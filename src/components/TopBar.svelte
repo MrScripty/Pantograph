@@ -1,30 +1,43 @@
 <script lang="ts">
   import { Logger } from '../services/Logger';
-  import { canvasExport } from '../services/CanvasExport';
-  import { LLMService } from '../services/LLMService';
+  import { AgentService } from '../services/AgentService';
+  import { componentRegistry } from '../services/HotLoadRegistry';
   import { panelWidth, openSidePanel } from '../stores/panelStore';
 
   let inputValue = '';
   let isLoading = false;
+  let errorMessage = '';
 
   const handleGo = async () => {
     if (!inputValue.trim() || isLoading) return;
 
+    console.log('[TopBar] handleGo called with:', inputValue);
     Logger.log('COMMAND_SUBMITTED', { text: inputValue });
 
-    const imageBase64 = canvasExport.exportToBase64();
-    if (!imageBase64) {
-      Logger.log('CANVAS_EXPORT_FAILED', {}, 'error');
-      return;
-    }
-
     isLoading = true;
+    errorMessage = '';
     openSidePanel();
 
     try {
-      await LLMService.sendVisionPrompt(inputValue, imageBase64);
+      console.log('[TopBar] Calling AgentService.run...');
+      // Run the agent - it handles canvas export internally
+      const response = await AgentService.run(inputValue);
+      console.log('[TopBar] AgentService.run returned:', response);
+
+      // Register the generated components
+      for (const update of response.component_updates) {
+        console.log('[TopBar] Registering component:', update.id);
+        await componentRegistry.registerFromUpdate(update);
+      }
+
+      Logger.log('UI_GENERATION_COMPLETE', {
+        filesChanged: response.file_changes.length,
+        componentsUpdated: response.component_updates.length,
+      });
     } catch (error) {
-      Logger.log('LLM_SUBMIT_ERROR', { error: String(error) }, 'error');
+      console.error('[TopBar] Error:', error);
+      errorMessage = error instanceof Error ? error.message : String(error);
+      Logger.log('AGENT_ERROR', { error: String(error) }, 'error');
     } finally {
       isLoading = false;
       inputValue = '';
@@ -53,4 +66,9 @@
       {isLoading ? '...' : 'GO'}
     </button>
   </div>
+  {#if errorMessage}
+    <div class="mt-2 p-3 bg-red-900/80 border border-red-700 rounded-lg text-red-200 text-sm">
+      {errorMessage}
+    </div>
+  {/if}
 </div>

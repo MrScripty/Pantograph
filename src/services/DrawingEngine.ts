@@ -65,6 +65,14 @@ export class DrawingEngine {
     }
   }
 
+  public clearStrokes() {
+    this.state.strokes = [];
+    this.state.currentStroke = null;
+    this.state.isDrawing = false;
+    Logger.log('STROKES_CLEARED', { message: 'All strokes cleared after UI generation' });
+    this.notify();
+  }
+
   public getState() {
     return { ...this.state };
   }
