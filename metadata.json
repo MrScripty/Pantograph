@@ -1,0 +1,5 @@
+{
+  "name": "Pantograph",
+  "description": "A minimalist, high-precision drawing overlay with architectural modularity, featuring a radial canvas, grid system, and dynamic component loading capabilities.",
+  "requestFramePermissions": []
+}

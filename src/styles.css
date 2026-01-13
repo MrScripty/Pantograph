@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg-inner: #0a0a0a;
+  --color-bg-outer: #262626;
+  --color-grid: rgba(255, 255, 255, 0.05);
+  --color-ruler: #404040;
+  --color-accent: #3b82f6;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background: radial-gradient(circle, var(--color-bg-inner) 0%, var(--color-bg-outer) 100%);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: #e5e7eb;
+}
+
+#app {
+  height: 100%;
+}
+
+.canvas-grid {
+  background-image:
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
