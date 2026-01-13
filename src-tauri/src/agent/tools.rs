@@ -5,7 +5,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use thiserror::Error;
 
-use super::types::{TailwindColors, TemplateInfo};
+use super::types::{TailwindColors, TemplateInfo, WriteTracker};
 
 // ============================================================================
 // Error Types
@@ -107,11 +107,16 @@ pub struct WriteGuiFileArgs {
 #[derive(Clone)]
 pub struct WriteGuiFileTool {
     project_root: PathBuf,
+    write_tracker: Option<WriteTracker>,
 }
 
 impl WriteGuiFileTool {
     pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root }
+        Self { project_root, write_tracker: None }
+    }
+
+    pub fn with_tracker(project_root: PathBuf, tracker: WriteTracker) -> Self {
+        Self { project_root, write_tracker: Some(tracker) }
     }
 
     fn get_generated_path(&self) -> PathBuf {
@@ -282,6 +287,14 @@ impl Tool for WriteGuiFileTool {
 
                 // Compilation succeeded - move temp file to final location
                 tokio::fs::rename(&temp_path, &full_path).await.map_err(ToolError::Io)?;
+
+                // Record successful write
+                if let Some(ref tracker) = self.write_tracker {
+                    if let Ok(mut writes) = tracker.lock() {
+                        writes.push(sanitized.clone());
+                    }
+                }
+
                 Ok(true)
             }
             Err(e) => {
@@ -290,6 +303,14 @@ impl Tool for WriteGuiFileTool {
                 log::warn!("Svelte validation script failed to run: {}. Proceeding without compiler validation.", e);
                 let _ = tokio::fs::remove_file(&temp_path).await;
                 tokio::fs::write(&full_path, &args.content).await.map_err(ToolError::Io)?;
+
+                // Record successful write
+                if let Some(ref tracker) = self.write_tracker {
+                    if let Ok(mut writes) = tracker.lock() {
+                        writes.push(sanitized.clone());
+                    }
+                }
+
                 Ok(true)
             }
         }
@@ -585,5 +606,89 @@ impl Tool for ReadTemplateTool {
         }
 
         tokio::fs::read_to_string(full_path).await.map_err(ToolError::Io)
+    }
+}
+
+// ============================================================================
+// SearchSvelteDocsTool - Search Svelte 5 documentation
+// ============================================================================
+
+use std::sync::Arc;
+use super::docs::DocsManager;
+use super::docs_search::{search_docs, DocSearchOutput};
+
+#[derive(Debug, Deserialize)]
+pub struct SearchSvelteDocsArgs {
+    pub query: String,
+    #[serde(default = "default_search_limit")]
+    pub limit: usize,
+}
+
+fn default_search_limit() -> usize {
+    3
+}
+
+#[derive(Clone)]
+pub struct SearchSvelteDocsTool {
+    docs_manager: Arc<DocsManager>,
+}
+
+impl SearchSvelteDocsTool {
+    pub fn new(docs_manager: Arc<DocsManager>) -> Self {
+        Self { docs_manager }
+    }
+}
+
+impl Tool for SearchSvelteDocsTool {
+    const NAME: &'static str = "search_svelte_docs";
+    type Error = ToolError;
+    type Args = SearchSvelteDocsArgs;
+    type Output = DocSearchOutput;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Search Svelte 5 documentation for syntax, APIs, and best practices. \
+                          Use this when you need to verify Svelte 5 runes syntax ($state, $derived, $effect, $props), \
+                          event handlers (onclick, onmouseenter), component patterns, or fix errors.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (e.g., '$state', 'event handlers', 'props', 'onclick')"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 3)",
+                        "default": 3
+                    }
+                },
+                "required": ["query"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        // Ensure docs are available (download if needed)
+        self.docs_manager
+            .ensure_docs_available()
+            .await
+            .map_err(|e| ToolError::Validation(format!("Docs not available: {}", e)))?;
+
+        // Load search index
+        let index = self
+            .docs_manager
+            .load_index()
+            .map_err(|e| ToolError::Validation(format!("Failed to load index: {}", e)))?;
+
+        // Perform fuzzy search
+        let results = search_docs(&index, &args.query, args.limit);
+
+        Ok(DocSearchOutput {
+            query: args.query,
+            total_matches: results.len(),
+            results,
+        })
     }
 }

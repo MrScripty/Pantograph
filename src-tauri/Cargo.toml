@@ -21,3 +21,5 @@ rig-core = "0.28.0"
 thiserror = "1"
 log = "0.4"
 env_logger = "0.11"
+nucleo-matcher = "0.3"
+chrono = { version = "0.4", features = ["serde"] }

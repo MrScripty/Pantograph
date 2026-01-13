@@ -1,4 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+
+/// Tracks files successfully written by the agent during a session
+pub type WriteTracker = Arc<Mutex<Vec<String>>>;
 
 /// Bounds of a drawing on the canvas
 #[derive(Debug, Clone, Serialize, Deserialize)]

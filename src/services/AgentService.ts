@@ -56,9 +56,43 @@ export interface AgentEvent {
   data: unknown;
 }
 
+// Detailed event data types from the backend
+export interface ContentEventData {
+  type?: 'system_prompt' | 'text_chunk' | 'reasoning';
+  message?: string;
+  prompt?: string;
+  chunk?: string;
+  text?: string;
+}
+
+export interface ToolCallEventData {
+  name: string;
+  arguments: string;
+}
+
+export interface ToolResultEventData {
+  tool_id: string;
+  output: string;
+}
+
+// Activity item for UI display
+export interface AgentActivityItem {
+  id: string;
+  type: 'system_prompt' | 'text' | 'tool_call' | 'tool_result' | 'reasoning' | 'status' | 'error';
+  timestamp: number;
+  content: string;
+  metadata?: {
+    toolName?: string;
+    toolArgs?: string;
+    toolId?: string;
+  };
+}
+
 interface AgentState {
   isRunning: boolean;
   currentMessage: string;
+  streamingText: string;
+  activityLog: AgentActivityItem[];
   error: string | null;
   lastResponse: AgentResponse | null;
 }
@@ -70,9 +104,33 @@ class AgentServiceClass {
   private state: AgentState = {
     isRunning: false,
     currentMessage: '',
+    streamingText: '',
+    activityLog: [],
     error: null,
     lastResponse: null,
   };
+
+  private activityIdCounter = 0;
+
+  private generateActivityId(): string {
+    return `activity-${Date.now()}-${this.activityIdCounter++}`;
+  }
+
+  private addActivityItem(
+    type: AgentActivityItem['type'],
+    content: string,
+    metadata?: AgentActivityItem['metadata']
+  ): void {
+    const item: AgentActivityItem = {
+      id: this.generateActivityId(),
+      type,
+      timestamp: Date.now(),
+      content,
+      metadata,
+    };
+    this.state.activityLog = [...this.state.activityLog, item];
+    this.notifyState();
+  }
 
   private stateListeners: AgentStateListener[] = [];
   private eventListeners: AgentEventListener[] = [];
@@ -154,6 +212,8 @@ class AgentServiceClass {
     this.state = {
       isRunning: true,
       currentMessage: '',
+      streamingText: '',
+      activityLog: [],
       error: null,
       lastResponse: null,
     };
@@ -226,6 +286,7 @@ class AgentServiceClass {
       engine.clearStrokes();
 
       this.state = {
+        ...this.state,
         isRunning: false,
         currentMessage: response.message,
         error: null,
@@ -242,7 +303,9 @@ class AgentServiceClass {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
+      this.addActivityItem('error', errorMessage);
       this.state = {
+        ...this.state,
         isRunning: false,
         currentMessage: '',
         error: errorMessage,
@@ -257,26 +320,79 @@ class AgentServiceClass {
 
   private handleAgentEvent(event: AgentEvent) {
     this.notifyEvent(event);
+    const data = event.data as ContentEventData | ToolCallEventData | ToolResultEventData | null;
 
     switch (event.event_type) {
       case 'content':
-        if (event.data && typeof event.data === 'object' && 'message' in event.data) {
-          this.state.currentMessage = String((event.data as { message: string }).message);
-          this.notifyState();
+        if (data && typeof data === 'object') {
+          const contentData = data as ContentEventData;
+
+          if (contentData.type === 'system_prompt' && contentData.prompt) {
+            // Add system prompt to activity log
+            this.addActivityItem('system_prompt', contentData.prompt);
+          } else if (contentData.type === 'text_chunk' && contentData.chunk) {
+            // Append streaming text
+            this.state.streamingText += contentData.chunk;
+            this.notifyState();
+          } else if (contentData.type === 'reasoning' && contentData.text) {
+            // Add reasoning to activity log
+            this.addActivityItem('reasoning', contentData.text);
+          } else if (contentData.message) {
+            // Status message
+            this.state.currentMessage = contentData.message;
+            this.addActivityItem('status', contentData.message);
+          }
         }
         break;
+
+      case 'tool_call':
+        if (data && typeof data === 'object') {
+          const toolData = data as ToolCallEventData;
+          this.addActivityItem('tool_call', `Calling ${toolData.name}`, {
+            toolName: toolData.name,
+            toolArgs: toolData.arguments,
+          });
+        }
+        break;
+
+      case 'tool_result':
+        if (data && typeof data === 'object') {
+          const resultData = data as ToolResultEventData;
+          this.addActivityItem('tool_result', resultData.output, {
+            toolId: resultData.tool_id,
+          });
+        }
+        break;
+
       case 'error':
-        if (event.data && typeof event.data === 'object' && 'error' in event.data) {
-          this.state.error = String((event.data as { error: string }).error);
-          this.notifyState();
+        if (data && typeof data === 'object' && 'error' in data) {
+          const errorMsg = String((data as { error: string }).error);
+          this.state.error = errorMsg;
+          this.addActivityItem('error', errorMsg);
         }
         break;
+
       case 'done':
+        // Finalize streaming text as the last text activity item
+        if (this.state.streamingText) {
+          this.addActivityItem('text', this.state.streamingText);
+          this.state.streamingText = '';
+        }
         Logger.log('AGENT_DONE', event.data);
         break;
+
       default:
         Logger.log('AGENT_EVENT', { type: event.event_type, data: event.data });
     }
+  }
+
+  /**
+   * Clear the activity log
+   */
+  public clearActivityLog(): void {
+    this.state.activityLog = [];
+    this.state.streamingText = '';
+    this.notifyState();
   }
 
   /**

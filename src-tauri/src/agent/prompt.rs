@@ -83,6 +83,8 @@ Example component:
 4. **get_tailwind_colors**: Get the full Tailwind color palette
 5. **list_templates**: See available reference templates
 6. **read_template**: Read a template for examples of good patterns
+7. **search_svelte_docs**: Search Svelte 5 documentation for syntax help, API details, and examples.
+   Use when unsure about Svelte 5 runes syntax ($state, $derived, $effect, $props), event handlers, or to fix errors.
 
 ## Workflow
 

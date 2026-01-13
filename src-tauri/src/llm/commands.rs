@@ -1,11 +1,14 @@
 use super::server::SharedLlamaServer;
 use super::types::*;
 use crate::agent;
-use crate::agent::{AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, FileChange, FileAction, Position, Size};
+use crate::agent::{AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, DocsManager, FileChange, FileAction, Position, Size, WriteTracker};
+use crate::agent::docs::DocsStatus;
 use futures_util::StreamExt;
 use reqwest::Client;
-use rig::completion::Prompt;
+use rig::agent::MultiTurnStreamItem;
+use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPrompt};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tauri::{command, ipc::Channel, AppHandle, Manager, State};
 
 #[command]
@@ -211,28 +214,149 @@ pub async fn run_agent(
     // Step 2: Create the RIG client and agent for tool execution
     log::info!("[run_agent] Step 2: Creating RIG agent...");
     let client = agent::create_client(&base_url)?;
-    let ui_agent = agent::create_ui_agent(&client, "default", project_root.clone());
+
+    // Initialize docs manager with app data directory
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let docs_manager = Arc::new(DocsManager::new(app_data_dir));
+
+    // Create write tracker to track files written during this session
+    let write_tracker: WriteTracker = Arc::new(Mutex::new(Vec::new()));
+
+    let ui_agent = agent::create_ui_agent(&client, "default", project_root.clone(), docs_manager, write_tracker.clone());
 
     // Build the prompt with vision analysis included
     let prompt = format_agent_prompt_with_analysis(&request, &vision_analysis);
     log::info!("[run_agent] Agent prompt: {}", prompt);
 
-    // Run the agent - RIG handles the tool-calling loop
+    // Send the prompt to the frontend for visibility
+    channel
+        .send(AgentEvent {
+            event_type: AgentEventType::Content,
+            data: Some(serde_json::json!({
+                "type": "system_prompt",
+                "prompt": prompt
+            })),
+        })
+        .ok();
+
+    // Run the agent with streaming - RIG handles the tool-calling loop
     // multi_turn(5) allows up to 5 tool-calling rounds before requiring a final response
     // This enables the agent to call tools (like write_gui_file) and handle validation errors
-    log::info!("[run_agent] Running RIG agent...");
-    let response: String = ui_agent
-        .prompt(&prompt)
+    log::info!("[run_agent] Running RIG agent with streaming...");
+    let mut stream = ui_agent
+        .stream_prompt(&prompt)
         .multi_turn(5)
-        .await
-        .map_err(|e| {
-            log::error!("[run_agent] Agent error: {}", e);
-            format!("Agent error: {}", e)
-        })?;
-    log::info!("[run_agent] Agent response: {}", response);
+        .await;
 
-    // Parse the response and extract file changes
-    let file_changes = extract_file_changes(&project_root);
+    let mut final_response = String::new();
+
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(MultiTurnStreamItem::StreamAssistantItem(content)) => {
+                match content {
+                    StreamedAssistantContent::Text(text) => {
+                        // Send streaming text chunk to frontend
+                        channel
+                            .send(AgentEvent {
+                                event_type: AgentEventType::Content,
+                                data: Some(serde_json::json!({
+                                    "type": "text_chunk",
+                                    "chunk": text.text
+                                })),
+                            })
+                            .ok();
+                        final_response.push_str(&text.text);
+                    }
+                    StreamedAssistantContent::ToolCall(tool_call) => {
+                        // Send tool call event to frontend
+                        channel
+                            .send(AgentEvent {
+                                event_type: AgentEventType::ToolCall,
+                                data: Some(serde_json::json!({
+                                    "name": tool_call.function.name,
+                                    "arguments": tool_call.function.arguments.to_string()
+                                })),
+                            })
+                            .ok();
+                        log::info!("[run_agent] Tool call: {} with args: {}",
+                            tool_call.function.name,
+                            tool_call.function.arguments);
+                    }
+                    StreamedAssistantContent::Reasoning(reasoning) => {
+                        // Send reasoning to frontend (for models that support it)
+                        let reasoning_text = reasoning.reasoning.join("\n");
+                        channel
+                            .send(AgentEvent {
+                                event_type: AgentEventType::Content,
+                                data: Some(serde_json::json!({
+                                    "type": "reasoning",
+                                    "text": reasoning_text
+                                })),
+                            })
+                            .ok();
+                    }
+                    _ => {} // Handle other variants (Final, ToolCallDelta, etc.)
+                }
+            }
+            Ok(MultiTurnStreamItem::StreamUserItem(user_content)) => {
+                // Tool results
+                let StreamedUserContent::ToolResult(result) = user_content;
+                let result_text = result.content.iter()
+                    .filter_map(|c| match c {
+                        rig::message::ToolResultContent::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                channel
+                    .send(AgentEvent {
+                        event_type: AgentEventType::ToolResult,
+                        data: Some(serde_json::json!({
+                            "tool_id": result.id,
+                            "output": result_text
+                        })),
+                    })
+                    .ok();
+                log::info!("[run_agent] Tool result for {}: {}", result.id, result_text);
+            }
+            Ok(MultiTurnStreamItem::FinalResponse(response)) => {
+                final_response = response.response().to_string();
+                log::info!("[run_agent] Final response received");
+            }
+            Ok(_) => {
+                // Handle future/unknown variants
+            }
+            Err(e) => {
+                log::error!("[run_agent] Stream error: {}", e);
+                channel
+                    .send(AgentEvent {
+                        event_type: AgentEventType::Error,
+                        data: Some(serde_json::json!({ "error": e.to_string() })),
+                    })
+                    .ok();
+                return Err(format!("Agent stream error: {}", e));
+            }
+        }
+    }
+
+    log::info!("[run_agent] Agent response: {}", final_response);
+    let response = final_response;
+
+    // Get files written during this session from the write tracker
+    let written_files = write_tracker.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let file_changes: Vec<FileChange> = written_files
+        .iter()
+        .filter_map(|path| {
+            let full_path = project_root.join("src").join("generated").join(path);
+            std::fs::read_to_string(&full_path).ok().map(|content| FileChange {
+                path: path.clone(),
+                action: FileAction::Create,
+                content: Some(content),
+            })
+        })
+        .collect();
     log::info!("[run_agent] Found {} file changes", file_changes.len());
 
     let component_updates = create_component_updates(&request, &file_changes);
@@ -402,40 +526,6 @@ fn format_agent_prompt(request: &AgentRequest) -> String {
     prompt
 }
 
-/// Extract file changes from the generated directory (recursive)
-fn extract_file_changes(project_root: &PathBuf) -> Vec<FileChange> {
-    let generated_path = project_root.join("src").join("generated");
-    let mut changes = Vec::new();
-
-    fn collect_svelte_files(dir: &PathBuf, base: &PathBuf, changes: &mut Vec<FileChange>) {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    // Recurse into subdirectories
-                    collect_svelte_files(&path, base, changes);
-                } else if path.extension().map_or(false, |ext| ext == "svelte") {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        let relative_path = path
-                            .strip_prefix(base)
-                            .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_default();
-
-                        changes.push(FileChange {
-                            path: relative_path,
-                            action: FileAction::Create,
-                            content: Some(content),
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    collect_svelte_files(&generated_path, &generated_path, &mut changes);
-    changes
-}
-
 /// Create component updates based on file changes and request context
 fn create_component_updates(request: &AgentRequest, file_changes: &[FileChange]) -> Vec<ComponentUpdate> {
     file_changes
@@ -464,4 +554,33 @@ fn create_component_updates(request: &AgentRequest, file_changes: &[FileChange])
             })
         })
         .collect()
+}
+
+// ============================================================================
+// Svelte Documentation Commands
+// ============================================================================
+
+#[command]
+pub async fn get_svelte_docs_status(app: AppHandle) -> Result<DocsStatus, String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let docs_manager = DocsManager::new(app_data_dir);
+    Ok(docs_manager.get_status())
+}
+
+#[command]
+pub async fn update_svelte_docs(app: AppHandle) -> Result<DocsStatus, String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let docs_manager = DocsManager::new(app_data_dir);
+
+    log::info!("Downloading Svelte 5 documentation...");
+    docs_manager.download_docs().await
+        .map_err(|e| format!("Failed to download docs: {}", e))?;
+
+    log::info!("Building search index...");
+    docs_manager.build_index().await
+        .map_err(|e| format!("Failed to build index: {}", e))?;
+
+    Ok(docs_manager.get_status())
 }

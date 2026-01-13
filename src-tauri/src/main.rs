@@ -3,7 +3,7 @@
 mod agent;
 mod llm;
 
-use llm::{connect_to_server, get_llm_status, run_agent, send_vision_prompt, start_sidecar_llm, stop_llm, LlamaServer};
+use llm::{connect_to_server, get_llm_status, get_svelte_docs_status, run_agent, send_vision_prompt, start_sidecar_llm, stop_llm, update_svelte_docs, LlamaServer};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -27,6 +27,8 @@ fn main() {
             get_llm_status,
             stop_llm,
             run_agent,
+            get_svelte_docs_status,
+            update_svelte_docs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
