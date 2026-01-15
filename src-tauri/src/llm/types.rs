@@ -73,3 +73,20 @@ pub struct StreamEvent {
     pub done: bool,
     pub error: Option<String>,
 }
+
+/// Status of llama.cpp binary availability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryStatus {
+    pub available: bool,
+    pub missing_files: Vec<String>,
+}
+
+/// Progress event for binary download
+#[derive(Debug, Clone, Serialize)]
+pub struct DownloadProgress {
+    pub status: String,
+    pub current: u64,
+    pub total: u64,
+    pub done: bool,
+    pub error: Option<String>,
+}

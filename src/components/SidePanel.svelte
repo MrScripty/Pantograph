@@ -12,6 +12,7 @@
   import DeviceConfig from './DeviceConfig.svelte';
   import RagStatus from './RagStatus.svelte';
   import BackendSelector from './BackendSelector.svelte';
+  import BinaryDownloader from './BinaryDownloader.svelte';
 
   let state: LLMState = LLMService.getState();
   let agentState = AgentService.getState();
@@ -145,6 +146,11 @@
       <!-- Backend Selector -->
       <div class="px-4 py-3 border-b border-neutral-700">
         <BackendSelector />
+      </div>
+
+      <!-- Binary Downloader (shows only when binaries are missing) -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <BinaryDownloader />
       </div>
 
       <!-- Server Status -->
