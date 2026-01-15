@@ -3,6 +3,7 @@
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { RagService, type RagState, type IndexingEvent } from '../services/RagService';
   import { ConfigService, type ConfigState } from '../services/ConfigService';
+  import { LLMService } from '../services/LLMService';
   import { openChunkPreview } from '../stores/chunkPreviewStore';
 
   let ragState: RagState = RagService.getState();
@@ -82,6 +83,7 @@
       console.log('invoke completed successfully');
       await RagService.refreshStatus();
       await ConfigService.refreshServerMode();
+      await LLMService.refreshStatus();
     } catch (error) {
       console.error('Indexing with switch failed:', error);
       ragState.error = String(error);

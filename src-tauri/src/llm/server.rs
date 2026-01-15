@@ -374,7 +374,7 @@ impl LlamaServer {
                     if is_oom_line(line_trimmed) {
                         oom_hint = Some(line_trimmed.to_string());
                     }
-                    if line_str.contains("server listening")
+                    if (line_str.contains("server") && line_str.contains("listening"))
                         || line_str.contains("HTTP server listening")
                     {
                         log::debug!("Stdout reports server listening, verifying HTTP...");
@@ -403,7 +403,7 @@ impl LlamaServer {
                     if is_oom_line(line_trimmed) {
                         oom_hint = Some(line_trimmed.to_string());
                     }
-                    if line_str.contains("server listening")
+                    if (line_str.contains("server") && line_str.contains("listening"))
                         || line_str.contains("HTTP server listening")
                     {
                         log::debug!("Stderr reports server listening, verifying HTTP...");

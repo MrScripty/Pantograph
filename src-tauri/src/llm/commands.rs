@@ -959,20 +959,39 @@ pub async fn start_sidecar_inference(
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
 ) -> Result<ServerModeInfo, String> {
+    let backend_name = gateway.current_backend_name().await;
+    log::info!("Starting sidecar inference with backend: {}", backend_name);
+
     let config_guard = config.read().await;
 
-    let model_path = config_guard.models.vlm_model_path.as_ref()
-        .ok_or_else(|| "VLM model path not configured".to_string())?;
-    let mmproj_path = config_guard.models.vlm_mmproj_path.as_ref()
-        .ok_or_else(|| "VLM mmproj path not configured".to_string())?;
+    // Build backend-specific config
+    let backend_config = match backend_name.as_str() {
+        "Ollama" => {
+            // Ollama uses model names, not file paths
+            let model_name = config_guard.models.ollama_vlm_model.as_ref()
+                .ok_or_else(|| "Ollama VLM model not configured. Set a model like 'llava:13b' or 'qwen2-vl:7b' in Model Configuration.".to_string())?;
+            BackendConfig {
+                model_name: Some(model_name.clone()),
+                embedding_mode: false,
+                ..Default::default()
+            }
+        }
+        _ => {
+            // llama.cpp and others use file paths
+            let model_path = config_guard.models.vlm_model_path.as_ref()
+                .ok_or_else(|| "VLM model path not configured".to_string())?;
+            let mmproj_path = config_guard.models.vlm_mmproj_path.as_ref()
+                .ok_or_else(|| "VLM mmproj path not configured".to_string())?;
 
-    let backend_config = BackendConfig {
-        model_path: Some(std::path::PathBuf::from(model_path)),
-        mmproj_path: Some(std::path::PathBuf::from(mmproj_path)),
-        device: Some(config_guard.device.device.clone()),
-        gpu_layers: Some(config_guard.device.gpu_layers),
-        embedding_mode: false,
-        ..Default::default()
+            BackendConfig {
+                model_path: Some(std::path::PathBuf::from(model_path)),
+                mmproj_path: Some(std::path::PathBuf::from(mmproj_path)),
+                device: Some(config_guard.device.device.clone()),
+                gpu_layers: Some(config_guard.device.gpu_layers),
+                embedding_mode: false,
+                ..Default::default()
+            }
+        }
     };
     drop(config_guard);
 

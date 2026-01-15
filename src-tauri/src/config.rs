@@ -20,6 +20,9 @@ pub struct ModelConfig {
     /// Path to the Candle embedding model directory (SafeTensors format, e.g., bge-small-en-v1.5/)
     /// This is separate from embedding_model_path because Candle uses a different model format.
     pub candle_embedding_model_path: Option<String>,
+    /// Ollama model name for VLM inference (e.g., "llava:13b", "qwen2-vl:7b")
+    /// Used when Ollama is the selected backend instead of file paths.
+    pub ollama_vlm_model: Option<String>,
 }
 
 /// Device configuration for inference

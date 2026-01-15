@@ -7,6 +7,7 @@ export interface ModelConfig {
   vlm_mmproj_path: string | null;
   embedding_model_path: string | null;
   candle_embedding_model_path: string | null;
+  ollama_vlm_model: string | null;
 }
 
 export interface DeviceConfig {
@@ -54,6 +55,7 @@ const defaultConfig: AppConfig = {
     vlm_mmproj_path: null,
     embedding_model_path: null,
     candle_embedding_model_path: null,
+    ollama_vlm_model: null,
   },
   device: {
     device: 'auto',

@@ -12,6 +12,7 @@
   let vlmMmprojPath: string = '';
   let embeddingModelPath: string = '';
   let candleEmbeddingModelPath: string = '';
+  let ollamaVlmModel: string = '';
 
   onMount(() => {
     unsubscribe = ConfigService.subscribe((nextState) => {
@@ -21,6 +22,7 @@
       vlmMmprojPath = nextState.config.models.vlm_mmproj_path || '';
       embeddingModelPath = nextState.config.models.embedding_model_path || '';
       candleEmbeddingModelPath = nextState.config.models.candle_embedding_model_path || '';
+      ollamaVlmModel = nextState.config.models.ollama_vlm_model || '';
     });
   });
 
@@ -64,6 +66,7 @@
         vlm_mmproj_path: vlmMmprojPath || null,
         embedding_model_path: embeddingModelPath || null,
         candle_embedding_model_path: candleEmbeddingModelPath || null,
+        ollama_vlm_model: ollamaVlmModel || null,
       };
       await ConfigService.setModelConfig(models);
     } catch (error) {
@@ -82,9 +85,10 @@
     vlmModelPath !== (state.config.models.vlm_model_path || '') ||
     vlmMmprojPath !== (state.config.models.vlm_mmproj_path || '') ||
     embeddingModelPath !== (state.config.models.embedding_model_path || '') ||
-    candleEmbeddingModelPath !== (state.config.models.candle_embedding_model_path || '');
+    candleEmbeddingModelPath !== (state.config.models.candle_embedding_model_path || '') ||
+    ollamaVlmModel !== (state.config.models.ollama_vlm_model || '');
 
-  $: isConfigured = vlmModelPath && vlmMmprojPath;
+  $: isConfigured = (vlmModelPath && vlmMmprojPath) || ollamaVlmModel;
 </script>
 
 <div class="space-y-3">
@@ -163,6 +167,25 @@
           {#if vlmMmprojPath}
             <div class="text-[10px] text-neutral-600 truncate">{getFileName(vlmMmprojPath)}</div>
           {/if}
+        </div>
+      </div>
+
+      <!-- Ollama VLM Model Section -->
+      <div class="space-y-2 border-t border-neutral-700 pt-3">
+        <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
+          Ollama VLM Model
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs text-neutral-400">Model Name (for Ollama backend)</label>
+          <input
+            type="text"
+            bind:value={ollamaVlmModel}
+            placeholder="e.g., llava:13b, qwen2-vl:7b"
+            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
+          />
+          <div class="text-[10px] text-neutral-500">
+            Enter an Ollama model name with vision support. Run <code class="bg-neutral-800 px-1 rounded">ollama pull llava:13b</code> to download.
+          </div>
         </div>
       </div>
 

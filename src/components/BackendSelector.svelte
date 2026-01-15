@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { invoke, Channel } from '@tauri-apps/api/core';
   import Modal from '../templates/Modal.svelte';
+  import { ConfigService } from '../services/ConfigService';
+  import { LLMService } from '../services/LLMService';
 
   interface BackendCapabilities {
     vision: boolean;
@@ -72,6 +74,17 @@
     try {
       await invoke('switch_backend', { backendName: name });
       currentBackend = name;
+
+      // Auto-start the LLM after switching backends
+      try {
+        await ConfigService.startInferenceMode();
+        await LLMService.refreshStatus();
+      } catch (e) {
+        // Show error to user instead of silently swallowing it
+        error = `Auto-start failed: ${String(e)}`;
+        console.warn('Auto-start failed:', e);
+      }
+
       // Reload backends to update active status
       await loadBackends();
     } catch (e) {
