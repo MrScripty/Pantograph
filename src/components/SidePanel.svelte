@@ -7,14 +7,17 @@
     type AgentActivityItem,
   } from '../services/AgentService';
   import { sidePanelOpen, toggleSidePanel } from '../stores/panelStore';
+  import ServerStatus from './ServerStatus.svelte';
+  import ModelConfig from './ModelConfig.svelte';
+  import DeviceConfig from './DeviceConfig.svelte';
+  import RagStatus from './RagStatus.svelte';
+  import BackendSelector from './BackendSelector.svelte';
 
   let state: LLMState = LLMService.getState();
   let agentState = AgentService.getState();
   let unsubscribeLLM: (() => void) | null = null;
   let unsubscribeAgent: (() => void) | null = null;
   let messagesContainer: HTMLDivElement;
-  let serverUrl = 'http://localhost:1234';
-  let isConnecting = false;
   let isUserScrolledUp = false;
 
   // Track expanded state for collapsible items
@@ -70,22 +73,6 @@
       return `[Image attached]\n\n${msg.content}`;
     }
     return msg.content;
-  };
-
-  const connectToServer = async () => {
-    if (!serverUrl.trim()) return;
-    isConnecting = true;
-    try {
-      await LLMService.connectToServer(serverUrl);
-    } catch (error) {
-      console.error('Failed to connect:', error);
-    } finally {
-      isConnecting = false;
-    }
-  };
-
-  const disconnect = async () => {
-    await LLMService.stop();
   };
 
   const clearAll = () => {
@@ -150,52 +137,35 @@
     >
       <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
         <h2 class="text-sm font-bold tracking-wider uppercase text-neutral-300">
-          AI Response
+          AI Assistant
         </h2>
         <span class="w-2 h-2 rounded-full {statusColor}" title={statusText}></span>
       </div>
 
-      {#if !state.status.ready}
-        <div class="p-4 border-b border-neutral-700 space-y-3">
-          <div class="text-xs uppercase tracking-wider text-neutral-500 mb-2">
-            Connect to LLM Server
-          </div>
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={serverUrl}
-              placeholder="http://localhost:1234"
-              class="flex-1 bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-sm font-mono outline-none focus:border-blue-500"
-              disabled={isConnecting}
-            />
-          </div>
-          <button
-            on:click={connectToServer}
-            disabled={isConnecting || !serverUrl.trim()}
-            class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold transition-colors"
-          >
-            {isConnecting ? 'Connecting...' : 'Connect'}
-          </button>
-          <div class="text-xs text-neutral-600">
-            LM Studio default: http://localhost:1234
-          </div>
-        </div>
-      {:else}
-        <div class="px-4 py-2 border-b border-neutral-700 flex items-center justify-between">
-          <div class="text-xs text-neutral-500">
-            <span class="uppercase tracking-wider">{state.status.mode}</span>
-            {#if state.status.url}
-              <span class="ml-2 font-mono text-[10px]">{state.status.url}</span>
-            {/if}
-          </div>
-          <button
-            on:click={disconnect}
-            class="text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            Disconnect
-          </button>
-        </div>
-      {/if}
+      <!-- Backend Selector -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <BackendSelector />
+      </div>
+
+      <!-- Server Status -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <ServerStatus />
+      </div>
+
+      <!-- Model Configuration -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <ModelConfig />
+      </div>
+
+      <!-- Device Configuration -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <DeviceConfig />
+      </div>
+
+      <!-- RAG Status Panel -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <RagStatus />
+      </div>
 
       <div
         bind:this={messagesContainer}

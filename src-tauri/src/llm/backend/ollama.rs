@@ -1,0 +1,521 @@
+//! Ollama backend implementation
+//!
+//! This backend connects to an Ollama daemon. If the daemon is not running,
+//! it will automatically start it. Ollama exposes an OpenAI-compatible API
+//! at `/v1/`, so we can forward requests directly without translation.
+
+use std::pin::Pin;
+use std::process::{Child, Command, Stdio};
+
+use async_trait::async_trait;
+use futures_util::{Stream, StreamExt};
+use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
+
+use super::{
+    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
+    InferenceBackend,
+};
+
+/// Default Ollama daemon URL
+const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+
+/// Ollama model information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaModel {
+    pub name: String,
+    pub modified_at: String,
+    pub size: u64,
+}
+
+/// Ollama tags response (list of models)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OllamaTagsResponse {
+    models: Vec<OllamaModel>,
+}
+
+/// Ollama backend connecting to the Ollama daemon
+///
+/// Ollama can run as a system service or be started on-demand by this backend.
+/// It exposes an OpenAI-compatible API at `/v1/` endpoints.
+pub struct OllamaBackend {
+    /// Base URL for Ollama daemon (default: http://localhost:11434)
+    base_url: String,
+    /// HTTP client for API requests
+    http_client: reqwest::Client,
+    /// Currently selected model name (e.g., "llava:13b")
+    model_name: Option<String>,
+    /// Whether the backend is ready (daemon is running and model is available)
+    ready: bool,
+    /// Daemon process if we started it (None if using external daemon)
+    daemon_process: Option<Child>,
+}
+
+impl OllamaBackend {
+    /// Create a new Ollama backend with default URL
+    pub fn new() -> Self {
+        Self {
+            base_url: DEFAULT_OLLAMA_URL.to_string(),
+            http_client: reqwest::Client::new(),
+            model_name: None,
+            ready: false,
+            daemon_process: None,
+        }
+    }
+
+    /// Create a new Ollama backend with custom URL
+    pub fn with_url(url: &str) -> Self {
+        Self {
+            base_url: url.to_string(),
+            http_client: reqwest::Client::new(),
+            model_name: None,
+            ready: false,
+            daemon_process: None,
+        }
+    }
+
+    /// Check if Ollama is installed on the system
+    fn check_ollama_installed() -> Result<(), BackendError> {
+        which::which("ollama").map_err(|_| {
+            BackendError::Config(
+                "Ollama not found. Install from https://ollama.ai/download".to_string(),
+            )
+        })?;
+        Ok(())
+    }
+
+    /// Start the Ollama daemon if not already running
+    async fn ensure_daemon_running(&mut self) -> Result<(), BackendError> {
+        // First check if daemon is already running (external or from us)
+        if self.check_daemon().await.is_ok() {
+            log::info!("Ollama daemon already running");
+            return Ok(());
+        }
+
+        // Check Ollama is installed before trying to start it
+        Self::check_ollama_installed()?;
+
+        log::info!("Starting Ollama daemon...");
+
+        // Try to start ollama serve
+        let child = Command::new("ollama")
+            .arg("serve")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| {
+                BackendError::StartupFailed(format!(
+                    "Failed to start Ollama daemon. Is Ollama installed? Error: {}",
+                    e
+                ))
+            })?;
+
+        self.daemon_process = Some(child);
+
+        // Wait for daemon to be ready (poll with timeout)
+        for i in 0..30 {
+            // 30 second timeout
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if self.check_daemon().await.is_ok() {
+                log::info!("Ollama daemon started successfully after {}s", i + 1);
+                return Ok(());
+            }
+        }
+
+        // Failed to start - clean up
+        if let Some(mut child) = self.daemon_process.take() {
+            let _ = child.kill();
+        }
+
+        Err(BackendError::StartupFailed(
+            "Ollama daemon failed to start within 30 seconds".to_string(),
+        ))
+    }
+
+    /// Get static capabilities (for registry info before instantiation)
+    pub fn static_capabilities() -> BackendCapabilities {
+        BackendCapabilities {
+            vision: true,            // llava and other vision models
+            embeddings: true,        // nomic-embed-text and others
+            gpu: true,               // Auto-managed by Ollama
+            device_selection: false, // Ollama manages GPU automatically
+            streaming: true,         // SSE streaming supported
+            tool_calling: true,      // Via OpenAI-compatible API
+        }
+    }
+
+    /// Check if Ollama daemon is running
+    async fn check_daemon(&self) -> Result<(), BackendError> {
+        let url = format!("{}/api/tags", self.base_url);
+
+        self.http_client
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+            .map_err(|_| {
+                BackendError::NotRunning(
+                    "Ollama daemon not running. Start with: ollama serve".to_string(),
+                )
+            })?;
+
+        Ok(())
+    }
+
+    /// List available models from Ollama
+    pub async fn list_models(&self) -> Result<Vec<OllamaModel>, BackendError> {
+        let url = format!("{}/api/tags", self.base_url);
+
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(BackendError::Http)?;
+
+        if !response.status().is_success() {
+            return Err(BackendError::Inference(format!(
+                "Failed to list models: {}",
+                response.status()
+            )));
+        }
+
+        let tags: OllamaTagsResponse = response
+            .json()
+            .await
+            .map_err(|e| BackendError::Inference(format!("Failed to parse models: {}", e)))?;
+
+        Ok(tags.models)
+    }
+
+    /// Check if a specific model is available
+    async fn check_model_available(&self, model_name: &str) -> Result<bool, BackendError> {
+        let models = self.list_models().await?;
+
+        // Check for exact match or prefix match (e.g., "llava" matches "llava:13b")
+        let available = models.iter().any(|m| {
+            m.name == model_name || m.name.starts_with(&format!("{}:", model_name))
+        });
+
+        Ok(available)
+    }
+
+    /// Pull a model if not available (blocking operation)
+    async fn ensure_model(&self, model_name: &str) -> Result<(), BackendError> {
+        if self.check_model_available(model_name).await? {
+            log::info!("Ollama model '{}' is available", model_name);
+            return Ok(());
+        }
+
+        log::info!("Ollama model '{}' not found, attempting to pull...", model_name);
+
+        let url = format!("{}/api/pull", self.base_url);
+        let request = serde_json::json!({
+            "name": model_name,
+            "stream": false,
+        });
+
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&request)
+            .timeout(std::time::Duration::from_secs(600)) // 10 min timeout for large models
+            .send()
+            .await
+            .map_err(BackendError::Http)?;
+
+        if !response.status().is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(BackendError::StartupFailed(format!(
+                "Failed to pull model '{}': {}",
+                model_name, body
+            )));
+        }
+
+        log::info!("Successfully pulled Ollama model '{}'", model_name);
+        Ok(())
+    }
+
+    /// Parse SSE stream into ChatChunk stream
+    fn parse_sse_stream(
+        response: reqwest::Response,
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
+        let stream = response.bytes_stream().map(|result| {
+            match result {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+
+                    // Parse SSE format: "data: {...}\n\n"
+                    for line in text.lines() {
+                        if line.starts_with("data: ") {
+                            let data = &line[6..];
+                            if data == "[DONE]" {
+                                return Ok(ChatChunk {
+                                    content: None,
+                                    done: true,
+                                });
+                            }
+
+                            // Parse JSON and extract content
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                if let Some(content) = json
+                                    .get("choices")
+                                    .and_then(|c| c.get(0))
+                                    .and_then(|c| c.get("delta"))
+                                    .and_then(|d| d.get("content"))
+                                    .and_then(|c| c.as_str())
+                                {
+                                    return Ok(ChatChunk {
+                                        content: Some(content.to_string()),
+                                        done: false,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    // No content in this chunk
+                    Ok(ChatChunk {
+                        content: None,
+                        done: false,
+                    })
+                }
+                Err(e) => Err(BackendError::Http(e)),
+            }
+        });
+
+        Box::pin(stream)
+    }
+}
+
+impl Default for OllamaBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl InferenceBackend for OllamaBackend {
+    fn name(&self) -> &'static str {
+        "Ollama"
+    }
+
+    fn description(&self) -> &'static str {
+        "Ollama daemon with automatic model management. Supports CUDA, Vulkan, and Metal."
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        Self::static_capabilities()
+    }
+
+    async fn start(&mut self, config: &BackendConfig, _app: &AppHandle) -> Result<(), BackendError> {
+        // 1. Ensure Ollama daemon is running (start if needed)
+        self.ensure_daemon_running().await?;
+
+        // 2. Get model name from config, with smart defaults for embedding mode
+        let model_name = if let Some(name) = config.model_name.as_ref() {
+            name.clone()
+        } else if config.embedding_mode {
+            // Use a sensible default for embedding mode
+            log::info!("No model_name specified for Ollama embedding mode, using default 'nomic-embed-text'");
+            "nomic-embed-text".to_string()
+        } else {
+            return Err(BackendError::Config(
+                "model_name required for Ollama inference (e.g., 'llava:13b', 'gemma3:12b'). \
+                 Configure Ollama models in the backend settings.".to_string(),
+            ));
+        };
+
+        // 3. Ensure model is available (pull if needed)
+        self.ensure_model(&model_name).await?;
+
+        // 4. Store model name and mark ready
+        self.model_name = Some(model_name.clone());
+        self.ready = true;
+
+        log::info!("Ollama backend started with model: {}", model_name);
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        // Kill daemon if we started it
+        if let Some(mut child) = self.daemon_process.take() {
+            log::info!("Stopping Ollama daemon that we started...");
+            let _ = child.kill();
+            let _ = child.wait(); // Reap the process
+        }
+
+        self.model_name = None;
+        self.ready = false;
+        log::info!("Ollama backend stopped");
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready
+    }
+
+    async fn health_check(&self) -> bool {
+        self.check_daemon().await.is_ok()
+    }
+
+    fn base_url(&self) -> Option<String> {
+        if self.ready {
+            Some(self.base_url.clone())
+        } else {
+            None
+        }
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        if !self.ready {
+            return Err(BackendError::NotReady);
+        }
+
+        // Ollama has OpenAI-compatible API at /v1/
+        let url = format!("{}/v1/chat/completions", self.base_url);
+
+        // Parse and ensure stream is enabled, and set model
+        let mut request: serde_json::Value = serde_json::from_str(&request_json)
+            .map_err(|e| BackendError::Inference(format!("Invalid request JSON: {}", e)))?;
+
+        request["stream"] = serde_json::json!(true);
+
+        // Use configured model if not specified in request
+        if request.get("model").and_then(|m| m.as_str()).unwrap_or("") == "default" {
+            if let Some(model) = &self.model_name {
+                request["model"] = serde_json::json!(model);
+            }
+        }
+
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(BackendError::Http)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(BackendError::Inference(format!(
+                "Ollama API error {}: {}",
+                status, body
+            )));
+        }
+
+        Ok(Self::parse_sse_stream(response))
+    }
+
+    async fn embeddings(
+        &self,
+        texts: Vec<String>,
+        model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        if !self.ready {
+            return Err(BackendError::NotReady);
+        }
+
+        // Ollama has OpenAI-compatible embeddings at /v1/embeddings
+        let url = format!("{}/v1/embeddings", self.base_url);
+
+        // Use configured model or provided model
+        let model_to_use = if model == "default" {
+            self.model_name.as_deref().unwrap_or("nomic-embed-text")
+        } else {
+            model
+        };
+
+        let request = serde_json::json!({
+            "input": texts,
+            "model": model_to_use,
+        });
+
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(BackendError::Http)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(BackendError::Inference(format!(
+                "Ollama embedding API error {}: {}",
+                status, body
+            )));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
+
+        // Parse OpenAI embedding response format
+        let data = json
+            .get("data")
+            .and_then(|d| d.as_array())
+            .ok_or_else(|| BackendError::Inference("Invalid embedding response format".to_string()))?;
+
+        let mut results = Vec::new();
+        for item in data {
+            let embedding = item
+                .get("embedding")
+                .and_then(|e| e.as_array())
+                .ok_or_else(|| BackendError::Inference("Missing embedding vector".to_string()))?;
+
+            let vector: Vec<f32> = embedding
+                .iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect();
+
+            results.push(EmbeddingResult {
+                vector,
+                token_count: 0, // Ollama doesn't return token count
+            });
+        }
+
+        Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_backend_name() {
+        let backend = OllamaBackend::new();
+        assert_eq!(backend.name(), "Ollama");
+    }
+
+    #[test]
+    fn test_capabilities() {
+        let caps = OllamaBackend::static_capabilities();
+        assert!(caps.vision);
+        assert!(caps.embeddings);
+        assert!(caps.gpu);
+        assert!(!caps.device_selection); // Ollama manages GPU automatically
+        assert!(caps.streaming);
+        assert!(caps.tool_calling);
+    }
+
+    #[test]
+    fn test_not_ready_initially() {
+        let backend = OllamaBackend::new();
+        assert!(!backend.is_ready());
+        assert!(backend.base_url().is_none());
+    }
+
+    #[test]
+    fn test_custom_url() {
+        let backend = OllamaBackend::with_url("http://192.168.1.100:11434");
+        assert_eq!(backend.base_url, "http://192.168.1.100:11434");
+    }
+}

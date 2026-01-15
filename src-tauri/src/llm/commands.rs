@@ -1,8 +1,14 @@
-use super::server::SharedLlamaServer;
+use super::gateway::SharedGateway;
 use super::types::*;
+use super::BackendConfig;
 use crate::agent;
-use crate::agent::{AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, DocsManager, FileChange, FileAction, Position, Size, WriteTracker};
 use crate::agent::docs::DocsStatus;
+use crate::agent::rag::{IndexingProgress, RagStatus, SharedRagManager};
+use crate::agent::{
+    AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, DocsManager,
+    FileAction, FileChange, Position, Size, WriteTracker,
+};
+use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig, ServerModeInfo};
 use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
@@ -10,24 +16,28 @@ use rig::streaming::{StreamedAssistantContent, StreamedUserContent, StreamingPro
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{command, ipc::Channel, AppHandle, Manager, State};
+use tauri_plugin_shell::ShellExt;
+use tokio::sync::RwLock;
+
+/// Shared app configuration
+pub type SharedAppConfig = Arc<RwLock<AppConfig>>;
 
 #[command]
 pub async fn send_vision_prompt(
     _app: AppHandle,
-    server: State<'_, SharedLlamaServer>,
+    gateway: State<'_, SharedGateway>,
     prompt: String,
     image_base64: String,
     channel: Channel<StreamEvent>,
 ) -> Result<(), String> {
-    let server_guard = server.read().await;
-    if !server_guard.is_ready() {
+    if !gateway.is_ready().await {
         return Err("LLM server not ready".to_string());
     }
 
-    let base_url = server_guard
+    let base_url = gateway
         .base_url()
+        .await
         .ok_or_else(|| "No server URL configured".to_string())?;
-    drop(server_guard);
 
     let client = Client::new();
 
@@ -124,62 +134,90 @@ pub async fn send_vision_prompt(
 
 #[command]
 pub async fn connect_to_server(
-    server: State<'_, SharedLlamaServer>,
-    url: String,
+    _gateway: State<'_, SharedGateway>,
+    _url: String,
 ) -> Result<LLMStatus, String> {
-    let mut server_guard = server.write().await;
-    server_guard.connect_external(&url).await?;
-    Ok(server_guard.status())
+    // TODO: Implement connect_external through gateway interface
+    // For now, this feature is disabled during the gateway migration
+    Err("External server connection not yet supported through gateway".to_string())
 }
 
 #[command]
 pub async fn start_sidecar_llm(
     app: AppHandle,
-    server: State<'_, SharedLlamaServer>,
+    gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
     model_path: String,
     mmproj_path: String,
 ) -> Result<LLMStatus, String> {
-    let mut server_guard = server.write().await;
-    server_guard
-        .start_sidecar(&app, &model_path, &mmproj_path)
-        .await?;
-    Ok(server_guard.status())
+    let config_guard = config.read().await;
+    let device = config_guard.device.clone();
+    drop(config_guard);
+
+    let backend_config = BackendConfig {
+        model_path: Some(std::path::PathBuf::from(&model_path)),
+        mmproj_path: Some(std::path::PathBuf::from(&mmproj_path)),
+        device: Some(device.device),
+        gpu_layers: Some(device.gpu_layers),
+        embedding_mode: false,
+        ..Default::default()
+    };
+
+    gateway
+        .start(&backend_config, &app)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(LLMStatus {
+        ready: gateway.is_ready().await,
+        mode: "sidecar_inference".to_string(),
+        url: gateway.base_url().await,
+    })
 }
 
 #[command]
-pub async fn get_llm_status(server: State<'_, SharedLlamaServer>) -> Result<LLMStatus, String> {
-    let server_guard = server.read().await;
-    Ok(server_guard.status())
+pub async fn get_llm_status(gateway: State<'_, SharedGateway>) -> Result<LLMStatus, String> {
+    let ready = gateway.is_ready().await;
+    let url = gateway.base_url().await;
+    let backend_name = gateway.current_backend_name().await;
+
+    Ok(LLMStatus {
+        ready,
+        mode: if ready {
+            format!("sidecar_{}", backend_name)
+        } else {
+            "none".to_string()
+        },
+        url,
+    })
 }
 
 #[command]
-pub async fn stop_llm(server: State<'_, SharedLlamaServer>) -> Result<(), String> {
-    let mut server_guard = server.write().await;
-    server_guard.stop();
+pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<(), String> {
+    gateway.stop().await;
     Ok(())
 }
 
 #[command]
 pub async fn run_agent(
     app: AppHandle,
-    server: State<'_, SharedLlamaServer>,
+    gateway: State<'_, SharedGateway>,
     request: AgentRequest,
     channel: Channel<AgentEvent>,
 ) -> Result<AgentResponse, String> {
     log::info!("[run_agent] Starting agent with prompt: {}", request.prompt);
 
     // Get the LLM server URL
-    let server_guard = server.read().await;
-    if !server_guard.is_ready() {
+    if !gateway.is_ready().await {
         log::error!("[run_agent] LLM server not ready");
         return Err("LLM server not ready".to_string());
     }
 
-    let base_url = server_guard
+    let base_url = gateway
         .base_url()
+        .await
         .ok_or_else(|| "No server URL configured".to_string())?;
     log::info!("[run_agent] Using LLM server at: {}", base_url);
-    drop(server_guard);
 
     // Get the project root - in dev mode, current_dir is src-tauri, so we go up one level
     // to get to the actual project root where src/generated lives
@@ -583,4 +621,643 @@ pub async fn update_svelte_docs(app: AppHandle) -> Result<DocsStatus, String> {
         .map_err(|e| format!("Failed to build index: {}", e))?;
 
     Ok(docs_manager.get_status())
+}
+
+// ============================================================================
+// RAG (Retrieval Augmented Generation) Commands
+// ============================================================================
+
+/// Event sent during document indexing
+#[derive(Clone, serde::Serialize)]
+pub struct IndexingEvent {
+    pub current: usize,
+    pub total: usize,
+    pub status: String,
+    pub done: bool,
+    pub error: Option<String>,
+}
+
+impl From<IndexingProgress> for IndexingEvent {
+    fn from(progress: IndexingProgress) -> Self {
+        Self {
+            current: progress.current,
+            total: progress.total,
+            status: progress.status,
+            done: false,
+            error: None,
+        }
+    }
+}
+
+#[command]
+pub async fn get_rag_status(
+    app: AppHandle,
+    rag_manager: State<'_, SharedRagManager>,
+) -> Result<RagStatus, String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let docs_manager = DocsManager::new(app_data_dir);
+
+    let mut manager = rag_manager.write().await;
+    manager.update_docs_status(&docs_manager);
+
+    Ok(manager.status().clone())
+}
+
+#[command]
+pub async fn check_embedding_server(url: String) -> Result<bool, String> {
+    Ok(crate::agent::check_embedding_server(&url).await)
+}
+
+#[command]
+pub async fn set_embedding_server_url(
+    rag_manager: State<'_, SharedRagManager>,
+    url: String,
+) -> Result<bool, String> {
+    let mut manager = rag_manager.write().await;
+    manager.set_embedding_url(url);
+    let available = manager.check_vectorizer().await;
+    Ok(available)
+}
+
+#[command]
+pub async fn index_rag_documents(
+    app: AppHandle,
+    rag_manager: State<'_, SharedRagManager>,
+    channel: Channel<IndexingEvent>,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let docs_manager = DocsManager::new(app_data_dir);
+
+    // Ensure docs are available
+    docs_manager.ensure_docs_available().await
+        .map_err(|e| format!("Failed to ensure docs available: {}", e))?;
+
+    // Load the search index
+    let index = docs_manager.load_index()
+        .map_err(|e| format!("Failed to load search index: {}", e))?;
+
+    let version = docs_manager.get_status().version.unwrap_or_else(|| "unknown".to_string());
+
+    // Create a progress callback that sends to the channel
+    let channel_clone = channel.clone();
+    let on_progress = move |progress: IndexingProgress| {
+        channel_clone.send(IndexingEvent::from(progress)).ok();
+    };
+
+    // Index documents
+    let mut manager = rag_manager.write().await;
+    match manager.index_documents(&index.entries, &version, on_progress).await {
+        Ok(()) => {
+            channel.send(IndexingEvent {
+                current: index.entries.len(),
+                total: index.entries.len(),
+                status: "Complete".to_string(),
+                done: true,
+                error: None,
+            }).ok();
+            Ok(())
+        }
+        Err(e) => {
+            channel.send(IndexingEvent {
+                current: 0,
+                total: 0,
+                status: "Failed".to_string(),
+                done: true,
+                error: Some(e.to_string()),
+            }).ok();
+            Err(e.to_string())
+        }
+    }
+}
+
+#[command]
+pub async fn load_rag_from_disk(
+    rag_manager: State<'_, SharedRagManager>,
+) -> Result<bool, String> {
+    let mut manager = rag_manager.write().await;
+    manager.load_from_disk().await
+        .map_err(|e| format!("Failed to load RAG from disk: {}", e))
+}
+
+#[command]
+pub async fn clear_rag_cache(
+    rag_manager: State<'_, SharedRagManager>,
+) -> Result<(), String> {
+    let mut manager = rag_manager.write().await;
+    manager.clear_cache().await
+        .map_err(|e| format!("Failed to clear RAG cache: {}", e))
+}
+
+#[command]
+pub async fn search_rag(
+    rag_manager: State<'_, SharedRagManager>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<crate::agent::SvelteDoc>, String> {
+    let manager = rag_manager.read().await;
+    manager.search(&query, limit.unwrap_or(3)).await
+        .map_err(|e| format!("RAG search failed: {}", e))
+}
+
+// ============================================================================
+// Model Configuration Commands
+// ============================================================================
+
+#[command]
+pub async fn get_model_config(
+    config: State<'_, SharedAppConfig>,
+) -> Result<ModelConfig, String> {
+    let config_guard = config.read().await;
+    Ok(config_guard.models.clone())
+}
+
+#[command]
+pub async fn set_model_config(
+    app: AppHandle,
+    config: State<'_, SharedAppConfig>,
+    models: ModelConfig,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    let mut config_guard = config.write().await;
+    config_guard.models = models;
+    config_guard.save(&app_data_dir).await
+        .map_err(|e| format!("Failed to save config: {}", e))?;
+
+    log::info!("Model configuration saved");
+    Ok(())
+}
+
+#[command]
+pub async fn get_app_config(
+    config: State<'_, SharedAppConfig>,
+) -> Result<AppConfig, String> {
+    let config_guard = config.read().await;
+    Ok(config_guard.clone())
+}
+
+#[command]
+pub async fn set_app_config(
+    app: AppHandle,
+    config: State<'_, SharedAppConfig>,
+    new_config: AppConfig,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    let mut config_guard = config.write().await;
+    *config_guard = new_config;
+    config_guard.save(&app_data_dir).await
+        .map_err(|e| format!("Failed to save config: {}", e))?;
+
+    log::info!("Application configuration saved");
+    Ok(())
+}
+
+#[command]
+pub async fn get_device_config(
+    config: State<'_, SharedAppConfig>,
+) -> Result<DeviceConfig, String> {
+    let config_guard = config.read().await;
+    Ok(config_guard.device.clone())
+}
+
+#[command]
+pub async fn set_device_config(
+    app: AppHandle,
+    config: State<'_, SharedAppConfig>,
+    device: DeviceConfig,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    let mut config_guard = config.write().await;
+    config_guard.device = device;
+    config_guard.save(&app_data_dir).await
+        .map_err(|e| format!("Failed to save config: {}", e))?;
+
+    log::info!("Device configuration saved");
+    Ok(())
+}
+
+/// List available compute devices by running llama-server --list-devices
+#[command]
+pub async fn list_devices(app: AppHandle) -> Result<Vec<DeviceInfo>, String> {
+    use tauri_plugin_shell::process::CommandEvent;
+
+    log::info!("Listing available devices...");
+
+    // Run llama-server with --list-devices flag
+    // Use --device CUDA0 to trigger the CUDA binary which shows all device types
+    let (mut rx, _child) = app
+        .shell()
+        .sidecar("llama-server-wrapper")
+        .map_err(|e| format!("Failed to create sidecar: {}", e))?
+        .args(["--device", "CUDA0", "--list-devices"])
+        .spawn()
+        .map_err(|e| format!("Failed to spawn llama-server: {}", e))?;
+
+    // Collect output
+    let mut output = String::new();
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(line) => {
+                if let Ok(text) = String::from_utf8(line) {
+                    output.push_str(&text);
+                }
+            }
+            CommandEvent::Stderr(line) => {
+                if let Ok(text) = String::from_utf8(line) {
+                    output.push_str(&text);
+                }
+            }
+            CommandEvent::Terminated(_) => break,
+            _ => {}
+        }
+    }
+
+    log::info!("Device list output: {}", output);
+
+    // Parse the output
+    // Format: "  Vulkan0: Intel(R) Graphics (RPL-P) (32003 MiB, 28803 MiB free)"
+    let mut devices = Vec::new();
+
+    // Always add CPU option first
+    devices.push(DeviceInfo {
+        id: "none".to_string(),
+        name: "CPU Only".to_string(),
+        total_vram_mb: 0,
+        free_vram_mb: 0,
+    });
+
+    for line in output.lines() {
+        let line = line.trim();
+        // Look for lines like "Vulkan0: ..." or "CUDA0: ..."
+        if let Some(colon_pos) = line.find(':') {
+            let id = line[..colon_pos].trim();
+            // Skip if it doesn't look like a device ID (e.g., "Available devices")
+            if !id.contains(' ') && (id.starts_with("Vulkan") || id.starts_with("CUDA") || id.starts_with("Metal")) {
+                let rest = line[colon_pos + 1..].trim();
+
+                // Parse name and VRAM info
+                // Format: "NVIDIA GeForce RTX 4060 Laptop GPU (8188 MiB, 547 MiB free)"
+                let (name, total_vram, free_vram) = if let Some(paren_pos) = rest.rfind('(') {
+                    let name = rest[..paren_pos].trim();
+                    let vram_info = &rest[paren_pos + 1..].trim_end_matches(')');
+
+                    // Parse "8188 MiB, 547 MiB free"
+                    let parts: Vec<&str> = vram_info.split(',').collect();
+                    let total = parts.get(0)
+                        .and_then(|s| s.trim().strip_suffix(" MiB"))
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+                    let free = parts.get(1)
+                        .and_then(|s| s.trim().strip_suffix(" MiB free"))
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+
+                    (name.to_string(), total, free)
+                } else {
+                    (rest.to_string(), 0, 0)
+                };
+
+                devices.push(DeviceInfo {
+                    id: id.to_string(),
+                    name,
+                    total_vram_mb: total_vram,
+                    free_vram_mb: free_vram,
+                });
+            }
+        }
+    }
+
+    log::info!("Found {} devices", devices.len());
+    Ok(devices)
+}
+
+// ============================================================================
+// Server Mode Commands
+// ============================================================================
+
+#[command]
+pub async fn get_server_mode(
+    gateway: State<'_, SharedGateway>,
+) -> Result<ServerModeInfo, String> {
+    Ok(gateway.mode_info().await)
+}
+
+#[command]
+pub async fn start_sidecar_inference(
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
+) -> Result<ServerModeInfo, String> {
+    let config_guard = config.read().await;
+
+    let model_path = config_guard.models.vlm_model_path.as_ref()
+        .ok_or_else(|| "VLM model path not configured".to_string())?;
+    let mmproj_path = config_guard.models.vlm_mmproj_path.as_ref()
+        .ok_or_else(|| "VLM mmproj path not configured".to_string())?;
+
+    let backend_config = BackendConfig {
+        model_path: Some(std::path::PathBuf::from(model_path)),
+        mmproj_path: Some(std::path::PathBuf::from(mmproj_path)),
+        device: Some(config_guard.device.device.clone()),
+        gpu_layers: Some(config_guard.device.gpu_layers),
+        embedding_mode: false,
+        ..Default::default()
+    };
+    drop(config_guard);
+
+    gateway
+        .start(&backend_config, &app)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Started sidecar in inference mode");
+    Ok(gateway.mode_info().await)
+}
+
+#[command]
+pub async fn start_sidecar_embedding(
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
+) -> Result<ServerModeInfo, String> {
+    let config_guard = config.read().await;
+
+    let model_path = config_guard.models.embedding_model_path.as_ref()
+        .ok_or_else(|| "Embedding model path not configured".to_string())?;
+
+    let backend_config = BackendConfig {
+        model_path: Some(std::path::PathBuf::from(model_path)),
+        device: Some(config_guard.device.device.clone()),
+        gpu_layers: Some(config_guard.device.gpu_layers),
+        embedding_mode: true,
+        ..Default::default()
+    };
+    drop(config_guard);
+
+    gateway
+        .start(&backend_config, &app)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Started sidecar in embedding mode");
+    Ok(gateway.mode_info().await)
+}
+
+/// Index documents with automatic mode switching
+/// If in inference mode, switches to embedding mode, indexes, then switches back
+#[command]
+pub async fn index_docs_with_switch(
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
+    rag_manager: State<'_, SharedRagManager>,
+    channel: Channel<IndexingEvent>,
+) -> Result<(), String> {
+    log::info!("========== INDEX_DOCS_WITH_SWITCH CALLED ==========");
+    let config_guard = config.read().await;
+
+    // Check we have embedding model configured
+    let embedding_model_path = config_guard.models.embedding_model_path.as_ref()
+        .ok_or_else(|| "Embedding model path not configured".to_string())?
+        .clone();
+    log::info!("Embedding model path: {:?}", embedding_model_path);
+
+    // Check if we need to restore VLM mode after
+    let restore_vlm = gateway.is_inference_mode().await;
+    log::info!("Restore VLM after indexing: {}", restore_vlm);
+
+    // Save the last inference config for potential restoration
+    let last_inference_config = gateway.last_inference_config().await;
+
+    let device = config_guard.device.clone();
+    drop(config_guard);
+
+    // Send progress: switching to embedding mode
+    channel.send(IndexingEvent {
+        current: 0,
+        total: 0,
+        status: "Switching to embedding mode...".to_string(),
+        done: false,
+        error: None,
+    }).ok();
+
+    // Build embedding config based on which backend is active
+    let backend_name = gateway.current_backend_name().await;
+    log::info!("Current backend for embedding: {}", backend_name);
+
+    let embedding_config = match backend_name.as_str() {
+        "Ollama" => {
+            // Ollama uses model names, not file paths
+            // Default to nomic-embed-text for embeddings
+            BackendConfig {
+                model_name: Some("nomic-embed-text".to_string()),
+                embedding_mode: true,
+                ..Default::default()
+            }
+        }
+        "Candle" => {
+            // Candle uses local SafeTensors model directories (not GGUF files)
+            // Get the path from config (user must download model manually from HuggingFace)
+            let config_guard = config.read().await;
+            let candle_path = config_guard.models.candle_embedding_model_path.clone()
+                .ok_or_else(|| {
+                    "Candle embedding model path not configured. \
+                     Download a SafeTensors model from HuggingFace (e.g., BAAI/bge-small-en-v1.5) \
+                     and set the path in Settings.".to_string()
+                })?;
+            drop(config_guard);
+
+            BackendConfig {
+                model_path: Some(std::path::PathBuf::from(&candle_path)),
+                embedding_mode: true,
+                ..Default::default()
+            }
+        }
+        _ => {
+            // llama.cpp and others use file paths (GGUF format)
+            BackendConfig {
+                model_path: Some(std::path::PathBuf::from(&embedding_model_path)),
+                device: Some(device.device.clone()),
+                gpu_layers: Some(device.gpu_layers),
+                embedding_mode: true,
+                ..Default::default()
+            }
+        }
+    };
+
+    gateway
+        .start(&embedding_config, &app)
+        .await
+        .map_err(|e| format!("Failed to start embedding server: {}", e))?;
+
+    // Update RAG manager with embedding URL from the gateway
+    // All backends now expose an HTTP API (llama.cpp sidecar, Ollama daemon, Candle's Axum server)
+    let embedding_url = match gateway.base_url().await {
+        Some(url) => url,
+        None => {
+            // Backend has no HTTP API (e.g., Candle)
+            // Restore VLM mode if needed and return error
+            if restore_vlm {
+                if let Some(inference_config) = last_inference_config.clone() {
+                    let _ = gateway.start(&inference_config, &app).await;
+                }
+            }
+            return Err(format!(
+                "The {} backend does not support RAG indexing through the GUI. \
+                 It runs in-process without an HTTP API. \
+                 Please use llama.cpp or Ollama for RAG/embedding functionality.",
+                backend_name
+            ));
+        }
+    };
+    log::info!("Embedding URL set: {:?}", embedding_url);
+    {
+        let mut rag_guard = rag_manager.write().await;
+        rag_guard.set_embedding_url(embedding_url);
+    }
+
+    // Load docs and index
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let docs_manager = DocsManager::new(app_data_dir);
+
+    docs_manager.ensure_docs_available().await
+        .map_err(|e| format!("Failed to ensure docs available: {}", e))?;
+
+    let index = docs_manager.load_index()
+        .map_err(|e| format!("Failed to load search index: {}", e))?;
+
+    let version = docs_manager.get_status().version.unwrap_or_else(|| "unknown".to_string());
+    log::info!("Loaded {} documents from search index (version: {})", index.entries.len(), version);
+
+    // Create progress callback
+    let channel_clone = channel.clone();
+    let on_progress = move |progress: IndexingProgress| {
+        channel_clone.send(IndexingEvent::from(progress)).ok();
+    };
+
+    // Index documents
+    log::info!("Starting index_documents() with {} docs", index.entries.len());
+    let index_result = {
+        let mut manager = rag_manager.write().await;
+        manager.index_documents(&index.entries, &version, on_progress).await
+    };
+
+    match index_result {
+        Ok(()) => {
+            channel.send(IndexingEvent {
+                current: index.entries.len(),
+                total: index.entries.len(),
+                status: "Indexing complete".to_string(),
+                done: false,
+                error: None,
+            }).ok();
+        }
+        Err(e) => {
+            log::error!("Failed to index documents: {:?}", e);
+            channel.send(IndexingEvent {
+                current: 0,
+                total: 0,
+                status: "Indexing failed".to_string(),
+                done: true,
+                error: Some(e.to_string()),
+            }).ok();
+
+            // Try to restore VLM mode even on error
+            if restore_vlm {
+                if let Some(inference_config) = last_inference_config.clone() {
+                    let _ = gateway.start(&inference_config, &app).await;
+                }
+            }
+
+            return Err(e.to_string());
+        }
+    }
+
+    // Restore VLM mode if we were in it before
+    if restore_vlm {
+        channel.send(IndexingEvent {
+            current: index.entries.len(),
+            total: index.entries.len(),
+            status: "Switching back to VLM mode...".to_string(),
+            done: false,
+            error: None,
+        }).ok();
+
+        if let Some(inference_config) = last_inference_config {
+            gateway
+                .start(&inference_config, &app)
+                .await
+                .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
+        }
+    }
+
+    channel.send(IndexingEvent {
+        current: index.entries.len(),
+        total: index.entries.len(),
+        status: "Complete".to_string(),
+        done: true,
+        error: None,
+    }).ok();
+
+    Ok(())
+}
+
+// ============================================================================
+// Backend Commands
+// ============================================================================
+
+use super::backend::BackendInfo;
+
+/// List all available inference backends
+#[command]
+pub async fn list_backends(gateway: State<'_, SharedGateway>) -> Result<Vec<BackendInfo>, String> {
+    let mut backends = gateway.available_backends();
+    let current_name = gateway.current_backend_name().await;
+
+    // Mark the active backend
+    for backend in &mut backends {
+        backend.active = backend.name == current_name;
+    }
+
+    Ok(backends)
+}
+
+/// Get the currently active backend name
+#[command]
+pub async fn get_current_backend(gateway: State<'_, SharedGateway>) -> Result<String, String> {
+    Ok(gateway.current_backend_name().await)
+}
+
+/// Switch to a different inference backend
+///
+/// Note: This stops the current backend. You'll need to call start_sidecar_inference
+/// or start_sidecar_embedding to start the new backend.
+#[command]
+pub async fn switch_backend(
+    gateway: State<'_, SharedGateway>,
+    backend_name: String,
+) -> Result<(), String> {
+    gateway
+        .switch_backend(&backend_name)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Switched to backend: {}", backend_name);
+    Ok(())
+}
+
+/// Get capabilities of the current backend
+#[command]
+pub async fn get_backend_capabilities(
+    gateway: State<'_, SharedGateway>,
+) -> Result<super::backend::BackendCapabilities, String> {
+    Ok(gateway.capabilities().await)
 }

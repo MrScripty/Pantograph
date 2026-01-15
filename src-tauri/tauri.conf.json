@@ -10,7 +10,7 @@
     "frontendDist": "../dist"
   },
   "bundle": {
-    "externalBin": ["binaries/llama-server"]
+    "externalBin": ["binaries/llama-server-wrapper"]
   },
   "app": {
     "windows": [

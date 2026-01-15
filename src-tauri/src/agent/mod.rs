@@ -1,12 +1,16 @@
 pub mod docs;
 pub mod docs_index;
 pub mod docs_search;
+pub mod embeddings;
 pub mod prompt;
+pub mod rag;
 pub mod tools;
 pub mod types;
 
 pub use docs::DocsManager;
+pub use embeddings::{check_embedding_server, create_embedding_client};
 pub use prompt::SYSTEM_PROMPT;
+pub use rag::{create_rag_manager, IndexingProgress, RagManager, RagStatus, SharedRagManager, SvelteDoc};
 pub use tools::*;
 pub use types::*;
 

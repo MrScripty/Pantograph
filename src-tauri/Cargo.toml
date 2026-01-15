@@ -5,6 +5,22 @@ description = "Pantograph"
 authors = ["you"]
 edition = "2021"
 
+[features]
+default = ["backend-llamacpp", "backend-ollama", "backend-candle"]
+
+# Inference backends - at least one must be enabled
+backend-llamacpp = []  # Default: llama.cpp sidecar with GGUF support
+backend-ollama = []    # Ollama daemon integration
+backend-candle = [     # In-process Candle inference (CUDA required, experimental)
+    "dep:candle-core",
+    "dep:candle-nn",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:tokio-stream",
+    "dep:axum",
+    "dep:tower-http",
+]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -13,13 +29,28 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.9.0", features = [] }
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full"] }
 base64 = "0.22"
 futures-util = "0.3"
-rig-core = "0.28.0"
+rig-core = { version = "0.28.0", features = ["derive"] }
 thiserror = "1"
 log = "0.4"
 env_logger = "0.11"
 nucleo-matcher = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+which = "7"
+
+# Candle dependencies (optional, for backend-candle feature)
+# Using git main branch for Qwen3 support (not in crates.io 0.9.1)
+candle-core = { git = "https://github.com/huggingface/candle", branch = "main", optional = true }
+candle-nn = { git = "https://github.com/huggingface/candle", branch = "main", optional = true }
+candle-transformers = { git = "https://github.com/huggingface/candle", branch = "main", optional = true }
+tokenizers = { version = "0.20", optional = true }
+tokio-stream = { version = "0.1", optional = true }
+
+# Axum HTTP server (optional, for backend-candle feature)
+axum = { version = "0.7", optional = true }
+tower-http = { version = "0.5", features = ["cors"], optional = true }

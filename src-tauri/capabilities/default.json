@@ -5,11 +5,12 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "dialog:default",
     {
       "identifier": "shell:allow-spawn",
       "allow": [
         {
-          "name": "binaries/llama-server",
+          "name": "binaries/llama-server-wrapper",
           "sidecar": true,
           "args": true
         }
@@ -19,7 +20,7 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
-          "name": "binaries/llama-server",
+          "name": "binaries/llama-server-wrapper",
           "sidecar": true,
           "args": true
         }
