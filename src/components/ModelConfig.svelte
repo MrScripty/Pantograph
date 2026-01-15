@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { ConfigService, type ConfigState, type ModelConfig } from '../services/ConfigService';
+  import { expandedSection, toggleSection } from '../stores/accordionStore';
 
   let state: ConfigState = ConfigService.getState();
   let unsubscribe: (() => void) | null = null;
-  let showConfig = false;
   let isSaving = false;
 
   // Local form state
@@ -95,7 +95,7 @@
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => (showConfig = !showConfig)}
+    on:click={() => toggleSection('model')}
   >
     <div class="flex items-center gap-2">
       <span>Model Configuration</span>
@@ -106,7 +106,7 @@
       {/if}
     </div>
     <svg
-      class="w-3 h-3 transform transition-transform {showConfig ? 'rotate-180' : ''}"
+      class="w-3 h-3 transform transition-transform {$expandedSection === 'model' ? 'rotate-180' : ''}"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -115,7 +115,7 @@
     </svg>
   </button>
 
-  {#if showConfig}
+  {#if $expandedSection === 'model'}
     <div class="space-y-4 p-3 bg-neutral-800/30 rounded-lg">
       <!-- VLM Model Section -->
       <div class="space-y-2">

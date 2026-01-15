@@ -86,6 +86,8 @@ pub struct AppConfig {
     pub connection_mode: ConnectionMode,
     /// External server URL (if using external mode)
     pub external_url: Option<String>,
+    /// API key for external providers (OpenAI, Anthropic, etc.)
+    pub api_key: Option<String>,
 }
 
 impl AppConfig {

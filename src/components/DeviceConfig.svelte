@@ -3,12 +3,12 @@
   import { ConfigService, type ConfigState, type DeviceConfig, type DeviceInfo } from '../services/ConfigService';
   import { LLMService } from '../services/LLMService';
   import { RagService } from '../services/RagService';
+  import { expandedSection, toggleSection } from '../stores/accordionStore';
 
   let state: ConfigState = ConfigService.getState();
   let unsubscribe: (() => void) | null = null;
   let unsubscribeLLM: (() => void) | null = null;
   let unsubscribeRag: (() => void) | null = null;
-  let showConfig = false;
   let isSaving = false;
   let isLoadingDevices = false;
   let isRefreshingDevices = false;
@@ -204,12 +204,12 @@
   ];
 
   $: {
-    if (showConfig && !refreshTimer) {
+    if ($expandedSection === 'device' && !refreshTimer) {
       void loadDevices({ silent: true });
       refreshTimer = setInterval(() => {
         void loadDevices({ silent: true });
       }, 3000);
-    } else if (!showConfig && refreshTimer) {
+    } else if ($expandedSection !== 'device' && refreshTimer) {
       clearInterval(refreshTimer);
       refreshTimer = null;
     }
@@ -220,7 +220,7 @@
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => (showConfig = !showConfig)}
+    on:click={() => toggleSection('device')}
   >
     <div class="flex items-center gap-2">
       <span>Device Configuration</span>
@@ -233,7 +233,7 @@
       {/if}
     </div>
     <svg
-      class="w-3 h-3 transform transition-transform {showConfig ? 'rotate-180' : ''}"
+      class="w-3 h-3 transform transition-transform {$expandedSection === 'device' ? 'rotate-180' : ''}"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -242,7 +242,7 @@
     </svg>
   </button>
 
-  {#if showConfig}
+  {#if $expandedSection === 'device'}
     <div class="space-y-4 p-3 bg-neutral-800/30 rounded-lg">
       <!-- Device Selection -->
       <div class="space-y-2">

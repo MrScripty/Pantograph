@@ -6,6 +6,8 @@
     type ConfigState,
     type ServerModeInfo,
   } from '../services/ConfigService';
+  import BackendSelector from './BackendSelector.svelte';
+  import { expandedSection, toggleSection } from '../stores/accordionStore';
 
   let llmState: LLMState = LLMService.getState();
   let configState: ConfigState = ConfigService.getState();
@@ -13,11 +15,10 @@
   let unsubscribeConfig: (() => void) | null = null;
 
   // UI state
-  let connectionType: 'external' | 'sidecar' = 'external';
+  let connectionType: 'external' | 'sidecar' = 'sidecar';
   let externalUrl = 'http://localhost:1234';
+  let apiKey = '';
   let isConnecting = false;
-  let isStarting = false;
-  let showSettings = false;
 
   onMount(async () => {
     unsubscribeLLM = LLMService.subscribe((state) => {
@@ -34,6 +35,9 @@
       configState = state;
       if (state.config.external_url) {
         externalUrl = state.config.external_url;
+      }
+      if (state.config.api_key) {
+        apiKey = state.config.api_key;
       }
     });
 
@@ -56,10 +60,11 @@
     isConnecting = true;
     try {
       await LLMService.connectToServer(externalUrl);
-      // Save the URL to config
+      // Save the URL and API key to config
       await ConfigService.saveConfig({
         ...configState.config,
         external_url: externalUrl,
+        api_key: apiKey || null,
         connection_mode: { type: 'External', url: externalUrl },
       });
     } catch (error) {
@@ -69,19 +74,7 @@
     }
   };
 
-  const startSidecarVLM = async () => {
-    isStarting = true;
-    try {
-      await ConfigService.startInferenceMode();
-      await LLMService.refreshStatus();
-    } catch (error) {
-      console.error('Failed to start sidecar:', error);
-    } finally {
-      isStarting = false;
-    }
-  };
-
-  const stopServer = async () => {
+  const disconnectExternal = async () => {
     await LLMService.stop();
     await ConfigService.refreshServerMode();
   };
@@ -110,19 +103,13 @@
         return 'None';
     }
   })();
-
-  $: canStartSidecar =
-    configState.config.models.vlm_model_path &&
-    configState.config.models.vlm_mmproj_path &&
-    !llmState.status.ready &&
-    !isStarting;
 </script>
 
 <div class="space-y-3">
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => (showSettings = !showSettings)}
+    on:click={() => toggleSection('server')}
   >
     <div class="flex items-center gap-2">
       <span class="w-2 h-2 rounded-full {statusColor}"></span>
@@ -132,7 +119,7 @@
       {/if}
     </div>
     <svg
-      class="w-3 h-3 transform transition-transform {showSettings ? 'rotate-180' : ''}"
+      class="w-3 h-3 transform transition-transform {$expandedSection === 'server' ? 'rotate-180' : ''}"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -141,7 +128,7 @@
     </svg>
   </button>
 
-  {#if showSettings}
+  {#if $expandedSection === 'server'}
     <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
       <!-- Connection Type Tabs -->
       <div class="flex gap-1 p-1 bg-neutral-900 rounded">
@@ -167,75 +154,44 @@
         <!-- External Connection -->
         <div class="space-y-2">
           <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
-            Connect to external server (LM Studio, API, etc.)
+            Connect to external server (LM Studio, OpenAI, etc.)
           </div>
+          <input
+            type="text"
+            bind:value={externalUrl}
+            placeholder="http://localhost:1234 or https://api.openai.com/v1"
+            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
+            disabled={isConnecting || (llmState.status.ready && llmState.status.mode === 'external')}
+          />
+          <input
+            type="password"
+            bind:value={apiKey}
+            placeholder="API Key (optional)"
+            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
+            disabled={isConnecting || (llmState.status.ready && llmState.status.mode === 'external')}
+          />
           <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={externalUrl}
-              placeholder="http://localhost:1234"
-              class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
-              disabled={isConnecting}
-            />
-            <button
-              on:click={connectExternal}
-              disabled={isConnecting || !externalUrl.trim()}
-              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-            >
-              {isConnecting ? '...' : 'Connect'}
-            </button>
-          </div>
-        </div>
-      {:else}
-        <!-- Sidecar Mode -->
-        <div class="space-y-2">
-          <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
-            Built-in llama.cpp server
-          </div>
-
-          {#if !ConfigService.hasVlmModels}
-            <div class="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/50 rounded p-2">
-              Configure model paths below to use sidecar mode
-            </div>
-          {:else if configState.serverMode.mode === 'sidecar_inference'}
-            <div class="flex items-center gap-2 text-xs text-green-400">
-              <span class="w-2 h-2 rounded-full bg-green-500"></span>
-              Running in VLM mode
-            </div>
-            {#if configState.serverMode.model_path}
-              <div class="text-[10px] text-neutral-500 truncate">
-                {configState.serverMode.model_path.split('/').pop()}
-              </div>
-            {/if}
-          {:else if configState.serverMode.mode === 'sidecar_embedding'}
-            <div class="flex items-center gap-2 text-xs text-blue-400">
-              <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-              Running in Embedding mode
-            </div>
-          {:else}
-            <div class="text-xs text-neutral-500">
-              Server not running
-            </div>
-          {/if}
-
-          <div class="flex gap-2">
-            <button
-              on:click={startSidecarVLM}
-              disabled={!canStartSidecar}
-              class="flex-1 px-2 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-            >
-              {isStarting ? 'Starting...' : 'Start VLM'}
-            </button>
-            {#if llmState.status.ready}
+            {#if llmState.status.ready && llmState.status.mode === 'external'}
               <button
-                on:click={stopServer}
-                class="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-xs transition-colors"
+                on:click={disconnectExternal}
+                class="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-xs transition-colors"
               >
-                Stop
+                Disconnect
+              </button>
+            {:else}
+              <button
+                on:click={connectExternal}
+                disabled={isConnecting || !externalUrl.trim()}
+                class="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
+              >
+                {isConnecting ? 'Connecting...' : 'Connect'}
               </button>
             {/if}
           </div>
         </div>
+      {:else}
+        <!-- Sidecar Mode - Backend Selector -->
+        <BackendSelector />
       {/if}
 
       <!-- Status -->

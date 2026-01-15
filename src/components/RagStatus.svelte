@@ -5,12 +5,12 @@
   import { ConfigService, type ConfigState } from '../services/ConfigService';
   import { LLMService } from '../services/LLMService';
   import { openChunkPreview } from '../stores/chunkPreviewStore';
+  import { expandedSection, toggleSection } from '../stores/accordionStore';
 
   let ragState: RagState = RagService.getState();
   let configState: ConfigState = ConfigService.getState();
   let unsubscribeRag: (() => void) | null = null;
   let unsubscribeConfig: (() => void) | null = null;
-  let showSettings = false;
   let isIndexingWithSwitch = false;
 
   // For external embedding server (legacy mode)
@@ -141,7 +141,7 @@
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => (showSettings = !showSettings)}
+    on:click={() => toggleSection('rag')}
   >
     <div class="flex items-center gap-2">
       <span>Documentation & RAG</span>
@@ -152,7 +152,7 @@
       {/if}
     </div>
     <svg
-      class="w-3 h-3 transform transition-transform {showSettings ? 'rotate-180' : ''}"
+      class="w-3 h-3 transform transition-transform {$expandedSection === 'rag' ? 'rotate-180' : ''}"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -161,7 +161,7 @@
     </svg>
   </button>
 
-  {#if showSettings}
+  {#if $expandedSection === 'rag'}
     <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
       <!-- Docs Status -->
       <div class="flex items-center gap-2">

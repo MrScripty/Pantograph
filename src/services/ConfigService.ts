@@ -32,6 +32,7 @@ export interface AppConfig {
   device: DeviceConfig;
   connection_mode: ConnectionMode;
   external_url: string | null;
+  api_key: string | null;
 }
 
 export interface ServerModeInfo {
@@ -63,6 +64,7 @@ const defaultConfig: AppConfig = {
   },
   connection_mode: { type: 'None' },
   external_url: null,
+  api_key: null,
 };
 
 const defaultServerMode: ServerModeInfo = {
