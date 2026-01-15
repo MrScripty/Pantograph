@@ -4,6 +4,7 @@
 //! it will automatically start it. Ollama exposes an OpenAI-compatible API
 //! at `/v1/`, so we can forward requests directly without translation.
 
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::{Child, Command, Stdio};
 
@@ -74,14 +75,79 @@ impl OllamaBackend {
         }
     }
 
-    /// Check if Ollama is installed on the system
-    fn check_ollama_installed() -> Result<(), BackendError> {
-        which::which("ollama").map_err(|_| {
-            BackendError::Config(
-                "Ollama not found. Install from https://ollama.ai/download".to_string(),
-            )
-        })?;
-        Ok(())
+    /// Check if Ollama is available for this backend
+    ///
+    /// Returns (available, reason_if_not) tuple.
+    /// This is called by the registry to populate BackendInfo.available.
+    pub fn check_availability() -> (bool, Option<String>) {
+        // Check system PATH first
+        if which::which("ollama").is_ok() {
+            return (true, None);
+        }
+
+        // Check managed binaries directory
+        if Self::find_managed_ollama().is_some() {
+            return (true, None);
+        }
+
+        (
+            false,
+            Some("Ollama not installed".to_string()),
+        )
+    }
+
+    /// Check if Ollama can be auto-installed on this platform
+    ///
+    /// Currently only Linux x86_64 is supported for auto-installation.
+    pub fn can_auto_install() -> bool {
+        cfg!(target_os = "linux") && cfg!(target_arch = "x86_64")
+    }
+
+    /// Find Ollama binary in our managed binaries directory
+    fn find_managed_ollama() -> Option<PathBuf> {
+        let mut candidates: Vec<PathBuf> = vec![];
+
+        // App data directory (where downloads go to avoid triggering recompilation)
+        // On Linux: ~/.local/share/com.pantograph.app/binaries/ollama
+        #[cfg(target_os = "linux")]
+        if let Some(data_dir) = dirs::data_dir() {
+            candidates.push(data_dir.join("com.pantograph.app/binaries/ollama"));
+        }
+
+        // Dev mode: src-tauri/binaries
+        if let Ok(cwd) = std::env::current_dir() {
+            candidates.push(cwd.join("binaries/ollama"));
+        }
+
+        // Dev mode: exe in target/debug, binaries in src-tauri/binaries
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(p) = exe.parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+            {
+                candidates.push(p.join("binaries/ollama"));
+            }
+        }
+
+        // Production: binaries next to exe
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(p) = exe.parent() {
+                candidates.push(p.join("binaries/ollama"));
+            }
+        }
+
+        candidates.into_iter().find(|p| p.exists())
+    }
+
+    /// Find the best Ollama binary to use (managed or system)
+    fn find_ollama_binary() -> Option<PathBuf> {
+        // Prefer our managed version
+        if let Some(managed) = Self::find_managed_ollama() {
+            return Some(managed);
+        }
+
+        // Fall back to system PATH
+        which::which("ollama").ok()
     }
 
     /// Start the Ollama daemon if not already running
@@ -92,21 +158,25 @@ impl OllamaBackend {
             return Ok(());
         }
 
-        // Check Ollama is installed before trying to start it
-        Self::check_ollama_installed()?;
+        // Find Ollama binary (prefer managed, then system PATH)
+        let ollama_bin = Self::find_ollama_binary().ok_or_else(|| {
+            BackendError::Config(
+                "Ollama not found. Install from https://ollama.ai/download".to_string(),
+            )
+        })?;
 
-        log::info!("Starting Ollama daemon...");
+        log::info!("Starting Ollama daemon from: {:?}", ollama_bin);
 
         // Try to start ollama serve
-        let child = Command::new("ollama")
+        let child = Command::new(&ollama_bin)
             .arg("serve")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| {
                 BackendError::StartupFailed(format!(
-                    "Failed to start Ollama daemon. Is Ollama installed? Error: {}",
-                    e
+                    "Failed to start Ollama daemon from {:?}. Error: {}",
+                    ollama_bin, e
                 ))
             })?;
 

@@ -514,6 +514,26 @@ impl CandleBackend {
         }
     }
 
+    /// Check if CUDA is available for this backend
+    ///
+    /// Returns (available, reason_if_not) tuple.
+    /// This is called by the registry to populate BackendInfo.available.
+    pub fn check_availability() -> (bool, Option<String>) {
+        // Try to create a CUDA device (device 0)
+        match Device::new_cuda(0) {
+            Ok(_) => (true, None),
+            Err(e) => {
+                let err_str = e.to_string();
+                let reason = if err_str.contains("not been built with cuda") {
+                    "Candle was not compiled with CUDA support".to_string()
+                } else {
+                    format!("CUDA not available: {}", err_str)
+                };
+                (false, Some(reason))
+            }
+        }
+    }
+
     /// Get static capabilities (for registry info before instantiation)
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {
@@ -705,7 +725,7 @@ mod tests {
         assert!(!caps.vision); // Vision not implemented yet
         assert!(caps.embeddings);
         assert!(caps.gpu);
-        assert!(!caps.device_selection);
+        assert!(caps.device_selection); // Supports CUDA device selection (e.g., "CUDA0", "CUDA1")
         assert!(caps.streaming);
         assert!(!caps.tool_calling);
     }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, Channel } from '@tauri-apps/api/core';
+  import Modal from '../templates/Modal.svelte';
 
   interface BackendCapabilities {
     vision: boolean;
@@ -18,7 +19,22 @@
     active: boolean;
     available: boolean;
     unavailable_reason: string | null;
+    can_install: boolean;
   }
+
+  interface DownloadProgress {
+    status: string;
+    current: number;
+    total: number;
+    done: boolean;
+    error: string | null;
+  }
+
+  // Download sizes for confirmation dialog
+  const DOWNLOAD_SIZES: Record<string, string> = {
+    'llama.cpp': '~60 MB',
+    Ollama: '~1.6 GB',
+  };
 
   let backends: BackendInfo[] = [];
   let currentBackend: string = '';
@@ -26,6 +42,13 @@
   let isSwitching = false;
   let error: string | null = null;
   let showDetails = false;
+
+  // Download state
+  let downloadingBackend: string | null = null;
+  let downloadProgress: DownloadProgress | null = null;
+
+  // Confirmation dialog state
+  let confirmDownload: BackendInfo | null = null;
 
   const loadBackends = async () => {
     isLoading = true;
@@ -59,6 +82,69 @@
     }
   };
 
+  const promptDownload = (backend: BackendInfo) => {
+    confirmDownload = backend;
+  };
+
+  const cancelDownload = () => {
+    confirmDownload = null;
+  };
+
+  const startDownload = async () => {
+    if (!confirmDownload) return;
+    const name = confirmDownload.name;
+    confirmDownload = null;
+
+    downloadingBackend = name;
+    downloadProgress = { status: 'Starting...', current: 0, total: 0, done: false, error: null };
+    error = null;
+
+    try {
+      const channel = new Channel<DownloadProgress>();
+      channel.onmessage = (event: DownloadProgress) => {
+        downloadProgress = event;
+        if (event.error) {
+          error = event.error;
+          downloadingBackend = null;
+          downloadProgress = null;
+        }
+        if (event.done && !event.error) {
+          downloadingBackend = null;
+          downloadProgress = null;
+          // Reload backends to update availability
+          loadBackends();
+        }
+      };
+
+      // Call backend-specific download command
+      if (name === 'llama.cpp') {
+        await invoke('download_llama_binaries', { channel });
+      } else if (name === 'Ollama') {
+        await invoke('download_ollama_binary', { channel });
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+      downloadingBackend = null;
+      downloadProgress = null;
+    }
+  };
+
+  const handleBackendClick = (backend: BackendInfo) => {
+    if (backend.available) {
+      switchBackend(backend.name);
+    } else if (backend.can_install) {
+      promptDownload(backend);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   onMount(() => {
     loadBackends();
   });
@@ -67,11 +153,32 @@
   $: activeBackend = backends.find((b) => b.name === currentBackend);
 </script>
 
+<!-- Confirmation Dialog -->
+<Modal open={confirmDownload !== null} title="Download Backend" size="sm" onclose={cancelDownload}>
+  {#if confirmDownload}
+    <p class="text-neutral-300">
+      Download <strong>{confirmDownload.name}</strong> backend?
+    </p>
+    <p class="text-sm text-neutral-500 mt-2">Size: {DOWNLOAD_SIZES[confirmDownload.name] || 'Unknown'}</p>
+  {/if}
+  {#snippet footer()}
+    <button onclick={cancelDownload} class="px-4 py-2 text-sm text-neutral-400 hover:text-white">
+      Cancel
+    </button>
+    <button
+      onclick={startDownload}
+      class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded"
+    >
+      Download
+    </button>
+  {/snippet}
+</Modal>
+
 <div class="space-y-3">
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => (showDetails = !showDetails)}
+    onclick={() => (showDetails = !showDetails)}
   >
     <div class="flex items-center gap-2">
       <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +208,8 @@
     <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
       {#if isLoading}
         <div class="flex items-center gap-2 text-xs text-neutral-500">
-          <div class="w-3 h-3 border border-neutral-500 border-t-transparent rounded-full animate-spin"
+          <div
+            class="w-3 h-3 border border-neutral-500 border-t-transparent rounded-full animate-spin"
           ></div>
           <span>Loading backends...</span>
         </div>
@@ -111,21 +219,78 @@
         <!-- Backend selection buttons -->
         <div class="flex flex-wrap gap-2">
           {#each backends as backend}
-            <button
-              class="px-3 py-1.5 text-xs rounded transition-colors {backend.name === currentBackend
-                ? 'bg-blue-600 text-white'
-                : backend.available
-                  ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-                  : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}"
-              on:click={() => switchBackend(backend.name)}
-              disabled={!backend.available || isSwitching}
-              title={backend.description}
-            >
-              {#if isSwitching && backend.name === currentBackend}
-                <span class="inline-block w-3 h-3 border border-white border-t-transparent rounded-full animate-spin mr-1"></span>
+            <div class="flex flex-col">
+              <button
+                class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.name ===
+                currentBackend
+                  ? 'bg-blue-600 text-white'
+                  : backend.available
+                    ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                    : backend.can_install
+                      ? 'bg-neutral-700/50 text-neutral-400 hover:bg-neutral-600/50 cursor-pointer'
+                      : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}"
+                onclick={() => handleBackendClick(backend)}
+                disabled={(!backend.available && !backend.can_install) ||
+                  isSwitching ||
+                  downloadingBackend !== null}
+                title={backend.available
+                  ? backend.description
+                  : backend.can_install
+                    ? `Click to download (${DOWNLOAD_SIZES[backend.name] || 'Unknown size'})`
+                    : backend.unavailable_reason || 'Not available'}
+              >
+                {#if isSwitching && backend.name === currentBackend}
+                  <span
+                    class="inline-block w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"
+                  ></span>
+                {:else if downloadingBackend === backend.name}
+                  <span
+                    class="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"
+                  ></span>
+                {:else if !backend.available && backend.can_install}
+                  <!-- Lucide Download Icon -->
+                  <svg
+                    class="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                {/if}
+                {backend.name}
+              </button>
+
+              {#if downloadingBackend === backend.name && downloadProgress}
+                <div class="mt-1 space-y-1">
+                  <div class="text-[9px] text-blue-400">{downloadProgress.status}</div>
+                  {#if downloadProgress.total > 0}
+                    <div class="bg-neutral-700 rounded-full h-1 overflow-hidden">
+                      <div
+                        class="bg-blue-500 h-1 transition-all duration-300"
+                        style="width: {(downloadProgress.current / downloadProgress.total) * 100}%"
+                      ></div>
+                    </div>
+                    <div class="text-[8px] text-neutral-500">
+                      {formatBytes(downloadProgress.current)} / {formatBytes(downloadProgress.total)}
+                    </div>
+                  {/if}
+                </div>
+              {:else if !backend.available && backend.unavailable_reason}
+                <span class="text-[9px] text-amber-400 mt-0.5 max-w-[120px] leading-tight">
+                  {#if backend.can_install}
+                    Click to install
+                  {:else}
+                    {backend.unavailable_reason}
+                  {/if}
+                </span>
               {/if}
-              {backend.name}
-            </button>
+            </div>
           {/each}
         </div>
 
@@ -198,7 +363,7 @@
 
       <!-- Refresh button -->
       <button
-        on:click={loadBackends}
+        onclick={loadBackends}
         disabled={isLoading}
         class="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors disabled:opacity-50"
       >

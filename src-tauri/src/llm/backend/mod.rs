@@ -85,6 +85,8 @@ pub struct BackendInfo {
     pub available: bool,
     /// Reason if unavailable
     pub unavailable_reason: Option<String>,
+    /// Whether this backend can be auto-installed (binaries can be downloaded)
+    pub can_install: bool,
 }
 
 /// Configuration for starting a backend

@@ -46,6 +46,9 @@ chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 which = "7"
 zip = "2"
+zstd = "0.13"
+tar = "0.4"
+dirs = "6"
 
 # Candle dependencies (optional, for backend-candle feature)
 # Using git main branch for Qwen3 support (not in crates.io 0.9.1)

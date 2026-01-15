@@ -37,6 +37,7 @@ impl BackendFactory for LlamaCppFactory {
             active: false,
             available: true,
             unavailable_reason: None,
+            can_install: true, // Binaries can be downloaded from GitHub releases
         }
     }
 }
@@ -52,13 +53,15 @@ impl BackendFactory for OllamaFactory {
     }
 
     fn info(&self) -> BackendInfo {
+        let (available, unavailable_reason) = OllamaBackend::check_availability();
         BackendInfo {
             name: "Ollama".to_string(),
             description: "Ollama daemon with automatic model management".to_string(),
             capabilities: OllamaBackend::static_capabilities(),
             active: false,
-            available: true,
-            unavailable_reason: None,
+            available,
+            unavailable_reason,
+            can_install: OllamaBackend::can_auto_install(),
         }
     }
 }
@@ -74,13 +77,19 @@ impl BackendFactory for CandleFactory {
     }
 
     fn info(&self) -> BackendInfo {
+        let (available, unavailable_reason) = CandleBackend::check_availability();
         BackendInfo {
             name: "Candle".to_string(),
-            description: "In-process Candle inference (CUDA required, experimental)".to_string(),
+            description: if available {
+                "In-process Candle inference (CUDA)".to_string()
+            } else {
+                "In-process Candle inference (CUDA required)".to_string()
+            },
             capabilities: CandleBackend::static_capabilities(),
             active: false,
-            available: true,
-            unavailable_reason: None,
+            available,
+            unavailable_reason,
+            can_install: false, // CUDA must be installed system-wide, can't auto-install
         }
     }
 }
