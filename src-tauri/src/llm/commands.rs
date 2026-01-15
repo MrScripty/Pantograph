@@ -758,7 +758,10 @@ pub async fn search_rag(
     limit: Option<usize>,
 ) -> Result<Vec<crate::agent::SvelteDoc>, String> {
     let manager = rag_manager.read().await;
-    manager.search(&query, limit.unwrap_or(3)).await
+    // Use the backwards-compatible method that returns SvelteDoc
+    manager
+        .search_as_docs(&query, limit.unwrap_or(3))
+        .await
         .map_err(|e| format!("RAG search failed: {}", e))
 }
 
