@@ -3,6 +3,7 @@
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { RagService, type RagState, type IndexingEvent } from '../services/RagService';
   import { ConfigService, type ConfigState } from '../services/ConfigService';
+  import { openChunkPreview } from '../stores/chunkPreviewStore';
 
   let ragState: RagState = RagService.getState();
   let configState: ConfigState = ConfigService.getState();
@@ -295,6 +296,19 @@
           class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
         >
           Clear Index Cache
+        </button>
+      {/if}
+
+      <!-- Chunk Preview button -->
+      {#if ragState.status.docs_available}
+        <button
+          on:click={openChunkPreview}
+          class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors flex items-center justify-center gap-2"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+          </svg>
+          Preview Chunks
         </button>
       {/if}
 

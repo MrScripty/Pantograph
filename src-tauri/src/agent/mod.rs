@@ -1,3 +1,4 @@
+pub mod chunker;
 pub mod docs;
 pub mod docs_index;
 pub mod docs_search;
@@ -7,6 +8,7 @@ pub mod rag;
 pub mod tools;
 pub mod types;
 
+pub use chunker::{chunk_document, preview_chunks, ChunkConfig};
 pub use docs::DocsManager;
 pub use embeddings::{check_embedding_server, create_embedding_client};
 pub use prompt::SYSTEM_PROMPT;

@@ -6,6 +6,7 @@
   import TopBar from './components/TopBar.svelte';
   import SidePanel from './components/SidePanel.svelte';
   import HotLoadContainer from './components/HotLoadContainer.svelte';
+  import ChunkPreview from './components/ChunkPreview.svelte';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
   import { panelWidth } from './stores/panelStore';
@@ -35,6 +36,9 @@
   <SidePanel />
 
   <HotLoadContainer />
+
+  <!-- Global modals -->
+  <ChunkPreview />
 
   <div
     class="fixed bottom-4 text-[10px] text-neutral-600 uppercase tracking-widest pointer-events-none z-40 transition-[right] duration-300 ease-out"

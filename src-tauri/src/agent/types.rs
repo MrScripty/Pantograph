@@ -1,3 +1,4 @@
+use rig::Embed;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -119,4 +120,68 @@ pub struct TemplateInfo {
     pub name: String,
     pub description: String,
     pub path: String,
+}
+
+// ============================================================================
+// Document Chunking Types
+// ============================================================================
+
+/// A chunk of a document for embedding in the RAG system
+#[derive(Embed, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Default)]
+pub struct DocChunk {
+    /// Unique ID: "{doc_id}#chunk{n}"
+    pub id: String,
+    /// Parent document ID
+    pub doc_id: String,
+    /// Chunk's section/subsection title
+    pub title: String,
+    /// Parent document title
+    pub doc_title: String,
+    /// Top-level section (e.g., "runes", "template-syntax")
+    pub section: String,
+    /// 0-indexed position in document
+    pub chunk_index: u32,
+    /// Total chunks in parent document
+    pub total_chunks: u32,
+    /// Header breadcrumb for context (e.g., "State > $state rune")
+    pub header_context: String,
+    /// The content to embed
+    #[embed]
+    pub content: String,
+    /// Whether chunk contains code examples
+    pub has_code: bool,
+}
+
+/// Preview data for UI visualization of document chunks
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ChunkPreview {
+    pub doc_id: String,
+    pub doc_title: String,
+    pub total_chunks: usize,
+    pub chunks: Vec<ChunkPreviewItem>,
+}
+
+/// Individual chunk data for preview display
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ChunkPreviewItem {
+    pub chunk_index: u32,
+    pub title: String,
+    pub header_context: String,
+    /// First 200 chars of content
+    pub content_preview: String,
+    /// Full content for display
+    pub full_content: String,
+    pub char_count: usize,
+    pub has_code: bool,
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
+/// Basic document info for listing available documents
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct DocInfo {
+    pub id: String,
+    pub title: String,
+    pub section: String,
+    pub char_count: usize,
 }
