@@ -1,6 +1,6 @@
 //! RAG (Retrieval Augmented Generation) manager for Svelte documentation
 //!
-//! Provides semantic search capabilities using RIG's InMemoryVectorStore
+//! Provides semantic search capabilities using LanceDB for persistent vector storage
 //! and a local embedding model (e.g., Qwen3-Embedding-0.6B via llama.cpp).
 //!
 //! Documents are chunked at H2/H3 header boundaries for finer-grained retrieval.
@@ -8,15 +8,20 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rig::embeddings::EmbeddingsBuilder;
-use rig::embeddings::EmbeddingError;
-use rig::embeddings::EmbedError;
-use rig::vector_store::in_memory_store::InMemoryVectorStore;
-use rig::vector_store::VectorStoreError;
-use rig::vector_store::VectorStoreIndex;
-use rig::vector_store::VectorSearchRequest;
-use rig::Embed;
+// Arrow types - must match lancedb's arrow version (56.2)
+use arrow_array::types::Float64Type;
+use arrow_array::{
+    ArrayRef, BooleanArray, FixedSizeListArray, Int32Array, RecordBatch, RecordBatchIterator,
+    StringArray,
+};
+use arrow_schema::{DataType, Field, Schema};
+use futures_util::TryStreamExt;
+use lancedb::query::{ExecutableQuery, QueryBase};
+use rig::embeddings::{EmbedError, Embedding, EmbeddingError, EmbeddingModel, EmbeddingsBuilder};
+use rig::one_or_many::OneOrMany;
 use rig::prelude::EmbeddingsClient;
+use rig::vector_store::VectorStoreError;
+use rig::Embed;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -42,6 +47,8 @@ pub enum RagError {
     DocsNotAvailable,
     #[error("Client error: {0}")]
     Client(String),
+    #[error("LanceDB error: {0}")]
+    LanceDb(String),
 }
 
 impl From<String> for RagError {
@@ -65,6 +72,12 @@ impl From<VectorStoreError> for RagError {
 impl From<EmbedError> for RagError {
     fn from(e: EmbedError) -> Self {
         RagError::Embedding(e.to_string())
+    }
+}
+
+impl From<lancedb::Error> for RagError {
+    fn from(e: lancedb::Error) -> Self {
+        RagError::LanceDb(e.to_string())
     }
 }
 
@@ -124,18 +137,24 @@ pub struct RagStatus {
     pub indexing_progress: Option<IndexingProgress>,
 }
 
+/// Default embedding dimensions for common models
+const DEFAULT_EMBEDDING_DIM: i32 = 1024; // Qwen3-Embedding-0.6B uses 1024 dimensions
+
+/// LanceDB table name for doc chunks
+const CHUNKS_TABLE_NAME: &str = "doc_chunks";
+
 /// Manager for RAG operations
 pub struct RagManager {
-    /// Path to store embeddings
+    /// Path to store LanceDB data
     store_path: PathBuf,
     /// URL of the embedding server
     embedding_url: Option<String>,
     /// Current status
     status: RagStatus,
-    /// Vector store (if initialized) - now stores chunks instead of whole docs
-    vector_store: Option<InMemoryVectorStore<DocChunk>>,
-    /// Cached chunks (for search results)
-    chunks: Vec<DocChunk>,
+    /// LanceDB connection (if initialized)
+    db: Option<lancedb::Connection>,
+    /// Cached embedding dimension (detected from first embedding)
+    embedding_dim: Option<i32>,
     /// Chunking configuration
     chunk_config: ChunkConfig,
 }
@@ -144,11 +163,11 @@ impl RagManager {
     /// Create a new RAG manager
     pub fn new(app_data_dir: PathBuf) -> Self {
         Self {
-            store_path: app_data_dir.join("svelte-docs"),
+            store_path: app_data_dir.join("lancedb"),
             embedding_url: None,
             status: RagStatus::default(),
-            vector_store: None,
-            chunks: Vec::new(),
+            db: None,
+            embedding_dim: None,
             chunk_config: ChunkConfig::default(),
         }
     }
@@ -183,6 +202,21 @@ impl RagManager {
         self.status.docs_count = status.doc_count;
     }
 
+    /// Initialize or connect to LanceDB
+    async fn ensure_db(&mut self) -> Result<&lancedb::Connection, RagError> {
+        if self.db.is_none() {
+            // Create directory if needed
+            tokio::fs::create_dir_all(&self.store_path).await?;
+
+            let db_path = self.store_path.to_string_lossy().to_string();
+            log::info!("Connecting to LanceDB at: {}", db_path);
+
+            let db = lancedb::connect(&db_path).execute().await?;
+            self.db = Some(db);
+        }
+        Ok(self.db.as_ref().unwrap())
+    }
+
     /// Check if we need to re-index
     #[allow(dead_code)]
     pub fn needs_indexing(&self, current_version: &str) -> bool {
@@ -197,6 +231,94 @@ impl RagManager {
         }
     }
 
+    /// Create Arrow schema for the chunks table
+    fn create_schema(embedding_dim: i32) -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("doc_id", DataType::Utf8, false),
+            Field::new("title", DataType::Utf8, false),
+            Field::new("doc_title", DataType::Utf8, false),
+            Field::new("section", DataType::Utf8, false),
+            Field::new("chunk_index", DataType::Int32, false),
+            Field::new("total_chunks", DataType::Int32, false),
+            Field::new("header_context", DataType::Utf8, false),
+            Field::new("content", DataType::Utf8, false),
+            Field::new("has_code", DataType::Boolean, false),
+            Field::new(
+                "vector",
+                DataType::FixedSizeList(
+                    Arc::new(Field::new("item", DataType::Float64, true)),
+                    embedding_dim,
+                ),
+                false,
+            ),
+        ]))
+    }
+
+    /// Convert embeddings to Arrow RecordBatch
+    fn embeddings_to_record_batch(
+        embeddings: &[(DocChunk, Embedding)],
+        embedding_dim: i32,
+    ) -> Result<RecordBatch, RagError> {
+        let ids: Vec<&str> = embeddings.iter().map(|(c, _)| c.id.as_str()).collect();
+        let doc_ids: Vec<&str> = embeddings.iter().map(|(c, _)| c.doc_id.as_str()).collect();
+        let titles: Vec<&str> = embeddings.iter().map(|(c, _)| c.title.as_str()).collect();
+        let doc_titles: Vec<&str> = embeddings
+            .iter()
+            .map(|(c, _)| c.doc_title.as_str())
+            .collect();
+        let sections: Vec<&str> = embeddings.iter().map(|(c, _)| c.section.as_str()).collect();
+        let chunk_indices: Vec<i32> = embeddings
+            .iter()
+            .map(|(c, _)| c.chunk_index as i32)
+            .collect();
+        let total_chunks: Vec<i32> = embeddings
+            .iter()
+            .map(|(c, _)| c.total_chunks as i32)
+            .collect();
+        let header_contexts: Vec<&str> = embeddings
+            .iter()
+            .map(|(c, _)| c.header_context.as_str())
+            .collect();
+        let contents: Vec<&str> = embeddings.iter().map(|(c, _)| c.content.as_str()).collect();
+        let has_codes: Vec<bool> = embeddings.iter().map(|(c, _)| c.has_code).collect();
+
+        // Build vector array - flatten all embeddings into a single Vec<f64>
+        let vectors_flat: Vec<f64> = embeddings
+            .iter()
+            .flat_map(|(_, emb)| emb.vec.iter().copied())
+            .collect();
+
+        let vectors_array = FixedSizeListArray::from_iter_primitive::<Float64Type, _, _>(
+            vectors_flat
+                .chunks(embedding_dim as usize)
+                .map(|chunk| Some(chunk.iter().copied().map(Some).collect::<Vec<_>>())),
+            embedding_dim,
+        );
+
+        let schema = Self::create_schema(embedding_dim);
+
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(ids)) as ArrayRef,
+                Arc::new(StringArray::from(doc_ids)) as ArrayRef,
+                Arc::new(StringArray::from(titles)) as ArrayRef,
+                Arc::new(StringArray::from(doc_titles)) as ArrayRef,
+                Arc::new(StringArray::from(sections)) as ArrayRef,
+                Arc::new(Int32Array::from(chunk_indices)) as ArrayRef,
+                Arc::new(Int32Array::from(total_chunks)) as ArrayRef,
+                Arc::new(StringArray::from(header_contexts)) as ArrayRef,
+                Arc::new(StringArray::from(contents)) as ArrayRef,
+                Arc::new(BooleanArray::from(has_codes)) as ArrayRef,
+                Arc::new(vectors_array) as ArrayRef,
+            ],
+        )
+        .map_err(|e| RagError::LanceDb(format!("Failed to create RecordBatch: {}", e)))?;
+
+        Ok(batch)
+    }
+
     /// Index all documentation entries by chunking them first
     pub async fn index_documents(
         &mut self,
@@ -208,11 +330,12 @@ impl RagManager {
         let embedding_url = self
             .embedding_url
             .as_ref()
-            .ok_or(RagError::ServerNotAvailable)?;
+            .ok_or(RagError::ServerNotAvailable)?
+            .clone();
 
         // Check server availability
         log::info!("Checking embedding server health at: {}", embedding_url);
-        let server_available = check_embedding_server(embedding_url).await;
+        let server_available = check_embedding_server(&embedding_url).await;
         log::info!("Embedding server health check result: {}", server_available);
         if !server_available {
             log::error!("Embedding server health check failed - server not responding");
@@ -252,8 +375,8 @@ impl RagManager {
         });
 
         // Create embedding client
-        let client = create_embedding_client(embedding_url)?;
-        let model_name = get_embedding_model_name(embedding_url).await;
+        let client = create_embedding_client(&embedding_url)?;
+        let model_name = get_embedding_model_name(&embedding_url).await;
         log::info!("Created embedding client for model: {}", model_name);
         let embedding_model = client.embedding_model(&model_name);
 
@@ -268,28 +391,59 @@ impl RagManager {
             "Sending {} chunks to embedding server for vectorization",
             all_chunks.len()
         );
-        let embeddings = EmbeddingsBuilder::new(embedding_model)
-            .documents(all_chunks.clone())?
-            .build()
-            .await?;
+        let raw_embeddings: Vec<(DocChunk, OneOrMany<Embedding>)> =
+            EmbeddingsBuilder::new(embedding_model.clone())
+                .documents(all_chunks.clone())?
+                .build()
+                .await?;
+        // Flatten OneOrMany to single embeddings (take first if multiple)
+        let embeddings: Vec<(DocChunk, Embedding)> = raw_embeddings
+            .into_iter()
+            .map(|(chunk, embs)| (chunk, embs.first().clone()))
+            .collect();
         log::info!("Received {} embeddings from server", embeddings.len());
+
+        // Detect embedding dimension from first embedding
+        let embedding_dim = if let Some((_, emb)) = embeddings.first() {
+            emb.vec.len() as i32
+        } else {
+            DEFAULT_EMBEDDING_DIM
+        };
+        self.embedding_dim = Some(embedding_dim);
+        log::info!("Detected embedding dimension: {}", embedding_dim);
 
         on_progress(IndexingProgress {
             current: total_chunks,
             total: total_chunks,
-            status: "Building vector index...".to_string(),
+            status: "Storing vectors in LanceDB...".to_string(),
         });
 
-        // Create vector store
-        let vector_store =
-            InMemoryVectorStore::from_documents_with_id_f(embeddings, |chunk| chunk.id.clone());
+        // Ensure DB is connected
+        let db = self.ensure_db().await?;
 
-        // Save to disk
-        self.save_chunks(&all_chunks, version).await?;
+        // Drop existing table if it exists
+        let table_names = db.table_names().execute().await?;
+        if table_names.contains(&CHUNKS_TABLE_NAME.to_string()) {
+            log::info!("Dropping existing chunks table");
+            db.drop_table(CHUNKS_TABLE_NAME, &[]).await?;
+        }
 
-        // Update state
-        self.vector_store = Some(vector_store);
-        self.chunks = all_chunks;
+        // Create RecordBatch from embeddings
+        let batch = Self::embeddings_to_record_batch(&embeddings, embedding_dim)?;
+        let schema = Self::create_schema(embedding_dim);
+
+        // Create table with embeddings
+        log::info!("Creating LanceDB table with {} vectors", embeddings.len());
+        let batches = RecordBatchIterator::new(vec![Ok(batch)], schema);
+        db.create_table(CHUNKS_TABLE_NAME, Box::new(batches))
+            .execute()
+            .await?;
+
+        // Save version for cache invalidation
+        let version_path = self.store_path.join("embeddings-version.txt");
+        tokio::fs::write(&version_path, version).await?;
+
+        // Update status
         self.status.vectors_indexed = true;
         self.status.vectors_count = total_chunks;
 
@@ -299,96 +453,42 @@ impl RagManager {
             status: "Complete".to_string(),
         });
 
+        log::info!(
+            "Successfully indexed {} chunks in LanceDB ({}D vectors)",
+            total_chunks,
+            embedding_dim
+        );
         Ok(())
     }
 
-    /// Save chunks to disk for persistence
-    async fn save_chunks(&self, chunks: &[DocChunk], version: &str) -> Result<(), RagError> {
-        // Create directory if needed
-        tokio::fs::create_dir_all(&self.store_path).await?;
-
-        // Save version
-        let version_path = self.store_path.join("embeddings-version.txt");
-        tokio::fs::write(&version_path, version).await?;
-
-        // Save chunks (we'll regenerate embeddings on load)
-        let chunks_path = self.store_path.join("embedded-chunks.json");
-        let chunks_json = serde_json::to_string_pretty(chunks)?;
-        tokio::fs::write(&chunks_path, chunks_json).await?;
-
-        log::info!("Saved {} embedded chunks to disk", chunks.len());
-        Ok(())
-    }
-
-    /// Load chunks from disk
+    /// Load existing index from LanceDB (no re-embedding required!)
     pub async fn load_from_disk(&mut self) -> Result<bool, RagError> {
-        // Try new chunks format first, fall back to old docs format
-        let chunks_path = self.store_path.join("embedded-chunks.json");
-        let legacy_docs_path = self.store_path.join("embedded-docs.json");
+        // Connect to LanceDB
+        let db = self.ensure_db().await?;
 
-        let chunks: Vec<DocChunk> = if chunks_path.exists() {
-            let chunks_json = tokio::fs::read_to_string(&chunks_path).await?;
-            serde_json::from_str(&chunks_json)?
-        } else if legacy_docs_path.exists() {
-            // Legacy format - convert SvelteDoc to single chunks
-            log::info!("Converting legacy embedded-docs.json to chunks format");
-            let docs_json = tokio::fs::read_to_string(&legacy_docs_path).await?;
-            let docs: Vec<SvelteDoc> = serde_json::from_str(&docs_json)?;
-            docs.into_iter()
-                .map(|doc| DocChunk {
-                    id: format!("{}#chunk0", doc.id),
-                    doc_id: doc.id.clone(),
-                    title: doc.title.clone(),
-                    doc_title: doc.title,
-                    section: doc.section,
-                    chunk_index: 0,
-                    total_chunks: 1,
-                    header_context: String::new(),
-                    content: doc.content,
-                    has_code: false,
-                })
-                .collect()
-        } else {
-            return Ok(false);
-        };
-
-        if chunks.is_empty() {
+        // Check if table exists
+        let table_names = db.table_names().execute().await?;
+        if !table_names.contains(&CHUNKS_TABLE_NAME.to_string()) {
+            log::info!("No existing chunks table found in LanceDB");
             return Ok(false);
         }
 
-        // Check if we have embedding server to regenerate the index
-        let embedding_url = match &self.embedding_url {
-            Some(url) => url.clone(),
-            None => return Ok(false),
-        };
+        // Open existing table and count rows
+        let table = db.open_table(CHUNKS_TABLE_NAME).execute().await?;
+        let count = table.count_rows(None).await?;
 
-        if !check_embedding_server(&embedding_url).await {
-            // Server not available, but we have the chunks
-            self.chunks = chunks;
-            self.status.vectors_count = self.chunks.len();
-            // Can't search without embeddings, but status shows we have cached chunks
+        if count == 0 {
             return Ok(false);
         }
 
-        // Regenerate embeddings
-        let client = create_embedding_client(&embedding_url)?;
-        let model_name = get_embedding_model_name(&embedding_url).await;
-        let embedding_model = client.embedding_model(&model_name);
-
-        let embeddings = EmbeddingsBuilder::new(embedding_model)
-            .documents(chunks.clone())?
-            .build()
-            .await?;
-
-        let vector_store =
-            InMemoryVectorStore::from_documents_with_id_f(embeddings, |chunk| chunk.id.clone());
-
-        self.vector_store = Some(vector_store);
-        self.chunks = chunks;
+        // Update status - vectors are already indexed!
         self.status.vectors_indexed = true;
-        self.status.vectors_count = self.chunks.len();
+        self.status.vectors_count = count;
 
-        log::info!("Loaded {} embedded chunks from disk", self.chunks.len());
+        log::info!(
+            "Loaded existing LanceDB index with {} vectors (no re-embedding needed)",
+            count
+        );
         Ok(true)
     }
 
@@ -399,35 +499,109 @@ impl RagManager {
             .as_ref()
             .ok_or(RagError::ServerNotAvailable)?;
 
-        let store = self
-            .vector_store
-            .as_ref()
-            .ok_or(RagError::DocsNotAvailable)?;
+        let db = self.db.as_ref().ok_or(RagError::DocsNotAvailable)?;
 
-        // Create embedding client for the query
+        // Open the chunks table
+        let table = db.open_table(CHUNKS_TABLE_NAME).execute().await?;
+
+        // Create embedding for query
         let client = create_embedding_client(embedding_url)?;
         let model_name = get_embedding_model_name(embedding_url).await;
         let embedding_model = client.embedding_model(&model_name);
 
-        // Create index and search
-        // Clone store since index() takes ownership
-        let index = store.clone().index(embedding_model);
+        // Get query embedding - use the EmbeddingModel trait method
+        let query_embedding = EmbeddingModel::embed_text(&embedding_model, query)
+            .await
+            .map_err(|e| RagError::Embedding(e.to_string()))?;
 
-        let request = VectorSearchRequest::builder()
-            .query(query)
-            .samples(limit as u64)
-            .build()?;
+        // Perform vector search
+        let mut results = table
+            .vector_search(query_embedding.vec.clone())
+            .map_err(|e| RagError::LanceDb(e.to_string()))?
+            .limit(limit)
+            .execute()
+            .await?;
 
-        let results: Vec<(f64, String, DocChunk)> = index.top_n::<DocChunk>(request).await?;
+        // Convert results to DocChunks
+        let mut chunks = Vec::new();
+        while let Some(batch) = results.try_next().await? {
 
-        // Extract just the chunks (results are (score, id, chunk) tuples)
-        let chunks: Vec<DocChunk> = results.into_iter().map(|(_, _, chunk)| chunk).collect();
+            // Helper to extract string column
+            fn get_string_col<'a>(
+                batch: &'a RecordBatch,
+                name: &str,
+            ) -> Result<&'a StringArray, RagError> {
+                batch
+                    .column_by_name(name)
+                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
+            }
+
+            // Helper to extract i32 column
+            fn get_i32_col<'a>(
+                batch: &'a RecordBatch,
+                name: &str,
+            ) -> Result<&'a Int32Array, RagError> {
+                batch
+                    .column_by_name(name)
+                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
+            }
+
+            // Helper to extract bool column
+            fn get_bool_col<'a>(
+                batch: &'a RecordBatch,
+                name: &str,
+            ) -> Result<&'a BooleanArray, RagError> {
+                batch
+                    .column_by_name(name)
+                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
+                    .as_any()
+                    .downcast_ref::<BooleanArray>()
+                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
+            }
+
+            // Extract columns
+            let ids = get_string_col(&batch, "id")?;
+            let doc_ids = get_string_col(&batch, "doc_id")?;
+            let titles = get_string_col(&batch, "title")?;
+            let doc_titles = get_string_col(&batch, "doc_title")?;
+            let sections = get_string_col(&batch, "section")?;
+            let chunk_indices = get_i32_col(&batch, "chunk_index")?;
+            let total_chunks_col = get_i32_col(&batch, "total_chunks")?;
+            let header_contexts = get_string_col(&batch, "header_context")?;
+            let contents = get_string_col(&batch, "content")?;
+            let has_codes = get_bool_col(&batch, "has_code")?;
+
+            for i in 0..batch.num_rows() {
+                chunks.push(DocChunk {
+                    id: ids.value(i).to_string(),
+                    doc_id: doc_ids.value(i).to_string(),
+                    title: titles.value(i).to_string(),
+                    doc_title: doc_titles.value(i).to_string(),
+                    section: sections.value(i).to_string(),
+                    chunk_index: chunk_indices.value(i) as u32,
+                    total_chunks: total_chunks_col.value(i) as u32,
+                    header_context: header_contexts.value(i).to_string(),
+                    content: contents.value(i).to_string(),
+                    has_code: has_codes.value(i),
+                });
+            }
+        }
 
         Ok(chunks)
     }
 
     /// Perform semantic search and convert to legacy SvelteDoc format for backwards compatibility
-    pub async fn search_as_docs(&self, query: &str, limit: usize) -> Result<Vec<SvelteDoc>, RagError> {
+    pub async fn search_as_docs(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SvelteDoc>, RagError> {
         let chunks = self.search(query, limit).await?;
 
         // Convert chunks to SvelteDoc format
@@ -448,29 +622,34 @@ impl RagManager {
     /// Check if semantic search is available
     #[allow(dead_code)]
     pub fn is_search_available(&self) -> bool {
-        self.vector_store.is_some() && self.embedding_url.is_some()
+        self.db.is_some() && self.embedding_url.is_some() && self.status.vectors_indexed
     }
 
     /// Clear the vector store and cached data
     pub async fn clear_cache(&mut self) -> Result<(), RagError> {
-        self.vector_store = None;
-        self.chunks.clear();
+        // Drop table if DB is connected
+        if let Some(db) = &self.db {
+            let table_names = db.table_names().execute().await?;
+            if table_names.contains(&CHUNKS_TABLE_NAME.to_string()) {
+                db.drop_table(CHUNKS_TABLE_NAME, &[]).await?;
+            }
+        }
+
         self.status.vectors_indexed = false;
         self.status.vectors_count = 0;
 
-        // Remove cached files (both new and legacy formats)
+        // Remove version file
         let version_path = self.store_path.join("embeddings-version.txt");
-        let chunks_path = self.store_path.join("embedded-chunks.json");
-        let legacy_docs_path = self.store_path.join("embedded-docs.json");
-
         if version_path.exists() {
             tokio::fs::remove_file(&version_path).await?;
         }
-        if chunks_path.exists() {
-            tokio::fs::remove_file(&chunks_path).await?;
-        }
-        if legacy_docs_path.exists() {
-            tokio::fs::remove_file(&legacy_docs_path).await?;
+
+        // Also remove old chunk files if they exist (legacy cleanup)
+        let chunks_path = self.store_path.parent().map(|p| p.join("svelte-docs"));
+        if let Some(path) = chunks_path {
+            if path.exists() {
+                let _ = tokio::fs::remove_dir_all(&path).await;
+            }
         }
 
         log::info!("Cleared RAG cache");

@@ -35,6 +35,9 @@ tokio = { version = "1", features = ["full"] }
 base64 = "0.22"
 futures-util = "0.3"
 rig-core = { version = "0.28.0", features = ["derive"] }
+lancedb = "0.22"
+arrow-array = "56.2"
+arrow-schema = "56.2"
 thiserror = "1"
 log = "0.4"
 env_logger = "0.11"
