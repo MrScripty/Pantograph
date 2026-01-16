@@ -1,0 +1,49 @@
+[package]
+name = "inference"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Multi-backend AI inference library supporting llama.cpp, Ollama, and Candle"
+readme = "README.md"
+
+[features]
+default = ["backend-llamacpp"]
+
+# Inference backends - at least one should be enabled
+backend-llamacpp = []  # llama.cpp sidecar with GGUF support
+backend-ollama = []    # Ollama daemon integration
+backend-candle = [     # In-process Candle inference (CUDA required)
+    "dep:candle-core",
+    "dep:candle-nn",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:tokio-stream",
+    "dep:axum",
+    "dep:tower-http",
+]
+
+# Optional: standard process spawner for non-Tauri use
+std-process = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+log.workspace = true
+futures-util.workspace = true
+reqwest.workspace = true
+which.workspace = true
+
+# Candle dependencies (optional)
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+
+[dev-dependencies]
+env_logger = "0.11"
