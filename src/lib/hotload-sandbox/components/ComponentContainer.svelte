@@ -5,6 +5,7 @@
   import { ComponentRegistry } from '../services/ComponentRegistry';
   import SafeComponent from './SafeComponent.svelte';
   import ErrorPlaceholder from './ErrorPlaceholder.svelte';
+  import { interactionMode } from '../../../stores/interactionModeStore';
 
   interface Props {
     /** The component registry to subscribe to */
@@ -33,13 +34,23 @@
   // Track render errors locally (in addition to registry)
   let renderErrors: Map<string, Error> = $state(new Map());
 
+  // Track interaction mode for pointer-events
+  let currentMode: 'draw' | 'interact' = $state('draw');
+
   onMount(() => {
     const unsubscribe = registry.subscribe((next) => {
       components = next;
       activeLogger.log('CONTAINER_COMPONENTS_UPDATED', { count: next.length });
     });
 
-    return () => unsubscribe();
+    const unsubscribeMode = interactionMode.subscribe((mode) => {
+      currentMode = mode;
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeMode();
+    };
   });
 
   /**
@@ -103,7 +114,7 @@
 >
   {#each components as comp (comp.id)}
     <div
-      class="pointer-events-auto absolute"
+      class="absolute {currentMode === 'interact' ? 'pointer-events-auto' : 'pointer-events-none'}"
       style="left: {comp.position.x}px; top: {comp.position.y}px; width: {comp.size.width}px; height: {comp.size.height}px;"
     >
       {#if shouldShowError(comp)}

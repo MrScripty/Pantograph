@@ -3,6 +3,7 @@
   import { engine } from '../services/DrawingEngine';
   import { canvasExport } from '../services/CanvasExport';
   import { panelWidth } from '../stores/panelStore';
+  import { interactionMode } from '../stores/interactionModeStore';
   import type { DrawingState, Point, Stroke } from '../types';
 
   let canvas: HTMLCanvasElement | null = null;
@@ -11,7 +12,9 @@
   let cssWidth = 0;
   let cssHeight = 0;
   let currentPanelWidth = 20;
+  let currentMode: 'draw' | 'interact' = 'draw';
   let unsubscribePanel: (() => void) | null = null;
+  let unsubscribeMode: (() => void) | null = null;
 
   const drawStroke = (stroke: Stroke) => {
     if (!ctx || stroke.points.length < 1) return;
@@ -108,22 +111,29 @@
       currentPanelWidth = w;
     });
 
+    // Subscribe to interaction mode for pointer-events toggle
+    unsubscribeMode = interactionMode.subscribe((mode) => {
+      currentMode = mode;
+    });
+
     window.addEventListener('resize', handleResize);
     return () => {
       unsubscribe();
       if (unsubscribePanel) unsubscribePanel();
+      if (unsubscribeMode) unsubscribeMode();
       window.removeEventListener('resize', handleResize);
     };
   });
 
   onDestroy(() => {
     if (unsubscribePanel) unsubscribePanel();
+    if (unsubscribeMode) unsubscribeMode();
   });
 </script>
 
 <canvas
   bind:this={canvas}
-  class="fixed top-0 left-0 cursor-crosshair z-10 touch-none transition-[right] duration-300 ease-out"
+  class="fixed top-0 left-0 z-20 touch-none transition-[right] duration-300 ease-out {currentMode === 'draw' ? 'cursor-crosshair pointer-events-auto' : 'cursor-default pointer-events-none'}"
   style="width: 100vw; height: 100vh; clip-path: inset(0 {currentPanelWidth}px 0 0);"
   on:mousedown={handleMouseDown}
   on:mousemove={handleMouseMove}

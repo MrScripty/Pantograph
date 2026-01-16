@@ -10,6 +10,7 @@
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
   import { panelWidth } from './stores/panelStore';
+  import { toggleInteractionMode } from './stores/interactionModeStore';
 
   onMount(() => {
     Logger.log('APP_MOUNTED', { version: '1.0.0-alpha' });
@@ -18,6 +19,11 @@
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         engine.undo();
+      }
+      // Toggle between draw and interact modes with Tab key
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        toggleInteractionMode();
       }
     };
 
