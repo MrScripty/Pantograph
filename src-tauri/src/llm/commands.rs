@@ -9,6 +9,7 @@ use crate::agent::{
     FileAction, FileChange, Position, Size, WriteTracker,
 };
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, EmbeddingMemoryMode, ModelConfig, ServerModeInfo};
+use crate::constants::paths::DATA_DIR;
 use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
@@ -22,6 +23,29 @@ use tokio::sync::RwLock;
 
 /// Shared app configuration
 pub type SharedAppConfig = Arc<RwLock<AppConfig>>;
+
+/// Get the project data directory for docs and RAG storage.
+/// Uses CARGO_MANIFEST_DIR (src-tauri/) and goes up one level to get project root.
+/// This ensures the data directory is at the project root regardless of the
+/// current working directory (which varies during `tauri dev`).
+fn get_project_data_dir() -> Result<PathBuf, String> {
+    // CARGO_MANIFEST_DIR is set at compile time to the directory containing Cargo.toml (src-tauri/)
+    // We go up one level to get the actual project root
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let project_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .ok_or_else(|| "Failed to get project root from CARGO_MANIFEST_DIR".to_string())?;
+
+    let data_dir = project_root.join(DATA_DIR);
+
+    // Create the directory if it doesn't exist
+    if !data_dir.exists() {
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    }
+
+    Ok(data_dir)
+}
 
 #[command]
 pub async fn send_vision_prompt(
@@ -255,10 +279,9 @@ pub async fn run_agent(
     log::info!("[run_agent] Step 2: Creating RIG agent...");
     let client = agent::create_client(&base_url)?;
 
-    // Initialize docs manager with app data directory
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    let docs_manager = Arc::new(DocsManager::new(app_data_dir));
+    // Initialize docs manager with project data directory
+    let project_data_dir = get_project_data_dir()?;
+    let docs_manager = Arc::new(DocsManager::new(project_data_dir));
 
     // Create write tracker to track files written during this session
     let write_tracker: WriteTracker = Arc::new(Mutex::new(Vec::new()));
@@ -611,18 +634,16 @@ fn create_component_updates(request: &AgentRequest, file_changes: &[FileChange])
 // ============================================================================
 
 #[command]
-pub async fn get_svelte_docs_status(app: AppHandle) -> Result<DocsStatus, String> {
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    let docs_manager = DocsManager::new(app_data_dir);
+pub async fn get_svelte_docs_status(_app: AppHandle) -> Result<DocsStatus, String> {
+    let project_data_dir = get_project_data_dir()?;
+    let docs_manager = DocsManager::new(project_data_dir);
     Ok(docs_manager.get_status())
 }
 
 #[command]
-pub async fn update_svelte_docs(app: AppHandle) -> Result<DocsStatus, String> {
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    let docs_manager = DocsManager::new(app_data_dir);
+pub async fn update_svelte_docs(_app: AppHandle) -> Result<DocsStatus, String> {
+    let project_data_dir = get_project_data_dir()?;
+    let docs_manager = DocsManager::new(project_data_dir);
 
     log::info!("Downloading Svelte 5 documentation...");
     docs_manager.download_docs().await
@@ -663,12 +684,11 @@ impl From<IndexingProgress> for IndexingEvent {
 
 #[command]
 pub async fn get_rag_status(
-    app: AppHandle,
+    _app: AppHandle,
     rag_manager: State<'_, SharedRagManager>,
 ) -> Result<RagStatus, String> {
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    let docs_manager = DocsManager::new(app_data_dir);
+    let project_data_dir = get_project_data_dir()?;
+    let docs_manager = DocsManager::new(project_data_dir);
 
     let mut manager = rag_manager.write().await;
     manager.update_docs_status(&docs_manager);
@@ -701,13 +721,12 @@ pub async fn set_embedding_server_url(
 
 #[command]
 pub async fn index_rag_documents(
-    app: AppHandle,
+    _app: AppHandle,
     rag_manager: State<'_, SharedRagManager>,
     channel: Channel<IndexingEvent>,
 ) -> Result<(), String> {
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    let docs_manager = DocsManager::new(app_data_dir);
+    let project_data_dir = get_project_data_dir()?;
+    let docs_manager = DocsManager::new(project_data_dir);
 
     // Ensure docs are available
     docs_manager.ensure_docs_available().await
@@ -1197,9 +1216,8 @@ pub async fn index_docs_with_switch(
     }
 
     // Load docs and index
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    let docs_manager = DocsManager::new(app_data_dir);
+    let project_data_dir = get_project_data_dir()?;
+    let docs_manager = DocsManager::new(project_data_dir);
 
     docs_manager.ensure_docs_available().await
         .map_err(|e| format!("Failed to ensure docs available: {}", e))?;

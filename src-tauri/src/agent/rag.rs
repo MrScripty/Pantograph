@@ -35,6 +35,10 @@ use super::types::DocChunk;
 use crate::config::EmbeddingMemoryMode;
 use crate::llm::{BackendConfig, SharedGateway};
 
+/// Number of chunks to process per embedding batch for progress updates.
+/// Small enough for frequent UI updates, large enough to minimize HTTP overhead.
+const EMBEDDING_BATCH_SIZE: usize = 10;
+
 /// Errors that can occur during RAG operations
 #[derive(Debug, Error)]
 pub enum RagError {
@@ -595,21 +599,41 @@ impl RagManager {
             status: format!("Generating embeddings for {} chunks...", total_chunks),
         });
 
-        // Build embeddings for all chunks
+        // Process chunks in batches for progress updates
         log::info!(
-            "Sending {} chunks to embedding server for vectorization",
-            all_chunks.len()
+            "Processing {} chunks in batches of {} for embedding",
+            all_chunks.len(),
+            EMBEDDING_BATCH_SIZE
         );
-        let raw_embeddings: Vec<(DocChunk, OneOrMany<Embedding>)> =
-            EmbeddingsBuilder::new(embedding_model.clone())
-                .documents(all_chunks.clone())?
-                .build()
-                .await?;
-        // Flatten OneOrMany to single embeddings (take first if multiple)
-        let embeddings: Vec<(DocChunk, Embedding)> = raw_embeddings
-            .into_iter()
-            .map(|(chunk, embs)| (chunk, embs.first().clone()))
-            .collect();
+
+        let mut all_embeddings: Vec<(DocChunk, Embedding)> = Vec::with_capacity(total_chunks);
+        let mut processed = 0;
+
+        for batch in all_chunks.chunks(EMBEDDING_BATCH_SIZE) {
+            // Build embeddings for this batch
+            let batch_vec: Vec<DocChunk> = batch.to_vec();
+            let raw_batch: Vec<(DocChunk, OneOrMany<Embedding>)> =
+                EmbeddingsBuilder::new(embedding_model.clone())
+                    .documents(batch_vec)?
+                    .build()
+                    .await?;
+
+            // Flatten OneOrMany to single embeddings
+            for (chunk, embs) in raw_batch {
+                all_embeddings.push((chunk, embs.first().clone()));
+            }
+
+            processed += batch.len();
+
+            // Send progress update after each batch
+            on_progress(IndexingProgress {
+                current: processed,
+                total: total_chunks,
+                status: format!("Embedded {}/{} chunks...", processed, total_chunks),
+            });
+        }
+
+        let embeddings = all_embeddings;
         log::info!("Received {} embeddings from server", embeddings.len());
 
         // Detect embedding dimension from first embedding

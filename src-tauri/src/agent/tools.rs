@@ -732,20 +732,46 @@ impl Tool for SearchSvelteDocsTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // Ensure docs are available (download if needed)
-        self.docs_manager
-            .ensure_docs_available()
-            .await
-            .map_err(|e| ToolError::Validation(format!("Docs not available: {}", e)))?;
+        log::debug!("[search_svelte_docs] Searching for: {}", args.query);
+
+        // Check if docs are available (does not auto-download)
+        if let Err(e) = self.docs_manager.ensure_docs_available().await {
+            // Return empty results with a note instead of failing
+            // This allows the agent to continue without docs
+            log::warn!("[search_svelte_docs] Docs not available: {}", e);
+            return Ok(DocSearchOutput {
+                query: args.query,
+                total_matches: 0,
+                results: vec![],
+            });
+        }
 
         // Load search index
-        let index = self
-            .docs_manager
-            .load_index()
-            .map_err(|e| ToolError::Validation(format!("Failed to load index: {}", e)))?;
+        let index = match self.docs_manager.load_index() {
+            Ok(idx) => idx,
+            Err(e) => {
+                log::warn!("[search_svelte_docs] Failed to load index: {}", e);
+                return Ok(DocSearchOutput {
+                    query: args.query,
+                    total_matches: 0,
+                    results: vec![],
+                });
+            }
+        };
+
+        log::debug!(
+            "[search_svelte_docs] Loaded index with {} entries, searching...",
+            index.entries.len()
+        );
 
         // Perform fuzzy search
         let results = search_docs(&index, &args.query, args.limit);
+
+        log::debug!(
+            "[search_svelte_docs] Found {} results for query '{}'",
+            results.len(),
+            args.query
+        );
 
         Ok(DocSearchOutput {
             query: args.query,

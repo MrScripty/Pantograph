@@ -73,20 +73,21 @@ impl DocsManager {
         self.docs_dir.join("index.json")
     }
 
-    /// Check if docs are available and not stale
+    /// Check if docs are available. Returns error if not available.
+    /// Does NOT auto-download - use the "Download Docs" button in the UI instead.
+    /// This prevents disruptive downloads during agent runs that can trigger app rebuilds.
     pub async fn ensure_docs_available(&self) -> Result<(), DocsError> {
         if !self.docs_dir.exists() || !self.index_path().exists() {
-            log::info!("Svelte docs not found, downloading...");
-            self.download_docs().await?;
-            self.build_index().await?;
-            return Ok(());
+            return Err(DocsError::NotAvailable(
+                "Svelte docs not downloaded. Use the 'Download Docs' button in the Documentation & RAG panel.".to_string()
+            ));
         }
 
-        // Check staleness
+        // Check staleness (just log a warning, don't auto-update)
         if let Ok(metadata) = self.load_metadata() {
             let age = Utc::now().signed_duration_since(metadata.downloaded_at);
             if age.num_days() > DOCS_STALENESS_DAYS {
-                log::info!("Svelte docs are stale ({} days old), consider updating", age.num_days());
+                log::info!("Svelte docs are stale ({} days old), consider updating via the UI", age.num_days());
             }
         }
 

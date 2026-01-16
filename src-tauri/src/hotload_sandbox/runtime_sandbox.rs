@@ -248,6 +248,21 @@ fn handle_js_error(error_str: &str) -> Result<(), RuntimeValidationError> {
 
     // Other runtime error (could be syntax error in JS, undefined variable, etc.)
     if error_str.contains("is not defined") {
+        // Svelte 5 runes are compile-time constructs, not runtime functions.
+        // The sandbox can't execute them, but that's expected - not an error.
+        // Complete list of Svelte 5 runes (as of v5.25):
+        // - $state, $state.raw, $state.snapshot
+        // - $derived, $derived.by
+        // - $effect, $effect.pre, $effect.tracking, $effect.root
+        // - $props, $bindable, $inspect, $host, $id
+        let svelte_runes = [
+            "$props", "$state", "$derived", "$effect", "$bindable", "$inspect", "$host", "$id",
+        ];
+        if svelte_runes.iter().any(|rune| error_str.contains(rune)) {
+            log::debug!("Ignoring expected rune undefined error: {}", error_str);
+            return Ok(());
+        }
+
         return Err(RuntimeValidationError::SemanticError {
             message: format!("Undefined variable: {}", error_str),
             line: None,

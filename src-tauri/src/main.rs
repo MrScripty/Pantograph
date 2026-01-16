@@ -8,6 +8,7 @@ mod llm;
 
 use agent::create_rag_manager;
 use config::AppConfig;
+use constants::paths::DATA_DIR;
 use llm::{
     check_embedding_server, check_llama_binaries, check_ollama_binary, clear_rag_cache,
     connect_to_server, download_llama_binaries, download_ollama_binary, get_app_config,
@@ -49,8 +50,25 @@ fn main() {
                 log::warn!("Failed to clean up stale sidecar: {}", err);
             }
 
-            // Initialize RAG manager
-            let rag_manager = create_rag_manager(app_data_dir.clone());
+            // Get project data directory for docs and RAG storage
+            // Use CARGO_MANIFEST_DIR (src-tauri/) and go up one level to get project root.
+            // This ensures data is stored at project root regardless of the current working
+            // directory (which can vary during `tauri dev`).
+            let manifest_dir = env!("CARGO_MANIFEST_DIR");
+            let project_root = std::path::Path::new(manifest_dir)
+                .parent()
+                .expect("Failed to get project root from CARGO_MANIFEST_DIR");
+            let project_data_dir = project_root.join(DATA_DIR);
+
+            // Create the data directory if it doesn't exist
+            if !project_data_dir.exists() {
+                std::fs::create_dir_all(&project_data_dir)
+                    .expect("Failed to create data directory");
+                log::info!("Created project data directory: {:?}", project_data_dir);
+            }
+
+            // Initialize RAG manager with project data directory
+            let rag_manager = create_rag_manager(project_data_dir);
             app.manage(rag_manager);
 
             // Load app configuration

@@ -46,3 +46,10 @@ pub mod hosts {
     /// Default host for local server binding
     pub const LOCAL: &str = "127.0.0.1";
 }
+
+/// Data storage paths
+pub mod paths {
+    /// Directory for downloaded/generated data (svelte docs, vector embeddings, etc.)
+    /// This is relative to the project root and should be gitignored.
+    pub const DATA_DIR: &str = "data";
+}

@@ -26,6 +26,9 @@ src-tauri/binaries/
 #Generated Element UI files
 /src/generated/*
 
+# Project data directory (downloaded docs, vector embeddings, etc.)
+/data/
+
 # Logs
 logs
 *.log

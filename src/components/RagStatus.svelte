@@ -18,6 +18,9 @@
   let isTestingServer = false;
   let useExternalEmbedding = false;
 
+  // For docs download
+  let isDownloadingDocs = false;
+
   onMount(async () => {
     unsubscribeRag = RagService.subscribe((state) => {
       ragState = state;
@@ -111,6 +114,22 @@
     }
   };
 
+  // Download Svelte docs manually
+  const downloadDocs = async () => {
+    isDownloadingDocs = true;
+    ragState.error = null;
+    try {
+      await invoke('update_svelte_docs');
+      await RagService.refreshStatus();
+    } catch (error) {
+      console.error('Failed to download docs:', error);
+      ragState.error = String(error);
+      ragState = { ...ragState }; // Trigger reactivity
+    } finally {
+      isDownloadingDocs = false;
+    }
+  };
+
   $: progressPercent = ragState.indexingProgress
     ? Math.round((ragState.indexingProgress.current / Math.max(ragState.indexingProgress.total, 1)) * 100)
     : 0;
@@ -141,7 +160,7 @@
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => toggleSection('rag')}
+    onclick={() => toggleSection('rag')}
   >
     <div class="flex items-center gap-2">
       <span>Documentation & RAG</span>
@@ -164,15 +183,27 @@
   {#if $expandedSection === 'rag'}
     <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
       <!-- Docs Status -->
-      <div class="flex items-center gap-2">
-        <span
-          class="w-2 h-2 rounded-full {ragState.status.docs_available ? 'bg-green-500' : 'bg-neutral-500'}"
-        ></span>
-        <span class="text-xs text-neutral-400">Svelte 5 Docs</span>
-        {#if ragState.status.docs_available}
-          <span class="text-xs text-neutral-500">({ragState.status.docs_count} files)</span>
-        {:else}
-          <span class="text-xs text-neutral-500">Not downloaded</span>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span
+            class="w-2 h-2 rounded-full {ragState.status.docs_available ? 'bg-green-500' : isDownloadingDocs ? 'bg-yellow-500 animate-pulse' : 'bg-neutral-500'}"
+          ></span>
+          <span class="text-xs text-neutral-400">Svelte 5 Docs</span>
+          {#if ragState.status.docs_available}
+            <span class="text-xs text-neutral-500">({ragState.status.docs_count} files)</span>
+          {:else if isDownloadingDocs}
+            <span class="text-xs text-yellow-400">Downloading...</span>
+          {:else}
+            <span class="text-xs text-neutral-500">Not downloaded</span>
+          {/if}
+        </div>
+        {#if !ragState.status.docs_available && !isDownloadingDocs}
+          <button
+            onclick={downloadDocs}
+            class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-colors"
+          >
+            Download
+          </button>
         {/if}
       </div>
 
@@ -234,7 +265,7 @@
         {#if configState.config.models.embedding_model_path}
           <!-- Primary: Index with automatic mode switching -->
           <button
-            on:click={indexWithSwitch}
+            onclick={indexWithSwitch}
             disabled={!canIndexWithSwitch}
             class="w-full px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
           >
@@ -251,7 +282,7 @@
         <!-- Toggle for external embedding server option -->
         <button
           class="w-full text-left text-[10px] text-neutral-600 hover:text-neutral-500 transition-colors"
-          on:click={() => (useExternalEmbedding = !useExternalEmbedding)}
+          onclick={() => (useExternalEmbedding = !useExternalEmbedding)}
         >
           {useExternalEmbedding ? '▼' : '▶'} Use external embedding server
         </button>
@@ -266,7 +297,7 @@
                 class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
               />
               <button
-                on:click={testExternalServer}
+                onclick={testExternalServer}
                 disabled={isTestingServer}
                 class="px-2 py-1 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-500 rounded text-xs transition-colors"
               >
@@ -280,7 +311,7 @@
                 Connected
               </div>
               <button
-                on:click={indexExternal}
+                onclick={indexExternal}
                 disabled={!canIndexExternal}
                 class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-500 rounded text-xs transition-colors"
               >
@@ -294,7 +325,7 @@
       <!-- Clear cache -->
       {#if ragState.status.vectors_indexed}
         <button
-          on:click={clearCache}
+          onclick={clearCache}
           class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
         >
           Clear Index Cache
@@ -304,7 +335,7 @@
       <!-- Chunk Preview button -->
       {#if ragState.status.docs_available}
         <button
-          on:click={openChunkPreview}
+          onclick={openChunkPreview}
           class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors flex items-center justify-center gap-2"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
