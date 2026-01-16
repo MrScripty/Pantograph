@@ -13,13 +13,13 @@ use llm::{
     check_embedding_server, check_llama_binaries, check_ollama_binary, clear_rag_cache,
     connect_to_server, download_llama_binaries, download_ollama_binary, get_app_config,
     get_backend_capabilities, get_current_backend, get_device_config, get_embedding_memory_mode,
-    get_embedding_server_url, get_llm_status, get_model_config, get_rag_status, get_server_mode,
-    get_svelte_docs_status, index_docs_with_switch, index_rag_documents, is_embedding_server_ready,
-    list_backends, list_chunkable_docs, list_devices, load_rag_from_disk, preview_doc_chunks,
-    run_agent, search_rag, send_vision_prompt, set_app_config, set_device_config,
-    set_embedding_memory_mode, set_embedding_server_url, set_model_config, start_sidecar_embedding,
-    start_sidecar_inference, start_sidecar_llm, stop_llm, switch_backend, update_svelte_docs,
-    InferenceGateway, LlamaServer, SharedAppConfig, SharedGateway,
+    get_embedding_server_url, get_llm_status, get_model_config, get_rag_status, get_sandbox_config,
+    get_server_mode, get_svelte_docs_status, index_docs_with_switch, index_rag_documents,
+    is_embedding_server_ready, list_backends, list_chunkable_docs, list_devices, load_rag_from_disk,
+    preview_doc_chunks, run_agent, search_rag, send_vision_prompt, set_app_config, set_device_config,
+    set_embedding_memory_mode, set_embedding_server_url, set_model_config, set_sandbox_config,
+    start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm, stop_llm, switch_backend,
+    update_svelte_docs, InferenceGateway, LlamaServer, SharedAppConfig, SharedGateway,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -141,6 +141,9 @@ fn main() {
             set_embedding_memory_mode,
             is_embedding_server_ready,
             get_embedding_server_url,
+            // Sandbox configuration commands
+            get_sandbox_config,
+            set_sandbox_config,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -3,10 +3,13 @@ use rig::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 
+use super::enricher::{EnricherRegistry, ErrorCategory};
 use super::rag::SharedRagManager;
 use super::types::{TailwindColors, TemplateInfo, WriteTracker};
+use crate::config::{ImportValidationMode, SandboxConfig};
 use crate::hotload_sandbox::runtime_sandbox::validate_runtime_semantics;
 
 // ============================================================================
@@ -110,31 +113,65 @@ pub struct WriteGuiFileArgs {
 pub struct WriteGuiFileTool {
     project_root: PathBuf,
     write_tracker: Option<WriteTracker>,
-    rag_manager: Option<SharedRagManager>,
+    sandbox_config: SandboxConfig,
+    enricher_registry: Arc<EnricherRegistry>,
 }
 
 impl WriteGuiFileTool {
-    pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root, write_tracker: None, rag_manager: None }
+    pub fn new(project_root: PathBuf, enricher_registry: Arc<EnricherRegistry>) -> Self {
+        Self {
+            project_root,
+            write_tracker: None,
+            sandbox_config: SandboxConfig::default(),
+            enricher_registry,
+        }
     }
 
-    pub fn with_tracker(project_root: PathBuf, tracker: WriteTracker) -> Self {
-        Self { project_root, write_tracker: Some(tracker), rag_manager: None }
+    pub fn with_tracker(project_root: PathBuf, tracker: WriteTracker, enricher_registry: Arc<EnricherRegistry>) -> Self {
+        Self {
+            project_root,
+            write_tracker: Some(tracker),
+            sandbox_config: SandboxConfig::default(),
+            enricher_registry,
+        }
     }
 
-    pub fn with_tracker_and_rag(project_root: PathBuf, tracker: WriteTracker, rag_manager: SharedRagManager) -> Self {
-        Self { project_root, write_tracker: Some(tracker), rag_manager: Some(rag_manager) }
+    pub fn with_sandbox_config(mut self, config: SandboxConfig) -> Self {
+        self.sandbox_config = config;
+        self
+    }
+
+    /// Enrich an error message with relevant documentation and return as ToolError::Validation
+    async fn validation_error(&self, message: String, category: ErrorCategory) -> ToolError {
+        let enriched = self.enricher_registry.enrich(&message, &category).await;
+        ToolError::Validation(enriched)
     }
 
     fn get_generated_path(&self) -> PathBuf {
         self.project_root.join("src").join("generated")
     }
 
-    fn validate_svelte_content(&self, content: &str) -> Result<(), ToolError> {
+    fn validate_svelte_content(&self, content: &str) -> Result<(), (String, ErrorCategory)> {
         // ============================================================
         // Svelte 5 Syntax Validation - CRITICAL
         // These patterns cause compilation errors in Svelte 5 runes mode
         // ============================================================
+
+        // Strip comments before validation to avoid false positives
+        // (e.g., comments explaining what NOT to do shouldn't trigger errors)
+        let content_no_comments: String = content
+            .lines()
+            .map(|line| {
+                // Remove single-line comments (// ...)
+                if let Some(idx) = line.find("//") {
+                    &line[..idx]
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
         let forbidden_patterns: &[(&str, &str)] = &[
             // Props - must use $props() not export let
             ("export let ", "Use `let { prop } = $props()` instead of `export let prop`"),
@@ -162,14 +199,19 @@ impl WriteGuiFileTool {
         ];
 
         for (pattern, fix) in forbidden_patterns {
-            if content.contains(pattern) {
-                return Err(ToolError::Validation(format!(
-                    "SVELTE 5 SYNTAX ERROR: Found forbidden pattern '{}'. {}. \
-                     Svelte 5 uses runes mode - you MUST use $props() for props and \
-                     lowercase event handlers (onclick, onchange, etc.). \
-                     Please rewrite the component using correct Svelte 5 syntax.",
-                    pattern, fix
-                )));
+            if content_no_comments.contains(pattern) {
+                // Return a tuple with the error message and category
+                // The caller will enrich this with documentation
+                return Err((
+                    format!(
+                        "SVELTE 5 SYNTAX ERROR: Found forbidden pattern '{}'. {}. \
+                         Svelte 5 uses runes mode - you MUST use $props() for props and \
+                         lowercase event handlers (onclick, onchange, etc.). \
+                         Please rewrite the component using correct Svelte 5 syntax.",
+                        pattern, fix
+                    ),
+                    ErrorCategory::SveltePattern,
+                ));
             }
         }
 
@@ -184,8 +226,9 @@ impl WriteGuiFileTool {
                 let style_content = &content[start..end];
                 // Check if the style block contains non-Tailwind CSS
                 if !style_content.contains("@apply") && !style_content.contains(":global") {
-                    return Err(ToolError::Validation(
-                        "Custom CSS not allowed. Use Tailwind classes only, or @apply directive.".to_string()
+                    return Err((
+                        "Custom CSS not allowed. Use Tailwind classes only, or @apply directive.".to_string(),
+                        ErrorCategory::Styling,
                     ));
                 }
             }
@@ -197,10 +240,101 @@ impl WriteGuiFileTool {
         let script_opens = content.matches("<script").count();
         let script_closes = content.matches("</script>").count();
         if script_opens != script_closes {
-            return Err(ToolError::Validation("Unbalanced <script> tags".to_string()));
+            return Err((
+                "Unbalanced <script> tags".to_string(),
+                ErrorCategory::SvelteCompiler,
+            ));
         }
 
         Ok(())
+    }
+
+    /// Validate imports based on the configured validation mode
+    async fn validate_imports(&self, file_path: &PathBuf) -> Result<(), (String, ErrorCategory)> {
+        let script_name = match self.sandbox_config.import_validation_mode {
+            ImportValidationMode::None => return Ok(()),
+            ImportValidationMode::ImportResolve => "validate-imports.mjs",
+            ImportValidationMode::ViteIntegration => "validate-vite.mjs",
+            ImportValidationMode::EsbuildBundle => "validate-esbuild.mjs",
+        };
+
+        let validation_script = self.project_root.join("scripts").join(script_name);
+
+        // Prepare additional allowed packages as JSON
+        let allowed_packages_json = if !self.sandbox_config.allowed_packages.is_empty() {
+            serde_json::to_string(&self.sandbox_config.allowed_packages).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let mut cmd = tokio::process::Command::new("node");
+        cmd.arg(&validation_script)
+            .arg(file_path)
+            .arg(&self.project_root);
+
+        // Add allowed packages for import resolution mode
+        if matches!(self.sandbox_config.import_validation_mode, ImportValidationMode::ImportResolve) && !allowed_packages_json.is_empty() {
+            cmd.arg(&allowed_packages_json);
+        }
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(self.sandbox_config.validation_timeout_ms),
+            cmd.output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                if !output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+
+                    // Parse JSON error output
+                    if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let error_msg = error_json.get("error")
+                            .and_then(|e| e.as_str())
+                            .unwrap_or("Unknown import validation error")
+                            .to_string();
+
+                        let line = error_json.get("line")
+                            .and_then(|l| l.as_u64());
+
+                        let mut full_error = format!("IMPORT VALIDATION ERROR: {}", error_msg);
+                        if let Some(line_num) = line {
+                            full_error.push_str(&format!(" (line {})", line_num));
+                        }
+
+                        // Add suggestions for common mistakes
+                        full_error.push_str("\n\nCommon fixes:\n");
+                        full_error.push_str("- Check package name spelling (e.g., 'lucide-svelte' not 'lucid')\n");
+                        full_error.push_str("- Ensure the package is in package.json dependencies\n");
+                        full_error.push_str("- Use relative paths for local components (./Component.svelte)");
+
+                        return Err((full_error, ErrorCategory::ImportResolution));
+                    } else {
+                        return Err((
+                            format!("IMPORT VALIDATION ERROR: {}", stdout.trim()),
+                            ErrorCategory::ImportResolution,
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                // Script failed to run - log but don't block
+                log::warn!("Import validation script failed to run: {}. Skipping import validation.", e);
+                Ok(())
+            }
+            Err(_) => {
+                // Timeout
+                Err((
+                    format!(
+                        "IMPORT VALIDATION ERROR: Validation timed out after {}ms. \
+                         This may indicate a complex import graph or slow disk I/O.",
+                        self.sandbox_config.validation_timeout_ms
+                    ),
+                    ErrorCategory::ImportResolution,
+                ))
+            }
+        }
     }
 }
 
@@ -233,7 +367,9 @@ impl Tool for WriteGuiFileTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         // Step 1: Basic pattern validation (fast check for obvious errors)
-        self.validate_svelte_content(&args.content)?;
+        if let Err((msg, category)) = self.validate_svelte_content(&args.content) {
+            return Err(self.validation_error(msg, category).await);
+        }
 
         // Sanitize path to prevent directory traversal
         let sanitized = args.path.replace("..", "").trim_start_matches('/').to_string();
@@ -286,29 +422,15 @@ impl Tool for WriteGuiFileTool {
                     }
                     full_error.push_str(". Please fix the syntax and try again.");
 
-                    // Search for relevant documentation using vector search
-                    if let Some(ref rag) = self.rag_manager {
-                        let rag_guard = rag.read().await;
-                        match rag_guard.search(&error_msg, 3).await {
-                            Ok(docs) if !docs.is_empty() => {
-                                full_error.push_str("\n\n## Relevant Svelte 5 Documentation:\n");
-                                for doc in docs {
-                                    full_error.push_str(&format!(
-                                        "\n### {} > {}\n{}\n",
-                                        doc.doc_title, doc.title, doc.content
-                                    ));
-                                }
-                            }
-                            Ok(_) => {
-                                log::debug!("No relevant documentation found for error: {}", error_msg);
-                            }
-                            Err(e) => {
-                                log::warn!("Failed to search documentation for compile error: {}", e);
-                            }
-                        }
-                    }
+                    // Use enricher pipeline to add relevant documentation
+                    return Err(self.validation_error(full_error, ErrorCategory::SvelteCompiler).await);
+                }
 
-                    return Err(ToolError::Validation(full_error));
+                // Step 3.5: Import validation based on sandbox config
+                // This catches imports that won't resolve at bundle time
+                if let Err((msg, category)) = self.validate_imports(&temp_path).await {
+                    let _ = tokio::fs::remove_file(&temp_path).await;
+                    return Err(self.validation_error(msg, category).await);
                 }
 
                 // Step 4: Runtime semantic validation using rustyscript sandbox
@@ -320,11 +442,10 @@ impl Tool for WriteGuiFileTool {
                     }
                     Err(crate::hotload_sandbox::runtime_sandbox::RuntimeValidationError::Timeout) => {
                         let _ = tokio::fs::remove_file(&temp_path).await;
-                        return Err(ToolError::Validation(
-                            "RUNTIME VALIDATION ERROR: Code execution timed out after 5000ms. \
+                        let msg = "RUNTIME VALIDATION ERROR: Code execution timed out after 5000ms. \
                              This may indicate an infinite loop in your script. \
-                             Please check for while(true), for(;;), or recursive calls without exit conditions.".to_string()
-                        ));
+                             Please check for while(true), for(;;), or recursive calls without exit conditions.".to_string();
+                        return Err(self.validation_error(msg, ErrorCategory::RuntimeSemantic).await);
                     }
                     Err(crate::hotload_sandbox::runtime_sandbox::RuntimeValidationError::SemanticError { message, line }) => {
                         let _ = tokio::fs::remove_file(&temp_path).await;
@@ -339,7 +460,7 @@ impl Tool for WriteGuiFileTool {
                              - Using undefined variables in the template\n\
                              - Components must be imported Svelte components, not primitive values"
                         );
-                        return Err(ToolError::Validation(error_msg));
+                        return Err(self.validation_error(error_msg, ErrorCategory::RuntimeSemantic).await);
                     }
                     Err(e) => {
                         // Other runtime errors - log but don't block (might be false positive)
@@ -672,10 +793,9 @@ impl Tool for ReadTemplateTool {
 }
 
 // ============================================================================
-// SearchSvelteDocsTool - Search Svelte 5 documentation
+// SearchSvelteDocsTool - Search Svelte 5 documentation (kept for programmatic use, not registered with agent)
 // ============================================================================
 
-use std::sync::Arc;
 use super::docs::DocsManager;
 use super::docs_search::{search_docs, DocSearchOutput};
 

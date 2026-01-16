@@ -11,6 +11,7 @@
   import ModelConfig from './ModelConfig.svelte';
   import DeviceConfig from './DeviceConfig.svelte';
   import RagStatus from './RagStatus.svelte';
+  import SandboxSettings from './SandboxSettings.svelte';
 
   let state: LLMState = LLMService.getState();
   let agentState = AgentService.getState();
@@ -159,6 +160,11 @@
       <!-- RAG Status Panel -->
       <div class="px-4 py-3 border-b border-neutral-700">
         <RagStatus />
+      </div>
+
+      <!-- Sandbox Settings Panel -->
+      <div class="px-4 py-3 border-b border-neutral-700">
+        <SandboxSettings />
       </div>
 
       <div

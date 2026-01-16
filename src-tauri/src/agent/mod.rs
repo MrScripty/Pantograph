@@ -3,6 +3,8 @@ pub mod docs;
 pub mod docs_index;
 pub mod docs_search;
 pub mod embeddings;
+pub mod enricher;
+pub mod enricher_svelte;
 pub mod prompt;
 pub mod rag;
 pub mod tools;
@@ -11,11 +13,14 @@ pub mod types;
 pub use chunker::{chunk_document, preview_chunks, ChunkConfig};
 pub use docs::DocsManager;
 pub use embeddings::{check_embedding_server, create_embedding_client};
+pub use enricher::{EnricherRegistry, ErrorCategory, ErrorEnricher};
+pub use enricher_svelte::SvelteDocsEnricher;
 pub use prompt::SYSTEM_PROMPT;
 pub use rag::{create_rag_manager, IndexingProgress, RagError, RagManager, RagStatus, SharedRagManager, SvelteDoc};
 pub use tools::*;
 pub use types::*;
 
+use crate::config::SandboxConfig;
 use rig::client::CompletionClient;
 use rig::providers::openai;
 use rig::providers::openai::completion::CompletionModel;
@@ -44,24 +49,33 @@ pub fn create_client(base_url: &str) -> Result<openai::CompletionsClient, String
 }
 
 /// Create the UI generation agent with all tools
+///
+/// The agent uses an enricher registry to automatically attach relevant documentation
+/// to validation errors. Doc search tools are NOT provided to the agent - documentation
+/// is served programmatically by the enricher pipeline.
 pub fn create_ui_agent(
     client: &openai::CompletionsClient,
     model_name: &str,
     project_root: PathBuf,
-    docs_manager: Arc<DocsManager>,
-    rag_manager: SharedRagManager,
+    enricher_registry: Arc<EnricherRegistry>,
     write_tracker: WriteTracker,
+    sandbox_config: SandboxConfig,
 ) -> rig::agent::Agent<CompletionModel> {
+    let write_tool = WriteGuiFileTool::with_tracker(
+        project_root.clone(),
+        write_tracker,
+        enricher_registry,
+    ).with_sandbox_config(sandbox_config);
+
+    // NO doc search tools - documentation is served automatically via the enricher pipeline
     client
         .agent(model_name)
         .preamble(SYSTEM_PROMPT)
         .tool(ReadGuiFileTool::new(project_root.clone()))
-        .tool(WriteGuiFileTool::with_tracker_and_rag(project_root.clone(), write_tracker, rag_manager.clone()))
+        .tool(write_tool)
         .tool(ListComponentsTool::new(project_root.clone()))
         .tool(GetTailwindColorsTool::new())
         .tool(ListTemplatesTool::new(project_root.clone()))
         .tool(ReadTemplateTool::new(project_root))
-        .tool(SearchSvelteDocsTool::new(docs_manager))
-        .tool(SearchSvelteDocsVectorTool::new(rag_manager))
         .build()
 }

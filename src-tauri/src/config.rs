@@ -94,6 +94,54 @@ pub enum EmbeddingMemoryMode {
     Sequential,
 }
 
+/// Import validation mode for generated Svelte components
+/// Controls how imports are validated before the component is loaded
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportValidationMode {
+    /// No import validation (current behavior, fastest)
+    /// Errors only surface when Vite tries to bundle at runtime
+    #[default]
+    None,
+    /// Parse imports and check against package.json dependencies
+    /// Fast and catches most errors (typos in package names)
+    ImportResolve,
+    /// Use Vite's module resolution to validate imports
+    /// Most accurate but requires Vite dev server
+    ViteIntegration,
+    /// Use esbuild to attempt bundling the script block
+    /// Catches all bundler errors but slowest option
+    EsbuildBundle,
+}
+
+/// Sandbox configuration for component validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxConfig {
+    /// How to validate imports in generated components
+    #[serde(default)]
+    pub import_validation_mode: ImportValidationMode,
+    /// Timeout for validation scripts in milliseconds
+    #[serde(default = "default_validation_timeout")]
+    pub validation_timeout_ms: u64,
+    /// Additional packages to allow beyond package.json dependencies
+    #[serde(default)]
+    pub allowed_packages: Vec<String>,
+}
+
+fn default_validation_timeout() -> u64 {
+    5000
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            import_validation_mode: ImportValidationMode::default(),
+            validation_timeout_ms: default_validation_timeout(),
+            allowed_packages: Vec::new(),
+        }
+    }
+}
+
 /// Full application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -111,6 +159,9 @@ pub struct AppConfig {
     /// Memory management mode for embedding model
     #[serde(default)]
     pub embedding_memory_mode: EmbeddingMemoryMode,
+    /// Sandbox configuration for component validation
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
 }
 
 impl AppConfig {

@@ -8,7 +8,7 @@ use crate::agent::{
     AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, DocsManager,
     FileAction, FileChange, Position, Size, WriteTracker,
 };
-use crate::config::{AppConfig, DeviceConfig, DeviceInfo, EmbeddingMemoryMode, ModelConfig, ServerModeInfo};
+use crate::config::{AppConfig, DeviceConfig, DeviceInfo, EmbeddingMemoryMode, ModelConfig, SandboxConfig, ServerModeInfo};
 use crate::constants::paths::DATA_DIR;
 use futures_util::StreamExt;
 use reqwest::Client;
@@ -228,6 +228,7 @@ pub async fn run_agent(
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
+    config: State<'_, SharedAppConfig>,
     request: AgentRequest,
     channel: Channel<AgentEvent>,
 ) -> Result<AgentResponse, String> {
@@ -279,24 +280,41 @@ pub async fn run_agent(
     log::info!("[run_agent] Step 2: Creating RIG agent...");
     let client = agent::create_client(&base_url)?;
 
-    // Initialize docs manager with project data directory
-    let project_data_dir = get_project_data_dir()?;
-    let docs_manager = Arc::new(DocsManager::new(project_data_dir));
-
     // Create write tracker to track files written during this session
     let write_tracker: WriteTracker = Arc::new(Mutex::new(Vec::new()));
 
     // Ensure RAG manager has the embedding URL before agent runs
     // This is needed for vector search to work when compile errors occur
-    if let Some(url) = gateway.embedding_url().await {
+    let vector_search_available = if let Some(url) = gateway.embedding_url().await {
         let mut rag = rag_manager.write().await;
         rag.set_embedding_url(url.clone());
         log::info!("[run_agent] Set embedding URL in RAG manager: {}", url);
+        // Check if vector search is fully available (embedding URL + indexed vectors)
+        rag.is_search_available()
     } else {
         log::warn!("[run_agent] No embedding URL available - vector search will not work");
-    }
+        false
+    };
 
-    let ui_agent = agent::create_ui_agent(&client, "default", project_root.clone(), docs_manager, rag_manager.inner().clone(), write_tracker.clone());
+    // Build enricher registry - this provides automatic documentation enrichment for errors
+    // The agent does NOT get doc search tools - documentation is served programmatically
+    let mut enricher_registry = agent::EnricherRegistry::new();
+    if vector_search_available {
+        enricher_registry.register(Box::new(agent::SvelteDocsEnricher::new(rag_manager.inner().clone())));
+        log::info!("[run_agent] Registered SvelteDocsEnricher for automatic error enrichment");
+    } else {
+        log::info!("[run_agent] Vector search not available - errors will not include auto-docs");
+    }
+    let enricher_registry = Arc::new(enricher_registry);
+
+    // Get sandbox config for import validation
+    let sandbox_config = {
+        let config_guard = config.read().await;
+        config_guard.sandbox.clone()
+    };
+    log::info!("[run_agent] Using sandbox config with import validation mode: {:?}", sandbox_config.import_validation_mode);
+
+    let ui_agent = agent::create_ui_agent(&client, "default", project_root.clone(), enricher_registry, write_tracker.clone(), sandbox_config);
 
     // Build the prompt with vision analysis included
     let prompt = format_agent_prompt_with_analysis(&request, &vision_analysis);
@@ -316,6 +334,7 @@ pub async fn run_agent(
     // Run the agent with streaming - RIG handles the tool-calling loop
     // multi_turn(5) allows up to 5 tool-calling rounds before requiring a final response
     // This enables the agent to call tools (like write_gui_file) and handle validation errors
+    // Note: Validation errors should include relevant docs automatically, so agent doesn't waste turns searching
     log::info!("[run_agent] Running RIG agent with streaming...");
     let mut stream = ui_agent
         .stream_prompt(&prompt)
@@ -1984,4 +2003,36 @@ pub async fn get_embedding_server_url(
     gateway: State<'_, SharedGateway>,
 ) -> Result<Option<String>, String> {
     Ok(gateway.embedding_url().await)
+}
+
+// ============================================================================
+// Sandbox Configuration Commands
+// ============================================================================
+
+/// Get the current sandbox configuration
+#[command]
+pub async fn get_sandbox_config(
+    config: State<'_, SharedAppConfig>,
+) -> Result<SandboxConfig, String> {
+    let config_guard = config.read().await;
+    Ok(config_guard.sandbox.clone())
+}
+
+/// Set the sandbox configuration
+#[command]
+pub async fn set_sandbox_config(
+    app: AppHandle,
+    config: State<'_, SharedAppConfig>,
+    sandbox: SandboxConfig,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    let mut config_guard = config.write().await;
+    config_guard.sandbox = sandbox;
+    config_guard.save(&app_data_dir).await
+        .map_err(|e| format!("Failed to save config: {}", e))?;
+
+    log::info!("Sandbox configuration saved");
+    Ok(())
 }
