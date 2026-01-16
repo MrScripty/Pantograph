@@ -126,6 +126,10 @@ pub struct SandboxConfig {
     /// Additional packages to allow beyond package.json dependencies
     #[serde(default)]
     pub allowed_packages: Vec<String>,
+    /// Enable ESLint validation for generated components
+    /// Catches code quality issues like explicit undefined usage, unused variables, etc.
+    #[serde(default)]
+    pub lint_enabled: bool,
 }
 
 fn default_validation_timeout() -> u64 {
@@ -138,6 +142,7 @@ impl Default for SandboxConfig {
             import_validation_mode: ImportValidationMode::default(),
             validation_timeout_ms: default_validation_timeout(),
             allowed_packages: Vec::new(),
+            lint_enabled: false,
         }
     }
 }

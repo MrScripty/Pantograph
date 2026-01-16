@@ -13,6 +13,51 @@ use crate::config::{ImportValidationMode, SandboxConfig};
 use crate::hotload_sandbox::runtime_sandbox::validate_runtime_semantics;
 
 // ============================================================================
+// Standard HTML Elements (for validation)
+// ============================================================================
+
+const STANDARD_HTML_ELEMENTS: &[&str] = &[
+    // Document metadata
+    "base", "head", "link", "meta", "style", "title",
+    // Sectioning
+    "body", "address", "article", "aside", "footer", "header",
+    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "main", "nav", "section", "search",
+    // Text content
+    "blockquote", "dd", "div", "dl", "dt", "figcaption", "figure", "hr", "li", "menu", "ol", "p", "pre", "ul",
+    // Inline text semantics
+    "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "dfn", "em", "i", "kbd", "mark", "q",
+    "rp", "rt", "ruby", "s", "samp", "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr",
+    // Image and multimedia
+    "area", "audio", "img", "map", "track", "video",
+    // Embedded content
+    "embed", "iframe", "object", "param", "picture", "portal", "source",
+    // SVG and MathML
+    "svg", "math",
+    // Scripting
+    "canvas", "noscript", "script",
+    // Edits
+    "del", "ins",
+    // Table content
+    "caption", "col", "colgroup", "table", "tbody", "td", "tfoot", "th", "thead", "tr",
+    // Forms
+    "button", "datalist", "fieldset", "form", "input", "label", "legend", "meter",
+    "optgroup", "option", "output", "progress", "select", "textarea",
+    // Interactive elements
+    "details", "dialog", "summary",
+    // Web Components
+    "slot", "template",
+];
+
+/// Capitalize the first letter of a string (for suggesting PascalCase component names)
+fn capitalize_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().chain(chars).collect(),
+    }
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -151,6 +196,31 @@ impl WriteGuiFileTool {
         self.project_root.join("src").join("generated")
     }
 
+    /// Extract template content from Svelte file (excludes script and style blocks)
+    fn extract_template_content(content: &str) -> String {
+        let mut result = content.to_string();
+
+        // Remove <script>...</script> blocks
+        while let Some(start) = result.find("<script") {
+            if let Some(end) = result[start..].find("</script>") {
+                result = format!("{}{}", &result[..start], &result[start + end + 9..]);
+            } else {
+                break;
+            }
+        }
+
+        // Remove <style>...</style> blocks
+        while let Some(start) = result.find("<style") {
+            if let Some(end) = result[start..].find("</style>") {
+                result = format!("{}{}", &result[..start], &result[start + end + 8..]);
+            } else {
+                break;
+            }
+        }
+
+        result
+    }
+
     fn validate_svelte_content(&self, content: &str) -> Result<(), (String, ErrorCategory)> {
         // ============================================================
         // Svelte 5 Syntax Validation - CRITICAL
@@ -246,6 +316,43 @@ impl WriteGuiFileTool {
             ));
         }
 
+        // ============================================================
+        // HTML Element Validation - disallow non-standard elements
+        // ============================================================
+        let template_content = Self::extract_template_content(content);
+
+        // Match lowercase tags that look like HTML elements
+        let element_regex = regex::Regex::new(r"<([a-z][a-z0-9]*)[^>]*[/]?>").unwrap();
+        for cap in element_regex.captures_iter(&template_content) {
+            if let Some(tag_match) = cap.get(1) {
+                let tag_name = tag_match.as_str();
+
+                // Allow standard HTML elements
+                if STANDARD_HTML_ELEMENTS.contains(&tag_name) {
+                    continue;
+                }
+
+                // Allow custom elements with hyphens (valid Web Components)
+                if tag_name.contains('-') {
+                    continue;
+                }
+
+                // Reject non-standard elements without hyphens
+                // Use HtmlElement category to avoid triggering Svelte doc enrichment
+                return Err((
+                    format!(
+                        "NON-STANDARD HTML ELEMENT: '<{}>' is not a valid HTML element. \
+                         Did you mean to use a Svelte component? Use PascalCase: '<{}>' instead. \
+                         Or for a custom element, add a hyphen: '<my-{}>' (Web Components require a hyphen).",
+                        tag_name,
+                        capitalize_first(tag_name),
+                        tag_name
+                    ),
+                    ErrorCategory::HtmlElement,
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -333,6 +440,71 @@ impl WriteGuiFileTool {
                     ),
                     ErrorCategory::ImportResolution,
                 ))
+            }
+        }
+    }
+
+    /// Validate code quality using ESLint (if enabled)
+    async fn validate_lint(&self, file_path: &PathBuf) -> Result<(), (String, ErrorCategory)> {
+        if !self.sandbox_config.lint_enabled {
+            return Ok(());
+        }
+
+        let lint_script = self.project_root.join("scripts").join("validate-lint.mjs");
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(self.sandbox_config.validation_timeout_ms),
+            tokio::process::Command::new("node")
+                .arg(&lint_script)
+                .arg(file_path)
+                .arg(&self.project_root)
+                .output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+
+                if !output.status.success() {
+                    // Parse JSON error output
+                    if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let error_msg = error_json.get("error")
+                            .and_then(|e| e.as_str())
+                            .unwrap_or("Unknown linting error")
+                            .to_string();
+
+                        let line = error_json.get("line")
+                            .and_then(|l| l.as_u64());
+
+                        let mut full_error = format!("LINTING ERROR: {}", error_msg);
+                        if let Some(line_num) = line {
+                            full_error.push_str(&format!(" (line {})", line_num));
+                        }
+
+                        full_error.push_str("\n\nCommon fixes:\n");
+                        full_error.push_str("- Don't use `undefined` explicitly - use `null` or omit initialization\n");
+                        full_error.push_str("- Remove unused variables\n");
+                        full_error.push_str("- Check for accidental type coercion");
+
+                        return Err((full_error, ErrorCategory::Linting));
+                    } else {
+                        return Err((
+                            format!("LINTING ERROR: {}", stdout.trim()),
+                            ErrorCategory::Linting,
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                // Script failed to run - log but don't block
+                log::warn!("Lint validation script failed to run: {}. Skipping lint validation.", e);
+                Ok(())
+            }
+            Err(_) => {
+                // Timeout - log warning but don't block
+                log::warn!("Lint validation timed out. Skipping lint validation.");
+                Ok(())
             }
         }
     }
@@ -429,6 +601,13 @@ impl Tool for WriteGuiFileTool {
                 // Step 3.5: Import validation based on sandbox config
                 // This catches imports that won't resolve at bundle time
                 if let Err((msg, category)) = self.validate_imports(&temp_path).await {
+                    let _ = tokio::fs::remove_file(&temp_path).await;
+                    return Err(self.validation_error(msg, category).await);
+                }
+
+                // Step 3.6: ESLint validation (if enabled)
+                // This catches code quality issues like explicit undefined usage, unused variables, etc.
+                if let Err((msg, category)) = self.validate_lint(&temp_path).await {
                     let _ = tokio::fs::remove_file(&temp_path).await;
                     return Err(self.validation_error(msg, category).await);
                 }

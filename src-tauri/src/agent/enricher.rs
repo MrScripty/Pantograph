@@ -20,6 +20,10 @@ pub enum ErrorCategory {
     RuntimeSemantic,
     /// CSS/styling errors
     Styling,
+    /// Non-standard HTML element errors (no docs to fetch)
+    HtmlElement,
+    /// ESLint code quality errors (no docs to fetch, error message is self-explanatory)
+    Linting,
     /// Unknown/other errors
     Other,
 }
