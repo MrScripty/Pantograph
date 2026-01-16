@@ -5,7 +5,9 @@ use serde_json::json;
 use std::path::PathBuf;
 use thiserror::Error;
 
+use super::rag::SharedRagManager;
 use super::types::{TailwindColors, TemplateInfo, WriteTracker};
+use crate::hotload_sandbox::runtime_sandbox::validate_runtime_semantics;
 
 // ============================================================================
 // Error Types
@@ -108,15 +110,20 @@ pub struct WriteGuiFileArgs {
 pub struct WriteGuiFileTool {
     project_root: PathBuf,
     write_tracker: Option<WriteTracker>,
+    rag_manager: Option<SharedRagManager>,
 }
 
 impl WriteGuiFileTool {
     pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root, write_tracker: None }
+        Self { project_root, write_tracker: None, rag_manager: None }
     }
 
     pub fn with_tracker(project_root: PathBuf, tracker: WriteTracker) -> Self {
-        Self { project_root, write_tracker: Some(tracker) }
+        Self { project_root, write_tracker: Some(tracker), rag_manager: None }
+    }
+
+    pub fn with_tracker_and_rag(project_root: PathBuf, tracker: WriteTracker, rag_manager: SharedRagManager) -> Self {
+        Self { project_root, write_tracker: Some(tracker), rag_manager: Some(rag_manager) }
     }
 
     fn get_generated_path(&self) -> PathBuf {
@@ -258,34 +265,89 @@ impl Tool for WriteGuiFileTool {
                     let _ = tokio::fs::remove_file(&temp_path).await;
 
                     // Try to parse JSON error output
-                    if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                        let error_msg = error_json.get("error")
+                    let (error_msg, line) = if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let msg = error_json.get("error")
                             .and_then(|e| e.as_str())
-                            .unwrap_or("Unknown compilation error");
-                        let line = error_json.get("line")
+                            .unwrap_or("Unknown compilation error")
+                            .to_string();
+                        let line_num = error_json.get("line")
                             .and_then(|l| l.as_u64());
-
-                        let mut full_error = format!(
-                            "SVELTE COMPILATION ERROR: {}",
-                            error_msg
-                        );
-                        if let Some(line_num) = line {
-                            full_error.push_str(&format!(" (line {})", line_num));
-                        }
-                        full_error.push_str(". Please fix the syntax and try again. Remember: use $props() for props (NOT export let), use onclick (NOT on:click), and $state() should only be used for local state variables, NOT inside $props() destructuring.");
-
-                        return Err(ToolError::Validation(full_error));
+                        (msg, line_num)
                     } else {
-                        // Couldn't parse JSON, use raw output
+                        (stdout.trim().to_string(), None)
+                    };
+
+                    let mut full_error = format!(
+                        "SVELTE COMPILATION ERROR: {}",
+                        error_msg
+                    );
+                    if let Some(line_num) = line {
+                        full_error.push_str(&format!(" (line {})", line_num));
+                    }
+                    full_error.push_str(". Please fix the syntax and try again.");
+
+                    // Search for relevant documentation using vector search
+                    if let Some(ref rag) = self.rag_manager {
+                        let rag_guard = rag.read().await;
+                        match rag_guard.search(&error_msg, 3).await {
+                            Ok(docs) if !docs.is_empty() => {
+                                full_error.push_str("\n\n## Relevant Svelte 5 Documentation:\n");
+                                for doc in docs {
+                                    full_error.push_str(&format!(
+                                        "\n### {} > {}\n{}\n",
+                                        doc.doc_title, doc.title, doc.content
+                                    ));
+                                }
+                            }
+                            Ok(_) => {
+                                log::debug!("No relevant documentation found for error: {}", error_msg);
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to search documentation for compile error: {}", e);
+                            }
+                        }
+                    }
+
+                    return Err(ToolError::Validation(full_error));
+                }
+
+                // Step 4: Runtime semantic validation using rustyscript sandbox
+                // This catches errors that pass syntax validation but would fail at runtime
+                // (e.g., using primitive values as components)
+                match validate_runtime_semantics(&args.content, 5000) {
+                    Ok(()) => {
+                        // All validations passed
+                    }
+                    Err(crate::hotload_sandbox::runtime_sandbox::RuntimeValidationError::Timeout) => {
                         let _ = tokio::fs::remove_file(&temp_path).await;
-                        return Err(ToolError::Validation(format!(
-                            "SVELTE COMPILATION ERROR: {}. Please fix the syntax and try again.",
-                            stdout.trim()
-                        )));
+                        return Err(ToolError::Validation(
+                            "RUNTIME VALIDATION ERROR: Code execution timed out after 5000ms. \
+                             This may indicate an infinite loop in your script. \
+                             Please check for while(true), for(;;), or recursive calls without exit conditions.".to_string()
+                        ));
+                    }
+                    Err(crate::hotload_sandbox::runtime_sandbox::RuntimeValidationError::SemanticError { message, line }) => {
+                        let _ = tokio::fs::remove_file(&temp_path).await;
+                        let mut error_msg = format!("RUNTIME SEMANTIC ERROR: {}", message);
+                        if let Some(line_num) = line {
+                            error_msg.push_str(&format!(" (around line {})", line_num));
+                        }
+                        error_msg.push_str(
+                            "\n\nThis error occurs because the code passes syntax validation \
+                             but would fail when actually rendered. Common causes:\n\
+                             - Using a string/number variable as a component (<MyVar /> where MyVar = \"text\")\n\
+                             - Using undefined variables in the template\n\
+                             - Components must be imported Svelte components, not primitive values"
+                        );
+                        return Err(ToolError::Validation(error_msg));
+                    }
+                    Err(e) => {
+                        // Other runtime errors - log but don't block (might be false positive)
+                        log::debug!("Runtime validation warning (non-blocking): {}", e);
                     }
                 }
 
-                // Compilation succeeded - move temp file to final location
+                // Compilation and runtime validation succeeded - move temp file to final location
                 tokio::fs::rename(&temp_path, &full_path).await.map_err(ToolError::Io)?;
 
                 // Record successful write
@@ -689,6 +751,126 @@ impl Tool for SearchSvelteDocsTool {
             query: args.query,
             total_matches: results.len(),
             results,
+        })
+    }
+}
+
+// ============================================================================
+// SearchSvelteDocsVectorTool - Semantic search using LanceDB vectors
+// ============================================================================
+
+use super::types::DocChunk;
+
+/// Output structure for the vector search tool
+#[derive(Debug, Serialize)]
+pub struct VectorDocSearchOutput {
+    /// The original query
+    pub query: String,
+    /// Search results ordered by relevance
+    pub results: Vec<VectorDocResult>,
+    /// Total number of matches found
+    pub total_matches: usize,
+}
+
+/// A vector search result with chunk details
+#[derive(Debug, Serialize)]
+pub struct VectorDocResult {
+    /// Document title
+    pub doc_title: String,
+    /// Chunk/section title
+    pub title: String,
+    /// Section name
+    pub section: String,
+    /// Header context (breadcrumb path)
+    pub header_context: String,
+    /// Full content of the chunk
+    pub content: String,
+    /// Whether this chunk contains code examples
+    pub has_code: bool,
+}
+
+impl From<DocChunk> for VectorDocResult {
+    fn from(chunk: DocChunk) -> Self {
+        Self {
+            doc_title: chunk.doc_title,
+            title: chunk.title,
+            section: chunk.section,
+            header_context: chunk.header_context,
+            content: chunk.content,
+            has_code: chunk.has_code,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchSvelteDocsVectorArgs {
+    pub query: String,
+    #[serde(default = "default_vector_search_limit")]
+    pub limit: usize,
+}
+
+fn default_vector_search_limit() -> usize {
+    3
+}
+
+#[derive(Clone)]
+pub struct SearchSvelteDocsVectorTool {
+    rag_manager: SharedRagManager,
+}
+
+impl SearchSvelteDocsVectorTool {
+    pub fn new(rag_manager: SharedRagManager) -> Self {
+        Self { rag_manager }
+    }
+}
+
+impl Tool for SearchSvelteDocsVectorTool {
+    const NAME: &'static str = "search_svelte_docs_vector";
+    type Error = ToolError;
+    type Args = SearchSvelteDocsVectorArgs;
+    type Output = VectorDocSearchOutput;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Semantic search Svelte 5 documentation using vector embeddings. \
+                          More accurate than keyword search for finding conceptually related content. \
+                          Use this when you need to understand Svelte 5 concepts, fix errors, or find related documentation. \
+                          Requires documentation to be indexed first.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language query describing what you're looking for (e.g., 'how to declare reactive props', 'event handler syntax')"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 3)",
+                        "default": 3
+                    }
+                },
+                "required": ["query"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let rag_guard = self.rag_manager.read().await;
+
+        // Perform semantic vector search
+        let chunks = rag_guard
+            .search(&args.query, args.limit)
+            .await
+            .map_err(|e| ToolError::Validation(format!("Vector search failed: {}. Make sure documentation is indexed.", e)))?;
+
+        let results: Vec<VectorDocResult> = chunks.into_iter().map(VectorDocResult::from).collect();
+        let total = results.len();
+
+        Ok(VectorDocSearchOutput {
+            query: args.query,
+            results,
+            total_matches: total,
         })
     }
 }

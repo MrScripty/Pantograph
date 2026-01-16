@@ -3,6 +3,7 @@
 mod agent;
 mod config;
 mod constants;
+mod hotload_sandbox;
 mod llm;
 
 use agent::create_rag_manager;
@@ -10,13 +11,14 @@ use config::AppConfig;
 use llm::{
     check_embedding_server, check_llama_binaries, check_ollama_binary, clear_rag_cache,
     connect_to_server, download_llama_binaries, download_ollama_binary, get_app_config,
-    get_backend_capabilities, get_current_backend, get_device_config, get_llm_status,
-    get_model_config, get_rag_status, get_server_mode, get_svelte_docs_status,
-    index_docs_with_switch, index_rag_documents, list_backends, list_chunkable_docs, list_devices,
-    load_rag_from_disk, preview_doc_chunks, run_agent, search_rag, send_vision_prompt,
-    set_app_config, set_device_config, set_embedding_server_url, set_model_config,
-    start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm, stop_llm, switch_backend,
-    update_svelte_docs, InferenceGateway, LlamaServer, SharedAppConfig, SharedGateway,
+    get_backend_capabilities, get_current_backend, get_device_config, get_embedding_memory_mode,
+    get_embedding_server_url, get_llm_status, get_model_config, get_rag_status, get_server_mode,
+    get_svelte_docs_status, index_docs_with_switch, index_rag_documents, is_embedding_server_ready,
+    list_backends, list_chunkable_docs, list_devices, load_rag_from_disk, preview_doc_chunks,
+    run_agent, search_rag, send_vision_prompt, set_app_config, set_device_config,
+    set_embedding_memory_mode, set_embedding_server_url, set_model_config, start_sidecar_embedding,
+    start_sidecar_inference, start_sidecar_llm, stop_llm, switch_backend, update_svelte_docs,
+    InferenceGateway, LlamaServer, SharedAppConfig, SharedGateway,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -116,6 +118,11 @@ fn main() {
             // Chunking preview commands
             list_chunkable_docs,
             preview_doc_chunks,
+            // Embedding memory mode commands
+            get_embedding_memory_mode,
+            set_embedding_memory_mode,
+            is_embedding_server_ready,
+            get_embedding_server_url,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
@@ -123,8 +130,9 @@ fn main() {
                 let app = window.app_handle();
                 if let Some(gateway) = app.try_state::<SharedGateway>() {
                     tauri::async_runtime::block_on(async {
-                        gateway.stop().await;
-                        log::info!("Stopped inference gateway on window close");
+                        // Stop both main server and embedding server
+                        gateway.stop_all().await;
+                        log::info!("Stopped inference gateway and embedding server on window close");
                     });
                 }
             }

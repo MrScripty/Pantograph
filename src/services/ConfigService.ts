@@ -15,6 +15,8 @@ export interface DeviceConfig {
   gpu_layers: number;
 }
 
+export type EmbeddingMemoryMode = 'cpu_parallel' | 'gpu_parallel' | 'sequential';
+
 export interface DeviceInfo {
   id: string;
   name: string;
@@ -340,6 +342,56 @@ class ConfigServiceClass {
    */
   public get isEmbeddingMode(): boolean {
     return this.state.serverMode.is_embedding_mode;
+  }
+
+  /**
+   * Get the current embedding memory mode
+   */
+  public async getEmbeddingMemoryMode(): Promise<EmbeddingMemoryMode> {
+    try {
+      const mode = await invoke<string>('get_embedding_memory_mode');
+      return mode as EmbeddingMemoryMode;
+    } catch (error) {
+      Logger.log('GET_EMBEDDING_MODE_ERROR', { error: String(error) }, 'error');
+      return 'cpu_parallel'; // Default
+    }
+  }
+
+  /**
+   * Set the embedding memory mode
+   */
+  public async setEmbeddingMemoryMode(mode: EmbeddingMemoryMode): Promise<void> {
+    try {
+      await invoke('set_embedding_memory_mode', { mode });
+      Logger.log('EMBEDDING_MODE_SET', { mode });
+    } catch (error) {
+      Logger.log('SET_EMBEDDING_MODE_ERROR', { error: String(error) }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Check if the dedicated embedding server is ready
+   */
+  public async isEmbeddingServerReady(): Promise<boolean> {
+    try {
+      return await invoke<boolean>('is_embedding_server_ready');
+    } catch (error) {
+      Logger.log('EMBEDDING_SERVER_CHECK_ERROR', { error: String(error) }, 'error');
+      return false;
+    }
+  }
+
+  /**
+   * Get the embedding server URL if available
+   */
+  public async getEmbeddingServerUrl(): Promise<string | null> {
+    try {
+      return await invoke<string | null>('get_embedding_server_url');
+    } catch (error) {
+      Logger.log('GET_EMBEDDING_URL_ERROR', { error: String(error) }, 'error');
+      return null;
+    }
   }
 }
 

@@ -74,6 +74,26 @@ impl Default for ConnectionMode {
     }
 }
 
+/// Memory management mode for embedding model
+/// Controls how the embedding model is loaded relative to the main LLM
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbeddingMemoryMode {
+    /// Embedding model runs on CPU (RAM), LLM on GPU (VRAM)
+    /// Best for machines with limited VRAM but plenty of RAM
+    /// This is the recommended default for most users
+    #[default]
+    CpuParallel,
+    /// Both models run on GPU (VRAM) simultaneously
+    /// Requires ~800MB+ additional VRAM for embedding model
+    /// Fastest option but needs sufficient VRAM
+    GpuParallel,
+    /// Only one model in memory at a time, swap as needed
+    /// Lowest memory usage but adds ~2-5s latency per search
+    /// Best for very limited memory systems
+    Sequential,
+}
+
 /// Full application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -88,6 +108,9 @@ pub struct AppConfig {
     pub external_url: Option<String>,
     /// API key for external providers (OpenAI, Anthropic, etc.)
     pub api_key: Option<String>,
+    /// Memory management mode for embedding model
+    #[serde(default)]
+    pub embedding_memory_mode: EmbeddingMemoryMode,
 }
 
 impl AppConfig {

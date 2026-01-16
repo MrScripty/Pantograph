@@ -85,6 +85,8 @@ export interface AgentActivityItem {
     toolName?: string;
     toolArgs?: string;
     toolId?: string;
+    status?: 'pending' | 'success' | 'error';
+    errorMessage?: string;
   };
 }
 
@@ -346,21 +348,43 @@ class AgentServiceClass {
         break;
 
       case 'tool_call':
+        // Flush any accumulated streaming text before the tool call
+        // This shows the agent's response/reasoning leading up to this tool call
+        if (this.state.streamingText) {
+          this.addActivityItem('text', this.state.streamingText);
+          this.state.streamingText = '';
+        }
         if (data && typeof data === 'object') {
           const toolData = data as ToolCallEventData;
           this.addActivityItem('tool_call', `Calling ${toolData.name}`, {
             toolName: toolData.name,
             toolArgs: toolData.arguments,
+            status: 'pending',
           });
         }
         break;
 
       case 'tool_result':
+        // Instead of adding a separate item, update the corresponding tool call's status
         if (data && typeof data === 'object') {
           const resultData = data as ToolResultEventData;
-          this.addActivityItem('tool_result', resultData.output, {
-            toolId: resultData.tool_id,
-          });
+          // Find the most recent pending tool_call and update its status (search from end)
+          let toolCallIndex = -1;
+          for (let i = this.state.activityLog.length - 1; i >= 0; i--) {
+            const item = this.state.activityLog[i];
+            if (item.type === 'tool_call' && item.metadata?.status === 'pending') {
+              toolCallIndex = i;
+              break;
+            }
+          }
+          if (toolCallIndex !== -1) {
+            const isSuccess = resultData.output === 'true';
+            this.state.activityLog[toolCallIndex].metadata!.status = isSuccess ? 'success' : 'error';
+            if (!isSuccess) {
+              this.state.activityLog[toolCallIndex].metadata!.errorMessage = resultData.output;
+            }
+            this.notifyState();
+          }
         }
         break;
 

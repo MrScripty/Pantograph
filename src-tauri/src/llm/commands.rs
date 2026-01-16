@@ -8,7 +8,7 @@ use crate::agent::{
     AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, DocsManager,
     FileAction, FileChange, Position, Size, WriteTracker,
 };
-use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig, ServerModeInfo};
+use crate::config::{AppConfig, DeviceConfig, DeviceInfo, EmbeddingMemoryMode, ModelConfig, ServerModeInfo};
 use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
@@ -203,6 +203,7 @@ pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<(), String> {
 pub async fn run_agent(
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    rag_manager: State<'_, SharedRagManager>,
     request: AgentRequest,
     channel: Channel<AgentEvent>,
 ) -> Result<AgentResponse, String> {
@@ -262,7 +263,17 @@ pub async fn run_agent(
     // Create write tracker to track files written during this session
     let write_tracker: WriteTracker = Arc::new(Mutex::new(Vec::new()));
 
-    let ui_agent = agent::create_ui_agent(&client, "default", project_root.clone(), docs_manager, write_tracker.clone());
+    // Ensure RAG manager has the embedding URL before agent runs
+    // This is needed for vector search to work when compile errors occur
+    if let Some(url) = gateway.embedding_url().await {
+        let mut rag = rag_manager.write().await;
+        rag.set_embedding_url(url.clone());
+        log::info!("[run_agent] Set embedding URL in RAG manager: {}", url);
+    } else {
+        log::warn!("[run_agent] No embedding URL available - vector search will not work");
+    }
+
+    let ui_agent = agent::create_ui_agent(&client, "default", project_root.clone(), docs_manager, rag_manager.inner().clone(), write_tracker.clone());
 
     // Build the prompt with vision analysis included
     let prompt = format_agent_prompt_with_analysis(&request, &vision_analysis);
@@ -662,6 +673,13 @@ pub async fn get_rag_status(
     let mut manager = rag_manager.write().await;
     manager.update_docs_status(&docs_manager);
 
+    // Load existing vectors from disk if not already loaded
+    if !manager.status().vectors_indexed {
+        if let Err(e) = manager.load_from_disk().await {
+            log::warn!("Failed to load vectors from disk: {}", e);
+        }
+    }
+
     Ok(manager.status().clone())
 }
 
@@ -958,11 +976,16 @@ pub async fn start_sidecar_inference(
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
+    rag_manager: State<'_, SharedRagManager>,
 ) -> Result<ServerModeInfo, String> {
     let backend_name = gateway.current_backend_name().await;
     log::info!("Starting sidecar inference with backend: {}", backend_name);
 
     let config_guard = config.read().await;
+
+    // Extract config values we'll need after dropping the guard
+    let embedding_model_path = config_guard.models.embedding_model_path.clone();
+    let embedding_memory_mode = config_guard.embedding_memory_mode.clone();
 
     // Build backend-specific config
     let backend_config = match backend_name.as_str() {
@@ -995,12 +1018,39 @@ pub async fn start_sidecar_inference(
     };
     drop(config_guard);
 
+    // Start the main LLM server
     gateway
         .start(&backend_config, &app)
         .await
         .map_err(|e| e.to_string())?;
 
     log::info!("Started sidecar in inference mode");
+
+    // Start embedding server for parallel modes (if embedding model is configured)
+    if let Some(ref emb_path) = embedding_model_path {
+        if embedding_memory_mode != EmbeddingMemoryMode::Sequential {
+            // Get device info for VRAM checking
+            let devices = list_devices(app.clone()).await.unwrap_or_default();
+
+            match gateway.start_embedding_server(emb_path, embedding_memory_mode.clone(), &devices, &app).await {
+                Ok(()) => {
+                    // Set embedding URL in RAG manager so search() will work
+                    if let Some(url) = gateway.embedding_url().await {
+                        let mut rag = rag_manager.write().await;
+                        rag.set_embedding_url(url);
+                        log::info!("Embedding server started and RAG manager configured");
+                    }
+                }
+                Err(e) => {
+                    // Log but don't fail - embedding server is optional
+                    log::warn!("Failed to start embedding server: {}. Vector search may not work.", e);
+                }
+            }
+        } else {
+            log::info!("Sequential embedding mode: embedding server will start on-demand");
+        }
+    }
+
     Ok(gateway.mode_info().await)
 }
 
@@ -1846,4 +1896,74 @@ pub async fn preview_doc_chunks(
     );
 
     Ok(preview)
+}
+
+// ============================================================================
+// Embedding Memory Mode Commands
+// ============================================================================
+
+/// Get the current embedding memory mode
+#[command]
+pub async fn get_embedding_memory_mode(
+    config: State<'_, SharedAppConfig>,
+) -> Result<String, String> {
+    let config_guard = config.read().await;
+    let mode = match config_guard.embedding_memory_mode {
+        EmbeddingMemoryMode::CpuParallel => "cpu_parallel",
+        EmbeddingMemoryMode::GpuParallel => "gpu_parallel",
+        EmbeddingMemoryMode::Sequential => "sequential",
+    };
+    Ok(mode.to_string())
+}
+
+/// Set the embedding memory mode
+/// Note: This saves the config but doesn't restart the embedding server.
+/// Call start_sidecar_inference to apply the new mode.
+#[command]
+pub async fn set_embedding_memory_mode(
+    app: AppHandle,
+    config: State<'_, SharedAppConfig>,
+    mode: String,
+) -> Result<(), String> {
+    let new_mode = match mode.as_str() {
+        "cpu_parallel" => EmbeddingMemoryMode::CpuParallel,
+        "gpu_parallel" => EmbeddingMemoryMode::GpuParallel,
+        "sequential" => EmbeddingMemoryMode::Sequential,
+        _ => return Err(format!("Invalid embedding memory mode: {}", mode)),
+    };
+
+    {
+        let mut config_guard = config.write().await;
+        config_guard.embedding_memory_mode = new_mode;
+    }
+
+    // Save config to disk
+    let config_guard = config.read().await;
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    config_guard
+        .save(&app_data_dir)
+        .await
+        .map_err(|e| format!("Failed to save config: {}", e))?;
+
+    log::info!("Set embedding memory mode to: {}", mode);
+    Ok(())
+}
+
+/// Check if the embedding server is ready
+#[command]
+pub async fn is_embedding_server_ready(
+    gateway: State<'_, SharedGateway>,
+) -> Result<bool, String> {
+    Ok(gateway.is_embedding_server_ready().await)
+}
+
+/// Get the embedding server URL if available
+#[command]
+pub async fn get_embedding_server_url(
+    gateway: State<'_, SharedGateway>,
+) -> Result<Option<String>, String> {
+    Ok(gateway.embedding_url().await)
 }

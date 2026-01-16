@@ -12,7 +12,7 @@ pub use chunker::{chunk_document, preview_chunks, ChunkConfig};
 pub use docs::DocsManager;
 pub use embeddings::{check_embedding_server, create_embedding_client};
 pub use prompt::SYSTEM_PROMPT;
-pub use rag::{create_rag_manager, IndexingProgress, RagManager, RagStatus, SharedRagManager, SvelteDoc};
+pub use rag::{create_rag_manager, IndexingProgress, RagError, RagManager, RagStatus, SharedRagManager, SvelteDoc};
 pub use tools::*;
 pub use types::*;
 
@@ -49,17 +49,19 @@ pub fn create_ui_agent(
     model_name: &str,
     project_root: PathBuf,
     docs_manager: Arc<DocsManager>,
+    rag_manager: SharedRagManager,
     write_tracker: WriteTracker,
 ) -> rig::agent::Agent<CompletionModel> {
     client
         .agent(model_name)
         .preamble(SYSTEM_PROMPT)
         .tool(ReadGuiFileTool::new(project_root.clone()))
-        .tool(WriteGuiFileTool::with_tracker(project_root.clone(), write_tracker))
+        .tool(WriteGuiFileTool::with_tracker_and_rag(project_root.clone(), write_tracker, rag_manager.clone()))
         .tool(ListComponentsTool::new(project_root.clone()))
         .tool(GetTailwindColorsTool::new())
         .tool(ListTemplatesTool::new(project_root.clone()))
         .tool(ReadTemplateTool::new(project_root))
         .tool(SearchSvelteDocsTool::new(docs_manager))
+        .tool(SearchSvelteDocsVectorTool::new(rag_manager))
         .build()
 }

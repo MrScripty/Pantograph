@@ -14,7 +14,8 @@ use super::backend::{
     BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry, ChatChunk,
     EmbeddingResult, InferenceBackend, LlamaCppBackend,
 };
-use crate::config::ServerModeInfo;
+use super::embedding_server::EmbeddingServer;
+use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 
 /// Error types for gateway operations
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +46,10 @@ pub struct InferenceGateway {
     embedding_mode: Arc<RwLock<bool>>,
     /// Last used inference config (for mode switching)
     last_inference_config: Arc<RwLock<Option<BackendConfig>>>,
+    /// Dedicated embedding server for parallel modes (CPU+GPU or GPU+GPU)
+    embedding_server: Arc<RwLock<Option<EmbeddingServer>>>,
+    /// Current embedding memory mode
+    embedding_memory_mode: Arc<RwLock<EmbeddingMemoryMode>>,
 }
 
 impl InferenceGateway {
@@ -56,6 +61,8 @@ impl InferenceGateway {
             current_backend_name: Arc::new(RwLock::new("llama.cpp".to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
+            embedding_server: Arc::new(RwLock::new(None)),
+            embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
         }
     }
 
@@ -134,6 +141,118 @@ impl InferenceGateway {
         // Reset embedding mode
         let mut mode = self.embedding_mode.write().await;
         *mode = false;
+    }
+
+    /// Stop the dedicated embedding server (if running)
+    pub async fn stop_embedding_server(&self) {
+        let mut guard = self.embedding_server.write().await;
+        if let Some(ref mut server) = *guard {
+            server.stop();
+        }
+        *guard = None;
+    }
+
+    /// Stop both the main backend and embedding server
+    pub async fn stop_all(&self) {
+        self.stop().await;
+        self.stop_embedding_server().await;
+    }
+
+    // ─── EMBEDDING SERVER MANAGEMENT ───────────────────────────────────
+
+    /// Start the dedicated embedding server for parallel modes
+    ///
+    /// This starts a separate llama.cpp instance for embedding operations,
+    /// allowing vector search to work while the main LLM is loaded.
+    ///
+    /// # Arguments
+    /// * `model_path` - Path to the embedding model GGUF file
+    /// * `mode` - Memory mode (CpuParallel, GpuParallel, or Sequential)
+    /// * `devices` - Available device info for VRAM checking
+    /// * `app` - Tauri app handle
+    pub async fn start_embedding_server(
+        &self,
+        model_path: &str,
+        mode: EmbeddingMemoryMode,
+        devices: &[DeviceInfo],
+        app: &tauri::AppHandle,
+    ) -> Result<(), GatewayError> {
+        // Store the memory mode
+        {
+            let mut mode_guard = self.embedding_memory_mode.write().await;
+            *mode_guard = mode.clone();
+        }
+
+        // Sequential mode doesn't need a dedicated server
+        if mode == EmbeddingMemoryMode::Sequential {
+            log::info!("Sequential embedding mode: no dedicated server needed");
+            return Ok(());
+        }
+
+        // Stop any existing embedding server
+        self.stop_embedding_server().await;
+
+        // Create and start new embedding server
+        let mut server = EmbeddingServer::new(mode);
+        server
+            .start(model_path, app, devices)
+            .await
+            .map_err(|e| GatewayError::SwitchFailed(e))?;
+
+        // Store the server
+        let mut guard = self.embedding_server.write().await;
+        *guard = Some(server);
+
+        log::info!("Dedicated embedding server started");
+        Ok(())
+    }
+
+    /// Get the URL of the embedding server (if available)
+    ///
+    /// Returns:
+    /// - In parallel modes: URL of the dedicated embedding server
+    /// - In sequential mode: None (use main gateway with mode switching)
+    /// - If main backend is in embedding mode: main backend URL
+    pub async fn embedding_url(&self) -> Option<String> {
+        // First check dedicated embedding server
+        {
+            let server = self.embedding_server.read().await;
+            if let Some(ref srv) = *server {
+                if srv.is_ready() {
+                    return Some(srv.base_url());
+                }
+            }
+        }
+
+        // Fall back to main server if in embedding mode
+        if self.is_embedding_mode().await {
+            return self.base_url().await;
+        }
+
+        None
+    }
+
+    /// Check if the embedding server is ready
+    pub async fn is_embedding_server_ready(&self) -> bool {
+        let server = self.embedding_server.read().await;
+        if let Some(ref srv) = *server {
+            return srv.is_ready();
+        }
+        false
+    }
+
+    /// Get the current embedding memory mode
+    pub async fn embedding_memory_mode(&self) -> EmbeddingMemoryMode {
+        self.embedding_memory_mode.read().await.clone()
+    }
+
+    /// Health check the embedding server
+    pub async fn embedding_server_health_check(&self) -> bool {
+        let server = self.embedding_server.read().await;
+        if let Some(ref srv) = *server {
+            return srv.health_check().await;
+        }
+        false
     }
 
     /// Check if currently in embedding mode

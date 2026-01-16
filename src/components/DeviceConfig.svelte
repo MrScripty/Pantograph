@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { ConfigService, type ConfigState, type DeviceConfig, type DeviceInfo } from '../services/ConfigService';
+  import { ConfigService, type ConfigState, type DeviceConfig, type DeviceInfo, type EmbeddingMemoryMode } from '../services/ConfigService';
   import { LLMService } from '../services/LLMService';
   import { RagService } from '../services/RagService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
@@ -24,6 +24,8 @@
   // Local form state
   let selectedDevice: string = 'auto';
   let gpuLayers: number = -1;
+  let embeddingMemoryMode: EmbeddingMemoryMode = 'cpu_parallel';
+  let initialEmbeddingMode: EmbeddingMemoryMode = 'cpu_parallel';
 
   onMount(async () => {
     unsubscribe = ConfigService.subscribe((nextState) => {
@@ -44,6 +46,11 @@
 
     // Load available devices
     await loadDevices();
+
+    // Load embedding memory mode
+    const mode = await ConfigService.getEmbeddingMemoryMode();
+    embeddingMemoryMode = mode;
+    initialEmbeddingMode = mode;
   });
 
   onDestroy(() => {
@@ -130,6 +137,12 @@
       };
       await ConfigService.setDeviceConfig(device);
 
+      // Save embedding memory mode if changed
+      if (embeddingMemoryMode !== initialEmbeddingMode) {
+        await ConfigService.setEmbeddingMemoryMode(embeddingMemoryMode);
+        initialEmbeddingMode = embeddingMemoryMode;
+      }
+
       // Auto-restart server if running in sidecar mode
       if (state.serverMode.mode.startsWith('sidecar')) {
         await ConfigService.startInferenceMode();
@@ -178,7 +191,8 @@
 
   $: hasChanges =
     selectedDevice !== state.config.device.device ||
-    gpuLayers !== state.config.device.gpu_layers;
+    gpuLayers !== state.config.device.gpu_layers ||
+    embeddingMemoryMode !== initialEmbeddingMode;
 
   $: selectedDeviceInfo = availableDevices.find(d => d.id === selectedDevice) || null;
   $: vramUsage = selectedDeviceInfo && selectedDeviceInfo.total_vram_mb > 0
@@ -202,6 +216,26 @@
     { id: 'auto', name: 'Auto (let llama-server choose)', total_vram_mb: 0, free_vram_mb: 0 },
     ...availableDevices.filter(d => d.id !== 'auto'),
   ];
+
+  // Minimum VRAM needed for embedding model (~800MB with buffer)
+  const EMBEDDING_MODEL_VRAM_MB = 800;
+  $: canFitBothModels = vramUsage ? vramUsage.free >= EMBEDDING_MODEL_VRAM_MB : false;
+
+  const getEmbeddingModeLabel = (mode: EmbeddingMemoryMode): string => {
+    switch (mode) {
+      case 'cpu_parallel': return 'CPU + GPU';
+      case 'gpu_parallel': return 'Both GPU';
+      case 'sequential': return 'Sequential';
+    }
+  };
+
+  const getEmbeddingModeDescription = (mode: EmbeddingMemoryMode): string => {
+    switch (mode) {
+      case 'cpu_parallel': return 'Embedding on RAM, LLM on VRAM. Fast searches, uses RAM.';
+      case 'gpu_parallel': return 'Both models on GPU. Fastest but needs ~800MB extra VRAM.';
+      case 'sequential': return 'One model at a time. Slowest but lowest memory usage.';
+    }
+  };
 
   $: {
     if ($expandedSection === 'device' && !refreshTimer) {
@@ -329,6 +363,33 @@
             </div>
           {/if}
         </div>
+
+        <!-- Embedding Memory Mode -->
+        <div class="space-y-1">
+          <label class="text-xs text-neutral-400">Embedding Memory Mode</label>
+          <select
+            bind:value={embeddingMemoryMode}
+            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
+            style="color-scheme: dark;"
+          >
+            <option value="cpu_parallel" class="bg-neutral-900 text-neutral-200">
+              CPU + GPU (Recommended)
+            </option>
+            <option
+              value="gpu_parallel"
+              class="bg-neutral-900 text-neutral-200"
+              disabled={!canFitBothModels}
+            >
+              Both on GPU {canFitBothModels ? '' : '(Insufficient VRAM)'}
+            </option>
+            <option value="sequential" class="bg-neutral-900 text-neutral-200">
+              Sequential (Low Memory)
+            </option>
+          </select>
+          <div class="text-[10px] text-neutral-600">
+            {getEmbeddingModeDescription(embeddingMemoryMode)}
+          </div>
+        </div>
       </div>
 
       <!-- Save Button -->
@@ -353,6 +414,8 @@
       <span class="text-neutral-400">{getSelectedDeviceName()}</span>
       <span class="mx-1">|</span>
       <span class="text-neutral-400">{getGpuLayersLabel(gpuLayers)}</span>
+      <span class="mx-1">|</span>
+      <span class="text-neutral-400">{getEmbeddingModeLabel(embeddingMemoryMode)}</span>
     </div>
   {/if}
 </div>

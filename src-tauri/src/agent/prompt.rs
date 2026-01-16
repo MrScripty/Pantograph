@@ -83,8 +83,10 @@ Example component:
 4. **get_tailwind_colors**: Get the full Tailwind color palette
 5. **list_templates**: See available reference templates
 6. **read_template**: Read a template for examples of good patterns
-7. **search_svelte_docs**: Search Svelte 5 documentation for syntax help, API details, and examples.
-   Use when unsure about Svelte 5 runes syntax ($state, $derived, $effect, $props), event handlers, or to fix errors.
+7. **search_svelte_docs**: Keyword search Svelte 5 documentation for syntax help.
+8. **search_svelte_docs_vector**: Semantic search Svelte 5 documentation using AI embeddings.
+   More accurate for conceptual queries. Use when you need to understand Svelte 5 patterns or fix errors.
+   Note: Requires documentation to be indexed. On compile errors, relevant docs are automatically included.
 
 ## Workflow
 
