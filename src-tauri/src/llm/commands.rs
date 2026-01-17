@@ -21,6 +21,10 @@ use tauri::{command, ipc::Channel, AppHandle, Manager, State};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::RwLock;
 
+/// Maximum allowed size for base64-encoded images (5MB after decoding)
+/// Base64 encoding increases size by ~33%, so we check for ~6.7MB encoded
+const MAX_IMAGE_BASE64_LEN: usize = 7 * 1024 * 1024;
+
 /// Shared app configuration
 pub type SharedAppConfig = Arc<RwLock<AppConfig>>;
 
@@ -55,6 +59,15 @@ pub async fn send_vision_prompt(
     image_base64: String,
     channel: Channel<StreamEvent>,
 ) -> Result<(), String> {
+    // Validate image size to prevent DoS
+    if image_base64.len() > MAX_IMAGE_BASE64_LEN {
+        return Err(format!(
+            "Image too large: {} bytes (max {} bytes)",
+            image_base64.len(),
+            MAX_IMAGE_BASE64_LEN
+        ));
+    }
+
     if !gateway.is_ready().await {
         return Err("LLM server not ready".to_string());
     }
@@ -232,6 +245,15 @@ pub async fn run_agent(
     request: AgentRequest,
     channel: Channel<AgentEvent>,
 ) -> Result<AgentResponse, String> {
+    // Validate image size to prevent DoS
+    if request.image_base64.len() > MAX_IMAGE_BASE64_LEN {
+        return Err(format!(
+            "Image too large: {} bytes (max {} bytes)",
+            request.image_base64.len(),
+            MAX_IMAGE_BASE64_LEN
+        ));
+    }
+
     log::info!("[run_agent] Starting agent with prompt: {}", request.prompt);
 
     // Get the LLM server URL

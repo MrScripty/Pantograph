@@ -6626,6 +6626,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tower-http 0.5.2",
+ "uuid",
  "which",
  "zip 2.4.2",
  "zstd",

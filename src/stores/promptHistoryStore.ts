@@ -8,7 +8,7 @@ function loadFromStorage(): string[] {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.every(p => typeof p === 'string')) {
         return parsed.slice(-MAX_HISTORY_SIZE);
       }
     }

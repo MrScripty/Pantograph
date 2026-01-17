@@ -59,6 +59,7 @@ zstd = "0.13"
 tar = "0.4"
 dirs = "6"
 regex = "1"
+uuid = { version = "1", features = ["v4"] }
 
 # JavaScript engine for runtime validation (pure Rust, no external dependencies)
 boa_engine = "0.21"

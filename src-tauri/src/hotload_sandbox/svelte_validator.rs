@@ -5,6 +5,7 @@
 
 use std::path::Path;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum SvelteValidationError {
@@ -59,9 +60,9 @@ pub async fn validate_svelte_syntax(
     content: &str,
     project_root: &Path,
 ) -> Result<SvelteValidationResult, SvelteValidationError> {
-    // Create temp file for validation
+    // Create temp file for validation with UUID for uniqueness and security
     let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join(format!("svelte_validate_{}.svelte", std::process::id()));
+    let temp_file = temp_dir.join(format!("svelte_validate_{}.svelte", Uuid::new_v4()));
 
     // Write content to temp file
     tokio::fs::write(&temp_file, content).await?;
@@ -75,8 +76,10 @@ pub async fn validate_svelte_syntax(
         .output()
         .await;
 
-    // Clean up temp file
-    let _ = tokio::fs::remove_file(&temp_file).await;
+    // Clean up temp file - log warning if cleanup fails
+    if let Err(e) = tokio::fs::remove_file(&temp_file).await {
+        log::warn!("Failed to clean up temp validation file {:?}: {}", temp_file, e);
+    }
 
     match result {
         Ok(output) => {
