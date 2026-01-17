@@ -62,9 +62,14 @@ fn main() {
 
             // Create the data directory if it doesn't exist
             if !project_data_dir.exists() {
-                std::fs::create_dir_all(&project_data_dir)
-                    .expect("Failed to create data directory");
-                log::info!("Created project data directory: {:?}", project_data_dir);
+                match std::fs::create_dir_all(&project_data_dir) {
+                    Ok(()) => {
+                        log::info!("Created project data directory: {:?}", project_data_dir);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to create data directory {:?}: {}. Some features may not work.", project_data_dir, e);
+                    }
+                }
             }
 
             // Initialize RAG manager with project data directory

@@ -119,26 +119,24 @@ pub async fn send_vision_prompt(
                 for line in text.lines() {
                     if let Some(data) = line.strip_prefix("data: ") {
                         if data == "[DONE]" {
-                            channel
-                                .send(StreamEvent {
-                                    content: None,
-                                    done: true,
-                                    error: None,
-                                })
-                                .ok();
+                            let _ = channel.send(StreamEvent {
+                                content: None,
+                                done: true,
+                                error: None,
+                            });
                             return Ok(());
                         }
 
                         if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
                             if let Some(choice) = chunk.choices.first() {
                                 if let Some(content) = &choice.delta.content {
-                                    channel
-                                        .send(StreamEvent {
-                                            content: Some(content.clone()),
-                                            done: false,
-                                            error: None,
-                                        })
-                                        .ok();
+                                    // If channel send fails, the receiver has dropped
+                                    // We could break here, but the stream will end naturally
+                                    let _ = channel.send(StreamEvent {
+                                        content: Some(content.clone()),
+                                        done: false,
+                                        error: None,
+                                    });
                                 }
                             }
                         }
@@ -146,26 +144,22 @@ pub async fn send_vision_prompt(
                 }
             }
             Err(e) => {
-                channel
-                    .send(StreamEvent {
-                        content: None,
-                        done: true,
-                        error: Some(e.to_string()),
-                    })
-                    .ok();
+                let _ = channel.send(StreamEvent {
+                    content: None,
+                    done: true,
+                    error: Some(e.to_string()),
+                });
                 return Err(e.to_string());
             }
         }
     }
 
     // Send done signal if stream ended without [DONE]
-    channel
-        .send(StreamEvent {
-            content: None,
-            done: true,
-            error: None,
-        })
-        .ok();
+    let _ = channel.send(StreamEvent {
+        content: None,
+        done: true,
+        error: None,
+    });
 
     Ok(())
 }
