@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { engine } from '../services/DrawingEngine';
+  import { AgentService } from '../services/AgentService';
+  import { LLMService } from '../services/LLMService';
   import { COLORS } from '../constants';
   import { panelWidth } from '../stores/panelStore';
   import { interactionMode, toggleInteractionMode } from '../stores/interactionModeStore';
@@ -21,6 +23,13 @@
       unsubscribeMode();
     };
   });
+
+  const handleClear = () => {
+    // Clear both the canvas and the activity log
+    engine.clearStrokes();
+    AgentService.clearActivityLog();
+    LLMService.clearHistory();
+  };
 </script>
 
 <div
@@ -54,6 +63,14 @@
     title="Undo (Ctrl+Z)"
   >
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
+  </button>
+
+  <button
+    on:click={handleClear}
+    class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
+    title="Clear Canvas & History"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
   </button>
 
   <div class="w-[1px] h-6 bg-neutral-700"></div>

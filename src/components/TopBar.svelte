@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Logger } from '../services/Logger';
-  import { AgentService } from '../services/AgentService';
+  import { AgentService, type ComponentUpdate } from '../services/AgentService';
   import { componentRegistry } from '../services/HotLoadRegistry';
   import { panelWidth, openSidePanel } from '../stores/panelStore';
   import { promptHistoryStore } from '../stores/promptHistoryStore';
@@ -34,16 +34,32 @@
     errorMessage = '';
     openSidePanel();
 
+    // Track components registered via streaming events to avoid duplicate registration
+    const registeredIds = new Set<string>();
+
+    // Subscribe to events for immediate component registration
+    const unsubscribe = AgentService.subscribeEvents(async (event) => {
+      if (event.event_type === 'component_created' && event.data) {
+        const update = event.data as ComponentUpdate;
+        console.log('[TopBar] Component created via stream, registering immediately:', update.id);
+        registeredIds.add(update.id);
+        await componentRegistry.registerFromUpdate(update);
+      }
+    });
+
     try {
       console.log('[TopBar] Calling AgentService.run...');
       // Run the agent - it handles canvas export internally
       const response = await AgentService.run(submittedPrompt);
       console.log('[TopBar] AgentService.run returned:', response);
 
-      // Register the generated components
+      // Register any components not already registered via streaming
+      // (fallback for cases where early termination didn't trigger)
       for (const update of response.component_updates) {
-        console.log('[TopBar] Registering component:', update.id);
-        await componentRegistry.registerFromUpdate(update);
+        if (!registeredIds.has(update.id)) {
+          console.log('[TopBar] Registering component from final response:', update.id);
+          await componentRegistry.registerFromUpdate(update);
+        }
       }
 
       Logger.log('UI_GENERATION_COMPLETE', {
@@ -62,6 +78,7 @@
       Logger.log('AGENT_ERROR', { error: String(error) }, 'error');
       // On error, preserve the input value (don't clear it)
     } finally {
+      unsubscribe();
       isLoading = false;
     }
   };

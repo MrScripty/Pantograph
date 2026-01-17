@@ -277,6 +277,84 @@ export class ComponentRegistry {
     this.notify();
   }
 
+  /**
+   * Refresh components that match the given paths.
+   * Called when HMR detects file changes to re-import updated components.
+   * @param updatedPaths - Full paths of updated files (e.g., '/src/generated/Button.svelte')
+   */
+  public async refreshByPaths(updatedPaths: string[]): Promise<void> {
+    // Normalize paths - remove base path prefix if present
+    const normalizedPaths = updatedPaths.map(p => {
+      // Handle both full paths and relative paths
+      if (p.startsWith('/src/generated/')) {
+        return p.replace('/src/generated/', '');
+      }
+      return p;
+    });
+
+    // Find components that match any of the updated paths
+    const componentsToRefresh = this.components.filter(comp =>
+      normalizedPaths.some(p => comp.path === p || comp.path.endsWith(p))
+    );
+
+    if (componentsToRefresh.length === 0) {
+      this.logger.log('HMR_NO_MATCHING_COMPONENTS', { updatedPaths });
+      return;
+    }
+
+    this.logger.log('HMR_REFRESHING_COMPONENTS', {
+      count: componentsToRefresh.length,
+      ids: componentsToRefresh.map(c => c.id),
+    });
+
+    // Refresh each component
+    for (const comp of componentsToRefresh) {
+      // Clear cache to force fresh import
+      this.importManager.clearCache(comp.path);
+      this.errorReporter.clearErrors(comp.id);
+
+      // Re-import the component
+      const result = await this.importManager.reimportComponent(comp.path);
+
+      if (result.success && result.component) {
+        // Update the component in registry
+        comp.component = result.component;
+        comp.status = 'ready';
+        comp.error = undefined;
+        comp.renderError = undefined;
+
+        this.logger.log('HMR_COMPONENT_REFRESHED', { id: comp.id, path: comp.path });
+      } else {
+        comp.status = 'error';
+        comp.error = result.error ?? 'HMR refresh failed';
+
+        this.logger.log('HMR_COMPONENT_REFRESH_FAILED', {
+          id: comp.id,
+          path: comp.path,
+          error: result.error,
+        }, 'error');
+      }
+    }
+
+    // Notify subscribers of the changes
+    this.notify();
+  }
+
+  /**
+   * Refresh a single component by ID.
+   * Useful for manual refresh or retry operations.
+   */
+  public async refreshById(id: string): Promise<boolean> {
+    const comp = this.components.find(c => c.id === id);
+    if (!comp) {
+      this.logger.log('REFRESH_COMPONENT_NOT_FOUND', { id }, 'warn');
+      return false;
+    }
+
+    await this.refreshByPaths([comp.path]);
+    return this.getById(id)?.status === 'ready';
+  }
+
   private createPositionProps(position: Position, size: Size): Record<string, unknown> {
     return {
       style: `position: absolute; left: ${position.x}px; top: ${position.y}px; width: ${size.width}px; height: ${size.height}px;`,

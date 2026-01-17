@@ -13,8 +13,51 @@ const DEFAULT_IMPORT_TIMEOUT = 10000;
 const DEFAULT_BASE_PATH = '/src/generated/';
 
 /**
+ * Glob-based component modules for HMR support.
+ * Vite tracks these modules and provides native HMR when they change.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let componentModules: Record<string, () => Promise<any>> =
+  import.meta.glob('/src/generated/**/*.svelte');
+
+/**
+ * HMR update listeners - called when components are hot-reloaded.
+ */
+type HmrUpdateListener = (updatedPaths: string[]) => void;
+const hmrListeners: Set<HmrUpdateListener> = new Set();
+
+/**
+ * Set up HMR handling for generated components.
+ * When a component file changes, Vite will trigger this handler.
+ */
+if (import.meta.hot) {
+  // Listen for specific file updates via Vite's HMR
+  import.meta.hot.on('vite:beforeUpdate', (payload) => {
+    // Filter for updates to generated components
+    const generatedUpdates = payload.updates
+      .filter((update: { path: string }) => update.path.includes('/src/generated/'))
+      .map((update: { path: string }) => update.path);
+
+    if (generatedUpdates.length > 0) {
+      // Refresh the glob to pick up changes
+      componentModules = import.meta.glob('/src/generated/**/*.svelte');
+      hmrListeners.forEach(listener => listener(generatedUpdates));
+    }
+  });
+}
+
+/**
+ * Subscribe to HMR updates for generated components.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToHmrUpdates(listener: HmrUpdateListener): () => void {
+  hmrListeners.add(listener);
+  return () => hmrListeners.delete(listener);
+}
+
+/**
  * Manages dynamic imports of Svelte components with timeout and validation.
- * Provides caching, timeout protection, and pre-render validation.
+ * Uses import.meta.glob() for native Vite HMR support.
  */
 export class ImportManager {
   private cache: Map<string, ImportResult> = new Map();
@@ -68,15 +111,50 @@ export class ImportManager {
    */
   private async doImport(path: string): Promise<ImportResult> {
     const startTime = Date.now();
+    const fullPath = `${this.basePath}${path}`;
+
+    this.logger.log('IMPORT_STARTING', { path, fullPath, timeout: this.importTimeout });
 
     try {
-      // Use cache-busting timestamp for fresh imports
-      const timestamp = Date.now();
-      const modulePath = `${this.basePath}${path}?t=${timestamp}`;
+      // First, try to use the glob-based import (supports HMR)
+      const importer = componentModules[fullPath];
 
-      this.logger.log('IMPORT_STARTING', { path, modulePath, timeout: this.importTimeout });
+      if (importer) {
+        // Use glob-based import - this supports HMR
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error(`Import timeout after ${this.importTimeout}ms`)),
+            this.importTimeout
+          );
+        });
 
-      // Create timeout promise
+        const module = await Promise.race([importer(), timeoutPromise]);
+        const duration = Date.now() - startTime;
+
+        const validation = this.validateModule(module);
+        if (!validation.valid) {
+          this.logger.log('IMPORT_VALIDATION_FAILED', { path, error: validation.error }, 'error');
+          return {
+            success: false,
+            component: null,
+            error: validation.error ?? 'Module validation failed',
+            duration,
+          };
+        }
+
+        this.logger.log('IMPORT_SUCCESS', { path, duration, method: 'glob' });
+        return {
+          success: true,
+          component: module.default,
+          error: null,
+          duration,
+        };
+      }
+
+      // Fallback: If not in glob (new file created after server start),
+      // use dynamic import with cache-busting timestamp
+      this.logger.log('IMPORT_GLOB_MISS', { path, fullPath }, 'warn');
+
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () => reject(new Error(`Import timeout after ${this.importTimeout}ms`)),
@@ -84,15 +162,15 @@ export class ImportManager {
         );
       });
 
-      // Race import against timeout
+      // Use timestamp for cache-busting on new files
+      const timestampedPath = `${fullPath}?t=${Date.now()}`;
       const module = (await Promise.race([
-        import(/* @vite-ignore */ modulePath),
+        import(/* @vite-ignore */ timestampedPath),
         timeoutPromise,
       ])) as { default: ComponentType<SvelteComponent> };
 
       const duration = Date.now() - startTime;
 
-      // Validate the imported module
       const validation = this.validateModule(module);
       if (!validation.valid) {
         this.logger.log('IMPORT_VALIDATION_FAILED', { path, error: validation.error }, 'error');
@@ -104,7 +182,10 @@ export class ImportManager {
         };
       }
 
-      this.logger.log('IMPORT_SUCCESS', { path, duration });
+      this.logger.log('IMPORT_SUCCESS', { path, duration, method: 'dynamic' });
+
+      // Try to refresh glob to include the new file for future HMR
+      this.refreshGlob();
 
       return {
         success: true,
@@ -115,8 +196,6 @@ export class ImportManager {
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Determine if it was a timeout
       const isTimeout = errorMessage.includes('timeout');
 
       this.logger.log(
@@ -131,6 +210,19 @@ export class ImportManager {
         error: errorMessage,
         duration,
       };
+    }
+  }
+
+  /**
+   * Refresh the glob to pick up newly created files.
+   * This is called after a dynamic import fallback.
+   */
+  private refreshGlob(): void {
+    try {
+      componentModules = import.meta.glob('/src/generated/**/*.svelte');
+      this.logger.log('GLOB_REFRESHED', { count: Object.keys(componentModules).length });
+    } catch (e) {
+      this.logger.log('GLOB_REFRESH_FAILED', { error: String(e) }, 'warn');
     }
   }
 
@@ -259,6 +351,13 @@ export class ImportManager {
   public async reimportComponent(path: string): Promise<ImportResult> {
     this.clearCache(path);
     return this.importComponent(path);
+  }
+
+  /**
+   * Get all component paths known to the glob.
+   */
+  public getKnownPaths(): string[] {
+    return Object.keys(componentModules).map(p => p.replace(this.basePath, ''));
   }
 }
 

@@ -41,7 +41,7 @@ export { defaultLogger } from './types';
 
 // Services
 export { ErrorReporter, createErrorReporter } from './services/ErrorReporter';
-export { ImportManager, createImportManager } from './services/ImportManager';
+export { ImportManager, createImportManager, subscribeToHmrUpdates } from './services/ImportManager';
 export { ComponentRegistry, createComponentRegistry } from './services/ComponentRegistry';
 
 // Components
