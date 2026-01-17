@@ -39,7 +39,7 @@
     if (!component) {
       hasError = true;
       errorMessage = 'Component is null or undefined';
-      logger.log('SAFE_COMPONENT_NULL', { componentId }, 'warn');
+      logger.log('safe_component_null', { componentId }, 'warn');
       return;
     }
 
@@ -47,7 +47,7 @@
     if (typeof component === 'string') {
       hasError = true;
       errorMessage = `Cannot render string as component: "${(component as string).slice(0, 50)}..."`;
-      logger.log('SAFE_COMPONENT_STRING', { componentId, value: component }, 'error');
+      logger.log('safe_component_string', { componentId, value: component }, 'error');
       onRenderError?.(new Error(errorMessage), componentId);
       return;
     }
@@ -55,7 +55,7 @@
     if (typeof component === 'number') {
       hasError = true;
       errorMessage = `Cannot render number as component: ${component}`;
-      logger.log('SAFE_COMPONENT_NUMBER', { componentId, value: component }, 'error');
+      logger.log('safe_component_number', { componentId, value: component }, 'error');
       onRenderError?.(new Error(errorMessage), componentId);
       return;
     }
@@ -63,26 +63,38 @@
     if (typeof component !== 'function' && typeof component !== 'object') {
       hasError = true;
       errorMessage = `Invalid component type: ${typeof component}`;
-      logger.log('SAFE_COMPONENT_INVALID_TYPE', { componentId, type: typeof component }, 'error');
+      logger.log('safe_component_invalid_type', { componentId, type: typeof component }, 'error');
       onRenderError?.(new Error(errorMessage), componentId);
       return;
     }
 
     // Component appears valid
     validated = true;
-    logger.log('SAFE_COMPONENT_VALIDATED', { componentId });
+    logger.log('safe_component_validated', { componentId });
   });
 
   // Capture runtime errors during render
   onMount(() => {
+    // Track when this component was mounted to filter stale errors
+    const mountTime = Date.now();
+
     // Set up error handler for this component's boundary
     const handleError = (event: ErrorEvent) => {
-      // Only handle errors that seem related to component rendering
-      // This is imperfect but helps catch some errors
-      if (event.message && !hasError) {
+      // Filter out errors that occurred before this component mounted
+      // or that have already been handled
+      if (hasError) return;
+
+      // Try to determine if this error is related to our component
+      // by checking if the error occurred shortly after mount or
+      // if the stack trace references our component path
+      const isRecentError = Date.now() - mountTime < 1000;
+      const errorStack = event.error?.stack || '';
+      const isRelatedError = isRecentError || errorStack.includes('generated/');
+
+      if (event.message && isRelatedError) {
         logger.log(
-          'SAFE_COMPONENT_RUNTIME_ERROR',
-          { componentId, error: event.message },
+          'safe_component_runtime_error',
+          { componentId, error: event.message, isRecentError },
           'error'
         );
         hasError = true;
@@ -91,8 +103,13 @@
       }
     };
 
-    // Note: This is a global handler which isn't ideal for isolation
-    // A more robust solution would use an iframe or web worker
+    // LIMITATION: This is a global error handler which isn't ideal for isolation.
+    // Errors from unrelated code may be caught if they occur during the window
+    // after mount. A more robust solution would use:
+    // - An iframe sandbox (strongest isolation, but complex communication)
+    // - A try/catch wrapper around render (not possible with Svelte's reactive model)
+    // - Error boundaries (not yet available in Svelte 5)
+    // TODO: Consider iframe isolation for production use cases
     window.addEventListener('error', handleError);
 
     return () => {
