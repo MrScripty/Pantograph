@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { Logger } from '../services/Logger';
 
 const STORAGE_KEY = 'pantograph-prompt-history';
 const MAX_HISTORY_SIZE = 100;
@@ -13,7 +14,7 @@ function loadFromStorage(): string[] {
       }
     }
   } catch (e) {
-    console.warn('[promptHistoryStore] Failed to load history from localStorage:', e);
+    Logger.log('prompt_history_load_failed', { error: String(e) }, 'warn');
   }
   return [];
 }
@@ -23,7 +24,7 @@ function saveToStorage(history: string[]) {
     const trimmed = history.slice(-MAX_HISTORY_SIZE);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
   } catch (e) {
-    console.warn('[promptHistoryStore] Failed to save history to localStorage:', e);
+    Logger.log('prompt_history_save_failed', { error: String(e) }, 'warn');
   }
 }
 

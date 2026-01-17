@@ -197,7 +197,7 @@ class AgentServiceClass {
    * Run the agent with the current drawing and a prompt
    */
   public async run(prompt: string): Promise<AgentResponse> {
-    console.log('[AgentService] run() called with prompt:', prompt);
+    Logger.log('agent_run_called', { promptLength: prompt.length });
 
     if (this.state.isRunning) {
       throw new Error('Agent is already running');
@@ -205,11 +205,11 @@ class AgentServiceClass {
 
     // Check if LLM is ready
     if (!LLMService.isReady) {
-      console.error('[AgentService] LLM not ready');
+      Logger.log('agent_llm_not_ready', {}, 'error');
       throw new Error('LLM not connected. Please connect to an LLM server first.');
     }
 
-    console.log('[AgentService] LLM is ready, starting agent...');
+    Logger.log('agent_starting', {});
 
     this.state = {
       isRunning: true,
@@ -224,10 +224,10 @@ class AgentServiceClass {
     try {
       // Get the current drawing state
       const drawingState = engine.getState();
-      console.log('[AgentService] Drawing state:', { strokeCount: drawingState.strokes.length });
+      Logger.log('agent_drawing_state', { strokeCount: drawingState.strokes.length });
 
       const imageBase64 = canvasExport.exportToBase64();
-      console.log('[AgentService] Canvas exported, base64 length:', imageBase64?.length ?? 0);
+      Logger.log('agent_canvas_exported', { base64Length: imageBase64?.length ?? 0 });
 
       if (!imageBase64) {
         throw new Error('Failed to export canvas');
@@ -253,15 +253,8 @@ class AgentServiceClass {
         target_element_id: targetElementId,
       };
 
-      Logger.log('AGENT_REQUEST', {
-        prompt,
-        hasDrawing: drawingState.strokes.length > 0,
-        drawingBounds,
-        targetElementId,
-      });
-
-      console.log('[AgentService] Request built:', {
-        prompt,
+      Logger.log('agent_request', {
+        promptLength: prompt.length,
         hasDrawing: drawingState.strokes.length > 0,
         drawingBounds,
         targetElementId,
@@ -272,17 +265,19 @@ class AgentServiceClass {
       const channel = new Channel<AgentEvent>();
 
       channel.onmessage = (event: AgentEvent) => {
-        console.log('[AgentService] Received event:', event);
         this.handleAgentEvent(event);
       };
 
       // Invoke the backend agent
-      console.log('[AgentService] Invoking run_agent command...');
+      Logger.log('agent_invoking_backend', {});
       const response = await invoke<AgentResponse>('run_agent', {
         request,
         channel,
       });
-      console.log('[AgentService] Backend response:', response);
+      Logger.log('agent_backend_response', {
+        filesChanged: response.file_changes.length,
+        componentsUpdated: response.component_updates.length
+      });
 
       // Success - clear the drawing
       engine.clearStrokes();
@@ -296,7 +291,7 @@ class AgentServiceClass {
       };
       this.notifyState();
 
-      Logger.log('AGENT_SUCCESS', {
+      Logger.log('agent_success', {
         filesChanged: response.file_changes.length,
         componentsUpdated: response.component_updates.length,
       });
@@ -315,7 +310,7 @@ class AgentServiceClass {
       };
       this.notifyState();
 
-      Logger.log('AGENT_ERROR', { error: errorMessage }, 'error');
+      Logger.log('agent_error', { error: errorMessage }, 'error');
       throw error;
     }
   }
@@ -402,11 +397,11 @@ class AgentServiceClass {
           this.addActivityItem('text', this.state.streamingText);
           this.state.streamingText = '';
         }
-        Logger.log('AGENT_DONE', event.data);
+        Logger.log('agent_done', {});
         break;
 
       default:
-        Logger.log('AGENT_EVENT', { type: event.event_type, data: event.data });
+        Logger.log('agent_event', { type: event.event_type });
     }
   }
 
