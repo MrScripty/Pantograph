@@ -508,6 +508,62 @@ impl WriteGuiFileTool {
             }
         }
     }
+
+    /// Validate that template expressions don't contain JSX syntax
+    /// This catches React-style patterns like {condition && <element>} that would
+    /// cause cryptic "Unexpected token" errors from the Svelte compiler.
+    async fn validate_jsx_in_template(&self, file_path: &PathBuf) -> Result<(), (String, ErrorCategory)> {
+        let validation_script = self.project_root.join("scripts").join("validate-jsx-in-template.mjs");
+
+        // Skip if validation script doesn't exist
+        if !validation_script.exists() {
+            log::debug!("JSX validation script not found, skipping JSX validation");
+            return Ok(());
+        }
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(self.sandbox_config.validation_timeout_ms),
+            tokio::process::Command::new("node")
+                .arg(&validation_script)
+                .arg(file_path)
+                .output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+
+                if !output.status.success() {
+                    // Parse JSON error output
+                    if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let error_msg = error_json.get("error")
+                            .and_then(|e| e.as_str())
+                            .unwrap_or("Found JSX syntax in template")
+                            .to_string();
+
+                        // Use SveltePattern category so it triggers the enricher
+                        return Err((error_msg, ErrorCategory::SveltePattern));
+                    } else {
+                        return Err((
+                            format!("JSX SYNTAX ERROR: {}", stdout.trim()),
+                            ErrorCategory::SveltePattern,
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                // Script failed to run - log but don't block
+                log::warn!("JSX validation script failed to run: {}. Skipping JSX validation.", e);
+                Ok(())
+            }
+            Err(_) => {
+                // Timeout - log warning but don't block
+                log::warn!("JSX validation timed out. Skipping JSX validation.");
+                Ok(())
+            }
+        }
+    }
 }
 
 impl Tool for WriteGuiFileTool {
@@ -555,6 +611,13 @@ impl Tool for WriteGuiFileTool {
         // Step 2: Write to a temp file first for validation
         let temp_path = full_path.with_extension("svelte.tmp");
         tokio::fs::write(&temp_path, &args.content).await.map_err(ToolError::Io)?;
+
+        // Step 2.5: Check for JSX patterns in template (before Svelte compiler)
+        // This provides helpful error messages instead of cryptic "Unexpected token" errors
+        if let Err((msg, category)) = self.validate_jsx_in_template(&temp_path).await {
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            return Err(self.validation_error(msg, category).await);
+        }
 
         // Step 3: Validate with Svelte compiler
         let validation_script = self.project_root.join("scripts").join("validate-svelte.mjs");
