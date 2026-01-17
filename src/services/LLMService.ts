@@ -95,7 +95,8 @@ class LLMServiceClass {
       this.state.status = status;
       this.notify();
       return status;
-    } catch {
+    } catch (error) {
+      Logger.log('llm_status_refresh_failed', { error: String(error) }, 'warn');
       return this.state.status;
     }
   }

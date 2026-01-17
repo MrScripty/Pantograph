@@ -25,7 +25,7 @@ export interface DrawingState {
 export interface WideEvent {
   timestamp: number;
   type: string;
-  payload: any;
+  payload: Record<string, unknown>;
   severity: 'info' | 'warn' | 'error';
 }
 

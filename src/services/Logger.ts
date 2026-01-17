@@ -3,7 +3,7 @@ import { WideEvent } from '../types';
 class LoggerService {
   private events: WideEvent[] = [];
 
-  public log(type: string, payload: any = {}, severity: 'info' | 'warn' | 'error' = 'info') {
+  public log(type: string, payload: Record<string, unknown> = {}, severity: 'info' | 'warn' | 'error' = 'info') {
     const event: WideEvent = {
       timestamp: Date.now(),
       type,
