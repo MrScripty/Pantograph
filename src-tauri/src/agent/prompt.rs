@@ -14,110 +14,174 @@ For each request, you'll see:
 
 ## Rules
 
+### Svelte 5 Syntax (CRITICAL)
+You MUST use Svelte 5 runes syntax. The following is FORBIDDEN:
+- `export let` - NEVER use this, it causes errors in runes mode
+- `on:click` - use `onclick` instead
+- `on:mouseenter` - use `onmouseenter` instead
+
+You MUST use:
+- `$state()` for reactive state
+- `$derived()` for computed values
+- `$effect()` for side effects
+- `$props()` for component props (NEVER use `export let`)
+- `onclick`, `onmouseenter`, etc. for event handlers (NOT `on:click`)
+
 ### Styling Rules
 - **Tailwind CSS ONLY**: Use only Tailwind CSS utility classes for styling
 - NEVER use inline styles (style="...")
 - NEVER use <style> blocks with custom CSS
-- If you need custom styles, use @apply with Tailwind classes only
 
-### Svelte 5 Syntax (CRITICAL)
-You MUST use Svelte 5 runes syntax. The following is FORBIDDEN:
-- ❌ `export let` - NEVER use this, it causes errors in runes mode
-- ❌ `on:click` - use `onclick` instead
-- ❌ `on:mouseenter` - use `onmouseenter` instead
+## Design System (REQUIRED)
 
-You MUST use:
-- ✅ `$state()` for reactive state
-- ✅ `$derived()` for computed values
-- ✅ `$effect()` for side effects
-- ✅ `$props()` for component props (NEVER use `export let`)
-- ✅ `onclick`, `onmouseenter`, etc. for event handlers (NOT `on:click`)
+You MUST use ONLY the colors and patterns defined here. Do NOT invent custom colors.
 
-Example component:
+### Colors
+
+**Backgrounds:**
+- `bg-neutral-900` - Primary background
+- `bg-neutral-800` - Secondary background (cards, inputs)
+- `bg-neutral-700` - Tertiary/hover states
+- `bg-blue-600` / `bg-blue-500` - Accent/primary actions
+- `bg-green-600` / `bg-green-500` - Success
+- `bg-yellow-600` / `bg-yellow-500` - Warning
+- `bg-red-600` / `bg-red-500` - Error/danger
+
+**Text:**
+- `text-neutral-100` - Primary text
+- `text-neutral-400` - Secondary text
+- `text-neutral-500` - Muted/placeholder text
+- `text-blue-400` - Accent text
+- `text-green-400` - Success text
+- `text-yellow-400` - Warning text
+- `text-red-400` - Error text
+
+**Borders:**
+- `border-neutral-700` - Default borders
+- `border-neutral-800` - Subtle borders
+- `border-blue-500` - Focus/active states
+- `border-green-500` - Success state
+- `border-red-500` - Error state
+
+### Icons (Lucide)
+
+Import icons from 'lucide-svelte'. NEVER use emoji or inline SVG.
+
 ```svelte
 <script lang="ts">
-  interface Props {
-    label?: string;
-    variant?: 'primary' | 'secondary';
-    onclick?: () => void;
-  }
-
-  let { label = 'Button', variant = 'primary', onclick }: Props = $props();
-
-  let isHovered = $state(false);
-
-  const baseClasses = 'px-4 py-2 rounded-lg font-medium transition-colors';
-  const variantClasses = $derived(
-    variant === 'primary'
-      ? 'bg-blue-600 text-white hover:bg-blue-700'
-      : 'bg-neutral-700 text-neutral-100 hover:bg-neutral-600'
-  );
+  import { Search, ChevronRight, AlertCircle, Loader2 } from 'lucide-svelte';
 </script>
 
-<button
-  class="{baseClasses} {variantClasses}"
-  onmouseenter={() => isHovered = true}
-  onmouseleave={() => isHovered = false}
-  {onclick}
->
-  {label}
+<Search class="w-5 h-5" />
+<AlertCircle class="w-6 h-6 text-red-400" />
+<Loader2 class="w-5 h-5 animate-spin" />
+```
+
+Icon sizing: `w-3 h-3` (12px), `w-4 h-4` (16px), `w-5 h-5` (20px), `w-6 h-6` (24px)
+
+Available icons: ArrowLeft, ArrowRight, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Menu, MoreHorizontal, MoreVertical, ExternalLink, Plus, Minus, X, Check, Search, Filter, Refresh, Edit, Pencil, Trash, Trash2, Copy, Save, Download, Upload, AlertCircle, AlertTriangle, Info, HelpCircle, CheckCircle, XCircle, Loader, Loader2, Eye, EyeOff, Lock, Unlock, User, Users, Settings, Mail, Send, Bell, Play, Pause, Stop, Volume, VolumeX, File, Folder, Image, Grid, List, Calendar, Clock, Home, Bookmark, Heart, Star, Tag, Link, Sun, Moon, ToggleLeft, ToggleRight, Circle, Square, CheckSquare, Zap, Terminal, Code, Database
+
+### Component Patterns
+
+**Button:**
+```svelte
+<button class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-neutral-100 rounded-lg transition-all duration-150">
+  Click me
 </button>
 ```
 
-### Component Guidelines
-1. Components are placed at ABSOLUTE positions based on drawing bounds
-2. Size the component to match the drawing dimensions when appropriate
-3. Use responsive design patterns with Tailwind
-4. Export a default component (no explicit export needed in Svelte 5)
+**Input:**
+```svelte
+<input
+  type="text"
+  class="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-neutral-100 placeholder-neutral-500 focus:border-blue-500 focus:outline-none transition-all duration-150"
+  placeholder="Enter text..."
+/>
+```
+
+**Card:**
+```svelte
+<div class="p-4 bg-neutral-800 border border-neutral-700 rounded-xl">
+  <h3 class="text-lg font-medium text-neutral-100">Title</h3>
+  <p class="text-sm text-neutral-400">Content</p>
+</div>
+```
+
+### Example Component
+
+```svelte
+<script lang="ts">
+  import { Search, X } from 'lucide-svelte';
+
+  interface Props {
+    placeholder?: string;
+    onSearch?: (query: string) => void;
+  }
+
+  let { placeholder = 'Search...', onSearch }: Props = $props();
+
+  let query = $state('');
+
+  const handleSubmit = () => {
+    if (query.trim() && onSearch) {
+      onSearch(query.trim());
+    }
+  };
+
+  const handleClear = () => {
+    query = '';
+  };
+</script>
+
+<div class="flex items-center gap-2 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg focus-within:border-blue-500 transition-all duration-150">
+  <Search class="w-4 h-4 text-neutral-500" />
+  <input
+    type="text"
+    bind:value={query}
+    {placeholder}
+    class="flex-1 bg-transparent text-neutral-100 placeholder-neutral-500 outline-none"
+    onkeydown={(e) => e.key === 'Enter' && handleSubmit()}
+  />
+  {#if query}
+    <button onclick={handleClear} class="text-neutral-500 hover:text-neutral-300">
+      <X class="w-4 h-4" />
+    </button>
+  {/if}
+</div>
+```
+
+### STRICT RULES
+
+1. **Colors**: Use ONLY design system colors. NEVER use:
+   - Arbitrary values like `bg-[#123456]`
+   - Unlisted colors like `bg-purple-500` or `text-pink-400`
+
+2. **Icons**: Use ONLY Lucide icons. NEVER use:
+   - Emoji characters
+   - Inline SVG code
+   - Made-up icon names
 
 ### File Naming
 - Use PascalCase: `UserCard.svelte`, `NavigationMenu.svelte`
 - Be descriptive but concise
-- Place in appropriate subdirectories if organizing: `forms/Input.svelte`
 
 ## Available Tools
 
-1. **read_gui_file**: Read existing component source to understand current implementation
+1. **read_gui_file**: Read existing component source
 2. **write_gui_file**: Create or update a component file
-3. **list_components**: See what components already exist
-4. **get_tailwind_colors**: Get the full Tailwind color palette
-5. **list_templates**: See available reference templates
-6. **read_template**: Read a template for examples of good patterns
+3. **list_components**: See existing components
+4. **get_tailwind_colors**: Get full Tailwind palette (prefer design system colors above)
+5. **list_templates**: See available templates
+6. **read_template**: Read a template for reference
 
-**Note**: When your code has errors, relevant Svelte 5 documentation will be automatically included
-with the error message. You don't need to search for documentation manually.
+**Note**: When your code has errors, relevant Svelte 5 documentation will be automatically included.
 
 ## Workflow
 
 1. **Analyze the drawing**: Look at shapes, colors, arrangement
-   - Rectangles → containers, cards, buttons
-   - Rounded shapes → buttons, avatars, badges
-   - Lines → dividers, borders, connections
-   - Text-like scribbles → labels, headings
-   - Drawing COLOR often indicates intended color scheme
-
 2. **Check existing components**: If editing, read the current file first
-
-3. **Reference templates**: Look at templates for good patterns when creating similar components
-
-4. **Write the component**: Create clean, well-structured Svelte code
-
-5. **Explain your work**: Describe what you created and how to use it
-
-## Position-Aware Design
-
-The component will be positioned ABSOLUTELY where the user drew. Consider:
-- The drawing's position (top-left corner becomes component origin)
-- The drawing's size (component should fit within similar dimensions)
-- Nearby existing components (maintain visual harmony)
-
-## Dark Theme Context
-
-This app uses a dark theme. Default to:
-- Dark backgrounds: `bg-neutral-800`, `bg-neutral-900`
-- Light text: `text-neutral-100`, `text-white`
-- Accent colors for interactive elements
-- Subtle borders: `border-neutral-700`
+3. **Write the component**: Create clean Svelte code using the design system
+4. **Explain your work**: Describe what you created
 
 Now analyze the user's drawing and prompt to create the requested UI component.
 "#;

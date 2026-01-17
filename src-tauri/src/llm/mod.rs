@@ -1,7 +1,7 @@
 // Local Tauri-specific modules (these will continue to use local implementations
 // while gradually migrating to the inference library)
 pub mod backend;
-pub mod commands;
+pub mod commands; // Now a directory with domain-specific modules
 pub mod device;
 pub mod embedding_server;
 pub mod gateway;
