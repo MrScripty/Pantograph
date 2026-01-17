@@ -1,10 +1,9 @@
-// Re-export from the agent module for backwards compatibility
-export {
-  AgentService,
-  ActivityLogger,
-  StreamHandler,
-} from './agent';
+// Agent service module
+export { AgentService } from './AgentService';
+export { ActivityLogger } from './ActivityLogger';
+export { StreamHandler } from './StreamHandler';
 
+// Re-export types
 export type {
   AgentRequest,
   AgentResponse,
@@ -21,4 +20,4 @@ export type {
   ToolCallDeltaEventData,
   ToolResultEventData,
   StreamingToolCall,
-} from './agent';
+} from './types';
