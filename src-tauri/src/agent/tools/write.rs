@@ -1,148 +1,16 @@
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
-use thiserror::Error;
 
-use super::enricher::{EnricherRegistry, ErrorCategory};
-use super::rag::SharedRagManager;
-use super::types::{TailwindColors, TemplateInfo, WriteTracker};
+use super::error::ToolError;
+use super::validation::{capitalize_first, MATHML_ELEMENTS, STANDARD_HTML_ELEMENTS, SVG_ELEMENTS};
+use crate::agent::enricher::{EnricherRegistry, ErrorCategory};
+use crate::agent::types::WriteTracker;
 use crate::config::{ImportValidationMode, SandboxConfig};
 use crate::hotload_sandbox::runtime_sandbox::validate_runtime_semantics;
-
-// ============================================================================
-// Standard HTML Elements (for validation)
-// ============================================================================
-
-const STANDARD_HTML_ELEMENTS: &[&str] = &[
-    // Document metadata
-    "base", "head", "link", "meta", "style", "title",
-    // Sectioning
-    "body", "address", "article", "aside", "footer", "header",
-    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "main", "nav", "section", "search",
-    // Text content
-    "blockquote", "dd", "div", "dl", "dt", "figcaption", "figure", "hr", "li", "menu", "ol", "p", "pre", "ul",
-    // Inline text semantics
-    "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "dfn", "em", "i", "kbd", "mark", "q",
-    "rp", "rt", "ruby", "s", "samp", "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr",
-    // Image and multimedia
-    "area", "audio", "img", "map", "track", "video",
-    // Embedded content
-    "embed", "iframe", "object", "param", "picture", "portal", "source",
-    // SVG and MathML
-    "svg", "math",
-    // Scripting
-    "canvas", "noscript", "script",
-    // Edits
-    "del", "ins",
-    // Table content
-    "caption", "col", "colgroup", "table", "tbody", "td", "tfoot", "th", "thead", "tr",
-    // Forms
-    "button", "datalist", "fieldset", "form", "input", "label", "legend", "meter",
-    "optgroup", "option", "output", "progress", "select", "textarea",
-    // Interactive elements
-    "details", "dialog", "summary",
-    // Web Components
-    "slot", "template",
-];
-
-/// Capitalize the first letter of a string (for suggesting PascalCase component names)
-fn capitalize_first(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(c) => c.to_uppercase().chain(chars).collect(),
-    }
-}
-
-// ============================================================================
-// Error Types
-// ============================================================================
-
-#[derive(Debug, Error)]
-pub enum ToolError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Path not allowed: {0}")]
-    PathNotAllowed(String),
-    #[error("Validation error: {0}")]
-    Validation(String),
-}
-
-impl Serialize for ToolError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-// ============================================================================
-// ReadGuiFileTool - Read existing Svelte component source
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-pub struct ReadGuiFileArgs {
-    pub path: String,
-}
-
-#[derive(Clone)]
-pub struct ReadGuiFileTool {
-    project_root: PathBuf,
-}
-
-impl ReadGuiFileTool {
-    pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root }
-    }
-
-    fn get_generated_path(&self) -> PathBuf {
-        self.project_root.join("src").join("generated")
-    }
-}
-
-impl Tool for ReadGuiFileTool {
-    const NAME: &'static str = "read_gui_file";
-    type Error = ToolError;
-    type Args = ReadGuiFileArgs;
-    type Output = String;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Read the source code of an existing Svelte component from the generated directory".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path to the component file (e.g., 'Button.svelte' or 'forms/Input.svelte')"
-                    }
-                },
-                "required": ["path"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // Sanitize path to prevent directory traversal
-        let sanitized = args.path.replace("..", "").trim_start_matches('/').to_string();
-        let full_path = self.get_generated_path().join(&sanitized);
-
-        // Verify the path is within the generated directory
-        let canonical = full_path.canonicalize().map_err(ToolError::Io)?;
-        let generated_canonical = self.get_generated_path().canonicalize().map_err(ToolError::Io)?;
-
-        if !canonical.starts_with(&generated_canonical) {
-            return Err(ToolError::PathNotAllowed(args.path));
-        }
-
-        tokio::fs::read_to_string(full_path).await.map_err(ToolError::Io)
-    }
-}
 
 // ============================================================================
 // WriteGuiFileTool - Create or update a Svelte component
@@ -327,8 +195,11 @@ impl WriteGuiFileTool {
             if let Some(tag_match) = cap.get(1) {
                 let tag_name = tag_match.as_str();
 
-                // Allow standard HTML elements
-                if STANDARD_HTML_ELEMENTS.contains(&tag_name) {
+                // Allow standard HTML elements, SVG elements, and MathML elements
+                if STANDARD_HTML_ELEMENTS.contains(&tag_name)
+                    || SVG_ELEMENTS.contains(&tag_name)
+                    || MATHML_ELEMENTS.contains(&tag_name)
+                {
                     continue;
                 }
 
@@ -505,6 +376,50 @@ impl WriteGuiFileTool {
                 // Timeout - log warning but don't block
                 log::warn!("Lint validation timed out. Skipping lint validation.");
                 Ok(())
+            }
+        }
+    }
+
+    /// Validate design system compliance (advisory - returns warnings, not errors)
+    /// This checks for non-design-system colors, emoji usage, etc.
+    async fn validate_design_system(&self, file_path: &PathBuf) -> Vec<String> {
+        let validation_script = self.project_root.join("scripts").join("validate-design-system.mjs");
+
+        // Skip if validation script doesn't exist
+        if !validation_script.exists() {
+            log::debug!("Design system validation script not found, skipping");
+            return vec![];
+        }
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(self.sandbox_config.validation_timeout_ms),
+            tokio::process::Command::new("node")
+                .arg(&validation_script)
+                .arg(file_path)
+                .output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+
+                if let Ok(result_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                    if let Some(warnings) = result_json.get("warnings").and_then(|w| w.as_array()) {
+                        return warnings
+                            .iter()
+                            .filter_map(|w| w.as_str().map(String::from))
+                            .collect();
+                    }
+                }
+                vec![]
+            }
+            Ok(Err(e)) => {
+                log::debug!("Design system validation script failed: {}", e);
+                vec![]
+            }
+            Err(_) => {
+                log::debug!("Design system validation timed out");
+                vec![]
             }
         }
     }
@@ -710,6 +625,16 @@ impl Tool for WriteGuiFileTool {
                     }
                 }
 
+                // Step 5: Design system validation (advisory - logs warnings but doesn't block)
+                let design_warnings = self.validate_design_system(&temp_path).await;
+                if !design_warnings.is_empty() {
+                    log::info!(
+                        "[write_gui_file] Design system warnings for {}: {:?}",
+                        sanitized,
+                        design_warnings
+                    );
+                }
+
                 // Compilation and runtime validation succeeded - move temp file to final location
                 tokio::fs::rename(&temp_path, &full_path).await.map_err(ToolError::Io)?;
 
@@ -739,526 +664,5 @@ impl Tool for WriteGuiFileTool {
                 Ok(true)
             }
         }
-    }
-}
-
-// ============================================================================
-// ListComponentsTool - List existing component files
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-pub struct ListComponentsArgs {}
-
-#[derive(Clone)]
-pub struct ListComponentsTool {
-    project_root: PathBuf,
-}
-
-impl ListComponentsTool {
-    pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root }
-    }
-
-    fn get_generated_path(&self) -> PathBuf {
-        self.project_root.join("src").join("generated")
-    }
-}
-
-impl Tool for ListComponentsTool {
-    const NAME: &'static str = "list_components";
-    type Error = ToolError;
-    type Args = ListComponentsArgs;
-    type Output = Vec<String>;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List all existing Svelte component files in the generated directory".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        }
-    }
-
-    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let generated_path = self.get_generated_path();
-        let mut components = Vec::new();
-
-        if !generated_path.exists() {
-            return Ok(components);
-        }
-
-        fn collect_svelte_files(dir: &PathBuf, base: &PathBuf, files: &mut Vec<String>) -> std::io::Result<()> {
-            if dir.is_dir() {
-                for entry in std::fs::read_dir(dir)? {
-                    let entry = entry?;
-                    let path = entry.path();
-                    if path.is_dir() {
-                        collect_svelte_files(&path, base, files)?;
-                    } else if path.extension().map_or(false, |ext| ext == "svelte") {
-                        if let Ok(relative) = path.strip_prefix(base) {
-                            files.push(relative.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        collect_svelte_files(&generated_path, &generated_path, &mut components)
-            .map_err(ToolError::Io)?;
-
-        Ok(components)
-    }
-}
-
-// ============================================================================
-// GetTailwindColorsTool - Return available Tailwind color palette
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-pub struct GetTailwindColorsArgs {}
-
-#[derive(Clone)]
-pub struct GetTailwindColorsTool;
-
-impl GetTailwindColorsTool {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for GetTailwindColorsTool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Tool for GetTailwindColorsTool {
-    const NAME: &'static str = "get_tailwind_colors";
-    type Error = ToolError;
-    type Args = GetTailwindColorsArgs;
-    type Output = TailwindColors;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Get the available Tailwind CSS color palette with all color names and their shades".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        }
-    }
-
-    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
-        use std::collections::HashMap;
-
-        let mut colors = HashMap::new();
-
-        // Standard Tailwind color palette
-        let shades = vec![
-            "50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"
-        ].into_iter().map(String::from).collect::<Vec<_>>();
-
-        for color in &["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber",
-                       "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue",
-                       "indigo", "violet", "purple", "fuchsia", "pink", "rose"] {
-            colors.insert(color.to_string(), shades.clone());
-        }
-
-        // Special colors
-        colors.insert("white".to_string(), vec!["".to_string()]);
-        colors.insert("black".to_string(), vec!["".to_string()]);
-        colors.insert("transparent".to_string(), vec!["".to_string()]);
-
-        Ok(TailwindColors { colors })
-    }
-}
-
-// ============================================================================
-// ListTemplatesTool - List available UI templates
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-pub struct ListTemplatesArgs {}
-
-#[derive(Clone)]
-pub struct ListTemplatesTool {
-    project_root: PathBuf,
-}
-
-impl ListTemplatesTool {
-    pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root }
-    }
-
-    fn get_templates_path(&self) -> PathBuf {
-        self.project_root.join("src").join("templates")
-    }
-}
-
-impl Tool for ListTemplatesTool {
-    const NAME: &'static str = "list_templates";
-    type Error = ToolError;
-    type Args = ListTemplatesArgs;
-    type Output = Vec<TemplateInfo>;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List available UI component templates that can be used as reference".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        }
-    }
-
-    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let templates_path = self.get_templates_path();
-        let mut templates = Vec::new();
-
-        if !templates_path.exists() {
-            return Ok(templates);
-        }
-
-        for entry in std::fs::read_dir(&templates_path).map_err(ToolError::Io)? {
-            let entry = entry.map_err(ToolError::Io)?;
-            let path = entry.path();
-
-            if path.extension().map_or(false, |ext| ext == "svelte") {
-                let name = path.file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default();
-
-                // Try to extract description from the first comment in the file
-                let description = if let Ok(content) = std::fs::read_to_string(&path) {
-                    content.lines()
-                        .find(|line| line.trim().starts_with("<!--"))
-                        .and_then(|line| {
-                            let trimmed = line.trim();
-                            if trimmed.ends_with("-->") {
-                                Some(trimmed[4..trimmed.len()-3].trim().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_else(|| format!("{} component template", name))
-                } else {
-                    format!("{} component template", name)
-                };
-
-                templates.push(TemplateInfo {
-                    name: name.clone(),
-                    description,
-                    path: format!("{}.svelte", name),
-                });
-            }
-        }
-
-        Ok(templates)
-    }
-}
-
-// ============================================================================
-// ReadTemplateTool - Read a specific template source
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-pub struct ReadTemplateArgs {
-    pub name: String,
-}
-
-#[derive(Clone)]
-pub struct ReadTemplateTool {
-    project_root: PathBuf,
-}
-
-impl ReadTemplateTool {
-    pub fn new(project_root: PathBuf) -> Self {
-        Self { project_root }
-    }
-
-    fn get_templates_path(&self) -> PathBuf {
-        self.project_root.join("src").join("templates")
-    }
-}
-
-impl Tool for ReadTemplateTool {
-    const NAME: &'static str = "read_template";
-    type Error = ToolError;
-    type Args = ReadTemplateArgs;
-    type Output = String;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Read the source code of a UI template component for reference".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Name of the template to read (e.g., 'Button', 'Card')"
-                    }
-                },
-                "required": ["name"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // Sanitize name - remove any path separators and extensions
-        let sanitized = args.name
-            .replace("..", "")
-            .replace('/', "")
-            .replace('\\', "")
-            .trim_end_matches(".svelte")
-            .to_string();
-
-        let full_path = self.get_templates_path().join(format!("{}.svelte", sanitized));
-
-        if !full_path.exists() {
-            return Err(ToolError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Template '{}' not found", args.name)
-            )));
-        }
-
-        tokio::fs::read_to_string(full_path).await.map_err(ToolError::Io)
-    }
-}
-
-// ============================================================================
-// SearchSvelteDocsTool - Search Svelte 5 documentation (kept for programmatic use, not registered with agent)
-// ============================================================================
-
-use super::docs::DocsManager;
-use super::docs_search::{search_docs, DocSearchOutput};
-
-#[derive(Debug, Deserialize)]
-pub struct SearchSvelteDocsArgs {
-    pub query: String,
-    #[serde(default = "default_search_limit")]
-    pub limit: usize,
-}
-
-fn default_search_limit() -> usize {
-    3
-}
-
-#[derive(Clone)]
-pub struct SearchSvelteDocsTool {
-    docs_manager: Arc<DocsManager>,
-}
-
-impl SearchSvelteDocsTool {
-    pub fn new(docs_manager: Arc<DocsManager>) -> Self {
-        Self { docs_manager }
-    }
-}
-
-impl Tool for SearchSvelteDocsTool {
-    const NAME: &'static str = "search_svelte_docs";
-    type Error = ToolError;
-    type Args = SearchSvelteDocsArgs;
-    type Output = DocSearchOutput;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Search Svelte 5 documentation for syntax, APIs, and best practices. \
-                          Use this when you need to verify Svelte 5 runes syntax ($state, $derived, $effect, $props), \
-                          event handlers (onclick, onmouseenter), component patterns, or fix errors.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query (e.g., '$state', 'event handlers', 'props', 'onclick')"
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of results to return (default: 3)",
-                        "default": 3
-                    }
-                },
-                "required": ["query"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        log::debug!("[search_svelte_docs] Searching for: {}", args.query);
-
-        // Check if docs are available (does not auto-download)
-        if let Err(e) = self.docs_manager.ensure_docs_available().await {
-            // Return empty results with a note instead of failing
-            // This allows the agent to continue without docs
-            log::warn!("[search_svelte_docs] Docs not available: {}", e);
-            return Ok(DocSearchOutput {
-                query: args.query,
-                total_matches: 0,
-                results: vec![],
-            });
-        }
-
-        // Load search index
-        let index = match self.docs_manager.load_index() {
-            Ok(idx) => idx,
-            Err(e) => {
-                log::warn!("[search_svelte_docs] Failed to load index: {}", e);
-                return Ok(DocSearchOutput {
-                    query: args.query,
-                    total_matches: 0,
-                    results: vec![],
-                });
-            }
-        };
-
-        log::debug!(
-            "[search_svelte_docs] Loaded index with {} entries, searching...",
-            index.entries.len()
-        );
-
-        // Perform fuzzy search
-        let results = search_docs(&index, &args.query, args.limit);
-
-        log::debug!(
-            "[search_svelte_docs] Found {} results for query '{}'",
-            results.len(),
-            args.query
-        );
-
-        Ok(DocSearchOutput {
-            query: args.query,
-            total_matches: results.len(),
-            results,
-        })
-    }
-}
-
-// ============================================================================
-// SearchSvelteDocsVectorTool - Semantic search using LanceDB vectors
-// ============================================================================
-
-use super::types::DocChunk;
-
-/// Output structure for the vector search tool
-#[derive(Debug, Serialize)]
-pub struct VectorDocSearchOutput {
-    /// The original query
-    pub query: String,
-    /// Search results ordered by relevance
-    pub results: Vec<VectorDocResult>,
-    /// Total number of matches found
-    pub total_matches: usize,
-}
-
-/// A vector search result with chunk details
-#[derive(Debug, Serialize)]
-pub struct VectorDocResult {
-    /// Document title
-    pub doc_title: String,
-    /// Chunk/section title
-    pub title: String,
-    /// Section name
-    pub section: String,
-    /// Header context (breadcrumb path)
-    pub header_context: String,
-    /// Full content of the chunk
-    pub content: String,
-    /// Whether this chunk contains code examples
-    pub has_code: bool,
-}
-
-impl From<DocChunk> for VectorDocResult {
-    fn from(chunk: DocChunk) -> Self {
-        Self {
-            doc_title: chunk.doc_title,
-            title: chunk.title,
-            section: chunk.section,
-            header_context: chunk.header_context,
-            content: chunk.content,
-            has_code: chunk.has_code,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SearchSvelteDocsVectorArgs {
-    pub query: String,
-    #[serde(default = "default_vector_search_limit")]
-    pub limit: usize,
-}
-
-fn default_vector_search_limit() -> usize {
-    3
-}
-
-#[derive(Clone)]
-pub struct SearchSvelteDocsVectorTool {
-    rag_manager: SharedRagManager,
-}
-
-impl SearchSvelteDocsVectorTool {
-    pub fn new(rag_manager: SharedRagManager) -> Self {
-        Self { rag_manager }
-    }
-}
-
-impl Tool for SearchSvelteDocsVectorTool {
-    const NAME: &'static str = "search_svelte_docs_vector";
-    type Error = ToolError;
-    type Args = SearchSvelteDocsVectorArgs;
-    type Output = VectorDocSearchOutput;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Semantic search Svelte 5 documentation using vector embeddings. \
-                          More accurate than keyword search for finding conceptually related content. \
-                          Use this when you need to understand Svelte 5 concepts, fix errors, or find related documentation. \
-                          Requires documentation to be indexed first.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Natural language query describing what you're looking for (e.g., 'how to declare reactive props', 'event handler syntax')"
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of results to return (default: 3)",
-                        "default": 3
-                    }
-                },
-                "required": ["query"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let rag_guard = self.rag_manager.read().await;
-
-        // Perform semantic vector search
-        let chunks = rag_guard
-            .search(&args.query, args.limit)
-            .await
-            .map_err(|e| ToolError::Validation(format!("Vector search failed: {}. Make sure documentation is indexed.", e)))?;
-
-        let results: Vec<VectorDocResult> = chunks.into_iter().map(VectorDocResult::from).collect();
-        let total = results.len();
-
-        Ok(VectorDocSearchOutput {
-            query: args.query,
-            results,
-            total_matches: total,
-        })
     }
 }
