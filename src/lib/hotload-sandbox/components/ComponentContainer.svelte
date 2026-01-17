@@ -44,7 +44,7 @@
   onMount(() => {
     const unsubscribe = registry.subscribe((next) => {
       components = next;
-      activeLogger.log('CONTAINER_COMPONENTS_UPDATED', { count: next.length });
+      activeLogger.log('container_components_updated', { count: next.length });
     });
 
     const unsubscribeMode = interactionMode.subscribe((mode) => {
@@ -66,11 +66,12 @@
    * Handle render error from SafeComponent
    */
   function handleRenderError(error: Error, componentId: string) {
-    activeLogger.log('CONTAINER_RENDER_ERROR', { componentId, error: error.message }, 'error');
+    activeLogger.log('container_render_error', { componentId, error: error.message }, 'error');
 
-    // Update local state
-    renderErrors.set(componentId, error);
-    renderErrors = new Map(renderErrors); // Trigger reactivity
+    // Update local state - create new Map to trigger Svelte 5 reactivity
+    const newErrors = new Map(renderErrors);
+    newErrors.set(componentId, error);
+    renderErrors = newErrors;
 
     // Update registry
     registry.setRenderError(componentId, error.message);
@@ -80,11 +81,12 @@
    * Handle retry request
    */
   async function handleRetry(componentId: string) {
-    activeLogger.log('CONTAINER_RETRY', { componentId });
+    activeLogger.log('container_retry', { componentId });
 
-    // Clear local error
-    renderErrors.delete(componentId);
-    renderErrors = new Map(renderErrors);
+    // Clear local error - create new Map to trigger Svelte 5 reactivity
+    const newErrors = new Map(renderErrors);
+    newErrors.delete(componentId);
+    renderErrors = newErrors;
 
     // Retry via registry
     await registry.retry(componentId);

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { engine } from '../services/DrawingEngine';
   import { canvasExport } from '../services/CanvasExport';
   import { panelWidth } from '../stores/panelStore';
@@ -179,11 +179,8 @@
     };
   });
 
-  onDestroy(() => {
-    if (unsubscribePanel) unsubscribePanel();
-    if (unsubscribeMode) unsubscribeMode();
-    if (unsubscribePan) unsubscribePan();
-  });
+  // Note: Cleanup is handled by the onMount return function above.
+  // No need for onDestroy since onMount's cleanup runs on component destruction.
 </script>
 
 <canvas
