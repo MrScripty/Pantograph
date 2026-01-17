@@ -1,18 +1,34 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { Logger } from '../services/Logger';
   import { AgentService } from '../services/AgentService';
   import { componentRegistry } from '../services/HotLoadRegistry';
   import { panelWidth, openSidePanel } from '../stores/panelStore';
+  import { promptHistoryStore } from '../stores/promptHistoryStore';
 
   let inputValue = '';
   let isLoading = false;
   let errorMessage = '';
 
+  // Prompt history state - synced with persistent store
+  let promptHistory: string[] = [];
+  let historyIndex = -1;
+  let tempInput = '';
+
+  // Subscribe to the persistent prompt history store
+  onMount(() => {
+    const unsubscribe = promptHistoryStore.subscribe(history => {
+      promptHistory = history;
+    });
+    return unsubscribe;
+  });
+
   const handleGo = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    console.log('[TopBar] handleGo called with:', inputValue);
-    Logger.log('COMMAND_SUBMITTED', { text: inputValue });
+    const submittedPrompt = inputValue.trim();
+    console.log('[TopBar] handleGo called with:', submittedPrompt);
+    Logger.log('COMMAND_SUBMITTED', { text: submittedPrompt });
 
     isLoading = true;
     errorMessage = '';
@@ -21,7 +37,7 @@
     try {
       console.log('[TopBar] Calling AgentService.run...');
       // Run the agent - it handles canvas export internally
-      const response = await AgentService.run(inputValue);
+      const response = await AgentService.run(submittedPrompt);
       console.log('[TopBar] AgentService.run returned:', response);
 
       // Register the generated components
@@ -34,13 +50,49 @@
         filesChanged: response.file_changes.length,
         componentsUpdated: response.component_updates.length,
       });
+
+      // Success - add to persistent history and clear input
+      promptHistoryStore.addPrompt(submittedPrompt);
+      historyIndex = -1;
+      tempInput = '';
+      inputValue = '';
     } catch (error) {
       console.error('[TopBar] Error:', error);
       errorMessage = error instanceof Error ? error.message : String(error);
       Logger.log('AGENT_ERROR', { error: String(error) }, 'error');
+      // On error, preserve the input value (don't clear it)
     } finally {
       isLoading = false;
-      inputValue = '';
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleGo();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (promptHistory.length > 0) {
+        if (historyIndex === -1) {
+          // Save current input before navigating
+          tempInput = inputValue;
+          historyIndex = promptHistory.length - 1;
+        } else if (historyIndex > 0) {
+          historyIndex--;
+        }
+        inputValue = promptHistory[historyIndex];
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex !== -1) {
+        if (historyIndex < promptHistory.length - 1) {
+          historyIndex++;
+          inputValue = promptHistory[historyIndex];
+        } else {
+          // Return to the temp input
+          historyIndex = -1;
+          inputValue = tempInput;
+        }
+      }
     }
   };
 </script>
@@ -56,7 +108,7 @@
       placeholder="Describe what you want to do with this drawing..."
       class="flex-1 bg-transparent px-4 py-3 outline-none font-mono text-sm placeholder:text-neutral-600"
       disabled={isLoading}
-      on:keydown={(e) => e.key === 'Enter' && handleGo()}
+      on:keydown={handleKeyDown}
     />
     <button
       on:click={handleGo}

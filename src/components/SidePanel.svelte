@@ -7,6 +7,9 @@
     type AgentActivityItem,
   } from '../services/AgentService';
   import { sidePanelOpen, toggleSidePanel } from '../stores/panelStore';
+  import { promptHistoryStore } from '../stores/promptHistoryStore';
+  import { componentRegistry } from '../services/HotLoadRegistry';
+  import { Logger } from '../services/Logger';
   import ServerStatus from './ServerStatus.svelte';
   import ModelConfig from './ModelConfig.svelte';
   import DeviceConfig from './DeviceConfig.svelte';
@@ -20,8 +23,41 @@
   let messagesContainer: HTMLDivElement;
   let isUserScrolledUp = false;
 
+  // Follow-up prompt state
+  let followUpInput = '';
+  let isFollowUpLoading = false;
+
   // Track expanded state for collapsible items
   let expandedItems: Set<string> = new Set();
+
+  // Track hovered item for Ctrl+C copy
+  let hoveredItemId: string | null = null;
+
+  // Handle Ctrl+C to copy hovered item content
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.ctrlKey && event.key === 'c' && hoveredItemId) {
+      const item = agentState.activityLog.find(i => i.id === hoveredItemId);
+      if (item) {
+        event.preventDefault();
+        let textToCopy = item.content;
+
+        // For tool calls, include tool name and args
+        if (item.type === 'tool_call' && item.metadata) {
+          textToCopy = `Tool: ${item.metadata.toolName}\nArguments: ${item.metadata.toolArgs || ''}`;
+          if (item.metadata.errorMessage) {
+            textToCopy += `\nError: ${item.metadata.errorMessage}`;
+          }
+        }
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          // Visual feedback could be added here
+          console.log('Copied to clipboard:', truncate(textToCopy, 50));
+        }).catch(err => {
+          console.error('Failed to copy:', err);
+        });
+      }
+    }
+  };
 
   const toggleExpanded = (id: string) => {
     if (expandedItems.has(id)) {
@@ -61,11 +97,15 @@
       agentState = nextState;
       scrollToBottom();
     });
+
+    // Add keyboard listener for Ctrl+C copy
+    window.addEventListener('keydown', handleKeydown);
   });
 
   onDestroy(() => {
     unsubscribeLLM?.();
     unsubscribeAgent?.();
+    window.removeEventListener('keydown', handleKeydown);
   });
 
   const formatMessage = (msg: ChatMessage): string => {
@@ -78,6 +118,48 @@
   const clearAll = () => {
     LLMService.clearHistory();
     AgentService.clearActivityLog();
+  };
+
+  const handleFollowUp = async () => {
+    if (!followUpInput.trim() || isFollowUpLoading) return;
+
+    const submittedPrompt = followUpInput.trim();
+    console.log('[SidePanel] Follow-up prompt:', submittedPrompt);
+    Logger.log('FOLLOW_UP_SUBMITTED', { text: submittedPrompt });
+
+    isFollowUpLoading = true;
+
+    try {
+      const response = await AgentService.run(submittedPrompt);
+      console.log('[SidePanel] Follow-up response:', response);
+
+      // Register any generated components
+      for (const update of response.component_updates) {
+        console.log('[SidePanel] Registering component:', update.id);
+        await componentRegistry.registerFromUpdate(update);
+      }
+
+      Logger.log('FOLLOW_UP_COMPLETE', {
+        filesChanged: response.file_changes.length,
+        componentsUpdated: response.component_updates.length,
+      });
+
+      // Add to persistent history and clear input
+      promptHistoryStore.addPrompt(submittedPrompt);
+      followUpInput = '';
+    } catch (error) {
+      console.error('[SidePanel] Follow-up error:', error);
+      Logger.log('FOLLOW_UP_ERROR', { error: String(error) }, 'error');
+    } finally {
+      isFollowUpLoading = false;
+    }
+  };
+
+  const handleFollowUpKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleFollowUp();
+    }
   };
 
   // Truncate long text for display
@@ -114,6 +196,12 @@
     agentState.activityLog.length > 0 ||
     agentState.streamingText ||
     agentState.isRunning;
+
+  // Show follow-up input when agent has completed and there's activity to follow up on
+  $: showFollowUp =
+    hasContent &&
+    !agentState.isRunning &&
+    state.status.ready;
 </script>
 
 <div class="fixed right-0 top-0 h-full z-50 flex">
@@ -179,6 +267,8 @@
               <!-- System Prompt Card (collapsible) -->
               <button
                 on:click={() => toggleExpanded(item.id)}
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
                 class="w-full text-left rounded-lg p-3 bg-purple-900/20 border border-purple-800/50 hover:bg-purple-900/30 transition-colors"
               >
                 <div class="flex items-center gap-2 text-xs text-purple-400 mb-1">
@@ -205,6 +295,8 @@
               <!-- Tool Call Card with status -->
               <button
                 on:click={() => toggleExpanded(item.id)}
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
                 class="w-full text-left rounded-lg p-3 {item.metadata?.status === 'error' ? 'bg-red-900/20 border border-red-800/50 hover:bg-red-900/30' : 'bg-amber-900/20 border border-amber-800/50 hover:bg-amber-900/30'} transition-colors"
               >
                 <div class="flex items-center gap-2 text-xs {item.metadata?.status === 'error' ? 'text-red-400' : 'text-amber-400'} mb-1">
@@ -242,6 +334,8 @@
               <!-- Tool Result Card - Legacy, kept for backwards compatibility but results now merge into tool_call -->
               <button
                 on:click={() => toggleExpanded(item.id)}
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
                 class="w-full text-left rounded-lg p-3 bg-green-900/20 border border-green-800/50 hover:bg-green-900/30 transition-colors"
               >
                 <div class="flex items-center gap-2 text-xs text-green-400 mb-1">
@@ -266,7 +360,13 @@
 
             {:else if item.type === 'text'}
               <!-- Final Text Response -->
-              <div class="rounded-lg p-3 bg-neutral-800/50">
+              <div
+                class="rounded-lg p-3 bg-neutral-800/50"
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
+                role="button"
+                tabindex="0"
+              >
                 <div class="text-xs text-neutral-500 mb-1 uppercase tracking-wider">
                   Assistant
                 </div>
@@ -279,6 +379,8 @@
               <!-- Reasoning (collapsible) -->
               <button
                 on:click={() => toggleExpanded(item.id)}
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
                 class="w-full text-left rounded-lg p-3 bg-blue-900/20 border border-blue-800/50 hover:bg-blue-900/30 transition-colors"
               >
                 <div class="flex items-center gap-2 text-xs text-blue-400 mb-1">
@@ -303,14 +405,26 @@
 
             {:else if item.type === 'status'}
               <!-- Status Message -->
-              <div class="flex items-center gap-2 text-neutral-500 text-xs px-2">
+              <div
+                class="flex items-center gap-2 text-neutral-500 text-xs px-2"
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
+                role="button"
+                tabindex="0"
+              >
                 <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
                 <span>{item.content}</span>
               </div>
 
             {:else if item.type === 'error'}
               <!-- Error Message -->
-              <div class="rounded-lg p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm">
+              <div
+                class="rounded-lg p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm"
+                on:mouseenter={() => hoveredItemId = item.id}
+                on:mouseleave={() => hoveredItemId = null}
+                role="button"
+                tabindex="0"
+              >
                 {item.content}
               </div>
             {/if}
@@ -390,6 +504,29 @@
           </div>
         {/if}
       </div>
+
+      <!-- Follow-up prompt input -->
+      {#if showFollowUp}
+        <div class="px-4 py-3 border-t border-neutral-700" transition:slide>
+          <div class="flex bg-neutral-800 border border-neutral-600 rounded-lg overflow-hidden">
+            <input
+              type="text"
+              bind:value={followUpInput}
+              placeholder="Follow-up prompt..."
+              class="flex-1 bg-transparent px-3 py-2 outline-none font-mono text-sm placeholder:text-neutral-600"
+              disabled={isFollowUpLoading}
+              on:keydown={handleFollowUpKeyDown}
+            />
+            <button
+              on:click={handleFollowUp}
+              disabled={isFollowUpLoading || !followUpInput.trim()}
+              class="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border-l border-neutral-600 transition-colors text-xs font-bold tracking-wider"
+            >
+              {isFollowUpLoading ? '...' : 'GO'}
+            </button>
+          </div>
+        </div>
+      {/if}
 
       <div class="px-4 py-3 border-t border-neutral-700">
         <button

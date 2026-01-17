@@ -7,6 +7,7 @@
   import SidePanel from './components/SidePanel.svelte';
   import HotLoadContainer from './components/HotLoadContainer.svelte';
   import ChunkPreview from './components/ChunkPreview.svelte';
+  import ClearButton from './components/ClearButton.svelte';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
   import { panelWidth } from './stores/panelStore';
@@ -39,6 +40,7 @@
   <Rulers />
   <TopBar />
   <Toolbar />
+  <ClearButton />
   <SidePanel />
 
   <HotLoadContainer />

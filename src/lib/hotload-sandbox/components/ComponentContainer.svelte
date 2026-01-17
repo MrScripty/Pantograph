@@ -6,6 +6,7 @@
   import SafeComponent from './SafeComponent.svelte';
   import ErrorPlaceholder from './ErrorPlaceholder.svelte';
   import { interactionMode } from '../../../stores/interactionModeStore';
+  import { canvasPan, type PanOffset } from '../../../stores/canvasStore';
 
   interface Props {
     /** The component registry to subscribe to */
@@ -37,6 +38,9 @@
   // Track interaction mode for pointer-events
   let currentMode: 'draw' | 'interact' = $state('draw');
 
+  // Track canvas pan offset
+  let currentPan: PanOffset = $state({ x: 0, y: 0 });
+
   onMount(() => {
     const unsubscribe = registry.subscribe((next) => {
       components = next;
@@ -47,9 +51,14 @@
       currentMode = mode;
     });
 
+    const unsubscribePan = canvasPan.subscribe((pan) => {
+      currentPan = pan;
+    });
+
     return () => {
       unsubscribe();
       unsubscribeMode();
+      unsubscribePan();
     };
   });
 
@@ -112,6 +121,8 @@
   class="fixed inset-0 pointer-events-none z-10 overflow-hidden"
   style="right: {rightOffset}px;"
 >
+  <!-- Inner container that moves with canvas pan -->
+  <div style="transform: translate({currentPan.x}px, {currentPan.y}px);">
   {#each components as comp (comp.id)}
     <div
       class="absolute {currentMode === 'interact' ? 'pointer-events-auto' : 'pointer-events-none'}"
@@ -149,4 +160,5 @@
       {/if}
     </div>
   {/each}
+  </div>
 </div>

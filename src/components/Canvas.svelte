@@ -4,6 +4,7 @@
   import { canvasExport } from '../services/CanvasExport';
   import { panelWidth } from '../stores/panelStore';
   import { interactionMode } from '../stores/interactionModeStore';
+  import { canvasPan, adjustPan, type PanOffset } from '../stores/canvasStore';
   import type { DrawingState, Point, Stroke } from '../types';
 
   let canvas: HTMLCanvasElement | null = null;
@@ -15,6 +16,12 @@
   let currentMode: 'draw' | 'interact' = 'draw';
   let unsubscribePanel: (() => void) | null = null;
   let unsubscribeMode: (() => void) | null = null;
+  let unsubscribePan: (() => void) | null = null;
+
+  // Pan state
+  let currentPan: PanOffset = { x: 0, y: 0 };
+  let isPanning = false;
+  let panStart: Point = { x: 0, y: 0 };
 
   const drawStroke = (stroke: Stroke) => {
     if (!ctx || stroke.points.length < 1) return;
@@ -40,7 +47,10 @@
 
   const render = () => {
     if (!ctx) return;
+    ctx.save();
     ctx.clearRect(0, 0, cssWidth, cssHeight);
+    // Apply pan offset
+    ctx.translate(currentPan.x, currentPan.y);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 2;
@@ -48,6 +58,7 @@
     if (state.currentStroke) {
       drawStroke(state.currentStroke);
     }
+    ctx.restore();
   };
 
   const syncState = (nextState: DrawingState) => {
@@ -61,20 +72,56 @@
     if ('touches' in e) {
       const touch = e.touches[0] ?? e.changedTouches[0];
       if (!touch) return { x: 0, y: 0 };
-      return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+      // Account for pan offset when drawing
+      return {
+        x: touch.clientX - rect.left - currentPan.x,
+        y: touch.clientY - rect.top - currentPan.y,
+      };
     }
+    // Account for pan offset when drawing
+    return {
+      x: e.clientX - rect.left - currentPan.x,
+      y: e.clientY - rect.top - currentPan.y,
+    };
+  };
+
+  const getScreenPoint = (e: MouseEvent): Point => {
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
   const handleMouseDown = (e: MouseEvent) => {
-    engine.startStroke(getPoint(e));
+    // Middle mouse button (button 1) starts panning
+    if (e.button === 1) {
+      e.preventDefault();
+      isPanning = true;
+      panStart = getScreenPoint(e);
+      return;
+    }
+    // Left mouse button draws
+    if (e.button === 0) {
+      engine.startStroke(getPoint(e));
+    }
   };
 
   const handleMouseMove = (e: MouseEvent) => {
+    if (isPanning) {
+      const current = getScreenPoint(e);
+      const dx = current.x - panStart.x;
+      const dy = current.y - panStart.y;
+      adjustPan(dx, dy);
+      panStart = current;
+      return;
+    }
     engine.addPoint(getPoint(e));
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: MouseEvent) => {
+    if (isPanning) {
+      isPanning = false;
+      return;
+    }
     engine.endStroke();
   };
 
@@ -116,11 +163,18 @@
       currentMode = mode;
     });
 
+    // Subscribe to pan offset for canvas translation
+    unsubscribePan = canvasPan.subscribe((pan) => {
+      currentPan = pan;
+      render();
+    });
+
     window.addEventListener('resize', handleResize);
     return () => {
       unsubscribe();
       if (unsubscribePanel) unsubscribePanel();
       if (unsubscribeMode) unsubscribeMode();
+      if (unsubscribePan) unsubscribePan();
       window.removeEventListener('resize', handleResize);
     };
   });
@@ -128,17 +182,19 @@
   onDestroy(() => {
     if (unsubscribePanel) unsubscribePanel();
     if (unsubscribeMode) unsubscribeMode();
+    if (unsubscribePan) unsubscribePan();
   });
 </script>
 
 <canvas
   bind:this={canvas}
-  class="fixed top-0 left-0 z-20 touch-none transition-[right] duration-300 ease-out {currentMode === 'draw' ? 'cursor-crosshair pointer-events-auto' : 'cursor-default pointer-events-none'}"
+  class="fixed top-0 left-0 z-20 touch-none transition-[right] duration-300 ease-out {isPanning ? 'cursor-grabbing' : currentMode === 'draw' ? 'cursor-crosshair pointer-events-auto' : 'cursor-default pointer-events-none'}"
   style="width: 100vw; height: 100vh; clip-path: inset(0 {currentPanelWidth}px 0 0);"
   on:mousedown={handleMouseDown}
   on:mousemove={handleMouseMove}
   on:mouseup={handleMouseUp}
   on:mouseleave={handleMouseUp}
+  on:auxclick|preventDefault={() => {}}
   on:touchstart|preventDefault={handleTouchStart}
   on:touchmove|preventDefault={handleTouchMove}
   on:touchend|preventDefault={handleTouchEnd}
