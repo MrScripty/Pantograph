@@ -27,6 +27,18 @@
       ],
       "$lib": [
         "./src/lib"
+      ],
+      "$features/*": [
+        "./src/features/*"
+      ],
+      "$features": [
+        "./src/features"
+      ],
+      "$shared/*": [
+        "./src/shared/*"
+      ],
+      "$shared": [
+        "./src/shared"
       ]
     },
     "allowImportingTsExtensions": true,

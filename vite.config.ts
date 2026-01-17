@@ -20,6 +20,8 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, 'src'),
           '$lib': path.resolve(__dirname, 'src/lib'),
+          '$features': path.resolve(__dirname, 'src/features'),
+          '$shared': path.resolve(__dirname, 'src/shared'),
         }
       }
     };
