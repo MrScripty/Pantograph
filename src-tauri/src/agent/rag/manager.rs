@@ -8,147 +8,31 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-// Arrow types - must match lancedb's arrow version (56.2)
-use arrow_array::types::Float64Type;
-use arrow_array::{
-    ArrayRef, BooleanArray, FixedSizeListArray, Int32Array, RecordBatch, RecordBatchIterator,
-    StringArray,
-};
-use arrow_schema::{DataType, Field, Schema};
+use arrow_array::RecordBatchIterator;
 use futures_util::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
-use rig::embeddings::{EmbedError, Embedding, EmbeddingError, EmbeddingModel, EmbeddingsBuilder};
+use rig::embeddings::{EmbeddingModel, EmbeddingsBuilder};
 use rig::one_or_many::OneOrMany;
 use rig::prelude::EmbeddingsClient;
-use rig::vector_store::VectorStoreError;
-use rig::Embed;
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tokio::sync::RwLock;
 
-use super::chunker::{chunk_document, ChunkConfig};
-use super::docs::DocsManager;
-use super::docs_index::IndexEntry;
-use super::embeddings::{check_embedding_server, create_embedding_client, get_embedding_model_name};
-use super::types::DocChunk;
-
+use super::error::RagError;
+use super::lancedb::{
+    create_schema, embeddings_to_record_batch, get_bool_col, get_i32_col, get_string_col,
+    CHUNKS_TABLE_NAME, DEFAULT_EMBEDDING_DIM,
+};
+use super::types::{IndexingProgress, RagStatus, SvelteDoc};
+use crate::agent::chunker::{chunk_document, ChunkConfig};
+use crate::agent::docs::DocsManager;
+use crate::agent::docs_index::IndexEntry;
+use crate::agent::embeddings::{check_embedding_server, create_embedding_client, get_embedding_model_name};
+use crate::agent::types::DocChunk;
 use crate::config::EmbeddingMemoryMode;
 use crate::llm::{BackendConfig, SharedGateway};
 
 /// Number of chunks to process per embedding batch for progress updates.
 /// Small enough for frequent UI updates, large enough to minimize HTTP overhead.
 const EMBEDDING_BATCH_SIZE: usize = 10;
-
-/// Errors that can occur during RAG operations
-#[derive(Debug, Error)]
-pub enum RagError {
-    #[error("Embedding server not available")]
-    ServerNotAvailable,
-    #[error("Embedding error: {0}")]
-    Embedding(String),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
-    #[error("Documents not available")]
-    DocsNotAvailable,
-    #[error("Client error: {0}")]
-    Client(String),
-    #[error("LanceDB error: {0}")]
-    LanceDb(String),
-}
-
-impl From<String> for RagError {
-    fn from(s: String) -> Self {
-        RagError::Client(s)
-    }
-}
-
-impl From<EmbeddingError> for RagError {
-    fn from(e: EmbeddingError) -> Self {
-        RagError::Embedding(e.to_string())
-    }
-}
-
-impl From<VectorStoreError> for RagError {
-    fn from(e: VectorStoreError) -> Self {
-        RagError::Embedding(e.to_string())
-    }
-}
-
-impl From<EmbedError> for RagError {
-    fn from(e: EmbedError) -> Self {
-        RagError::Embedding(e.to_string())
-    }
-}
-
-impl From<lancedb::Error> for RagError {
-    fn from(e: lancedb::Error) -> Self {
-        RagError::LanceDb(e.to_string())
-    }
-}
-
-/// A Svelte documentation entry prepared for embedding
-#[derive(Embed, Clone, Serialize, Deserialize, Debug, Eq, PartialEq, Default)]
-pub struct SvelteDoc {
-    /// Unique identifier
-    pub id: String,
-    /// Display title
-    pub title: String,
-    /// Section name
-    pub section: String,
-    /// Brief summary
-    pub summary: String,
-    /// Full content - this is what gets embedded
-    #[embed]
-    pub content: String,
-}
-
-impl From<&IndexEntry> for SvelteDoc {
-    fn from(entry: &IndexEntry) -> Self {
-        Self {
-            id: entry.id.clone(),
-            title: entry.title.clone(),
-            section: entry.section.clone(),
-            summary: entry.summary.clone(),
-            // Combine title and content for better semantic matching
-            content: format!("{}\n\n{}", entry.title, entry.content),
-        }
-    }
-}
-
-/// Progress information for indexing operations
-#[derive(Debug, Clone, Serialize)]
-pub struct IndexingProgress {
-    pub current: usize,
-    pub total: usize,
-    pub status: String,
-}
-
-/// Status of the RAG system
-#[derive(Debug, Clone, Serialize, Default)]
-pub struct RagStatus {
-    /// Whether documentation is downloaded
-    pub docs_available: bool,
-    /// Number of documentation files
-    pub docs_count: usize,
-    /// Whether the embedding server is reachable
-    pub vectorizer_available: bool,
-    /// URL of the embedding server (if configured)
-    pub vectorizer_url: Option<String>,
-    /// Whether vectors have been indexed
-    pub vectors_indexed: bool,
-    /// Number of indexed vectors
-    pub vectors_count: usize,
-    /// Current indexing progress (if indexing)
-    pub indexing_progress: Option<IndexingProgress>,
-}
-
-/// Default embedding dimensions for common models
-const DEFAULT_EMBEDDING_DIM: i32 = 1024; // Qwen3-Embedding-0.6B uses 1024 dimensions
-
-/// LanceDB table name for doc chunks
-const CHUNKS_TABLE_NAME: &str = "doc_chunks";
 
 /// Manager for RAG operations
 pub struct RagManager {
@@ -292,45 +176,6 @@ impl RagManager {
         while let Some(batch_result) = results.try_next().await.transpose() {
             let batch = batch_result.map_err(|e| RagError::LanceDb(e.to_string()))?;
 
-            // Helper to extract string column
-            fn get_string_col<'a>(
-                batch: &'a RecordBatch,
-                name: &str,
-            ) -> Result<&'a StringArray, RagError> {
-                batch
-                    .column_by_name(name)
-                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
-                    .as_any()
-                    .downcast_ref::<StringArray>()
-                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
-            }
-
-            // Helper to extract i32 column
-            fn get_i32_col<'a>(
-                batch: &'a RecordBatch,
-                name: &str,
-            ) -> Result<&'a Int32Array, RagError> {
-                batch
-                    .column_by_name(name)
-                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
-                    .as_any()
-                    .downcast_ref::<Int32Array>()
-                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
-            }
-
-            // Helper to extract bool column
-            fn get_bool_col<'a>(
-                batch: &'a RecordBatch,
-                name: &str,
-            ) -> Result<&'a BooleanArray, RagError> {
-                batch
-                    .column_by_name(name)
-                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
-                    .as_any()
-                    .downcast_ref::<BooleanArray>()
-                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
-            }
-
             // Extract columns
             let ids = get_string_col(&batch, "id")?;
             let doc_ids = get_string_col(&batch, "doc_id")?;
@@ -444,94 +289,6 @@ impl RagManager {
         }
     }
 
-    /// Create Arrow schema for the chunks table
-    fn create_schema(embedding_dim: i32) -> Arc<Schema> {
-        Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("doc_id", DataType::Utf8, false),
-            Field::new("title", DataType::Utf8, false),
-            Field::new("doc_title", DataType::Utf8, false),
-            Field::new("section", DataType::Utf8, false),
-            Field::new("chunk_index", DataType::Int32, false),
-            Field::new("total_chunks", DataType::Int32, false),
-            Field::new("header_context", DataType::Utf8, false),
-            Field::new("content", DataType::Utf8, false),
-            Field::new("has_code", DataType::Boolean, false),
-            Field::new(
-                "vector",
-                DataType::FixedSizeList(
-                    Arc::new(Field::new("item", DataType::Float64, true)),
-                    embedding_dim,
-                ),
-                false,
-            ),
-        ]))
-    }
-
-    /// Convert embeddings to Arrow RecordBatch
-    fn embeddings_to_record_batch(
-        embeddings: &[(DocChunk, Embedding)],
-        embedding_dim: i32,
-    ) -> Result<RecordBatch, RagError> {
-        let ids: Vec<&str> = embeddings.iter().map(|(c, _)| c.id.as_str()).collect();
-        let doc_ids: Vec<&str> = embeddings.iter().map(|(c, _)| c.doc_id.as_str()).collect();
-        let titles: Vec<&str> = embeddings.iter().map(|(c, _)| c.title.as_str()).collect();
-        let doc_titles: Vec<&str> = embeddings
-            .iter()
-            .map(|(c, _)| c.doc_title.as_str())
-            .collect();
-        let sections: Vec<&str> = embeddings.iter().map(|(c, _)| c.section.as_str()).collect();
-        let chunk_indices: Vec<i32> = embeddings
-            .iter()
-            .map(|(c, _)| c.chunk_index as i32)
-            .collect();
-        let total_chunks: Vec<i32> = embeddings
-            .iter()
-            .map(|(c, _)| c.total_chunks as i32)
-            .collect();
-        let header_contexts: Vec<&str> = embeddings
-            .iter()
-            .map(|(c, _)| c.header_context.as_str())
-            .collect();
-        let contents: Vec<&str> = embeddings.iter().map(|(c, _)| c.content.as_str()).collect();
-        let has_codes: Vec<bool> = embeddings.iter().map(|(c, _)| c.has_code).collect();
-
-        // Build vector array - flatten all embeddings into a single Vec<f64>
-        let vectors_flat: Vec<f64> = embeddings
-            .iter()
-            .flat_map(|(_, emb)| emb.vec.iter().copied())
-            .collect();
-
-        let vectors_array = FixedSizeListArray::from_iter_primitive::<Float64Type, _, _>(
-            vectors_flat
-                .chunks(embedding_dim as usize)
-                .map(|chunk| Some(chunk.iter().copied().map(Some).collect::<Vec<_>>())),
-            embedding_dim,
-        );
-
-        let schema = Self::create_schema(embedding_dim);
-
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![
-                Arc::new(StringArray::from(ids)) as ArrayRef,
-                Arc::new(StringArray::from(doc_ids)) as ArrayRef,
-                Arc::new(StringArray::from(titles)) as ArrayRef,
-                Arc::new(StringArray::from(doc_titles)) as ArrayRef,
-                Arc::new(StringArray::from(sections)) as ArrayRef,
-                Arc::new(Int32Array::from(chunk_indices)) as ArrayRef,
-                Arc::new(Int32Array::from(total_chunks)) as ArrayRef,
-                Arc::new(StringArray::from(header_contexts)) as ArrayRef,
-                Arc::new(StringArray::from(contents)) as ArrayRef,
-                Arc::new(BooleanArray::from(has_codes)) as ArrayRef,
-                Arc::new(vectors_array) as ArrayRef,
-            ],
-        )
-        .map_err(|e| RagError::LanceDb(format!("Failed to create RecordBatch: {}", e)))?;
-
-        Ok(batch)
-    }
-
     /// Index all documentation entries by chunking them first
     pub async fn index_documents(
         &mut self,
@@ -606,13 +363,13 @@ impl RagManager {
             EMBEDDING_BATCH_SIZE
         );
 
-        let mut all_embeddings: Vec<(DocChunk, Embedding)> = Vec::with_capacity(total_chunks);
+        let mut all_embeddings: Vec<(DocChunk, rig::embeddings::Embedding)> = Vec::with_capacity(total_chunks);
         let mut processed = 0;
 
         for batch in all_chunks.chunks(EMBEDDING_BATCH_SIZE) {
             // Build embeddings for this batch
             let batch_vec: Vec<DocChunk> = batch.to_vec();
-            let raw_batch: Vec<(DocChunk, OneOrMany<Embedding>)> =
+            let raw_batch: Vec<(DocChunk, OneOrMany<rig::embeddings::Embedding>)> =
                 EmbeddingsBuilder::new(embedding_model.clone())
                     .documents(batch_vec)?
                     .build()
@@ -662,8 +419,8 @@ impl RagManager {
         }
 
         // Create RecordBatch from embeddings
-        let batch = Self::embeddings_to_record_batch(&embeddings, embedding_dim)?;
-        let schema = Self::create_schema(embedding_dim);
+        let batch = embeddings_to_record_batch(&embeddings, embedding_dim)?;
+        let schema = create_schema(embedding_dim);
 
         // Create table with embeddings
         log::info!("Creating LanceDB table with {} vectors", embeddings.len());
@@ -758,46 +515,6 @@ impl RagManager {
         // Convert results to DocChunks
         let mut chunks = Vec::new();
         while let Some(batch) = results.try_next().await? {
-
-            // Helper to extract string column
-            fn get_string_col<'a>(
-                batch: &'a RecordBatch,
-                name: &str,
-            ) -> Result<&'a StringArray, RagError> {
-                batch
-                    .column_by_name(name)
-                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
-                    .as_any()
-                    .downcast_ref::<StringArray>()
-                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
-            }
-
-            // Helper to extract i32 column
-            fn get_i32_col<'a>(
-                batch: &'a RecordBatch,
-                name: &str,
-            ) -> Result<&'a Int32Array, RagError> {
-                batch
-                    .column_by_name(name)
-                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
-                    .as_any()
-                    .downcast_ref::<Int32Array>()
-                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
-            }
-
-            // Helper to extract bool column
-            fn get_bool_col<'a>(
-                batch: &'a RecordBatch,
-                name: &str,
-            ) -> Result<&'a BooleanArray, RagError> {
-                batch
-                    .column_by_name(name)
-                    .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
-                    .as_any()
-                    .downcast_ref::<BooleanArray>()
-                    .ok_or_else(|| RagError::LanceDb(format!("{} column has wrong type", name)))
-            }
-
             // Extract columns
             let ids = get_string_col(&batch, "id")?;
             let doc_ids = get_string_col(&batch, "doc_id")?;

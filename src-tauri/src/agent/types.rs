@@ -101,6 +101,7 @@ pub struct AgentEvent {
 #[serde(rename_all = "snake_case")]
 pub enum AgentEventType {
     ToolCall,
+    ToolCallDelta,
     ToolResult,
     Content,
     ComponentCreated,
