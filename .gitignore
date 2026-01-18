@@ -24,11 +24,8 @@ src-tauri/binaries/
 #.idea/
 
 # Generated UI components (agent-created)
-/src/generated/*
-
-# Isolated git repo for generated component versioning (undo/redo)
-# This nested git repo should not be tracked by the main project
-/src/generated/.git/
+# Ignore everything in generated/ (has its own nested git repo for undo/redo)
+/src/generated/
 
 # Project data directory (downloaded docs, vector embeddings, etc.)
 /data/
