@@ -121,15 +121,28 @@ try {
       tempFile = null;
     }
 
-    // Parse esbuild errors
-    const errors = buildError.errors?.map(e => ({
-      message: e.text,
-      file: e.location?.file,
-      line: e.location?.line,
-      column: e.location?.column,
-      // Extract package name from error message if possible
-      package: extractPackageFromError(e.text)
-    })) || [{ message: buildError.message }];
+    // Get allowed packages for typo suggestions
+    const allowed = getAllowedPackages(projectRoot);
+
+    // Parse esbuild errors with typo suggestions
+    const errors = buildError.errors?.map(e => {
+      const pkg = extractPackageFromError(e.text);
+      const suggestions = pkg ? findSimilarPackages(pkg, allowed) : [];
+
+      let message = e.text;
+      if (suggestions.length > 0) {
+        message += `. Did you mean: ${suggestions.map(s => `"${s}"`).join(', ')}?`;
+      }
+
+      return {
+        message,
+        file: e.location?.file,
+        line: e.location?.line,
+        column: e.location?.column,
+        package: pkg,
+        suggestions
+      };
+    }) || [{ message: buildError.message }];
 
     // Format for display
     const errorMessages = errors.map(e => e.message).join('; ');
@@ -176,4 +189,94 @@ function extractPackageFromError(message) {
     return specifier.split('/')[0];
   }
   return undefined;
+}
+
+/**
+ * Load allowed packages from package.json dependencies
+ */
+function getAllowedPackages(root) {
+  const pkgPath = join(root, 'package.json');
+  if (!existsSync(pkgPath)) {
+    return new Set(['svelte', 'lucide-svelte']);
+  }
+
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    const packages = new Set([
+      ...Object.keys(pkg.dependencies || {}),
+      ...Object.keys(pkg.devDependencies || {}),
+      // Always allow svelte core packages
+      'svelte',
+    ]);
+    return packages;
+  } catch (e) {
+    return new Set(['svelte', 'lucide-svelte']);
+  }
+}
+
+/**
+ * Calculate Levenshtein distance for typo suggestions
+ */
+function levenshteinDistance(a, b) {
+  const matrix = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Find similar package names for typo suggestions
+ * Uses multiple strategies: prefix matching, substring matching, and Levenshtein distance
+ */
+function findSimilarPackages(pkgName, allowed, maxDistance = 3) {
+  const suggestions = [];
+  const pkgLower = pkgName.toLowerCase();
+
+  for (const candidate of allowed) {
+    const candidateLower = candidate.toLowerCase();
+
+    // Strategy 1: Check if input is a prefix of a package name (e.g., "lucid" -> "lucide-svelte")
+    if (candidateLower.startsWith(pkgLower) && candidateLower !== pkgLower) {
+      suggestions.push({ name: candidate, distance: 0, priority: 1 });
+      continue;
+    }
+
+    // Strategy 2: Check if input is contained in package name
+    if (candidateLower.includes(pkgLower) && candidateLower !== pkgLower) {
+      suggestions.push({ name: candidate, distance: 1, priority: 2 });
+      continue;
+    }
+
+    // Strategy 3: Levenshtein distance for typos
+    const distance = levenshteinDistance(pkgLower, candidateLower);
+    if (distance <= maxDistance && distance > 0) {
+      suggestions.push({ name: candidate, distance, priority: 3 });
+    }
+  }
+
+  // Sort by priority first, then by distance
+  return suggestions
+    .sort((a, b) => a.priority - b.priority || a.distance - b.distance)
+    .slice(0, 3)
+    .map(s => s.name);
 }
