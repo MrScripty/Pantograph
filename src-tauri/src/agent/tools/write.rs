@@ -11,6 +11,7 @@ use crate::agent::enricher::{EnricherRegistry, ErrorCategory};
 use crate::agent::types::WriteTracker;
 use crate::config::{ImportValidationMode, SandboxConfig};
 use crate::hotload_sandbox::runtime_sandbox::validate_runtime_semantics;
+use crate::llm::commands::version::update_tracking_after_commit;
 
 // ============================================================================
 // WriteGuiFileTool - Create or update a Svelte component
@@ -31,15 +32,6 @@ pub struct WriteGuiFileTool {
 }
 
 impl WriteGuiFileTool {
-    pub fn new(project_root: PathBuf, enricher_registry: Arc<EnricherRegistry>) -> Self {
-        Self {
-            project_root,
-            write_tracker: None,
-            sandbox_config: SandboxConfig::default(),
-            enricher_registry,
-        }
-    }
-
     pub fn with_tracker(project_root: PathBuf, tracker: WriteTracker, enricher_registry: Arc<EnricherRegistry>) -> Self {
         Self {
             project_root,
@@ -209,7 +201,8 @@ impl WriteGuiFileTool {
                 }
 
                 // Reject non-standard elements without hyphens
-                // Use HtmlElement category to avoid triggering Svelte doc enrichment
+                // Use SveltePattern to trigger doc enrichment - semantic search will
+                // return relevant docs (e.g., svelte:component for dynamic components)
                 return Err((
                     format!(
                         "NON-STANDARD HTML ELEMENT: '<{}>' is not a valid HTML element. \
@@ -219,7 +212,7 @@ impl WriteGuiFileTool {
                         capitalize_first(tag_name),
                         tag_name
                     ),
-                    ErrorCategory::HtmlElement,
+                    ErrorCategory::SveltePattern,
                 ));
             }
         }
@@ -275,16 +268,28 @@ impl WriteGuiFileTool {
                         let line = error_json.get("line")
                             .and_then(|l| l.as_u64());
 
+                        // Extract suggestions from the JSON response
+                        let suggestions: Vec<String> = error_json.get("errors")
+                            .and_then(|e| e.as_array())
+                            .and_then(|arr| arr.first())
+                            .and_then(|e| e.get("suggestions"))
+                            .and_then(|s| s.as_array())
+                            .map(|arr| arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect())
+                            .unwrap_or_default();
+
                         let mut full_error = format!("IMPORT VALIDATION ERROR: {}", error_msg);
                         if let Some(line_num) = line {
                             full_error.push_str(&format!(" (line {})", line_num));
                         }
 
-                        // Add suggestions for common mistakes
-                        full_error.push_str("\n\nCommon fixes:\n");
-                        full_error.push_str("- Check package name spelling (e.g., 'lucide-svelte' not 'lucid')\n");
-                        full_error.push_str("- Ensure the package is in package.json dependencies\n");
-                        full_error.push_str("- Use relative paths for local components (./Component.svelte)");
+                        // Use dynamic suggestions if available, otherwise show generic help
+                        if !suggestions.is_empty() {
+                            full_error.push_str(&format!("\n\nDid you mean: {}?",
+                                suggestions.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", ")));
+                        }
+                        full_error.push_str("\n\nEnsure the package is listed in package.json dependencies.");
 
                         return Err((full_error, ErrorCategory::ImportResolution));
                     } else {
@@ -420,6 +425,94 @@ impl WriteGuiFileTool {
             Err(_) => {
                 log::debug!("Design system validation timed out");
                 vec![]
+            }
+        }
+    }
+
+    /// Initialize git repo in generated folder if not exists (for versioning)
+    fn ensure_git_repo(&self) -> Result<(), std::io::Error> {
+        let generated_dir = self.get_generated_path();
+        let git_dir = generated_dir.join(".git");
+
+        if !git_dir.exists() {
+            // Create the generated directory if it doesn't exist
+            std::fs::create_dir_all(&generated_dir)?;
+
+            // Initialize git repo
+            let output = std::process::Command::new("git")
+                .args(["init"])
+                .current_dir(&generated_dir)
+                .output()?;
+
+            if output.status.success() {
+                log::info!("[write_gui_file] Initialized git repo in src/generated/");
+
+                // Create a .gitignore inside the generated folder
+                let gitignore_path = generated_dir.join(".gitignore");
+                if !gitignore_path.exists() {
+                    std::fs::write(&gitignore_path, "# Temporary validation files\n*.tmp\n")?;
+                }
+
+                // Initial commit
+                let _ = std::process::Command::new("git")
+                    .args(["add", "."])
+                    .current_dir(&generated_dir)
+                    .output();
+                let _ = std::process::Command::new("git")
+                    .args(["commit", "-m", "Initialize generated components", "--allow-empty"])
+                    .current_dir(&generated_dir)
+                    .output();
+            } else {
+                log::warn!("[write_gui_file] Failed to initialize git repo: {:?}", String::from_utf8_lossy(&output.stderr));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Commit the file change to git (for undo/redo support)
+    fn commit_change(&self, path: &str, is_new: bool) {
+        let generated_dir = self.get_generated_path();
+
+        // Ensure git repo exists
+        if let Err(e) = self.ensure_git_repo() {
+            log::warn!("[write_gui_file] Failed to ensure git repo: {}", e);
+            return;
+        }
+
+        // Stage the file
+        let stage_result = std::process::Command::new("git")
+            .args(["add", path])
+            .current_dir(&generated_dir)
+            .output();
+
+        if let Err(e) = stage_result {
+            log::warn!("[write_gui_file] Failed to stage file: {}", e);
+            return;
+        }
+
+        // Commit with descriptive message
+        let action = if is_new { "Create" } else { "Update" };
+        let message = format!("{} {}", action, path);
+
+        let commit_result = std::process::Command::new("git")
+            .args(["commit", "-m", &message])
+            .current_dir(&generated_dir)
+            .output();
+
+        match commit_result {
+            Ok(output) if output.status.success() => {
+                log::info!("[write_gui_file] Git committed: {}", message);
+                // Update tracking files for non-destructive undo/redo
+                update_tracking_after_commit(&generated_dir);
+            }
+            Ok(output) => {
+                // Non-zero exit but not an error (e.g., nothing to commit)
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                log::debug!("[write_gui_file] Git commit notice: {}", stderr);
+            }
+            Err(e) => {
+                log::warn!("[write_gui_file] Failed to commit: {}", e);
             }
         }
     }
@@ -635,8 +728,14 @@ impl Tool for WriteGuiFileTool {
                     );
                 }
 
+                // Check if this is a new file or an update (for git commit message)
+                let is_new_file = !full_path.exists();
+
                 // Compilation and runtime validation succeeded - move temp file to final location
                 tokio::fs::rename(&temp_path, &full_path).await.map_err(ToolError::Io)?;
+
+                // Git versioning - commit the change for undo/redo support
+                self.commit_change(&sanitized, is_new_file);
 
                 // Record successful write
                 if let Some(ref tracker) = self.write_tracker {

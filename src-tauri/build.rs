@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 
 fn main() {
@@ -7,6 +8,54 @@ fn main() {
     copy_binaries_to_target();
 
     tauri_build::build();
+}
+
+/// Quick hash of first 8KB + last 8KB + file size for fast comparison
+fn quick_file_hash(path: &Path) -> Option<u64> {
+    let metadata = fs::metadata(path).ok()?;
+    let size = metadata.len();
+
+    let mut file = fs::File::open(path).ok()?;
+    let mut hasher: u64 = size;
+
+    // Read first 8KB
+    let mut buf = [0u8; 8192];
+    let n = file.read(&mut buf).ok()?;
+    for byte in &buf[..n] {
+        hasher = hasher.wrapping_mul(31).wrapping_add(*byte as u64);
+    }
+
+    // Read last 8KB if file is large enough
+    if size > 16384 {
+        use std::io::Seek;
+        file.seek(std::io::SeekFrom::End(-8192)).ok()?;
+        let n = file.read(&mut buf).ok()?;
+        for byte in &buf[..n] {
+            hasher = hasher.wrapping_mul(31).wrapping_add(*byte as u64);
+        }
+    }
+
+    Some(hasher)
+}
+
+/// Check if two files are identical using quick hash
+fn files_match(src: &Path, dst: &Path) -> bool {
+    if !dst.exists() {
+        return false;
+    }
+
+    // Quick check: sizes must match
+    let src_size = fs::metadata(src).map(|m| m.len()).unwrap_or(0);
+    let dst_size = fs::metadata(dst).map(|m| m.len()).unwrap_or(1);
+    if src_size != dst_size {
+        return false;
+    }
+
+    // Compare hashes
+    match (quick_file_hash(src), quick_file_hash(dst)) {
+        (Some(h1), Some(h2)) => h1 == h2,
+        _ => false,
+    }
 }
 
 fn copy_binaries_to_target() {
@@ -30,7 +79,9 @@ fn copy_binaries_to_target() {
     let dst_wrapper = target_dir.join(wrapper_name);
 
     if src_wrapper.exists() {
-        if let Err(e) = fs::copy(&src_wrapper, &dst_wrapper) {
+        if files_match(&src_wrapper, &dst_wrapper) {
+            // Already up to date, skip
+        } else if let Err(e) = fs::copy(&src_wrapper, &dst_wrapper) {
             println!("cargo:warning=Failed to copy wrapper script: {}", e);
         } else {
             println!("cargo:warning=Copied wrapper script to {:?}", dst_wrapper);
@@ -52,11 +103,14 @@ fn copy_binaries_to_target() {
     let cuda_dst = target_dir.join("cuda");
 
     if cuda_src.exists() && cuda_src.is_dir() {
-        if let Err(e) = copy_dir_recursive(&cuda_src, &cuda_dst) {
+        let mut copied = 0;
+        let mut skipped = 0;
+        if let Err(e) = copy_dir_if_changed(&cuda_src, &cuda_dst, &mut copied, &mut skipped) {
             println!("cargo:warning=Failed to copy cuda directory: {}", e);
-        } else {
-            println!("cargo:warning=Copied cuda directory to {:?}", cuda_dst);
+        } else if copied > 0 {
+            println!("cargo:warning=Copied {} files to {:?} ({} unchanged)", copied, cuda_dst, skipped);
         }
+        // Silent if all files were skipped (already up to date)
     }
 
     // Trigger rebuild when binaries change
@@ -65,7 +119,7 @@ fn copy_binaries_to_target() {
     println!("cargo:rerun-if-changed=binaries/cuda/libggml-cuda.so");
 }
 
-fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+fn copy_dir_if_changed(src: &Path, dst: &Path, copied: &mut usize, skipped: &mut usize) -> std::io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
     }
@@ -76,9 +130,17 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         let dst_path = dst.join(entry.file_name());
 
         if src_path.is_dir() {
-            copy_dir_recursive(&src_path, &dst_path)?;
+            copy_dir_if_changed(&src_path, &dst_path, copied, skipped)?;
         } else {
+            // Skip if files match
+            if files_match(&src_path, &dst_path) {
+                *skipped += 1;
+                continue;
+            }
+
             fs::copy(&src_path, &dst_path)?;
+            *copied += 1;
+
             // Make shared libraries and executables executable
             #[cfg(unix)]
             {

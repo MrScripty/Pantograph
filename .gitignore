@@ -23,8 +23,12 @@ src-tauri/binaries/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-#Generated Element UI files
+# Generated UI components (agent-created)
 /src/generated/*
+
+# Isolated git repo for generated component versioning (undo/redo)
+# This nested git repo should not be tracked by the main project
+/src/generated/.git/
 
 # Project data directory (downloaded docs, vector embeddings, etc.)
 /data/
