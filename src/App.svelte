@@ -10,20 +10,74 @@
   import ChunkPreview from './components/ChunkPreview.svelte';
   import ClearButton from './components/ClearButton.svelte';
   import NodeGraph from './components/NodeGraph.svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
   import { panelWidth } from './stores/panelStore';
   import { toggleInteractionMode } from './stores/interactionModeStore';
   import { viewMode, toggleViewMode } from './stores/viewModeStore';
+  import { loadWorkspace } from './services/HotLoadRegistry';
+
+  async function handleComponentUndo() {
+    try {
+      const result = await invoke<{ success: boolean; message: string }>('undo_component_change');
+      if (result.success) {
+        Logger.info('Component change undone', result.message);
+      }
+    } catch (e) {
+      Logger.debug('Component undo', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function handleComponentRedo() {
+    try {
+      const result = await invoke<{ success: boolean; message: string }>('redo_component_change');
+      if (result.success) {
+        Logger.info('Component change redone', result.message);
+      }
+    } catch (e) {
+      Logger.debug('Component redo', e instanceof Error ? e.message : String(e));
+    }
+  }
 
   onMount(() => {
     Logger.log('APP_MOUNTED', { version: '1.0.0-alpha' });
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        engine.undo();
+    // Load previously generated components from disk
+    loadWorkspace().then((count) => {
+      if (count > 0) {
+        Logger.info('Workspace restored', `${count} component(s) loaded`);
       }
+    });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      // Handle all Ctrl+Z variants
+      if (isCtrl && e.key === 'z') {
+        if (e.shiftKey) {
+          // Ctrl+Shift+Z → Component redo
+          e.preventDefault();
+          handleComponentRedo();
+        } else if (e.altKey) {
+          // Alt+Ctrl+Z → Component undo
+          e.preventDefault();
+          handleComponentUndo();
+        } else {
+          // Plain Ctrl+Z → Canvas drawing undo
+          e.preventDefault();
+          engine.undo();
+        }
+        return;
+      }
+
+      // Ctrl+Y → Component redo (alternative)
+      if (isCtrl && e.key === 'y') {
+        e.preventDefault();
+        handleComponentRedo();
+        return;
+      }
+
       // Toggle between canvas and node-graph views with Ctrl+`
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
