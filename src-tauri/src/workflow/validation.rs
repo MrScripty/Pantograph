@@ -232,7 +232,7 @@ pub fn validate_connection(source_type: &PortDataType, target_type: &PortDataTyp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::types::{GraphNode, Position};
+    use crate::workflow::types::{GraphEdge, GraphNode, Position};
 
     fn create_test_registry() -> NodeRegistry {
         NodeRegistry::new()

@@ -360,7 +360,7 @@ impl Node for RAGSearchNode {
         // Perform RAG search
         let rag_manager = context.rag_manager.read().await;
         let docs = rag_manager
-            .search_as_docs(query, limit)
+            .search_as_docs(&query, limit)
             .await
             .map_err(|e| NodeError::Rag(e.to_string()))?;
 

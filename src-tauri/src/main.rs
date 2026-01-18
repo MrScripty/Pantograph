@@ -190,6 +190,10 @@ fn main() {
             workflow::commands::get_node_definitions,
             workflow::commands::get_node_definitions_by_category,
             workflow::commands::get_node_definition,
+            // Workflow persistence commands
+            workflow::commands::save_workflow,
+            workflow::commands::load_workflow,
+            workflow::commands::list_workflows,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

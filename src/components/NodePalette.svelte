@@ -3,7 +3,12 @@
   import type { NodeDefinition } from '../services/workflow/types';
 
   let searchQuery = $state('');
-  let expandedCategories = $state(new Set(['Input', 'Processing', 'Output']));
+  let expandedCategories = $state(new Set(['input', 'processing', 'output']));
+
+  // Format category names for display (snake_case -> Title Case)
+  function formatCategoryName(category: string): string {
+    return category.charAt(0).toUpperCase() + category.slice(1);
+  }
 
   let filteredByCategory = $derived(() => {
     const result = new Map<string, NodeDefinition[]>();
@@ -40,19 +45,19 @@
   }
 
   const categoryIcons: Record<string, string> = {
-    Input: '[ ]',
-    Processing: '[~]',
-    Tool: '[#]',
-    Output: '[>]',
-    Control: '[?]',
+    input: '[ ]',
+    processing: '[~]',
+    tool: '[#]',
+    output: '[>]',
+    control: '[?]',
   };
 
   const categoryColors: Record<string, string> = {
-    Input: 'text-blue-400',
-    Processing: 'text-green-400',
-    Tool: 'text-amber-400',
-    Output: 'text-cyan-400',
-    Control: 'text-purple-400',
+    input: 'text-blue-400',
+    processing: 'text-green-400',
+    tool: 'text-amber-400',
+    output: 'text-cyan-400',
+    control: 'text-purple-400',
   };
 </script>
 
@@ -77,7 +82,7 @@
           <span class="font-mono text-xs {categoryColors[category] || 'text-neutral-400'}">
             {categoryIcons[category] || '[*]'}
           </span>
-          <span class="flex-1 text-sm text-neutral-200">{category}</span>
+          <span class="flex-1 text-sm text-neutral-200">{formatCategoryName(category)}</span>
           <span class="text-xs text-neutral-500">{definitions.length}</span>
           <span class="text-xs text-neutral-500">
             {expandedCategories.has(category) ? '[-]' : '[+]'}

@@ -191,18 +191,18 @@
     <Controls />
     <MiniMap
       nodeColor={(node) => {
-        // Color by node category
+        // Color by node category (snake_case to match Rust serde)
         const def = node.data?.definition as NodeDefinition | undefined;
         switch (def?.category) {
-          case 'Input':
+          case 'input':
             return '#2563eb';
-          case 'Processing':
+          case 'processing':
             return '#16a34a';
-          case 'Tool':
+          case 'tool':
             return '#d97706';
-          case 'Output':
+          case 'output':
             return '#0891b2';
-          case 'Control':
+          case 'control':
             return '#9333ea';
           default:
             return '#525252';

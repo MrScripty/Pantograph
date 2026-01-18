@@ -27,13 +27,16 @@ pub mod types;
 pub mod validation;
 
 // Re-export commonly used types
-pub use commands::{execute_workflow, get_node_definitions, validate_workflow_connection};
+pub use commands::{
+    execute_workflow, get_node_definitions, list_workflows, load_workflow, save_workflow,
+    validate_workflow_connection,
+};
 pub use engine::{WorkflowEngine, WorkflowError, WorkflowResult};
 pub use events::WorkflowEvent;
 pub use node::{ExecutionContext, Node, NodeError, NodeInputs, NodeOutputs, PortValue};
 pub use registry::NodeRegistry;
 pub use types::{
     ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, PortDataType,
-    PortDefinition, Position, WorkflowGraph,
+    PortDefinition, Position, Viewport, WorkflowFile, WorkflowGraph, WorkflowMetadata,
 };
 pub use validation::{validate_connection, ValidationError, WorkflowValidator};

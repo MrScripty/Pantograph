@@ -1,161 +1,162 @@
 // Mock data for frontend development without Rust backend
 import type { NodeDefinition, WorkflowEvent, WorkflowGraph } from './types';
 
+// NOTE: These mock definitions use snake_case to match Rust serde serialization
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
   // Input Nodes
   {
     node_type: 'text-input',
-    category: 'Input',
+    category: 'input',
     label: 'Text Input',
     description: 'User text input field',
     inputs: [],
     outputs: [
-      { id: 'text', label: 'Text', data_type: 'String', required: true, multiple: false },
+      { id: 'text', label: 'Text', data_type: 'string', required: true, multiple: false },
     ],
-    execution_mode: 'Reactive',
+    execution_mode: 'reactive',
   },
   {
     node_type: 'image-input',
-    category: 'Input',
+    category: 'input',
     label: 'Image Input',
     description: 'Canvas image capture',
     inputs: [],
     outputs: [
-      { id: 'image', label: 'Image', data_type: 'Image', required: true, multiple: false },
-      { id: 'bounds', label: 'Bounds', data_type: 'Json', required: true, multiple: false },
+      { id: 'image', label: 'Image', data_type: 'image', required: true, multiple: false },
+      { id: 'bounds', label: 'Bounds', data_type: 'json', required: true, multiple: false },
     ],
-    execution_mode: 'Reactive',
+    execution_mode: 'reactive',
   },
   {
     node_type: 'system-prompt',
-    category: 'Input',
+    category: 'input',
     label: 'System Prompt',
     description: 'System prompt configuration',
     inputs: [],
     outputs: [
-      { id: 'prompt', label: 'Prompt', data_type: 'String', required: true, multiple: false },
+      { id: 'prompt', label: 'Prompt', data_type: 'string', required: true, multiple: false },
     ],
-    execution_mode: 'Reactive',
+    execution_mode: 'reactive',
   },
 
   // Processing Nodes
   {
     node_type: 'llm-inference',
-    category: 'Processing',
+    category: 'processing',
     label: 'LLM Inference',
     description: 'Text completion via local LLM',
     inputs: [
-      { id: 'prompt', label: 'Prompt', data_type: 'Prompt', required: true, multiple: false },
-      { id: 'system_prompt', label: 'System Prompt', data_type: 'String', required: false, multiple: false },
+      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
+      { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
     ],
     outputs: [
-      { id: 'response', label: 'Response', data_type: 'String', required: true, multiple: false },
-      { id: 'stream', label: 'Stream', data_type: 'Stream', required: true, multiple: false },
+      { id: 'response', label: 'Response', data_type: 'string', required: true, multiple: false },
+      { id: 'stream', label: 'Stream', data_type: 'stream', required: true, multiple: false },
     ],
-    execution_mode: 'Stream',
+    execution_mode: 'stream',
   },
   {
     node_type: 'vision-analysis',
-    category: 'Processing',
+    category: 'processing',
     label: 'Vision Analysis',
     description: 'Analyze images with vision model',
     inputs: [
-      { id: 'image', label: 'Image', data_type: 'Image', required: true, multiple: false },
-      { id: 'prompt', label: 'Prompt', data_type: 'String', required: false, multiple: false },
+      { id: 'image', label: 'Image', data_type: 'image', required: true, multiple: false },
+      { id: 'prompt', label: 'Prompt', data_type: 'string', required: false, multiple: false },
     ],
     outputs: [
-      { id: 'analysis', label: 'Analysis', data_type: 'String', required: true, multiple: false },
+      { id: 'analysis', label: 'Analysis', data_type: 'string', required: true, multiple: false },
     ],
-    execution_mode: 'Manual',
+    execution_mode: 'manual',
   },
   {
     node_type: 'rag-search',
-    category: 'Processing',
+    category: 'processing',
     label: 'RAG Search',
     description: 'Search documentation with embeddings',
     inputs: [
-      { id: 'query', label: 'Query', data_type: 'String', required: true, multiple: false },
+      { id: 'query', label: 'Query', data_type: 'string', required: true, multiple: false },
     ],
     outputs: [
-      { id: 'documents', label: 'Documents', data_type: 'Document', required: true, multiple: true },
-      { id: 'context', label: 'Context', data_type: 'String', required: true, multiple: false },
+      { id: 'documents', label: 'Documents', data_type: 'document', required: true, multiple: true },
+      { id: 'context', label: 'Context', data_type: 'string', required: true, multiple: false },
     ],
-    execution_mode: 'Manual',
+    execution_mode: 'manual',
   },
 
   // Tool Nodes
   {
     node_type: 'read-file',
-    category: 'Tool',
+    category: 'tool',
     label: 'Read File',
     description: 'Read file contents from project',
     inputs: [
-      { id: 'path', label: 'Path', data_type: 'String', required: true, multiple: false },
+      { id: 'path', label: 'Path', data_type: 'string', required: true, multiple: false },
     ],
     outputs: [
-      { id: 'content', label: 'Content', data_type: 'String', required: true, multiple: false },
+      { id: 'content', label: 'Content', data_type: 'string', required: true, multiple: false },
     ],
-    execution_mode: 'Manual',
+    execution_mode: 'manual',
   },
   {
     node_type: 'write-file',
-    category: 'Tool',
+    category: 'tool',
     label: 'Write File',
     description: 'Write content to file in project',
     inputs: [
-      { id: 'path', label: 'Path', data_type: 'String', required: true, multiple: false },
-      { id: 'content', label: 'Content', data_type: 'String', required: true, multiple: false },
+      { id: 'path', label: 'Path', data_type: 'string', required: true, multiple: false },
+      { id: 'content', label: 'Content', data_type: 'string', required: true, multiple: false },
     ],
     outputs: [
-      { id: 'success', label: 'Success', data_type: 'Boolean', required: true, multiple: false },
+      { id: 'success', label: 'Success', data_type: 'boolean', required: true, multiple: false },
     ],
-    execution_mode: 'Manual',
+    execution_mode: 'manual',
   },
 
   // Output Nodes
   {
     node_type: 'text-output',
-    category: 'Output',
+    category: 'output',
     label: 'Text Output',
     description: 'Display text result',
     inputs: [
-      { id: 'text', label: 'Text', data_type: 'String', required: true, multiple: false },
+      { id: 'text', label: 'Text', data_type: 'string', required: true, multiple: false },
     ],
     outputs: [],
-    execution_mode: 'Reactive',
+    execution_mode: 'reactive',
   },
   {
     node_type: 'component-preview',
-    category: 'Output',
+    category: 'output',
     label: 'Component Preview',
     description: 'Render component on canvas',
     inputs: [
-      { id: 'component', label: 'Component', data_type: 'Component', required: true, multiple: false },
+      { id: 'component', label: 'Component', data_type: 'component', required: true, multiple: false },
     ],
     outputs: [
-      { id: 'rendered', label: 'Rendered', data_type: 'Boolean', required: true, multiple: false },
+      { id: 'rendered', label: 'Rendered', data_type: 'boolean', required: true, multiple: false },
     ],
-    execution_mode: 'Reactive',
+    execution_mode: 'reactive',
   },
 
   // Control Nodes
   {
     node_type: 'tool-loop',
-    category: 'Control',
+    category: 'control',
     label: 'Tool Loop',
     description: 'Multi-turn agent with tool execution',
     inputs: [
-      { id: 'prompt', label: 'Prompt', data_type: 'Prompt', required: true, multiple: false },
-      { id: 'system_prompt', label: 'System Prompt', data_type: 'String', required: false, multiple: false },
-      { id: 'tools', label: 'Tools', data_type: 'Tools', required: false, multiple: true },
-      { id: 'context', label: 'Context', data_type: 'String', required: false, multiple: false },
+      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
+      { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
+      { id: 'tools', label: 'Tools', data_type: 'tools', required: false, multiple: true },
+      { id: 'context', label: 'Context', data_type: 'string', required: false, multiple: false },
     ],
     outputs: [
-      { id: 'response', label: 'Response', data_type: 'String', required: true, multiple: false },
-      { id: 'stream', label: 'Stream', data_type: 'Stream', required: true, multiple: false },
-      { id: 'tool_calls', label: 'Tool Calls', data_type: 'Json', required: true, multiple: false },
+      { id: 'response', label: 'Response', data_type: 'string', required: true, multiple: false },
+      { id: 'stream', label: 'Stream', data_type: 'stream', required: true, multiple: false },
+      { id: 'tool_calls', label: 'Tool Calls', data_type: 'json', required: true, multiple: false },
     ],
-    execution_mode: 'Stream',
+    execution_mode: 'stream',
   },
 ];
 
@@ -200,20 +201,20 @@ export async function mockExecuteWorkflow(
 }
 
 export function mockValidateConnection(sourceType: string, targetType: string): boolean {
-  // Any accepts all types
-  if (targetType === 'Any' || sourceType === 'Any') return true;
+  // Any accepts all types (snake_case to match Rust serde)
+  if (targetType === 'any' || sourceType === 'any') return true;
 
   // Same type always valid
   if (sourceType === targetType) return true;
 
   // String can connect to Prompt
-  if (sourceType === 'String' && targetType === 'Prompt') return true;
+  if (sourceType === 'string' && targetType === 'prompt') return true;
 
   // Json can connect to String
-  if (sourceType === 'Json' && targetType === 'String') return true;
+  if (sourceType === 'json' && targetType === 'string') return true;
 
   // Document can connect to String
-  if (sourceType === 'Document' && targetType === 'String') return true;
+  if (sourceType === 'document' && targetType === 'string') return true;
 
   return false;
 }

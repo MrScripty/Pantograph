@@ -1,18 +1,20 @@
 // Workflow type definitions for the node-based visual programming system
+// NOTE: These types must match the Rust types in src-tauri/src/workflow/types.rs
+// Rust uses snake_case serialization for enums
 
 export type PortDataType =
-  | 'Any'
-  | 'String'
-  | 'Image'
-  | 'Component'
-  | 'Stream'
-  | 'Prompt'
-  | 'Tools'
-  | 'Embedding'
-  | 'Document'
-  | 'Json'
-  | 'Boolean'
-  | 'Number';
+  | 'any'
+  | 'string'
+  | 'image'
+  | 'component'
+  | 'stream'
+  | 'prompt'
+  | 'tools'
+  | 'embedding'
+  | 'document'
+  | 'json'
+  | 'boolean'
+  | 'number';
 
 export interface PortDefinition {
   id: string;
@@ -22,8 +24,8 @@ export interface PortDefinition {
   multiple: boolean;
 }
 
-export type NodeCategory = 'Input' | 'Processing' | 'Tool' | 'Output' | 'Control';
-export type ExecutionMode = 'Reactive' | 'Manual' | 'Stream';
+export type NodeCategory = 'input' | 'processing' | 'tool' | 'output' | 'control';
+export type ExecutionMode = 'reactive' | 'manual' | 'stream';
 
 export interface NodeDefinition {
   node_type: string;

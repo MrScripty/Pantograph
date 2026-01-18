@@ -36,12 +36,12 @@
 
   let categoryColor = $derived(
     {
-      Input: 'border-blue-600/50',
-      Processing: 'border-green-600/50',
-      Tool: 'border-amber-600/50',
-      Output: 'border-cyan-600/50',
-      Control: 'border-purple-600/50',
-    }[data.definition?.category || 'Processing']
+      input: 'border-blue-600/50',
+      processing: 'border-green-600/50',
+      tool: 'border-amber-600/50',
+      output: 'border-cyan-600/50',
+      control: 'border-purple-600/50',
+    }[data.definition?.category || 'processing']
   );
 </script>
 

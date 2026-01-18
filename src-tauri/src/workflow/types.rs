@@ -250,6 +250,63 @@ impl WorkflowGraph {
     }
 }
 
+/// Viewport state for workflow editor
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Viewport {
+    pub x: f64,
+    pub y: f64,
+    pub zoom: f64,
+}
+
+/// Metadata for a saved workflow
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowMetadata {
+    /// Display name
+    pub name: String,
+    /// Optional description
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// ISO 8601 timestamp of creation
+    pub created: String,
+    /// ISO 8601 timestamp of last modification
+    pub modified: String,
+}
+
+/// Complete workflow file structure for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowFile {
+    /// File format version for forward compatibility
+    pub version: String,
+    /// Workflow metadata
+    pub metadata: WorkflowMetadata,
+    /// The workflow graph
+    pub graph: WorkflowGraph,
+    /// Optional viewport state for restoring editor position
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<Viewport>,
+}
+
+impl WorkflowFile {
+    /// Current file format version
+    pub const CURRENT_VERSION: &'static str = "1.0";
+
+    /// Create a new workflow file
+    pub fn new(name: impl Into<String>, graph: WorkflowGraph) -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        Self {
+            version: Self::CURRENT_VERSION.to_string(),
+            metadata: WorkflowMetadata {
+                name: name.into(),
+                description: None,
+                created: now.clone(),
+                modified: now,
+            },
+            graph,
+            viewport: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

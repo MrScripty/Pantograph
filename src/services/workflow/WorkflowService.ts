@@ -12,8 +12,8 @@ import {
   mockValidateConnection,
 } from './mocks';
 
-// Toggle this when Rust backend is ready
-const USE_MOCKS = true;
+// Set to false to use real Rust backend, true to use frontend mocks
+const USE_MOCKS = false;
 
 export class WorkflowService {
   private channel: Channel<WorkflowEvent> | null = null;
