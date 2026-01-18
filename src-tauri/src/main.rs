@@ -5,6 +5,7 @@ mod config;
 mod constants;
 mod hotload_sandbox;
 mod llm;
+mod workflow;
 
 use agent::create_rag_manager;
 use config::AppConfig;
@@ -183,6 +184,12 @@ fn main() {
             get_recovery_attempt_count,
             trigger_recovery,
             reset_recovery_state,
+            // Workflow commands
+            workflow::commands::execute_workflow,
+            workflow::commands::validate_workflow_connection,
+            workflow::commands::get_node_definitions,
+            workflow::commands::get_node_definitions_by_category,
+            workflow::commands::get_node_definition,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
