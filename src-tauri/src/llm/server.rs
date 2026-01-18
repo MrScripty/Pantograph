@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 #[cfg(unix)]
 use std::process::Command;
 #[cfg(unix)]
@@ -10,10 +9,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
-use tokio::sync::RwLock;
 
-use super::types::LLMStatus;
-use crate::config::{DeviceConfig, ServerModeInfo};
+use crate::config::DeviceConfig;
 use crate::constants::{defaults, device_types, hosts, ports, timeouts};
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
@@ -55,8 +52,6 @@ fn oom_error_message(hint: Option<&str>) -> String {
 pub enum ServerMode {
     /// No server running
     None,
-    /// Connected to external server (remote API or local server like LM Studio)
-    External { url: String },
     /// Sidecar running in inference mode (VLM with vision support)
     SidecarInference {
         port: u16,
@@ -131,48 +126,6 @@ impl LlamaServer {
 
         let _ = fs::remove_file(&pid_path);
         Ok(())
-    }
-
-    pub async fn connect_external(&mut self, url: &str) -> Result<(), String> {
-        // Stop any existing sidecar
-        self.stop();
-
-        // Validate the URL by making a simple request
-        let client = reqwest::Client::new();
-        let health_url = format!("{}/health", url.trim_end_matches('/'));
-
-        match client.get(&health_url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                self.mode = ServerMode::External { url: url.to_string() };
-                self.ready = true;
-                Ok(())
-            }
-            Ok(resp) => {
-                // Some servers don't have /health, try /v1/models instead
-                let models_url = format!("{}/v1/models", url.trim_end_matches('/'));
-                match client.get(&models_url).send().await {
-                    Ok(resp2) if resp2.status().is_success() => {
-                        self.mode = ServerMode::External { url: url.to_string() };
-                        self.ready = true;
-                        Ok(())
-                    }
-                    _ => Err(format!("Server responded with status: {}", resp.status())),
-                }
-            }
-            Err(e) => Err(format!("Failed to connect to server at {}: {}", url, e)),
-        }
-    }
-
-    /// Start sidecar in inference mode (VLM with vision support)
-    /// This is the original start_sidecar method, renamed for clarity
-    pub async fn start_sidecar(
-        &mut self,
-        app: &AppHandle,
-        model_path: &str,
-        mmproj_path: &str,
-        device: &DeviceConfig,
-    ) -> Result<(), String> {
-        self.start_sidecar_inference(app, model_path, mmproj_path, device).await
     }
 
     /// Start sidecar in inference mode (VLM with vision support)
@@ -449,7 +402,6 @@ impl LlamaServer {
     pub fn base_url(&self) -> Option<String> {
         match &self.mode {
             ServerMode::None => None,
-            ServerMode::External { url } => Some(url.trim_end_matches('/').to_string()),
             ServerMode::SidecarInference { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
             ServerMode::SidecarEmbedding { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
         }
@@ -457,64 +409,6 @@ impl LlamaServer {
 
     pub fn is_ready(&self) -> bool {
         self.ready
-    }
-
-    /// Check if currently in external mode
-    pub fn is_external(&self) -> bool {
-        matches!(self.mode, ServerMode::External { .. })
-    }
-
-    /// Check if currently running a sidecar (either inference or embedding)
-    pub fn is_sidecar(&self) -> bool {
-        matches!(self.mode, ServerMode::SidecarInference { .. } | ServerMode::SidecarEmbedding { .. })
-    }
-
-    /// Check if currently in embedding mode
-    pub fn is_embedding_mode(&self) -> bool {
-        matches!(self.mode, ServerMode::SidecarEmbedding { .. })
-    }
-
-    /// Check if currently in inference mode
-    pub fn is_inference_mode(&self) -> bool {
-        matches!(self.mode, ServerMode::SidecarInference { .. })
-    }
-
-    /// Get the current mode
-    pub fn current_mode(&self) -> &ServerMode {
-        &self.mode
-    }
-
-    pub fn status(&self) -> LLMStatus {
-        LLMStatus {
-            ready: self.ready,
-            mode: match &self.mode {
-                ServerMode::None => "none".to_string(),
-                ServerMode::External { .. } => "external".to_string(),
-                ServerMode::SidecarInference { .. } => "sidecar_inference".to_string(),
-                ServerMode::SidecarEmbedding { .. } => "sidecar_embedding".to_string(),
-            },
-            url: self.base_url(),
-        }
-    }
-
-    /// Get detailed server mode info for frontend
-    pub fn mode_info(&self) -> ServerModeInfo {
-        ServerModeInfo {
-            mode: match &self.mode {
-                ServerMode::None => "none".to_string(),
-                ServerMode::External { .. } => "external".to_string(),
-                ServerMode::SidecarInference { .. } => "sidecar_inference".to_string(),
-                ServerMode::SidecarEmbedding { .. } => "sidecar_embedding".to_string(),
-            },
-            ready: self.ready,
-            url: self.base_url(),
-            model_path: match &self.mode {
-                ServerMode::SidecarInference { model_path, .. } => Some(model_path.clone()),
-                ServerMode::SidecarEmbedding { model_path, .. } => Some(model_path.clone()),
-                _ => None,
-            },
-            is_embedding_mode: self.is_embedding_mode(),
-        }
     }
 
     pub fn stop(&mut self) {
@@ -587,5 +481,3 @@ impl Drop for LlamaServer {
         self.stop();
     }
 }
-
-pub type SharedLlamaServer = Arc<RwLock<LlamaServer>>;

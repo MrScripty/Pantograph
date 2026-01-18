@@ -4,15 +4,13 @@
 //! providing a unified interface for the rest of the application. It manages backend
 //! lifecycle, switching, and forwards requests to the active backend.
 
-use std::pin::Pin;
 use std::sync::Arc;
 
-use futures_util::Stream;
 use tokio::sync::RwLock;
 
 use super::backend::{
-    BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry, ChatChunk,
-    EmbeddingResult, InferenceBackend, LlamaCppBackend,
+    BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry,
+    InferenceBackend, LlamaCppBackend,
 };
 use super::embedding_server::EmbeddingServer;
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
@@ -22,9 +20,6 @@ use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 pub enum GatewayError {
     #[error("Backend error: {0}")]
     Backend(#[from] BackendError),
-
-    #[error("No backend active")]
-    NoBackend,
 
     #[error("Backend switch failed: {0}")]
     SwitchFailed(String),
@@ -64,11 +59,6 @@ impl InferenceGateway {
             embedding_server: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
         }
-    }
-
-    /// Get the registry for backend information
-    pub fn registry(&self) -> &BackendRegistry {
-        &self.registry
     }
 
     /// Get the name of the currently active backend
@@ -241,20 +231,6 @@ impl InferenceGateway {
         false
     }
 
-    /// Get the current embedding memory mode
-    pub async fn embedding_memory_mode(&self) -> EmbeddingMemoryMode {
-        self.embedding_memory_mode.read().await.clone()
-    }
-
-    /// Health check the embedding server
-    pub async fn embedding_server_health_check(&self) -> bool {
-        let server = self.embedding_server.read().await;
-        if let Some(ref srv) = *server {
-            return srv.health_check().await;
-        }
-        false
-    }
-
     /// Check if currently in embedding mode
     pub async fn is_embedding_mode(&self) -> bool {
         *self.embedding_mode.read().await
@@ -297,12 +273,6 @@ impl InferenceGateway {
         guard.is_ready()
     }
 
-    /// Health check the current backend
-    pub async fn health_check(&self) -> bool {
-        let guard = self.backend.read().await;
-        guard.health_check().await
-    }
-
     /// Get the base URL of the current backend (if HTTP-based)
     pub async fn base_url(&self) -> Option<String> {
         let guard = self.backend.read().await;
@@ -313,53 +283,6 @@ impl InferenceGateway {
     pub async fn capabilities(&self) -> BackendCapabilities {
         let guard = self.backend.read().await;
         guard.capabilities()
-    }
-
-    // ─── INFERENCE METHODS ──────────────────────────────────────────
-
-    /// Stream chat completion responses
-    ///
-    /// Takes a JSON-serialized OpenAI-compatible request and returns
-    /// a stream of response chunks.
-    pub async fn chat_completion_stream(
-        &self,
-        request_json: String,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
-    {
-        let guard = self.backend.read().await;
-        if !guard.is_ready() {
-            return Err(GatewayError::Backend(BackendError::NotReady));
-        }
-        guard
-            .chat_completion_stream(request_json)
-            .await
-            .map_err(GatewayError::Backend)
-    }
-
-    /// Generate embeddings for the given texts
-    pub async fn embeddings(
-        &self,
-        texts: Vec<String>,
-        model: &str,
-    ) -> Result<Vec<EmbeddingResult>, GatewayError> {
-        let guard = self.backend.read().await;
-        if !guard.is_ready() {
-            return Err(GatewayError::Backend(BackendError::NotReady));
-        }
-        guard
-            .embeddings(texts, model)
-            .await
-            .map_err(GatewayError::Backend)
-    }
-
-    // ─── LEGACY COMPATIBILITY ───────────────────────────────────────
-
-    /// Get a reference to the underlying backend for legacy code
-    ///
-    /// This is a temporary method for gradual migration. New code should
-    /// use the gateway methods directly.
-    pub fn backend(&self) -> Arc<RwLock<Box<dyn InferenceBackend>>> {
-        self.backend.clone()
     }
 }
 

@@ -202,15 +202,6 @@ impl AppConfig {
         Ok(())
     }
 
-    /// Check if sidecar models are configured
-    pub fn has_sidecar_models(&self) -> bool {
-        self.models.vlm_model_path.is_some() && self.models.vlm_mmproj_path.is_some()
-    }
-
-    /// Check if embedding model is configured
-    pub fn has_embedding_model(&self) -> bool {
-        self.models.embedding_model_path.is_some()
-    }
 }
 
 /// Configuration errors

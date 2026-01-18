@@ -51,11 +51,6 @@ impl EmbeddingServer {
         })
     }
 
-    /// Get the minimum VRAM required for embedding model
-    pub fn required_vram_mb() -> u64 {
-        EMBEDDING_MODEL_VRAM_MB
-    }
-
     /// Start the embedding server based on memory mode
     ///
     /// # Arguments
@@ -291,16 +286,6 @@ impl EmbeddingServer {
         self.ready && self.child.is_some()
     }
 
-    /// Get the current memory mode
-    pub fn mode(&self) -> &EmbeddingMemoryMode {
-        &self.mode
-    }
-
-    /// Get the port number
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     /// Stop the embedding server
     pub fn stop(&mut self) {
         if let Some(child) = self.child.take() {
@@ -317,18 +302,6 @@ impl EmbeddingServer {
         self.pid_file = None;
     }
 
-    /// Perform a health check on the server
-    pub async fn health_check(&self) -> bool {
-        if !self.is_ready() {
-            return false;
-        }
-
-        let health_url = format!("{}/health", self.base_url());
-        match reqwest::get(&health_url).await {
-            Ok(resp) => resp.status().is_success(),
-            Err(_) => false,
-        }
-    }
 }
 
 impl Drop for EmbeddingServer {
@@ -378,10 +351,5 @@ mod tests {
     fn test_base_url() {
         let server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
         assert_eq!(server.base_url(), "http://127.0.0.1:8081");
-    }
-
-    #[test]
-    fn test_required_vram() {
-        assert_eq!(EmbeddingServer::required_vram_mb(), 800);
     }
 }

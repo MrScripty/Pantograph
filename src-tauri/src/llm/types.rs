@@ -1,18 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ServerConfig {
-    #[serde(rename = "external")]
-    External { url: String },
-    #[serde(rename = "sidecar")]
-    Sidecar {
-        model_path: String,
-        mmproj_path: String,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMStatus {
     pub ready: bool,
     pub mode: String,
