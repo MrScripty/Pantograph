@@ -10,17 +10,23 @@ use agent::create_rag_manager;
 use config::AppConfig;
 use constants::paths::DATA_DIR;
 use llm::{
-    check_embedding_server, check_llama_binaries, check_ollama_binary, clear_rag_cache,
-    connect_to_server, download_llama_binaries, download_ollama_binary, get_app_config,
-    get_backend_capabilities, get_current_backend, get_device_config, get_embedding_memory_mode,
-    get_embedding_server_url, get_llm_status, get_model_config, get_rag_status, get_sandbox_config,
-    get_server_mode, get_svelte_docs_status, get_system_prompt, index_docs_with_switch,
-    index_rag_documents, is_embedding_server_ready, list_backends, list_chunkable_docs, list_devices,
-    load_rag_from_disk, preview_doc_chunks, run_agent, search_rag, send_vision_prompt, set_app_config,
-    set_device_config, set_embedding_memory_mode, set_embedding_server_url, set_model_config,
-    set_sandbox_config, set_system_prompt, start_sidecar_embedding, start_sidecar_inference,
-    start_sidecar_llm, stop_llm, switch_backend, update_svelte_docs, InferenceGateway, LlamaServer,
-    SharedAppConfig, SharedGateway,
+    check_embedding_server, check_health_now, check_llama_binaries, check_ollama_binary,
+    check_port_status, clear_rag_cache, connect_to_server, download_llama_binaries,
+    download_ollama_binary, find_alternate_port, get_app_config, get_backend_capabilities,
+    get_component_history, get_current_backend, get_default_port, get_device_config,
+    get_embedding_memory_mode, get_embedding_server_url, get_health_status, get_llm_status,
+    get_model_config, get_rag_status, get_recovery_attempt_count, get_recovery_config,
+    get_redo_count, get_sandbox_config, get_server_mode, get_svelte_docs_status, get_system_prompt,
+    index_docs_with_switch, index_rag_documents, is_embedding_server_ready,
+    is_health_monitor_running, is_recovery_in_progress, list_backends, list_chunkable_docs,
+    list_devices, list_generated_components, load_rag_from_disk, preview_doc_chunks,
+    redo_component_change, reset_recovery_state, resolve_conflict, run_agent, search_rag,
+    send_vision_prompt, set_app_config, set_device_config, set_embedding_memory_mode,
+    set_embedding_server_url, set_model_config, set_sandbox_config, set_system_prompt,
+    start_health_monitor, start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm,
+    stop_health_monitor, stop_llm, switch_backend, trigger_recovery, undo_component_change,
+    update_svelte_docs, validate_component, InferenceGateway, LlamaServer, SharedAppConfig,
+    SharedGateway,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -150,9 +156,33 @@ fn main() {
             // Sandbox configuration commands
             get_sandbox_config,
             set_sandbox_config,
+            validate_component,
             // System prompt commands
             get_system_prompt,
             set_system_prompt,
+            // Version commands (undo/redo for generated components)
+            undo_component_change,
+            redo_component_change,
+            get_component_history,
+            get_redo_count,
+            list_generated_components,
+            // Port management commands
+            check_port_status,
+            resolve_conflict,
+            find_alternate_port,
+            get_default_port,
+            // Health monitoring commands
+            start_health_monitor,
+            stop_health_monitor,
+            get_health_status,
+            check_health_now,
+            is_health_monitor_running,
+            // Recovery commands
+            get_recovery_config,
+            is_recovery_in_progress,
+            get_recovery_attempt_count,
+            trigger_recovery,
+            reset_recovery_state,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
