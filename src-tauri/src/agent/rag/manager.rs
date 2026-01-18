@@ -27,8 +27,6 @@ use crate::agent::docs::DocsManager;
 use crate::agent::docs_index::IndexEntry;
 use crate::agent::embeddings::{check_embedding_server, create_embedding_client, get_embedding_model_name};
 use crate::agent::types::DocChunk;
-use crate::config::EmbeddingMemoryMode;
-use crate::llm::{BackendConfig, SharedGateway};
 
 /// Number of chunks to process per embedding batch for progress updates.
 /// Small enough for frequent UI updates, large enough to minimize HTTP overhead.
@@ -48,8 +46,6 @@ pub struct RagManager {
     embedding_dim: Option<i32>,
     /// Chunking configuration
     chunk_config: ChunkConfig,
-    /// Embedding backend config for sequential mode switching
-    embedding_config: Option<BackendConfig>,
 }
 
 impl RagManager {
@@ -62,7 +58,6 @@ impl RagManager {
             db: None,
             embedding_dim: None,
             chunk_config: ChunkConfig::default(),
-            embedding_config: None,
         }
     }
 
@@ -89,170 +84,6 @@ impl RagManager {
         }
     }
 
-    /// Set the embedding backend config for sequential mode
-    ///
-    /// This config is used when we need to temporarily switch the main
-    /// backend to embedding mode for search operations.
-    pub fn set_embedding_config(&mut self, config: BackendConfig) {
-        self.embedding_config = Some(config);
-    }
-
-    /// Get the stored embedding config
-    pub fn embedding_config(&self) -> Option<&BackendConfig> {
-        self.embedding_config.as_ref()
-    }
-
-    // ─── GATEWAY-AWARE SEARCH METHODS ──────────────────────────────────
-
-    /// Perform semantic search with gateway support for different memory modes
-    ///
-    /// This method handles all three memory modes:
-    /// - CpuParallel/GpuParallel: Uses the dedicated embedding server
-    /// - Sequential: Temporarily switches the main backend to embedding mode
-    ///
-    /// # Arguments
-    /// * `query` - The search query text
-    /// * `limit` - Maximum number of results
-    /// * `gateway` - The inference gateway
-    /// * `app` - Tauri app handle (needed for sequential mode)
-    /// * `mode` - Current embedding memory mode
-    pub async fn search_with_gateway(
-        &self,
-        query: &str,
-        limit: usize,
-        gateway: &SharedGateway,
-        app: &tauri::AppHandle,
-        mode: EmbeddingMemoryMode,
-    ) -> Result<Vec<DocChunk>, RagError> {
-        match mode {
-            EmbeddingMemoryMode::CpuParallel | EmbeddingMemoryMode::GpuParallel => {
-                // Parallel mode: use the dedicated embedding server URL
-                let url = gateway.embedding_url().await
-                    .ok_or(RagError::ServerNotAvailable)?;
-                self.search_with_url(&url, query, limit).await
-            }
-            EmbeddingMemoryMode::Sequential => {
-                // Sequential mode: need to swap models
-                self.search_with_swap(query, limit, gateway, app).await
-            }
-        }
-    }
-
-    /// Perform search using a specific embedding server URL
-    ///
-    /// This is the core search implementation that creates embeddings
-    /// from the given URL and queries LanceDB.
-    pub async fn search_with_url(
-        &self,
-        embedding_url: &str,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<DocChunk>, RagError> {
-        let db = self.db.as_ref().ok_or(RagError::DocsNotAvailable)?;
-
-        // Open the chunks table
-        let table = db.open_table(CHUNKS_TABLE_NAME).execute().await?;
-
-        // Create embedding for query
-        let client = create_embedding_client(embedding_url)?;
-        let model_name = get_embedding_model_name(embedding_url).await;
-        let embedding_model = client.embedding_model(&model_name);
-
-        // Get query embedding
-        let query_embedding = EmbeddingModel::embed_text(&embedding_model, query)
-            .await
-            .map_err(|e| RagError::Embedding(e.to_string()))?;
-
-        // Perform vector search
-        let mut results = table
-            .vector_search(query_embedding.vec.clone())
-            .map_err(|e| RagError::LanceDb(e.to_string()))?
-            .limit(limit)
-            .execute()
-            .await?;
-
-        // Convert results to DocChunks
-        let mut chunks = Vec::new();
-        while let Some(batch_result) = results.try_next().await.transpose() {
-            let batch = batch_result.map_err(|e| RagError::LanceDb(e.to_string()))?;
-
-            // Extract columns
-            let ids = get_string_col(&batch, "id")?;
-            let doc_ids = get_string_col(&batch, "doc_id")?;
-            let titles = get_string_col(&batch, "title")?;
-            let doc_titles = get_string_col(&batch, "doc_title")?;
-            let sections = get_string_col(&batch, "section")?;
-            let chunk_indices = get_i32_col(&batch, "chunk_index")?;
-            let total_chunks_col = get_i32_col(&batch, "total_chunks")?;
-            let header_contexts = get_string_col(&batch, "header_context")?;
-            let contents = get_string_col(&batch, "content")?;
-            let has_codes = get_bool_col(&batch, "has_code")?;
-
-            for i in 0..batch.num_rows() {
-                chunks.push(DocChunk {
-                    id: ids.value(i).to_string(),
-                    doc_id: doc_ids.value(i).to_string(),
-                    title: titles.value(i).to_string(),
-                    doc_title: doc_titles.value(i).to_string(),
-                    section: sections.value(i).to_string(),
-                    chunk_index: chunk_indices.value(i) as u32,
-                    total_chunks: total_chunks_col.value(i) as u32,
-                    header_context: header_contexts.value(i).to_string(),
-                    content: contents.value(i).to_string(),
-                    has_code: has_codes.value(i),
-                });
-            }
-        }
-
-        Ok(chunks)
-    }
-
-    /// Perform search with model swapping (sequential mode)
-    ///
-    /// This temporarily switches the main backend to embedding mode,
-    /// performs the search, then switches back to inference mode.
-    async fn search_with_swap(
-        &self,
-        query: &str,
-        limit: usize,
-        gateway: &SharedGateway,
-        app: &tauri::AppHandle,
-    ) -> Result<Vec<DocChunk>, RagError> {
-        let was_inference = gateway.is_inference_mode().await;
-        let restore_config = gateway.last_inference_config().await;
-        let embedding_config = self.embedding_config.as_ref()
-            .ok_or(RagError::ServerNotAvailable)?;
-
-        // Switch to embedding mode if currently in inference mode
-        if was_inference {
-            log::info!("Sequential mode: switching to embedding model for search");
-            gateway.start(embedding_config, app).await
-                .map_err(|e| RagError::Client(format!("Failed to switch to embedding mode: {}", e)))?;
-
-            // Wait a moment for the server to initialize
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        }
-
-        // Get the embedding URL (now from main server)
-        let url = gateway.base_url().await
-            .ok_or(RagError::ServerNotAvailable)?;
-
-        // Perform search
-        let result = self.search_with_url(&url, query, limit).await;
-
-        // Restore inference mode
-        if was_inference {
-            log::info!("Sequential mode: restoring inference model");
-            if let Some(config) = restore_config {
-                if let Err(e) = gateway.start(&config, app).await {
-                    log::error!("Failed to restore inference mode: {}", e);
-                }
-            }
-        }
-
-        result
-    }
-
     /// Update docs status from DocsManager
     pub fn update_docs_status(&mut self, docs_manager: &DocsManager) {
         let status = docs_manager.get_status();
@@ -272,7 +103,10 @@ impl RagManager {
             let db = lancedb::connect(&db_path).execute().await?;
             self.db = Some(db);
         }
-        Ok(self.db.as_ref().unwrap())
+        // Safe: we just set self.db = Some(...) above if it was None
+        self.db
+            .as_ref()
+            .ok_or_else(|| RagError::LanceDb("Database connection unexpectedly None".to_string()))
     }
 
     /// Check if we need to re-index

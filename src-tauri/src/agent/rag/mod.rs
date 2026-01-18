@@ -8,11 +8,8 @@ mod lancedb;
 mod manager;
 mod types;
 
-// Re-export error types
-pub use error::RagError;
-
 // Re-export data types
 pub use types::{IndexingProgress, RagStatus, SvelteDoc};
 
 // Re-export manager
-pub use manager::{create_rag_manager, RagManager, SharedRagManager};
+pub use manager::{create_rag_manager, SharedRagManager};
