@@ -5,12 +5,32 @@
 //! such as using primitive values as components.
 
 use boa_engine::{Context, Source};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
+
+// Pre-compiled regex patterns for better performance and compile-time validation
+static SCRIPT_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"<script[^>]*>([\s\S]*?)</script>"#).expect("Invalid script regex"));
+static COMPONENT_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"<([A-Z][a-zA-Z0-9]*)[^>]*/?>").expect("Invalid component regex"));
+static TYPE_ANNOTATION_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r":\s*[A-Za-z_][A-Za-z0-9_<>,\s\[\]|&]*\s*=").expect("Invalid type annotation regex")
+});
+static PARAM_TYPE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(\w+)\s*:\s*[A-Za-z_][A-Za-z0-9_<>,\s\[\]|&]*").expect("Invalid param type regex")
+});
+static AS_CAST_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\s+as\s+[A-Za-z_][A-Za-z0-9_<>,\s\[\]|&]*").expect("Invalid as cast regex")
+});
+static INTERFACE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?m)^\s*(export\s+)?(interface|type)\s+\w+[^;{]*(\{[^}]*\}|=[^;]+);?\s*$")
+        .expect("Invalid interface regex")
+});
 
 #[derive(Debug, Error)]
 pub enum RuntimeValidationError {
@@ -22,17 +42,12 @@ pub enum RuntimeValidationError {
 
     #[error("Runtime error: {0}")]
     RuntimeError(String),
-
-    #[error("Failed to extract script: {0}")]
-    ExtractionError(String),
 }
 
 /// Extract JavaScript code from a Svelte component's <script> block.
 fn extract_script_content(svelte_source: &str) -> Option<String> {
     // Match <script> or <script lang="ts"> blocks
-    let script_regex = Regex::new(r#"<script[^>]*>([\s\S]*?)</script>"#).ok()?;
-
-    if let Some(captures) = script_regex.captures(svelte_source) {
+    if let Some(captures) = SCRIPT_REGEX.captures(svelte_source) {
         Some(captures.get(1)?.as_str().to_string())
     } else {
         None
@@ -44,12 +59,9 @@ fn extract_component_usage(svelte_source: &str) -> Vec<String> {
     let mut components = Vec::new();
 
     // Match capitalized tags that look like component usage: <MyComponent /> or <MyComponent>
-    let component_regex = Regex::new(r"<([A-Z][a-zA-Z0-9]*)[^>]*/?>");
-    if let Ok(regex) = component_regex {
-        for cap in regex.captures_iter(svelte_source) {
-            if let Some(name) = cap.get(1) {
-                components.push(name.as_str().to_string());
-            }
+    for cap in COMPONENT_REGEX.captures_iter(svelte_source) {
+        if let Some(name) = cap.get(1) {
+            components.push(name.as_str().to_string());
         }
     }
 
@@ -62,20 +74,16 @@ fn strip_typescript(script_content: &str) -> String {
     let mut result = script_content.to_string();
 
     // Remove type annotations from variable declarations: const x: Type = ...
-    let type_annotation_regex = Regex::new(r":\s*[A-Za-z_][A-Za-z0-9_<>,\s\[\]|&]*\s*=").unwrap();
-    result = type_annotation_regex.replace_all(&result, " =").to_string();
+    result = TYPE_ANNOTATION_REGEX.replace_all(&result, " =").to_string();
 
     // Remove type annotations from function parameters: (x: Type) => ...
-    let param_type_regex = Regex::new(r"(\w+)\s*:\s*[A-Za-z_][A-Za-z0-9_<>,\s\[\]|&]*").unwrap();
-    result = param_type_regex.replace_all(&result, "$1").to_string();
+    result = PARAM_TYPE_REGEX.replace_all(&result, "$1").to_string();
 
     // Remove 'as Type' casts
-    let as_cast_regex = Regex::new(r"\s+as\s+[A-Za-z_][A-Za-z0-9_<>,\s\[\]|&]*").unwrap();
-    result = as_cast_regex.replace_all(&result, "").to_string();
+    result = AS_CAST_REGEX.replace_all(&result, "").to_string();
 
     // Remove interface/type declarations (entire lines)
-    let interface_regex = Regex::new(r"(?m)^\s*(export\s+)?(interface|type)\s+\w+[^;{]*(\{[^}]*\}|=[^;]+);?\s*$").unwrap();
-    result = interface_regex.replace_all(&result, "").to_string();
+    result = INTERFACE_REGEX.replace_all(&result, "").to_string();
 
     result
 }
