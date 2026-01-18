@@ -1,6 +1,9 @@
 import type { SvelteComponent, ComponentType } from 'svelte';
 import type { ImportResult, ValidationResult, LoggerInterface, HotloadConfig } from '../types';
 import { defaultLogger } from '../types';
+import { getComponentModules, refreshGlobModules, getModuleCount } from './GlobRegistry';
+import { fastHash, getValidationState, setValidationState, invalidatePath } from './ValidationCache';
+import { invoke } from '@tauri-apps/api/core';
 
 /**
  * Default import timeout in milliseconds.
@@ -13,12 +16,12 @@ const DEFAULT_IMPORT_TIMEOUT = 10000;
 const DEFAULT_BASE_PATH = '/src/generated/';
 
 /**
- * Glob-based component modules for HMR support.
- * Vite tracks these modules and provides native HMR when they change.
+ * Result from validate_component Tauri command.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let componentModules: Record<string, () => Promise<any>> =
-  import.meta.glob('/src/generated/**/*.svelte');
+interface TauriValidationResult {
+  valid: boolean;
+  error?: string;
+}
 
 /**
  * HMR update listeners - called when components are hot-reloaded.
@@ -29,6 +32,9 @@ const hmrListeners: Set<HmrUpdateListener> = new Set();
 /**
  * Set up HMR handling for generated components.
  * When a component file changes, Vite will trigger this handler.
+ *
+ * Note: The glob itself is now in GlobRegistry.ts which has its own HMR boundary.
+ * This prevents the glob invalidation from cascading up to HotLoadRegistry and beyond.
  */
 if (import.meta.hot) {
   // Listen for specific file updates via Vite's HMR
@@ -39,10 +45,39 @@ if (import.meta.hot) {
       .map((update: { path: string }) => update.path);
 
     if (generatedUpdates.length > 0) {
-      // Refresh the glob to pick up changes
-      componentModules = import.meta.glob('/src/generated/**/*.svelte');
+      // Refresh the glob to pick up changes (via GlobRegistry)
+      refreshGlobModules();
       hmrListeners.forEach(listener => listener(generatedUpdates));
     }
+  });
+
+  // Listen for file deletions from our Vite plugin (generated-components-hmr)
+  import.meta.hot.on('generated-component-deleted', (data: { file: string }) => {
+    console.log('[HMR] Generated component deleted:', data.file);
+    // Refresh the glob to remove the deleted file reference
+    refreshGlobModules();
+    // Notify listeners about the deletion
+    hmrListeners.forEach(listener => listener([data.file]));
+  });
+
+  // Listen for new file creations from our Vite plugin
+  import.meta.hot.on('generated-component-created', (data: { file: string }) => {
+    console.log('[HMR] Generated component created:', data.file);
+    // Refresh the glob to include the new file
+    refreshGlobModules();
+    // Notify listeners about the new file
+    hmrListeners.forEach(listener => listener([data.file]));
+  });
+
+  // Listen for file updates from our Vite plugin (used during git undo/redo)
+  import.meta.hot.on('generated-component-updated', (data: { file: string }) => {
+    console.log('[HMR] Generated component updated:', data.file);
+    // Clear validation cache for this file so it gets re-validated
+    invalidatePath(data.file);
+    // Refresh the glob in case file list changed
+    refreshGlobModules();
+    // Notify listeners about the update
+    hmrListeners.forEach(listener => listener([data.file]));
   });
 }
 
@@ -107,6 +142,54 @@ export class ImportManager {
   }
 
   /**
+   * Validate a component file before importing.
+   * Uses hash-based caching to avoid unnecessary re-validation.
+   */
+  private async validateBeforeImport(fullPath: string): Promise<{ valid: boolean; error?: string }> {
+    try {
+      // Fetch the file content to compute hash
+      const response = await fetch(fullPath);
+      if (!response.ok) {
+        return { valid: false, error: `File not found: ${fullPath}` };
+      }
+
+      const content = await response.text();
+      const contentHash = fastHash(content);
+
+      // Check validation cache
+      const cached = getValidationState(fullPath, contentHash);
+      if (cached) {
+        this.logger.log('VALIDATION_CACHE_HIT', { path: fullPath, valid: cached.valid });
+        return { valid: cached.valid, error: cached.error };
+      }
+
+      // Hash differs or not cached - validate via Tauri
+      this.logger.log('VALIDATION_RUNNING', { path: fullPath });
+
+      // Pass the relative path - the Tauri backend will resolve to absolute path
+      const result = await invoke<TauriValidationResult>('validate_component', {
+        relativePath: fullPath,
+      });
+
+      // Cache the validation result
+      setValidationState(fullPath, contentHash, result.valid, result.error);
+
+      this.logger.log('VALIDATION_COMPLETE', {
+        path: fullPath,
+        valid: result.valid,
+        error: result.error,
+      });
+
+      return { valid: result.valid, error: result.error };
+    } catch (error) {
+      // If validation fails (e.g., Tauri not available), log but allow import
+      // This ensures the app works even if validation is broken
+      this.logger.log('VALIDATION_ERROR', { path: fullPath, error: String(error) }, 'warn');
+      return { valid: true }; // Fail open - let Vite catch actual errors
+    }
+  }
+
+  /**
    * Perform the actual import with timeout.
    */
   private async doImport(path: string): Promise<ImportResult> {
@@ -116,8 +199,21 @@ export class ImportManager {
     this.logger.log('IMPORT_STARTING', { path, fullPath, timeout: this.importTimeout });
 
     try {
+      // Validate the component before importing to prevent Vite freeze
+      const preValidation = await this.validateBeforeImport(fullPath);
+      if (!preValidation.valid) {
+        const duration = Date.now() - startTime;
+        this.logger.log('IMPORT_BLOCKED_BY_VALIDATION', { path, error: preValidation.error }, 'error');
+        return {
+          success: false,
+          component: null,
+          error: preValidation.error ?? 'Component failed pre-import validation',
+          duration,
+        };
+      }
+
       // First, try to use the glob-based import (supports HMR)
-      const importer = componentModules[fullPath];
+      const importer = getComponentModules()[fullPath];
 
       if (importer) {
         // Use glob-based import - this supports HMR
@@ -219,8 +315,8 @@ export class ImportManager {
    */
   private refreshGlob(): void {
     try {
-      componentModules = import.meta.glob('/src/generated/**/*.svelte');
-      this.logger.log('GLOB_REFRESHED', { count: Object.keys(componentModules).length });
+      refreshGlobModules();
+      this.logger.log('GLOB_REFRESHED', { count: getModuleCount() });
     } catch (e) {
       this.logger.log('GLOB_REFRESH_FAILED', { error: String(e) }, 'warn');
     }
@@ -357,7 +453,7 @@ export class ImportManager {
    * Get all component paths known to the glob.
    */
   public getKnownPaths(): string[] {
-    return Object.keys(componentModules).map(p => p.replace(this.basePath, ''));
+    return Object.keys(getComponentModules()).map(p => p.replace(this.basePath, ''));
   }
 }
 
