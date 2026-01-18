@@ -11,6 +11,7 @@
   import { Logger } from '../services/Logger';
   import { componentRegistry, importManager } from '../services/HotLoadRegistry';
   import { refreshGlobModules } from '$lib/hotload-sandbox/services/GlobRegistry';
+  import { timelineStore } from '../stores/timelineStore';
 
   interface VersionResult {
     success: boolean;
@@ -83,13 +84,15 @@
     try {
       const result = await invoke<VersionResult>('undo_component_change');
       if (result.success) {
-        Logger.info('Component change undone', result.message);
+        Logger.log('COMPONENT_UNDO', { message: result.message });
         if (result.affected_file) {
           await refreshComponentAfterGitOp(result.affected_file);
         }
+        // Refresh timeline to show current position
+        await timelineStore.refresh();
       }
     } catch (e) {
-      Logger.debug('Component undo', e instanceof Error ? e.message : String(e));
+      Logger.log('COMPONENT_UNDO_FAILED', { error: e instanceof Error ? e.message : String(e) }, 'warn');
     }
   };
 
@@ -97,13 +100,15 @@
     try {
       const result = await invoke<VersionResult>('redo_component_change');
       if (result.success) {
-        Logger.info('Component change redone', result.message);
+        Logger.log('COMPONENT_REDO', { message: result.message });
         if (result.affected_file) {
           await refreshComponentAfterGitOp(result.affected_file);
         }
+        // Refresh timeline to show current position
+        await timelineStore.refresh();
       }
     } catch (e) {
-      Logger.debug('Component redo', e instanceof Error ? e.message : String(e));
+      Logger.log('COMPONENT_REDO_FAILED', { error: e instanceof Error ? e.message : String(e) }, 'warn');
     }
   };
 </script>

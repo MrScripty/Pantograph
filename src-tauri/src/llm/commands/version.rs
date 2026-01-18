@@ -33,6 +33,16 @@ pub struct HistoryEntry {
     pub timestamp: Option<String>,
 }
 
+/// Commit info for the timeline UI
+#[derive(Debug, Serialize)]
+pub struct TimelineCommit {
+    pub hash: String,
+    pub short_hash: String,
+    pub message: String,
+    pub timestamp: Option<String>,
+    pub is_current: bool,
+}
+
 /// Read a tracking file from .git directory, returning None if not found
 fn read_tracking_file(generated_dir: &PathBuf, filename: &str) -> Option<String> {
     let path = generated_dir.join(".git").join(filename);
@@ -482,6 +492,239 @@ pub async fn list_generated_components() -> Result<Vec<GeneratedComponentInfo>, 
     collect_svelte_files(&generated_dir, &generated_dir, &mut components)?;
 
     Ok(components)
+}
+
+/// Get only the current commit info (for lazy loading on startup)
+#[command]
+pub async fn get_current_commit_info() -> Result<Option<TimelineCommit>, String> {
+    let project_root = get_project_root()?;
+    let generated_dir = project_root.join("src").join("generated");
+
+    // Check if git repo exists
+    if !generated_dir.join(".git").exists() {
+        return Ok(None);
+    }
+
+    // Get current position
+    let current = match get_current_position(&generated_dir) {
+        Ok(c) => c,
+        Err(_) => return Ok(None),
+    };
+
+    // Get commit details
+    let output = Command::new("git")
+        .args(["log", "-1", "--format=%H|%s|%cr", &current])
+        .current_dir(&generated_dir)
+        .output()
+        .map_err(|e| format!("Failed to get commit info: {}", e))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let line = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let parts: Vec<&str> = line.splitn(3, '|').collect();
+
+    if parts.len() >= 2 {
+        Ok(Some(TimelineCommit {
+            hash: parts[0].to_string(),
+            short_hash: parts[0].chars().take(7).collect(),
+            message: parts[1].to_string(),
+            timestamp: parts.get(2).map(|s| s.to_string()),
+            is_current: true,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Get full commit history for the timeline UI
+#[command]
+pub async fn get_timeline_commits(limit: Option<u32>) -> Result<Vec<TimelineCommit>, String> {
+    let project_root = get_project_root()?;
+    let generated_dir = project_root.join("src").join("generated");
+
+    // Check if git repo exists
+    if !generated_dir.join(".git").exists() {
+        return Ok(vec![]);
+    }
+
+    // Get current position to mark which commit is active
+    let current = get_current_position(&generated_dir).unwrap_or_default();
+
+    let limit_str = limit.unwrap_or(50).to_string();
+    let output = Command::new("git")
+        .args(["log", "--oneline", "-n", &limit_str, "--format=%H|%s|%cr"])
+        .current_dir(&generated_dir)
+        .output()
+        .map_err(|e| format!("Failed to get history: {}", e))?;
+
+    let commits = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(3, '|').collect();
+            if parts.len() >= 2 {
+                let hash = parts[0].to_string();
+                Some(TimelineCommit {
+                    short_hash: hash.chars().take(7).collect(),
+                    is_current: hash == current,
+                    hash,
+                    message: parts[1].to_string(),
+                    timestamp: parts.get(2).map(|s| s.to_string()),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok(commits)
+}
+
+/// Hard delete a commit from git history (permanent, destructive)
+/// Uses cherry-pick strategy to rewrite history without the target commit
+#[command]
+pub async fn hard_delete_commit(hash: String) -> Result<VersionResult, String> {
+    let project_root = get_project_root()?;
+    let generated_dir = project_root.join("src").join("generated");
+
+    // Check if git repo exists
+    if !generated_dir.join(".git").exists() {
+        return Ok(VersionResult {
+            success: false,
+            message: "No version history available".to_string(),
+            affected_file: None,
+        });
+    }
+
+    // Get current position and tip
+    let current = get_current_position(&generated_dir)?;
+    let tip = read_tracking_file(&generated_dir, "PANTOGRAPH_TIP")
+        .unwrap_or_else(|| get_git_head(&generated_dir).unwrap_or_default());
+
+    // Get parent of target commit
+    let parent = match get_parent_commit(&generated_dir, &hash) {
+        Some(p) => p,
+        None => {
+            return Ok(VersionResult {
+                success: false,
+                message: "Cannot delete the root commit".to_string(),
+                affected_file: None,
+            });
+        }
+    };
+
+    // Get all commits after target (toward TIP)
+    let output = Command::new("git")
+        .args(["rev-list", "--reverse", &format!("{}..{}", hash, tip)])
+        .current_dir(&generated_dir)
+        .output()
+        .map_err(|e| format!("Failed to list commits: {}", e))?;
+
+    let commits_after: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Reset to parent of target commit
+    let reset_output = Command::new("git")
+        .args(["reset", "--hard", &parent])
+        .current_dir(&generated_dir)
+        .output()
+        .map_err(|e| format!("Failed to reset: {}", e))?;
+
+    if !reset_output.status.success() {
+        return Ok(VersionResult {
+            success: false,
+            message: format!(
+                "Failed to reset: {}",
+                String::from_utf8_lossy(&reset_output.stderr)
+            ),
+            affected_file: None,
+        });
+    }
+
+    // Cherry-pick all commits after target
+    for commit in &commits_after {
+        let cherry_output = Command::new("git")
+            .args(["cherry-pick", "--allow-empty", commit])
+            .current_dir(&generated_dir)
+            .output()
+            .map_err(|e| format!("Failed to cherry-pick: {}", e))?;
+
+        if !cherry_output.status.success() {
+            // Try to abort and restore
+            let _ = Command::new("git")
+                .args(["cherry-pick", "--abort"])
+                .current_dir(&generated_dir)
+                .output();
+
+            return Ok(VersionResult {
+                success: false,
+                message: format!(
+                    "Failed to cherry-pick commit {}: {}",
+                    &commit[..7.min(commit.len())],
+                    String::from_utf8_lossy(&cherry_output.stderr)
+                ),
+                affected_file: None,
+            });
+        }
+    }
+
+    // Update tracking files
+    let new_head = get_git_head(&generated_dir)?;
+    write_tracking_file(&generated_dir, "PANTOGRAPH_HEAD", &new_head)?;
+    write_tracking_file(&generated_dir, "PANTOGRAPH_TIP", &new_head)?;
+
+    // If we deleted the current commit, sync working directory to new HEAD
+    if current == hash {
+        sync_working_dir_to_commit(&generated_dir, &new_head)?;
+    }
+
+    Ok(VersionResult {
+        success: true,
+        message: format!("Deleted commit {}", &hash[..7.min(hash.len())]),
+        affected_file: None,
+    })
+}
+
+/// Navigate to a specific commit (checkout)
+#[command]
+pub async fn checkout_commit(hash: String) -> Result<VersionResult, String> {
+    let project_root = get_project_root()?;
+    let generated_dir = project_root.join("src").join("generated");
+
+    // Check if git repo exists
+    if !generated_dir.join(".git").exists() {
+        return Ok(VersionResult {
+            success: false,
+            message: "No version history available".to_string(),
+            affected_file: None,
+        });
+    }
+
+    // Sync working directory to the target commit
+    sync_working_dir_to_commit(&generated_dir, &hash)?;
+
+    // Update PANTOGRAPH_HEAD
+    write_tracking_file(&generated_dir, "PANTOGRAPH_HEAD", &hash)?;
+
+    // Ensure PANTOGRAPH_TIP is set
+    if read_tracking_file(&generated_dir, "PANTOGRAPH_TIP").is_none() {
+        if let Ok(git_head) = get_git_head(&generated_dir) {
+            write_tracking_file(&generated_dir, "PANTOGRAPH_TIP", &git_head)?;
+        }
+    }
+
+    let message = get_commit_message(&generated_dir, &hash)
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    Ok(VersionResult {
+        success: true,
+        message: format!("Checked out: {}", message),
+        affected_file: None,
+    })
 }
 
 /// Recursively collect .svelte files from a directory

@@ -15,12 +15,14 @@ This is a stand-alone feature demo for Studio Whip, prototyping how GUI creation
 ## Prerequisites
 
 Install Node.js (for npm) and the Rust toolchain (Cargo).
+
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
 Install Tauri system dependencies (includes `libsoup-2.4` and `javascriptcoregtk-4.0`):
+
 ```bash
 # Debian/Ubuntu
 sudo apt install pkg-config libsoup2.4-dev libjavascriptcoregtk-4.0-dev
@@ -33,24 +35,29 @@ sudo pacman -S pkgconf libsoup2 webkit2gtk
 ```
 
 ## Development (Desktop)
+
 ```bash
 npm install
 npm run dev:desktop
 ```
+
 Requires the Rust toolchain and Tauri system dependencies for your OS.
 Runtime assets are local (no CDN), so the app is offline-safe once dependencies are installed.
 
 ## Development (Web Preview)
+
 ```bash
 npm run dev
 ```
 
 ## Build Desktop App
+
 ```bash
 npm run build:desktop
 ```
 
 ## Launcher
+
 ```bash
 ./launcher.sh
 ```
@@ -80,6 +87,30 @@ npm run build:desktop
 
 - **GLM-4.6V-Flash**: Full llama.cpp support with mmproj file. This is the model being used for development testing.
 - Any vision model compatible with LM Studio or llama.cpp
+
+## Keyboard Shortcuts
+
+| Shortcut       | Action                                     |
+| -------------- | ------------------------------------------ |
+| `Ctrl+Z`       | Undo canvas drawing stroke                 |
+| `Ctrl+Shift+Z` | Unified undo (unhide commits, etc.)        |
+| `Alt+Ctrl+Z`   | Undo component change (git)                |
+| `Ctrl+Y`       | Redo component change (git)                |
+| `Alt+Ctrl+Y`   | Unified redo                               |
+| `Tab`          | Toggle between Draw and Interact modes     |
+| `Ctrl+\``      | Toggle between Canvas and Node Graph views |
+
+## Commit Timeline
+
+A minimal commit timeline appears above the toolbar when you have generated components. Hover to expand it.
+
+| Action                         | Effect                                            |
+| ------------------------------ | ------------------------------------------------- |
+| **Click** a commit node        | Soft delete (hide) - can undo with `Ctrl+Shift+Z` |
+| **Ctrl+Click** a commit node   | Hard delete (permanent, with confirmation)        |
+| **Double-click** a commit node | Checkout that commit                              |
+
+**Note:** Soft-deleted commits are automatically hard-deleted after 32 undo steps to keep history clean.
 
 ## Tech Stack
 

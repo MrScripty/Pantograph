@@ -9,6 +9,7 @@
   import HotLoadContainer from './components/HotLoadContainer.svelte';
   import ChunkPreview from './components/ChunkPreview.svelte';
   import ClearButton from './components/ClearButton.svelte';
+  import CommitTimeline from './components/CommitTimeline.svelte';
   import NodeGraph from './components/NodeGraph.svelte';
   import WorkflowGraph from './components/WorkflowGraph.svelte';
   import NodePalette from './components/NodePalette.svelte';
@@ -20,15 +21,16 @@
   import { toggleInteractionMode } from './stores/interactionModeStore';
   import { viewMode, toggleViewMode } from './stores/viewModeStore';
   import { loadWorkspace } from './services/HotLoadRegistry';
+  import { undoStore } from './stores/undoStore';
 
   async function handleComponentUndo() {
     try {
       const result = await invoke<{ success: boolean; message: string }>('undo_component_change');
       if (result.success) {
-        Logger.info('Component change undone', result.message);
+        Logger.log('COMPONENT_UNDO', { message: result.message });
       }
     } catch (e) {
-      Logger.debug('Component undo', e instanceof Error ? e.message : String(e));
+      Logger.log('COMPONENT_UNDO_FAILED', { error: e instanceof Error ? e.message : String(e) }, 'warn');
     }
   }
 
@@ -36,10 +38,10 @@
     try {
       const result = await invoke<{ success: boolean; message: string }>('redo_component_change');
       if (result.success) {
-        Logger.info('Component change redone', result.message);
+        Logger.log('COMPONENT_REDO', { message: result.message });
       }
     } catch (e) {
-      Logger.debug('Component redo', e instanceof Error ? e.message : String(e));
+      Logger.log('COMPONENT_REDO_FAILED', { error: e instanceof Error ? e.message : String(e) }, 'warn');
     }
   }
 
@@ -49,7 +51,7 @@
     // Load previously generated components from disk
     loadWorkspace().then((count) => {
       if (count > 0) {
-        Logger.info('Workspace restored', `${count} component(s) loaded`);
+        Logger.log('WORKSPACE_RESTORED', { count });
       }
     });
 
@@ -58,15 +60,15 @@
 
       // Handle all Ctrl+Z variants
       if (isCtrl && e.key === 'z') {
-        if (e.shiftKey) {
-          // Ctrl+Shift+Z → Component redo
+        if (e.shiftKey && !e.altKey) {
+          // Ctrl+Shift+Z → Unified undo (unhide commits, etc.)
           e.preventDefault();
-          handleComponentRedo();
-        } else if (e.altKey) {
+          undoStore.undo();
+        } else if (e.altKey && !e.shiftKey) {
           // Alt+Ctrl+Z → Component undo
           e.preventDefault();
           handleComponentUndo();
-        } else {
+        } else if (!e.shiftKey && !e.altKey) {
           // Plain Ctrl+Z → Canvas drawing undo
           e.preventDefault();
           engine.undo();
@@ -74,10 +76,17 @@
         return;
       }
 
-      // Ctrl+Y → Component redo (alternative)
-      if (isCtrl && e.key === 'y') {
+      // Ctrl+Y → Component redo
+      if (isCtrl && e.key === 'y' && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         handleComponentRedo();
+        return;
+      }
+
+      // Alt+Ctrl+Y → Unified redo
+      if (isCtrl && e.altKey && e.key === 'y') {
+        e.preventDefault();
+        undoStore.redo();
         return;
       }
 
@@ -106,6 +115,7 @@
     <div class="absolute inset-0" transition:fade={{ duration: 200 }}>
       <Canvas />
       <Rulers />
+      <CommitTimeline />
       <Toolbar />
       <ClearButton />
       <HotLoadContainer />
