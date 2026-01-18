@@ -1,7 +1,6 @@
 pub mod chunker;
 pub mod docs;
 pub mod docs_index;
-pub mod docs_search;
 pub mod embeddings;
 pub mod enricher;
 pub mod enricher_svelte;
@@ -10,13 +9,13 @@ pub mod rag;
 pub mod tools;
 pub mod types;
 
-pub use chunker::{chunk_document, preview_chunks, ChunkConfig};
+pub use chunker::{preview_chunks, ChunkConfig};
 pub use docs::DocsManager;
-pub use embeddings::{check_embedding_server, create_embedding_client};
-pub use enricher::{EnricherRegistry, ErrorCategory, ErrorEnricher};
+pub use embeddings::check_embedding_server;
+pub use enricher::EnricherRegistry;
 pub use enricher_svelte::SvelteDocsEnricher;
 pub use prompt::SYSTEM_PROMPT;
-pub use rag::{create_rag_manager, IndexingProgress, RagError, RagManager, RagStatus, SharedRagManager, SvelteDoc};
+pub use rag::{create_rag_manager, SvelteDoc};
 pub use tools::*;
 pub use types::*;
 
