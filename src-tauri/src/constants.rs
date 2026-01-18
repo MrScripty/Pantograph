@@ -7,6 +7,10 @@
 pub mod ports {
     /// Default port for inference and embedding server
     pub const SERVER: u16 = 8080;
+    /// Alternate port range start (when default is in use)
+    pub const ALTERNATE_START: u16 = 8081;
+    /// Number of ports to scan when looking for alternates
+    pub const ALTERNATE_RANGE: u16 = 100;
 }
 
 /// Timeout configuration (in seconds)
@@ -19,8 +23,6 @@ pub mod timeouts {
 pub mod defaults {
     /// Default context window size
     pub const CONTEXT_SIZE: u32 = 8192;
-    /// Default maximum tokens for generation
-    pub const MAX_TOKENS: u32 = 2048;
     /// Default GPU layers (-1 = all layers on GPU)
     pub const GPU_LAYERS: i32 = -1;
     /// Default device selection
@@ -29,16 +31,8 @@ pub mod defaults {
 
 /// Device type identifiers and prefixes
 pub mod device_types {
-    /// CPU-only mode identifier
-    pub const CPU: &str = "none";
     /// Auto-select device identifier
     pub const AUTO: &str = "auto";
-    /// CUDA device prefix (e.g., "CUDA0", "CUDA1")
-    pub const CUDA_PREFIX: &str = "CUDA";
-    /// Vulkan device prefix (e.g., "Vulkan0", "Vulkan1")
-    pub const VULKAN_PREFIX: &str = "Vulkan";
-    /// Metal device prefix (e.g., "Metal0")
-    pub const METAL_PREFIX: &str = "Metal";
 }
 
 /// Server host configuration

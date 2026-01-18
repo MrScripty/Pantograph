@@ -4,21 +4,29 @@
   import {
     ConfigService,
     type ConfigState,
-    type ServerModeInfo,
   } from '../services/ConfigService';
+  import {
+    HealthMonitorService,
+    type HealthMonitorState,
+    type ServerEvent,
+  } from '../services/HealthMonitorService';
   import BackendSelector from './BackendSelector.svelte';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
 
-  let llmState: LLMState = LLMService.getState();
-  let configState: ConfigState = ConfigService.getState();
+  let llmState: LLMState = $state(LLMService.getState());
+  let configState: ConfigState = $state(ConfigService.getState());
+  let healthState: HealthMonitorState = $state(HealthMonitorService.getState());
   let unsubscribeLLM: (() => void) | null = null;
   let unsubscribeConfig: (() => void) | null = null;
+  let unsubscribeHealth: (() => void) | null = null;
+  let unsubscribeEvents: (() => void) | null = null;
 
   // UI state
-  let connectionType: 'external' | 'sidecar' = 'sidecar';
-  let externalUrl = 'http://localhost:1234';
-  let apiKey = '';
-  let isConnecting = false;
+  let connectionType: 'external' | 'sidecar' = $state('sidecar');
+  let externalUrl = $state('http://localhost:1234');
+  let apiKey = $state('');
+  let isConnecting = $state(false);
+  let showHealthDetails = $state(false);
 
   onMount(async () => {
     unsubscribeLLM = LLMService.subscribe((state) => {
@@ -41,6 +49,17 @@
       }
     });
 
+    unsubscribeHealth = HealthMonitorService.subscribeState((state) => {
+      healthState = state;
+    });
+
+    unsubscribeEvents = HealthMonitorService.subscribeEvents((event: ServerEvent) => {
+      // Handle server events (could show toast notifications, etc.)
+      if (event.type === 'server_crashed') {
+        console.warn('[ServerStatus] Server crashed:', event.error);
+      }
+    });
+
     // Load config and server mode
     try {
       await ConfigService.loadConfig();
@@ -48,11 +67,22 @@
     } catch {
       // Errors handled by service
     }
+
+    // Start health monitoring if server is ready
+    if (llmState.status.ready) {
+      try {
+        await HealthMonitorService.start();
+      } catch {
+        // Non-critical
+      }
+    }
   });
 
   onDestroy(() => {
     unsubscribeLLM?.();
     unsubscribeConfig?.();
+    unsubscribeHealth?.();
+    unsubscribeEvents?.();
   });
 
   const connectExternal = async () => {
@@ -67,6 +97,8 @@
         api_key: apiKey || null,
         connection_mode: { type: 'External', url: externalUrl },
       });
+      // Start health monitoring
+      await HealthMonitorService.start();
     } catch (error) {
       console.error('Failed to connect:', error);
     } finally {
@@ -75,23 +107,44 @@
   };
 
   const disconnectExternal = async () => {
+    await HealthMonitorService.stop();
     await LLMService.stop();
     await ConfigService.refreshServerMode();
   };
 
-  $: statusColor = llmState.status.ready
-    ? 'bg-green-500'
-    : llmState.status.mode !== 'none'
-      ? 'bg-yellow-500 animate-pulse'
-      : 'bg-neutral-500';
+  const triggerRecovery = async () => {
+    try {
+      await HealthMonitorService.triggerRecovery();
+    } catch (error) {
+      console.error('Recovery failed:', error);
+    }
+  };
 
-  $: statusText = llmState.status.ready
-    ? 'Ready'
-    : llmState.status.mode !== 'none'
-      ? 'Starting...'
-      : 'Not connected';
+  const checkHealthNow = async () => {
+    await HealthMonitorService.checkNow();
+  };
 
-  $: modeText = (() => {
+  let statusColor = $derived(
+    llmState.status.ready
+      ? healthState.lastResult?.healthy === false
+        ? 'bg-red-500'
+        : 'bg-green-500'
+      : llmState.status.mode !== 'none'
+        ? 'bg-yellow-500 animate-pulse'
+        : 'bg-neutral-500'
+  );
+
+  let statusText = $derived(
+    llmState.status.ready
+      ? healthState.lastResult?.healthy === false
+        ? 'Unhealthy'
+        : 'Ready'
+      : llmState.status.mode !== 'none'
+        ? 'Starting...'
+        : 'Not connected'
+  );
+
+  let modeText = $derived((() => {
     switch (configState.serverMode.mode) {
       case 'external':
         return 'External';
@@ -102,14 +155,26 @@
       default:
         return 'None';
     }
-  })();
+  })());
+
+  let healthStatusColor = $derived(
+    healthState.lastResult
+      ? HealthMonitorService.getStatusColor(healthState.lastResult.status)
+      : 'text-neutral-500'
+  );
+
+  let healthStatusLabel = $derived(
+    healthState.lastResult
+      ? HealthMonitorService.getStatusLabel(healthState.lastResult.status)
+      : 'Unknown'
+  );
 </script>
 
 <div class="space-y-3">
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => toggleSection('server')}
+    onclick={() => toggleSection('server')}
   >
     <div class="flex items-center gap-2">
       <span class="w-2 h-2 rounded-full {statusColor}"></span>
@@ -136,7 +201,7 @@
           class="flex-1 px-2 py-1 text-xs rounded transition-colors {connectionType === 'external'
             ? 'bg-neutral-700 text-neutral-200'
             : 'text-neutral-500 hover:text-neutral-400'}"
-          on:click={() => (connectionType = 'external')}
+          onclick={() => (connectionType = 'external')}
         >
           External
         </button>
@@ -144,7 +209,7 @@
           class="flex-1 px-2 py-1 text-xs rounded transition-colors {connectionType === 'sidecar'
             ? 'bg-neutral-700 text-neutral-200'
             : 'text-neutral-500 hover:text-neutral-400'}"
-          on:click={() => (connectionType = 'sidecar')}
+          onclick={() => (connectionType = 'sidecar')}
         >
           Sidecar
         </button>
@@ -173,14 +238,14 @@
           <div class="flex gap-2">
             {#if llmState.status.ready && llmState.status.mode === 'external'}
               <button
-                on:click={disconnectExternal}
+                onclick={disconnectExternal}
                 class="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-xs transition-colors"
               >
                 Disconnect
               </button>
             {:else}
               <button
-                on:click={connectExternal}
+                onclick={connectExternal}
                 disabled={isConnecting || !externalUrl.trim()}
                 class="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
               >
@@ -202,12 +267,79 @@
             <span class="text-neutral-600 font-mono text-[10px]">{llmState.status.url}</span>
           {/if}
         </div>
+
+        <!-- Health Status -->
+        <button
+          class="w-full flex items-center justify-between text-xs py-1 hover:bg-neutral-800/50 rounded px-1 transition-colors"
+          onclick={() => (showHealthDetails = !showHealthDetails)}
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-neutral-500">Health:</span>
+            <span class={healthStatusColor}>{healthStatusLabel}</span>
+            {#if healthState.lastResult?.response_time_ms}
+              <span class="text-neutral-600 text-[10px]">
+                ({healthState.lastResult.response_time_ms}ms)
+              </span>
+            {/if}
+          </div>
+          <svg
+            class="w-3 h-3 text-neutral-500 transform transition-transform {showHealthDetails ? 'rotate-180' : ''}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {#if showHealthDetails}
+          <div class="space-y-2 pl-2 border-l-2 border-neutral-700">
+            <!-- Health details -->
+            {#if healthState.lastResult}
+              <div class="text-[10px] text-neutral-500 space-y-1">
+                <div>Consecutive failures: {healthState.lastResult.consecutive_failures}</div>
+                <div>Last check: {new Date(healthState.lastResult.timestamp).toLocaleTimeString()}</div>
+                {#if healthState.lastResult.error}
+                  <div class="text-red-400">Error: {healthState.lastResult.error}</div>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- Health actions -->
+            <div class="flex gap-2">
+              <button
+                onclick={checkHealthNow}
+                class="flex-1 px-2 py-1 text-[10px] bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
+              >
+                Check Now
+              </button>
+              {#if healthState.lastResult?.healthy === false}
+                <button
+                  onclick={triggerRecovery}
+                  disabled={healthState.isRecovering}
+                  class="flex-1 px-2 py-1 text-[10px] bg-yellow-700 hover:bg-yellow-600 disabled:opacity-50 rounded transition-colors"
+                >
+                  {healthState.isRecovering ? 'Recovering...' : 'Recover'}
+                </button>
+              {/if}
+            </div>
+
+            <!-- Monitoring status -->
+            <div class="text-[10px] text-neutral-600">
+              {#if healthState.isRunning}
+                <span class="text-green-500">● Monitoring active</span>
+              {:else}
+                <span class="text-neutral-500">○ Monitoring inactive</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
       {/if}
 
       <!-- Error -->
-      {#if llmState.error || configState.error}
+      {#if llmState.error || configState.error || healthState.error}
         <div class="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded p-2">
-          {llmState.error || configState.error}
+          {llmState.error || configState.error || healthState.error}
         </div>
       {/if}
     </div>
