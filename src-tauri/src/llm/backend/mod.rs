@@ -11,10 +11,7 @@ pub mod ollama;
 pub mod candle;
 pub mod registry;
 
-use std::pin::Pin;
-
 use async_trait::async_trait;
-use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -23,14 +20,11 @@ pub use llamacpp::LlamaCppBackend;
 pub use ollama::OllamaBackend;
 #[cfg(feature = "backend-candle")]
 pub use candle::CandleBackend;
-pub use registry::{BackendFactory, BackendRegistry};
+pub use registry::BackendRegistry;
 
 /// Error types for backend operations
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
-    #[error("Backend not ready")]
-    NotReady,
-
     #[error("Backend not running: {0}")]
     NotRunning(String),
 
@@ -48,9 +42,6 @@ pub enum BackendError {
 
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
-
-    #[error("Unknown error: {0}")]
-    Unknown(String),
 }
 
 /// Capabilities that a backend may or may not support
@@ -98,34 +89,12 @@ pub struct BackendConfig {
     pub mmproj_path: Option<std::path::PathBuf>,
     /// Model name (for Ollama, e.g., "llava:13b")
     pub model_name: Option<String>,
-    /// HuggingFace model ID (for Candle)
-    pub model_id: Option<String>,
     /// Device configuration
     pub device: Option<String>,
     /// Number of GPU layers (-1 for all)
     pub gpu_layers: Option<i32>,
-    /// Context size
-    pub context_size: Option<u32>,
     /// Embedding mode
     pub embedding_mode: bool,
-}
-
-/// A streaming chunk from chat completion
-#[derive(Debug, Clone, Serialize)]
-pub struct ChatChunk {
-    /// Text content of this chunk
-    pub content: Option<String>,
-    /// Whether this is the final chunk
-    pub done: bool,
-}
-
-/// Embedding result
-#[derive(Debug, Clone, Serialize)]
-pub struct EmbeddingResult {
-    /// The embedding vector
-    pub vector: Vec<f32>,
-    /// Number of tokens in the input
-    pub token_count: usize,
 }
 
 /// The core trait that all inference backends must implement.
@@ -135,18 +104,8 @@ pub struct EmbeddingResult {
 /// which backend is active.
 #[async_trait]
 pub trait InferenceBackend: Send + Sync {
-    // ─── IDENTITY ───────────────────────────────────────────────────
-
-    /// Human-readable name for UI display
-    fn name(&self) -> &'static str;
-
-    /// Description of this backend
-    fn description(&self) -> &'static str;
-
     /// What this backend supports
     fn capabilities(&self) -> BackendCapabilities;
-
-    // ─── LIFECYCLE ──────────────────────────────────────────────────
 
     /// Initialize and start the backend with given configuration
     async fn start(&mut self, config: &BackendConfig, app: &AppHandle) -> Result<(), BackendError>;
@@ -157,25 +116,7 @@ pub trait InferenceBackend: Send + Sync {
     /// Is the backend ready to accept requests?
     fn is_ready(&self) -> bool;
 
-    /// Health check - verify the backend is responding
-    async fn health_check(&self) -> bool;
-
     /// Get the base URL for this backend (if HTTP-based)
     /// Returns None for in-process backends like Candle
     fn base_url(&self) -> Option<String>;
-
-    // ─── INFERENCE ──────────────────────────────────────────────────
-
-    /// Stream chat completion responses
-    ///
-    /// Takes a JSON-serialized OpenAI-compatible chat completion request
-    /// and returns a stream of response chunks.
-    async fn chat_completion_stream(
-        &self,
-        request_json: String,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>;
-
-    /// Generate embeddings for the given texts
-    async fn embeddings(&self, texts: Vec<String>, model: &str)
-        -> Result<Vec<EmbeddingResult>, BackendError>;
 }
