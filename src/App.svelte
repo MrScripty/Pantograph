@@ -10,6 +10,9 @@
   import ChunkPreview from './components/ChunkPreview.svelte';
   import ClearButton from './components/ClearButton.svelte';
   import NodeGraph from './components/NodeGraph.svelte';
+  import WorkflowGraph from './components/WorkflowGraph.svelte';
+  import NodePalette from './components/NodePalette.svelte';
+  import WorkflowToolbar from './components/WorkflowToolbar.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
@@ -107,9 +110,19 @@
       <ClearButton />
       <HotLoadContainer />
     </div>
-  {:else}
+  {:else if $viewMode === 'node-graph'}
     <div class="absolute inset-0" transition:fade={{ duration: 200 }}>
       <NodeGraph />
+    </div>
+  {:else if $viewMode === 'workflow'}
+    <div class="absolute inset-0 flex flex-col" transition:fade={{ duration: 200 }}>
+      <WorkflowToolbar />
+      <div class="flex-1 flex overflow-hidden">
+        <NodePalette />
+        <div class="flex-1">
+          <WorkflowGraph />
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -126,8 +139,10 @@
   >
     {#if $viewMode === 'canvas'}
       Zenith System Active
-    {:else}
+    {:else if $viewMode === 'node-graph'}
       Node Graph View (Ctrl+` to switch)
+    {:else}
+      Workflow Editor (Ctrl+` to switch)
     {/if}
   </div>
 </main>
