@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export type ViewMode = 'canvas' | 'node-graph' | 'workflow';
+export type ViewMode = 'canvas' | 'node-graph' | 'workflow' | 'architecture';
 
 export const viewMode = writable<ViewMode>('canvas');
 
@@ -12,6 +12,8 @@ export function toggleViewMode() {
       case 'node-graph':
         return 'workflow';
       case 'workflow':
+        return 'architecture';
+      case 'architecture':
         return 'canvas';
       default:
         return 'canvas';

@@ -14,6 +14,9 @@
   import WorkflowGraph from './components/WorkflowGraph.svelte';
   import NodePalette from './components/NodePalette.svelte';
   import WorkflowToolbar from './components/WorkflowToolbar.svelte';
+  import ArchitectureGraph from './components/ArchitectureGraph.svelte';
+  import ArchitectureToolbar from './components/ArchitectureToolbar.svelte';
+  import ArchitectureLegend from './components/ArchitectureLegend.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
@@ -134,6 +137,16 @@
         </div>
       </div>
     </div>
+  {:else if $viewMode === 'architecture'}
+    <div class="absolute inset-0 flex flex-col" transition:fade={{ duration: 200 }}>
+      <ArchitectureToolbar />
+      <div class="flex-1 flex overflow-hidden">
+        <ArchitectureLegend />
+        <div class="flex-1">
+          <ArchitectureGraph />
+        </div>
+      </div>
+    </div>
   {/if}
 
   <!-- Always visible components -->
@@ -151,8 +164,10 @@
       Zenith System Active
     {:else if $viewMode === 'node-graph'}
       Node Graph View (Ctrl+` to switch)
-    {:else}
+    {:else if $viewMode === 'workflow'}
       Workflow Editor (Ctrl+` to switch)
+    {:else if $viewMode === 'architecture'}
+      Architecture View (Ctrl+` to switch)
     {/if}
   </div>
 </main>
