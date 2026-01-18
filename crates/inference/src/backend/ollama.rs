@@ -141,7 +141,7 @@ impl InferenceBackend for OllamaBackend {
 
     async fn start(
         &mut self,
-        config: &BackendConfig,
+        _config: &BackendConfig,
         spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<(), BackendError> {
         self.spawner = Some(spawner);

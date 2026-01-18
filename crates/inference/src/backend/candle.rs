@@ -90,7 +90,7 @@ impl InferenceBackend for CandleBackend {
 
     async fn start(
         &mut self,
-        config: &BackendConfig,
+        _config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<(), BackendError> {
         // Candle runs in-process, so we don't need the spawner

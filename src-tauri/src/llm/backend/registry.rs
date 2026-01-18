@@ -129,11 +129,6 @@ impl BackendRegistry {
         self.factories.insert(name.to_string(), factory);
     }
 
-    /// List all available backend names
-    pub fn available_names(&self) -> Vec<&str> {
-        self.factories.keys().map(|s| s.as_str()).collect()
-    }
-
     /// Get information about all registered backends
     pub fn list(&self) -> Vec<BackendInfo> {
         self.factories.values().map(|f| f.info()).collect()
@@ -147,10 +142,6 @@ impl BackendRegistry {
             .create()
     }
 
-    /// Check if a backend is available
-    pub fn is_available(&self, name: &str) -> bool {
-        self.factories.contains_key(name)
-    }
 }
 
 impl Default for BackendRegistry {
@@ -162,12 +153,6 @@ impl Default for BackendRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_registry_has_llamacpp() {
-        let registry = BackendRegistry::new();
-        assert!(registry.is_available("llama.cpp"));
-    }
 
     #[test]
     fn test_registry_list() {

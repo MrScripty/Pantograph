@@ -169,7 +169,11 @@ mod std_process {
             if let Some(stdout) = stdout {
                 let tx = tx.clone();
                 tokio::spawn(async move {
-                    let reader = BufReader::new(tokio::process::ChildStdout::from_std(stdout).unwrap());
+                    let Ok(async_stdout) = tokio::process::ChildStdout::from_std(stdout) else {
+                        let _ = tx.send(ProcessEvent::Error("Failed to convert stdout to async".to_string())).await;
+                        return;
+                    };
+                    let reader = BufReader::new(async_stdout);
                     let mut lines = reader.lines();
                     while let Ok(Some(line)) = lines.next_line().await {
                         let _ = tx.send(ProcessEvent::Stdout(line.into_bytes())).await;
@@ -181,7 +185,11 @@ mod std_process {
             if let Some(stderr) = stderr {
                 let tx = tx.clone();
                 tokio::spawn(async move {
-                    let reader = BufReader::new(tokio::process::ChildStderr::from_std(stderr).unwrap());
+                    let Ok(async_stderr) = tokio::process::ChildStderr::from_std(stderr) else {
+                        let _ = tx.send(ProcessEvent::Error("Failed to convert stderr to async".to_string())).await;
+                        return;
+                    };
+                    let reader = BufReader::new(async_stderr);
                     let mut lines = reader.lines();
                     while let Ok(Some(line)) = lines.next_line().await {
                         let _ = tx.send(ProcessEvent::Stderr(line.into_bytes())).await;

@@ -5,18 +5,13 @@
 //! at `/v1/`, so we can forward requests directly without translation.
 
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::process::{Child, Command, Stdio};
 
 use async_trait::async_trait;
-use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    InferenceBackend,
-};
+use super::{BackendCapabilities, BackendConfig, BackendError, InferenceBackend};
 
 /// Default Ollama daemon URL
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -57,17 +52,6 @@ impl OllamaBackend {
     pub fn new() -> Self {
         Self {
             base_url: DEFAULT_OLLAMA_URL.to_string(),
-            http_client: reqwest::Client::new(),
-            model_name: None,
-            ready: false,
-            daemon_process: None,
-        }
-    }
-
-    /// Create a new Ollama backend with custom URL
-    pub fn with_url(url: &str) -> Self {
-        Self {
-            base_url: url.to_string(),
             http_client: reqwest::Client::new(),
             model_name: None,
             ready: false,
@@ -305,57 +289,6 @@ impl OllamaBackend {
         log::info!("Successfully pulled Ollama model '{}'", model_name);
         Ok(())
     }
-
-    /// Parse SSE stream into ChatChunk stream
-    fn parse_sse_stream(
-        response: reqwest::Response,
-    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
-        let stream = response.bytes_stream().map(|result| {
-            match result {
-                Ok(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
-
-                    // Parse SSE format: "data: {...}\n\n"
-                    for line in text.lines() {
-                        if line.starts_with("data: ") {
-                            let data = &line[6..];
-                            if data == "[DONE]" {
-                                return Ok(ChatChunk {
-                                    content: None,
-                                    done: true,
-                                });
-                            }
-
-                            // Parse JSON and extract content
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                                if let Some(content) = json
-                                    .get("choices")
-                                    .and_then(|c| c.get(0))
-                                    .and_then(|c| c.get("delta"))
-                                    .and_then(|d| d.get("content"))
-                                    .and_then(|c| c.as_str())
-                                {
-                                    return Ok(ChatChunk {
-                                        content: Some(content.to_string()),
-                                        done: false,
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    // No content in this chunk
-                    Ok(ChatChunk {
-                        content: None,
-                        done: false,
-                    })
-                }
-                Err(e) => Err(BackendError::Http(e)),
-            }
-        });
-
-        Box::pin(stream)
-    }
 }
 
 impl Default for OllamaBackend {
@@ -366,14 +299,6 @@ impl Default for OllamaBackend {
 
 #[async_trait]
 impl InferenceBackend for OllamaBackend {
-    fn name(&self) -> &'static str {
-        "Ollama"
-    }
-
-    fn description(&self) -> &'static str {
-        "Ollama daemon with automatic model management. Supports CUDA, Vulkan, and Metal."
-    }
-
     fn capabilities(&self) -> BackendCapabilities {
         Self::static_capabilities()
     }
@@ -424,10 +349,6 @@ impl InferenceBackend for OllamaBackend {
         self.ready
     }
 
-    async fn health_check(&self) -> bool {
-        self.check_daemon().await.is_ok()
-    }
-
     fn base_url(&self) -> Option<String> {
         if self.ready {
             Some(self.base_url.clone())
@@ -435,135 +356,11 @@ impl InferenceBackend for OllamaBackend {
             None
         }
     }
-
-    async fn chat_completion_stream(
-        &self,
-        request_json: String,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
-    {
-        if !self.ready {
-            return Err(BackendError::NotReady);
-        }
-
-        // Ollama has OpenAI-compatible API at /v1/
-        let url = format!("{}/v1/chat/completions", self.base_url);
-
-        // Parse and ensure stream is enabled, and set model
-        let mut request: serde_json::Value = serde_json::from_str(&request_json)
-            .map_err(|e| BackendError::Inference(format!("Invalid request JSON: {}", e)))?;
-
-        request["stream"] = serde_json::json!(true);
-
-        // Use configured model if not specified in request
-        if request.get("model").and_then(|m| m.as_str()).unwrap_or("") == "default" {
-            if let Some(model) = &self.model_name {
-                request["model"] = serde_json::json!(model);
-            }
-        }
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(BackendError::Http)?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(BackendError::Inference(format!(
-                "Ollama API error {}: {}",
-                status, body
-            )));
-        }
-
-        Ok(Self::parse_sse_stream(response))
-    }
-
-    async fn embeddings(
-        &self,
-        texts: Vec<String>,
-        model: &str,
-    ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        if !self.ready {
-            return Err(BackendError::NotReady);
-        }
-
-        // Ollama has OpenAI-compatible embeddings at /v1/embeddings
-        let url = format!("{}/v1/embeddings", self.base_url);
-
-        // Use configured model or provided model
-        let model_to_use = if model == "default" {
-            self.model_name.as_deref().unwrap_or("nomic-embed-text")
-        } else {
-            model
-        };
-
-        let request = serde_json::json!({
-            "input": texts,
-            "model": model_to_use,
-        });
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(BackendError::Http)?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(BackendError::Inference(format!(
-                "Ollama embedding API error {}: {}",
-                status, body
-            )));
-        }
-
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
-
-        // Parse OpenAI embedding response format
-        let data = json
-            .get("data")
-            .and_then(|d| d.as_array())
-            .ok_or_else(|| BackendError::Inference("Invalid embedding response format".to_string()))?;
-
-        let mut results = Vec::new();
-        for item in data {
-            let embedding = item
-                .get("embedding")
-                .and_then(|e| e.as_array())
-                .ok_or_else(|| BackendError::Inference("Missing embedding vector".to_string()))?;
-
-            let vector: Vec<f32> = embedding
-                .iter()
-                .filter_map(|v| v.as_f64().map(|f| f as f32))
-                .collect();
-
-            results.push(EmbeddingResult {
-                vector,
-                token_count: 0, // Ollama doesn't return token count
-            });
-        }
-
-        Ok(results)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_backend_name() {
-        let backend = OllamaBackend::new();
-        assert_eq!(backend.name(), "Ollama");
-    }
 
     #[test]
     fn test_capabilities() {
@@ -581,11 +378,5 @@ mod tests {
         let backend = OllamaBackend::new();
         assert!(!backend.is_ready());
         assert!(backend.base_url().is_none());
-    }
-
-    #[test]
-    fn test_custom_url() {
-        let backend = OllamaBackend::with_url("http://192.168.1.100:11434");
-        assert_eq!(backend.base_url, "http://192.168.1.100:11434");
     }
 }

@@ -20,7 +20,6 @@
 
 use std::net::SocketAddr;
 use std::path::Path;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -30,16 +29,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
-use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    InferenceBackend,
-};
+use super::{BackendCapabilities, BackendConfig, BackendError, InferenceBackend};
 
 // Candle imports - these are behind the feature flag
 use candle_core::{DType, Device, Tensor};
@@ -588,14 +583,6 @@ impl Default for CandleBackend {
 
 #[async_trait]
 impl InferenceBackend for CandleBackend {
-    fn name(&self) -> &'static str {
-        "Candle"
-    }
-
-    fn description(&self) -> &'static str {
-        "In-process Candle inference (CUDA required). Uses local SafeTensors models."
-    }
-
     fn capabilities(&self) -> BackendCapabilities {
         Self::static_capabilities()
     }
@@ -658,50 +645,9 @@ impl InferenceBackend for CandleBackend {
         self.ready
     }
 
-    async fn health_check(&self) -> bool {
-        // Check if model is loaded and server is running
-        self.ready && self.engine.is_some() && self.server_addr.is_some()
-    }
-
     fn base_url(&self) -> Option<String> {
         // Return the HTTP server URL (now we have one!)
         self.server_addr.map(|addr| format!("http://{}", addr))
-    }
-
-    async fn chat_completion_stream(
-        &self,
-        _request_json: String,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
-    {
-        // Chat completion requires a generative model (LLaVA, etc.)
-        // Currently only embedding models are supported
-        Err(BackendError::Inference(
-            "Chat completion not yet implemented for Candle backend. \
-             Currently only embedding models are supported."
-                .to_string(),
-        ))
-    }
-
-    async fn embeddings(
-        &self,
-        texts: Vec<String>,
-        _model: &str,
-    ) -> Result<Vec<EmbeddingResult>, BackendError> {
-        let engine = self.engine.as_ref().ok_or(BackendError::NotReady)?;
-        // Use write lock because Qwen3's forward() takes &mut self
-        let mut guard = engine.write().await;
-
-        let vectors = guard.embed(&texts)?;
-
-        let embeddings = vectors
-            .into_iter()
-            .map(|vector| EmbeddingResult {
-                vector,
-                token_count: 0,
-            })
-            .collect();
-
-        Ok(embeddings)
     }
 }
 
@@ -712,12 +658,6 @@ unsafe impl Sync for CandleBackend {}
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_backend_name() {
-        let backend = CandleBackend::new();
-        assert_eq!(backend.name(), "Candle");
-    }
 
     #[test]
     fn test_capabilities() {
