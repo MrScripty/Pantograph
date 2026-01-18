@@ -44,6 +44,19 @@ pub struct AgentRequest {
     pub drawing_bounds: Option<DrawingBounds>,
     pub component_tree: Vec<ComponentInfo>,
     pub target_element_id: Option<String>,
+    /// Path to the component being edited (for edit mode)
+    pub target_component_path: Option<String>,
+
+    // Fix mode fields - skip vision analysis and use pre-loaded context
+    /// Skip vision analysis, go directly to agent with error context
+    #[serde(default)]
+    pub fix_mode: bool,
+    /// Pre-loaded file content (avoids read tool call)
+    pub file_content: Option<String>,
+    /// Error that triggered fix mode (enriched with docs)
+    pub error_context: Option<String>,
+    /// Explicit target file path for write
+    pub target_file_path: Option<String>,
 }
 
 /// Response from the agent to the frontend

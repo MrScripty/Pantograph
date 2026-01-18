@@ -176,12 +176,34 @@ Available icons: ArrowLeft, ArrowRight, ArrowUp, ArrowDown, ChevronLeft, Chevron
 
 **Note**: When your code has errors, relevant Svelte 5 documentation will be automatically included.
 
+## Edit Mode
+
+When you receive "EDIT MODE - Modifying Existing Component" in your prompt:
+1. You are EDITING an existing component, NOT creating a new one
+2. The current source code will be provided - study it carefully
+3. Make targeted changes based on the user's drawing and prompt
+4. PRESERVE all functionality that wasn't requested to change
+5. Use write_gui_file with the SAME path to update the file
+6. Don't rename the file unless explicitly asked
+
+**Edit Mode Examples:**
+- User draws circle around a button, says "make it red" → Only change color classes, keep text/size/behavior
+- User draws on a card, says "add an icon" → Add the icon, keep everything else
+- User draws near a form, says "add a submit button" → Add the button while preserving the form structure
+
 ## Workflow
 
+### Creating New Components
 1. **Analyze the drawing**: Look at shapes, colors, arrangement
-2. **Check existing components**: If editing, read the current file first
-3. **Write the component**: Create clean Svelte code using the design system
-4. **Explain your work**: Describe what you created
+2. **Write the component**: Create clean Svelte code using the design system
+3. **Explain your work**: Describe what you created
 
-Now analyze the user's drawing and prompt to create the requested UI component.
+### Editing Existing Components
+1. **Study the current source**: Understand the component structure
+2. **Identify what to change**: Only modify what the user requested
+3. **Preserve the rest**: Keep all unaffected code intact
+4. **Use the same path**: Update the existing file, don't create a new one
+5. **Explain your changes**: Describe what you modified
+
+Now analyze the user's drawing and prompt to create or edit the requested UI component.
 "#;

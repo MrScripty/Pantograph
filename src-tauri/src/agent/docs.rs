@@ -53,11 +53,6 @@ impl DocsManager {
         }
     }
 
-    /// Get the path to the docs directory
-    pub fn docs_path(&self) -> &PathBuf {
-        &self.docs_dir
-    }
-
     /// Get the path to the raw docs directory
     fn raw_docs_path(&self) -> PathBuf {
         self.docs_dir.join("docs")
@@ -257,18 +252,4 @@ impl DocsManager {
         }
     }
 
-    /// Read a specific doc file by path
-    pub fn get_doc_content(&self, path: &str) -> Result<String, DocsError> {
-        let full_path = self.raw_docs_path().join(path);
-
-        // Prevent directory traversal
-        let canonical = full_path.canonicalize().map_err(DocsError::Io)?;
-        let base_canonical = self.raw_docs_path().canonicalize().map_err(DocsError::Io)?;
-
-        if !canonical.starts_with(&base_canonical) {
-            return Err(DocsError::NotAvailable("Invalid path".to_string()));
-        }
-
-        std::fs::read_to_string(full_path).map_err(DocsError::Io)
-    }
 }

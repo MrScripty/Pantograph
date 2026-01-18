@@ -279,37 +279,3 @@ impl SearchIndex {
     }
 }
 
-/// Extract code blocks from markdown content
-pub fn extract_code_blocks(content: &str) -> Vec<String> {
-    let mut blocks = Vec::new();
-    let mut in_block = false;
-    let mut current_block = String::new();
-    let mut is_svelte_block = false;
-
-    for line in content.lines() {
-        if line.starts_with("```") {
-            if in_block {
-                if is_svelte_block && !current_block.trim().is_empty() {
-                    blocks.push(current_block.trim().to_string());
-                }
-                current_block.clear();
-                is_svelte_block = false;
-            } else {
-                // Check if it's a svelte, js, or ts block
-                let lang = line.trim_start_matches('`').to_lowercase();
-                is_svelte_block = lang.starts_with("svelte")
-                    || lang.starts_with("js")
-                    || lang.starts_with("ts")
-                    || lang.starts_with("javascript")
-                    || lang.starts_with("typescript")
-                    || lang.is_empty();
-            }
-            in_block = !in_block;
-        } else if in_block {
-            current_block.push_str(line);
-            current_block.push('\n');
-        }
-    }
-
-    blocks
-}

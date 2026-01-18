@@ -35,8 +35,6 @@ pub struct ParsedSection {
     pub title: String,
     /// Content under this header (not including sub-headers)
     pub content: String,
-    /// Line number where this section starts (0-indexed)
-    pub start_line: usize,
     /// Line number where this section ends (exclusive, 0-indexed)
     pub end_line: usize,
     /// Parent header indices for building breadcrumbs
@@ -51,7 +49,6 @@ pub fn parse_markdown_structure(content: &str) -> Vec<ParsedSection> {
 
     let mut current_section: Option<ParsedSection> = None;
     let mut current_content = String::new();
-    let mut section_start_line = 0;
 
     for (line_num, line) in lines.iter().enumerate() {
         if let Some((level, title)) = parse_header_line(line) {
@@ -67,7 +64,6 @@ pub fn parse_markdown_structure(content: &str) -> Vec<ParsedSection> {
                     level: 0,
                     title: String::new(),
                     content: current_content.trim().to_string(),
-                    start_line: section_start_line,
                     end_line: line_num,
                     parent_indices: Vec::new(),
                 });
@@ -87,13 +83,11 @@ pub fn parse_markdown_structure(content: &str) -> Vec<ParsedSection> {
             let parent_indices: Vec<usize> = header_stack.iter().map(|(_, idx)| *idx).collect();
 
             // Start new section
-            section_start_line = line_num;
             let section_index = sections.len();
             current_section = Some(ParsedSection {
                 level,
                 title: title.to_string(),
                 content: String::new(),
-                start_line: line_num,
                 end_line: 0, // Will be set when section ends
                 parent_indices,
             });
@@ -117,7 +111,6 @@ pub fn parse_markdown_structure(content: &str) -> Vec<ParsedSection> {
             level: 0,
             title: String::new(),
             content: current_content.trim().to_string(),
-            start_line: section_start_line,
             end_line: lines.len(),
             parent_indices: Vec::new(),
         });
