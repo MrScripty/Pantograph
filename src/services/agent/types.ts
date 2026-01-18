@@ -7,6 +7,18 @@ export interface AgentRequest {
   drawing_bounds: DrawingBounds | null;
   component_tree: ComponentInfo[];
   target_element_id: string | null;
+  /** Path to the component being edited (for edit mode) */
+  target_component_path: string | null;
+
+  // Fix mode fields - skip vision analysis and use pre-loaded context
+  /** Skip vision analysis, go directly to agent with error context */
+  fix_mode?: boolean;
+  /** Pre-loaded file content (avoids read tool call) */
+  file_content?: string;
+  /** Error that triggered fix mode (enriched with docs) */
+  error_context?: string;
+  /** Explicit target file path for write */
+  target_file_path?: string;
 }
 
 export interface ComponentInfo {

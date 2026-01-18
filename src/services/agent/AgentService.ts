@@ -1,9 +1,12 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
+import { get } from 'svelte/store';
 import { engine } from '../DrawingEngine';
 import { canvasExport } from '../CanvasExport';
 import { Logger } from '../Logger';
 import { LLMService } from '../LLMService';
-import { calculateBounds, findTargetComponent, type ComponentPosition } from '../DrawingAnalyzer';
+import { calculateBounds, type ComponentPosition } from '../DrawingAnalyzer';
+import { hitTestService } from '../HitTestService';
+import { canvasPan } from '../../stores/canvasStore';
 import { ActivityLogger } from './ActivityLogger';
 import { StreamHandler } from './StreamHandler';
 import type {
@@ -143,8 +146,25 @@ class AgentServiceClass {
       // Calculate drawing bounds
       const drawingBounds = calculateBounds(drawingState.strokes);
 
-      // Find target element if drawing overlaps existing components
-      const targetElementId = findTargetComponent(drawingState.strokes, this.componentRegistry);
+      // Use DOM hit-testing to find target component more accurately
+      let targetElementId: string | null = null;
+      let targetComponentPath: string | null = null;
+
+      if (drawingBounds) {
+        const panOffset = get(canvasPan);
+        const hitResults = hitTestService.findComponentsInBounds(drawingBounds, panOffset);
+
+        if (hitResults.length > 0) {
+          // Take the first (topmost) hit result
+          targetElementId = hitResults[0].componentId;
+          targetComponentPath = hitResults[0].componentPath;
+          Logger.log('agent_hit_test', {
+            hitCount: hitResults.length,
+            targetId: targetElementId,
+            targetPath: targetComponentPath,
+          });
+        }
+      }
 
       // Build the request
       const request: AgentRequest = {
@@ -158,6 +178,7 @@ class AgentServiceClass {
           bounds: c.bounds,
         })),
         target_element_id: targetElementId,
+        target_component_path: targetComponentPath,
       };
 
       Logger.log('agent_request', {
@@ -165,6 +186,7 @@ class AgentServiceClass {
         hasDrawing: drawingState.strokes.length > 0,
         drawingBounds,
         targetElementId,
+        targetComponentPath,
         imageBase64Length: imageBase64.length,
       });
 
@@ -219,6 +241,124 @@ class AgentServiceClass {
       this.notifyState();
 
       Logger.log('agent_error', { error: errorMessage }, 'error');
+      throw error;
+    }
+  }
+
+  /**
+   * Run agent in fix mode with error context.
+   * Skips drawing/vision analysis, goes directly to fixing the component.
+   *
+   * @param targetPath - Path to the component file to fix (relative to src/generated/)
+   * @param errorMessage - The error that triggered fix mode
+   * @param fileContent - Current content of the file
+   * @param fixInstruction - Optional custom instruction (defaults to "Fix the import error")
+   */
+  public async runFixMode(
+    targetPath: string,
+    errorMessage: string,
+    fileContent: string,
+    fixInstruction: string = 'Fix the import error in this component'
+  ): Promise<AgentResponse> {
+    Logger.log('agent_fix_mode_called', { targetPath, errorLength: errorMessage.length });
+
+    if (this.state.isRunning) {
+      throw new Error('Agent is already running');
+    }
+
+    // Check if LLM is ready
+    if (!LLMService.isReady) {
+      Logger.log('agent_llm_not_ready', {}, 'error');
+      throw new Error('LLM not connected. Please connect to an LLM server first.');
+    }
+
+    Logger.log('agent_fix_mode_starting', { targetPath });
+
+    // Reset state
+    this.abortRequested = false;
+    this.activityLogger.clearStreamingToolCalls();
+
+    this.state = {
+      isRunning: true,
+      currentMessage: '',
+      streamingText: '',
+      streamingReasoning: '',
+      activityLog: [],
+      error: null,
+      lastResponse: null,
+    };
+    this.notifyState();
+
+    try {
+      // Build fix mode request - no image or drawing needed
+      const request: AgentRequest = {
+        prompt: fixInstruction,
+        image_base64: '',
+        drawing_bounds: null,
+        component_tree: [],
+        target_element_id: null,
+        target_component_path: targetPath,
+        // Fix mode specific fields
+        fix_mode: true,
+        file_content: fileContent,
+        error_context: errorMessage,
+        target_file_path: targetPath,
+      };
+
+      Logger.log('agent_fix_mode_request', {
+        targetPath,
+        contentLength: fileContent.length,
+        errorLength: errorMessage.length,
+      });
+
+      // Create channel for streaming events
+      const channel = new Channel<AgentEvent>();
+
+      channel.onmessage = (event: AgentEvent) => {
+        this.state = this.streamHandler.handleEvent(event, this.state);
+        this.notifyState();
+      };
+
+      // Invoke the backend agent
+      Logger.log('agent_fix_mode_invoking_backend', {});
+      const response = await invoke<AgentResponse>('run_agent', {
+        request,
+        channel,
+      });
+      Logger.log('agent_fix_mode_response', {
+        filesChanged: response.file_changes.length,
+        componentsUpdated: response.component_updates.length,
+      });
+
+      this.state = {
+        ...this.state,
+        isRunning: false,
+        currentMessage: response.message,
+        error: null,
+        lastResponse: response,
+      };
+      this.notifyState();
+
+      Logger.log('agent_fix_mode_success', {
+        filesChanged: response.file_changes.length,
+        componentsUpdated: response.component_updates.length,
+      });
+
+      return response;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      this.state = this.activityLogger.addActivityItem(this.state, 'error', errorMsg);
+      this.state = {
+        ...this.state,
+        isRunning: false,
+        currentMessage: '',
+        error: errorMsg,
+        lastResponse: null,
+      };
+      this.notifyState();
+
+      Logger.log('agent_fix_mode_error', { error: errorMsg }, 'error');
       throw error;
     }
   }
