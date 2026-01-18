@@ -38,22 +38,22 @@
     Ollama: '~1.6 GB',
   };
 
-  let backends: BackendInfo[] = [];
-  let currentBackend: string = '';
-  let isLoading = false;
-  let isSwitching = false;
-  let error: string | null = null;
-  let serverRunning = false;
+  let backends: BackendInfo[] = $state([]);
+  let currentBackend: string = $state('');
+  let isLoading = $state(false);
+  let isSwitching = $state(false);
+  let error: string | null = $state(null);
+  let serverRunning = $state(false);
 
   // Download state
-  let downloadingBackend: string | null = null;
-  let downloadProgress: DownloadProgress | null = null;
+  let downloadingBackend: string | null = $state(null);
+  let downloadProgress: DownloadProgress | null = $state(null);
 
   // LLM status subscription
   let unsubscribe: (() => void) | null = null;
 
   // Confirmation dialog state
-  let confirmDownload: BackendInfo | null = null;
+  let confirmDownload: BackendInfo | null = $state(null);
 
   const loadBackends = async () => {
     isLoading = true;
@@ -195,7 +195,7 @@
 
   // Get the active backend info
   // Only show backend as active if server is actually running
-  $: activeBackend = serverRunning ? backends.find((b) => b.name === currentBackend) : null;
+  let activeBackend = $derived(serverRunning ? backends.find((b) => b.name === currentBackend) : null);
 </script>
 
 <!-- Confirmation Dialog -->

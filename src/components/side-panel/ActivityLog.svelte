@@ -4,19 +4,33 @@
   import type { ChatMessage } from '../../services/LLMService';
 
   // Props
-  export let activityLog: AgentActivityItem[] = [];
-  export let streamingText: string = '';
-  export let streamingReasoning: string = '';
-  export let isAgentRunning: boolean = false;
-  export let messages: ChatMessage[] = [];
-  export let isGenerating: boolean = false;
-  export let currentResponse: string = '';
-  export let error: string | null = null;
-  export let isReady: boolean = false;
+  interface Props {
+    activityLog?: AgentActivityItem[];
+    streamingText?: string;
+    streamingReasoning?: string;
+    isAgentRunning?: boolean;
+    messages?: ChatMessage[];
+    isGenerating?: boolean;
+    currentResponse?: string;
+    error?: string | null;
+    isReady?: boolean;
+  }
+
+  let {
+    activityLog = [],
+    streamingText = '',
+    streamingReasoning = '',
+    isAgentRunning = false,
+    messages = [],
+    isGenerating = false,
+    currentResponse = '',
+    error = null,
+    isReady = false,
+  }: Props = $props();
 
   // Local state
-  let expandedItems: Set<string> = new Set();
-  let hoveredItemId: string | null = null;
+  let expandedItems: Set<string> = $state(new Set());
+  let hoveredItemId: string | null = $state(null);
 
   // Handle Ctrl+C to copy hovered item content
   const handleKeydown = (event: KeyboardEvent) => {
@@ -76,14 +90,15 @@
   };
 
   // Check if there's any content to display
-  $: hasContent =
+  let hasContent = $derived(
     messages.length > 0 ||
     activityLog.length > 0 ||
     streamingText ||
-    isAgentRunning;
+    isAgentRunning
+  );
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="space-y-3">
   <!-- Agent Activity Log -->
@@ -92,9 +107,9 @@
       {#if item.type === 'system_prompt'}
         <!-- System Prompt Card (collapsible) -->
         <button
-          on:click={() => toggleExpanded(item.id)}
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onclick={() => toggleExpanded(item.id)}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-purple-900/20 border border-purple-800/50 hover:bg-purple-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-purple-400 mb-1">
@@ -120,9 +135,9 @@
       {:else if item.type === 'tool_call'}
         <!-- Tool Call Card with status -->
         <button
-          on:click={() => toggleExpanded(item.id)}
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onclick={() => toggleExpanded(item.id)}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 {item.metadata?.status === 'error' ? 'bg-red-900/20 border border-red-800/50 hover:bg-red-900/30' : 'bg-amber-900/20 border border-amber-800/50 hover:bg-amber-900/30'} transition-colors"
         >
           <div class="flex items-center gap-2 text-xs {item.metadata?.status === 'error' ? 'text-red-400' : 'text-amber-400'} mb-1">
@@ -159,9 +174,9 @@
       {:else if item.type === 'tool_call_streaming'}
         <!-- Streaming Tool Call Card - shows tool call as it's being generated -->
         <button
-          on:click={() => toggleExpanded(item.id)}
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onclick={() => toggleExpanded(item.id)}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-cyan-900/20 border border-cyan-800/50 hover:bg-cyan-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-cyan-400 mb-1">
@@ -189,9 +204,9 @@
       {:else if item.type === 'tool_result'}
         <!-- Tool Result Card - Legacy, kept for backwards compatibility but results now merge into tool_call -->
         <button
-          on:click={() => toggleExpanded(item.id)}
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onclick={() => toggleExpanded(item.id)}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-green-900/20 border border-green-800/50 hover:bg-green-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-green-400 mb-1">
@@ -218,8 +233,8 @@
         <!-- Final Text Response -->
         <div
           class="rounded-lg p-3 bg-neutral-800/50"
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           role="button"
           tabindex="0"
         >
@@ -234,9 +249,9 @@
       {:else if item.type === 'reasoning'}
         <!-- Reasoning (collapsible) -->
         <button
-          on:click={() => toggleExpanded(item.id)}
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onclick={() => toggleExpanded(item.id)}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-blue-900/20 border border-blue-800/50 hover:bg-blue-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-blue-400 mb-1">
@@ -263,8 +278,8 @@
         <!-- Status Message -->
         <div
           class="flex items-center gap-2 text-neutral-500 text-xs px-2"
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           role="button"
           tabindex="0"
         >
@@ -276,8 +291,8 @@
         <!-- Error Message -->
         <div
           class="rounded-lg p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm"
-          on:mouseenter={() => hoveredItemId = item.id}
-          on:mouseleave={() => hoveredItemId = null}
+          onmouseenter={() => hoveredItemId = item.id}
+          onmouseleave={() => hoveredItemId = null}
           role="button"
           tabindex="0"
         >

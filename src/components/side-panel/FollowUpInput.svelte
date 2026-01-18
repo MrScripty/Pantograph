@@ -1,24 +1,28 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  interface Props {
+    isAgentRunning?: boolean;
+    isReady?: boolean;
+    onsubmit?: (message: string) => void;
+    onstop?: () => void;
+  }
 
-  export let isAgentRunning: boolean = false;
-  export let isReady: boolean = false;
+  let {
+    isAgentRunning = false,
+    isReady = false,
+    onsubmit,
+    onstop,
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher<{
-    submit: string;
-    stop: void;
-  }>();
-
-  let followUpInput = '';
+  let followUpInput = $state('');
 
   const handleFollowUp = () => {
     if (!followUpInput.trim() || isAgentRunning) return;
-    dispatch('submit', followUpInput.trim());
+    onsubmit?.(followUpInput.trim());
     followUpInput = '';
   };
 
   const handleStopAgent = () => {
-    dispatch('stop');
+    onstop?.();
   };
 
   const handleFollowUpKeyDown = (e: KeyboardEvent) => {
@@ -37,12 +41,12 @@
       placeholder={isAgentRunning ? "Agent is running..." : "Send a message..."}
       class="flex-1 bg-transparent px-3 py-2 outline-none font-mono text-sm placeholder:text-neutral-600"
       disabled={isAgentRunning}
-      on:keydown={handleFollowUpKeyDown}
+      onkeydown={handleFollowUpKeyDown}
     />
     {#if isAgentRunning}
       <!-- Stop button when agent is running -->
       <button
-        on:click={handleStopAgent}
+        onclick={handleStopAgent}
         class="px-4 py-2 bg-red-700 hover:bg-red-600 border-l border-neutral-600 transition-colors text-xs font-bold tracking-wider text-white"
         title="Stop agent"
       >
@@ -53,7 +57,7 @@
     {:else}
       <!-- Send button when agent is idle -->
       <button
-        on:click={handleFollowUp}
+        onclick={handleFollowUp}
         disabled={!followUpInput.trim() || !isReady}
         class="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border-l border-neutral-600 transition-colors text-xs font-bold tracking-wider"
         title="Send message"

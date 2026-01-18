@@ -125,10 +125,10 @@
       placeholder="Describe what you want to do with this drawing..."
       class="flex-1 bg-transparent px-4 py-3 outline-none font-mono text-sm placeholder:text-neutral-600"
       disabled={isLoading}
-      on:keydown={handleKeyDown}
+      onkeydown={handleKeyDown}
     />
     <button
-      on:click={handleGo}
+      onclick={handleGo}
       disabled={isLoading || !inputValue.trim()}
       class="px-6 py-3 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed border-l border-neutral-700 transition-colors text-sm font-bold tracking-wider"
     >

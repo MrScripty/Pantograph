@@ -2,7 +2,11 @@
   import { Handle, Position } from '@xyflow/svelte';
   import type { SystemPromptNodeData } from '../../types/nodes';
 
-  export let data: SystemPromptNodeData;
+  interface Props {
+    data: SystemPromptNodeData;
+  }
+
+  let { data }: Props = $props();
 
   // Truncate prompt for preview
   function truncate(text: string | undefined, maxLength: number = 50): string {

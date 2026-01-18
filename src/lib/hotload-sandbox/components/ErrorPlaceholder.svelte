@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { ComponentError } from '../types';
+  import { AgentService } from '../../../services/agent/AgentService';
+  import { Logger } from '../../../services/Logger';
 
   interface Props {
     /** The error that occurred */
@@ -12,6 +14,10 @@
     onRetry?: () => void;
     /** Whether to show the retry button */
     showRetry?: boolean;
+    /** Path to the component file (for fix mode) */
+    componentPath?: string;
+    /** Source content of the component (for fix mode) */
+    componentSource?: string;
   }
 
   let {
@@ -20,7 +26,11 @@
     componentId,
     onRetry,
     showRetry = true,
+    componentPath,
+    componentSource,
   }: Props = $props();
+
+  let isFixing = $state(false);
 
   // Derive the display message
   const displayMessage = $derived(error?.errorMessage ?? errorMessage ?? 'Unknown error');
@@ -45,6 +55,33 @@
   function handleRetry() {
     onRetry?.();
   }
+
+  async function handleFixWithAgent() {
+    if (!componentPath || !componentSource) {
+      Logger.log('fix_mode_missing_context', { hasPath: !!componentPath, hasSource: !!componentSource }, 'warn');
+      return;
+    }
+
+    isFixing = true;
+    try {
+      Logger.log('fix_mode_starting', { componentPath });
+      await AgentService.runFixMode(
+        componentPath,
+        displayMessage,
+        componentSource,
+        'Fix the error in this component. Make minimal changes to resolve the issue.'
+      );
+      Logger.log('fix_mode_complete', { componentPath });
+      // Component will be reloaded via HMR when the agent writes the fixed file
+    } catch (err) {
+      Logger.log('fix_mode_failed', { error: err instanceof Error ? err.message : String(err) }, 'error');
+    } finally {
+      isFixing = false;
+    }
+  }
+
+  // Check if fix mode is available
+  const canFix = $derived(!!componentPath && !!componentSource);
 </script>
 
 <div
@@ -87,15 +124,26 @@
     {componentId}
   </p>
 
-  <!-- Retry Button -->
-  {#if showRetry && onRetry}
-    <button
-      onclick={handleRetry}
-      class="px-3 py-1 text-xs font-medium bg-red-800/50 hover:bg-red-700/50 text-red-200 rounded transition-colors"
-    >
-      Retry
-    </button>
-  {/if}
+  <!-- Action Buttons -->
+  <div class="flex gap-2">
+    {#if showRetry && onRetry}
+      <button
+        onclick={handleRetry}
+        class="px-3 py-1 text-xs font-medium bg-red-800/50 hover:bg-red-700/50 text-red-200 rounded transition-colors"
+      >
+        Retry
+      </button>
+    {/if}
+    {#if canFix}
+      <button
+        onclick={handleFixWithAgent}
+        disabled={isFixing}
+        class="px-3 py-1 text-xs font-medium bg-blue-800/50 hover:bg-blue-700/50 text-blue-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isFixing ? 'Fixing...' : 'Fix with Agent'}
+      </button>
+    {/if}
+  </div>
 
   <!-- Timestamp -->
   {#if error?.timestamp}

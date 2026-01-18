@@ -3,16 +3,16 @@
   import { ConfigService, type ConfigState, type ModelConfig } from '../services/ConfigService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
 
-  let state: ConfigState = ConfigService.getState();
+  let state: ConfigState = $state(ConfigService.getState());
   let unsubscribe: (() => void) | null = null;
-  let isSaving = false;
+  let isSaving = $state(false);
 
   // Local form state
-  let vlmModelPath: string = '';
-  let vlmMmprojPath: string = '';
-  let embeddingModelPath: string = '';
-  let candleEmbeddingModelPath: string = '';
-  let ollamaVlmModel: string = '';
+  let vlmModelPath: string = $state('');
+  let vlmMmprojPath: string = $state('');
+  let embeddingModelPath: string = $state('');
+  let candleEmbeddingModelPath: string = $state('');
+  let ollamaVlmModel: string = $state('');
 
   onMount(() => {
     unsubscribe = ConfigService.subscribe((nextState) => {
@@ -81,21 +81,22 @@
     return path.split('/').pop() || path.split('\\').pop() || path;
   };
 
-  $: hasChanges =
+  let hasChanges = $derived(
     vlmModelPath !== (state.config.models.vlm_model_path || '') ||
     vlmMmprojPath !== (state.config.models.vlm_mmproj_path || '') ||
     embeddingModelPath !== (state.config.models.embedding_model_path || '') ||
     candleEmbeddingModelPath !== (state.config.models.candle_embedding_model_path || '') ||
-    ollamaVlmModel !== (state.config.models.ollama_vlm_model || '');
+    ollamaVlmModel !== (state.config.models.ollama_vlm_model || '')
+  );
 
-  $: isConfigured = (vlmModelPath && vlmMmprojPath) || ollamaVlmModel;
+  let isConfigured = $derived((vlmModelPath && vlmMmprojPath) || ollamaVlmModel);
 </script>
 
 <div class="space-y-3">
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => toggleSection('model')}
+    onclick={() => toggleSection('model')}
   >
     <div class="flex items-center gap-2">
       <span>Model Configuration</span>
@@ -125,9 +126,10 @@
 
         <!-- Model Path -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">Model File</label>
+          <label for="vlm-model-path" class="text-xs text-neutral-400">Model File</label>
           <div class="flex gap-2">
             <input
+              id="vlm-model-path"
               type="text"
               bind:value={vlmModelPath}
               placeholder="Select model file..."
@@ -135,7 +137,7 @@
               title={vlmModelPath}
             />
             <button
-              on:click={pickVlmModel}
+              onclick={pickVlmModel}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
               Browse
@@ -148,9 +150,10 @@
 
         <!-- MMProj Path -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">MMProj File</label>
+          <label for="vlm-mmproj-path" class="text-xs text-neutral-400">MMProj File</label>
           <div class="flex gap-2">
             <input
+              id="vlm-mmproj-path"
               type="text"
               bind:value={vlmMmprojPath}
               placeholder="Select mmproj file..."
@@ -158,7 +161,7 @@
               title={vlmMmprojPath}
             />
             <button
-              on:click={pickMmproj}
+              onclick={pickMmproj}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
               Browse
@@ -176,8 +179,9 @@
           Ollama VLM Model
         </div>
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">Model Name (for Ollama backend)</label>
+          <label for="ollama-vlm-model" class="text-xs text-neutral-400">Model Name (for Ollama backend)</label>
           <input
+            id="ollama-vlm-model"
             type="text"
             bind:value={ollamaVlmModel}
             placeholder="e.g., llava:13b, qwen2-vl:7b"
@@ -197,9 +201,10 @@
 
         <!-- GGUF Embedding Model (llama.cpp) -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">GGUF Model File (llama.cpp)</label>
+          <label for="embedding-model-path" class="text-xs text-neutral-400">GGUF Model File (llama.cpp)</label>
           <div class="flex gap-2">
             <input
+              id="embedding-model-path"
               type="text"
               bind:value={embeddingModelPath}
               placeholder="Select embedding model..."
@@ -207,7 +212,7 @@
               title={embeddingModelPath}
             />
             <button
-              on:click={pickEmbeddingModel}
+              onclick={pickEmbeddingModel}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
               Browse
@@ -220,9 +225,10 @@
 
         <!-- SafeTensors Embedding Model (Candle) -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">SafeTensors Model Directory (Candle)</label>
+          <label for="candle-embedding-path" class="text-xs text-neutral-400">SafeTensors Model Directory (Candle)</label>
           <div class="flex gap-2">
             <input
+              id="candle-embedding-path"
               type="text"
               bind:value={candleEmbeddingModelPath}
               placeholder="e.g., ~/models/bge-small-en-v1.5/"
@@ -230,7 +236,7 @@
               title={candleEmbeddingModelPath}
             />
             <button
-              on:click={pickCandleEmbeddingModel}
+              onclick={pickCandleEmbeddingModel}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
               Browse
@@ -248,7 +254,7 @@
       <!-- Save Button -->
       {#if hasChanges}
         <button
-          on:click={saveConfig}
+          onclick={saveConfig}
           disabled={isSaving}
           class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
         >

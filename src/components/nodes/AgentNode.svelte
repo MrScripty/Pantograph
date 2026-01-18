@@ -2,25 +2,29 @@
   import { Handle, Position } from '@xyflow/svelte';
   import type { AgentNodeData } from '../../types/nodes';
 
-  export let data: AgentNodeData;
+  interface Props {
+    data: AgentNodeData;
+  }
 
-  $: status = data.status || 'idle';
-  $: modelName = data.modelName || 'Local VLM';
-  $: maxTurns = data.maxTurns || 5;
+  let { data }: Props = $props();
 
-  $: statusColor = {
+  let status = $derived(data.status || 'idle');
+  let modelName = $derived(data.modelName || 'Local VLM');
+  let maxTurns = $derived(data.maxTurns || 5);
+
+  let statusColor = $derived({
     idle: 'bg-neutral-500',
     running: 'bg-blue-500 animate-pulse',
     success: 'bg-green-500',
     error: 'bg-red-500',
-  }[status];
+  }[status]);
 
-  $: statusText = {
+  let statusText = $derived({
     idle: 'Idle',
     running: 'Running...',
     success: 'Success',
     error: 'Error',
-  }[status];
+  }[status]);
 </script>
 
 <div class="node-container bg-neutral-800 border border-green-600/50 rounded-lg p-4 min-w-[220px]">

@@ -129,6 +129,8 @@
     <div
       class="absolute {currentMode === 'interact' ? 'pointer-events-auto' : 'pointer-events-none'}"
       style="left: {comp.position.x}px; top: {comp.position.y}px; width: {comp.size.width}px; height: {comp.size.height}px;"
+      data-component-id={comp.id}
+      data-component-path={comp.path}
     >
       {#if shouldShowError(comp)}
         <!-- Show error placeholder -->
@@ -138,6 +140,8 @@
           componentId={comp.id}
           onRetry={() => handleRetry(comp.id)}
           showRetry={true}
+          componentPath={comp.path}
+          componentSource={comp.source}
         />
       {:else if comp.status === 'loading'}
         <!-- Loading state -->

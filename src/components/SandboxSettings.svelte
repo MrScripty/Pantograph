@@ -12,19 +12,19 @@
     allowed_packages: string[];
   }
 
-  let isLoading = true;
-  let isSaving = false;
-  let loadError: string | null = null;
+  let isLoading = $state(true);
+  let isSaving = $state(false);
+  let loadError: string | null = $state(null);
 
   // Form state
-  let validationMode: ImportValidationMode = 'none';
-  let timeoutMs = 5000;
-  let allowedPackages = '';
+  let validationMode: ImportValidationMode = $state('none');
+  let timeoutMs = $state(5000);
+  let allowedPackages = $state('');
 
   // Original values for change detection
-  let originalMode: ImportValidationMode = 'none';
-  let originalTimeout = 5000;
-  let originalPackages = '';
+  let originalMode: ImportValidationMode = $state('none');
+  let originalTimeout = $state(5000);
+  let originalPackages = $state('');
 
   onMount(async () => {
     await loadConfig();
@@ -97,10 +97,11 @@
     }
   };
 
-  $: hasChanges =
+  let hasChanges = $derived(
     validationMode !== originalMode ||
     timeoutMs !== originalTimeout ||
-    allowedPackages !== originalPackages;
+    allowedPackages !== originalPackages
+  );
 </script>
 
 <div class="space-y-3">
@@ -139,8 +140,9 @@
 
       <!-- Import Validation Mode -->
       <div class="space-y-2">
-        <label class="text-xs text-neutral-400">Import Validation Mode</label>
+        <label for="validation-mode-select" class="text-xs text-neutral-400">Import Validation Mode</label>
         <select
+          id="validation-mode-select"
           bind:value={validationMode}
           disabled={isLoading}
           class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
@@ -166,9 +168,10 @@
 
       <!-- Validation Timeout -->
       <div class="space-y-1">
-        <label class="text-xs text-neutral-400">Validation Timeout (ms)</label>
+        <label for="validation-timeout-range" class="text-xs text-neutral-400">Validation Timeout (ms)</label>
         <div class="flex items-center gap-3">
           <input
+            id="validation-timeout-range"
             type="range"
             bind:value={timeoutMs}
             min="1000"
@@ -186,8 +189,9 @@
 
       <!-- Additional Allowed Packages -->
       <div class="space-y-1">
-        <label class="text-xs text-neutral-400">Additional Allowed Packages</label>
+        <label for="allowed-packages-textarea" class="text-xs text-neutral-400">Additional Allowed Packages</label>
         <textarea
+          id="allowed-packages-textarea"
           bind:value={allowedPackages}
           disabled={validationMode === 'none'}
           placeholder="package-name

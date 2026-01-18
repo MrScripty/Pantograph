@@ -3,20 +3,24 @@
   import { invoke } from '@tauri-apps/api/core';
   import { updateNodeData } from '../stores/nodeGraphStore';
 
-  export let onClose: () => void;
+  interface Props {
+    onClose: () => void;
+  }
 
-  let promptContent = '';
-  let isLoading = true;
-  let isSaving = false;
-  let error: string | null = null;
-  let saveSuccess = false;
-  let textareaEl: HTMLTextAreaElement;
-  let lineNumbersEl: HTMLDivElement;
+  let { onClose }: Props = $props();
+
+  let promptContent = $state('');
+  let isLoading = $state(true);
+  let isSaving = $state(false);
+  let error: string | null = $state(null);
+  let saveSuccess = $state(false);
+  let textareaEl: HTMLTextAreaElement | null = $state(null);
+  let lineNumbersEl: HTMLDivElement | null = $state(null);
 
   // Compute line count and character count
-  $: lines = promptContent.split('\n');
-  $: lineCount = lines.length;
-  $: charCount = promptContent.length;
+  let lines = $derived(promptContent.split('\n'));
+  let lineCount = $derived(lines.length);
+  let charCount = $derived(promptContent.length);
 
   // Sync scroll between textarea and line numbers
   function handleScroll() {
@@ -68,7 +72,7 @@
   }
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} />
 
 <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-8">
   <div class="bg-neutral-900 border border-neutral-700 rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl">
@@ -86,8 +90,9 @@
         </div>
       </div>
       <button
-        on:click={onClose}
+        onclick={onClose}
         class="p-2 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg transition-colors"
+        aria-label="Close"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -119,11 +124,11 @@
           <textarea
             bind:this={textareaEl}
             bind:value={promptContent}
-            on:scroll={handleScroll}
+            onscroll={handleScroll}
             class="flex-1 bg-neutral-950 p-4 text-sm font-mono text-neutral-200 resize-none focus:outline-none leading-[1.5rem]"
             placeholder="Enter the system prompt..."
             spellcheck="false"
-          />
+          ></textarea>
         </div>
       {/if}
     </div>
@@ -143,13 +148,13 @@
       </div>
       <div class="flex items-center gap-3">
         <button
-          on:click={onClose}
+          onclick={onClose}
           class="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors"
         >
           Cancel
         </button>
         <button
-          on:click={handleSave}
+          onclick={handleSave}
           disabled={isLoading || isSaving}
           class="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white transition-colors"
         >

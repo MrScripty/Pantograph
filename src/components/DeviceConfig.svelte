@@ -5,27 +5,27 @@
   import { RagService } from '../services/RagService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
 
-  let state: ConfigState = ConfigService.getState();
+  let state: ConfigState = $state(ConfigService.getState());
   let unsubscribe: (() => void) | null = null;
   let unsubscribeLLM: (() => void) | null = null;
   let unsubscribeRag: (() => void) | null = null;
-  let isSaving = false;
-  let isLoadingDevices = false;
-  let isRefreshingDevices = false;
-  let deviceLoadError: string | null = null;
-  let oomFlash = false;
+  let isSaving = $state(false);
+  let isLoadingDevices = $state(false);
+  let isRefreshingDevices = $state(false);
+  let deviceLoadError: string | null = $state(null);
+  let oomFlash = $state(false);
   let oomFlashTimer: ReturnType<typeof setTimeout> | null = null;
   let lastOomAt = 0;
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   // Available devices from llama-server
-  let availableDevices: DeviceInfo[] = [];
+  let availableDevices: DeviceInfo[] = $state([]);
 
   // Local form state
-  let selectedDevice: string = 'auto';
-  let gpuLayers: number = -1;
-  let embeddingMemoryMode: EmbeddingMemoryMode = 'cpu_parallel';
-  let initialEmbeddingMode: EmbeddingMemoryMode = 'cpu_parallel';
+  let selectedDevice: string = $state('auto');
+  let gpuLayers: number = $state(-1);
+  let embeddingMemoryMode: EmbeddingMemoryMode = $state('cpu_parallel');
+  let initialEmbeddingMode: EmbeddingMemoryMode = $state('cpu_parallel');
 
   onMount(async () => {
     unsubscribe = ConfigService.subscribe((nextState) => {
@@ -189,13 +189,14 @@
     return device?.name || selectedDevice;
   };
 
-  $: hasChanges =
+  let hasChanges = $derived(
     selectedDevice !== state.config.device.device ||
     gpuLayers !== state.config.device.gpu_layers ||
-    embeddingMemoryMode !== initialEmbeddingMode;
+    embeddingMemoryMode !== initialEmbeddingMode
+  );
 
-  $: selectedDeviceInfo = availableDevices.find(d => d.id === selectedDevice) || null;
-  $: vramUsage = selectedDeviceInfo && selectedDeviceInfo.total_vram_mb > 0
+  let selectedDeviceInfo = $derived(availableDevices.find(d => d.id === selectedDevice) || null);
+  let vramUsage = $derived(selectedDeviceInfo && selectedDeviceInfo.total_vram_mb > 0
     ? {
         used: Math.max(selectedDeviceInfo.total_vram_mb - selectedDeviceInfo.free_vram_mb, 0),
         free: Math.max(selectedDeviceInfo.free_vram_mb, 0),
@@ -209,17 +210,18 @@
           )
         ),
       }
-    : null;
+    : null
+  );
 
   // Add auto option to device list if not present
-  $: deviceOptions = [
+  let deviceOptions = $derived([
     { id: 'auto', name: 'Auto (let llama-server choose)', total_vram_mb: 0, free_vram_mb: 0 },
     ...availableDevices.filter(d => d.id !== 'auto'),
-  ];
+  ]);
 
   // Minimum VRAM needed for embedding model (~800MB with buffer)
   const EMBEDDING_MODEL_VRAM_MB = 800;
-  $: canFitBothModels = vramUsage ? vramUsage.free >= EMBEDDING_MODEL_VRAM_MB : false;
+  let canFitBothModels = $derived(vramUsage ? vramUsage.free >= EMBEDDING_MODEL_VRAM_MB : false);
 
   const getEmbeddingModeLabel = (mode: EmbeddingMemoryMode): string => {
     switch (mode) {
@@ -237,7 +239,7 @@
     }
   };
 
-  $: {
+  $effect(() => {
     if ($expandedSection === 'device' && !refreshTimer) {
       void loadDevices({ silent: true });
       refreshTimer = setInterval(() => {
@@ -247,14 +249,14 @@
       clearInterval(refreshTimer);
       refreshTimer = null;
     }
-  }
+  });
 </script>
 
 <div class="space-y-3">
   <!-- Header with toggle -->
   <button
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    on:click={() => toggleSection('device')}
+    onclick={() => toggleSection('device')}
   >
     <div class="flex items-center gap-2">
       <span>Device Configuration</span>
@@ -285,7 +287,7 @@
             Inference Device
           </div>
           <button
-            on:click={() => loadDevices()}
+            onclick={() => loadDevices()}
             disabled={isLoadingDevices}
             class="text-[10px] text-neutral-500 hover:text-neutral-400 disabled:opacity-50"
           >
@@ -301,8 +303,9 @@
 
         <!-- Device Selection -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">Compute Device</label>
+          <label for="compute-device-select" class="text-xs text-neutral-400">Compute Device</label>
           <select
+            id="compute-device-select"
             bind:value={selectedDevice}
             disabled={isLoadingDevices}
             class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
@@ -319,9 +322,10 @@
 
         <!-- GPU Layers -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">GPU Layers</label>
+          <label for="gpu-layers-range" class="text-xs text-neutral-400">GPU Layers</label>
           <div class="flex items-center gap-3">
             <input
+              id="gpu-layers-range"
               type="range"
               bind:value={gpuLayers}
               min="-1"
@@ -337,7 +341,7 @@
 
         <!-- VRAM Usage -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">VRAM Usage</label>
+          <span class="text-xs text-neutral-400">VRAM Usage</span>
           {#if vramUsage}
             <div class={`space-y-1 rounded border p-2 ${oomFlash ? 'border-red-500/70 bg-red-900/20 animate-pulse' : 'border-neutral-700/60 bg-neutral-900/40'}`}>
               <div class="flex items-center justify-between text-[10px] text-neutral-500">
@@ -366,8 +370,9 @@
 
         <!-- Embedding Memory Mode -->
         <div class="space-y-1">
-          <label class="text-xs text-neutral-400">Embedding Memory Mode</label>
+          <label for="embedding-memory-mode-select" class="text-xs text-neutral-400">Embedding Memory Mode</label>
           <select
+            id="embedding-memory-mode-select"
             bind:value={embeddingMemoryMode}
             class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
             style="color-scheme: dark;"
@@ -395,7 +400,7 @@
       <!-- Save Button -->
       {#if hasChanges}
         <button
-          on:click={saveConfig}
+          onclick={saveConfig}
           disabled={isSaving}
           class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
         >

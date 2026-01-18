@@ -100,6 +100,8 @@
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     onclick={handleBackdropClick}
+    onkeydown={handleKeydown}
+    tabindex="0"
     role="dialog"
     aria-modal="true"
   >
@@ -128,8 +130,9 @@
 
       <!-- Document Selector -->
       <div class="px-6 py-3 border-b border-neutral-800 shrink-0">
-        <label class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Document</label>
+        <label for="chunk-preview-doc-select" class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Document</label>
         <select
+          id="chunk-preview-doc-select"
           class="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-500"
           value={selectedDocId}
           onchange={handleDocChange}

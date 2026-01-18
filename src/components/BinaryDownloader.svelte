@@ -15,10 +15,10 @@
     error: string | null;
   }
 
-  let status: BinaryStatus = { available: true, missing_files: [] };
-  let downloading = false;
-  let progress: DownloadProgress = { status: '', current: 0, total: 0, done: false, error: null };
-  let error: string | null = null;
+  let status: BinaryStatus = $state({ available: true, missing_files: [] });
+  let downloading = $state(false);
+  let progress: DownloadProgress = $state({ status: '', current: 0, total: 0, done: false, error: null });
+  let error: string | null = $state(null);
 
   onMount(async () => {
     try {
@@ -62,7 +62,7 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  $: progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+  let progressPercent = $derived(progress.total > 0 ? (progress.current / progress.total) * 100 : 0);
 </script>
 
 {#if !status.available}
@@ -112,7 +112,7 @@
         </details>
       {/if}
       <button
-        on:click={download}
+        onclick={download}
         class="w-full py-2 px-3 bg-amber-600 hover:bg-amber-500 text-white rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

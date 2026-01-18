@@ -187,12 +187,12 @@
   bind:this={canvas}
   class="fixed top-0 left-0 z-20 touch-none transition-[right] duration-300 ease-out {isPanning ? 'cursor-grabbing' : currentMode === 'draw' ? 'cursor-crosshair pointer-events-auto' : 'cursor-default pointer-events-none'}"
   style="width: 100vw; height: 100vh; clip-path: inset(0 {currentPanelWidth}px 0 0);"
-  on:mousedown={handleMouseDown}
-  on:mousemove={handleMouseMove}
-  on:mouseup={handleMouseUp}
-  on:mouseleave={handleMouseUp}
-  on:auxclick|preventDefault={() => {}}
-  on:touchstart|preventDefault={handleTouchStart}
-  on:touchmove|preventDefault={handleTouchMove}
-  on:touchend|preventDefault={handleTouchEnd}
+  onmousedown={handleMouseDown}
+  onmousemove={handleMouseMove}
+  onmouseup={handleMouseUp}
+  onmouseleave={handleMouseUp}
+  onauxclick={(e) => e.preventDefault()}
+  ontouchstart={(e) => { e.preventDefault(); handleTouchStart(e); }}
+  ontouchmove={(e) => { e.preventDefault(); handleTouchMove(e); }}
+  ontouchend={(e) => { e.preventDefault(); handleTouchEnd(); }}
 ></canvas>

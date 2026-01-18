@@ -51,14 +51,14 @@
   });
 
   // Handle node drag events - sync back to store
-  function onNodeDragStop(event: CustomEvent<{ node: Node }>) {
-    const { node } = event.detail;
-    updateNodePosition(node.id, node.position);
+  function onNodeDragStop({ targetNode }: { targetNode: Node | null; nodes: Node[]; event: MouseEvent | TouchEvent }) {
+    if (targetNode) {
+      updateNodePosition(targetNode.id, targetNode.position);
+    }
   }
 
   // Handle system prompt edit request
-  function handleNodeClick(event: CustomEvent<{ node: Node }>) {
-    const { node } = event.detail;
+  function handleNodeClick({ node }: { node: Node; event: MouseEvent | TouchEvent }) {
     if (node.type === 'systemPrompt') {
       showPromptEditor = true;
     }
@@ -79,8 +79,8 @@
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
-    on:nodedragstop={onNodeDragStop}
-    on:nodeclick={handleNodeClick}
+    onnodedragstop={onNodeDragStop}
+    onnodeclick={handleNodeClick}
     defaultEdgeOptions={{
       type: 'smoothstep',
       animated: false,

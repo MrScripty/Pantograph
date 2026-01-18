@@ -9,8 +9,8 @@
     isNumbered: boolean;
   };
 
-  let mousePos = { x: 0, y: 0 };
-  let windowSize = { w: 0, h: 0 };
+  let mousePos = $state({ x: 0, y: 0 });
+  let windowSize = $state({ w: 0, h: 0 });
 
   const buildMarks = (length: number): Mark[] => {
     const marks: Mark[] = [];
@@ -24,11 +24,8 @@
     return marks;
   };
 
-  let marksH: Mark[] = [];
-  let marksV: Mark[] = [];
-
-  $: marksH = buildMarks(windowSize.w);
-  $: marksV = buildMarks(windowSize.h);
+  let marksH: Mark[] = $derived(buildMarks(windowSize.w));
+  let marksV: Mark[] = $derived(buildMarks(windowSize.h));
 
   onMount(() => {
     const handleMouseMove = (e: MouseEvent) => {

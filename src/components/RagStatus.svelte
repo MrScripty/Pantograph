@@ -7,19 +7,19 @@
   import { openChunkPreview } from '../stores/chunkPreviewStore';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
 
-  let ragState: RagState = RagService.getState();
-  let configState: ConfigState = ConfigService.getState();
+  let ragState: RagState = $state(RagService.getState());
+  let configState: ConfigState = $state(ConfigService.getState());
   let unsubscribeRag: (() => void) | null = null;
   let unsubscribeConfig: (() => void) | null = null;
-  let isIndexingWithSwitch = false;
+  let isIndexingWithSwitch = $state(false);
 
   // For external embedding server (legacy mode)
-  let embeddingUrl = 'http://127.0.0.1:8081';
-  let isTestingServer = false;
-  let useExternalEmbedding = false;
+  let embeddingUrl = $state('http://127.0.0.1:8081');
+  let isTestingServer = $state(false);
+  let useExternalEmbedding = $state(false);
 
   // For docs download
-  let isDownloadingDocs = false;
+  let isDownloadingDocs = $state(false);
 
   onMount(async () => {
     unsubscribeRag = RagService.subscribe((state) => {
@@ -130,30 +130,34 @@
     }
   };
 
-  $: progressPercent = ragState.indexingProgress
+  let progressPercent = $derived(ragState.indexingProgress
     ? Math.round((ragState.indexingProgress.current / Math.max(ragState.indexingProgress.total, 1)) * 100)
-    : 0;
+    : 0
+  );
 
   // Can index with sidecar mode switching
-  $: canIndexWithSwitch =
+  let canIndexWithSwitch = $derived(
     ragState.status.docs_available &&
     configState.config.models.embedding_model_path &&
     !ragState.isIndexing &&
-    !isIndexingWithSwitch;
+    !isIndexingWithSwitch
+  );
 
   // Can index with external embedding server
-  $: canIndexExternal =
+  let canIndexExternal = $derived(
     ragState.status.docs_available &&
     ragState.status.vectorizer_available &&
-    !ragState.isIndexing;
+    !ragState.isIndexing
+  );
 
   // Check if server is in embedding mode
-  $: isEmbeddingMode = configState.serverMode.is_embedding_mode;
+  let isEmbeddingMode = $derived(configState.serverMode.is_embedding_mode);
 
   // Check if server is in inference mode (will need to switch)
-  $: needsModeSwitch =
+  let needsModeSwitch = $derived(
     configState.serverMode.mode === 'sidecar_inference' &&
-    !ragState.status.vectorizer_available;
+    !ragState.status.vectorizer_available
+  );
 </script>
 
 <div class="space-y-3">

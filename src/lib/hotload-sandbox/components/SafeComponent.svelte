@@ -124,11 +124,12 @@
     class="hidden"
     data-error={errorMessage}
     data-component-id={componentId}
-  />
+  ></div>
 {:else if validated && component}
-  <!-- Render the component -->
+  <!-- Render the component - components are dynamic by default in Svelte 5 runes mode -->
   {#key componentId}
-    <svelte:component this={component} {...props} />
+    {@const Component = component}
+    <Component {...props} />
   {/key}
 {:else}
   <!-- Loading/validating state -->

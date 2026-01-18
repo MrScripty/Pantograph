@@ -9,12 +9,12 @@
   import { Logger } from '../services/Logger';
   import { SettingsTab, ActivityLog, FollowUpInput } from './side-panel';
 
-  let state: LLMState = LLMService.getState();
-  let agentState = AgentService.getState();
+  let state: LLMState = $state(LLMService.getState());
+  let agentState = $state(AgentService.getState());
   let unsubscribeLLM: (() => void) | null = null;
   let unsubscribeAgent: (() => void) | null = null;
-  let messagesContainer: HTMLDivElement;
-  let isUserScrolledUp = false;
+  let messagesContainer: HTMLDivElement | null = $state(null);
+  let isUserScrolledUp = $state(false);
 
   const checkIfScrolledToBottom = () => {
     if (!messagesContainer) return;
@@ -52,8 +52,7 @@
     unsubscribeAgent?.();
   });
 
-  const handleFollowUp = async (event: CustomEvent<string>) => {
-    const submittedPrompt = event.detail;
+  const handleFollowUp = async (submittedPrompt: string) => {
     console.log('[SidePanel] Follow-up prompt:', submittedPrompt);
     Logger.log('FOLLOW_UP_SUBMITTED', { text: submittedPrompt });
 
@@ -88,23 +87,27 @@
     activeSidePanelTab.set(tab);
   };
 
-  $: statusColor = state.status.ready
-    ? 'bg-green-500'
-    : state.status.mode !== 'none'
-      ? 'bg-yellow-500 animate-pulse'
-      : 'bg-neutral-500';
+  let statusColor = $derived(
+    state.status.ready
+      ? 'bg-green-500'
+      : state.status.mode !== 'none'
+        ? 'bg-yellow-500 animate-pulse'
+        : 'bg-neutral-500'
+  );
 
-  $: statusText = state.status.ready
-    ? `Connected (${state.status.mode})`
-    : state.status.mode !== 'none'
-      ? 'Connecting...'
-      : 'Not connected';
+  let statusText = $derived(
+    state.status.ready
+      ? `Connected (${state.status.mode})`
+      : state.status.mode !== 'none'
+        ? 'Connecting...'
+        : 'Not connected'
+  );
 </script>
 
 <div class="fixed right-0 top-0 h-full z-50 flex">
   <!-- Handle - always visible -->
   <button
-    on:click={toggleSidePanel}
+    onclick={toggleSidePanel}
     class="h-full w-5 bg-neutral-800/90 backdrop-blur-md border-l border-neutral-700 flex items-center justify-center hover:bg-neutral-700/90 transition-colors cursor-pointer"
     aria-label={$sidePanelOpen ? 'Close AI panel' : 'Open AI panel'}
   >
@@ -131,13 +134,13 @@
       <!-- Tab Bar -->
       <div class="flex border-b border-neutral-700">
         <button
-          on:click={() => setActiveTab('settings')}
+          onclick={() => setActiveTab('settings')}
           class="flex-1 px-4 py-2 text-xs font-medium uppercase tracking-wider transition-colors {$activeSidePanelTab === 'settings' ? 'text-neutral-100 bg-neutral-800 border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'}"
         >
           Settings
         </button>
         <button
-          on:click={() => setActiveTab('history')}
+          onclick={() => setActiveTab('history')}
           class="flex-1 px-4 py-2 text-xs font-medium uppercase tracking-wider transition-colors {$activeSidePanelTab === 'history' ? 'text-neutral-100 bg-neutral-800 border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'}"
         >
           History
@@ -153,7 +156,7 @@
       {#if $activeSidePanelTab === 'history'}
         <div
           bind:this={messagesContainer}
-          on:scroll={handleScroll}
+          onscroll={handleScroll}
           class="flex-1 overflow-y-auto p-4"
         >
           <ActivityLog
@@ -172,8 +175,8 @@
         <FollowUpInput
           isAgentRunning={agentState.isRunning}
           isReady={state.status.ready}
-          on:submit={handleFollowUp}
-          on:stop={handleStopAgent}
+          onsubmit={handleFollowUp}
+          onstop={handleStopAgent}
         />
       {/if}
     </div>

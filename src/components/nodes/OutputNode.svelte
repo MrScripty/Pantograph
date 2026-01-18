@@ -2,7 +2,11 @@
   import { Handle, Position } from '@xyflow/svelte';
   import type { OutputNodeData } from '../../types/nodes';
 
-  export let data: OutputNodeData;
+  interface Props {
+    data: OutputNodeData;
+  }
+
+  let { data }: Props = $props();
 
   function truncate(text: string | undefined, maxLength: number = 60): string {
     if (!text) return 'No output yet';

@@ -2,7 +2,11 @@
   import { Handle, Position } from '@xyflow/svelte';
   import type { UserInputNodeData } from '../../types/nodes';
 
-  export let data: UserInputNodeData;
+  interface Props {
+    data: UserInputNodeData;
+  }
+
+  let { data }: Props = $props();
 </script>
 
 <div class="node-container bg-neutral-800 border border-neutral-600 rounded-lg p-3 w-[200px]">

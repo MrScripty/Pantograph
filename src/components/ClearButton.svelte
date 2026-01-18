@@ -16,7 +16,7 @@
 </script>
 
 <button
-  on:click={handleClear}
+  onclick={handleClear}
   class="fixed bottom-8 left-8 p-3 bg-neutral-900/80 backdrop-blur-md border border-neutral-700 rounded-full z-50 text-neutral-400 hover:text-white hover:border-neutral-600 transition-colors"
   title="Clear workspace"
 >

@@ -2,7 +2,11 @@
   import { Handle, Position } from '@xyflow/svelte';
   import type { ToolsNodeData } from '../../types/nodes';
 
-  export let data: ToolsNodeData;
+  interface Props {
+    data: ToolsNodeData;
+  }
+
+  let { data }: Props = $props();
 
   // Default tools list
   const defaultTools = [
@@ -14,7 +18,7 @@
     { name: 'read_template', description: 'Read template source', enabled: true },
   ];
 
-  $: tools = data.tools || defaultTools;
+  let tools = $derived(data.tools || defaultTools);
 </script>
 
 <div class="node-container bg-neutral-800 border border-amber-600/50 rounded-lg p-3 w-[200px]">
