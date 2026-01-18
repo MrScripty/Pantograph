@@ -1,6 +1,6 @@
 //! Agent orchestration and execution commands.
 
-use super::shared::{get_project_data_dir, SharedAppConfig, MAX_IMAGE_BASE64_LEN};
+use super::shared::{SharedAppConfig, MAX_IMAGE_BASE64_LEN};
 use crate::agent;
 use crate::agent::rag::SharedRagManager;
 use crate::agent::tools::WriteGuiFileArgs;
@@ -22,7 +22,7 @@ use futures_util::StreamExt;
 
 #[command]
 pub async fn run_agent(
-    app: AppHandle,
+    _app: AppHandle,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
     config: State<'_, SharedAppConfig>,
@@ -70,19 +70,31 @@ pub async fn run_agent(
         })
         .ok();
 
-    // Step 1: Use vision API to analyze the drawing first
-    log::info!("[run_agent] Step 1: Analyzing drawing with vision API...");
-    let vision_analysis = analyze_drawing_with_vision(&base_url, &request).await?;
-    log::info!("[run_agent] Vision analysis result: {}", vision_analysis);
+    // Step 1: Use vision API to analyze the drawing (skip in fix mode)
+    let vision_analysis = if request.fix_mode {
+        log::info!("[run_agent] Fix mode - skipping vision analysis");
+        channel
+            .send(AgentEvent {
+                event_type: AgentEventType::Content,
+                data: Some(serde_json::json!({ "message": "Fix mode - analyzing error..." })),
+            })
+            .ok();
+        String::new()
+    } else {
+        log::info!("[run_agent] Step 1: Analyzing drawing with vision API...");
+        let analysis = analyze_drawing_with_vision(&base_url, &request).await?;
+        log::info!("[run_agent] Vision analysis result: {}", analysis);
 
-    channel
-        .send(AgentEvent {
-            event_type: AgentEventType::Content,
-            data: Some(
-                serde_json::json!({ "message": "Analyzed drawing, generating component..." }),
-            ),
-        })
-        .ok();
+        channel
+            .send(AgentEvent {
+                event_type: AgentEventType::Content,
+                data: Some(
+                    serde_json::json!({ "message": "Analyzed drawing, generating component..." }),
+                ),
+            })
+            .ok();
+        analysis
+    };
 
     // Step 2: Create the RIG client and agent for tool execution
     log::info!("[run_agent] Step 2: Creating RIG agent...");
@@ -137,9 +149,15 @@ pub async fn run_agent(
         sandbox_config,
     );
 
-    // Build the prompt with vision analysis included
-    let prompt = format_agent_prompt_with_analysis(&request, &vision_analysis);
-    log::info!("[run_agent] Agent prompt: {}", prompt);
+    // Build the prompt - use fix mode prompt or normal prompt with vision analysis
+    let prompt = if request.fix_mode {
+        format_fix_mode_prompt(&request)
+    } else {
+        format_agent_prompt_with_analysis(&request, &vision_analysis, &project_root)
+    };
+    log::info!("[run_agent] Agent prompt ({}): {}",
+        if request.fix_mode { "fix mode" } else { "normal mode" },
+        prompt);
 
     // Send the prompt to the frontend for visibility
     channel
@@ -313,7 +331,7 @@ pub async fn run_agent(
                             channel
                                 .send(AgentEvent {
                                     event_type: AgentEventType::ComponentCreated,
-                                    data: Some(serde_json::to_value(&component_update).unwrap()),
+                                    data: serde_json::to_value(&component_update).ok(),
                                 })
                                 .ok();
                             log::info!(
@@ -456,7 +474,11 @@ async fn analyze_drawing_with_vision(
 }
 
 /// Format the agent prompt with vision analysis
-fn format_agent_prompt_with_analysis(request: &AgentRequest, vision_analysis: &str) -> String {
+fn format_agent_prompt_with_analysis(
+    request: &AgentRequest,
+    vision_analysis: &str,
+    project_root: &std::path::Path,
+) -> String {
     let mut prompt = String::new();
 
     // Add vision analysis
@@ -473,12 +495,34 @@ fn format_agent_prompt_with_analysis(request: &AgentRequest, vision_analysis: &s
         ));
     }
 
-    // Add target element context
+    // EDIT MODE: If target_component_path is set, read and include existing component source
+    if let Some(target_path) = &request.target_component_path {
+        let full_path = project_root.join("src").join("generated").join(target_path);
+        if let Ok(existing_source) = std::fs::read_to_string(&full_path) {
+            prompt.push_str(&format!(
+                "## EDIT MODE - Modifying Existing Component\n\
+                You are EDITING an existing component, not creating a new one.\n\
+                File: {}\n\n\
+                ### Current Source:\n```svelte\n{}\n```\n\n\
+                Modify this component based on the user's drawing and prompt.\n\
+                Use write_gui_file with the SAME path \"{}\" to update it.\n\
+                Preserve functionality that wasn't requested to change.\n\n",
+                target_path, existing_source, target_path
+            ));
+            log::info!("[format_agent_prompt] Edit mode: including source for {}", target_path);
+        } else {
+            log::warn!("[format_agent_prompt] Could not read component at {:?}", full_path);
+        }
+    }
+
+    // Add target element context (for reference, even if we have the source)
     if let Some(target_id) = &request.target_element_id {
-        prompt.push_str(&format!(
-            "## Target Element\nThe user is drawing on/near existing component: {}\n\n",
-            target_id
-        ));
+        if request.target_component_path.is_none() {
+            prompt.push_str(&format!(
+                "## Target Element\nThe user is drawing on/near existing component: {}\n\n",
+                target_id
+            ));
+        }
     }
 
     // Add component tree context
@@ -493,11 +537,51 @@ fn format_agent_prompt_with_analysis(request: &AgentRequest, vision_analysis: &s
         prompt.push_str("\n");
     }
 
-    // Add user's request
+    // Add user's request with appropriate instruction
+    let instruction = if request.target_component_path.is_some() {
+        "Based on the drawing analysis and user request, use the write_gui_file tool to UPDATE the existing component."
+    } else {
+        "Based on the drawing analysis and user request, use the write_gui_file tool to create the Svelte component."
+    };
+
     prompt.push_str(&format!(
-        "## User's Request\n{}\n\n\
-        Based on the drawing analysis and user request, use the write_gui_file tool to create the Svelte component.",
-        request.prompt
+        "## User's Request\n{}\n\n{}",
+        request.prompt, instruction
+    ));
+
+    prompt
+}
+
+/// Format the agent prompt for fix/repair mode.
+/// Skips vision analysis, includes error context and file content directly.
+fn format_fix_mode_prompt(request: &AgentRequest) -> String {
+    let mut prompt = String::new();
+
+    // Error context that triggered fix mode
+    if let Some(error) = &request.error_context {
+        prompt.push_str(&format!("## ERROR TO FIX\n{}\n\n", error));
+    }
+
+    // Current file content (pre-loaded, no read tool call needed)
+    if let Some(content) = &request.file_content {
+        prompt.push_str(&format!(
+            "## CURRENT COMPONENT SOURCE\n```svelte\n{}\n```\n\n\
+            Fix this component. Only modify what's necessary to resolve the error.\n\n",
+            content
+        ));
+    }
+
+    // Target file path for write
+    if let Some(target) = &request.target_file_path {
+        prompt.push_str(&format!("## TARGET FILE\nUpdate: {}\n\n", target));
+    }
+
+    // User's fix instruction
+    prompt.push_str(&format!(
+        "## FIX REQUEST\n{}\n\n\
+        Use write_gui_file with path \"{}\" to fix this component.",
+        request.prompt,
+        request.target_file_path.as_deref().unwrap_or("")
     ));
 
     prompt

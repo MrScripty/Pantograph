@@ -5,7 +5,7 @@ use crate::agent::rag::{IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;
 use crate::llm::BackendConfig;
-use tauri::{command, ipc::Channel, AppHandle, Manager, State};
+use tauri::{command, ipc::Channel, AppHandle, State};
 
 /// Event sent during document indexing
 #[derive(Clone, serde::Serialize)]

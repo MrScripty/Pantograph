@@ -14,6 +14,19 @@ pub const MAX_IMAGE_BASE64_LEN: usize = 7 * 1024 * 1024;
 /// Shared app configuration
 pub type SharedAppConfig = Arc<RwLock<AppConfig>>;
 
+/// Get the project root directory.
+/// Uses CARGO_MANIFEST_DIR (src-tauri/) and goes up one level to get project root.
+/// This ensures we get the correct path regardless of the current working directory.
+pub fn get_project_root() -> Result<PathBuf, String> {
+    // CARGO_MANIFEST_DIR is set at compile time to the directory containing Cargo.toml (src-tauri/)
+    // We go up one level to get the actual project root
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    std::path::Path::new(manifest_dir)
+        .parent()
+        .map(PathBuf::from)
+        .ok_or_else(|| "Failed to get project root from CARGO_MANIFEST_DIR".to_string())
+}
+
 /// Get the project data directory for docs and RAG storage.
 /// Uses CARGO_MANIFEST_DIR (src-tauri/) and goes up one level to get project root.
 /// This ensures the data directory is at the project root regardless of the

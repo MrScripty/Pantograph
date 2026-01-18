@@ -11,6 +11,9 @@
 //! - `docs`: Documentation and chunking
 //! - `sandbox`: Sandbox configuration
 //! - `embedding`: Embedding server and memory modes
+//! - `version`: Component versioning (undo/redo)
+//! - `port`: Port management and conflict resolution
+//! - `health`: Health monitoring and recovery
 
 mod agent;
 mod backend;
@@ -18,9 +21,12 @@ mod binary;
 mod config;
 mod docs;
 mod embedding;
+mod health;
+mod port;
 mod rag;
 mod sandbox;
 mod server;
+pub mod version;
 mod vision;
 
 // Shared utilities used by multiple command modules
@@ -34,9 +40,12 @@ pub use binary::*;
 pub use config::*;
 pub use docs::*;
 pub use embedding::*;
+pub use health::*;
+pub use port::*;
 pub use rag::*;
 pub use sandbox::*;
 pub use server::*;
+pub use version::*;
 pub use vision::*;
 
 // Re-export shared types that are part of the public API
