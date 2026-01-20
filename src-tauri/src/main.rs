@@ -196,8 +196,7 @@ fn main() {
             get_recovery_attempt_count,
             trigger_recovery,
             reset_recovery_state,
-            // Workflow commands (legacy)
-            workflow::commands::execute_workflow,
+            // Workflow commands
             workflow::commands::validate_workflow_connection,
             workflow::commands::get_node_definitions,
             workflow::commands::get_node_definitions_by_category,

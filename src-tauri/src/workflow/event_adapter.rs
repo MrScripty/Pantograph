@@ -9,7 +9,9 @@ use node_engine::{EventError, EventSink};
 use tauri::ipc::Channel;
 
 use super::events::WorkflowEvent as TauriWorkflowEvent;
-use super::node::PortValue;
+
+/// A value that flows through a port (alias for serde_json::Value)
+type PortValue = serde_json::Value;
 
 /// Adapter that converts node-engine WorkflowEvents to Tauri WorkflowEvents
 /// and sends them through a Tauri channel to the frontend.

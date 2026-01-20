@@ -12,7 +12,6 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use tauri::{command, ipc::Channel, State};
@@ -22,11 +21,9 @@ use crate::agent::rag::SharedRagManager;
 use crate::llm::gateway::SharedGateway;
 use node_engine::EventSink;
 
-use super::engine::{WorkflowEngine, WorkflowResult};
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
-use super::node::ExecutionContext;
 use super::registry::NodeRegistry;
 use super::task_executor::PantographTaskExecutor;
 use super::types::{
@@ -47,42 +44,6 @@ fn get_workflows_dir() -> Result<PathBuf, String> {
     fs::create_dir_all(&workflows_dir)
         .map_err(|e| format!("Failed to create workflows directory: {}", e))?;
     Ok(workflows_dir)
-}
-
-/// Execute a workflow graph
-///
-/// Validates the graph, executes nodes in topological order, and
-/// streams events to the frontend via the provided channel.
-#[command]
-pub async fn execute_workflow(
-    graph: WorkflowGraph,
-    gateway: State<'_, SharedGateway>,
-    rag_manager: State<'_, SharedRagManager>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<WorkflowResult, String> {
-    // Get project root - use CARGO_MANIFEST_DIR like main.rs does
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let project_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    // Create execution context
-    let context = ExecutionContext {
-        project_root,
-        abort_signal: Arc::new(AtomicBool::new(false)),
-        gateway: gateway.inner().clone(),
-        rag_manager: rag_manager.inner().clone(),
-        execution_id: Uuid::new_v4().to_string(),
-    };
-
-    // Create engine and execute
-    let engine = WorkflowEngine::new();
-
-    engine
-        .execute(graph, context, channel)
-        .await
-        .map_err(|e| e.to_string())
 }
 
 /// Validate a connection between two port types

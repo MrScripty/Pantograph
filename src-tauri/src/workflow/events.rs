@@ -6,7 +6,8 @@
 use serde::Serialize;
 use std::collections::HashMap;
 
-use super::node::PortValue;
+/// A value that flows through a port (alias for serde_json::Value)
+pub type PortValue = serde_json::Value;
 
 /// Events emitted during workflow execution
 ///

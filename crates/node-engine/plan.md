@@ -1218,11 +1218,29 @@ Convert each existing node to graph-flow Task trait:
 - `get_execution_graph` - Get current graph state
 - `remove_execution` - Cleanup execution
 
-### Phase 6: Cleanup (Sequential)
+### Phase 6: Cleanup (Sequential) ✅ COMPLETE
 
-1. Remove old workflow/engine.rs, workflow/node.rs
-2. Remove old node implementations
-3. Update frontend types if needed
+1. ✅ Remove old workflow/engine.rs, workflow/node.rs
+2. ✅ Remove old node implementations (nodes/ directory)
+3. ✅ Update frontend types (PortValue now defined locally)
+
+**Files Deleted:**
+- `src-tauri/src/workflow/engine.rs` - Old V1 synchronous execution engine
+- `src-tauri/src/workflow/node.rs` - Old V1 Node trait definition
+- `src-tauri/src/workflow/nodes/` - All old V1 node implementations (input.rs, output.rs, processing.rs, tools.rs, control.rs, mod.rs)
+
+**Files Modified:**
+- `src-tauri/src/workflow/mod.rs` - Removed old module exports (engine, node, nodes)
+- `src-tauri/src/workflow/commands.rs` - Removed old execute_workflow command
+- `src-tauri/src/workflow/registry.rs` - Rewritten to only provide node definitions (no Node trait dependency)
+- `src-tauri/src/workflow/events.rs` - Added local PortValue type alias
+- `src-tauri/src/workflow/event_adapter.rs` - Added local PortValue type alias
+- `src-tauri/src/main.rs` - Removed old execute_workflow command registration
+
+**Verification:**
+- ✅ `cargo build --package pantograph` passes
+- ✅ `cargo test --package node-engine` - All 70 tests pass
+- Note: Pre-existing test issue in `candle.rs` (CandleBackend.description() method missing) is unrelated to Phase 6
 
 ---
 
