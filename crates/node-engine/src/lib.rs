@@ -37,9 +37,13 @@ pub mod types;
 pub mod undo;
 
 // Re-export key types
-pub use engine::DemandEngine;
+pub use engine::{CacheStats, CachedOutput, DemandEngine, TaskExecutor, WorkflowExecutor};
 pub use error::{NodeEngineError, Result};
-pub use events::{EventSink, WorkflowEvent};
+pub use events::{EventError, EventSink, NullEventSink, VecEventSink, WorkflowEvent};
+pub use types::{
+    EdgeId, ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, NodeId,
+    PortDataType, PortDefinition, PortId, WorkflowGraph,
+};
 pub use undo::UndoStack;
 
 // Re-export graph-flow types that consumers will need
