@@ -19,10 +19,13 @@
 
 pub mod commands;
 pub mod engine;
+pub mod event_adapter;
 pub mod events;
+pub mod execution_manager;
 pub mod node;
 pub mod nodes;
 pub mod registry;
+pub mod task_executor;
 pub mod types;
 pub mod validation;
 
@@ -32,9 +35,12 @@ pub use commands::{
     validate_workflow_connection,
 };
 pub use engine::{WorkflowEngine, WorkflowError, WorkflowResult};
+pub use event_adapter::TauriEventAdapter;
 pub use events::WorkflowEvent;
+pub use execution_manager::{ExecutionManager, ExecutionState, SharedExecutionManager, UndoRedoState};
 pub use node::{ExecutionContext, Node, NodeError, NodeInputs, NodeOutputs, PortValue};
 pub use registry::NodeRegistry;
+pub use task_executor::PantographTaskExecutor;
 pub use types::{
     ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, PortDataType,
     PortDefinition, Position, Viewport, WorkflowFile, WorkflowGraph, WorkflowMetadata,

@@ -10,6 +10,7 @@ mod workflow;
 use agent::create_rag_manager;
 use config::AppConfig;
 use constants::paths::DATA_DIR;
+use workflow::ExecutionManager;
 use llm::{
     check_embedding_server, check_health_now, check_llama_binaries, check_ollama_binary,
     check_port_status, clear_rag_cache, connect_to_server, download_llama_binaries,
@@ -46,10 +47,14 @@ fn main() {
     // Create the inference gateway - single entry point for all inference operations
     let gateway: SharedGateway = Arc::new(InferenceGateway::new());
 
+    // Create the execution manager for node-engine based workflows
+    let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(gateway)
+        .manage(execution_manager)
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -191,7 +196,7 @@ fn main() {
             get_recovery_attempt_count,
             trigger_recovery,
             reset_recovery_state,
-            // Workflow commands
+            // Workflow commands (legacy)
             workflow::commands::execute_workflow,
             workflow::commands::validate_workflow_connection,
             workflow::commands::get_node_definitions,
@@ -201,6 +206,17 @@ fn main() {
             workflow::commands::save_workflow,
             workflow::commands::load_workflow,
             workflow::commands::list_workflows,
+            // Node-engine workflow commands (Phase 5)
+            workflow::commands::execute_workflow_v2,
+            workflow::commands::get_undo_redo_state,
+            workflow::commands::undo_workflow,
+            workflow::commands::redo_workflow,
+            workflow::commands::update_node_data,
+            workflow::commands::add_node_to_execution,
+            workflow::commands::add_edge_to_execution,
+            workflow::commands::remove_edge_from_execution,
+            workflow::commands::get_execution_graph,
+            workflow::commands::remove_execution,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

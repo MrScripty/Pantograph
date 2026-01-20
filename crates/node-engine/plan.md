@@ -1191,12 +1191,32 @@ Convert each existing node to graph-flow Task trait:
 | RAGNode | RAGTask | May use `WaitForInput` for user confirmation |
 | etc. | etc. | Each node is independent, can parallelize |
 
-### Phase 5: Integration (Sequential)
+### Phase 5: Integration (Sequential) ✅ COMPLETE
 
-1. Update Tauri commands to use new engine
-2. Wire up event streaming from graph-flow to frontend
-3. Implement undo/redo Tauri commands
-4. Test with frontend
+1. ✅ Update Tauri commands to use new engine
+2. ✅ Wire up event streaming from graph-flow to frontend
+3. ✅ Implement undo/redo Tauri commands
+4. ✅ Test with frontend (build passes)
+
+**Files Created:**
+- `src-tauri/src/workflow/event_adapter.rs` - Bridges node-engine EventSink → Tauri Channel
+- `src-tauri/src/workflow/execution_manager.rs` - Manages execution state with undo/redo
+- `src-tauri/src/workflow/task_executor.rs` - Bridges node-engine tasks with Tauri resources
+
+**Files Modified:**
+- `src-tauri/src/workflow/mod.rs` - Added new module exports
+- `src-tauri/src/workflow/commands.rs` - Added V2 commands (execute_workflow_v2, undo_workflow, redo_workflow, update_node_data, etc.)
+- `src-tauri/src/main.rs` - Added ExecutionManager to Tauri state, registered new commands
+- `src/services/workflow/WorkflowService.ts` - Added executeWorkflowV2, undo, redo, graph modification methods
+
+**New Tauri Commands:**
+- `execute_workflow_v2` - Node-engine based execution with demand-driven evaluation
+- `get_undo_redo_state` - Get current undo/redo state
+- `undo_workflow` / `redo_workflow` - Undo/redo graph modifications
+- `update_node_data` - Update node data during execution
+- `add_node_to_execution` / `add_edge_to_execution` / `remove_edge_from_execution` - Live graph modification
+- `get_execution_graph` - Get current graph state
+- `remove_execution` - Cleanup execution
 
 ### Phase 6: Cleanup (Sequential)
 

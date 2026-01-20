@@ -5,6 +5,8 @@ import type {
   WorkflowGraph,
   WorkflowFile,
   WorkflowMetadata,
+  GraphNode,
+  GraphEdge,
 } from './types';
 import {
   MOCK_NODE_DEFINITIONS,
@@ -15,9 +17,17 @@ import {
 // Set to false to use real Rust backend, true to use frontend mocks
 const USE_MOCKS = false;
 
+/** Undo/redo state from the backend */
+export interface UndoRedoState {
+  canUndo: boolean;
+  canRedo: boolean;
+  undoCount: number;
+}
+
 export class WorkflowService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
+  private currentExecutionId: string | null = null;
 
   // --- Node Definitions ---
 
@@ -48,7 +58,7 @@ export class WorkflowService {
     });
   }
 
-  // --- Workflow Execution ---
+  // --- Workflow Execution (Legacy) ---
 
   async executeWorkflow(graph: WorkflowGraph): Promise<void> {
     if (USE_MOCKS) {
@@ -68,6 +78,210 @@ export class WorkflowService {
       channel: this.channel,
     });
   }
+
+  // --- Workflow Execution V2 (Node-Engine Based) ---
+
+  /**
+   * Execute a workflow using the node-engine with demand-driven evaluation.
+   * Returns the execution ID which can be used for undo/redo and graph modifications.
+   */
+  async executeWorkflowV2(graph: WorkflowGraph): Promise<string> {
+    if (USE_MOCKS) {
+      // For mocks, fall back to legacy execution and return a fake ID
+      await mockExecuteWorkflow(graph, (event) => {
+        this.eventListeners.forEach((listener) => listener(event));
+      });
+      this.currentExecutionId = 'mock-execution-id';
+      return this.currentExecutionId;
+    }
+
+    this.channel = new Channel<WorkflowEvent>();
+
+    this.channel.onmessage = (event) => {
+      this.eventListeners.forEach((listener) => listener(event));
+    };
+
+    const executionId = await invoke<string>('execute_workflow_v2', {
+      graph,
+      channel: this.channel,
+    });
+
+    this.currentExecutionId = executionId;
+    return executionId;
+  }
+
+  /**
+   * Get the current execution ID, if any.
+   */
+  getCurrentExecutionId(): string | null {
+    return this.currentExecutionId;
+  }
+
+  // --- Undo/Redo ---
+
+  /**
+   * Get the current undo/redo state for an execution.
+   */
+  async getUndoRedoState(executionId?: string): Promise<UndoRedoState> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      return { canUndo: false, canRedo: false, undoCount: 0 };
+    }
+
+    if (USE_MOCKS) {
+      return { canUndo: false, canRedo: false, undoCount: 0 };
+    }
+
+    return invoke<UndoRedoState>('get_undo_redo_state', { executionId: id });
+  }
+
+  /**
+   * Undo the last graph modification.
+   * Returns the restored graph state.
+   */
+  async undo(executionId?: string): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      throw new Error('Undo not supported in mock mode');
+    }
+
+    return invoke<WorkflowGraph>('undo_workflow', { executionId: id });
+  }
+
+  /**
+   * Redo the last undone graph modification.
+   * Returns the restored graph state.
+   */
+  async redo(executionId?: string): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      throw new Error('Redo not supported in mock mode');
+    }
+
+    return invoke<WorkflowGraph>('redo_workflow', { executionId: id });
+  }
+
+  // --- Graph Modification During Execution ---
+
+  /**
+   * Update a node's data during execution.
+   * This marks the node as modified and will trigger re-execution of downstream nodes.
+   */
+  async updateNodeData(
+    nodeId: string,
+    data: Record<string, unknown>,
+    executionId?: string
+  ): Promise<void> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Update node data', nodeId, data);
+      return;
+    }
+
+    return invoke('update_node_data', { executionId: id, nodeId, data });
+  }
+
+  /**
+   * Add a node to the graph during execution.
+   */
+  async addNode(node: GraphNode, executionId?: string): Promise<void> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Add node', node);
+      return;
+    }
+
+    return invoke('add_node_to_execution', { executionId: id, node });
+  }
+
+  /**
+   * Add an edge to the graph during execution.
+   */
+  async addEdge(edge: GraphEdge, executionId?: string): Promise<void> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Add edge', edge);
+      return;
+    }
+
+    return invoke('add_edge_to_execution', { executionId: id, edge });
+  }
+
+  /**
+   * Remove an edge from the graph during execution.
+   */
+  async removeEdge(edgeId: string, executionId?: string): Promise<void> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Remove edge', edgeId);
+      return;
+    }
+
+    return invoke('remove_edge_from_execution', { executionId: id, edgeId });
+  }
+
+  /**
+   * Get the current graph state from an execution.
+   */
+  async getExecutionGraph(executionId?: string): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      return { nodes: [], edges: [] };
+    }
+
+    return invoke<WorkflowGraph>('get_execution_graph', { executionId: id });
+  }
+
+  /**
+   * Clean up an execution when done.
+   */
+  async removeExecution(executionId?: string): Promise<void> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      return;
+    }
+
+    if (USE_MOCKS) {
+      this.currentExecutionId = null;
+      return;
+    }
+
+    await invoke('remove_execution', { executionId: id });
+
+    if (id === this.currentExecutionId) {
+      this.currentExecutionId = null;
+    }
+  }
+
+  // --- Event Subscription ---
 
   subscribeEvents(listener: (event: WorkflowEvent) => void): () => void {
     this.eventListeners.add(listener);
