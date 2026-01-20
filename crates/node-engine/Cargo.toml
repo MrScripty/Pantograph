@@ -1,0 +1,33 @@
+[package]
+name = "node-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Graph-based workflow execution engine for Pantograph"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Core graph execution
+graph-flow = "0.2"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Compression for undo/redo snapshots
+zstd = "0.13"
+
+# Error handling
+thiserror = "1"
+
+# Logging
+log = "0.4"
+
+# HTTP client for inference tasks
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
