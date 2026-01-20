@@ -27,6 +27,83 @@ You MUST use:
 - `$props()` for component props (NEVER use `export let`)
 - `onclick`, `onmouseenter`, etc. for event handlers (NOT `on:click`)
 
+### Svelte 5 Reactivity Patterns (CRITICAL)
+
+**$state()** - For component-local mutable state (NOT derived from props):
+```svelte
+let count = $state(0);
+let items = $state<string[]>([]);
+let isOpen = $state(false);
+```
+
+**$derived()** - For values computed from props or other reactive values:
+```svelte
+let { isActive = false }: Props = $props();
+let isUp = $derived(isActive);  // Stays in sync with prop changes
+
+let { label }: Props = $props();
+let displayText = $derived(label.toUpperCase());
+```
+
+**NEVER initialize $state() with a prop value** - this captures only the initial value and breaks reactivity:
+```svelte
+// WRONG - breaks reactivity, only gets initial value!
+let isUp = $state(isActive);
+let buttonText = $state(label);
+
+// CORRECT - stays reactive to prop changes
+let isUp = $derived(isActive);
+let buttonText = $derived(label);
+```
+
+**$effect()** - For side effects or syncing with external changes:
+```svelte
+let localValue = $state('');
+$effect(() => {
+  // Runs when dependencies change
+  console.log('Value changed:', localValue);
+});
+```
+
+### Accessibility (REQUIRED)
+
+Interactive elements MUST be accessible. Follow these rules:
+
+**Buttons**: ALWAYS use `<button>` element for clickable items:
+```svelte
+<!-- CORRECT -->
+<button type="button" onclick={handleClick} class="...">Click me</button>
+
+<!-- WRONG - Never use div with onclick -->
+<div onclick={handleClick}>Click me</div>
+```
+
+**Icon-only buttons**: Add aria-label for screen readers:
+```svelte
+<button type="button" onclick={closeModal} aria-label="Close dialog" class="...">
+  <X class="w-5 h-5" />
+</button>
+```
+
+**Custom interactive elements**: If you MUST use a non-button element, add role, tabindex, and keyboard handler:
+```svelte
+<div
+  role="button"
+  tabindex="0"
+  onclick={handleClick}
+  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick()}
+  class="..."
+>
+  Content
+</div>
+```
+
+**Form labels**: ALWAYS link labels to inputs using for/id:
+```svelte
+<label for="user-email" class="...">Email</label>
+<input id="user-email" type="email" class="..." />
+```
+
 ### Styling Rules
 - **Tailwind CSS ONLY**: Use only Tailwind CSS utility classes for styling
 - NEVER use inline styles (style="...")
@@ -85,7 +162,11 @@ Available icons: ArrowLeft, ArrowRight, ArrowUp, ArrowDown, ChevronLeft, Chevron
 
 **Button:**
 ```svelte
-<button class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-neutral-100 rounded-lg transition-all duration-150">
+<button
+  type="button"
+  onclick={handleClick}
+  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-neutral-100 rounded-lg transition-all duration-150"
+>
   Click me
 </button>
 ```
@@ -143,7 +224,7 @@ Available icons: ArrowLeft, ArrowRight, ArrowUp, ArrowDown, ChevronLeft, Chevron
     onkeydown={(e) => e.key === 'Enter' && handleSubmit()}
   />
   {#if query}
-    <button onclick={handleClear} class="text-neutral-500 hover:text-neutral-300">
+    <button type="button" onclick={handleClear} aria-label="Clear search" class="text-neutral-500 hover:text-neutral-300">
       <X class="w-4 h-4" />
     </button>
   {/if}
