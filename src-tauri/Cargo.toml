@@ -25,8 +25,9 @@ backend-candle = [
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# Local inference library
+# Local crates
 inference = { path = "../crates/inference", default-features = false }
+node-engine = { path = "../crates/node-engine" }
 
 # Workspace dependencies
 serde.workspace = true
