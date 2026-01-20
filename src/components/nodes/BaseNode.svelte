@@ -42,10 +42,10 @@
 </script>
 
 <div
-  class="base-node bg-neutral-800 rounded-lg min-w-[200px] relative"
+  class="base-node bg-neutral-800 rounded-lg min-w-[180px] relative"
   class:selected
-  style="min-height: {nodeHeight}px;"
 >
+  <!-- Node Header -->
   <div class="node-header px-3 py-2 bg-neutral-700/50 rounded-t-lg border-b border-neutral-600">
     {#if header}
       {@render header()}
@@ -54,46 +54,54 @@
     {/if}
   </div>
 
-  <div class="node-content px-3 py-2">
-    {#if children}
-      {@render children()}
-    {/if}
+  <!-- Ports Section -->
+  <div class="ports-section px-3 py-2">
+    <div class="ports-grid" style="min-height: {Math.max(inputs.length, outputs.length) * 20}px;">
+      <!-- Input labels (left column) -->
+      <div class="input-labels flex flex-col gap-1">
+        {#each inputs as input}
+          <span class="text-[10px] text-neutral-400 h-4 leading-4" title="{input.data_type}">
+            {input.label}
+          </span>
+        {/each}
+      </div>
+      <!-- Output labels (right column) -->
+      <div class="output-labels flex flex-col gap-1 text-right">
+        {#each outputs as output}
+          <span class="text-[10px] text-neutral-400 h-4 leading-4" title="{output.data_type}">
+            {output.label}
+          </span>
+        {/each}
+      </div>
+    </div>
   </div>
 
-  <!-- Input Handles -->
+  <!-- Node Content (below ports) -->
+  {#if children}
+    <div class="node-content px-3 py-2 border-t border-neutral-700">
+      {@render children()}
+    </div>
+  {/if}
+
+  <!-- Handles positioned absolutely on edges -->
   {#each inputs as input, i}
-    {@const yPos = 48 + i * 28}
+    {@const yPos = 52 + i * 20}
     <Handle
       type="target"
       position={Position.Left}
       id={input.id}
-      style="top: {yPos}px; background: {getPortColor(input)}; width: 12px; height: 12px; border: 2px solid #262626;"
+      style="top: {yPos}px; background: {getPortColor(input)}; width: 10px; height: 10px; border: 2px solid #262626;"
     />
-    <span
-      class="port-label input-label text-[10px] text-neutral-400 absolute pointer-events-none"
-      style="top: {yPos - 6}px; left: 16px;"
-      title="{input.label} ({input.data_type})"
-    >
-      {input.label}
-    </span>
   {/each}
 
-  <!-- Output Handles -->
   {#each outputs as output, i}
-    {@const yPos = 48 + i * 28}
+    {@const yPos = 52 + i * 20}
     <Handle
       type="source"
       position={Position.Right}
       id={output.id}
-      style="top: {yPos}px; background: {getPortColor(output)}; width: 12px; height: 12px; border: 2px solid #262626;"
+      style="top: {yPos}px; background: {getPortColor(output)}; width: 10px; height: 10px; border: 2px solid #262626;"
     />
-    <span
-      class="port-label output-label text-[10px] text-neutral-400 absolute pointer-events-none text-right"
-      style="top: {yPos - 6}px; right: 16px;"
-      title="{output.label} ({output.data_type})"
-    >
-      {output.label}
-    </span>
   {/each}
 </div>
 
@@ -106,6 +114,12 @@
   .base-node.selected {
     border-color: #4f46e5;
     box-shadow: 0 0 0 2px #4f46e5;
+  }
+
+  .ports-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
   }
 
   :global(.base-node .svelte-flow__handle) {

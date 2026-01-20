@@ -126,14 +126,25 @@ export function resetExecutionStates() {
 }
 
 export function loadWorkflow(graph: WorkflowGraph, metadata?: WorkflowMetadata) {
+  // Get current node definitions to attach to loaded nodes
+  const definitions = get(nodeDefinitions);
+
   // Convert GraphNodes to SvelteFlow Nodes
   nodes.set(
-    graph.nodes.map((n) => ({
-      id: n.id,
-      type: n.node_type,
-      position: n.position,
-      data: n.data,
-    }))
+    graph.nodes.map((n) => {
+      // Look up the definition for this node type
+      const definition = definitions.find((d) => d.node_type === n.node_type);
+
+      return {
+        id: n.id,
+        type: n.node_type,
+        position: n.position,
+        data: {
+          ...n.data,
+          definition, // Attach definition so BaseNode can render inputs/outputs
+        },
+      };
+    })
   );
 
   // Convert GraphEdges to SvelteFlow Edges

@@ -119,3 +119,19 @@ export function showAllConnectionTypes() {
 export function clearSearch() {
   searchQuery.set('');
 }
+
+// --- Workflow Graph Format for Unified Editor ---
+
+/**
+ * Converts the architecture data to the format used by the unified WorkflowGraph component.
+ * This allows the architecture to be displayed in the same editor as workflows.
+ */
+export const architectureAsWorkflowGraph = derived(
+  [architectureNodes, architectureEdges],
+  ([$nodes, $edges]): { nodes: Node[]; edges: Edge[] } => {
+    return {
+      nodes: $nodes,
+      edges: $edges,
+    };
+  }
+);

@@ -13,8 +13,9 @@
     removeEdge,
     addNode,
     removeNode,
-    loadDefaultWorkflow,
   } from '../stores/workflowStore';
+  import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
+  import { architectureAsWorkflowGraph } from '../stores/architectureStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
 
@@ -23,6 +24,13 @@
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
+
+  // Import architecture node components
+  import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
+  import ArchServiceNode from './nodes/architecture/ArchServiceNode.svelte';
+  import ArchStoreNode from './nodes/architecture/ArchStoreNode.svelte';
+  import ArchBackendNode from './nodes/architecture/ArchBackendNode.svelte';
+  import ArchCommandNode from './nodes/architecture/ArchCommandNode.svelte';
 
   // Define custom node types for workflow
   const nodeTypes: NodeTypes = {
@@ -38,29 +46,49 @@
     'write-file': GenericNode,
     'component-preview': GenericNode,
     'tool-loop': GenericNode,
+    // Architecture node types
+    'arch-component': ArchComponentNode,
+    'arch-service': ArchServiceNode,
+    'arch-store': ArchStoreNode,
+    'arch-backend': ArchBackendNode,
+    'arch-command': ArchCommandNode,
   };
 
   // Local state for SvelteFlow (Svelte 5 requires $state.raw for xyflow)
-  let nodes = $state.raw<Node[]>($nodesStore);
-  let edges = $state.raw<Edge[]>($edgesStore);
+  let nodes = $state.raw<Node[]>([]);
+  let edges = $state.raw<Edge[]>([]);
 
-  // Sync store changes to local state
+  // Determine if we can edit based on both isEditing store and isReadOnly
+  let canEdit = $derived($isEditing && !$isReadOnly);
+
+  // Sync store changes to local state based on graph type
+  // Combining into a single effect to ensure proper reactivity tracking
   $effect(() => {
-    nodes = $nodesStore;
-  });
-  $effect(() => {
-    edges = $edgesStore;
+    const graphType = $currentGraphType;
+    const graphId = $currentGraphId;
+    const archGraph = $architectureAsWorkflowGraph;
+    const workflowNodes = $nodesStore;
+    const workflowEdges = $edgesStore;
+
+    console.log('[WorkflowGraph] Syncing graph:', { graphType, graphId, workflowNodeCount: workflowNodes.length });
+
+    if (graphType === 'system' && graphId === 'app-architecture') {
+      // Load architecture graph
+      if (archGraph) {
+        nodes = archGraph.nodes;
+        edges = archGraph.edges;
+      }
+    } else {
+      // Load workflow graph from store
+      nodes = workflowNodes;
+      edges = workflowEdges;
+    }
   });
 
   // Initialize node definitions on mount
   onMount(async () => {
     const definitions = await workflowService.getNodeDefinitions();
     nodeDefinitions.set(definitions);
-
-    // Load default workflow if empty
-    if ($nodesStore.length === 0) {
-      loadDefaultWorkflow(definitions);
-    }
   });
 
   // Handle node drag events - sync back to store
@@ -71,6 +99,7 @@
     nodes: Node[];
     event: MouseEvent | TouchEvent;
   }) {
+    if (!canEdit) return;
     if (targetNode) {
       updateNodePosition(targetNode.id, targetNode.position);
     }
@@ -78,7 +107,7 @@
 
   // Handle new connections
   async function handleConnect(connection: Connection) {
-    if (!$isEditing) return;
+    if (!canEdit) return;
 
     // Get port types from node data
     const sourceNode = nodes.find((n) => n.id === connection.source);
@@ -122,7 +151,7 @@
 
   // Handle deletion of nodes and edges
   function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
-    if (!$isEditing) return;
+    if (!canEdit) return;
     for (const edge of deletedEdges) {
       removeEdge(edge.id);
     }
@@ -134,6 +163,8 @@
   // Handle drop from palette
   function handleDrop(event: DragEvent) {
     event.preventDefault();
+
+    if (!canEdit) return;
 
     const data = event.dataTransfer?.getData('application/json');
     if (!data) return;
@@ -156,6 +187,7 @@
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
+    if (!canEdit) return;
     event.dataTransfer!.dropEffect = 'copy';
   }
 </script>
@@ -171,14 +203,14 @@
     bind:edges
     {nodeTypes}
     fitViewOptions={{ maxZoom: 1 }}
-    nodesConnectable={$isEditing}
+    nodesConnectable={canEdit}
     elementsSelectable={true}
-    nodesDraggable={true}
+    nodesDraggable={canEdit}
     panOnDrag={true}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
-    deleteKey={$isEditing ? 'Delete' : null}
+    deleteKey={canEdit ? 'Delete' : null}
     onnodedragstop={onNodeDragStop}
     onconnect={handleConnect}
     ondelete={handleDelete}

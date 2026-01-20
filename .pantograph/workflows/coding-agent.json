@@ -1,0 +1,190 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "Coding Agent",
+    "description": "Agent for generating Svelte GUI elements with tool-loop capabilities",
+    "created": "2026-01-20T00:00:00Z",
+    "modified": "2026-01-20T00:00:00Z"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "user-input",
+        "node_type": "text-input",
+        "position": { "x": 50, "y": 100 },
+        "data": {
+          "label": "User Input",
+          "text": ""
+        }
+      },
+      {
+        "id": "image-input",
+        "node_type": "image-input",
+        "position": { "x": 50, "y": 250 },
+        "data": {
+          "label": "Image Input"
+        }
+      },
+      {
+        "id": "system-prompt",
+        "node_type": "system-prompt",
+        "position": { "x": 50, "y": 400 },
+        "data": {
+          "label": "System Prompt",
+          "text": "You are a helpful assistant that generates Svelte components. When asked to create UI elements, respond with valid Svelte 5 component code using runes syntax."
+        }
+      },
+      {
+        "id": "rag-search",
+        "node_type": "rag-search",
+        "position": { "x": 300, "y": 400 },
+        "data": {
+          "label": "RAG Search",
+          "collection": "codebase"
+        }
+      },
+      {
+        "id": "llm-inference",
+        "node_type": "llm-inference",
+        "position": { "x": 550, "y": 200 },
+        "data": {
+          "label": "LLM Inference",
+          "model": "claude-3-5-sonnet",
+          "temperature": 0.7
+        }
+      },
+      {
+        "id": "tool-loop",
+        "node_type": "tool-loop",
+        "position": { "x": 800, "y": 200 },
+        "data": {
+          "label": "Agent Loop",
+          "max_turns": 10
+        }
+      },
+      {
+        "id": "read-file",
+        "node_type": "read-file",
+        "position": { "x": 800, "y": 400 },
+        "data": {
+          "label": "Read File"
+        }
+      },
+      {
+        "id": "write-file",
+        "node_type": "write-file",
+        "position": { "x": 950, "y": 400 },
+        "data": {
+          "label": "Write File"
+        }
+      },
+      {
+        "id": "component-preview",
+        "node_type": "component-preview",
+        "position": { "x": 1100, "y": 100 },
+        "data": {
+          "label": "Component Preview"
+        }
+      },
+      {
+        "id": "text-output",
+        "node_type": "text-output",
+        "position": { "x": 1100, "y": 300 },
+        "data": {
+          "label": "Text Output"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "user-to-llm",
+        "source": "user-input",
+        "source_handle": "text",
+        "target": "llm-inference",
+        "target_handle": "prompt"
+      },
+      {
+        "id": "image-to-llm",
+        "source": "image-input",
+        "source_handle": "image",
+        "target": "llm-inference",
+        "target_handle": "image"
+      },
+      {
+        "id": "system-to-llm",
+        "source": "system-prompt",
+        "source_handle": "text",
+        "target": "llm-inference",
+        "target_handle": "system"
+      },
+      {
+        "id": "rag-to-llm",
+        "source": "rag-search",
+        "source_handle": "documents",
+        "target": "llm-inference",
+        "target_handle": "context"
+      },
+      {
+        "id": "user-to-rag",
+        "source": "user-input",
+        "source_handle": "text",
+        "target": "rag-search",
+        "target_handle": "query"
+      },
+      {
+        "id": "llm-to-loop",
+        "source": "llm-inference",
+        "source_handle": "response",
+        "target": "tool-loop",
+        "target_handle": "input"
+      },
+      {
+        "id": "loop-to-read",
+        "source": "tool-loop",
+        "source_handle": "tool_call",
+        "target": "read-file",
+        "target_handle": "request"
+      },
+      {
+        "id": "loop-to-write",
+        "source": "tool-loop",
+        "source_handle": "tool_call",
+        "target": "write-file",
+        "target_handle": "request"
+      },
+      {
+        "id": "read-to-loop",
+        "source": "read-file",
+        "source_handle": "content",
+        "target": "tool-loop",
+        "target_handle": "tool_result"
+      },
+      {
+        "id": "write-to-loop",
+        "source": "write-file",
+        "source_handle": "result",
+        "target": "tool-loop",
+        "target_handle": "tool_result"
+      },
+      {
+        "id": "loop-to-preview",
+        "source": "tool-loop",
+        "source_handle": "component",
+        "target": "component-preview",
+        "target_handle": "component"
+      },
+      {
+        "id": "loop-to-output",
+        "source": "tool-loop",
+        "source_handle": "response",
+        "target": "text-output",
+        "target_handle": "text"
+      }
+    ]
+  },
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

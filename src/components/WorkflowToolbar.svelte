@@ -10,11 +10,17 @@
     loadDefaultWorkflow,
     nodeDefinitions,
   } from '../stores/workflowStore';
+  import {
+    isReadOnly,
+    currentGraphName,
+    createNewWorkflow,
+  } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { WorkflowEvent } from '../services/workflow/types';
   import { get } from 'svelte/store';
+  import GraphSelector from './GraphSelector.svelte';
 
-  let workflowName = $derived($workflowMetadata?.name || 'Untitled Workflow');
+  let workflowName = $derived($currentGraphName || 'Untitled Workflow');
 
   async function handleRun() {
     if ($isExecuting) return;
@@ -66,53 +72,66 @@
   }
 
   function handleNew() {
+    if ($isReadOnly) return;
     if ($isDirty && !confirm('Discard unsaved changes?')) return;
-    loadDefaultWorkflow(get(nodeDefinitions));
+    createNewWorkflow();
   }
 
   function handleClear() {
+    if ($isReadOnly) return;
     if (!confirm('Clear all nodes?')) return;
     clearWorkflow();
   }
 </script>
 
 <div class="workflow-toolbar h-12 px-4 bg-neutral-900 border-b border-neutral-700 flex items-center justify-between">
-  <div class="flex items-center gap-2">
-    <button
-      class="px-3 py-1.5 text-sm bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded text-neutral-200 transition-colors"
-      onclick={handleNew}
-      title="New Workflow"
-    >
-      [+] New
-    </button>
-    <button
-      class="px-3 py-1.5 text-sm bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded text-neutral-200 transition-colors"
-      onclick={handleSave}
-      title="Save Workflow"
-    >
-      [S] Save
-    </button>
-    <button
-      class="px-3 py-1.5 text-sm bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded text-neutral-200 transition-colors"
-      onclick={handleLoad}
-      title="Load Workflow"
-    >
-      [L] Load
-    </button>
-    <button
-      class="px-3 py-1.5 text-sm bg-neutral-800 hover:bg-red-900/50 border border-neutral-600 rounded text-neutral-200 transition-colors"
-      onclick={handleClear}
-      title="Clear All"
-    >
-      [X] Clear
-    </button>
+  <div class="flex items-center gap-3">
+    <GraphSelector />
+
+    <div class="h-6 w-px bg-neutral-700"></div>
+
+    <div class="flex items-center gap-2">
+      <button
+        class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
+        class:hover:bg-neutral-700={!$isReadOnly}
+        class:opacity-50={$isReadOnly}
+        class:cursor-not-allowed={$isReadOnly}
+        onclick={handleNew}
+        disabled={$isReadOnly}
+        title={$isReadOnly ? 'Cannot create new in read-only mode' : 'New Workflow'}
+      >
+        [+] New
+      </button>
+      <button
+        class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
+        class:hover:bg-neutral-700={!$isReadOnly}
+        class:opacity-50={$isReadOnly}
+        class:cursor-not-allowed={$isReadOnly}
+        onclick={handleSave}
+        disabled={$isReadOnly}
+        title={$isReadOnly ? 'Cannot save read-only graph' : 'Save Workflow'}
+      >
+        [S] Save
+      </button>
+      <button
+        class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors hover:bg-red-900"
+        class:opacity-50={$isReadOnly}
+        class:cursor-not-allowed={$isReadOnly}
+        class:hover:bg-transparent={$isReadOnly}
+        onclick={handleClear}
+        disabled={$isReadOnly}
+        title={$isReadOnly ? 'Cannot clear read-only graph' : 'Clear All'}
+      >
+        [X] Clear
+      </button>
+    </div>
   </div>
 
   <div class="flex items-center gap-2">
-    <span class="text-sm text-neutral-300">
-      {workflowName}
-    </span>
-    {#if $isDirty}
+    {#if $isReadOnly}
+      <span class="text-xs text-neutral-500 bg-neutral-800 px-2 py-0.5 rounded">(read-only)</span>
+    {/if}
+    {#if $isDirty && !$isReadOnly}
       <span class="text-amber-400 text-sm" title="Unsaved changes">*</span>
     {/if}
   </div>

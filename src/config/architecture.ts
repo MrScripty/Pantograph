@@ -22,13 +22,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       description: 'Drawing canvas with stroke rendering'
     },
     {
-      id: 'component:NodeGraph',
-      category: 'component',
-      label: 'NodeGraph',
-      filePath: 'src/components/NodeGraph.svelte',
-      description: 'Agent/RAG node visualization'
-    },
-    {
       id: 'component:WorkflowGraph',
       category: 'component',
       label: 'WorkflowGraph',
@@ -194,13 +187,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       description: 'Workflow nodes, edges, and execution state'
     },
     {
-      id: 'store:nodeGraphStore',
-      category: 'store',
-      label: 'nodeGraphStore',
-      filePath: 'src/stores/nodeGraphStore.ts',
-      description: 'Agent node graph state'
-    },
-    {
       id: 'store:canvasStore',
       category: 'store',
       label: 'canvasStore',
@@ -348,7 +334,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
   connections: [
     // ==================== App imports components ====================
     { id: 'c1', source: 'component:App', target: 'component:Canvas', connectionType: 'import' },
-    { id: 'c2', source: 'component:App', target: 'component:NodeGraph', connectionType: 'import' },
     { id: 'c3', source: 'component:App', target: 'component:WorkflowGraph', connectionType: 'import' },
     { id: 'c4', source: 'component:App', target: 'component:SidePanel', connectionType: 'import' },
     { id: 'c5', source: 'component:App', target: 'component:TopBar', connectionType: 'import' },
@@ -363,7 +348,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c12', source: 'component:Canvas', target: 'store:canvasStore', connectionType: 'subscription' },
     { id: 'c13', source: 'component:Canvas', target: 'store:interactionModeStore', connectionType: 'subscription' },
     { id: 'c14', source: 'component:WorkflowGraph', target: 'store:workflowStore', connectionType: 'subscription' },
-    { id: 'c15', source: 'component:NodeGraph', target: 'store:nodeGraphStore', connectionType: 'subscription' },
     { id: 'c16', source: 'component:ChunkPreview', target: 'store:chunkPreviewStore', connectionType: 'subscription' },
     { id: 'c17', source: 'component:WorkflowToolbar', target: 'store:workflowStore', connectionType: 'subscription' },
     { id: 'c18', source: 'component:NodePalette', target: 'store:workflowStore', connectionType: 'subscription' },

@@ -10,13 +10,9 @@
   import ChunkPreview from './components/ChunkPreview.svelte';
   import ClearButton from './components/ClearButton.svelte';
   import CommitTimeline from './components/CommitTimeline.svelte';
-  import NodeGraph from './components/NodeGraph.svelte';
   import WorkflowGraph from './components/WorkflowGraph.svelte';
   import NodePalette from './components/NodePalette.svelte';
   import WorkflowToolbar from './components/WorkflowToolbar.svelte';
-  import ArchitectureGraph from './components/ArchitectureGraph.svelte';
-  import ArchitectureToolbar from './components/ArchitectureToolbar.svelte';
-  import ArchitectureLegend from './components/ArchitectureLegend.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
@@ -25,6 +21,7 @@
   import { viewMode, toggleViewMode } from './stores/viewModeStore';
   import { loadWorkspace } from './services/HotLoadRegistry';
   import { undoStore } from './stores/undoStore';
+  import { loadLastGraph, isReadOnly } from './stores/graphSessionStore';
 
   async function handleComponentUndo() {
     try {
@@ -56,6 +53,11 @@
       if (count > 0) {
         Logger.log('WORKSPACE_RESTORED', { count });
       }
+    });
+
+    // Load the last opened workflow/graph
+    loadLastGraph().then(() => {
+      Logger.log('GRAPH_SESSION_RESTORED', {});
     });
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -123,34 +125,24 @@
       <ClearButton />
       <HotLoadContainer />
     </div>
-  {:else if $viewMode === 'node-graph'}
-    <div class="absolute inset-0" transition:fade={{ duration: 200 }}>
-      <NodeGraph />
-    </div>
   {:else if $viewMode === 'workflow'}
     <div class="absolute inset-0 flex flex-col" transition:fade={{ duration: 200 }}>
       <WorkflowToolbar />
       <div class="flex-1 flex overflow-hidden">
-        <NodePalette />
+        {#if !$isReadOnly}
+          <NodePalette />
+        {/if}
         <div class="flex-1">
           <WorkflowGraph />
-        </div>
-      </div>
-    </div>
-  {:else if $viewMode === 'architecture'}
-    <div class="absolute inset-0 flex flex-col" transition:fade={{ duration: 200 }}>
-      <ArchitectureToolbar />
-      <div class="flex-1 flex overflow-hidden">
-        <ArchitectureLegend />
-        <div class="flex-1">
-          <ArchitectureGraph />
         </div>
       </div>
     </div>
   {/if}
 
   <!-- Always visible components -->
-  <TopBar />
+  {#if $viewMode === 'canvas'}
+    <TopBar />
+  {/if}
   <SidePanel />
 
   <!-- Global modals -->
@@ -162,12 +154,12 @@
   >
     {#if $viewMode === 'canvas'}
       Zenith System Active
-    {:else if $viewMode === 'node-graph'}
-      Node Graph View (Ctrl+` to switch)
     {:else if $viewMode === 'workflow'}
-      Workflow Editor (Ctrl+` to switch)
-    {:else if $viewMode === 'architecture'}
-      Architecture View (Ctrl+` to switch)
+      {#if $isReadOnly}
+        Read-Only Graph (Ctrl+` to switch)
+      {:else}
+        Workflow Editor (Ctrl+` to switch)
+      {/if}
     {/if}
   </div>
 </main>

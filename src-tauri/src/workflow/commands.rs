@@ -127,10 +127,19 @@ pub fn save_workflow(name: String, graph: WorkflowGraph) -> Result<String, Strin
 
 /// Load a workflow from disk
 ///
-/// Loads a workflow file from the given path.
+/// Loads a workflow file from the given path (relative to project root).
 #[command]
 pub fn load_workflow(path: String) -> Result<WorkflowFile, String> {
-    let content = fs::read_to_string(&path)
+    // Resolve path relative to project root
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let project_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let full_path = project_root.join(&path);
+
+    let content = fs::read_to_string(&full_path)
         .map_err(|e| format!("Failed to read workflow file: {}", e))?;
 
     let workflow: WorkflowFile = serde_json::from_str(&content)
@@ -158,7 +167,11 @@ pub fn list_workflows() -> Result<Vec<WorkflowMetadata>, String> {
         if path.extension().map_or(false, |ext| ext == "json") {
             match fs::read_to_string(&path) {
                 Ok(content) => {
-                    if let Ok(workflow) = serde_json::from_str::<WorkflowFile>(&content) {
+                    if let Ok(mut workflow) = serde_json::from_str::<WorkflowFile>(&content) {
+                        // Extract filename stem as ID for loading
+                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                            workflow.metadata.id = Some(stem.to_string());
+                        }
                         workflows.push(workflow.metadata);
                     }
                 }

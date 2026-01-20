@@ -80,7 +80,7 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
-        strictPort: true,
+        strictPort: false, // Allow fallback to next available port if 3000 is in use
         watch: {
           // Ignore Rust build artifacts - target/doc alone is 2.2GB with thousands of files
           ignored: ['**/src-tauri/target/**']

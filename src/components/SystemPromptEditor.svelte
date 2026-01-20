@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { updateNodeData } from '../stores/nodeGraphStore';
+  import { updateNodeData } from '../stores/workflowStore';
 
   interface Props {
     onClose: () => void;

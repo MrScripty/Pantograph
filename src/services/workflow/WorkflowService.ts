@@ -318,14 +318,36 @@ export class WorkflowService {
     if (USE_MOCKS) {
       return [
         {
-          name: 'Default Agent',
-          description: 'Standard agent workflow with tools',
+          name: 'coding-agent',
+          description: 'Agent for generating Svelte GUI elements',
           created: new Date().toISOString(),
           modified: new Date().toISOString(),
         },
       ];
     }
     return invoke<WorkflowMetadata[]>('list_workflows');
+  }
+
+  async deleteWorkflow(name: string): Promise<void> {
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Deleting workflow', name);
+      return;
+    }
+    return invoke('delete_workflow', { name });
+  }
+
+  /**
+   * Get a list of built-in workflow templates
+   */
+  getBuiltInWorkflows(): WorkflowMetadata[] {
+    return [
+      {
+        name: 'coding-agent',
+        description: 'Agent for generating Svelte GUI elements with tool-loop',
+        created: '2026-01-20T00:00:00Z',
+        modified: '2026-01-20T00:00:00Z',
+      },
+    ];
   }
 }
 

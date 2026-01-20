@@ -58,6 +58,7 @@ export interface WorkflowGraph {
 }
 
 export interface WorkflowMetadata {
+  id?: string; // Filename stem (e.g., "coding-agent") for loading, populated by list_workflows
   name: string;
   description?: string;
   created: string;

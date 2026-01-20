@@ -261,6 +261,10 @@ pub struct Viewport {
 /// Metadata for a saved workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowMetadata {
+    /// Filename stem (e.g., "coding-agent") used for loading
+    /// Populated by list_workflows, not stored in the JSON file
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Display name
     pub name: String,
     /// Optional description
@@ -296,6 +300,7 @@ impl WorkflowFile {
         Self {
             version: Self::CURRENT_VERSION.to_string(),
             metadata: WorkflowMetadata {
+                id: None, // Will be populated by list_workflows from filename
                 name: name.into(),
                 description: None,
                 created: now.clone(),
