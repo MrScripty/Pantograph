@@ -60,3 +60,14 @@ pub struct RagStatus {
     /// Current indexing progress (if indexing)
     pub indexing_progress: Option<IndexingProgress>,
 }
+
+/// Information about a vector database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseInfo {
+    /// Database name (derived from directory name)
+    pub name: String,
+    /// Full path to the database
+    pub path: String,
+    /// Number of tables in the database (0 if not enumerated)
+    pub table_count: usize,
+}

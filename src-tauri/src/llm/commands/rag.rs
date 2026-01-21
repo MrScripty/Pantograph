@@ -1,7 +1,7 @@
 //! RAG (Retrieval Augmented Generation) commands.
 
 use super::shared::{get_project_data_dir, SharedAppConfig};
-use crate::agent::rag::{IndexingProgress, RagStatus, SharedRagManager};
+use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;
 use crate::llm::BackendConfig;
@@ -387,4 +387,29 @@ pub async fn index_docs_with_switch(
         .ok();
 
     Ok(())
+}
+
+/// List all available vector databases
+#[command]
+pub async fn list_vector_databases(
+    rag_manager: State<'_, SharedRagManager>,
+) -> Result<Vec<DatabaseInfo>, String> {
+    let manager = rag_manager.read().await;
+    manager
+        .list_databases()
+        .await
+        .map_err(|e| format!("Failed to list databases: {}", e))
+}
+
+/// Create a new vector database
+#[command]
+pub async fn create_vector_database(
+    rag_manager: State<'_, SharedRagManager>,
+    name: String,
+) -> Result<String, String> {
+    let manager = rag_manager.read().await;
+    manager
+        .create_database(&name)
+        .await
+        .map_err(|e| format!("Failed to create database: {}", e))
 }

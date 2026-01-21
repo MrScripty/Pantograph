@@ -439,6 +439,56 @@ impl RagManager {
         log::info!("Cleared RAG cache");
         Ok(())
     }
+
+    /// Get the store path for vector databases
+    pub fn store_path(&self) -> &PathBuf {
+        &self.store_path
+    }
+
+    /// List all available vector databases in the store path
+    pub async fn list_databases(&self) -> Result<Vec<super::types::DatabaseInfo>, RagError> {
+        let mut databases = Vec::new();
+
+        // The default database is always present if the store path exists
+        if self.store_path.exists() {
+            // Add the default database (main LanceDB)
+            databases.push(super::types::DatabaseInfo {
+                name: "default".to_string(),
+                path: self.store_path.to_string_lossy().to_string(),
+                table_count: 0,
+            });
+
+            // Look for subdirectories that could be additional databases
+            let mut entries = tokio::fs::read_dir(&self.store_path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if path.is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    // Skip internal LanceDB directories (they typically have specific patterns)
+                    if !name.starts_with('.') && !name.ends_with(".lance") {
+                        databases.push(super::types::DatabaseInfo {
+                            name,
+                            path: path.to_string_lossy().to_string(),
+                            table_count: 0,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(databases)
+    }
+
+    /// Create a new vector database
+    pub async fn create_database(&self, name: &str) -> Result<String, RagError> {
+        let db_path = self.store_path.join(name);
+
+        // Create the directory for the new database
+        tokio::fs::create_dir_all(&db_path).await?;
+
+        log::info!("Created new vector database at: {:?}", db_path);
+        Ok(db_path.to_string_lossy().to_string())
+    }
 }
 
 /// Thread-safe wrapper for RagManager
