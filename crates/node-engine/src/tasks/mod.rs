@@ -1,89 +1,25 @@
-//! Task implementations for workflow nodes
+//! Context key helpers for tasks
 //!
-//! Each task corresponds to a node type and implements graph-flow's Task trait.
-//! Tasks communicate via the shared Context, storing inputs and outputs
-//! with well-defined key patterns.
+//! Task implementations have moved to the `workflow-nodes` crate.
+//! This module provides only the `ContextKeys` helper for building
+//! context key strings.
 //!
 //! # Key Conventions
 //!
 //! - Inputs: `{task_id}.input.{port_name}`
 //! - Outputs: `{task_id}.output.{port_name}`
 //! - Streaming: `{task_id}.stream.{port_name}`
-//!
-//! # Task Categories
-//!
-//! ## Input Tasks
-//! - [`TextInputTask`] - Simple text passthrough
-//! - [`ImageInputTask`] - Base64 image handling
-//! - [`HumanInputTask`] - Interactive user input (pauses execution)
-//!
-//! ## Output Tasks
-//! - [`TextOutputTask`] - Text display with streaming
-//! - [`ComponentPreviewTask`] - Svelte component rendering
-//!
-//! ## Processing Tasks
-//! - [`InferenceTask`] - LLM text completion
-//! - [`VisionAnalysisTask`] - Image analysis with vision models
-//! - [`RagSearchTask`] - Semantic document search
-//!
-//! ## Tool Tasks
-//! - [`ReadFileTask`] - File reading
-//! - [`WriteFileTask`] - File writing
-//!
-//! ## Control Flow Tasks
-//! - [`ToolLoopTask`] - Multi-turn agent loop with tool calling
+//! - Metadata: `{task_id}.meta.{field_name}`
 //!
 //! # Example
 //!
 //! ```ignore
-//! // Set input for inference task
-//! context.set("inference_1.input.prompt", "Hello, world!").await;
+//! use node_engine::ContextKeys;
 //!
-//! // After execution, get output
-//! let response: String = context.get("inference_1.output.response").await?;
+//! // Build keys for a task
+//! let prompt_key = ContextKeys::input("inference_1", "prompt");
+//! let response_key = ContextKeys::output("inference_1", "response");
 //! ```
-
-// Input tasks
-pub mod text_input;
-pub mod image_input;
-pub mod human_input;
-
-// Output tasks
-pub mod text_output;
-pub mod component_preview;
-
-// Processing tasks
-pub mod inference;
-pub mod vision_analysis;
-pub mod rag_search;
-
-// Tool tasks
-pub mod read_file;
-pub mod write_file;
-
-// Control flow tasks
-pub mod tool_loop;
-
-// Re-exports - Input tasks
-pub use text_input::TextInputTask;
-pub use image_input::{ImageInputTask, ImageBounds};
-pub use human_input::HumanInputTask;
-
-// Re-exports - Output tasks
-pub use text_output::TextOutputTask;
-pub use component_preview::ComponentPreviewTask;
-
-// Re-exports - Processing tasks
-pub use inference::{InferenceTask, InferenceConfig};
-pub use vision_analysis::{VisionAnalysisTask, VisionConfig};
-pub use rag_search::{RagSearchTask, RagConfig, RagDocument};
-
-// Re-exports - Tool tasks
-pub use read_file::ReadFileTask;
-pub use write_file::WriteFileTask;
-
-// Re-exports - Control flow tasks
-pub use tool_loop::{ToolLoopTask, ToolLoopConfig, ToolDefinition, ToolCall};
 
 /// Helper for building context keys
 pub struct ContextKeys;
@@ -127,6 +63,10 @@ mod tests {
         assert_eq!(
             ContextKeys::stream("task1", "chunks"),
             "task1.stream.chunks"
+        );
+        assert_eq!(
+            ContextKeys::meta("task1", "config"),
+            "task1.meta.config"
         );
     }
 }

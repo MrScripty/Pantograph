@@ -6740,6 +6740,7 @@ dependencies = [
  "tower-http 0.5.2",
  "uuid",
  "which",
+ "workflow-nodes",
  "zip 2.4.2",
  "zstd",
 ]
@@ -11359,6 +11360,27 @@ name = "wit-bindgen"
 version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
+
+[[package]]
+name = "workflow-nodes"
+version = "0.1.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "async-trait",
+ "graph-flow",
+ "inference",
+ "lancedb",
+ "log",
+ "node-engine",
+ "reqwest",
+ "rig-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+]
 
 [[package]]
 name = "write16"

@@ -1,18 +1,100 @@
 //! Node registry - manages available node type definitions
 //!
 //! The registry stores node definitions for the UI palette.
-//! Node execution is handled by node-engine's TaskExecutor.
+//! Definitions are sourced from node-engine's TaskDescriptor trait,
+//! creating a single source of truth for node metadata.
 
 use std::collections::HashMap;
 
-use super::types::{
-    ExecutionMode, NodeCategory, NodeDefinition, PortDataType, PortDefinition,
+use node_engine::TaskDescriptor;
+use workflow_nodes::{
+    // Input tasks
+    HumanInputTask, ImageInputTask, TextInputTask, VectorDbTask,
+    // Output tasks
+    ComponentPreviewTask, TextOutputTask,
+    // Processing tasks
+    EmbeddingTask, InferenceTask, VisionAnalysisTask,
+    // Storage tasks
+    LanceDbTask, ReadFileTask, WriteFileTask,
+    // Control tasks
+    ToolLoopTask,
 };
+
+use super::types::{ExecutionMode, NodeCategory, NodeDefinition, PortDataType, PortDefinition};
+
+/// Convert node-engine's TaskMetadata to src-tauri's NodeDefinition
+fn convert_metadata(meta: node_engine::TaskMetadata) -> NodeDefinition {
+    NodeDefinition {
+        node_type: meta.node_type,
+        category: convert_category(meta.category),
+        label: meta.label,
+        description: meta.description,
+        inputs: meta.inputs.into_iter().map(convert_port).collect(),
+        outputs: meta.outputs.into_iter().map(convert_port).collect(),
+        execution_mode: convert_execution_mode(meta.execution_mode),
+    }
+}
+
+fn convert_category(cat: node_engine::NodeCategory) -> NodeCategory {
+    match cat {
+        node_engine::NodeCategory::Input => NodeCategory::Input,
+        node_engine::NodeCategory::Output => NodeCategory::Output,
+        node_engine::NodeCategory::Processing => NodeCategory::Processing,
+        node_engine::NodeCategory::Control => NodeCategory::Control,
+        node_engine::NodeCategory::Tool => NodeCategory::Tool,
+    }
+}
+
+fn convert_execution_mode(mode: node_engine::ExecutionMode) -> ExecutionMode {
+    match mode {
+        node_engine::ExecutionMode::Batch => ExecutionMode::Reactive,
+        node_engine::ExecutionMode::Stream => ExecutionMode::Stream,
+        node_engine::ExecutionMode::Reactive => ExecutionMode::Reactive,
+        node_engine::ExecutionMode::Manual => ExecutionMode::Manual,
+    }
+}
+
+fn convert_port(port: node_engine::PortMetadata) -> PortDefinition {
+    PortDefinition {
+        id: port.id,
+        label: port.label,
+        data_type: convert_data_type(port.data_type),
+        required: port.required,
+        multiple: port.multiple,
+    }
+}
+
+fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
+    match dt {
+        node_engine::PortDataType::Any => PortDataType::Any,
+        node_engine::PortDataType::String => PortDataType::String,
+        node_engine::PortDataType::Image => PortDataType::Image,
+        node_engine::PortDataType::Audio => PortDataType::Audio,
+        node_engine::PortDataType::Component => PortDataType::Component,
+        node_engine::PortDataType::Stream => PortDataType::Stream,
+        node_engine::PortDataType::Prompt => PortDataType::Prompt,
+        node_engine::PortDataType::Tools => PortDataType::Tools,
+        node_engine::PortDataType::Embedding => PortDataType::Embedding,
+        node_engine::PortDataType::Document => PortDataType::Document,
+        node_engine::PortDataType::Json => PortDataType::Json,
+        node_engine::PortDataType::Boolean => PortDataType::Boolean,
+        node_engine::PortDataType::Number => PortDataType::Number,
+        node_engine::PortDataType::VectorDb => PortDataType::VectorDb,
+        // Map additional node-engine types to closest match
+        node_engine::PortDataType::ModelHandle => PortDataType::String,
+        node_engine::PortDataType::EmbeddingHandle => PortDataType::String,
+        node_engine::PortDataType::DatabaseHandle => PortDataType::String,
+        node_engine::PortDataType::Vector => PortDataType::Embedding,
+        node_engine::PortDataType::Tensor => PortDataType::Json,
+        node_engine::PortDataType::AudioSamples => PortDataType::Audio,
+    }
+}
 
 /// Registry of available node types
 ///
 /// Stores node definitions and provides them to the frontend for
-/// the node palette. Execution is handled by PantographTaskExecutor.
+/// the node palette. Definitions are sourced from node-engine's
+/// TaskDescriptor trait.
 pub struct NodeRegistry {
     definitions: HashMap<String, NodeDefinition>,
 }
@@ -22,30 +104,42 @@ impl NodeRegistry {
     pub fn new() -> Self {
         let mut definitions = HashMap::new();
 
-        // Input nodes
-        Self::register(&mut definitions, Self::text_input_definition());
-        Self::register(&mut definitions, Self::image_input_definition());
-        Self::register(&mut definitions, Self::system_prompt_definition());
+        // Register definitions from workflow-nodes tasks (single source of truth)
+        // Input tasks
+        Self::register_from_task::<TextInputTask>(&mut definitions);
+        Self::register_from_task::<ImageInputTask>(&mut definitions);
+        Self::register_from_task::<HumanInputTask>(&mut definitions);
+        Self::register_from_task::<VectorDbTask>(&mut definitions);
+
+        // Output tasks
+        Self::register_from_task::<TextOutputTask>(&mut definitions);
+        Self::register_from_task::<ComponentPreviewTask>(&mut definitions);
+
+        // Processing tasks
+        Self::register_from_task::<InferenceTask>(&mut definitions);
+        Self::register_from_task::<VisionAnalysisTask>(&mut definitions);
+        Self::register_from_task::<EmbeddingTask>(&mut definitions);
+
+        // Storage tasks
+        Self::register_from_task::<LanceDbTask>(&mut definitions);
+        Self::register_from_task::<ReadFileTask>(&mut definitions);
+        Self::register_from_task::<WriteFileTask>(&mut definitions);
+
+        // Control tasks
+        Self::register_from_task::<ToolLoopTask>(&mut definitions);
+
+        // Tauri-only nodes (no node-engine task implementation)
         Self::register(&mut definitions, Self::puma_lib_definition());
-
-        // Processing nodes
-        Self::register(&mut definitions, Self::llm_inference_definition());
-        Self::register(&mut definitions, Self::vision_analysis_definition());
-        Self::register(&mut definitions, Self::rag_search_definition());
-
-        // Output nodes
-        Self::register(&mut definitions, Self::text_output_definition());
-        Self::register(&mut definitions, Self::component_preview_definition());
-
-        // Tool nodes
         Self::register(&mut definitions, Self::agent_tools_definition());
-        Self::register(&mut definitions, Self::read_file_definition());
-        Self::register(&mut definitions, Self::write_file_definition());
-
-        // Control nodes
-        Self::register(&mut definitions, Self::tool_loop_definition());
 
         Self { definitions }
+    }
+
+    /// Register a definition from a TaskDescriptor
+    fn register_from_task<T: TaskDescriptor>(map: &mut HashMap<String, NodeDefinition>) {
+        let meta = T::descriptor();
+        let def = convert_metadata(meta);
+        map.insert(def.node_type.clone(), def);
     }
 
     /// Register a node definition
@@ -69,10 +163,7 @@ impl NodeRegistry {
 
         for def in self.definitions.values() {
             let category = format!("{:?}", def.category).to_lowercase();
-            grouped
-                .entry(category)
-                .or_default()
-                .push(def.clone());
+            grouped.entry(category).or_default().push(def.clone());
         }
 
         grouped
@@ -94,74 +185,8 @@ impl NodeRegistry {
     }
 
     // =========================================================================
-    // Node Definition Factories
+    // Tauri-only Node Definitions (no node-engine task)
     // =========================================================================
-
-    fn text_input_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "text-input".to_string(),
-            category: NodeCategory::Input,
-            label: "Text Input".to_string(),
-            description: "Provides text input to the workflow".to_string(),
-            inputs: vec![PortDefinition {
-                id: "text".to_string(),
-                label: "Text".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            outputs: vec![PortDefinition {
-                id: "text".to_string(),
-                label: "Text".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn image_input_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "image-input".to_string(),
-            category: NodeCategory::Input,
-            label: "Image Input".to_string(),
-            description: "Provides image input to the workflow".to_string(),
-            inputs: vec![],
-            outputs: vec![PortDefinition {
-                id: "image".to_string(),
-                label: "Image".to_string(),
-                data_type: PortDataType::Image,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn system_prompt_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "system-prompt".to_string(),
-            category: NodeCategory::Input,
-            label: "System Prompt".to_string(),
-            description: "Provides system prompt configuration".to_string(),
-            inputs: vec![PortDefinition {
-                id: "prompt".to_string(),
-                label: "Prompt".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            outputs: vec![PortDefinition {
-                id: "prompt".to_string(),
-                label: "Prompt".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
 
     fn puma_lib_definition() -> NodeDefinition {
         NodeDefinition {
@@ -174,201 +199,6 @@ impl NodeRegistry {
                 id: "model_path".to_string(),
                 label: "Model Path".to_string(),
                 data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn llm_inference_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "llm-inference".to_string(),
-            category: NodeCategory::Processing,
-            label: "LLM Inference".to_string(),
-            description: "Runs text through a language model".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "prompt".to_string(),
-                    label: "Prompt".to_string(),
-                    data_type: PortDataType::Prompt,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "system_prompt".to_string(),
-                    label: "System Prompt".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "model".to_string(),
-                    label: "Model".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "image".to_string(),
-                    label: "Image".to_string(),
-                    data_type: PortDataType::Image,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "audio".to_string(),
-                    label: "Audio".to_string(),
-                    data_type: PortDataType::Audio,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![
-                PortDefinition {
-                    id: "response".to_string(),
-                    label: "Response".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "stream".to_string(),
-                    label: "Stream".to_string(),
-                    data_type: PortDataType::Stream,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            execution_mode: ExecutionMode::Stream,
-        }
-    }
-
-    fn vision_analysis_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "vision-analysis".to_string(),
-            category: NodeCategory::Processing,
-            label: "Vision Analysis".to_string(),
-            description: "Analyzes images using a vision model".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "image".to_string(),
-                    label: "Image".to_string(),
-                    data_type: PortDataType::Image,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "prompt".to_string(),
-                    label: "Prompt".to_string(),
-                    data_type: PortDataType::String,
-                    required: true,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![PortDefinition {
-                id: "analysis".to_string(),
-                label: "Analysis".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn rag_search_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "rag-search".to_string(),
-            category: NodeCategory::Processing,
-            label: "RAG Search".to_string(),
-            description: "Searches indexed documents using RAG".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "query".to_string(),
-                    label: "Query".to_string(),
-                    data_type: PortDataType::String,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "limit".to_string(),
-                    label: "Limit".to_string(),
-                    data_type: PortDataType::Number,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![
-                PortDefinition {
-                    id: "documents".to_string(),
-                    label: "Documents".to_string(),
-                    data_type: PortDataType::Json,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "context".to_string(),
-                    label: "Context".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn text_output_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "text-output".to_string(),
-            category: NodeCategory::Output,
-            label: "Text Output".to_string(),
-            description: "Displays text output from the workflow".to_string(),
-            inputs: vec![PortDefinition {
-                id: "text".to_string(),
-                label: "Text".to_string(),
-                data_type: PortDataType::String,
-                required: true,
-                multiple: false,
-            }],
-            outputs: vec![PortDefinition {
-                id: "text".to_string(),
-                label: "Text".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn component_preview_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "component-preview".to_string(),
-            category: NodeCategory::Output,
-            label: "Component Preview".to_string(),
-            description: "Previews a Svelte component".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "component".to_string(),
-                    label: "Component".to_string(),
-                    data_type: PortDataType::Component,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "props".to_string(),
-                    label: "Props".to_string(),
-                    data_type: PortDataType::Json,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![PortDefinition {
-                id: "rendered".to_string(),
-                label: "Rendered".to_string(),
-                data_type: PortDataType::Component,
                 required: false,
                 multiple: false,
             }],
@@ -393,130 +223,6 @@ impl NodeRegistry {
             execution_mode: ExecutionMode::Reactive,
         }
     }
-
-    fn read_file_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "read-file".to_string(),
-            category: NodeCategory::Tool,
-            label: "Read File".to_string(),
-            description: "Reads a file from the filesystem".to_string(),
-            inputs: vec![PortDefinition {
-                id: "path".to_string(),
-                label: "Path".to_string(),
-                data_type: PortDataType::String,
-                required: true,
-                multiple: false,
-            }],
-            outputs: vec![
-                PortDefinition {
-                    id: "content".to_string(),
-                    label: "Content".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "path".to_string(),
-                    label: "Path".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn write_file_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "write-file".to_string(),
-            category: NodeCategory::Tool,
-            label: "Write File".to_string(),
-            description: "Writes content to a file".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "path".to_string(),
-                    label: "Path".to_string(),
-                    data_type: PortDataType::String,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "content".to_string(),
-                    label: "Content".to_string(),
-                    data_type: PortDataType::String,
-                    required: true,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![
-                PortDefinition {
-                    id: "success".to_string(),
-                    label: "Success".to_string(),
-                    data_type: PortDataType::Boolean,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "path".to_string(),
-                    label: "Path".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn tool_loop_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "tool-loop".to_string(),
-            category: NodeCategory::Control,
-            label: "Tool Loop".to_string(),
-            description: "Executes LLM with tools in a loop until completion".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "prompt".to_string(),
-                    label: "Prompt".to_string(),
-                    data_type: PortDataType::Prompt,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "tools".to_string(),
-                    label: "Tools".to_string(),
-                    data_type: PortDataType::Tools,
-                    required: true,
-                    multiple: true,
-                },
-                PortDefinition {
-                    id: "max_iterations".to_string(),
-                    label: "Max Iterations".to_string(),
-                    data_type: PortDataType::Number,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![
-                PortDefinition {
-                    id: "response".to_string(),
-                    label: "Response".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "tool_calls".to_string(),
-                    label: "Tool Calls".to_string(),
-                    data_type: PortDataType::Json,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            execution_mode: ExecutionMode::Stream,
-        }
-    }
 }
 
 impl Default for NodeRegistry {
@@ -533,19 +239,24 @@ mod tests {
     fn test_registry_has_builtin_nodes() {
         let registry = NodeRegistry::new();
 
+        // Nodes from TaskDescriptor (workflow-nodes crate)
         assert!(registry.has_node_type("text-input"));
         assert!(registry.has_node_type("image-input"));
-        assert!(registry.has_node_type("system-prompt"));
-        assert!(registry.has_node_type("puma-lib"));
+        assert!(registry.has_node_type("human-input"));
+        assert!(registry.has_node_type("vector-db"));
         assert!(registry.has_node_type("llm-inference"));
         assert!(registry.has_node_type("vision-analysis"));
-        assert!(registry.has_node_type("rag-search"));
+        assert!(registry.has_node_type("embedding"));
+        assert!(registry.has_node_type("lancedb"));
         assert!(registry.has_node_type("text-output"));
         assert!(registry.has_node_type("component-preview"));
-        assert!(registry.has_node_type("agent-tools"));
         assert!(registry.has_node_type("read-file"));
         assert!(registry.has_node_type("write-file"));
         assert!(registry.has_node_type("tool-loop"));
+
+        // Tauri-only nodes
+        assert!(registry.has_node_type("puma-lib"));
+        assert!(registry.has_node_type("agent-tools"));
     }
 
     #[test]
@@ -577,5 +288,19 @@ mod tests {
         assert!(grouped.contains_key("output"));
         assert!(grouped.contains_key("tool"));
         assert!(grouped.contains_key("control"));
+    }
+
+    #[test]
+    fn test_descriptor_conversion() {
+        // Verify that TaskDescriptor conversion produces correct output
+        let meta = TextInputTask::descriptor();
+        let def = convert_metadata(meta);
+
+        assert_eq!(def.node_type, "text-input");
+        assert_eq!(def.category, NodeCategory::Input);
+        assert_eq!(def.inputs.len(), 1);
+        assert_eq!(def.inputs[0].id, "text");
+        assert_eq!(def.outputs.len(), 1);
+        assert_eq!(def.outputs[0].id, "text");
     }
 }
