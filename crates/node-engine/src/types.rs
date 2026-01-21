@@ -16,7 +16,7 @@ pub type PortId = String;
 
 /// The data type of a port
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum PortDataType {
     /// Accepts any type
     Any,
@@ -24,6 +24,8 @@ pub enum PortDataType {
     String,
     /// Image data (base64 encoded)
     Image,
+    /// Audio data
+    Audio,
     /// UI component reference
     Component,
     /// Streaming data
@@ -42,6 +44,8 @@ pub enum PortDataType {
     Boolean,
     /// Numeric value
     Number,
+    /// Vector database reference
+    VectorDb,
     /// Reference to a loaded model
     ModelHandle,
     /// Reference to an embedding model
@@ -135,7 +139,7 @@ impl PortDefinition {
 
 /// Category of a node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum NodeCategory {
     /// Input nodes (user input, file input, etc.)
     Input,
@@ -146,12 +150,12 @@ pub enum NodeCategory {
     /// Control flow nodes (conditionals, loops, etc.)
     Control,
     /// Tool nodes (function calls, integrations)
-    Tools,
+    Tool,
 }
 
 /// Execution mode for a node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     /// Execute once when inputs are available
     Batch,
@@ -159,6 +163,8 @@ pub enum ExecutionMode {
     Stream,
     /// Execute reactively when inputs change
     Reactive,
+    /// Requires explicit trigger to execute
+    Manual,
 }
 
 /// Definition of a node type
