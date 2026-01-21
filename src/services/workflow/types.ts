@@ -15,7 +15,8 @@ export type PortDataType =
   | 'document'
   | 'json'
   | 'boolean'
-  | 'number';
+  | 'number'
+  | 'vector_db';
 
 export interface PortDefinition {
   id: string;

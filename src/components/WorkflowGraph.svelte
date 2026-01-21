@@ -27,6 +27,7 @@
   import SystemPromptNode from './nodes/workflow/SystemPromptNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
+  import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
 
   // Import architecture node components
   import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
@@ -43,6 +44,7 @@
     'system-prompt': SystemPromptNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
+    'vector-db': VectorDbNode,
     // Generic fallback for other node types
     'image-input': GenericNode,
     'vision-analysis': GenericNode,
@@ -195,12 +197,192 @@
     if (!canEdit) return;
     event.dataTransfer!.dropEffect = 'copy';
   }
+
+  // --- Edge Reconnection (drag-off-anchor to disconnect) ---
+  let edgeReconnectSuccessful = $state(false);
+  let reconnectingEdgeId = $state<string | null>(null);
+
+  function handleReconnectStart({ edge }: { edge: Edge }) {
+    if (!canEdit) return;
+    edgeReconnectSuccessful = false;
+    reconnectingEdgeId = edge.id;
+  }
+
+  async function handleReconnect({ edge, newConnection }: { edge: Edge; newConnection: Connection }) {
+    if (!canEdit) return;
+    edgeReconnectSuccessful = true;
+
+    // Validate the new connection
+    const sourceNode = nodes.find((n) => n.id === newConnection.source);
+    const targetNode = nodes.find((n) => n.id === newConnection.target);
+    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
+    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
+    const sourcePort = sourceDef?.outputs?.find((p) => p.id === newConnection.sourceHandle);
+    const targetPort = targetDef?.inputs?.find((p) => p.id === newConnection.targetHandle);
+
+    if (sourcePort && targetPort) {
+      const isValid = await workflowService.validateConnection(
+        sourcePort.data_type,
+        targetPort.data_type
+      );
+      if (!isValid) {
+        console.warn('[WorkflowGraph] Invalid reconnection');
+        return;
+      }
+    }
+
+    // Remove old edge
+    removeEdge(edge.id);
+
+    // Add new edge with updated connection
+    const newEdge: Edge = {
+      id: `${newConnection.source}-${newConnection.sourceHandle}-${newConnection.target}-${newConnection.targetHandle}`,
+      source: newConnection.source!,
+      sourceHandle: newConnection.sourceHandle,
+      target: newConnection.target!,
+      targetHandle: newConnection.targetHandle,
+    };
+    storeAddEdge(newEdge);
+  }
+
+  function handleReconnectEnd() {
+    if (!canEdit) return;
+
+    // If reconnect was not successful (dropped on empty space), remove the edge
+    if (!edgeReconnectSuccessful && reconnectingEdgeId) {
+      removeEdge(reconnectingEdgeId);
+    }
+
+    reconnectingEdgeId = null;
+  }
+
+  // --- Cut Tool (Ctrl+drag to cut edges) ---
+  let isCutting = $state(false);
+  let cutStart = $state<{ x: number; y: number } | null>(null);
+  let cutEnd = $state<{ x: number; y: number } | null>(null);
+  let ctrlPressed = $state(false);
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Control') {
+      ctrlPressed = true;
+    }
+  }
+
+  function handleKeyUp(e: KeyboardEvent) {
+    if (e.key === 'Control') {
+      ctrlPressed = false;
+      if (isCutting) {
+        finishCut();
+      }
+    }
+  }
+
+  function handlePaneMouseDown(e: MouseEvent) {
+    if (!canEdit || !ctrlPressed) return;
+
+    // Only start cut if clicking on the pane (not on a node)
+    const target = e.target as HTMLElement;
+    if (target.closest('.svelte-flow__node') || target.closest('.svelte-flow__handle')) return;
+
+    isCutting = true;
+    const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    cutStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    cutEnd = cutStart;
+  }
+
+  function handlePaneMouseMove(e: MouseEvent) {
+    if (!isCutting || !cutStart) return;
+
+    const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    cutEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function handlePaneMouseUp() {
+    if (isCutting) {
+      finishCut();
+    }
+  }
+
+  function finishCut() {
+    if (!cutStart || !cutEnd) {
+      isCutting = false;
+      cutStart = null;
+      cutEnd = null;
+      return;
+    }
+
+    // Find edges that intersect with the cut line
+    const edgesToRemove = edges.filter((edge) => {
+      const edgeEl = document.querySelector(`[data-id="${edge.id}"] path`);
+      if (!edgeEl) return false;
+
+      return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
+    });
+
+    // Remove intersecting edges
+    edgesToRemove.forEach((edge) => removeEdge(edge.id));
+
+    isCutting = false;
+    cutStart = null;
+    cutEnd = null;
+  }
+
+  // Utility function to check if a line intersects an SVG path
+  function lineIntersectsPath(
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+    path: SVGPathElement
+  ): boolean {
+    const pathLength = path.getTotalLength();
+    const samples = 20;
+
+    for (let i = 0; i < samples; i++) {
+      const t1 = (i / samples) * pathLength;
+      const t2 = ((i + 1) / samples) * pathLength;
+
+      const point1 = path.getPointAtLength(t1);
+      const point2 = path.getPointAtLength(t2);
+
+      if (
+        linesIntersect(p1, p2, { x: point1.x, y: point1.y }, { x: point2.x, y: point2.y })
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Line-line intersection check
+  function linesIntersect(
+    a1: { x: number; y: number },
+    a2: { x: number; y: number },
+    b1: { x: number; y: number },
+    b2: { x: number; y: number }
+  ): boolean {
+    const det = (a2.x - a1.x) * (b2.y - b1.y) - (b2.x - b1.x) * (a2.y - a1.y);
+    if (det === 0) return false;
+
+    const lambda = ((b2.y - b1.y) * (b2.x - a1.x) + (b1.x - b2.x) * (b2.y - a1.y)) / det;
+    const gamma = ((a1.y - a2.y) * (b2.x - a1.x) + (a2.x - a1.x) * (b2.y - a1.y)) / det;
+
+    return 0 < lambda && lambda < 1 && 0 < gamma && gamma < 1;
+  }
 </script>
+
+<svelte:window onkeydown={handleKeyDown} onkeyup={handleKeyUp} />
 
 <div
   class="workflow-graph-container w-full h-full"
+  class:cutting={isCutting}
   ondrop={handleDrop}
   ondragover={handleDragOver}
+  onmousedown={handlePaneMouseDown}
+  onmousemove={handlePaneMouseMove}
+  onmouseup={handlePaneMouseUp}
   role="application"
 >
   <SvelteFlow
@@ -211,14 +393,18 @@
     nodesConnectable={canEdit}
     elementsSelectable={true}
     nodesDraggable={canEdit}
-    panOnDrag={true}
+    panOnDrag={!ctrlPressed}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
     deleteKey={canEdit ? 'Delete' : null}
+    edgesReconnectable={canEdit}
     onnodedragstop={onNodeDragStop}
     onconnect={handleConnect}
     ondelete={handleDelete}
+    onreconnectstart={handleReconnectStart}
+    onreconnect={handleReconnect}
+    onreconnectend={handleReconnectEnd}
     defaultEdgeOptions={{
       type: 'smoothstep',
       animated: false,
@@ -248,6 +434,21 @@
       maskColor="rgba(0, 0, 0, 0.8)"
     />
   </SvelteFlow>
+
+  <!-- Cut line overlay -->
+  {#if isCutting && cutStart && cutEnd}
+    <svg class="cut-overlay">
+      <line
+        x1={cutStart.x}
+        y1={cutStart.y}
+        x2={cutEnd.x}
+        y2={cutEnd.y}
+        stroke="#ef4444"
+        stroke-width="2"
+        stroke-dasharray="5,5"
+      />
+    </svg>
+  {/if}
 </div>
 
 <style>
@@ -313,5 +514,24 @@
   :global(.svelte-flow__connection-line) {
     stroke: #4f46e5;
     stroke-width: 2px;
+  }
+
+  /* Cut tool styles */
+  .workflow-graph-container {
+    position: relative;
+  }
+
+  .workflow-graph-container.cutting {
+    cursor: crosshair;
+  }
+
+  .cut-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1000;
   }
 </style>

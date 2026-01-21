@@ -129,18 +129,36 @@ export function loadWorkflow(graph: WorkflowGraph, metadata?: WorkflowMetadata) 
   // Get current node definitions to attach to loaded nodes
   const definitions = get(nodeDefinitions);
 
+  // Track which nodes were migrated from system-prompt
+  const migratedNodeIds = new Set<string>();
+
   // Convert GraphNodes to SvelteFlow Nodes
+  // Migrate system-prompt nodes to text-input
   nodes.set(
     graph.nodes.map((n) => {
+      let nodeType = n.node_type;
+      let nodeData = { ...n.data };
+
+      // Migration: system-prompt -> text-input
+      if (nodeType === 'system-prompt') {
+        nodeType = 'text-input';
+        migratedNodeIds.add(n.id);
+        // Migrate 'prompt' field to 'text' if present
+        if ('prompt' in nodeData && !('text' in nodeData)) {
+          nodeData.text = nodeData.prompt;
+          delete nodeData.prompt;
+        }
+      }
+
       // Look up the definition for this node type
-      const definition = definitions.find((d) => d.node_type === n.node_type);
+      const definition = definitions.find((d) => d.node_type === nodeType);
 
       return {
         id: n.id,
-        type: n.node_type,
+        type: nodeType,
         position: n.position,
         data: {
-          ...n.data,
+          ...nodeData,
           definition, // Attach definition so BaseNode can render inputs/outputs
         },
       };
@@ -148,14 +166,29 @@ export function loadWorkflow(graph: WorkflowGraph, metadata?: WorkflowMetadata) 
   );
 
   // Convert GraphEdges to SvelteFlow Edges
+  // Migrate 'prompt' handles to 'text' for migrated nodes
   edges.set(
-    graph.edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      sourceHandle: e.source_handle,
-      target: e.target,
-      targetHandle: e.target_handle,
-    }))
+    graph.edges.map((e) => {
+      let sourceHandle = e.source_handle;
+      let targetHandle = e.target_handle;
+
+      // If the source was a migrated system-prompt node, change 'prompt' to 'text'
+      if (migratedNodeIds.has(e.source) && sourceHandle === 'prompt') {
+        sourceHandle = 'text';
+      }
+      // If the target was a migrated system-prompt node, change 'prompt' to 'text'
+      if (migratedNodeIds.has(e.target) && targetHandle === 'prompt') {
+        targetHandle = 'text';
+      }
+
+      return {
+        id: e.id,
+        source: e.source,
+        sourceHandle,
+        target: e.target,
+        targetHandle,
+      };
+    })
   );
 
   workflowMetadata.set(metadata || null);

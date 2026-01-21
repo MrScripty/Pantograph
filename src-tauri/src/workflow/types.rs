@@ -34,6 +34,8 @@ pub enum PortDataType {
     Boolean,
     /// Numeric value
     Number,
+    /// Vector database reference
+    VectorDb,
 }
 
 impl PortDataType {

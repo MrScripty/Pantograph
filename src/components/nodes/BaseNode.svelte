@@ -31,6 +31,7 @@
     document: '#14b8a6',
     tools: '#d97706',
     embedding: '#6366f1',
+    vector_db: '#a855f7',
     any: '#6b7280',
   };
 
