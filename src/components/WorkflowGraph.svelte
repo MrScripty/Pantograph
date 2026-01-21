@@ -24,6 +24,9 @@
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
+  import SystemPromptNode from './nodes/workflow/SystemPromptNode.svelte';
+  import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
+  import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
 
   // Import architecture node components
   import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
@@ -37,9 +40,11 @@
     'text-input': TextInputNode,
     'llm-inference': LLMInferenceNode,
     'text-output': TextOutputNode,
+    'system-prompt': SystemPromptNode,
+    'puma-lib': PumaLibNode,
+    'agent-tools': AgentToolsNode,
     // Generic fallback for other node types
     'image-input': GenericNode,
-    'system-prompt': GenericNode,
     'vision-analysis': GenericNode,
     'rag-search': GenericNode,
     'read-file': GenericNode,

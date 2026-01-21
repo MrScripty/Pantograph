@@ -9,9 +9,22 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Text Input',
     description: 'User text input field',
-    inputs: [],
+    inputs: [
+      { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false },
+    ],
     outputs: [
       { id: 'text', label: 'Text', data_type: 'string', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
+    node_type: 'puma-lib',
+    category: 'input',
+    label: 'Puma-Lib',
+    description: 'AI model file path provider',
+    inputs: [],
+    outputs: [
+      { id: 'model_path', label: 'Model Path', data_type: 'string', required: true, multiple: false },
     ],
     execution_mode: 'reactive',
   },
@@ -32,7 +45,9 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'System Prompt',
     description: 'System prompt configuration',
-    inputs: [],
+    inputs: [
+      { id: 'prompt', label: 'Prompt', data_type: 'string', required: false, multiple: false },
+    ],
     outputs: [
       { id: 'prompt', label: 'Prompt', data_type: 'string', required: true, multiple: false },
     ],
@@ -48,6 +63,9 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     inputs: [
       { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
+      { id: 'model', label: 'Model', data_type: 'string', required: false, multiple: false },
+      { id: 'image', label: 'Image', data_type: 'image', required: false, multiple: false },
+      { id: 'audio', label: 'Audio', data_type: 'audio', required: false, multiple: false },
     ],
     outputs: [
       { id: 'response', label: 'Response', data_type: 'string', required: true, multiple: false },
@@ -85,6 +103,17 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
   },
 
   // Tool Nodes
+  {
+    node_type: 'agent-tools',
+    category: 'tool',
+    label: 'Agent Tools',
+    description: 'Configure available tools for agent',
+    inputs: [],
+    outputs: [
+      { id: 'tools', label: 'Tools', data_type: 'tools', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
   {
     node_type: 'read-file',
     category: 'tool',

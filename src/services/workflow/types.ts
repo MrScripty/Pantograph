@@ -6,6 +6,7 @@ export type PortDataType =
   | 'any'
   | 'string'
   | 'image'
+  | 'audio'
   | 'component'
   | 'stream'
   | 'prompt'

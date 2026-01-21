@@ -14,6 +14,8 @@ pub enum PortDataType {
     String,
     /// Base64-encoded image data
     Image,
+    /// Audio data for audio models
+    Audio,
     /// Svelte component path or content
     Component,
     /// Streaming data (emits chunks over time)

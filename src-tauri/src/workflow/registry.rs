@@ -25,6 +25,8 @@ impl NodeRegistry {
         // Input nodes
         Self::register(&mut definitions, Self::text_input_definition());
         Self::register(&mut definitions, Self::image_input_definition());
+        Self::register(&mut definitions, Self::system_prompt_definition());
+        Self::register(&mut definitions, Self::puma_lib_definition());
 
         // Processing nodes
         Self::register(&mut definitions, Self::llm_inference_definition());
@@ -36,6 +38,7 @@ impl NodeRegistry {
         Self::register(&mut definitions, Self::component_preview_definition());
 
         // Tool nodes
+        Self::register(&mut definitions, Self::agent_tools_definition());
         Self::register(&mut definitions, Self::read_file_definition());
         Self::register(&mut definitions, Self::write_file_definition());
 
@@ -100,7 +103,13 @@ impl NodeRegistry {
             category: NodeCategory::Input,
             label: "Text Input".to_string(),
             description: "Provides text input to the workflow".to_string(),
-            inputs: vec![],
+            inputs: vec![PortDefinition {
+                id: "text".to_string(),
+                label: "Text".to_string(),
+                data_type: PortDataType::String,
+                required: false,
+                multiple: false,
+            }],
             outputs: vec![PortDefinition {
                 id: "text".to_string(),
                 label: "Text".to_string(),
@@ -130,6 +139,48 @@ impl NodeRegistry {
         }
     }
 
+    fn system_prompt_definition() -> NodeDefinition {
+        NodeDefinition {
+            node_type: "system-prompt".to_string(),
+            category: NodeCategory::Input,
+            label: "System Prompt".to_string(),
+            description: "Provides system prompt configuration".to_string(),
+            inputs: vec![PortDefinition {
+                id: "prompt".to_string(),
+                label: "Prompt".to_string(),
+                data_type: PortDataType::String,
+                required: false,
+                multiple: false,
+            }],
+            outputs: vec![PortDefinition {
+                id: "prompt".to_string(),
+                label: "Prompt".to_string(),
+                data_type: PortDataType::String,
+                required: false,
+                multiple: false,
+            }],
+            execution_mode: ExecutionMode::Reactive,
+        }
+    }
+
+    fn puma_lib_definition() -> NodeDefinition {
+        NodeDefinition {
+            node_type: "puma-lib".to_string(),
+            category: NodeCategory::Input,
+            label: "Puma-Lib".to_string(),
+            description: "Provides AI model file path".to_string(),
+            inputs: vec![],
+            outputs: vec![PortDefinition {
+                id: "model_path".to_string(),
+                label: "Model Path".to_string(),
+                data_type: PortDataType::String,
+                required: false,
+                multiple: false,
+            }],
+            execution_mode: ExecutionMode::Reactive,
+        }
+    }
+
     fn llm_inference_definition() -> NodeDefinition {
         NodeDefinition {
             node_type: "llm-inference".to_string(),
@@ -152,9 +203,23 @@ impl NodeRegistry {
                     multiple: false,
                 },
                 PortDefinition {
-                    id: "context".to_string(),
-                    label: "Context".to_string(),
+                    id: "model".to_string(),
+                    label: "Model".to_string(),
                     data_type: PortDataType::String,
+                    required: false,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "image".to_string(),
+                    label: "Image".to_string(),
+                    data_type: PortDataType::Image,
+                    required: false,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "audio".to_string(),
+                    label: "Audio".to_string(),
+                    data_type: PortDataType::Audio,
                     required: false,
                     multiple: false,
                 },
@@ -311,6 +376,24 @@ impl NodeRegistry {
         }
     }
 
+    fn agent_tools_definition() -> NodeDefinition {
+        NodeDefinition {
+            node_type: "agent-tools".to_string(),
+            category: NodeCategory::Tool,
+            label: "Agent Tools".to_string(),
+            description: "Configures available tools for agent".to_string(),
+            inputs: vec![],
+            outputs: vec![PortDefinition {
+                id: "tools".to_string(),
+                label: "Tools".to_string(),
+                data_type: PortDataType::Tools,
+                required: false,
+                multiple: false,
+            }],
+            execution_mode: ExecutionMode::Reactive,
+        }
+    }
+
     fn read_file_definition() -> NodeDefinition {
         NodeDefinition {
             node_type: "read-file".to_string(),
@@ -452,11 +535,14 @@ mod tests {
 
         assert!(registry.has_node_type("text-input"));
         assert!(registry.has_node_type("image-input"));
+        assert!(registry.has_node_type("system-prompt"));
+        assert!(registry.has_node_type("puma-lib"));
         assert!(registry.has_node_type("llm-inference"));
         assert!(registry.has_node_type("vision-analysis"));
         assert!(registry.has_node_type("rag-search"));
         assert!(registry.has_node_type("text-output"));
         assert!(registry.has_node_type("component-preview"));
+        assert!(registry.has_node_type("agent-tools"));
         assert!(registry.has_node_type("read-file"));
         assert!(registry.has_node_type("write-file"));
         assert!(registry.has_node_type("tool-loop"));

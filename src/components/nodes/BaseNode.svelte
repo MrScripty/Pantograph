@@ -19,22 +19,23 @@
   let label = $derived(data.label || definition?.label || 'Node');
 
   const typeColors: Record<string, string> = {
-    String: '#22c55e',
-    Prompt: '#3b82f6',
-    Number: '#f59e0b',
-    Boolean: '#ef4444',
-    Image: '#8b5cf6',
-    Stream: '#06b6d4',
-    Json: '#f97316',
-    Component: '#ec4899',
-    Document: '#14b8a6',
-    Tools: '#d97706',
-    Embedding: '#6366f1',
-    Any: '#6b7280',
+    string: '#22c55e',
+    prompt: '#3b82f6',
+    number: '#f59e0b',
+    boolean: '#ef4444',
+    image: '#8b5cf6',
+    audio: '#f472b6',
+    stream: '#06b6d4',
+    json: '#f97316',
+    component: '#ec4899',
+    document: '#14b8a6',
+    tools: '#d97706',
+    embedding: '#6366f1',
+    any: '#6b7280',
   };
 
   function getPortColor(port: PortDefinition): string {
-    return typeColors[port.data_type] || typeColors.Any;
+    return typeColors[port.data_type] || typeColors.any;
   }
 
   // Calculate node height based on port count
