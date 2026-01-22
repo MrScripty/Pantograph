@@ -387,12 +387,14 @@ pub async fn add_node_to_execution(
 }
 
 /// Add an edge to the graph during execution
+///
+/// Returns the updated graph so the frontend can sync its state.
 #[command]
 pub async fn add_edge_to_execution(
     execution_id: String,
     edge: GraphEdge,
     execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<(), String> {
+) -> Result<WorkflowGraph, String> {
     let ne_edge = convert_edge_to_node_engine(&edge);
 
     let mut executions = execution_manager.executions().await;
@@ -406,16 +408,21 @@ pub async fn add_edge_to_execution(
 
     // Add edge (this marks target as modified)
     state.executor.add_edge(ne_edge).await;
-    Ok(())
+
+    // Return updated graph
+    let graph = state.executor.get_graph_snapshot().await;
+    Ok(convert_graph_from_node_engine(&graph))
 }
 
 /// Remove an edge from the graph during execution
+///
+/// Returns the updated graph so the frontend can sync its state.
 #[command]
 pub async fn remove_edge_from_execution(
     execution_id: String,
     edge_id: String,
     execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<(), String> {
+) -> Result<WorkflowGraph, String> {
     let mut executions = execution_manager.executions().await;
     let state = executions
         .get_mut(&execution_id)
@@ -427,7 +434,10 @@ pub async fn remove_edge_from_execution(
 
     // Remove edge (this marks target as modified)
     state.executor.remove_edge(&edge_id).await;
-    Ok(())
+
+    // Return updated graph
+    let graph = state.executor.get_graph_snapshot().await;
+    Ok(convert_graph_from_node_engine(&graph))
 }
 
 /// Get the current graph state from an execution
@@ -447,6 +457,120 @@ pub async fn get_execution_graph(
 }
 
 /// Remove an execution from the manager
+/// Create a workflow editing session without executing
+///
+/// This creates an ExecutionState that can be used for editing the graph
+/// (adding/removing nodes and edges) with undo/redo support. Nodes will not
+/// be executed until `run_workflow_session` is called.
+#[command]
+pub async fn create_workflow_session(
+    graph: WorkflowGraph,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<String, String> {
+    // Generate session ID
+    let session_id = Uuid::new_v4().to_string();
+
+    // Convert Tauri graph to node-engine graph
+    let ne_graph = convert_graph_to_node_engine(&graph);
+
+    // Create execution with NullEventSink (no events during editing)
+    let event_sink = Arc::new(node_engine::NullEventSink);
+    execution_manager
+        .create_execution(&session_id, ne_graph, event_sink)
+        .await;
+
+    // Push initial undo snapshot
+    {
+        let mut executions = execution_manager.executions().await;
+        if let Some(state) = executions.get_mut(&session_id) {
+            let _ = state.push_undo_snapshot().await;
+        }
+    }
+
+    Ok(session_id)
+}
+
+/// Run an existing workflow session by demanding outputs from terminal nodes
+///
+/// This takes an existing session (created by `create_workflow_session`) and
+/// executes it by demanding outputs from all terminal nodes (nodes with no outgoing edges).
+#[command]
+pub async fn run_workflow_session(
+    session_id: String,
+    gateway: State<'_, SharedGateway>,
+    rag_manager: State<'_, SharedRagManager>,
+    execution_manager: State<'_, SharedExecutionManager>,
+    channel: Channel<WorkflowEvent>,
+) -> Result<(), String> {
+    // Get project root
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let project_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Create event adapter and update the executor's event sink
+    let event_adapter = Arc::new(TauriEventAdapter::new(channel, &session_id));
+
+    // Create task executor
+    let task_executor = PantographTaskExecutor::new(
+        gateway.inner().clone(),
+        rag_manager.inner().clone(),
+        project_root,
+    );
+
+    // Get the graph to find terminal nodes, then execute
+    let mut executions = execution_manager.executions().await;
+    let state = executions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+    state.touch();
+
+    // Update the executor's event sink to use the channel
+    state.executor.set_event_sink(event_adapter.clone());
+
+    // Get graph snapshot to find terminal nodes
+    let graph = state.executor.get_graph_snapshot().await;
+    let terminal_nodes: Vec<String> = graph
+        .nodes
+        .iter()
+        .filter(|node| !graph.edges.iter().any(|e| e.source == node.id))
+        .map(|node| node.id.clone())
+        .collect();
+
+    // Send workflow started event
+    let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowStarted {
+        workflow_id: session_id.clone(),
+        execution_id: session_id.clone(),
+    });
+
+    // Demand from each terminal node
+    for node_id in &terminal_nodes {
+        match state.executor.demand(node_id, &task_executor).await {
+            Ok(_outputs) => {
+                log::debug!("Demanded outputs from node: {}", node_id);
+            }
+            Err(e) => {
+                log::error!("Error demanding from node {}: {}", node_id, e);
+                let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowFailed {
+                    workflow_id: session_id.clone(),
+                    execution_id: session_id.clone(),
+                    error: e.to_string(),
+                });
+                return Err(e.to_string());
+            }
+        }
+    }
+
+    // Send workflow completed event
+    let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
+        workflow_id: session_id.clone(),
+        execution_id: session_id.clone(),
+    });
+
+    Ok(())
+}
+
 #[command]
 pub async fn remove_execution(
     execution_id: String,

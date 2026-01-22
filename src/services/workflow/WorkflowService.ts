@@ -117,6 +117,51 @@ export class WorkflowService {
     return this.currentExecutionId;
   }
 
+  // --- Session Management ---
+
+  /**
+   * Create a workflow editing session without executing.
+   * This enables editing the graph with undo/redo support before running.
+   * Returns the session ID which can be used for graph modifications.
+   */
+  async createSession(graph: WorkflowGraph): Promise<string> {
+    if (USE_MOCKS) {
+      this.currentExecutionId = 'mock-session-id';
+      return this.currentExecutionId;
+    }
+
+    const sessionId = await invoke<string>('create_workflow_session', { graph });
+    this.currentExecutionId = sessionId;
+    return sessionId;
+  }
+
+  /**
+   * Run an existing workflow session by demanding outputs from terminal nodes.
+   * Uses the current session if no sessionId is provided.
+   */
+  async runSession(sessionId?: string): Promise<void> {
+    const id = sessionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Run session', id);
+      return;
+    }
+
+    this.channel = new Channel<WorkflowEvent>();
+
+    this.channel.onmessage = (event) => {
+      this.eventListeners.forEach((listener) => listener(event));
+    };
+
+    await invoke('run_workflow_session', {
+      sessionId: id,
+      channel: this.channel,
+    });
+  }
+
   // --- Undo/Redo ---
 
   /**
@@ -212,36 +257,38 @@ export class WorkflowService {
 
   /**
    * Add an edge to the graph during execution.
+   * Returns the updated graph for syncing frontend state.
    */
-  async addEdge(edge: GraphEdge, executionId?: string): Promise<void> {
+  async addEdge(edge: GraphEdge, executionId?: string): Promise<WorkflowGraph> {
     const id = executionId ?? this.currentExecutionId;
     if (!id) {
-      throw new Error('No active execution');
+      throw new Error('No active session');
     }
 
     if (USE_MOCKS) {
       console.log('[WorkflowService] Mock: Add edge', edge);
-      return;
+      return { nodes: [], edges: [] };
     }
 
-    return invoke('add_edge_to_execution', { executionId: id, edge });
+    return invoke<WorkflowGraph>('add_edge_to_execution', { executionId: id, edge });
   }
 
   /**
    * Remove an edge from the graph during execution.
+   * Returns the updated graph for syncing frontend state.
    */
-  async removeEdge(edgeId: string, executionId?: string): Promise<void> {
+  async removeEdge(edgeId: string, executionId?: string): Promise<WorkflowGraph> {
     const id = executionId ?? this.currentExecutionId;
     if (!id) {
-      throw new Error('No active execution');
+      throw new Error('No active session');
     }
 
     if (USE_MOCKS) {
       console.log('[WorkflowService] Mock: Remove edge', edgeId);
-      return;
+      return { nodes: [], edges: [] };
     }
 
-    return invoke('remove_edge_from_execution', { executionId: id, edgeId });
+    return invoke<WorkflowGraph>('remove_edge_from_execution', { executionId: id, edgeId });
   }
 
   /**

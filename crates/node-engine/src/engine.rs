@@ -449,6 +449,11 @@ impl WorkflowExecutor {
         self.event_sink.send(event)
     }
 
+    /// Set the event sink (used when transitioning from editing to running)
+    pub fn set_event_sink(&mut self, event_sink: Arc<dyn EventSink>) {
+        self.event_sink = event_sink;
+    }
+
     /// Demand output from a specific node
     ///
     /// This is the main entry point for demand-driven execution.

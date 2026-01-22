@@ -36,6 +36,8 @@ export const currentGraphId = writable<string | null>(null);
 export const currentGraphType = writable<GraphType>('workflow');
 export const currentGraphName = writable<string>('Untitled');
 export const availableWorkflows = writable<WorkflowMetadata[]>([]);
+/** The current backend session ID for the loaded workflow */
+export const currentSessionId = writable<string | null>(null);
 
 // --- Derived ---
 
@@ -76,6 +78,7 @@ export async function refreshWorkflowList(): Promise<void> {
 
 /**
  * Load a workflow by name (filename stem without .json extension)
+ * Also creates a backend session for editing with undo/redo support.
  */
 export async function loadWorkflowByName(name: string): Promise<boolean> {
   console.log(`[graphSessionStore] Loading workflow: "${name}"`);
@@ -91,7 +94,14 @@ export async function loadWorkflowByName(name: string): Promise<boolean> {
     const file = await workflowService.loadWorkflow(path);
     console.log(`[graphSessionStore] Loaded workflow with ${file.graph.nodes.length} nodes`);
 
+    // Load workflow into frontend stores
     loadWorkflow(file.graph, file.metadata);
+
+    // Create a backend session for this workflow
+    // This enables editing operations to go through the backend with undo/redo
+    const sessionId = await workflowService.createSession(file.graph);
+    currentSessionId.set(sessionId);
+    console.log(`[graphSessionStore] Created backend session: ${sessionId}`);
 
     currentGraphId.set(name);
     currentGraphType.set('workflow');
@@ -131,14 +141,21 @@ export function loadSystemGraph(graphId: string): boolean {
 
 /**
  * Create a new empty workflow
+ * Also creates a backend session for editing with undo/redo support.
  */
-export function createNewWorkflow(): void {
+export async function createNewWorkflow(): Promise<void> {
   clearWorkflow();
 
   const newId = `workflow-${Date.now()}`;
   currentGraphId.set(newId);
   currentGraphType.set('workflow');
   currentGraphName.set('Untitled Workflow');
+
+  // Create a backend session for the empty workflow
+  const emptyGraph = { nodes: [], edges: [] };
+  const sessionId = await workflowService.createSession(emptyGraph);
+  currentSessionId.set(sessionId);
+  console.log(`[graphSessionStore] Created backend session for new workflow: ${sessionId}`);
 }
 
 /**
@@ -195,7 +212,7 @@ export async function loadLastGraph(): Promise<void> {
   if (success) return;
 
   // If coding-agent doesn't exist, create a new empty workflow
-  createNewWorkflow();
+  await createNewWorkflow();
 }
 
 /**

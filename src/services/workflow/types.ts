@@ -82,7 +82,8 @@ export type WorkflowEventType =
   | 'NodeCompleted'
   | 'NodeError'
   | 'Completed'
-  | 'Failed';
+  | 'Failed'
+  | 'GraphModified';
 
 export interface WorkflowEventData {
   Started: { workflow_id: string; node_count: number };
@@ -93,6 +94,7 @@ export interface WorkflowEventData {
   NodeError: { node_id: string; error: string };
   Completed: { outputs: Record<string, unknown> };
   Failed: { error: string };
+  GraphModified: { graph: WorkflowGraph };
 }
 
 export interface WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> {

@@ -208,6 +208,8 @@ fn main() {
             workflow::commands::list_workflows,
             // Node-engine workflow commands (Phase 5)
             workflow::commands::execute_workflow_v2,
+            workflow::commands::create_workflow_session,
+            workflow::commands::run_workflow_session,
             workflow::commands::get_undo_redo_state,
             workflow::commands::undo_workflow,
             workflow::commands::redo_workflow,

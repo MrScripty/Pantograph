@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { SvelteFlow, Controls, MiniMap, type NodeTypes, type Node, type Edge, type Connection } from '@xyflow/svelte';
+  import { SvelteFlow, Controls, MiniMap, type NodeTypes, type EdgeTypes, type Node, type Edge, type Connection } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
   import {
@@ -9,12 +9,12 @@
     nodeDefinitions,
     isEditing,
     updateNodePosition,
-    addEdge as storeAddEdge,
-    removeEdge,
     addNode,
     removeNode,
+    syncEdgesFromBackend,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
+  import type { GraphEdge } from '../services/workflow/types';
   import { architectureAsWorkflowGraph } from '../stores/architectureStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
@@ -35,6 +35,14 @@
   import ArchStoreNode from './nodes/architecture/ArchStoreNode.svelte';
   import ArchBackendNode from './nodes/architecture/ArchBackendNode.svelte';
   import ArchCommandNode from './nodes/architecture/ArchCommandNode.svelte';
+
+  // Import custom edge components
+  import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
+
+  // Define custom edge types
+  const edgeTypes: EdgeTypes = {
+    reconnectable: ReconnectableEdge,
+  };
 
   // Define custom node types for workflow
   const nodeTypes: NodeTypes = {
@@ -112,7 +120,7 @@
     }
   }
 
-  // Handle new connections
+  // Handle new connections - routes through backend for single source of truth
   async function handleConnect(connection: Connection) {
     if (!canEdit) return;
 
@@ -144,24 +152,38 @@
       }
     }
 
-    // Create edge
-    const edge: Edge = {
+    // Create edge via backend
+    const edge: GraphEdge = {
       id: `${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`,
       source: connection.source!,
-      sourceHandle: connection.sourceHandle,
+      source_handle: connection.sourceHandle!,
       target: connection.target!,
-      targetHandle: connection.targetHandle,
+      target_handle: connection.targetHandle!,
     };
 
-    storeAddEdge(edge);
+    try {
+      const updatedGraph = await workflowService.addEdge(edge);
+      syncEdgesFromBackend(updatedGraph);
+    } catch (error) {
+      console.error('[WorkflowGraph] Failed to add edge:', error);
+    }
   }
 
-  // Handle deletion of nodes and edges
-  function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
+  // Handle deletion of nodes and edges - edge deletion routes through backend
+  async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
     if (!canEdit) return;
+
+    // Delete edges via backend
     for (const edge of deletedEdges) {
-      removeEdge(edge.id);
+      try {
+        const updatedGraph = await workflowService.removeEdge(edge.id);
+        syncEdgesFromBackend(updatedGraph);
+      } catch (error) {
+        console.error('[WorkflowGraph] Failed to remove edge:', error);
+      }
     }
+
+    // Delete nodes (still local for now - could be moved to backend later)
     for (const node of deletedNodes) {
       removeNode(node.id);
     }
@@ -202,13 +224,13 @@
   let edgeReconnectSuccessful = $state(false);
   let reconnectingEdgeId = $state<string | null>(null);
 
-  function handleReconnectStart({ edge }: { edge: Edge }) {
+  function handleReconnectStart(_event: MouseEvent | TouchEvent, edge: Edge) {
     if (!canEdit) return;
     edgeReconnectSuccessful = false;
     reconnectingEdgeId = edge.id;
   }
 
-  async function handleReconnect({ edge, newConnection }: { edge: Edge; newConnection: Connection }) {
+  async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
     if (!canEdit) return;
     edgeReconnectSuccessful = true;
 
@@ -231,26 +253,36 @@
       }
     }
 
-    // Remove old edge
-    removeEdge(edge.id);
+    try {
+      // Remove old edge via backend
+      await workflowService.removeEdge(oldEdge.id);
 
-    // Add new edge with updated connection
-    const newEdge: Edge = {
-      id: `${newConnection.source}-${newConnection.sourceHandle}-${newConnection.target}-${newConnection.targetHandle}`,
-      source: newConnection.source!,
-      sourceHandle: newConnection.sourceHandle,
-      target: newConnection.target!,
-      targetHandle: newConnection.targetHandle,
-    };
-    storeAddEdge(newEdge);
+      // Add new edge via backend
+      const newEdge: GraphEdge = {
+        id: `${newConnection.source}-${newConnection.sourceHandle}-${newConnection.target}-${newConnection.targetHandle}`,
+        source: newConnection.source!,
+        source_handle: newConnection.sourceHandle!,
+        target: newConnection.target!,
+        target_handle: newConnection.targetHandle!,
+      };
+      const updatedGraph = await workflowService.addEdge(newEdge);
+      syncEdgesFromBackend(updatedGraph);
+    } catch (error) {
+      console.error('[WorkflowGraph] Failed to reconnect edge:', error);
+    }
   }
 
-  function handleReconnectEnd() {
+  async function handleReconnectEnd(_event: MouseEvent | TouchEvent, _edge: Edge, _handleType: unknown, connectionState: { isValid: boolean }) {
     if (!canEdit) return;
 
     // If reconnect was not successful (dropped on empty space), remove the edge
-    if (!edgeReconnectSuccessful && reconnectingEdgeId) {
-      removeEdge(reconnectingEdgeId);
+    if (!connectionState.isValid && reconnectingEdgeId) {
+      try {
+        const updatedGraph = await workflowService.removeEdge(reconnectingEdgeId);
+        syncEdgesFromBackend(updatedGraph);
+      } catch (error) {
+        console.error('[WorkflowGraph] Failed to remove edge on reconnect end:', error);
+      }
     }
 
     reconnectingEdgeId = null;
@@ -307,7 +339,7 @@
     }
   }
 
-  function finishCut() {
+  async function finishCut() {
     if (!cutStart || !cutEnd) {
       isCutting = false;
       cutStart = null;
@@ -323,8 +355,15 @@
       return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
     });
 
-    // Remove intersecting edges
-    edgesToRemove.forEach((edge) => removeEdge(edge.id));
+    // Remove intersecting edges via backend
+    for (const edge of edgesToRemove) {
+      try {
+        const updatedGraph = await workflowService.removeEdge(edge.id);
+        syncEdgesFromBackend(updatedGraph);
+      } catch (error) {
+        console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
+      }
+    }
 
     isCutting = false;
     cutStart = null;
@@ -389,6 +428,7 @@
     bind:nodes
     bind:edges
     {nodeTypes}
+    {edgeTypes}
     fitViewOptions={{ maxZoom: 1 }}
     nodesConnectable={canEdit}
     elementsSelectable={true}
@@ -406,9 +446,12 @@
     onreconnect={handleReconnect}
     onreconnectend={handleReconnectEnd}
     defaultEdgeOptions={{
-      type: 'smoothstep',
+      type: 'reconnectable',
       animated: false,
       style: 'stroke: #525252; stroke-width: 2px;',
+      interactionWidth: 20,
+      selectable: true,
+      focusable: true,
     }}
   >
     <Controls />

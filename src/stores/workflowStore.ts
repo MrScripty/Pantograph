@@ -203,6 +203,26 @@ export function clearWorkflow() {
   resetExecutionStates();
 }
 
+/**
+ * Sync the edges from a backend graph response.
+ * This is used when edge operations return the updated graph from the backend.
+ * We only update edges, not nodes, since edge operations don't change nodes.
+ */
+export function syncEdgesFromBackend(backendGraph: { nodes: unknown[]; edges: Array<{ id: string; source: string; source_handle: string; target: string; target_handle: string }> }) {
+  // Convert backend edge format to SvelteFlow format
+  // Note: type, selectable, focusable come from defaultEdgeOptions in WorkflowGraph.svelte
+  const newEdges: Edge[] = backendGraph.edges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    sourceHandle: e.source_handle,
+    target: e.target,
+    targetHandle: e.target_handle,
+  }));
+
+  edges.set(newEdges);
+  isDirty.set(true);
+}
+
 // --- Default Workflow ---
 
 export function loadDefaultWorkflow(definitions: NodeDefinition[]) {

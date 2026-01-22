@@ -79,6 +79,12 @@ pub enum WorkflowEvent {
         /// Error message describing the failure
         error: String,
     },
+
+    /// Graph was modified (edge/node added/removed)
+    GraphModified {
+        /// The updated graph
+        graph: super::types::WorkflowGraph,
+    },
 }
 
 impl WorkflowEvent {
