@@ -19,6 +19,12 @@
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
 
+  // Import view store for zoom transitions
+  import {
+    tabIntoGroup,
+    zoomTarget,
+  } from '../stores/viewStore';
+
   // Import workflow node components
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
@@ -28,6 +34,7 @@
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
   import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
+  import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
 
   // Import architecture node components
   import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
@@ -53,6 +60,7 @@
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
     'vector-db': VectorDbNode,
+    'node-group': NodeGroupNode,
     // Generic fallback for other node types
     'image-input': GenericNode,
     'vision-analysis': GenericNode,
@@ -75,6 +83,11 @@
 
   // Determine if we can edit based on both isEditing store and isReadOnly
   let canEdit = $derived($isEditing && !$isReadOnly);
+
+  // Track double-click for group zoom
+  let lastClickTime = $state(0);
+  let lastClickNodeId = $state<string | null>(null);
+  const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
   // Sync store changes to local state based on graph type
   // Combining into a single effect to ensure proper reactivity tracking
@@ -117,6 +130,41 @@
     if (!canEdit) return;
     if (targetNode) {
       updateNodePosition(targetNode.id, targetNode.position);
+    }
+  }
+
+  // Handle node click for double-click detection (to zoom into groups)
+  function onNodeClick({ node }: { node: Node }) {
+    const now = Date.now();
+    const isDoubleClick =
+      lastClickNodeId === node.id && now - lastClickTime < DOUBLE_CLICK_THRESHOLD;
+
+    if (isDoubleClick) {
+      handleNodeDoubleClick(node);
+    }
+
+    lastClickTime = now;
+    lastClickNodeId = node.id;
+  }
+
+  // Handle double-click on a node to zoom into it (for node groups)
+  async function handleNodeDoubleClick(node: Node) {
+    // Check if this node is a group (will be determined by Workstream B's NodeGroup type)
+    const isNodeGroup = node.data?.isGroup === true || node.type === 'node-group';
+
+    if (isNodeGroup) {
+      // Update zoom target position for animation origin
+      zoomTarget.set({
+        nodeId: node.id,
+        position: node.position,
+        bounds: {
+          width: (node.measured?.width || node.width || 200) as number,
+          height: (node.measured?.height || node.height || 100) as number,
+        },
+      });
+
+      // Trigger zoom into group
+      await tabIntoGroup(node.id);
     }
   }
 
@@ -440,6 +488,7 @@
     deleteKey={canEdit ? 'Delete' : null}
     edgesReconnectable={canEdit}
     onnodedragstop={onNodeDragStop}
+    onnodeclick={onNodeClick}
     onconnect={handleConnect}
     ondelete={handleDelete}
     onreconnectstart={handleReconnectStart}
