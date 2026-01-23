@@ -402,6 +402,240 @@ impl PantographTaskExecutor {
         outputs.insert("input".to_string(), serde_json::json!(user_input.unwrap_or_default()));
         Ok(outputs)
     }
+
+    /// Execute a tool executor task
+    async fn execute_tool_executor(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let tool_calls = inputs
+            .get("tool_calls")
+            .cloned()
+            .unwrap_or(serde_json::json!([]));
+
+        // For now, return placeholder results
+        // Actual tool execution would be handled by the orchestration layer
+        let results: Vec<serde_json::Value> = tool_calls
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|call| {
+                let id = call.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
+                serde_json::json!({
+                    "tool_call_id": id,
+                    "result": {"status": "pending", "message": "Tool execution requires external implementation"},
+                    "success": true,
+                    "error": null
+                })
+            })
+            .collect();
+
+        let mut outputs = HashMap::new();
+        outputs.insert("results".to_string(), serde_json::json!(results));
+        outputs.insert("all_success".to_string(), serde_json::json!(true));
+        Ok(outputs)
+    }
+
+    /// Execute a conditional task
+    async fn execute_conditional(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let condition = inputs
+            .get("condition")
+            .and_then(|c| c.as_bool())
+            .unwrap_or(false);
+
+        let value = inputs
+            .get("value")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+
+        let mut outputs = HashMap::new();
+        if condition {
+            outputs.insert("true_out".to_string(), value);
+            outputs.insert("false_out".to_string(), serde_json::Value::Null);
+        } else {
+            outputs.insert("true_out".to_string(), serde_json::Value::Null);
+            outputs.insert("false_out".to_string(), value);
+        }
+        Ok(outputs)
+    }
+
+    /// Execute a merge task
+    async fn execute_merge(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        // Get inputs - may be array or single value
+        let input_values: Vec<String> = if let Some(arr) = inputs.get("inputs").and_then(|v| v.as_array()) {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .filter(|s| !s.trim().is_empty())
+                .collect()
+        } else if let Some(s) = inputs.get("inputs").and_then(|v| v.as_str()) {
+            if s.trim().is_empty() {
+                vec![]
+            } else {
+                vec![s.to_string()]
+            }
+        } else {
+            vec![]
+        };
+
+        let merged = input_values.join("\n");
+        let count = input_values.len();
+
+        let mut outputs = HashMap::new();
+        outputs.insert("merged".to_string(), serde_json::json!(merged));
+        outputs.insert("count".to_string(), serde_json::json!(count));
+        Ok(outputs)
+    }
+
+    /// Execute a validator task
+    async fn execute_validator(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let code = inputs
+            .get("code")
+            .and_then(|c| c.as_str())
+            .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing code input".to_string()))?;
+
+        // Perform pattern-based validation (same as ValidatorTask)
+        let forbidden_patterns: &[(&str, &str)] = &[
+            ("export let ", "Use `let { prop } = $props()` instead of `export let prop`"),
+            ("on:click", "Use `onclick` instead of `on:click`"),
+            ("on:change", "Use `onchange` instead of `on:change`"),
+            ("on:input", "Use `oninput` instead of `on:input`"),
+            ("on:submit", "Use `onsubmit` instead of `on:submit`"),
+        ];
+
+        // Strip comments
+        let code_no_comments: String = code
+            .lines()
+            .map(|line| {
+                if let Some(idx) = line.find("//") {
+                    &line[..idx]
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let mut valid = true;
+        let mut error = String::new();
+        let mut category = String::new();
+
+        for (pattern, fix) in forbidden_patterns {
+            if code_no_comments.contains(pattern) {
+                valid = false;
+                error = format!(
+                    "SVELTE 5 SYNTAX ERROR: Found forbidden pattern '{}'. {}.",
+                    pattern, fix
+                );
+                category = "SveltePattern".to_string();
+                break;
+            }
+        }
+
+        // Check for unbalanced script tags
+        if valid {
+            let script_opens = code.matches("<script").count();
+            let script_closes = code.matches("</script>").count();
+            if script_opens != script_closes {
+                valid = false;
+                error = "Unbalanced <script> tags".to_string();
+                category = "SvelteCompiler".to_string();
+            }
+        }
+
+        let mut outputs = HashMap::new();
+        outputs.insert("valid".to_string(), serde_json::json!(valid));
+        outputs.insert("error".to_string(), serde_json::json!(error));
+        outputs.insert("category".to_string(), serde_json::json!(category));
+        Ok(outputs)
+    }
+
+    /// Execute a JSON filter task
+    async fn execute_json_filter(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let json = inputs
+            .get("json")
+            .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing json input".to_string()))?;
+
+        // Get path from _data (node configuration)
+        let path = inputs
+            .get("_data")
+            .and_then(|d| d.get("path"))
+            .and_then(|p| p.as_str())
+            .unwrap_or("");
+
+        let (value, found) = Self::extract_json_path(json, path);
+
+        let mut outputs = HashMap::new();
+        outputs.insert("value".to_string(), value);
+        outputs.insert("found".to_string(), serde_json::json!(found));
+        Ok(outputs)
+    }
+
+    /// Extract a value from JSON using a path expression
+    fn extract_json_path(json: &serde_json::Value, path: &str) -> (serde_json::Value, bool) {
+        if path.is_empty() {
+            return (json.clone(), true);
+        }
+
+        let mut current = json;
+        let mut remaining = path;
+
+        while !remaining.is_empty() {
+            // Handle array indexing at start: [0]
+            if remaining.starts_with('[') {
+                if let Some(end) = remaining.find(']') {
+                    let index_str = &remaining[1..end];
+                    if let Ok(index) = index_str.parse::<usize>() {
+                        if let Some(val) = current.get(index) {
+                            current = val;
+                            remaining = &remaining[end + 1..];
+                            if remaining.starts_with('.') {
+                                remaining = &remaining[1..];
+                            }
+                            continue;
+                        }
+                    }
+                }
+                return (serde_json::Value::Null, false);
+            }
+
+            // Handle object field access
+            let (field, rest) = if let Some(dot_pos) = remaining.find('.') {
+                let bracket_pos = remaining.find('[').unwrap_or(remaining.len());
+                if dot_pos < bracket_pos {
+                    (&remaining[..dot_pos], &remaining[dot_pos + 1..])
+                } else {
+                    (&remaining[..bracket_pos], &remaining[bracket_pos..])
+                }
+            } else if let Some(bracket_pos) = remaining.find('[') {
+                (&remaining[..bracket_pos], &remaining[bracket_pos..])
+            } else {
+                (remaining, "")
+            };
+
+            if !field.is_empty() {
+                if let Some(val) = current.get(field) {
+                    current = val;
+                } else {
+                    return (serde_json::Value::Null, false);
+                }
+            }
+            remaining = rest;
+        }
+
+        (current.clone(), true)
+    }
 }
 
 #[async_trait]
@@ -450,6 +684,13 @@ impl TaskExecutor for PantographTaskExecutor {
             "read-file" => self.execute_read_file(&inputs).await,
             "write-file" => self.execute_write_file(&inputs).await,
             "human-input" => self.execute_human_input(&inputs).await,
+            // New control nodes
+            "tool-executor" => self.execute_tool_executor(&inputs).await,
+            "conditional" => self.execute_conditional(&inputs).await,
+            "merge" => self.execute_merge(&inputs).await,
+            // New processing nodes
+            "validator" => self.execute_validator(&inputs).await,
+            "json-filter" => self.execute_json_filter(&inputs).await,
             _ => {
                 log::warn!("Unknown node type: {}", node_type);
                 // Return empty outputs for unknown types

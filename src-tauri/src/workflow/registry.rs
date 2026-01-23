@@ -13,11 +13,11 @@ use workflow_nodes::{
     // Output tasks
     ComponentPreviewTask, TextOutputTask,
     // Processing tasks
-    EmbeddingTask, InferenceTask, VisionAnalysisTask,
+    EmbeddingTask, InferenceTask, JsonFilterTask, ValidatorTask, VisionAnalysisTask,
     // Storage tasks
     LanceDbTask, ReadFileTask, WriteFileTask,
     // Control tasks
-    ToolLoopTask,
+    ConditionalTask, MergeTask, ToolExecutorTask, ToolLoopTask,
 };
 
 use super::types::{ExecutionMode, NodeCategory, NodeDefinition, PortDataType, PortDefinition};
@@ -127,6 +127,13 @@ impl NodeRegistry {
 
         // Control tasks
         Self::register_from_task::<ToolLoopTask>(&mut definitions);
+        Self::register_from_task::<ToolExecutorTask>(&mut definitions);
+        Self::register_from_task::<ConditionalTask>(&mut definitions);
+        Self::register_from_task::<MergeTask>(&mut definitions);
+
+        // Processing tasks (additional)
+        Self::register_from_task::<ValidatorTask>(&mut definitions);
+        Self::register_from_task::<JsonFilterTask>(&mut definitions);
 
         // Tauri-only nodes (no node-engine task implementation)
         Self::register(&mut definitions, Self::puma_lib_definition());
@@ -253,6 +260,15 @@ mod tests {
         assert!(registry.has_node_type("read-file"));
         assert!(registry.has_node_type("write-file"));
         assert!(registry.has_node_type("tool-loop"));
+
+        // New control nodes
+        assert!(registry.has_node_type("tool-executor"));
+        assert!(registry.has_node_type("conditional"));
+        assert!(registry.has_node_type("merge"));
+
+        // New processing nodes
+        assert!(registry.has_node_type("validator"));
+        assert!(registry.has_node_type("json-filter"));
 
         // Tauri-only nodes
         assert!(registry.has_node_type("puma-lib"));
