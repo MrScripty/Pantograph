@@ -506,6 +506,10 @@
     <Controls />
     <MiniMap
       nodeColor={(node) => {
+        // Node groups get a special purple color
+        if (node.type === 'node-group' || node.data?.isGroup) {
+          return '#7c3aed';
+        }
         // Color by node category (snake_case to match Rust serde)
         const def = node.data?.definition as NodeDefinition | undefined;
         switch (def?.category) {
