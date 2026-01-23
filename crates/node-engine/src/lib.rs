@@ -56,6 +56,8 @@ pub mod descriptor;
 pub mod engine;
 pub mod error;
 pub mod events;
+pub mod groups;
+pub mod orchestration;
 pub mod tasks;
 pub mod types;
 pub mod undo;
@@ -70,11 +72,24 @@ pub use types::{
 };
 pub use undo::UndoStack;
 
+// Re-export group types
+pub use groups::{
+    CreateGroupResult, GroupOperations, GroupValidationError, NodeGroup, PortMapping,
+};
+
 // Re-export descriptor types
 pub use descriptor::{PortMetadata, TaskDescriptor, TaskMetadata};
 
 // Re-export ContextKeys helper (only framework type from tasks module)
 pub use tasks::ContextKeys;
+
+// Re-export orchestration types
+pub use orchestration::{
+    ConditionConfig, DataGraphConfig, DataGraphExecutor, LoopConfig, NodeExecutionResult,
+    OrchestrationContext, OrchestrationEdge, OrchestrationEdgeId, OrchestrationEvent,
+    OrchestrationExecutor, OrchestrationGraph, OrchestrationGraphId, OrchestrationNode,
+    OrchestrationNodeId, OrchestrationNodeType, OrchestrationResult,
+};
 
 // Re-export graph-flow types that consumers will need
 pub use graph_flow::{Context, GraphBuilder, GraphError, NextAction, Task, TaskResult};

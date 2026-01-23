@@ -49,11 +49,16 @@ fn main() {
     // Create the execution manager for node-engine based workflows
     let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
 
+    // Create the orchestration store for managing orchestration graphs
+    let orchestration_store: workflow::SharedOrchestrationStore =
+        Arc::new(RwLock::new(workflow::OrchestrationStore::new()));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(gateway)
         .manage(execution_manager)
+        .manage(orchestration_store)
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -219,6 +224,29 @@ fn main() {
             workflow::commands::remove_edge_from_execution,
             workflow::commands::get_execution_graph,
             workflow::commands::remove_execution,
+            // Node group commands
+            workflow::groups::create_node_group,
+            workflow::groups::expand_node_group,
+            workflow::groups::collapse_node_group,
+            workflow::groups::update_group_ports,
+            workflow::groups::rename_node_group,
+            workflow::groups::ungroup_nodes,
+            // Orchestration commands
+            workflow::orchestration::create_orchestration,
+            workflow::orchestration::get_orchestration,
+            workflow::orchestration::list_orchestrations,
+            workflow::orchestration::save_orchestration,
+            workflow::orchestration::delete_orchestration,
+            workflow::orchestration::add_orchestration_node,
+            workflow::orchestration::remove_orchestration_node,
+            workflow::orchestration::add_orchestration_edge,
+            workflow::orchestration::remove_orchestration_edge,
+            workflow::orchestration::update_orchestration_node,
+            workflow::orchestration::update_orchestration_node_position,
+            workflow::orchestration::set_orchestration_data_graph,
+            workflow::orchestration::register_data_graph,
+            workflow::orchestration::execute_orchestration,
+            workflow::orchestration::get_orchestration_node_types,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

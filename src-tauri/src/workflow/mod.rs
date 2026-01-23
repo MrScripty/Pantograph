@@ -26,6 +26,8 @@ pub mod commands;
 pub mod event_adapter;
 pub mod events;
 pub mod execution_manager;
+pub mod groups;
+pub mod orchestration;
 pub mod registry;
 pub mod task_executor;
 pub mod types;
@@ -46,3 +48,16 @@ pub use types::{
     PortDefinition, Position, Viewport, WorkflowFile, WorkflowGraph, WorkflowMetadata,
 };
 pub use validation::{validate_connection, ValidationError, WorkflowValidator};
+
+// Re-export group types and commands
+pub use groups::{
+    collapse_node_group, create_node_group, expand_node_group, rename_node_group,
+    ungroup_nodes, update_group_ports, CreateGroupResult, ExpandGroupResult, NodeGroup,
+    PortMapping,
+};
+
+// Re-export orchestration types and commands
+pub use orchestration::{
+    OrchestrationGraphMetadata, OrchestrationNodeTypeInfo, OrchestrationStore,
+    SharedOrchestrationStore,
+};

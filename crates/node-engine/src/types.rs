@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::groups::NodeGroup;
+
 /// Unique identifier for a node
 pub type NodeId = String;
 
@@ -229,6 +231,9 @@ pub struct WorkflowGraph {
     pub nodes: Vec<GraphNode>,
     /// Edges connecting nodes
     pub edges: Vec<GraphEdge>,
+    /// Node groups (collapsed node collections)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<NodeGroup>,
 }
 
 impl WorkflowGraph {
@@ -239,6 +244,7 @@ impl WorkflowGraph {
             name: name.into(),
             nodes: Vec::new(),
             edges: Vec::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -274,6 +280,35 @@ impl WorkflowGraph {
         self.outgoing_edges(node_id)
             .map(|e| e.target.clone())
             .collect()
+    }
+
+    /// Find a group by ID
+    pub fn find_group(&self, group_id: &str) -> Option<&NodeGroup> {
+        self.groups.iter().find(|g| g.id == group_id)
+    }
+
+    /// Find a group by ID (mutable)
+    pub fn find_group_mut(&mut self, group_id: &str) -> Option<&mut NodeGroup> {
+        self.groups.iter_mut().find(|g| g.id == group_id)
+    }
+
+    /// Add a group to the graph
+    pub fn add_group(&mut self, group: NodeGroup) {
+        self.groups.push(group);
+    }
+
+    /// Remove a group by ID
+    pub fn remove_group(&mut self, group_id: &str) -> Option<NodeGroup> {
+        if let Some(pos) = self.groups.iter().position(|g| g.id == group_id) {
+            Some(self.groups.remove(pos))
+        } else {
+            None
+        }
+    }
+
+    /// Check if a node is inside any group
+    pub fn node_in_group(&self, node_id: &str) -> Option<&NodeGroup> {
+        self.groups.iter().find(|g| g.contains_node(node_id))
     }
 }
 
