@@ -10,6 +10,7 @@
     selectOrchestrationNode,
     addOrchestrationEdge,
     removeOrchestrationEdge,
+    removeOrchestrationNode,
     updateOrchestrationNodePosition,
     currentOrchestration,
   } from '../../stores/orchestrationStore';
@@ -20,6 +21,14 @@
   import LoopNode from './LoopNode.svelte';
   import DataGraphNode from './DataGraphNode.svelte';
   import MergeNode from './MergeNode.svelte';
+
+  // Props
+  interface Props {
+    /** Handler for double-clicking a node (e.g., to zoom into DataGraph) */
+    onNodeDoubleClick?: (nodeId: string) => void;
+  }
+
+  let { onNodeDoubleClick }: Props = $props();
 
   // Node type mapping for SvelteFlow
   const nodeTypes: NodeTypes = {
@@ -44,9 +53,26 @@
     edges = $orchestrationFlowEdges;
   });
 
-  // Handle node selection
-  function handleNodeClick(event: CustomEvent<{ node: Node }>) {
-    selectOrchestrationNode(event.detail.node.id);
+  // Track click times for double-click detection
+  let lastClickTime = 0;
+  let lastClickNodeId: string | null = null;
+  const DOUBLE_CLICK_THRESHOLD = 300; // ms
+
+  // Handle node selection and double-click
+  function handleNodeClick({ node }: { node: Node }) {
+    const now = Date.now();
+    const isDoubleClick =
+      lastClickNodeId === node.id &&
+      (now - lastClickTime) < DOUBLE_CLICK_THRESHOLD;
+
+    if (isDoubleClick && onNodeDoubleClick) {
+      onNodeDoubleClick(node.id);
+    } else {
+      selectOrchestrationNode(node.id);
+    }
+
+    lastClickTime = now;
+    lastClickNodeId = node.id;
   }
 
   // Handle pane click (deselect)
@@ -55,8 +81,7 @@
   }
 
   // Handle new connection
-  async function handleConnect(event: CustomEvent<{ connection: Connection }>) {
-    const { connection } = event.detail;
+  async function handleConnect(connection: Connection) {
     if (connection.source && connection.target) {
       try {
         await addOrchestrationEdge(
@@ -71,22 +96,31 @@
     }
   }
 
-  // Handle edge deletion
-  async function handleEdgesDelete(event: CustomEvent<{ edges: Edge[] }>) {
-    for (const edge of event.detail.edges) {
+  // Handle deletion of nodes and edges
+  async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
+    // Handle edge deletion
+    for (const edge of deletedEdges) {
       try {
         await removeOrchestrationEdge(edge.id);
       } catch (error) {
         console.error('Failed to remove edge:', error);
       }
     }
+
+    // Handle node deletion
+    for (const node of deletedNodes) {
+      try {
+        await removeOrchestrationNode(node.id);
+      } catch (error) {
+        console.error('Failed to remove node:', error);
+      }
+    }
   }
 
   // Handle node drag end
-  async function handleNodeDragStop(event: CustomEvent<{ node: Node }>) {
-    const { node } = event.detail;
+  async function handleNodeDragStop({ targetNode }: { targetNode: Node }) {
     try {
-      await updateOrchestrationNodePosition(node.id, node.position.x, node.position.y);
+      await updateOrchestrationNodePosition(targetNode.id, targetNode.position.x, targetNode.position.y);
     } catch (error) {
       console.error('Failed to update node position:', error);
     }
@@ -111,7 +145,7 @@
         onnodeclick={handleNodeClick}
         onpaneclick={handlePaneClick}
         onconnect={handleConnect}
-        onedgesdelete={handleEdgesDelete}
+        ondelete={handleDelete}
         onnodedragstop={handleNodeDragStop}
       >
         <Background />

@@ -10,13 +10,23 @@
     zoomToOrchestration,
     zoomToDataGraph,
     tabIntoGroup,
+    tabOutOfGroup,
     navigateBack,
+    currentDataGraphId,
+    groupStack,
     type ViewLevel,
   } from '../stores/viewStore';
+  import {
+    currentOrchestration,
+    selectedOrchestrationNodeId,
+    loadOrchestrationNodeTypes,
+  } from '../stores/orchestrationStore';
+  import { nodeGroups, expandedGroupId } from '../stores/workflowStore';
 
   import ZoomTransition from './ZoomTransition.svelte';
   import NavigationBreadcrumb from './NavigationBreadcrumb.svelte';
   import WorkflowGraph from './WorkflowGraph.svelte';
+  import OrchestrationGraph from './orchestration/OrchestrationGraph.svelte';
 
   // Props for customization
   interface Props {
@@ -63,9 +73,39 @@
     }, 0);
   });
 
-  // Restore view state on mount
+  // Restore view state on mount and load orchestration node types
   onMount(() => {
     restoreViewState();
+    loadOrchestrationNodeTypes().catch(console.error);
+  });
+
+  // Handle double-click on DataGraph node in orchestration to zoom in
+  function handleOrchestrationNodeDoubleClick(nodeId: string) {
+    const orch = $currentOrchestration;
+    if (!orch) return;
+
+    const node = orch.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    // Only zoom into DataGraph nodes
+    if (node.nodeType === 'data_graph') {
+      const dataGraphId = orch.dataGraphs[nodeId];
+      if (dataGraphId) {
+        zoomToDataGraph(nodeId, dataGraphId);
+      }
+    }
+  }
+
+  // Handle double-click on group node in data graph to tab in
+  function handleGroupDoubleClick(groupId: string) {
+    tabIntoGroup(groupId);
+  }
+
+  // Get current group being edited (if in group view)
+  let currentGroup = $derived.by(() => {
+    if ($viewLevel !== 'group' || $groupStack.length === 0) return null;
+    const groupId = $groupStack[$groupStack.length - 1];
+    return $nodeGroups.get(groupId) ?? null;
   });
 
   // Keyboard shortcuts
@@ -79,6 +119,17 @@
     // Ctrl+[ to zoom out to orchestration
     if (event.ctrlKey && event.key === '[') {
       zoomToOrchestration();
+      event.preventDefault();
+    }
+
+    // Ctrl+] to zoom into selected node (DataGraph or Group)
+    if (event.ctrlKey && event.key === ']') {
+      if ($viewLevel === 'orchestration' && $selectedOrchestrationNodeId) {
+        handleOrchestrationNodeDoubleClick($selectedOrchestrationNodeId);
+      } else if ($viewLevel === 'data-graph' && $expandedGroupId === null) {
+        // If a group node is selected, tab into it
+        // (selection would come from WorkflowGraph component)
+      }
       event.preventDefault();
     }
   }
@@ -108,19 +159,25 @@
 
   <!-- Main graph container with transitions -->
   <div class="graph-container">
-    <!-- Orchestration view (placeholder - will be implemented by Workstream C) -->
+    <!-- Orchestration view -->
     {#if $viewLevel === 'orchestration'}
       <div
         class="view-layer orchestration-layer"
         in:scale={{ duration: $animationConfig.duration, start: 0.5, easing: cubicOut }}
         out:scale={{ duration: $animationConfig.duration, start: 2, easing: cubicOut }}
       >
-        <div class="placeholder-view">
-          <div class="placeholder-icon">⚙️</div>
-          <h3>Orchestration View</h3>
-          <p>Control flow graph - Coming from Workstream C</p>
-          <p class="hint">Double-click a node to zoom into its data graph</p>
-        </div>
+        {#if $currentOrchestration}
+          <OrchestrationGraph
+            onNodeDoubleClick={handleOrchestrationNodeDoubleClick}
+          />
+        {:else}
+          <div class="placeholder-view">
+            <div class="placeholder-icon">⚙️</div>
+            <h3>No Orchestration Loaded</h3>
+            <p>Create or load an orchestration to see the control flow graph</p>
+            <p class="hint">Use the orchestration panel to manage workflows</p>
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -135,19 +192,64 @@
       </div>
     {/if}
 
-    <!-- Group view (placeholder - will be implemented by Workstream B) -->
+    <!-- Group view - shows the internal nodes of a group -->
     {#if $viewLevel === 'group'}
       <div
         class="view-layer group-layer"
         in:scale={{ duration: $animationConfig.duration, start: 2, easing: cubicOut }}
         out:scale={{ duration: $animationConfig.duration, start: 0.5, easing: cubicOut }}
       >
-        <div class="placeholder-view">
-          <div class="placeholder-icon">📦</div>
-          <h3>Node Group View</h3>
-          <p>Internal group nodes - Coming from Workstream B</p>
-          <p class="hint">Press Escape or click back to exit group</p>
-        </div>
+        {#if currentGroup}
+          <div class="group-editor">
+            <div class="group-header">
+              <span class="group-icon">📦</span>
+              <h3>{currentGroup.name}</h3>
+              {#if currentGroup.description}
+                <p class="group-description">{currentGroup.description}</p>
+              {/if}
+              <button class="exit-group-btn" onclick={() => tabOutOfGroup()}>
+                Exit Group
+              </button>
+            </div>
+            <!-- Group editing view - displays group info and node preview -->
+            <div class="group-graph-container">
+              <div class="group-info">
+                <div class="info-row">
+                  <span class="info-label">Nodes:</span>
+                  <span class="info-value">{currentGroup.nodes.length}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Edges:</span>
+                  <span class="info-value">{currentGroup.edges.length}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Exposed Inputs:</span>
+                  <span class="info-value">{currentGroup.exposed_inputs.length}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Exposed Outputs:</span>
+                  <span class="info-value">{currentGroup.exposed_outputs.length}</span>
+                </div>
+              </div>
+              <div class="group-nodes-preview">
+                <h4>Nodes in Group</h4>
+                {#each currentGroup.nodes as node}
+                  <div class="preview-node">
+                    <span class="node-type">{node.node_type}</span>
+                    <span class="node-id">{node.id}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div class="placeholder-view">
+            <div class="placeholder-icon">📦</div>
+            <h3>Group Not Found</h3>
+            <p>The selected group could not be loaded</p>
+            <p class="hint">Press Escape to go back</p>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -353,5 +455,136 @@
 
   .zoom-button:not(:disabled):active {
     transform: scale(0.95);
+  }
+
+  /* Group editor styles */
+  .group-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #1a1a1a;
+  }
+
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    background: linear-gradient(to right, rgba(245, 158, 11, 0.1), transparent);
+  }
+
+  .group-icon {
+    font-size: 24px;
+  }
+
+  .group-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #f59e0b;
+  }
+
+  .group-description {
+    margin: 0;
+    font-size: 12px;
+    color: #888;
+    margin-left: auto;
+  }
+
+  .group-graph-container {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 16px;
+    overflow-y: auto;
+  }
+
+  .exit-group-btn {
+    margin-left: auto;
+    padding: 6px 12px;
+    background: rgba(245, 158, 11, 0.2);
+    border: 1px solid #f59e0b;
+    border-radius: 4px;
+    color: #f59e0b;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .exit-group-btn:hover {
+    background: rgba(245, 158, 11, 0.3);
+  }
+
+  .group-info {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px;
+    background: #252525;
+    border-radius: 8px;
+    border: 1px solid #333;
+  }
+
+  .info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .info-label {
+    color: #888;
+    font-size: 12px;
+  }
+
+  .info-value {
+    color: #f59e0b;
+    font-weight: 600;
+  }
+
+  .group-nodes-preview {
+    background: #252525;
+    border-radius: 8px;
+    border: 1px solid #333;
+    padding: 16px;
+  }
+
+  .group-nodes-preview h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #a3a3a3;
+  }
+
+  .preview-node {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #1a1a1a;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    border: 1px solid #333;
+  }
+
+  .preview-node:last-child {
+    margin-bottom: 0;
+  }
+
+  .node-type {
+    padding: 2px 8px;
+    background: rgba(59, 130, 246, 0.2);
+    border-radius: 4px;
+    color: #3b82f6;
+    font-size: 11px;
+    font-family: monospace;
+  }
+
+  .node-id {
+    color: #666;
+    font-size: 11px;
+    font-family: monospace;
   }
 </style>

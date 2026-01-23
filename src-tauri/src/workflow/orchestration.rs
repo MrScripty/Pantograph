@@ -1,7 +1,7 @@
 //! Tauri commands for orchestration graph management and execution.
 
 use node_engine::{
-    DataGraphExecutor, EventSink, NullEventSink, OrchestrationEdge, OrchestrationExecutor,
+    DataGraphExecutor, EventSink, OrchestrationEdge, OrchestrationExecutor,
     OrchestrationGraph, OrchestrationNode, OrchestrationNodeType, OrchestrationResult,
     Result as EngineResult, WorkflowGraph,
 };
@@ -10,13 +10,13 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{command, Channel, State};
+use tauri::{command, ipc::Channel, State};
 use tokio::sync::RwLock;
 
 use super::events::WorkflowEvent;
 use super::SharedExecutionManager;
-use crate::inference::SharedGateway;
-use crate::rag::SharedRagManager;
+use crate::llm::gateway::SharedGateway;
+use crate::agent::rag::SharedRagManager;
 
 /// Storage for orchestration graphs.
 #[derive(Debug, Default)]
@@ -113,6 +113,8 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         inputs: HashMap<String, Value>,
         event_sink: &dyn EventSink,
     ) -> EngineResult<HashMap<String, Value>> {
+        use node_engine::{Context, DemandEngine};
+
         // Get the data graph from the store
         let store = self.store.read().await;
         let graph = store.get_data_graph(graph_id).ok_or_else(|| {
@@ -130,57 +132,95 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
             self.project_root.clone(),
         );
 
-        // Create a workflow executor
-        let mut workflow_executor = node_engine::WorkflowExecutor::new(graph.clone(), task_executor);
+        // Create graph-flow context and demand engine
+        let context = Context::new();
+        let execution_id = format!("data-graph-{}-{}", graph_id, uuid::Uuid::new_v4());
+        let mut demand_engine = DemandEngine::new(&execution_id);
 
-        // Set initial inputs in the context
-        // This maps input port values to the appropriate context keys
-        for (port_name, value) in inputs {
-            // Find input nodes and set their values
-            for node in &graph.nodes {
-                let input_key = format!("{}.output.{}", node.id, port_name);
-                workflow_executor.set_context_value(&input_key, value.clone());
+        // Find input nodes (nodes with type "text-input" or that have input port names matching our inputs)
+        // and inject the input values into their data
+        let mut modified_graph = graph.clone();
+        for (port_name, value) in &inputs {
+            // Find nodes that might accept this input
+            // Strategy 1: Look for input nodes with matching data field
+            for node in &mut modified_graph.nodes {
+                if node.node_type == "text-input" {
+                    // If the input port matches, set the text value
+                    if port_name == "text" || port_name == "input" {
+                        if let Some(obj) = node.data.as_object_mut() {
+                            obj.insert("text".to_string(), value.clone());
+                        } else {
+                            node.data = serde_json::json!({ "text": value });
+                        }
+                    }
+                }
+                // Strategy 2: Inject as node data for any node whose output port matches
+                // This allows orchestration to feed data to specific nodes
+                if let Some(obj) = node.data.as_object_mut() {
+                    obj.insert(format!("_input_{}", port_name), value.clone());
+                }
             }
         }
 
-        // Find terminal nodes (nodes with no outgoing edges) to demand from
-        let terminal_nodes: Vec<String> = graph
+        // Find terminal nodes (nodes with no outgoing edges) - these are our output nodes
+        let terminal_nodes: Vec<String> = modified_graph
             .nodes
             .iter()
             .filter(|node| {
-                !graph.edges.iter().any(|e| e.source == node.id)
+                !modified_graph.edges.iter().any(|e| e.source == node.id)
             })
             .map(|n| n.id.clone())
             .collect();
 
         // Execute the workflow by demanding outputs from terminal nodes
         let mut outputs = HashMap::new();
-        for terminal_id in terminal_nodes {
-            // Find the node to get its output ports
-            if let Some(node) = graph.nodes.iter().find(|n| n.id == terminal_id) {
-                // Demand execution
-                let result = workflow_executor
-                    .demand(&terminal_id, event_sink)
-                    .await;
+        for terminal_id in &terminal_nodes {
+            // Demand execution from this terminal node
+            let result = demand_engine
+                .demand(
+                    terminal_id,
+                    &modified_graph,
+                    &task_executor,
+                    &context,
+                    event_sink,
+                )
+                .await;
 
-                match result {
-                    Ok(_) => {
-                        // Collect outputs from the terminal node
-                        // For now, collect all context values that match this node's outputs
-                        let prefix = format!("{}.output.", terminal_id);
-                        // We'd need to iterate the context, but it's private
-                        // For now, store a success marker
+            match result {
+                Ok(node_outputs) => {
+                    // Collect all outputs from this terminal node
+                    for (output_port, output_value) in node_outputs {
+                        // Use format "nodeId.portName" for disambiguation
                         outputs.insert(
-                            format!("{}_completed", node.node_type),
-                            Value::Bool(true),
+                            format!("{}.{}", terminal_id, output_port),
+                            output_value.clone(),
                         );
+                        // Also store just the port name for simple access
+                        outputs.insert(output_port, output_value);
                     }
-                    Err(e) => {
-                        return Err(e);
-                    }
+                }
+                Err(e) => {
+                    // Log the error but continue with other terminal nodes
+                    log::error!(
+                        "Error executing terminal node '{}' in data graph '{}': {}",
+                        terminal_id,
+                        graph_id,
+                        e
+                    );
+                    outputs.insert(
+                        format!("{}.error", terminal_id),
+                        Value::String(e.to_string()),
+                    );
                 }
             }
         }
+
+        // Also include metadata about successful execution
+        outputs.insert("_graph_id".to_string(), Value::String(graph_id.to_string()));
+        outputs.insert(
+            "_terminal_nodes".to_string(),
+            Value::Array(terminal_nodes.into_iter().map(Value::String).collect()),
+        );
 
         Ok(outputs)
     }
@@ -480,7 +520,7 @@ pub async fn execute_orchestration(
     let executor = OrchestrationExecutor::new(data_executor);
 
     // Create an event adapter for the channel
-    let event_sink = super::event_adapter::TauriEventAdapter::new(channel);
+    let event_sink = super::event_adapter::TauriEventAdapter::new(channel, &orchestration_id);
 
     // Execute the orchestration
     let result = executor

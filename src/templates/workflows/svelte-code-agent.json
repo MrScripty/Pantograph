@@ -1,0 +1,463 @@
+{
+  "name": "Svelte Code Agent",
+  "description": "A complete agent workflow for generating, validating, and iterating on Svelte 5 components",
+  "version": "1.0.0",
+  "orchestration": {
+    "id": "svelte-code-agent-orch",
+    "name": "Svelte Code Agent",
+    "description": "Orchestration for Svelte component generation with validation loop",
+    "nodes": [
+      {
+        "id": "start",
+        "nodeType": "start",
+        "position": [50, 200],
+        "config": {}
+      },
+      {
+        "id": "generate",
+        "nodeType": "data_graph",
+        "position": [200, 200],
+        "config": {
+          "dataGraphId": "generate-component",
+          "inputMappings": {
+            "user_prompt": "input"
+          },
+          "outputMappings": {
+            "response": "generated_code"
+          }
+        }
+      },
+      {
+        "id": "validate",
+        "nodeType": "data_graph",
+        "position": [400, 200],
+        "config": {
+          "dataGraphId": "validate-component",
+          "inputMappings": {
+            "generated_code": "input"
+          },
+          "outputMappings": {
+            "valid": "is_valid",
+            "error": "validation_error"
+          }
+        }
+      },
+      {
+        "id": "check-valid",
+        "nodeType": "condition",
+        "position": [600, 200],
+        "config": {
+          "conditionKey": "is_valid"
+        }
+      },
+      {
+        "id": "output-success",
+        "nodeType": "end",
+        "position": [800, 100],
+        "config": {}
+      },
+      {
+        "id": "retry-loop",
+        "nodeType": "loop",
+        "position": [600, 350],
+        "config": {
+          "maxIterations": 3,
+          "exitConditionKey": "is_valid",
+          "iterationKey": "retry_count"
+        }
+      },
+      {
+        "id": "enrich-prompt",
+        "nodeType": "data_graph",
+        "position": [400, 350],
+        "config": {
+          "dataGraphId": "enrich-prompt",
+          "inputMappings": {
+            "user_prompt": "input",
+            "validation_error": "error",
+            "generated_code": "code"
+          },
+          "outputMappings": {
+            "response": "enriched_prompt"
+          }
+        }
+      },
+      {
+        "id": "output-failure",
+        "nodeType": "end",
+        "position": [800, 350],
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "sourceHandle": "next",
+        "target": "generate",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e2",
+        "source": "generate",
+        "sourceHandle": "next",
+        "target": "validate",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e3",
+        "source": "validate",
+        "sourceHandle": "next",
+        "target": "check-valid",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e4",
+        "source": "check-valid",
+        "sourceHandle": "true",
+        "target": "output-success",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e5",
+        "source": "check-valid",
+        "sourceHandle": "false",
+        "target": "retry-loop",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e6",
+        "source": "retry-loop",
+        "sourceHandle": "iteration",
+        "target": "enrich-prompt",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e7",
+        "source": "enrich-prompt",
+        "sourceHandle": "next",
+        "target": "generate",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e8",
+        "source": "retry-loop",
+        "sourceHandle": "complete",
+        "target": "output-failure",
+        "targetHandle": "input"
+      }
+    ],
+    "dataGraphs": {
+      "generate": "generate-component",
+      "validate": "validate-component",
+      "enrich-prompt": "enrich-prompt"
+    }
+  },
+  "dataGraphs": {
+    "generate-component": {
+      "id": "generate-component",
+      "name": "Generate Component",
+      "nodes": [
+        {
+          "id": "system-prompt",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 100 },
+          "data": {
+            "text": "You are an expert Svelte 5 developer. Generate clean, functional Svelte 5 components using the latest syntax:\n- Use `let { prop } = $props()` instead of `export let prop`\n- Use `onclick` instead of `on:click`\n- Use `$state()` for reactive state\n- Use `$derived()` for computed values\n- Use `$effect()` for side effects\n\nRespond with ONLY the Svelte component code, no explanations."
+          }
+        },
+        {
+          "id": "user-prompt",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 250 },
+          "data": { "text": "" }
+        },
+        {
+          "id": "rag-search",
+          "node_type": "rag-search",
+          "position": { "x": 250, "y": 250 },
+          "data": { "limit": 3 }
+        },
+        {
+          "id": "llm",
+          "node_type": "llm-inference",
+          "position": { "x": 450, "y": 175 },
+          "data": {}
+        },
+        {
+          "id": "output",
+          "node_type": "text-output",
+          "position": { "x": 700, "y": 175 },
+          "data": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "system-prompt",
+          "source_handle": "text",
+          "target": "llm",
+          "target_handle": "system_prompt"
+        },
+        {
+          "id": "e2",
+          "source": "user-prompt",
+          "source_handle": "text",
+          "target": "rag-search",
+          "target_handle": "query"
+        },
+        {
+          "id": "e3",
+          "source": "user-prompt",
+          "source_handle": "text",
+          "target": "llm",
+          "target_handle": "prompt"
+        },
+        {
+          "id": "e4",
+          "source": "rag-search",
+          "source_handle": "context",
+          "target": "llm",
+          "target_handle": "context"
+        },
+        {
+          "id": "e5",
+          "source": "llm",
+          "source_handle": "response",
+          "target": "output",
+          "target_handle": "text"
+        }
+      ]
+    },
+    "validate-component": {
+      "id": "validate-component",
+      "name": "Validate Component",
+      "nodes": [
+        {
+          "id": "code-input",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 150 },
+          "data": { "text": "" }
+        },
+        {
+          "id": "validator",
+          "node_type": "validator",
+          "position": { "x": 300, "y": 150 },
+          "data": { "timeout_ms": 5000 }
+        },
+        {
+          "id": "conditional",
+          "node_type": "conditional",
+          "position": { "x": 550, "y": 150 },
+          "data": {}
+        },
+        {
+          "id": "valid-output",
+          "node_type": "text-output",
+          "position": { "x": 800, "y": 100 },
+          "data": {}
+        },
+        {
+          "id": "error-output",
+          "node_type": "text-output",
+          "position": { "x": 800, "y": 250 },
+          "data": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "code-input",
+          "source_handle": "text",
+          "target": "validator",
+          "target_handle": "code"
+        },
+        {
+          "id": "e2",
+          "source": "validator",
+          "source_handle": "valid",
+          "target": "conditional",
+          "target_handle": "condition"
+        },
+        {
+          "id": "e3",
+          "source": "code-input",
+          "source_handle": "text",
+          "target": "conditional",
+          "target_handle": "value"
+        },
+        {
+          "id": "e4",
+          "source": "conditional",
+          "source_handle": "true_out",
+          "target": "valid-output",
+          "target_handle": "text"
+        },
+        {
+          "id": "e5",
+          "source": "validator",
+          "source_handle": "error",
+          "target": "error-output",
+          "target_handle": "text"
+        }
+      ]
+    },
+    "enrich-prompt": {
+      "id": "enrich-prompt",
+      "name": "Enrich Prompt with Error Feedback",
+      "nodes": [
+        {
+          "id": "original-prompt",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 100 },
+          "data": { "text": "" }
+        },
+        {
+          "id": "error-message",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 200 },
+          "data": { "text": "" }
+        },
+        {
+          "id": "previous-code",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 300 },
+          "data": { "text": "" }
+        },
+        {
+          "id": "merge",
+          "node_type": "merge",
+          "position": { "x": 300, "y": 200 },
+          "data": { "separator": "\n\n---\n\n" }
+        },
+        {
+          "id": "enrichment-prompt",
+          "node_type": "text-input",
+          "position": { "x": 300, "y": 50 },
+          "data": {
+            "text": "The previous attempt had the following error. Please fix it:\n\nError:"
+          }
+        },
+        {
+          "id": "llm",
+          "node_type": "llm-inference",
+          "position": { "x": 550, "y": 175 },
+          "data": {}
+        },
+        {
+          "id": "output",
+          "node_type": "text-output",
+          "position": { "x": 800, "y": 175 },
+          "data": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "enrichment-prompt",
+          "source_handle": "text",
+          "target": "merge",
+          "target_handle": "inputs"
+        },
+        {
+          "id": "e2",
+          "source": "error-message",
+          "source_handle": "text",
+          "target": "merge",
+          "target_handle": "inputs"
+        },
+        {
+          "id": "e3",
+          "source": "original-prompt",
+          "source_handle": "text",
+          "target": "merge",
+          "target_handle": "inputs"
+        },
+        {
+          "id": "e4",
+          "source": "previous-code",
+          "source_handle": "text",
+          "target": "merge",
+          "target_handle": "inputs"
+        },
+        {
+          "id": "e5",
+          "source": "merge",
+          "source_handle": "merged",
+          "target": "llm",
+          "target_handle": "prompt"
+        },
+        {
+          "id": "e6",
+          "source": "llm",
+          "source_handle": "response",
+          "target": "output",
+          "target_handle": "text"
+        }
+      ]
+    }
+  },
+  "nodeGroups": {
+    "rag-search-group": {
+      "id": "rag-search-group",
+      "name": "RAG Search",
+      "description": "Semantic search over indexed codebase",
+      "nodes": [
+        {
+          "id": "query-input",
+          "node_type": "text-input",
+          "position": { "x": 50, "y": 100 },
+          "data": { "text": "" }
+        },
+        {
+          "id": "rag",
+          "node_type": "rag-search",
+          "position": { "x": 250, "y": 100 },
+          "data": { "limit": 5 }
+        },
+        {
+          "id": "context-output",
+          "node_type": "text-output",
+          "position": { "x": 450, "y": 100 },
+          "data": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "query-input",
+          "source_handle": "text",
+          "target": "rag",
+          "target_handle": "query"
+        },
+        {
+          "id": "e2",
+          "source": "rag",
+          "source_handle": "context",
+          "target": "context-output",
+          "target_handle": "text"
+        }
+      ],
+      "exposed_inputs": [
+        {
+          "internal_node_id": "query-input",
+          "internal_port_id": "text",
+          "group_port_id": "query",
+          "group_port_label": "Query",
+          "data_type": "string"
+        }
+      ],
+      "exposed_outputs": [
+        {
+          "internal_node_id": "context-output",
+          "internal_port_id": "text",
+          "group_port_id": "context",
+          "group_port_label": "Context",
+          "data_type": "string"
+        }
+      ],
+      "position": [0, 0],
+      "collapsed": true
+    }
+  }
+}
