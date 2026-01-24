@@ -12,8 +12,11 @@
   } from '../stores/workflowStore';
   import {
     isReadOnly,
+    currentGraphId,
     currentGraphName,
     createNewWorkflow,
+    saveLastGraph,
+    refreshWorkflowList,
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { WorkflowEvent } from '../services/workflow/types';
@@ -61,6 +64,12 @@
     try {
       await workflowService.saveWorkflow(name, $workflowGraph);
       isDirty.set(false);
+
+      // Update frontend state to match saved workflow
+      currentGraphId.set(name);
+      currentGraphName.set(name);
+      saveLastGraph(name, 'workflow');
+      await refreshWorkflowList();
     } catch (error) {
       console.error('Failed to save workflow:', error);
     }

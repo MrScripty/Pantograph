@@ -1,6 +1,8 @@
 import { writable, derived, get } from 'svelte/store';
 import { workflowService } from '../services/workflow/WorkflowService';
 import { loadWorkflow, clearWorkflow, nodeDefinitions } from './workflowStore';
+import { loadOrchestration } from './orchestrationStore';
+import { setOrchestrationContext } from './viewStore';
 import type { WorkflowMetadata } from '../services/workflow/types';
 
 // --- Types ---
@@ -97,6 +99,22 @@ export async function loadWorkflowByName(name: string): Promise<boolean> {
     // Load workflow into frontend stores
     loadWorkflow(file.graph, file.metadata);
 
+    // Load associated orchestration if specified (enables zoom-out navigation)
+    console.log(`[graphSessionStore] Checking for orchestrationId in metadata:`, file.metadata);
+    if (file.metadata.orchestrationId) {
+      try {
+        console.log(`[graphSessionStore] Loading orchestration: ${file.metadata.orchestrationId}`);
+        await loadOrchestration(file.metadata.orchestrationId);
+        setOrchestrationContext(file.metadata.orchestrationId);
+        console.log(`[graphSessionStore] Loaded associated orchestration: ${file.metadata.orchestrationId}`);
+      } catch (error) {
+        console.warn('[graphSessionStore] Failed to load associated orchestration:', error);
+        // Continue without orchestration - workflow still usable, just no zoom-out
+      }
+    } else {
+      console.log('[graphSessionStore] No orchestrationId in workflow metadata');
+    }
+
     // Create a backend session for this workflow
     // This enables editing operations to go through the backend with undo/redo
     const sessionId = await workflowService.createSession(file.graph);
@@ -161,7 +179,7 @@ export async function createNewWorkflow(): Promise<void> {
 /**
  * Save last opened graph to localStorage
  */
-function saveLastGraph(id: string, type: GraphType): void {
+export function saveLastGraph(id: string, type: GraphType): void {
   try {
     localStorage.setItem(LAST_GRAPH_KEY, JSON.stringify({ id, type }));
   } catch {
