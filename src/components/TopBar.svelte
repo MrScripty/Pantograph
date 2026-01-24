@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  import { writable } from 'svelte/store';
+
+  // Persisted input value - survives component unmount/remount across view switches
+  export const topBarInputValue = writable('');
+</script>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Logger } from '../services/Logger';
@@ -5,10 +12,20 @@
   import { componentRegistry } from '../services/HotLoadRegistry';
   import { panelWidth, openSidePanel } from '../stores/panelStore';
   import { promptHistoryStore } from '../stores/promptHistoryStore';
+  import {
+    registerLinkable,
+    linkModeActive,
+    createLink,
+  } from '../stores/linkStore';
 
-  let inputValue = '';
+  let inputValue = $state($topBarInputValue);
   let isLoading = false;
   let errorMessage = '';
+
+  // Sync input value back to store when it changes (so it persists across view switches)
+  $effect(() => {
+    topBarInputValue.set(inputValue);
+  });
 
   // Prompt history state - synced with persistent store
   let promptHistory: string[] = [];
@@ -17,11 +34,40 @@
 
   // Subscribe to the persistent prompt history store
   onMount(() => {
-    const unsubscribe = promptHistoryStore.subscribe(history => {
+    const unsubscribeHistory = promptHistoryStore.subscribe(history => {
       promptHistory = history;
     });
-    return unsubscribe;
+
+    // Register this input as linkable for the GUI linking system
+    const unregisterLinkable = registerLinkable({
+      id: 'topbar-input',
+      label: 'Command Input',
+      type: 'input',
+      getValue: () => inputValue,
+    });
+
+    return () => {
+      unsubscribeHistory();
+      unregisterLinkable();
+    };
   });
+
+  // Handle click during link mode
+  function handleLinkClick(e: MouseEvent) {
+    if ($linkModeActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      createLink('topbar-input');
+    }
+  }
+
+  // Handle keyboard events during link mode (a11y)
+  function handleLinkKeyDown(e: KeyboardEvent) {
+    if ($linkModeActive && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      createLink('topbar-input');
+    }
+  }
 
   const handleGo = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -118,13 +164,31 @@
   class="fixed top-8 left-1/2 w-full max-w-xl px-4 z-50 transition-transform duration-300 ease-out"
   style="transform: translateX(calc(-50% - {$panelWidth / 2}px));"
 >
-  <div class="flex bg-neutral-900/90 backdrop-blur-md border border-neutral-700 rounded-lg overflow-hidden shadow-2xl">
+  <div
+    class="flex bg-neutral-900/90 backdrop-blur-md border border-neutral-700 rounded-lg overflow-hidden shadow-2xl relative"
+    class:link-mode-highlight={$linkModeActive}
+    data-linkable-id="topbar-input"
+    onclick={handleLinkClick}
+    onkeydown={handleLinkKeyDown}
+    role={$linkModeActive ? 'button' : undefined}
+    tabindex={$linkModeActive ? 0 : -1}
+  >
+    <!-- Click overlay during link mode - captures clicks that disabled input would swallow -->
+    {#if $linkModeActive}
+      <div
+        class="absolute inset-0 cursor-pointer z-10"
+        onclick={handleLinkClick}
+        role="button"
+        tabindex="0"
+        onkeydown={handleLinkKeyDown}
+      />
+    {/if}
     <input
       type="text"
       bind:value={inputValue}
       placeholder="Describe what you want to do with this drawing..."
       class="flex-1 bg-transparent px-4 py-3 outline-none font-mono text-sm placeholder:text-neutral-600"
-      disabled={isLoading}
+      disabled={isLoading || $linkModeActive}
       onkeydown={handleKeyDown}
     />
     <button
