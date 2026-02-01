@@ -264,6 +264,7 @@ pub struct Viewport {
 
 /// Metadata for a saved workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowMetadata {
     /// Filename stem (e.g., "coding-agent") used for loading
     /// Populated by list_workflows, not stored in the JSON file
@@ -278,6 +279,9 @@ pub struct WorkflowMetadata {
     pub created: String,
     /// ISO 8601 timestamp of last modification
     pub modified: String,
+    /// Optional link to parent orchestration for zoom-out navigation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orchestration_id: Option<String>,
 }
 
 /// Complete workflow file structure for persistence
@@ -309,6 +313,7 @@ impl WorkflowFile {
                 description: None,
                 created: now.clone(),
                 modified: now,
+                orchestration_id: None,
             },
             graph,
             viewport: None,

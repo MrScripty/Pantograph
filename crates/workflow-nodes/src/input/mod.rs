@@ -4,8 +4,12 @@
 
 mod human_input;
 mod image_input;
+mod linked_input;
+mod model_provider;
 mod text_input;
 
 pub use human_input::HumanInputTask;
 pub use image_input::{ImageBounds, ImageInputTask};
+pub use linked_input::LinkedInputTask;
+pub use model_provider::{ModelInfo, ModelProviderTask};
 pub use text_input::TextInputTask;

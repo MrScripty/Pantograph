@@ -9,11 +9,11 @@ use std::collections::HashMap;
 use node_engine::TaskDescriptor;
 use workflow_nodes::{
     // Input tasks
-    HumanInputTask, ImageInputTask, TextInputTask, VectorDbTask,
+    HumanInputTask, ImageInputTask, LinkedInputTask, ModelProviderTask, TextInputTask, VectorDbTask,
     // Output tasks
     ComponentPreviewTask, TextOutputTask,
     // Processing tasks
-    EmbeddingTask, InferenceTask, JsonFilterTask, ValidatorTask, VisionAnalysisTask,
+    EmbeddingTask, InferenceTask, JsonFilterTask, OllamaInferenceTask, ValidatorTask, VisionAnalysisTask,
     // Storage tasks
     LanceDbTask, ReadFileTask, WriteFileTask,
     // Control tasks
@@ -110,13 +110,16 @@ impl NodeRegistry {
         Self::register_from_task::<ImageInputTask>(&mut definitions);
         Self::register_from_task::<HumanInputTask>(&mut definitions);
         Self::register_from_task::<VectorDbTask>(&mut definitions);
+        Self::register_from_task::<LinkedInputTask>(&mut definitions);
+        Self::register_from_task::<ModelProviderTask>(&mut definitions);
 
         // Output tasks
         Self::register_from_task::<TextOutputTask>(&mut definitions);
         Self::register_from_task::<ComponentPreviewTask>(&mut definitions);
 
         // Processing tasks
-        Self::register_from_task::<InferenceTask>(&mut definitions);
+        Self::register_from_task::<InferenceTask>(&mut definitions);  // Keep for backward compatibility
+        Self::register_from_task::<OllamaInferenceTask>(&mut definitions);
         Self::register_from_task::<VisionAnalysisTask>(&mut definitions);
         Self::register_from_task::<EmbeddingTask>(&mut definitions);
 
@@ -138,6 +141,7 @@ impl NodeRegistry {
         // Tauri-only nodes (no node-engine task implementation)
         Self::register(&mut definitions, Self::puma_lib_definition());
         Self::register(&mut definitions, Self::agent_tools_definition());
+        Self::register(&mut definitions, Self::llamacpp_inference_definition());
 
         Self { definitions }
     }
@@ -230,6 +234,69 @@ impl NodeRegistry {
             execution_mode: ExecutionMode::Reactive,
         }
     }
+
+    fn llamacpp_inference_definition() -> NodeDefinition {
+        NodeDefinition {
+            node_type: "llamacpp-inference".to_string(),
+            category: NodeCategory::Processing,
+            label: "LlamaCpp Inference".to_string(),
+            description: "Run inference via llama.cpp server (no model duplication)".to_string(),
+            inputs: vec![
+                PortDefinition {
+                    id: "model_path".to_string(),
+                    label: "Model Path".to_string(),
+                    data_type: PortDataType::String,
+                    required: true,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "prompt".to_string(),
+                    label: "Prompt".to_string(),
+                    data_type: PortDataType::Prompt,
+                    required: true,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "system_prompt".to_string(),
+                    label: "System Prompt".to_string(),
+                    data_type: PortDataType::String,
+                    required: false,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "temperature".to_string(),
+                    label: "Temperature".to_string(),
+                    data_type: PortDataType::Number,
+                    required: false,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "max_tokens".to_string(),
+                    label: "Max Tokens".to_string(),
+                    data_type: PortDataType::Number,
+                    required: false,
+                    multiple: false,
+                },
+            ],
+            outputs: vec![
+                PortDefinition {
+                    id: "response".to_string(),
+                    label: "Response".to_string(),
+                    data_type: PortDataType::String,
+                    required: true,
+                    multiple: false,
+                },
+                PortDefinition {
+                    id: "model_path".to_string(),
+                    label: "Model Path".to_string(),
+                    data_type: PortDataType::String,
+                    required: false,
+                    multiple: false,
+                },
+            ],
+            execution_mode: ExecutionMode::Stream,
+        }
+    }
 }
 
 impl Default for NodeRegistry {
@@ -251,7 +318,10 @@ mod tests {
         assert!(registry.has_node_type("image-input"));
         assert!(registry.has_node_type("human-input"));
         assert!(registry.has_node_type("vector-db"));
+        assert!(registry.has_node_type("linked-input"));
+        assert!(registry.has_node_type("model-provider"));
         assert!(registry.has_node_type("llm-inference"));
+        assert!(registry.has_node_type("ollama-inference"));
         assert!(registry.has_node_type("vision-analysis"));
         assert!(registry.has_node_type("embedding"));
         assert!(registry.has_node_type("lancedb"));
@@ -273,6 +343,7 @@ mod tests {
         // Tauri-only nodes
         assert!(registry.has_node_type("puma-lib"));
         assert!(registry.has_node_type("agent-tools"));
+        assert!(registry.has_node_type("llamacpp-inference"));
     }
 
     #[test]
