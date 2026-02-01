@@ -147,8 +147,13 @@ export async function zoomToOrchestration(
   targetNodeId?: string
 ): Promise<void> {
   const currentLevel = get(viewLevel);
-  if (currentLevel === 'orchestration') return;
+  console.log('[viewStore] zoomToOrchestration called, currentLevel:', currentLevel);
+  if (currentLevel === 'orchestration') {
+    console.log('[viewStore] Already at orchestration level, returning');
+    return;
+  }
 
+  console.log('[viewStore] Transitioning to orchestration view');
   isAnimating.set(true);
 
   // Save current data graph ID and set zoom target

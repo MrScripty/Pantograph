@@ -58,8 +58,12 @@ export class WorkflowService {
     });
   }
 
-  // --- Workflow Execution (Legacy) ---
+  // --- Workflow Execution ---
 
+  /**
+   * Execute a workflow using the node-engine.
+   * This is a convenience wrapper around executeWorkflowV2.
+   */
   async executeWorkflow(graph: WorkflowGraph): Promise<void> {
     if (USE_MOCKS) {
       return mockExecuteWorkflow(graph, (event) => {
@@ -73,7 +77,8 @@ export class WorkflowService {
       this.eventListeners.forEach((listener) => listener(event));
     };
 
-    await invoke('execute_workflow', {
+    // Use execute_workflow_v2 (the node-engine based command)
+    await invoke('execute_workflow_v2', {
       graph,
       channel: this.channel,
     });

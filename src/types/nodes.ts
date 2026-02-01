@@ -6,13 +6,6 @@ export interface UserInputNodeData {
   promptText?: string;
 }
 
-export interface SystemPromptNodeData {
-  label: string;
-  promptPreview?: string;
-  isEditing?: boolean;
-  onEdit?: () => void;
-}
-
 export interface ToolsNodeData {
   label: string;
   tools?: Array<{
@@ -37,7 +30,6 @@ export interface OutputNodeData {
 
 export type NodeData =
   | UserInputNodeData
-  | SystemPromptNodeData
   | ToolsNodeData
   | AgentNodeData
   | OutputNodeData;

@@ -65,6 +65,19 @@ export interface WorkflowMetadata {
   description?: string;
   created: string;
   modified: string;
+  orchestrationId?: string; // Optional link to parent orchestration for zoom-out navigation
+}
+
+// Link mapping types for GUI element linking
+export type LinkStatus = 'linked' | 'unlinked' | 'error';
+
+export interface LinkMapping {
+  nodeId: string;
+  elementId: string;
+  elementLabel: string;
+  status: LinkStatus;
+  errorMessage?: string;
+  lastValue?: string;
 }
 
 export interface WorkflowFile {
@@ -72,6 +85,7 @@ export interface WorkflowFile {
   metadata: WorkflowMetadata;
   graph: WorkflowGraph;
   viewport?: { x: number; y: number; zoom: number };
+  linkMappings?: LinkMapping[]; // Persisted link mappings for linked-input nodes
 }
 
 export type WorkflowEventType =
@@ -103,3 +117,9 @@ export interface WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> 
 }
 
 export type NodeExecutionState = 'idle' | 'running' | 'success' | 'error';
+
+/** Extended execution info including error messages */
+export interface NodeExecutionInfo {
+  state: NodeExecutionState;
+  errorMessage?: string;
+}

@@ -232,12 +232,15 @@ export async function createOrchestration(
  */
 export async function loadOrchestration(id: string): Promise<void> {
   try {
+    console.log(`[orchestrationStore] Loading orchestration: ${id}`);
     const graph = await invoke<OrchestrationGraph>('get_orchestration', { id });
+    console.log(`[orchestrationStore] Loaded orchestration:`, graph);
     currentOrchestration.set(graph);
+    console.log(`[orchestrationStore] Set currentOrchestration store`);
     selectedOrchestrationNodeId.set(null);
     isOrchestrationDirty.set(false);
   } catch (error) {
-    console.error('Failed to load orchestration:', error);
+    console.error('[orchestrationStore] Failed to load orchestration:', error);
     throw error;
   }
 }
