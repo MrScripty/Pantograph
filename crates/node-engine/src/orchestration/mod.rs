@@ -47,11 +47,13 @@
 
 pub mod executor;
 pub mod nodes;
+pub mod store;
 pub mod types;
 
 // Re-export commonly used types
 pub use executor::{DataGraphExecutor, OrchestrationEvent, OrchestrationExecutor};
 pub use nodes::{NodeExecutionResult, OrchestrationContext};
+pub use store::{OrchestrationGraphMetadata, OrchestrationStore};
 pub use types::{
     ConditionConfig, DataGraphConfig, LoopConfig, OrchestrationEdge, OrchestrationEdgeId,
     OrchestrationGraph, OrchestrationGraphId, OrchestrationNode, OrchestrationNodeId,

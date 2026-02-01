@@ -87,8 +87,9 @@ pub use tasks::ContextKeys;
 pub use orchestration::{
     ConditionConfig, DataGraphConfig, DataGraphExecutor, LoopConfig, NodeExecutionResult,
     OrchestrationContext, OrchestrationEdge, OrchestrationEdgeId, OrchestrationEvent,
-    OrchestrationExecutor, OrchestrationGraph, OrchestrationGraphId, OrchestrationNode,
-    OrchestrationNodeId, OrchestrationNodeType, OrchestrationResult,
+    OrchestrationExecutor, OrchestrationGraph, OrchestrationGraphId, OrchestrationGraphMetadata,
+    OrchestrationNode, OrchestrationNodeId, OrchestrationNodeType, OrchestrationResult,
+    OrchestrationStore,
 };
 
 // Re-export graph-flow types that consumers will need
