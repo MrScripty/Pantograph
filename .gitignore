@@ -30,6 +30,9 @@ src-tauri/binaries/
 # Claude Code local settings
 .claude/
 
+# Agent planning documents
+agent_plan.md
+
 # User-created workflows and orchestrations
 # Default examples (lowercase-hyphenated) are tracked; user creations are ignored
 .pantograph/orchestrations/
