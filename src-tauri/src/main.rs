@@ -49,9 +49,30 @@ fn main() {
     // Create the execution manager for node-engine based workflows
     let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
 
-    // Create the orchestration store for managing orchestration graphs
+    // Create the orchestration store with file persistence
+    // Use CARGO_MANIFEST_DIR to get project root (same pattern as project_data_dir below)
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let project_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .expect("Failed to get project root from CARGO_MANIFEST_DIR");
+    let orchestrations_path = project_root.join(".pantograph/orchestrations");
+
+    let mut orchestration_store = node_engine::OrchestrationStore::with_persistence(&orchestrations_path);
+
+    // Load existing orchestrations from disk
+    match orchestration_store.load_from_disk() {
+        Ok(count) => {
+            if count > 0 {
+                log::info!("Loaded {} orchestrations from {:?}", count, orchestrations_path);
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to load orchestrations from disk: {}", e);
+        }
+    }
+
     let orchestration_store: workflow::SharedOrchestrationStore =
-        Arc::new(RwLock::new(workflow::OrchestrationStore::new()));
+        Arc::new(RwLock::new(orchestration_store));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

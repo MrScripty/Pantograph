@@ -4,7 +4,8 @@
     "name": "Coding Agent",
     "description": "Agent for generating Svelte GUI elements with tool-loop capabilities",
     "created": "2026-01-20T00:00:00Z",
-    "modified": "2026-01-20T00:00:00Z"
+    "modified": "2026-01-20T00:00:00Z",
+    "orchestrationId": "coding-agent-orch"
   },
   "graph": {
     "nodes": [
@@ -113,16 +114,9 @@
       {
         "id": "system-to-llm",
         "source": "system-prompt",
-        "source_handle": "text",
+        "source_handle": "prompt",
         "target": "llm-inference",
-        "target_handle": "system"
-      },
-      {
-        "id": "rag-to-llm",
-        "source": "rag-search",
-        "source_handle": "documents",
-        "target": "llm-inference",
-        "target_handle": "context"
+        "target_handle": "system_prompt"
       },
       {
         "id": "user-to-rag",
@@ -136,42 +130,7 @@
         "source": "llm-inference",
         "source_handle": "response",
         "target": "tool-loop",
-        "target_handle": "input"
-      },
-      {
-        "id": "loop-to-read",
-        "source": "tool-loop",
-        "source_handle": "tool_call",
-        "target": "read-file",
-        "target_handle": "request"
-      },
-      {
-        "id": "loop-to-write",
-        "source": "tool-loop",
-        "source_handle": "tool_call",
-        "target": "write-file",
-        "target_handle": "request"
-      },
-      {
-        "id": "read-to-loop",
-        "source": "read-file",
-        "source_handle": "content",
-        "target": "tool-loop",
-        "target_handle": "tool_result"
-      },
-      {
-        "id": "write-to-loop",
-        "source": "write-file",
-        "source_handle": "result",
-        "target": "tool-loop",
-        "target_handle": "tool_result"
-      },
-      {
-        "id": "loop-to-preview",
-        "source": "tool-loop",
-        "source_handle": "component",
-        "target": "component-preview",
-        "target_handle": "component"
+        "target_handle": "prompt"
       },
       {
         "id": "loop-to-output",

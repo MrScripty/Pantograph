@@ -90,18 +90,28 @@ export default defineConfig(({ mode }) => {
       plugins: [
         generatedComponentsHMR(), // Must be before svelte() to intercept first
         // Normal Svelte with HMR - excludes generated components
-        svelte({ exclude: GENERATED_PATTERN }),
+        svelte({
+          exclude: GENERATED_PATTERN,
+          experimental: {
+            compileModule: {
+              // Exclude @xyflow/svelte from Svelte module compilation
+              // The package ships pre-compiled .svelte.js files that should not be recompiled
+              exclude: ['**/node_modules/@xyflow/**']
+            }
+          }
+        }),
         // Generated components - compiled but NO HMR (we handle it ourselves via custom events)
         svelte({
           include: GENERATED_PATTERN,
           hot: false,
-          configFile: false // Don't read svelte.config.js twice
+          configFile: false, // Don't read svelte.config.js twice
+          experimental: {
+            compileModule: {
+              exclude: ['**/node_modules/@xyflow/**']
+            }
+          }
         })
       ],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, 'src'),
@@ -123,11 +133,8 @@ export default defineConfig(({ mode }) => {
           // Other commonly used deps
           '@tauri-apps/api/core',
           '@tauri-apps/plugin-dialog',
-          // Note: @xyflow/svelte has a known Svelte 5 compatibility issue:
-          // The package ships pre-compiled .svelte.js files that use 'import * as $'
-          // which conflicts with Svelte 5's reserved $ prefix.
-          // See: https://github.com/xyflow/xyflow/issues/5200
-          // '@xyflow/svelte',
+          // @xyflow/svelte is excluded from module compilation via experimental.compileModule.exclude
+          // in the svelte() plugin config above (see plugins array)
         ],
       }
     };
