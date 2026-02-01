@@ -10,9 +10,11 @@
   // Import workflow node components (reuse from main workflow)
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
+  import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
+  import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
+  import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
-  import SystemPromptNode from './nodes/workflow/SystemPromptNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
   import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
@@ -37,8 +39,10 @@
   const nodeTypes: NodeTypes = {
     'text-input': TextInputNode,
     'llm-inference': LLMInferenceNode,
+    'ollama-inference': OllamaInferenceNode,
+    'llamacpp-inference': LlamaCppInferenceNode,
+    'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
-    'system-prompt': SystemPromptNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
     'vector-db': VectorDbNode,

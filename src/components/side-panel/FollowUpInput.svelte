@@ -1,4 +1,11 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import {
+    registerLinkable,
+    linkModeActive,
+    createLink,
+  } from '../../stores/linkStore';
+
   interface Props {
     isAgentRunning?: boolean;
     isReady?: boolean;
@@ -14,6 +21,34 @@
   }: Props = $props();
 
   let followUpInput = $state('');
+
+  // Register this input as linkable
+  onMount(() => {
+    const unregister = registerLinkable({
+      id: 'follow-up-input',
+      label: 'Follow-Up Input',
+      type: 'input',
+      getValue: () => followUpInput,
+    });
+    return unregister;
+  });
+
+  // Handle click during link mode
+  function handleLinkClick(e: MouseEvent) {
+    if ($linkModeActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      createLink('follow-up-input');
+    }
+  }
+
+  // Handle keyboard events during link mode (a11y)
+  function handleLinkKeyDown(e: KeyboardEvent) {
+    if ($linkModeActive && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      createLink('follow-up-input');
+    }
+  }
 
   const handleFollowUp = () => {
     if (!followUpInput.trim() || isAgentRunning) return;
@@ -34,13 +69,21 @@
 </script>
 
 <div class="px-4 py-3 border-t border-neutral-700">
-  <div class="flex bg-neutral-800 border border-neutral-600 rounded-lg overflow-hidden">
+  <div
+    class="flex bg-neutral-800 border border-neutral-600 rounded-lg overflow-hidden"
+    class:link-mode-highlight={$linkModeActive}
+    data-linkable-id="follow-up-input"
+    onclick={handleLinkClick}
+    onkeydown={handleLinkKeyDown}
+    role="button"
+    tabindex={$linkModeActive ? 0 : -1}
+  >
     <input
       type="text"
       bind:value={followUpInput}
       placeholder={isAgentRunning ? "Agent is running..." : "Send a message..."}
       class="flex-1 bg-transparent px-3 py-2 outline-none font-mono text-sm placeholder:text-neutral-600"
-      disabled={isAgentRunning}
+      disabled={isAgentRunning || $linkModeActive}
       onkeydown={handleFollowUpKeyDown}
     />
     {#if isAgentRunning}

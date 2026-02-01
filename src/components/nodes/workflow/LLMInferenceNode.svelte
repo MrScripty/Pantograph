@@ -1,6 +1,6 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition, NodeExecutionState } from '../../../services/workflow/types';
+  import type { NodeDefinition } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
 
   interface Props {
@@ -16,7 +16,9 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let executionState = $derived($nodeExecutionStates.get(id) || 'idle');
+  // Get execution info (new format with state and errorMessage)
+  let executionInfo = $derived($nodeExecutionStates.get(id));
+  let executionState = $derived(executionInfo?.state || 'idle');
   let modelName = $derived(data.modelName || 'Local LLM');
   let streamContent = $derived(data.streamContent || '');
 

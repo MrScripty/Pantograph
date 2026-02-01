@@ -23,18 +23,25 @@
   import {
     tabIntoGroup,
     zoomTarget,
+    zoomToOrchestration,
+    viewLevel,
   } from '../stores/viewStore';
+  import { currentOrchestration } from '../stores/orchestrationStore';
 
   // Import workflow node components
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
+  import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
+  import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
+  import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
-  import SystemPromptNode from './nodes/workflow/SystemPromptNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
   import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
   import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
+  import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
+
 
   // Import architecture node components
   import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
@@ -55,12 +62,15 @@
   const nodeTypes: NodeTypes = {
     'text-input': TextInputNode,
     'llm-inference': LLMInferenceNode,
+    'ollama-inference': OllamaInferenceNode,
+    'llamacpp-inference': LlamaCppInferenceNode,
+    'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
-    'system-prompt': SystemPromptNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
     'vector-db': VectorDbNode,
     'node-group': NodeGroupNode,
+    'linked-input': LinkedInputNode,
     // Generic fallback for other node types
     'image-input': GenericNode,
     'vision-analysis': GenericNode,
@@ -88,6 +98,127 @@
   let lastClickTime = $state(0);
   let lastClickNodeId = $state<string | null>(null);
   const DOUBLE_CLICK_THRESHOLD = 300; // ms
+
+  // --- Container border and zoom-out transition ---
+  // Container margin around all nodes (represents orchestration node padding)
+  const CONTAINER_MARGIN = 100;
+  // Extra margin needed for visibility check before transition
+  const VISIBILITY_MARGIN = 50;
+
+  // Track if we've already triggered the zoom-out transition
+  let transitionTriggered = $state(false);
+
+  // Track if the container border is selected
+  let containerSelected = $state(false);
+
+  // Container element reference for size calculations
+  let containerElement: HTMLElement;
+
+  // Current viewport state for rendering the container border
+  let currentViewport = $state<{ x: number; y: number; zoom: number } | null>(null);
+
+  // Calculate container bounds from all nodes (represents orchestration node boundary)
+  let containerBounds = $derived.by(() => {
+    if (nodes.length === 0) return null;
+
+    // Find bounding box of all nodes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const node of nodes) {
+      const width = (node.measured?.width || node.width || 200) as number;
+      const height = (node.measured?.height || node.height || 100) as number;
+
+      minX = Math.min(minX, node.position.x);
+      minY = Math.min(minY, node.position.y);
+      maxX = Math.max(maxX, node.position.x + width);
+      maxY = Math.max(maxY, node.position.y + height);
+    }
+
+    return {
+      x: minX - CONTAINER_MARGIN,
+      y: minY - CONTAINER_MARGIN,
+      width: (maxX - minX) + (CONTAINER_MARGIN * 2),
+      height: (maxY - minY) + (CONTAINER_MARGIN * 2),
+    };
+  });
+
+  // Check if container is fully visible within the viewport
+  function isContainerFullyVisible(
+    bounds: { x: number; y: number; width: number; height: number },
+    viewport: { x: number; y: number; zoom: number },
+    screenWidth: number,
+    screenHeight: number
+  ): boolean {
+    // Convert flow coordinates to screen coordinates
+    const screenX = bounds.x * viewport.zoom + viewport.x;
+    const screenY = bounds.y * viewport.zoom + viewport.y;
+    const screenW = bounds.width * viewport.zoom;
+    const screenH = bounds.height * viewport.zoom;
+
+    // Check if container fits within viewport with margin
+    return (
+      screenX >= VISIBILITY_MARGIN &&
+      screenY >= VISIBILITY_MARGIN &&
+      screenX + screenW <= screenWidth - VISIBILITY_MARGIN &&
+      screenY + screenH <= screenHeight - VISIBILITY_MARGIN
+    );
+  }
+
+  // Handle viewport changes during pan/zoom for border rendering
+  function handleMove(_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) {
+    currentViewport = viewport;
+  }
+
+  // Handle viewport changes to detect when to transition to orchestration view
+  function handleMoveEnd(_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) {
+    // Always update current viewport for border rendering
+    currentViewport = viewport;
+
+    // Debug logging to diagnose zoom-out transition
+    console.log('[WorkflowGraph] handleMoveEnd:', {
+      hasContainerBounds: !!containerBounds,
+      hasContainerElement: !!containerElement,
+      currentOrchestration: $currentOrchestration,
+      zoom: viewport.zoom,
+    });
+
+    if (!containerBounds || !containerElement || $currentOrchestration === null) return;
+
+    const screenWidth = containerElement.clientWidth;
+    const screenHeight = containerElement.clientHeight;
+
+    const fullyVisible = isContainerFullyVisible(containerBounds, viewport, screenWidth, screenHeight);
+
+    // Trigger transition when container becomes fully visible
+    if (fullyVisible && !transitionTriggered) {
+      transitionTriggered = true;
+      zoomToOrchestration();
+    }
+
+    // Reset trigger when zoomed back in (container not fully visible)
+    if (!fullyVisible) {
+      transitionTriggered = false;
+    }
+  }
+
+  // Reset transition state when returning to data-graph view
+  $effect(() => {
+    if ($viewLevel === 'data-graph') {
+      transitionTriggered = false;
+    }
+  });
+
+  // Handle container border click to select/deselect
+  function handleContainerClick(event: MouseEvent) {
+    event.stopPropagation();
+    containerSelected = !containerSelected;
+    console.log('[WorkflowGraph] Container clicked, selected:', containerSelected);
+  }
+
+  // Deselect container when clicking on the graph background
+  function handlePaneClick() {
+    containerSelected = false;
+  }
 
   // Sync store changes to local state based on graph type
   // Combining into a single effect to ensure proper reactivity tracking
@@ -346,6 +477,21 @@
     if (e.key === 'Control') {
       ctrlPressed = true;
     }
+    // Tab transitions to orchestration view when container is selected
+    if (e.key === 'Tab') {
+      console.log('[WorkflowGraph] Tab pressed, containerSelected:', containerSelected);
+      if (containerSelected) {
+        e.preventDefault();
+        containerSelected = false;
+        console.log('[WorkflowGraph] Transitioning to orchestration view');
+        zoomToOrchestration();
+      }
+    }
+    // Escape deselects the container
+    if (e.key === 'Escape' && containerSelected) {
+      e.preventDefault();
+      containerSelected = false;
+    }
   }
 
   function handleKeyUp(e: KeyboardEvent) {
@@ -465,6 +611,7 @@
 <div
   class="workflow-graph-container w-full h-full"
   class:cutting={isCutting}
+  bind:this={containerElement}
   ondrop={handleDrop}
   ondragover={handleDragOver}
   onmousedown={handlePaneMouseDown}
@@ -494,6 +641,9 @@
     onreconnectstart={handleReconnectStart}
     onreconnect={handleReconnect}
     onreconnectend={handleReconnectEnd}
+    onmove={handleMove}
+    onmoveend={handleMoveEnd}
+    onpaneclick={handlePaneClick}
     defaultEdgeOptions={{
       type: 'reconnectable',
       animated: false,
@@ -529,7 +679,144 @@
       }}
       maskColor="rgba(0, 0, 0, 0.8)"
     />
+
   </SvelteFlow>
+
+  <!-- Container border overlay (represents orchestration node boundary) -->
+  <!-- Uses edge divs for click detection so interior doesn't block canvas panning -->
+  {#if containerBounds && currentViewport}
+    {@const x = containerBounds.x * currentViewport.zoom + currentViewport.x}
+    {@const y = containerBounds.y * currentViewport.zoom + currentViewport.y}
+    {@const w = containerBounds.width * currentViewport.zoom}
+    {@const h = containerBounds.height * currentViewport.zoom}
+    {@const edgeWidth = 12}
+
+    <!-- Visual border (pointer-events: none) -->
+    <div
+      class="container-border-visual"
+      style="
+        position: absolute;
+        left: {x}px;
+        top: {y}px;
+        width: {w}px;
+        height: {h}px;
+        border: 3px solid {containerSelected ? '#93c5fd' : '#60a5fa'};
+        border-radius: 8px;
+        pointer-events: none;
+        z-index: 1;
+        box-shadow:
+          0 0 15px rgba(96, 165, 250, 0.4),
+          0 0 30px rgba(96, 165, 250, 0.2),
+          inset 0 0 15px rgba(96, 165, 250, 0.05);
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      "
+    ></div>
+
+    <!-- Clickable edge zones (invisible, only for click detection) -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="container-edge top"
+      onclick={handleContainerClick}
+      style="
+        position: absolute;
+        left: {x}px;
+        top: {y - edgeWidth/2}px;
+        width: {w}px;
+        height: {edgeWidth}px;
+        cursor: pointer;
+        pointer-events: auto;
+        z-index: 2;
+      "
+    ></div>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="container-edge bottom"
+      onclick={handleContainerClick}
+      style="
+        position: absolute;
+        left: {x}px;
+        top: {y + h - edgeWidth/2}px;
+        width: {w}px;
+        height: {edgeWidth}px;
+        cursor: pointer;
+        pointer-events: auto;
+        z-index: 2;
+      "
+    ></div>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="container-edge left"
+      onclick={handleContainerClick}
+      style="
+        position: absolute;
+        left: {x - edgeWidth/2}px;
+        top: {y}px;
+        width: {edgeWidth}px;
+        height: {h}px;
+        cursor: pointer;
+        pointer-events: auto;
+        z-index: 2;
+      "
+    ></div>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="container-edge right"
+      onclick={handleContainerClick}
+      style="
+        position: absolute;
+        left: {x + w - edgeWidth/2}px;
+        top: {y}px;
+        width: {edgeWidth}px;
+        height: {h}px;
+        cursor: pointer;
+        pointer-events: auto;
+        z-index: 2;
+      "
+    ></div>
+
+    <!-- Input anchor (left side) -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="container-anchor input"
+      style="
+        position: absolute;
+        left: {x - 8}px;
+        top: {y + h / 2 - 8}px;
+        width: 16px;
+        height: 16px;
+        background: #3b82f6;
+        border: 2px solid #1e3a5f;
+        border-radius: 50%;
+        pointer-events: auto;
+        z-index: 3;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      "
+    ></div>
+    <!-- Output anchor (right side) -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="container-anchor output"
+      style="
+        position: absolute;
+        left: {x + w - 8}px;
+        top: {y + h / 2 - 8}px;
+        width: 16px;
+        height: 16px;
+        background: #3b82f6;
+        border: 2px solid #1e3a5f;
+        border-radius: 50%;
+        pointer-events: auto;
+        z-index: 3;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      "
+    ></div>
+  {/if}
 
   <!-- Cut line overlay -->
   {#if isCutting && cutStart && cutEnd}
@@ -545,6 +832,7 @@
       />
     </svg>
   {/if}
+
 </div>
 
 <style>
@@ -562,13 +850,15 @@
   }
 
   :global(.svelte-flow__edge-path) {
-    stroke: #525252;
+    stroke: #60a5fa;
     stroke-width: 2px;
+    filter: drop-shadow(0 0 3px rgba(96, 165, 250, 0.6));
   }
 
   :global(.svelte-flow__edge.selected .svelte-flow__edge-path) {
-    stroke: #4f46e5;
+    stroke: #93c5fd;
     stroke-width: 3px;
+    filter: drop-shadow(0 0 6px rgba(147, 197, 253, 0.8));
   }
 
   :global(.svelte-flow__controls) {
@@ -604,17 +894,20 @@
   }
 
   :global(.svelte-flow__handle.connecting) {
-    background: #4f46e5 !important;
+    background: #60a5fa !important;
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
   }
 
   :global(.svelte-flow__connection-line) {
-    stroke: #4f46e5;
+    stroke: #60a5fa;
     stroke-width: 2px;
+    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.7));
   }
 
   /* Cut tool styles */
   .workflow-graph-container {
     position: relative;
+    overflow: hidden;
   }
 
   .workflow-graph-container.cutting {
@@ -630,4 +923,5 @@
     pointer-events: none;
     z-index: 1000;
   }
+
 </style>
