@@ -4,6 +4,7 @@ import type {
   WorkflowGraph,
   WorkflowMetadata,
   NodeExecutionState,
+  NodeExecutionInfo,
   NodeDefinition,
 } from '../services/workflow/types';
 import type { NodeGroup, PortMapping, CreateGroupResult } from '../services/workflow/groupTypes';
@@ -42,7 +43,7 @@ export const workflowMetadata = writable<WorkflowMetadata | null>(null);
 export const isDirty = writable<boolean>(false);
 export const isExecuting = writable<boolean>(false);
 export const isEditing = writable<boolean>(true);
-export const nodeExecutionStates = writable<Map<string, NodeExecutionState>>(new Map());
+export const nodeExecutionStates = writable<Map<string, NodeExecutionInfo>>(new Map());
 
 /** Current viewport state (for saving/restoring during zoom transitions) */
 export const currentViewport = writable<ViewportState>({ x: 0, y: 0, zoom: 1 });
@@ -142,12 +143,17 @@ export function updateNodeData(nodeId: string, data: Record<string, unknown>) {
   isDirty.set(true);
 }
 
-export function setNodeExecutionState(nodeId: string, state: NodeExecutionState) {
+export function setNodeExecutionState(nodeId: string, state: NodeExecutionState, errorMessage?: string) {
   nodeExecutionStates.update((map) => {
     const newMap = new Map(map);
-    newMap.set(nodeId, state);
+    newMap.set(nodeId, { state, errorMessage });
     return newMap;
   });
+}
+
+/** Get the execution info for a node (state + error message) */
+export function getNodeExecutionInfo(nodeId: string): NodeExecutionInfo | undefined {
+  return get(nodeExecutionStates).get(nodeId);
 }
 
 export function resetExecutionStates() {

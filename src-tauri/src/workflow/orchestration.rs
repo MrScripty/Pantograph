@@ -2,81 +2,27 @@
 
 use node_engine::{
     DataGraphExecutor, EventSink, OrchestrationEdge, OrchestrationExecutor,
-    OrchestrationGraph, OrchestrationNode, OrchestrationNodeType, OrchestrationResult,
-    Result as EngineResult, WorkflowGraph,
+    OrchestrationGraph, OrchestrationNode, OrchestrationNodeType,
+    OrchestrationResult, Result as EngineResult, WorkflowGraph,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{command, ipc::Channel, State};
+use tauri::{command, ipc::Channel, AppHandle, State};
 use tokio::sync::RwLock;
 
 use super::events::WorkflowEvent;
 use super::SharedExecutionManager;
-use crate::llm::gateway::SharedGateway;
 use crate::agent::rag::SharedRagManager;
+use crate::llm::gateway::SharedGateway;
 
-/// Storage for orchestration graphs.
-#[derive(Debug, Default)]
-pub struct OrchestrationStore {
-    /// Stored orchestration graphs, keyed by ID.
-    graphs: HashMap<String, OrchestrationGraph>,
-    /// Mapping from data graph node IDs to their workflow graphs.
-    data_graphs: HashMap<String, WorkflowGraph>,
-}
-
-impl OrchestrationStore {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn get_graph(&self, id: &str) -> Option<&OrchestrationGraph> {
-        self.graphs.get(id)
-    }
-
-    pub fn insert_graph(&mut self, graph: OrchestrationGraph) {
-        self.graphs.insert(graph.id.clone(), graph);
-    }
-
-    pub fn remove_graph(&mut self, id: &str) -> Option<OrchestrationGraph> {
-        self.graphs.remove(id)
-    }
-
-    pub fn list_graphs(&self) -> Vec<OrchestrationGraphMetadata> {
-        self.graphs
-            .values()
-            .map(|g| OrchestrationGraphMetadata {
-                id: g.id.clone(),
-                name: g.name.clone(),
-                description: g.description.clone(),
-                node_count: g.nodes.len(),
-            })
-            .collect()
-    }
-
-    pub fn get_data_graph(&self, id: &str) -> Option<&WorkflowGraph> {
-        self.data_graphs.get(id)
-    }
-
-    pub fn insert_data_graph(&mut self, id: String, graph: WorkflowGraph) {
-        self.data_graphs.insert(id, graph);
-    }
-}
+// Re-export types from node_engine for use by other modules
+pub use node_engine::{OrchestrationGraphMetadata, OrchestrationStore};
 
 /// Shared orchestration store type.
 pub type SharedOrchestrationStore = Arc<RwLock<OrchestrationStore>>;
-
-/// Metadata for an orchestration graph (for listing).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OrchestrationGraphMetadata {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub node_count: usize,
-}
 
 /// Data graph executor that uses the PantographTaskExecutor.
 pub struct PantographDataGraphExecutor {
@@ -85,6 +31,7 @@ pub struct PantographDataGraphExecutor {
     rag_manager: SharedRagManager,
     execution_manager: SharedExecutionManager,
     project_root: PathBuf,
+    app_handle: AppHandle,
 }
 
 impl PantographDataGraphExecutor {
@@ -94,6 +41,7 @@ impl PantographDataGraphExecutor {
         rag_manager: SharedRagManager,
         execution_manager: SharedExecutionManager,
         project_root: PathBuf,
+        app_handle: AppHandle,
     ) -> Self {
         Self {
             store,
@@ -101,6 +49,7 @@ impl PantographDataGraphExecutor {
             rag_manager,
             execution_manager,
             project_root,
+            app_handle,
         }
     }
 }
@@ -125,11 +74,12 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         let graph = graph.clone();
         drop(store);
 
-        // Create a task executor for this data graph
-        let task_executor = super::task_executor::PantographTaskExecutor::new(
+        // Create a task executor for this data graph with app handle for backend lifecycle
+        let task_executor = super::task_executor::PantographTaskExecutor::with_app_handle(
             self.gateway.clone(),
             self.rag_manager.clone(),
             self.project_root.clone(),
+            self.app_handle.clone(),
         );
 
         // Create graph-flow context and demand engine
@@ -273,7 +223,7 @@ pub async fn create_orchestration(
     ));
 
     let mut store = orchestration_store.write().await;
-    store.insert_graph(graph.clone());
+    store.insert_graph(graph.clone()).map_err(|e| e.to_string())?;
 
     Ok(graph)
 }
@@ -307,8 +257,7 @@ pub async fn save_orchestration(
     orchestration_store: State<'_, SharedOrchestrationStore>,
 ) -> Result<(), String> {
     let mut store = orchestration_store.write().await;
-    store.insert_graph(graph);
-    Ok(())
+    store.insert_graph(graph).map_err(|e| e.to_string())
 }
 
 /// Delete an orchestration graph.
@@ -320,6 +269,7 @@ pub async fn delete_orchestration(
     let mut store = orchestration_store.write().await;
     store
         .remove_graph(&id)
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Orchestration '{}' not found", id))?;
     Ok(())
 }
@@ -333,12 +283,15 @@ pub async fn add_orchestration_node(
 ) -> Result<OrchestrationGraph, String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     graph.nodes.push(node);
-    Ok(graph.clone())
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    Ok(updated)
 }
 
 /// Remove a node from an orchestration graph.
@@ -350,8 +303,7 @@ pub async fn remove_orchestration_node(
 ) -> Result<OrchestrationGraph, String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     // Remove the node
@@ -361,7 +313,11 @@ pub async fn remove_orchestration_node(
         .edges
         .retain(|e| e.source != node_id && e.target != node_id);
 
-    Ok(graph.clone())
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    Ok(updated)
 }
 
 /// Add an edge to an orchestration graph.
@@ -373,12 +329,15 @@ pub async fn add_orchestration_edge(
 ) -> Result<OrchestrationGraph, String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     graph.edges.push(edge);
-    Ok(graph.clone())
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    Ok(updated)
 }
 
 /// Remove an edge from an orchestration graph.
@@ -390,12 +349,15 @@ pub async fn remove_orchestration_edge(
 ) -> Result<OrchestrationGraph, String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     graph.edges.retain(|e| e.id != edge_id);
-    Ok(graph.clone())
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    Ok(updated)
 }
 
 /// Update a node's configuration.
@@ -408,8 +370,7 @@ pub async fn update_orchestration_node(
 ) -> Result<OrchestrationGraph, String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == node_id) {
@@ -418,7 +379,11 @@ pub async fn update_orchestration_node(
         return Err(format!("Node '{}' not found", node_id));
     }
 
-    Ok(graph.clone())
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    Ok(updated)
 }
 
 /// Update a node's position.
@@ -432,16 +397,20 @@ pub async fn update_orchestration_node_position(
 ) -> Result<(), String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == node_id) {
         node.position = (x, y);
-        Ok(())
     } else {
-        Err(format!("Node '{}' not found", node_id))
+        return Err(format!("Node '{}' not found", node_id));
     }
+
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Associate a data graph with a DataGraph node.
@@ -454,8 +423,7 @@ pub async fn set_orchestration_data_graph(
 ) -> Result<(), String> {
     let mut store = orchestration_store.write().await;
     let graph = store
-        .graphs
-        .get_mut(&orchestration_id)
+        .get_graph_mut(&orchestration_id)
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
 
     // Verify the node exists and is a DataGraph node
@@ -470,6 +438,10 @@ pub async fn set_orchestration_data_graph(
     }
 
     graph.data_graphs.insert(node_id, data_graph_id);
+    let updated = graph.clone();
+
+    // Persist the change
+    store.insert_graph(updated).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -488,6 +460,7 @@ pub async fn register_data_graph(
 /// Execute an orchestration graph.
 #[command]
 pub async fn execute_orchestration(
+    app: AppHandle,
     orchestration_id: String,
     initial_data: HashMap<String, Value>,
     orchestration_store: State<'_, SharedOrchestrationStore>,
@@ -507,13 +480,14 @@ pub async fn execute_orchestration(
     // Get project root from environment or use current directory
     let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    // Create the data graph executor
+    // Create the data graph executor with app handle for backend lifecycle
     let data_executor = PantographDataGraphExecutor::new(
         orchestration_store.inner().clone(),
         gateway.inner().clone(),
         rag_manager.inner().clone(),
         execution_manager.inner().clone(),
         project_root,
+        app,
     );
 
     // Create the orchestration executor

@@ -10,9 +10,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use node_engine::{Context, NodeEngineError, Result, TaskExecutor};
+use tauri::AppHandle;
 use tokio::sync::RwLock;
 
 use crate::agent::rag::RagManager;
+use crate::llm::backend::BackendConfig;
 use crate::llm::gateway::InferenceGateway;
 
 /// Context keys for storing Pantograph-specific resources in graph-flow Context
@@ -34,6 +36,8 @@ pub struct PantographTaskExecutor {
     rag_manager: Arc<RwLock<RagManager>>,
     /// Project root directory
     project_root: PathBuf,
+    /// Tauri app handle for spawning sidecars
+    app_handle: Option<AppHandle>,
 }
 
 impl PantographTaskExecutor {
@@ -47,6 +51,22 @@ impl PantographTaskExecutor {
             gateway,
             rag_manager,
             project_root,
+            app_handle: None,
+        }
+    }
+
+    /// Create a new Pantograph task executor with app handle
+    pub fn with_app_handle(
+        gateway: Arc<InferenceGateway>,
+        rag_manager: Arc<RwLock<RagManager>>,
+        project_root: PathBuf,
+        app_handle: AppHandle,
+    ) -> Self {
+        Self {
+            gateway,
+            rag_manager,
+            project_root,
+            app_handle: Some(app_handle),
         }
     }
 
@@ -75,6 +95,23 @@ impl PantographTaskExecutor {
 
         let mut outputs = HashMap::new();
         outputs.insert("text".to_string(), serde_json::json!(text));
+        Ok(outputs)
+    }
+
+    /// Execute a linked input task (reads value from linked GUI element)
+    async fn execute_linked_input(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        // Get linked_value from _data (injected by frontend before execution)
+        let value = inputs
+            .get("_data")
+            .and_then(|d| d.get("linked_value"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let mut outputs = HashMap::new();
+        outputs.insert("value".to_string(), serde_json::json!(value));
         Ok(outputs)
     }
 
@@ -636,6 +673,327 @@ impl PantographTaskExecutor {
 
         (current.clone(), true)
     }
+
+    /// Execute a model provider task (provides model name to inference nodes)
+    async fn execute_model_provider(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        // Get model_name from _data (UI input) or from input port
+        let model_name = inputs
+            .get("_data")
+            .and_then(|d| d.get("model_name"))
+            .and_then(|m| m.as_str())
+            .or_else(|| inputs.get("model_name").and_then(|m| m.as_str()))
+            .unwrap_or("llama2");
+
+        let mut outputs = HashMap::new();
+        outputs.insert("model_name".to_string(), serde_json::json!(model_name));
+        outputs.insert(
+            "model_info".to_string(),
+            serde_json::json!({
+                "name": model_name,
+                "model_type": "llm"
+            }),
+        );
+
+        log::debug!("ModelProvider: providing model '{}'", model_name);
+        Ok(outputs)
+    }
+
+    /// Execute an Ollama inference task
+    async fn execute_ollama_inference(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        // Get required inputs
+        let prompt = inputs
+            .get("prompt")
+            .and_then(|p| p.as_str())
+            .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+
+        let model = inputs
+            .get("model")
+            .and_then(|m| m.as_str())
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(
+                    "Missing model input. Connect a Model Provider node.".to_string(),
+                )
+            })?;
+
+        // Get optional inputs
+        let system_prompt = inputs
+            .get("system_prompt")
+            .and_then(|s| s.as_str());
+
+        let temperature = inputs
+            .get("temperature")
+            .and_then(|t| t.as_f64());
+
+        let max_tokens = inputs
+            .get("max_tokens")
+            .and_then(|m| m.as_i64());
+
+        // Build Ollama API request
+        let mut request_body = serde_json::json!({
+            "model": model,
+            "prompt": prompt,
+            "stream": false
+        });
+
+        if let Some(sys) = system_prompt {
+            request_body["system"] = serde_json::json!(sys);
+        }
+
+        // Add options if provided
+        let mut options = serde_json::Map::new();
+        if let Some(temp) = temperature {
+            options.insert("temperature".to_string(), serde_json::json!(temp));
+        }
+        if let Some(max) = max_tokens {
+            options.insert("num_predict".to_string(), serde_json::json!(max));
+        }
+        if !options.is_empty() {
+            request_body["options"] = serde_json::Value::Object(options);
+        }
+
+        // Make the HTTP request to Ollama
+        let client = reqwest::Client::new();
+        let url = "http://localhost:11434/api/generate";
+
+        log::debug!(
+            "OllamaInference: sending request to {} with model '{}'",
+            url,
+            model
+        );
+
+        let http_response = client
+            .post(url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Failed to connect to Ollama server: {}. Is Ollama running?",
+                    e
+                ))
+            })?;
+
+        if !http_response.status().is_success() {
+            let status = http_response.status();
+            let error_body = http_response.text().await.unwrap_or_default();
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Ollama API error ({}): {}",
+                status, error_body
+            )));
+        }
+
+        let response_json: serde_json::Value = http_response.json().await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to parse Ollama response: {}", e))
+        })?;
+
+        let response_text = response_json["response"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        let model_used = response_json["model"]
+            .as_str()
+            .unwrap_or(model)
+            .to_string();
+
+        let mut outputs = HashMap::new();
+        outputs.insert("response".to_string(), serde_json::json!(response_text));
+        outputs.insert("model_used".to_string(), serde_json::json!(model_used));
+
+        log::debug!(
+            "OllamaInference: completed with {} chars using model '{}'",
+            response_text.len(),
+            model_used
+        );
+
+        Ok(outputs)
+    }
+
+    /// Execute a puma-lib task (provides model path from UI selection)
+    async fn execute_puma_lib(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        // Get modelPath from _data (UI input)
+        let model_path = inputs
+            .get("_data")
+            .and_then(|d| d.get("modelPath"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
+
+        let mut outputs = HashMap::new();
+        outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+
+        log::debug!("PumaLib: providing model path '{}'", model_path);
+        Ok(outputs)
+    }
+
+    /// Execute a llama.cpp inference task
+    ///
+    /// Uses the InferenceGateway to manage the llama.cpp server lifecycle.
+    /// The gateway will automatically start the server with the specified model
+    /// if it's not already running.
+    async fn execute_llamacpp_inference(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        // Get required inputs
+        let prompt = inputs
+            .get("prompt")
+            .and_then(|p| p.as_str())
+            .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+
+        let model_path = inputs
+            .get("model_path")
+            .and_then(|m| m.as_str())
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(
+                    "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+                )
+            })?;
+
+        // Get optional inputs
+        let system_prompt = inputs.get("system_prompt").and_then(|s| s.as_str());
+
+        let temperature = inputs
+            .get("temperature")
+            .and_then(|t| t.as_f64())
+            .unwrap_or(0.7);
+
+        let max_tokens = inputs
+            .get("max_tokens")
+            .and_then(|m| m.as_i64())
+            .unwrap_or(512);
+
+        // Get app handle (required for starting the backend)
+        let app_handle = self.app_handle.as_ref().ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "AppHandle not available. Use with_app_handle() constructor.".to_string(),
+            )
+        })?;
+
+        // Build backend config for the model
+        let config = BackendConfig {
+            model_path: Some(PathBuf::from(model_path)),
+            mmproj_path: None,
+            model_name: None,
+            device: Some("auto".to_string()),
+            gpu_layers: Some(-1), // Use all GPU layers
+            embedding_mode: false,
+        };
+
+        // Ensure the gateway is ready with the correct model
+        // If not ready or model changed, start/restart the backend
+        if !self.gateway.is_ready().await {
+            log::info!(
+                "LlamaCppInference: Starting llama.cpp server with model '{}'",
+                model_path
+            );
+            self.gateway
+                .start(&config, app_handle)
+                .await
+                .map_err(|e| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "Failed to start llama.cpp server: {}",
+                        e
+                    ))
+                })?;
+
+            // Wait for the server to be ready (with timeout)
+            let max_wait = std::time::Duration::from_secs(60);
+            let start = std::time::Instant::now();
+            while !self.gateway.is_ready().await {
+                if start.elapsed() > max_wait {
+                    return Err(NodeEngineError::ExecutionFailed(
+                        "Timeout waiting for llama.cpp server to start".to_string(),
+                    ));
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            log::info!("LlamaCppInference: Server is ready");
+        }
+
+        // Get the base URL from the gateway
+        let base_url = self.gateway.base_url().await.ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "llama.cpp server started but no URL available".to_string(),
+            )
+        })?;
+
+        // Build full prompt with system prompt if provided
+        let full_prompt = if let Some(sys) = system_prompt {
+            format!("{}\n\n{}", sys, prompt)
+        } else {
+            prompt.to_string()
+        };
+
+        // Build llama.cpp server API request
+        // Note: llama-server uses /completion endpoint
+        let request_body = serde_json::json!({
+            "prompt": full_prompt,
+            "n_predict": max_tokens,
+            "temperature": temperature,
+            "stop": ["</s>", "<|im_end|>", "<|end|>"],
+            "stream": false
+        });
+
+        // Make the HTTP request to llama.cpp server via gateway URL
+        let client = reqwest::Client::new();
+        let url = format!("{}/completion", base_url);
+
+        log::debug!(
+            "LlamaCppInference: sending request to {} with model '{}'",
+            url,
+            model_path
+        );
+
+        let http_response = client
+            .post(&url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Failed to connect to llama.cpp server at {}: {}",
+                    url, e
+                ))
+            })?;
+
+        if !http_response.status().is_success() {
+            let status = http_response.status();
+            let error_body = http_response.text().await.unwrap_or_default();
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "llama.cpp API error ({}): {}",
+                status, error_body
+            )));
+        }
+
+        let response_json: serde_json::Value = http_response.json().await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to parse llama.cpp response: {}", e))
+        })?;
+
+        let response_text = response_json["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        let mut outputs = HashMap::new();
+        outputs.insert("response".to_string(), serde_json::json!(response_text));
+        outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+
+        log::debug!(
+            "LlamaCppInference: completed with {} chars",
+            response_text.len()
+        );
+
+        Ok(outputs)
+    }
 }
 
 #[async_trait]
@@ -675,6 +1033,7 @@ impl TaskExecutor for PantographTaskExecutor {
         // Dispatch to appropriate handler based on node type
         match node_type.as_str() {
             "text-input" => self.execute_text_input(&inputs).await,
+            "linked-input" => self.execute_linked_input(&inputs).await,
             "image-input" => self.execute_image_input(&inputs).await,
             "text-output" => self.execute_text_output(&inputs).await,
             "component-preview" => self.execute_component_preview(&inputs).await,
@@ -691,10 +1050,18 @@ impl TaskExecutor for PantographTaskExecutor {
             // New processing nodes
             "validator" => self.execute_validator(&inputs).await,
             "json-filter" => self.execute_json_filter(&inputs).await,
+            // Model and inference nodes
+            "model-provider" => self.execute_model_provider(&inputs).await,
+            "ollama-inference" => self.execute_ollama_inference(&inputs).await,
+            "puma-lib" => self.execute_puma_lib(&inputs).await,
+            "llamacpp-inference" => self.execute_llamacpp_inference(&inputs).await,
             _ => {
                 log::warn!("Unknown node type: {}", node_type);
-                // Return empty outputs for unknown types
-                Ok(HashMap::new())
+                // Return error for unknown types instead of empty output
+                Err(NodeEngineError::ExecutionFailed(format!(
+                    "Unknown node type: {}. Available types: text-input, text-output, llm-inference, ollama-inference, model-provider, etc.",
+                    node_type
+                )))
             }
         }
     }

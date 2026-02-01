@@ -9,6 +9,8 @@
     clearWorkflow,
     loadDefaultWorkflow,
     nodeDefinitions,
+    edges,
+    updateNodeData,
   } from '../stores/workflowStore';
   import {
     isReadOnly,
@@ -25,35 +27,86 @@
 
   let workflowName = $derived($currentGraphName || 'Untitled Workflow');
 
+  // Store unsubscribe function at module scope so event handler can access it
+  let currentUnsubscribe: (() => void) | null = null;
+
   async function handleRun() {
     if ($isExecuting) return;
 
     isExecuting.set(true);
     resetExecutionStates();
 
-    const unsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
+    // Subscribe to events - will be cleaned up in handleWorkflowEvent on completion/failure
+    currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
 
     try {
       await workflowService.executeWorkflow($workflowGraph);
+      // Don't unsubscribe here - wait for Completed/Failed events
     } catch (error) {
       console.error('Workflow execution failed:', error);
-    } finally {
+      // Only cleanup on synchronous errors (e.g., invoke failed)
       isExecuting.set(false);
-      unsubscribe();
+      if (currentUnsubscribe) {
+        currentUnsubscribe();
+        currentUnsubscribe = null;
+      }
+    }
+  }
+
+  function cleanupExecution() {
+    isExecuting.set(false);
+    if (currentUnsubscribe) {
+      currentUnsubscribe();
+      currentUnsubscribe = null;
     }
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
+    console.log('Workflow event:', event.type, event.data);
+
     switch (event.type) {
       case 'NodeStarted':
         setNodeExecutionState((event.data as { node_id: string }).node_id, 'running');
         break;
-      case 'NodeCompleted':
-        setNodeExecutionState((event.data as { node_id: string }).node_id, 'success');
+      case 'NodeCompleted': {
+        const completedData = event.data as { node_id: string; outputs?: Record<string, unknown> };
+        setNodeExecutionState(completedData.node_id, 'success');
+
+        // Propagate outputs to connected downstream nodes
+        if (completedData.outputs) {
+          const currentEdges = get(edges);
+          const outgoingEdges = currentEdges.filter(e => e.source === completedData.node_id);
+
+          for (const edge of outgoingEdges) {
+            const sourceHandle = edge.sourceHandle || '';
+            const outputValue = completedData.outputs[sourceHandle];
+            if (outputValue !== undefined) {
+              // Update the target node's data with the incoming value
+              const targetHandle = edge.targetHandle || '';
+              updateNodeData(edge.target, {
+                [targetHandle]: outputValue
+              });
+            }
+          }
+        }
         break;
-      case 'NodeError':
-        setNodeExecutionState((event.data as { node_id: string }).node_id, 'error');
+      }
+      case 'NodeError': {
+        const errorData = event.data as { node_id: string; error: string };
+        setNodeExecutionState(errorData.node_id, 'error', errorData.error);
+        console.error(`Node ${errorData.node_id} failed:`, errorData.error);
         break;
+      }
+      case 'Completed':
+        console.log('Workflow completed successfully');
+        cleanupExecution();
+        break;
+      case 'Failed': {
+        const failedData = event.data as { error: string };
+        console.error('Workflow failed:', failedData.error);
+        cleanupExecution();
+        break;
+      }
     }
   }
 

@@ -14,7 +14,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{command, ipc::Channel, State};
+use tauri::{command, ipc::Channel, AppHandle, State};
 use uuid::Uuid;
 
 use crate::agent::rag::SharedRagManager;
@@ -198,6 +198,7 @@ pub fn list_workflows() -> Result<Vec<WorkflowMetadata>, String> {
 /// Returns the execution ID which can be used for subsequent operations.
 #[command]
 pub async fn execute_workflow_v2(
+    app: AppHandle,
     graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
@@ -225,11 +226,12 @@ pub async fn execute_workflow_v2(
         .create_execution(&execution_id, ne_graph, event_adapter.clone())
         .await;
 
-    // Create task executor
-    let task_executor = PantographTaskExecutor::new(
+    // Create task executor with app handle for backend lifecycle management
+    let task_executor = PantographTaskExecutor::with_app_handle(
         gateway.inner().clone(),
         rag_manager.inner().clone(),
         project_root,
+        app,
     );
 
     // Find terminal nodes (nodes with no outgoing edges)
@@ -496,6 +498,7 @@ pub async fn create_workflow_session(
 /// executes it by demanding outputs from all terminal nodes (nodes with no outgoing edges).
 #[command]
 pub async fn run_workflow_session(
+    app: AppHandle,
     session_id: String,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
@@ -512,11 +515,12 @@ pub async fn run_workflow_session(
     // Create event adapter and update the executor's event sink
     let event_adapter = Arc::new(TauriEventAdapter::new(channel, &session_id));
 
-    // Create task executor
-    let task_executor = PantographTaskExecutor::new(
+    // Create task executor with app handle for backend lifecycle management
+    let task_executor = PantographTaskExecutor::with_app_handle(
         gateway.inner().clone(),
         rag_manager.inner().clone(),
         project_root,
+        app,
     );
 
     // Get the graph to find terminal nodes, then execute
