@@ -52,11 +52,11 @@ fn oom_error_message(hint: Option<&str>) -> String {
 pub enum ServerMode {
     /// No server running
     None,
-    /// Sidecar running in inference mode (VLM with vision support)
+    /// Sidecar running in inference mode (text-only or VLM with vision support)
     SidecarInference {
         port: u16,
         model_path: String,
-        mmproj_path: String,
+        mmproj_path: Option<String>,
     },
     /// Sidecar running in embedding mode (for RAG indexing)
     SidecarEmbedding {
@@ -128,12 +128,15 @@ impl LlamaServer {
         Ok(())
     }
 
-    /// Start sidecar in inference mode (VLM with vision support)
+    /// Start sidecar in inference mode (text-only or VLM with vision support)
+    ///
+    /// For text-only models, pass `None` for `mmproj_path`.
+    /// For vision/multimodal models (like LLaVA), pass `Some(path)` for the mmproj file.
     pub async fn start_sidecar_inference(
         &mut self,
         app: &AppHandle,
         model_path: &str,
-        mmproj_path: &str,
+        mmproj_path: Option<&str>,
         device: &DeviceConfig,
     ) -> Result<(), String> {
         // Stop any existing connection
@@ -146,16 +149,21 @@ impl LlamaServer {
         let port_str = port.to_string();
         let context_size_str = defaults::CONTEXT_SIZE.to_string();
 
-        // Build base args
+        // Build base args (without mmproj - added conditionally below)
         let mut args: Vec<String> = vec![
             "-m".to_string(), model_path.to_string(),
-            "--mmproj".to_string(), mmproj_path.to_string(),
             "--port".to_string(), port_str,
             "-c".to_string(), context_size_str,
             "--host".to_string(), hosts::LOCAL.to_string(),
             "--jinja".to_string(),
             "-ngl".to_string(), gpu_layers_str,
         ];
+
+        // Add mmproj only for vision/multimodal models
+        if let Some(mmproj) = mmproj_path {
+            args.push("--mmproj".to_string());
+            args.push(mmproj.to_string());
+        }
 
         let pid_file = app
             .path()
@@ -193,7 +201,7 @@ impl LlamaServer {
         self.mode = ServerMode::SidecarInference {
             port,
             model_path: model_path.to_string(),
-            mmproj_path: mmproj_path.to_string(),
+            mmproj_path: mmproj_path.map(|s| s.to_string()),
         };
 
         self.wait_for_ready(&mut rx).await
