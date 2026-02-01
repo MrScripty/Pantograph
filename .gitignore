@@ -27,6 +27,15 @@ src-tauri/binaries/
 # Ignore everything in generated/ (has its own nested git repo for undo/redo)
 /src/generated/
 
+# Claude Code local settings
+.claude/
+
+# User-created workflows and orchestrations
+# Default examples (lowercase-hyphenated) are tracked; user creations are ignored
+.pantograph/orchestrations/
+.pantograph/workflows/*
+!.pantograph/workflows/coding-agent.json
+
 # Project data directory (downloaded docs, vector embeddings, etc.)
 /data/
 
