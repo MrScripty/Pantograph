@@ -4,6 +4,8 @@ members = [
     "crates/inference",
     "crates/node-engine",
     "crates/workflow-nodes",
+    "crates/pantograph-rustler",
+    "crates/pantograph-uniffi",
     "src-tauri",
 ]
 
