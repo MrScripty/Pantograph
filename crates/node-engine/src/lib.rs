@@ -52,20 +52,26 @@
 //! }
 //! ```
 
+pub mod builder;
 pub mod descriptor;
 pub mod engine;
 pub mod error;
 pub mod events;
 pub mod groups;
 pub mod orchestration;
+pub mod registry;
 pub mod tasks;
 pub mod types;
 pub mod undo;
+pub mod validation;
 
 // Re-export key types from engine
 pub use engine::{CacheStats, CachedOutput, DemandEngine, TaskExecutor, WorkflowExecutor};
 pub use error::{NodeEngineError, Result};
-pub use events::{EventError, EventSink, NullEventSink, VecEventSink, WorkflowEvent};
+pub use events::{
+    BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,
+    NullEventSink, VecEventSink, WorkflowEvent,
+};
 pub use types::{
     EdgeId, ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, NodeId,
     PortDataType, PortDefinition, PortId, WorkflowGraph,
@@ -83,6 +89,12 @@ pub use descriptor::{PortMetadata, TaskDescriptor, TaskMetadata};
 // Re-export ContextKeys helper (only framework type from tasks module)
 pub use tasks::ContextKeys;
 
+// Re-export registry types
+pub use registry::{
+    CallbackNodeExecutor, NodeExecutor, NodeExecutorFactory, NodeRegistry, RegistryTaskExecutor,
+    SyncCallbackNodeExecutor,
+};
+
 // Re-export orchestration types
 pub use orchestration::{
     ConditionConfig, DataGraphConfig, DataGraphExecutor, LoopConfig, NodeExecutionResult,
@@ -91,6 +103,12 @@ pub use orchestration::{
     OrchestrationNode, OrchestrationNodeId, OrchestrationNodeType, OrchestrationResult,
     OrchestrationStore,
 };
+
+// Re-export builder types
+pub use builder::{OrchestrationBuilder, WorkflowBuilder};
+
+// Re-export validation types
+pub use validation::{validate_orchestration, validate_workflow, ValidationError};
 
 // Re-export graph-flow types that consumers will need
 pub use graph_flow::{Context, GraphBuilder, GraphError, NextAction, Task, TaskResult};

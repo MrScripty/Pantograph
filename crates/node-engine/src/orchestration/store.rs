@@ -275,10 +275,7 @@ mod tests {
     fn test_data_graph_storage() {
         let mut store = OrchestrationStore::new();
 
-        let workflow = WorkflowGraph {
-            nodes: vec![],
-            edges: vec![],
-        };
+        let workflow = WorkflowGraph::new("test-wf", "Test Workflow");
 
         store.insert_data_graph("my-workflow".to_string(), workflow);
         assert!(store.get_data_graph("my-workflow").is_some());
