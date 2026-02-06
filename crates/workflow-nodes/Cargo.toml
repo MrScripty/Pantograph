@@ -22,7 +22,7 @@ arrow-array = "56"
 arrow-schema = "56"
 
 # Async/Serialization
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "time"] }
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

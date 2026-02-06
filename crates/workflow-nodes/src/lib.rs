@@ -16,6 +16,7 @@ pub mod input;
 pub mod output;
 pub mod processing;
 pub mod storage;
+pub mod system;
 
 // Re-export all tasks for convenience
 pub use control::*;
@@ -23,3 +24,4 @@ pub use input::*;
 pub use output::*;
 pub use processing::*;
 pub use storage::*;
+pub use system::*;
