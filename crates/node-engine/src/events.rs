@@ -201,6 +201,121 @@ impl EventSink for VecEventSink {
     }
 }
 
+/// Event sink that broadcasts events via a tokio broadcast channel
+///
+/// Allows multiple consumers to receive events concurrently. Useful for
+/// fanout to multiple listeners (UI, logging, metrics, etc.).
+///
+/// If no receivers are listening, events are silently dropped.
+pub struct BroadcastEventSink {
+    sender: tokio::sync::broadcast::Sender<WorkflowEvent>,
+}
+
+impl BroadcastEventSink {
+    /// Create a new broadcast event sink with the given channel capacity
+    pub fn new(capacity: usize) -> (Self, tokio::sync::broadcast::Receiver<WorkflowEvent>) {
+        let (sender, receiver) = tokio::sync::broadcast::channel(capacity);
+        (Self { sender }, receiver)
+    }
+
+    /// Subscribe to this broadcast sink
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<WorkflowEvent> {
+        self.sender.subscribe()
+    }
+
+    /// Get the number of active receivers
+    pub fn receiver_count(&self) -> usize {
+        self.sender.receiver_count()
+    }
+}
+
+impl EventSink for BroadcastEventSink {
+    fn send(&self, event: WorkflowEvent) -> Result<(), EventError> {
+        let _ = self.sender.send(event);
+        Ok(())
+    }
+}
+
+/// Event sink that calls a user-provided callback for each event
+///
+/// Critical for NIF bridging: the callback can be a closure that sends
+/// events to an Elixir process or any other foreign runtime.
+pub struct CallbackEventSink {
+    callback: Box<dyn Fn(WorkflowEvent) + Send + Sync>,
+}
+
+impl CallbackEventSink {
+    /// Create a new callback event sink
+    pub fn new(callback: impl Fn(WorkflowEvent) + Send + Sync + 'static) -> Self {
+        Self {
+            callback: Box::new(callback),
+        }
+    }
+}
+
+impl EventSink for CallbackEventSink {
+    fn send(&self, event: WorkflowEvent) -> Result<(), EventError> {
+        (self.callback)(event);
+        Ok(())
+    }
+}
+
+/// Event sink that fans out events to multiple child sinks
+///
+/// All child sinks receive every event. If one child fails, the error
+/// is logged but other children still receive the event.
+pub struct CompositeEventSink {
+    sinks: Vec<Box<dyn EventSink>>,
+}
+
+impl CompositeEventSink {
+    /// Create a new composite event sink with no children
+    pub fn new() -> Self {
+        Self { sinks: Vec::new() }
+    }
+
+    /// Create with pre-built sinks
+    pub fn with_sinks(sinks: Vec<Box<dyn EventSink>>) -> Self {
+        Self { sinks }
+    }
+
+    /// Add a child sink
+    pub fn add(&mut self, sink: Box<dyn EventSink>) {
+        self.sinks.push(sink);
+    }
+
+    /// Get the number of child sinks
+    pub fn len(&self) -> usize {
+        self.sinks.len()
+    }
+
+    /// Check if there are no child sinks
+    pub fn is_empty(&self) -> bool {
+        self.sinks.is_empty()
+    }
+}
+
+impl Default for CompositeEventSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventSink for CompositeEventSink {
+    fn send(&self, event: WorkflowEvent) -> Result<(), EventError> {
+        let mut last_error = None;
+        for sink in &self.sinks {
+            if let Err(e) = sink.send(event.clone()) {
+                last_error = Some(e);
+            }
+        }
+        match last_error {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +344,77 @@ mod tests {
         let sink = NullEventSink;
         // Should not panic
         sink.send(WorkflowEvent::task_progress("task1", "exec1", 1.0, None))
+            .unwrap();
+    }
+
+    #[test]
+    fn test_broadcast_event_sink() {
+        let (sink, mut rx) = BroadcastEventSink::new(16);
+        let mut rx2 = sink.subscribe();
+
+        sink.send(WorkflowEvent::task_progress("task1", "exec1", 0.5, None))
+            .unwrap();
+
+        let event = rx.try_recv().unwrap();
+        assert!(matches!(event, WorkflowEvent::TaskProgress { .. }));
+
+        let event2 = rx2.try_recv().unwrap();
+        assert!(matches!(event2, WorkflowEvent::TaskProgress { .. }));
+    }
+
+    #[test]
+    fn test_broadcast_no_receivers() {
+        let (sink, rx) = BroadcastEventSink::new(16);
+        drop(rx);
+        // Should not error even with no receivers
+        let result = sink.send(WorkflowEvent::task_progress("task1", "exec1", 1.0, None));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_callback_event_sink() {
+        let collected = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let collected_clone = collected.clone();
+
+        let sink = CallbackEventSink::new(move |event| {
+            collected_clone.lock().unwrap().push(event);
+        });
+
+        sink.send(WorkflowEvent::task_progress("task1", "exec1", 0.5, None))
+            .unwrap();
+        sink.send(WorkflowEvent::task_progress("task1", "exec1", 1.0, None))
+            .unwrap();
+
+        assert_eq!(collected.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_composite_event_sink() {
+        let mut composite = CompositeEventSink::new();
+        let collector = std::sync::Arc::new(VecEventSink::new());
+
+        // Use a callback sink to verify events are fanned out
+        let collector_clone = collector.clone();
+        composite.add(Box::new(CallbackEventSink::new(move |event| {
+            collector_clone.events.lock().unwrap().push(event);
+        })));
+        composite.add(Box::new(NullEventSink));
+        assert_eq!(composite.len(), 2);
+
+        composite
+            .send(WorkflowEvent::task_progress("task1", "exec1", 0.5, None))
+            .unwrap();
+
+        assert_eq!(collector.events().len(), 1);
+    }
+
+    #[test]
+    fn test_composite_empty() {
+        let composite = CompositeEventSink::new();
+        assert!(composite.is_empty());
+        // Should succeed silently
+        composite
+            .send(WorkflowEvent::task_progress("task1", "exec1", 0.5, None))
             .unwrap();
     }
 }
