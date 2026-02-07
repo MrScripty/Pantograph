@@ -157,6 +157,11 @@ pub struct OrchestrationStoreResource {
     pub store: Arc<tokio::sync::RwLock<OrchestrationStore>>,
 }
 
+/// Wrapper for NodeRegistry shared via ResourceArc.
+pub struct NodeRegistryResource {
+    pub registry: Arc<tokio::sync::RwLock<node_engine::NodeRegistry>>,
+}
+
 /// Pending callback channels for bridging node execution to BEAM.
 static PENDING_CALLBACKS: std::sync::LazyLock<
     Mutex<HashMap<String, oneshot::Sender<Result<String, String>>>>,
@@ -173,6 +178,7 @@ static CALLBACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 pub struct ElixirCallbackTaskExecutor {
     pid: rustler::LocalPid,
     owned_env: Arc<Mutex<OwnedEnv>>,
+    timeout_secs: u64,
 }
 
 impl ElixirCallbackTaskExecutor {
@@ -180,7 +186,13 @@ impl ElixirCallbackTaskExecutor {
         Self {
             pid,
             owned_env: Arc::new(Mutex::new(OwnedEnv::new())),
+            timeout_secs: 300,
         }
+    }
+
+    pub fn with_timeout(mut self, timeout_secs: u64) -> Self {
+        self.timeout_secs = timeout_secs;
+        self
     }
 }
 
@@ -231,7 +243,7 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
         } // MutexGuard dropped here, before the await
 
         // Wait for response with timeout
-        let result = tokio::time::timeout(std::time::Duration::from_secs(300), rx)
+        let result = tokio::time::timeout(std::time::Duration::from_secs(self.timeout_secs), rx)
             .await
             .map_err(|_| {
                 // Clean up on timeout
@@ -514,6 +526,35 @@ fn executor_new(
     }))
 }
 
+/// Create a new WorkflowExecutor with a custom callback timeout.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_new_with_timeout(
+    env: Env,
+    graph_json: String,
+    caller_pid: rustler::LocalPid,
+    timeout_secs: u64,
+) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
+    let _ = env;
+    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(
+        ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs),
+    );
+    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
+
+    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
+
+    Ok(ResourceArc::new(WorkflowExecutorResource {
+        executor: Arc::new(tokio::sync::RwLock::new(executor)),
+        task_executor,
+        runtime: Arc::new(runtime),
+    }))
+}
+
 /// Demand output from a node (triggers lazy evaluation).
 #[rustler::nif(schedule = "DirtyCpu")]
 fn executor_demand(
@@ -603,6 +644,65 @@ fn executor_get_graph_snapshot(
         let graph = exec.get_graph_snapshot().await;
         serde_json::to_string(&graph)
             .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    })
+}
+
+// ============================================================================
+// NIF Functions - Executor I/O
+// ============================================================================
+
+/// Set an input value for a node in the executor context.
+///
+/// Sets the value at key "{node_id}.input.{port}" using ContextKeys convention.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_set_input(
+    resource: ResourceArc<WorkflowExecutorResource>,
+    node_id: String,
+    port: String,
+    value_json: String,
+) -> NifResult<Atom> {
+    let rt = &resource.runtime;
+    let executor = &resource.executor;
+
+    let value: serde_json::Value = serde_json::from_str(&value_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let key = node_engine::ContextKeys::input(&node_id, &port);
+
+    rt.block_on(async {
+        let exec = executor.read().await;
+        exec.set_context_value(&key, value).await;
+        Ok(atoms::ok())
+    })
+}
+
+/// Get an output value from a node in the executor context.
+///
+/// Gets the value at key "{node_id}.output.{port}" using ContextKeys convention.
+/// Returns the JSON string or nil if not set.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_get_output(
+    resource: ResourceArc<WorkflowExecutorResource>,
+    node_id: String,
+    port: String,
+) -> NifResult<Option<String>> {
+    let rt = &resource.runtime;
+    let executor = &resource.executor;
+
+    let key = node_engine::ContextKeys::output(&node_id, &port);
+
+    rt.block_on(async {
+        let exec = executor.read().await;
+        let value: Option<serde_json::Value> = exec.get_context_value(&key).await;
+        match value {
+            Some(v) => {
+                let json = serde_json::to_string(&v).map_err(|e| {
+                    rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))
+                })?;
+                Ok(Some(json))
+            }
+            None => Ok(None),
+        }
     })
 }
 
@@ -737,12 +837,241 @@ fn orchestration_store_remove(
 }
 
 // ============================================================================
+// NIF Functions - Node Registry
+// ============================================================================
+
+/// Create a new empty node registry.
+#[rustler::nif]
+fn node_registry_new() -> ResourceArc<NodeRegistryResource> {
+    ResourceArc::new(NodeRegistryResource {
+        registry: Arc::new(tokio::sync::RwLock::new(node_engine::NodeRegistry::new())),
+    })
+}
+
+/// Register a node type with metadata in the registry.
+///
+/// metadata_json should be a JSON object matching TaskMetadata:
+/// `{"nodeType": "...", "category": "...", "label": "...", ...}`
+#[rustler::nif]
+fn node_registry_register(
+    resource: ResourceArc<NodeRegistryResource>,
+    metadata_json: String,
+) -> NifResult<Atom> {
+    let metadata: node_engine::TaskMetadata = serde_json::from_str(&metadata_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let mut registry = resource.registry.blocking_write();
+    registry.register_metadata(metadata);
+
+    Ok(atoms::ok())
+}
+
+/// List all registered node types and their metadata as JSON.
+#[rustler::nif]
+fn node_registry_list(
+    resource: ResourceArc<NodeRegistryResource>,
+) -> NifResult<String> {
+    let registry = resource.registry.blocking_read();
+    let metadata: Vec<&node_engine::TaskMetadata> = registry.all_metadata();
+
+    serde_json::to_string(&metadata)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+// ============================================================================
+// ElixirDataGraphExecutor - bridges orchestration to BEAM
+// ============================================================================
+
+/// DataGraphExecutor that executes data graphs using the Elixir callback bridge.
+pub struct ElixirDataGraphExecutor {
+    store: Arc<tokio::sync::RwLock<OrchestrationStore>>,
+    task_executor: Arc<dyn TaskExecutor>,
+    event_sink_pid: rustler::LocalPid,
+}
+
+impl ElixirDataGraphExecutor {
+    pub fn new(
+        store: Arc<tokio::sync::RwLock<OrchestrationStore>>,
+        task_executor: Arc<dyn TaskExecutor>,
+        event_sink_pid: rustler::LocalPid,
+    ) -> Self {
+        Self {
+            store,
+            task_executor,
+            event_sink_pid,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl node_engine::DataGraphExecutor for ElixirDataGraphExecutor {
+    async fn execute_data_graph(
+        &self,
+        graph_id: &str,
+        inputs: HashMap<String, serde_json::Value>,
+        _event_sink: &dyn EventSink,
+    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
+        // Look up the data graph from the store
+        let graph = {
+            let store = self.store.read().await;
+            store.get_data_graph(graph_id).cloned().ok_or_else(|| {
+                node_engine::NodeEngineError::ExecutionFailed(format!(
+                    "Data graph '{}' not found in store",
+                    graph_id
+                ))
+            })?
+        };
+
+        // Create event sink for this execution
+        let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(self.event_sink_pid));
+
+        // Create a WorkflowExecutor for this data graph
+        let exec_id = format!("data-graph-{}", graph_id);
+        let executor = WorkflowExecutor::new(&exec_id, graph.clone(), event_sink);
+
+        // Set inputs into context using ContextKeys convention
+        for (port, value) in &inputs {
+            // Find input nodes and set their values
+            for node in &graph.nodes {
+                let key = node_engine::ContextKeys::input(&node.id, port);
+                executor.set_context_value(&key, value.clone()).await;
+            }
+        }
+
+        // Find terminal nodes (nodes with no outgoing edges) and demand them
+        let terminal_nodes: Vec<String> = graph
+            .nodes
+            .iter()
+            .filter(|n| !graph.edges.iter().any(|e| e.source == n.id))
+            .map(|n| n.id.clone())
+            .collect();
+
+        // If no terminal nodes found, demand all nodes
+        let demand_nodes = if terminal_nodes.is_empty() {
+            graph.nodes.iter().map(|n| n.id.clone()).collect()
+        } else {
+            terminal_nodes
+        };
+
+        let results = executor
+            .demand_multiple(&demand_nodes, self.task_executor.as_ref())
+            .await?;
+
+        // Flatten all outputs into a single map
+        let mut outputs = HashMap::new();
+        for (node_id, node_outputs) in results {
+            for (port, value) in node_outputs {
+                outputs.insert(format!("{}.{}", node_id, port), value);
+            }
+        }
+
+        Ok(outputs)
+    }
+
+    fn get_data_graph(&self, graph_id: &str) -> Option<WorkflowGraph> {
+        let store = self.store.blocking_read();
+        store.get_data_graph(graph_id).cloned()
+    }
+}
+
+// ============================================================================
+// NIF Functions - Orchestration Execution
+// ============================================================================
+
+/// Execute an orchestration graph.
+///
+/// Retrieves the orchestration graph from the store, creates an
+/// ElixirDataGraphExecutor to handle data graph nodes, and runs
+/// the orchestration to completion. Events stream to callback_pid.
+///
+/// Returns JSON string of OrchestrationResult.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn execute_orchestration(
+    env: Env,
+    store_resource: ResourceArc<OrchestrationStoreResource>,
+    graph_id: String,
+    initial_data_json: String,
+    callback_pid: rustler::LocalPid,
+) -> NifResult<String> {
+    let _ = env;
+
+    let initial_data: HashMap<String, serde_json::Value> =
+        serde_json::from_str(&initial_data_json)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    // Look up the orchestration graph
+    let graph = {
+        let store = store_resource.store.blocking_read();
+        store.get_graph(&graph_id).cloned().ok_or_else(|| {
+            rustler::Error::Term(Box::new(format!(
+                "Orchestration graph '{}' not found",
+                graph_id
+            )))
+        })?
+    };
+
+    // Create runtime for this execution
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let task_executor: Arc<dyn TaskExecutor> =
+        Arc::new(ElixirCallbackTaskExecutor::new(callback_pid));
+    let event_sink = BeamEventSink::new(callback_pid);
+
+    // Create the data graph executor
+    let data_executor = ElixirDataGraphExecutor::new(
+        store_resource.store.clone(),
+        task_executor,
+        callback_pid,
+    );
+
+    // Create and run the orchestration executor
+    let orch_executor = node_engine::OrchestrationExecutor::new(data_executor)
+        .with_execution_id(format!("nif-orch-{}", graph_id));
+
+    let result = runtime.block_on(async {
+        orch_executor
+            .execute(&graph, initial_data, &event_sink)
+            .await
+    });
+
+    match result {
+        Ok(orch_result) => serde_json::to_string(&orch_result)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))),
+        Err(e) => Err(rustler::Error::Term(Box::new(format!(
+            "Orchestration error: {}",
+            e
+        )))),
+    }
+}
+
+/// Insert a data graph (workflow) into the orchestration store.
+///
+/// Data graphs are the low-level workflow graphs that orchestration
+/// DataGraph nodes reference and execute.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn orchestration_store_insert_data_graph(
+    resource: ResourceArc<OrchestrationStoreResource>,
+    graph_id: String,
+    graph_json: String,
+) -> NifResult<Atom> {
+    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let mut guard = resource.store.blocking_write();
+    guard.insert_data_graph(graph_id, graph);
+
+    Ok(atoms::ok())
+}
+
+// ============================================================================
 // Resource registration and NIF init
 // ============================================================================
 
 fn load(env: Env, _info: Term) -> bool {
     rustler::resource!(WorkflowExecutorResource, env);
     rustler::resource!(OrchestrationStoreResource, env);
+    rustler::resource!(NodeRegistryResource, env);
     true
 }
 
@@ -812,5 +1141,55 @@ mod tests {
     fn test_orchestration_store_roundtrip() {
         let store = OrchestrationStore::new();
         assert!(store.list_graphs().is_empty());
+    }
+
+    #[test]
+    fn test_context_keys_input_output() {
+        let input_key = node_engine::ContextKeys::input("node-1", "prompt");
+        assert_eq!(input_key, "node-1.input.prompt");
+
+        let output_key = node_engine::ContextKeys::output("node-1", "response");
+        assert_eq!(output_key, "node-1.output.response");
+    }
+
+    #[test]
+    fn test_node_registry_metadata() {
+        let mut registry = node_engine::NodeRegistry::new();
+        assert!(registry.all_metadata().is_empty());
+
+        let metadata = node_engine::TaskMetadata {
+            node_type: "test-node".to_string(),
+            category: node_engine::NodeCategory::Processing,
+            label: "Test Node".to_string(),
+            description: "A test node".to_string(),
+            inputs: vec![],
+            outputs: vec![],
+            execution_mode: node_engine::ExecutionMode::Reactive,
+        };
+
+        registry.register_metadata(metadata);
+        assert_eq!(registry.all_metadata().len(), 1);
+        assert!(registry.has_node_type("test-node"));
+
+        // Verify JSON serialization
+        let all = registry.all_metadata();
+        let json = serde_json::to_string(&all).unwrap();
+        assert!(json.contains("test-node"));
+    }
+
+    #[test]
+    fn test_task_metadata_json_roundtrip() {
+        let json = r#"{
+            "nodeType": "my-node",
+            "category": "processing",
+            "label": "My Node",
+            "description": "Does things",
+            "inputs": [],
+            "outputs": [],
+            "executionMode": "reactive"
+        }"#;
+        let metadata: node_engine::TaskMetadata = serde_json::from_str(json).unwrap();
+        assert_eq!(metadata.node_type, "my-node");
+        assert_eq!(metadata.label, "My Node");
     }
 }
