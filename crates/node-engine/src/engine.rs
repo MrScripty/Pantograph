@@ -39,6 +39,7 @@ use tokio::sync::RwLock;
 
 use crate::error::{NodeEngineError, Result};
 use crate::events::{EventSink, WorkflowEvent};
+use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
 
 /// Trait for executing a single node/task
@@ -53,6 +54,7 @@ pub trait TaskExecutor: Send + Sync {
     /// * `task_id` - The ID of the task to execute
     /// * `inputs` - Map of input port names to their values
     /// * `context` - The graph-flow context for shared state
+    /// * `extensions` - Typed extension map for non-serializable dependencies
     ///
     /// # Returns
     /// A map of output port names to their values
@@ -61,6 +63,7 @@ pub trait TaskExecutor: Send + Sync {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         context: &Context,
+        extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>>;
 }
 
@@ -186,10 +189,11 @@ impl DemandEngine {
         executor: &dyn TaskExecutor,
         context: &Context,
         event_sink: &dyn EventSink,
+        extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         // Track which nodes we're currently computing to detect cycles
         let mut computing = HashSet::new();
-        self.demand_internal(node_id, graph, executor, context, event_sink, &mut computing)
+        self.demand_internal(node_id, graph, executor, context, event_sink, extensions, &mut computing)
             .await
     }
 
@@ -204,6 +208,7 @@ impl DemandEngine {
         executor: &'a dyn TaskExecutor,
         context: &'a Context,
         event_sink: &'a dyn EventSink,
+        extensions: &'a ExecutorExtensions,
         computing: &'a mut HashSet<NodeId>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>> + Send + 'a>> {
         Box::pin(async move {
@@ -226,7 +231,7 @@ impl DemandEngine {
             for dep_id in &dependencies {
                 // Recursively demand the dependency
                 let dep_outputs = self
-                    .demand_internal(dep_id, graph, executor, context, event_sink, computing)
+                    .demand_internal(dep_id, graph, executor, context, event_sink, extensions, computing)
                     .await?;
 
                 // Find the edge(s) connecting this dependency to our node
@@ -275,7 +280,7 @@ impl DemandEngine {
             });
 
             // 5. Execute this node
-            let outputs = executor.execute_task(node_id, inputs, context).await?;
+            let outputs = executor.execute_task(node_id, inputs, context, extensions).await?;
 
             // Send task completed event
             let _ = event_sink.send(WorkflowEvent::TaskCompleted {
@@ -315,6 +320,7 @@ impl DemandEngine {
         executor: &dyn TaskExecutor,
         context: &Context,
         event_sink: &dyn EventSink,
+        extensions: &ExecutorExtensions,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         let mut results = HashMap::new();
 
@@ -322,7 +328,7 @@ impl DemandEngine {
         // more complex dependency analysis to find independent subgraphs.
         // This is a future optimization.
         for node_id in node_ids {
-            let output = self.demand(node_id, graph, executor, context, event_sink).await?;
+            let output = self.demand(node_id, graph, executor, context, event_sink, extensions).await?;
             results.insert(node_id.clone(), output);
         }
 
@@ -383,6 +389,8 @@ pub struct WorkflowExecutor {
     graph: Arc<RwLock<WorkflowGraph>>,
     /// Execution ID
     execution_id: String,
+    /// Typed extensions for non-serializable dependencies (API clients, etc.)
+    extensions: ExecutorExtensions,
 }
 
 impl WorkflowExecutor {
@@ -399,6 +407,7 @@ impl WorkflowExecutor {
             event_sink,
             graph: Arc::new(RwLock::new(graph)),
             execution_id,
+            extensions: ExecutorExtensions::new(),
         }
     }
 
@@ -420,6 +429,16 @@ impl WorkflowExecutor {
     /// Get a mutable reference to the graph-flow context
     pub fn context_mut(&mut self) -> &mut Context {
         &mut self.context
+    }
+
+    /// Get a reference to the executor extensions
+    pub fn extensions(&self) -> &ExecutorExtensions {
+        &self.extensions
+    }
+
+    /// Get a mutable reference to the executor extensions
+    pub fn extensions_mut(&mut self) -> &mut ExecutorExtensions {
+        &mut self.extensions
     }
 
     /// Get a reference to the workflow graph
@@ -467,7 +486,7 @@ impl WorkflowExecutor {
         let mut engine = self.demand_engine.write().await;
 
         engine
-            .demand(node_id, &graph, executor, &self.context, self.event_sink.as_ref())
+            .demand(node_id, &graph, executor, &self.context, self.event_sink.as_ref(), &self.extensions)
             .await
     }
 
@@ -481,7 +500,7 @@ impl WorkflowExecutor {
         let mut engine = self.demand_engine.write().await;
 
         engine
-            .demand_multiple(node_ids, &graph, executor, &self.context, self.event_sink.as_ref())
+            .demand_multiple(node_ids, &graph, executor, &self.context, self.event_sink.as_ref(), &self.extensions)
             .await
     }
 
@@ -685,6 +704,7 @@ mod tests {
             task_id: &str,
             inputs: HashMap<String, serde_json::Value>,
             _context: &Context,
+            _extensions: &ExecutorExtensions,
         ) -> Result<HashMap<String, serde_json::Value>> {
             self.execution_count.fetch_add(1, Ordering::SeqCst);
 
@@ -801,10 +821,11 @@ mod tests {
         let executor = CountingExecutor::new();
         let context = Context::new();
         let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
 
         // Demand 'c' - should execute a, b, c
         let result = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
 
         assert!(result.is_ok());
@@ -818,16 +839,17 @@ mod tests {
         let executor = CountingExecutor::new();
         let context = Context::new();
         let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
 
         // First demand
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
         assert_eq!(executor.count(), 3);
 
         // Second demand - should use cache
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
         assert_eq!(executor.count(), 3); // No additional executions
     }
@@ -839,10 +861,11 @@ mod tests {
         let executor = CountingExecutor::new();
         let context = Context::new();
         let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
 
         // First demand
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
         assert_eq!(executor.count(), 3);
 
@@ -851,7 +874,7 @@ mod tests {
 
         // Demand again - should only recompute b and c (not a)
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
         // Note: Due to version-based invalidation, this depends on implementation details.
         // The current implementation uses sum of dependency versions, so modifying 'b'
@@ -865,10 +888,11 @@ mod tests {
         let executor = CountingExecutor::new();
         let context = Context::new();
         let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
 
         // Demand 'd' - should execute a, b, c, d (a only once despite diamond)
         let result = engine
-            .demand(&"d".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"d".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
 
         assert!(result.is_ok());
@@ -882,9 +906,10 @@ mod tests {
         let executor = CountingExecutor::new();
         let context = Context::new();
         let event_sink = VecEventSink::new();
+        let extensions = ExecutorExtensions::new();
 
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink)
+            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
             .await;
 
         let events = event_sink.events();

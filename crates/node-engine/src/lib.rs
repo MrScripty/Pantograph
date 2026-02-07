@@ -57,6 +57,7 @@ pub mod descriptor;
 pub mod engine;
 pub mod error;
 pub mod events;
+pub mod extensions;
 pub mod groups;
 pub mod orchestration;
 pub mod registry;
@@ -68,6 +69,7 @@ pub mod validation;
 // Re-export key types from engine
 pub use engine::{CacheStats, CachedOutput, DemandEngine, TaskExecutor, WorkflowExecutor};
 pub use error::{NodeEngineError, Result};
+pub use extensions::{extension_keys, ExecutorExtensions};
 pub use events::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,
     NullEventSink, VecEventSink, WorkflowEvent,

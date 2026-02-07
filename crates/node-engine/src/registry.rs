@@ -25,6 +25,7 @@ use graph_flow::Context;
 
 use crate::descriptor::TaskMetadata;
 use crate::error::{NodeEngineError, Result};
+use crate::extensions::ExecutorExtensions;
 use crate::types::NodeCategory;
 
 /// Per-node-type executor
@@ -39,6 +40,7 @@ pub trait NodeExecutor: Send + Sync {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         context: &Context,
+        extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>>;
 }
 
@@ -202,6 +204,7 @@ impl NodeExecutor for CallbackNodeExecutor {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         _context: &Context,
+        _extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         (self.callback)(task_id.to_string(), inputs).await
     }
@@ -238,6 +241,7 @@ impl NodeExecutor for SyncCallbackNodeExecutor {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         _context: &Context,
+        _extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         (self.callback)(task_id, inputs)
     }
@@ -284,6 +288,7 @@ impl crate::engine::TaskExecutor for RegistryTaskExecutor {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         context: &Context,
+        extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         // Extract node_type from _data.node_type (same pattern as PantographTaskExecutor)
         let node_type = inputs
@@ -308,7 +313,7 @@ impl crate::engine::TaskExecutor for RegistryTaskExecutor {
             ))
         })?;
 
-        executor.execute(task_id, inputs, context).await
+        executor.execute(task_id, inputs, context, extensions).await
     }
 }
 
@@ -394,8 +399,9 @@ mod tests {
         });
 
         let context = Context::new();
+        let extensions = ExecutorExtensions::new();
         let result = executor
-            .execute("test-1", HashMap::new(), &context)
+            .execute("test-1", HashMap::new(), &context, &extensions)
             .await
             .unwrap();
 
@@ -416,7 +422,8 @@ mod tests {
         let mut inputs = HashMap::new();
         inputs.insert("value".to_string(), serde_json::json!("hello"));
 
-        let result = executor.execute("echo-1", inputs, &context).await.unwrap();
+        let extensions = ExecutorExtensions::new();
+        let result = executor.execute("echo-1", inputs, &context, &extensions).await.unwrap();
         assert_eq!(result.get("value").unwrap(), "hello");
     }
 
@@ -439,8 +446,9 @@ mod tests {
             serde_json::json!({"node_type": "echo"}),
         );
 
+        let extensions = ExecutorExtensions::new();
         let result = task_executor
-            .execute_task("echo-1", inputs, &context)
+            .execute_task("echo-1", inputs, &context, &extensions)
             .await
             .unwrap();
 
@@ -459,8 +467,9 @@ mod tests {
             serde_json::json!({"node_type": "unknown"}),
         );
 
+        let extensions = ExecutorExtensions::new();
         let result: Result<HashMap<String, serde_json::Value>> =
-            task_executor.execute_task("unknown-1", inputs, &context).await;
+            task_executor.execute_task("unknown-1", inputs, &context, &extensions).await;
         assert!(result.is_err());
     }
 

@@ -126,6 +126,7 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         let mut outputs = HashMap::new();
         for terminal_id in &terminal_nodes {
             // Demand execution from this terminal node
+            let extensions = node_engine::ExecutorExtensions::new();
             let result = demand_engine
                 .demand(
                     terminal_id,
@@ -133,6 +134,7 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
                     &task_executor,
                     &context,
                     event_sink,
+                    &extensions,
                 )
                 .await;
 

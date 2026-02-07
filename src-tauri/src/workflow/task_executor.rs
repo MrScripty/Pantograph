@@ -1003,6 +1003,7 @@ impl TaskExecutor for PantographTaskExecutor {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         _context: &Context,
+        _extensions: &node_engine::ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         // Extract node_type from _data if available, otherwise infer from task_id
         let node_type = inputs
