@@ -1,28 +1,35 @@
-import { writable, derived, get } from 'svelte/store';
-import { workflowService } from '../services/workflow/WorkflowService';
-import { loadWorkflow, clearWorkflow, nodeDefinitions } from './workflowStore';
-import { loadOrchestration } from './orchestrationStore';
-import { setOrchestrationContext } from './viewStore';
-import type { WorkflowMetadata } from '../services/workflow/types';
+/**
+ * Graph Session Store — thin re-export layer with Pantograph-specific additions.
+ *
+ * Re-exports session stores from the singleton and adds system graph support
+ * (SYSTEM_GRAPHS, loadSystemGraph) which is Pantograph-specific.
+ */
+import { sessionStores, backend, workflowStores } from './storeInstances';
 
-// --- Types ---
+// Re-export types
+export type { GraphType, GraphInfo } from '@pantograph/svelte-graph';
 
-export type GraphType = 'workflow' | 'system';
+// --- Re-export writable stores ---
+export const currentGraphId = sessionStores.currentGraphId;
+export const currentGraphType = sessionStores.currentGraphType;
+export const currentGraphName = sessionStores.currentGraphName;
+export const availableWorkflows = sessionStores.availableWorkflows;
+export const currentSessionId = sessionStores.currentSessionId;
 
-export interface GraphInfo {
-  id: string;
-  name: string;
-  type: GraphType;
-  description?: string;
-  path?: string; // File path for workflows
-}
+// --- Re-export derived stores ---
+export const isReadOnly = sessionStores.isReadOnly;
+export const currentGraphInfo = sessionStores.currentGraphInfo;
 
-// --- Constants ---
+// --- Re-export actions ---
+export const refreshWorkflowList = sessionStores.refreshWorkflowList;
+export const loadWorkflowByName = sessionStores.loadWorkflowByName;
+export const createNewWorkflow = sessionStores.createNewWorkflow;
+export const saveLastGraph = sessionStores.saveLastGraph;
 
-const LAST_GRAPH_KEY = 'pantograph.lastGraph';
-const DEFAULT_GRAPH_ID = 'coding-agent';
+// --- Pantograph-specific: System graphs ---
 
-// System graphs (read-only)
+import type { GraphInfo, GraphType } from '@pantograph/svelte-graph';
+
 export const SYSTEM_GRAPHS: GraphInfo[] = [
   {
     id: 'app-architecture',
@@ -31,109 +38,6 @@ export const SYSTEM_GRAPHS: GraphInfo[] = [
     description: 'Internal application architecture visualization',
   },
 ];
-
-// --- State ---
-
-export const currentGraphId = writable<string | null>(null);
-export const currentGraphType = writable<GraphType>('workflow');
-export const currentGraphName = writable<string>('Untitled');
-export const availableWorkflows = writable<WorkflowMetadata[]>([]);
-/** The current backend session ID for the loaded workflow */
-export const currentSessionId = writable<string | null>(null);
-
-// --- Derived ---
-
-export const isReadOnly = derived(currentGraphType, ($type) => $type === 'system');
-
-export const currentGraphInfo = derived(
-  [currentGraphId, currentGraphType, currentGraphName],
-  ([$id, $type, $name]): GraphInfo | null => {
-    if (!$id) return null;
-
-    // Check if it's a system graph
-    const systemGraph = SYSTEM_GRAPHS.find((g) => g.id === $id);
-    if (systemGraph) return systemGraph;
-
-    // It's a workflow
-    return {
-      id: $id,
-      name: $name,
-      type: $type,
-    };
-  }
-);
-
-// --- Actions ---
-
-/**
- * Load available workflows from the backend
- */
-export async function refreshWorkflowList(): Promise<void> {
-  try {
-    const workflows = await workflowService.listWorkflows();
-    availableWorkflows.set(workflows);
-  } catch (error) {
-    console.error('Failed to load workflow list:', error);
-    availableWorkflows.set([]);
-  }
-}
-
-/**
- * Load a workflow by name (filename stem without .json extension)
- * Also creates a backend session for editing with undo/redo support.
- */
-export async function loadWorkflowByName(name: string): Promise<boolean> {
-  console.log(`[graphSessionStore] Loading workflow: "${name}"`);
-  try {
-    // Ensure node definitions are loaded (needed for loadWorkflow to attach them)
-    if (get(nodeDefinitions).length === 0) {
-      const definitions = await workflowService.getNodeDefinitions();
-      nodeDefinitions.set(definitions);
-    }
-
-    const path = `.pantograph/workflows/${name}.json`;
-    console.log(`[graphSessionStore] Loading from path: ${path}`);
-    const file = await workflowService.loadWorkflow(path);
-    console.log(`[graphSessionStore] Loaded workflow with ${file.graph.nodes.length} nodes`);
-
-    // Load workflow into frontend stores
-    loadWorkflow(file.graph, file.metadata);
-
-    // Load associated orchestration if specified (enables zoom-out navigation)
-    console.log(`[graphSessionStore] Checking for orchestrationId in metadata:`, file.metadata);
-    if (file.metadata.orchestrationId) {
-      try {
-        console.log(`[graphSessionStore] Loading orchestration: ${file.metadata.orchestrationId}`);
-        await loadOrchestration(file.metadata.orchestrationId);
-        setOrchestrationContext(file.metadata.orchestrationId);
-        console.log(`[graphSessionStore] Loaded associated orchestration: ${file.metadata.orchestrationId}`);
-      } catch (error) {
-        console.warn('[graphSessionStore] Failed to load associated orchestration:', error);
-        // Continue without orchestration - workflow still usable, just no zoom-out
-      }
-    } else {
-      console.log('[graphSessionStore] No orchestrationId in workflow metadata');
-    }
-
-    // Create a backend session for this workflow
-    // This enables editing operations to go through the backend with undo/redo
-    const sessionId = await workflowService.createSession(file.graph);
-    currentSessionId.set(sessionId);
-    console.log(`[graphSessionStore] Created backend session: ${sessionId}`);
-
-    currentGraphId.set(name);
-    currentGraphType.set('workflow');
-    currentGraphName.set(file.metadata.name);
-
-    saveLastGraph(name, 'workflow');
-
-    console.log(`[graphSessionStore] Workflow "${name}" loaded successfully`);
-    return true;
-  } catch (error) {
-    console.error(`[graphSessionStore] Failed to load workflow "${name}":`, error);
-    return false;
-  }
-}
 
 /**
  * Load a system graph (e.g., app-architecture)
@@ -150,96 +54,47 @@ export function loadSystemGraph(graphId: string): boolean {
   currentGraphName.set(systemGraph.name);
 
   saveLastGraph(graphId, 'system');
-
-  // The actual graph data will be loaded by the component
-  // based on currentGraphId being 'app-architecture'
-
   return true;
 }
 
-/**
- * Create a new empty workflow
- * Also creates a backend session for editing with undo/redo support.
- */
-export async function createNewWorkflow(): Promise<void> {
-  clearWorkflow();
+// --- Override: loadLastGraph with system graph support ---
 
-  const newId = `workflow-${Date.now()}`;
-  currentGraphId.set(newId);
-  currentGraphType.set('workflow');
-  currentGraphName.set('Untitled Workflow');
+const LAST_GRAPH_KEY = 'pantograph.lastGraph';
 
-  // Create a backend session for the empty workflow
-  const emptyGraph = { nodes: [], edges: [] };
-  const sessionId = await workflowService.createSession(emptyGraph);
-  currentSessionId.set(sessionId);
-  console.log(`[graphSessionStore] Created backend session for new workflow: ${sessionId}`);
-}
-
-/**
- * Save last opened graph to localStorage
- */
-export function saveLastGraph(id: string, type: GraphType): void {
-  try {
-    localStorage.setItem(LAST_GRAPH_KEY, JSON.stringify({ id, type }));
-  } catch {
-    // localStorage might not be available
-  }
-}
-
-/**
- * Get last opened graph from localStorage
- */
 function getLastGraph(): { id: string; type: GraphType } | null {
   try {
     const stored = localStorage.getItem(LAST_GRAPH_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
+    return stored ? JSON.parse(stored) : null;
   } catch {
-    // localStorage might not be available or corrupted
+    return null;
   }
-  return null;
 }
 
 /**
- * Load the last opened graph, or fall back to default
+ * Load the last opened graph, or fall back to default.
+ * Extends the package's loadLastGraph to handle system graphs.
  */
 export async function loadLastGraph(): Promise<void> {
-  // Load node definitions first so they're available for loadWorkflow
-  const definitions = await workflowService.getNodeDefinitions();
-  nodeDefinitions.set(definitions);
-
-  await refreshWorkflowList();
-
-  const lastGraph = getLastGraph();
-
-  if (lastGraph) {
-    if (lastGraph.type === 'system') {
-      loadSystemGraph(lastGraph.id);
-      return;
-    }
-
-    // Try to load the last workflow
-    const success = await loadWorkflowByName(lastGraph.id);
-    if (success) return;
+  const last = getLastGraph();
+  if (last?.type === 'system') {
+    // Load definitions so they're available when user switches to a workflow
+    const defs = await backend.getNodeDefinitions();
+    workflowStores.nodeDefinitions.set(defs);
+    await sessionStores.refreshWorkflowList();
+    loadSystemGraph(last.id);
+    return;
   }
 
-  // Fall back to default coding-agent workflow
-  const success = await loadWorkflowByName(DEFAULT_GRAPH_ID);
-  if (success) return;
-
-  // If coding-agent doesn't exist, create a new empty workflow
-  await createNewWorkflow();
+  // Delegate to factory for workflow graphs (handles definitions, fallback, etc.)
+  await sessionStores.loadLastGraph();
 }
 
 /**
- * Switch to a different graph
+ * Switch to a different graph (workflow or system)
  */
 export async function switchGraph(graphId: string, type: GraphType): Promise<boolean> {
-  console.log(`[graphSessionStore] switchGraph called: graphId="${graphId}", type="${type}"`);
   if (type === 'system') {
     return loadSystemGraph(graphId);
   }
-  return loadWorkflowByName(graphId);
+  return sessionStores.loadWorkflowByName(graphId);
 }

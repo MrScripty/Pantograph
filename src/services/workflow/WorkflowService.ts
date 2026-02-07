@@ -122,6 +122,14 @@ export class WorkflowService {
     return this.currentExecutionId;
   }
 
+  /**
+   * Set the current execution ID externally.
+   * Used by storeInstances to sync session IDs created via WorkflowBackend.
+   */
+  setCurrentExecutionId(id: string | null): void {
+    this.currentExecutionId = id;
+  }
+
   // --- Session Management ---
 
   /**

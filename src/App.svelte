@@ -24,6 +24,17 @@
   import { loadLastGraph, isReadOnly } from './stores/graphSessionStore';
   import { linkModeActive, cancelLinkMode, startValueSync, stopValueSync } from './stores/linkStore';
 
+  // Set up the @pantograph/svelte-graph context so package components
+  // (GenericNode, ReconnectableEdge, etc.) can access stores via useGraphContext().
+  import { createGraphContextFromStores } from '@pantograph/svelte-graph';
+  import { backend, registry, workflowStores, viewStores, sessionStores } from './stores/storeInstances';
+
+  createGraphContextFromStores(backend, registry, {
+    workflow: workflowStores,
+    view: viewStores,
+    session: sessionStores,
+  });
+
   async function handleComponentUndo() {
     try {
       const result = await invoke<{ success: boolean; message: string }>('undo_component_change');
