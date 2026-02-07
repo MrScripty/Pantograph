@@ -162,6 +162,12 @@ pub struct NodeRegistryResource {
     pub registry: Arc<tokio::sync::RwLock<node_engine::NodeRegistry>>,
 }
 
+/// Wrapper for PumasApi shared via ResourceArc.
+pub struct PumasApiResource {
+    pub api: Arc<pumas_library::PumasApi>,
+    pub runtime: Arc<tokio::runtime::Runtime>,
+}
+
 /// Pending callback channels for bridging node execution to BEAM.
 static PENDING_CALLBACKS: std::sync::LazyLock<
     Mutex<HashMap<String, oneshot::Sender<Result<String, String>>>>,
@@ -203,6 +209,7 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         _context: &graph_flow::Context,
+        _extensions: &node_engine::ExecutorExtensions,
     ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
         let callback_id = format!(
             "cb-{}",
@@ -1065,6 +1072,293 @@ fn orchestration_store_insert_data_graph(
 }
 
 // ============================================================================
+// NIF Functions - PumasApi (Model Library)
+// ============================================================================
+
+/// Create a new PumasApi instance.
+///
+/// `launcher_root_path` is the root directory for the pumas library.
+/// Pass an empty string to use the default/auto-discovered path.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_api_new(launcher_root_path: String) -> NifResult<ResourceArc<PumasApiResource>> {
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let api = runtime.block_on(async {
+        pumas_library::PumasApi::builder(&launcher_root_path)
+            .auto_create_dirs(true)
+            .with_hf_client(true)
+            .with_process_manager(false)
+            .build()
+            .await
+    })
+    .map_err(|e| rustler::Error::Term(Box::new(format!("PumasApi init error: {}", e))))?;
+
+    Ok(ResourceArc::new(PumasApiResource {
+        api: Arc::new(api),
+        runtime: Arc::new(runtime),
+    }))
+}
+
+/// Inject a PumasApi into a WorkflowExecutor's extensions.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_set_pumas_api(
+    executor_resource: ResourceArc<WorkflowExecutorResource>,
+    pumas_resource: ResourceArc<PumasApiResource>,
+) -> NifResult<Atom> {
+    let rt = &executor_resource.runtime;
+
+    rt.block_on(async {
+        let mut exec = executor_resource.executor.write().await;
+        exec.extensions_mut().set(
+            node_engine::extension_keys::PUMAS_API,
+            pumas_resource.api.clone(),
+        );
+    });
+
+    Ok(atoms::ok())
+}
+
+// --- Local library NIFs ---
+
+/// List all models in the local library. Returns JSON array of ModelRecord.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_list_models(resource: ResourceArc<PumasApiResource>) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async { resource.api.list_models().await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("list_models error: {}", e))))
+        .and_then(|models| {
+            serde_json::to_string(&models)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+/// Search the local model library. Returns JSON SearchResult.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_search_models(
+    resource: ResourceArc<PumasApiResource>,
+    query: String,
+    limit: usize,
+    offset: usize,
+) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async { resource.api.search_models(&query, limit, offset).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("search_models error: {}", e))))
+        .and_then(|result| {
+            serde_json::to_string(&result)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+/// Get a single model by ID. Returns JSON ModelRecord or nil.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_get_model(
+    resource: ResourceArc<PumasApiResource>,
+    model_id: String,
+) -> NifResult<Option<String>> {
+    let model = resource
+        .runtime
+        .block_on(async { resource.api.get_model(&model_id).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("get_model error: {}", e))))?;
+
+    match model {
+        Some(m) => {
+            let json = serde_json::to_string(&m)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))?;
+            Ok(Some(json))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Rebuild the model index. Returns the number of models indexed.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_rebuild_index(resource: ResourceArc<PumasApiResource>) -> NifResult<usize> {
+    resource
+        .runtime
+        .block_on(async { resource.api.rebuild_model_index().await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("rebuild_index error: {}", e))))
+}
+
+// --- HuggingFace NIFs ---
+
+/// Search HuggingFace for models. Returns JSON array of HuggingFaceModel.
+///
+/// `kind` is optional and filters by model type (e.g., "llm", "diffusion", "embedding").
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_search_hf(
+    resource: ResourceArc<PumasApiResource>,
+    query: String,
+    kind: Option<String>,
+    limit: usize,
+) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async {
+            resource
+                .api
+                .search_hf_models(&query, kind.as_deref(), limit)
+                .await
+        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("search_hf error: {}", e))))
+        .and_then(|models| {
+            serde_json::to_string(&models)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+/// Get file tree for a HuggingFace repo. Returns JSON RepoFileTree.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_get_repo_files(
+    resource: ResourceArc<PumasApiResource>,
+    repo_id: String,
+) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async { resource.api.get_hf_repo_files(&repo_id).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("get_repo_files error: {}", e))))
+        .and_then(|tree| {
+            serde_json::to_string(&tree)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+// --- Download NIFs ---
+
+/// Start a model download from HuggingFace. Returns the download ID.
+///
+/// `request_json` should be a JSON DownloadRequest:
+/// `{"repo_id": "...", "family": "...", "official_name": "...", ...}`
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_start_download(
+    resource: ResourceArc<PumasApiResource>,
+    request_json: String,
+) -> NifResult<String> {
+    let request: pumas_library::model_library::DownloadRequest =
+        serde_json::from_str(&request_json)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    resource
+        .runtime
+        .block_on(async { resource.api.start_hf_download(&request).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("start_download error: {}", e))))
+}
+
+/// Get download progress for a download ID. Returns JSON ModelDownloadProgress or nil.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_get_download_progress(
+    resource: ResourceArc<PumasApiResource>,
+    download_id: String,
+) -> NifResult<Option<String>> {
+    let progress = resource
+        .runtime
+        .block_on(async { resource.api.get_hf_download_progress(&download_id).await });
+
+    match progress {
+        Some(p) => {
+            let json = serde_json::to_string(&p)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))?;
+            Ok(Some(json))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Cancel a download. Returns true if cancelled.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_cancel_download(
+    resource: ResourceArc<PumasApiResource>,
+    download_id: String,
+) -> NifResult<bool> {
+    resource
+        .runtime
+        .block_on(async { resource.api.cancel_hf_download(&download_id).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("cancel_download error: {}", e))))
+}
+
+// --- Import NIFs ---
+
+/// Import a model into the library. Returns JSON ModelImportResult.
+///
+/// `spec_json` should be a JSON ModelImportSpec:
+/// `{"path": "...", "family": "...", "official_name": "...", ...}`
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_import_model(
+    resource: ResourceArc<PumasApiResource>,
+    spec_json: String,
+) -> NifResult<String> {
+    let spec: pumas_library::model_library::ModelImportSpec =
+        serde_json::from_str(&spec_json)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let result = resource
+        .runtime
+        .block_on(async { resource.api.import_model(&spec).await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("import_model error: {}", e))))?;
+
+    serde_json::to_string(&result)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+}
+
+/// Import multiple models in batch. Returns JSON array of ModelImportResult.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_import_batch(
+    resource: ResourceArc<PumasApiResource>,
+    specs_json: String,
+) -> NifResult<String> {
+    let specs: Vec<pumas_library::model_library::ModelImportSpec> =
+        serde_json::from_str(&specs_json)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let results = resource
+        .runtime
+        .block_on(async { resource.api.import_models_batch(specs).await });
+
+    serde_json::to_string(&results)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+}
+
+// --- System NIFs ---
+
+/// Get disk space info. Returns JSON DiskSpaceResponse.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_get_disk_space(resource: ResourceArc<PumasApiResource>) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async { resource.api.get_disk_space().await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("get_disk_space error: {}", e))))
+        .and_then(|info| {
+            serde_json::to_string(&info)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+/// Get system resources info. Returns JSON SystemResourcesResponse.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_get_system_resources(resource: ResourceArc<PumasApiResource>) -> NifResult<String> {
+    resource
+        .runtime
+        .block_on(async { resource.api.get_system_resources().await })
+        .map_err(|e| {
+            rustler::Error::Term(Box::new(format!("get_system_resources error: {}", e)))
+        })
+        .and_then(|info| {
+            serde_json::to_string(&info)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+/// Check if Ollama is running.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_is_ollama_running(resource: ResourceArc<PumasApiResource>) -> bool {
+    resource
+        .runtime
+        .block_on(async { resource.api.is_ollama_running().await })
+}
+
+// ============================================================================
 // Resource registration and NIF init
 // ============================================================================
 
@@ -1072,6 +1366,7 @@ fn load(env: Env, _info: Term) -> bool {
     rustler::resource!(WorkflowExecutorResource, env);
     rustler::resource!(OrchestrationStoreResource, env);
     rustler::resource!(NodeRegistryResource, env);
+    rustler::resource!(PumasApiResource, env);
     true
 }
 
