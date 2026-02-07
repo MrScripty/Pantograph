@@ -209,6 +209,7 @@ impl TaskExecutor for NoopTaskExecutor {
         task_id: &str,
         _inputs: HashMap<String, serde_json::Value>,
         _context: &Context,
+        _extensions: &node_engine::ExecutorExtensions,
     ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
         Err(node_engine::NodeEngineError::ExecutionFailed(format!(
             "No executor configured for task '{}'",
@@ -528,6 +529,229 @@ impl FfiOrchestrationStore {
         let mut guard = self.store.write().await;
         guard.remove_graph(&graph_id).map_err(FfiError::from)?;
         Ok(())
+    }
+}
+
+// ============================================================================
+// FfiPumasApi - Model Library API
+// ============================================================================
+
+/// Pumas model library API for model management, HuggingFace search,
+/// downloads, and imports.
+#[derive(uniffi::Object)]
+pub struct FfiPumasApi {
+    api: Arc<pumas_library::PumasApi>,
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+impl FfiPumasApi {
+    /// Create a new PumasApi instance.
+    ///
+    /// `launcher_root` is the root directory for the pumas library.
+    #[uniffi::constructor]
+    pub async fn new(launcher_root: String) -> Result<Arc<Self>, FfiError> {
+        let api = pumas_library::PumasApi::builder(&launcher_root)
+            .auto_create_dirs(true)
+            .with_hf_client(true)
+            .with_process_manager(false)
+            .build()
+            .await
+            .map_err(|e| FfiError::Other {
+                message: format!("PumasApi init error: {}", e),
+            })?;
+
+        Ok(Arc::new(Self {
+            api: Arc::new(api),
+        }))
+    }
+
+    // --- Local library ---
+
+    /// List all models in the local library. Returns JSON array of ModelRecord.
+    pub async fn list_models(&self) -> Result<String, FfiError> {
+        let models = self.api.list_models().await.map_err(|e| FfiError::Other {
+            message: e.to_string(),
+        })?;
+        serde_json::to_string(&models).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    /// Search the local model library. Returns JSON SearchResult.
+    pub async fn search_models(
+        &self,
+        query: String,
+        limit: u32,
+        offset: u32,
+    ) -> Result<String, FfiError> {
+        let result = self
+            .api
+            .search_models(&query, limit as usize, offset as usize)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&result).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    /// Get a single model by ID. Returns JSON ModelRecord or None.
+    pub async fn get_model(&self, model_id: String) -> Result<Option<String>, FfiError> {
+        let model = self
+            .api
+            .get_model(&model_id)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        match model {
+            Some(m) => {
+                let json = serde_json::to_string(&m).map_err(|e| FfiError::Serialization {
+                    message: e.to_string(),
+                })?;
+                Ok(Some(json))
+            }
+            None => Ok(None),
+        }
+    }
+
+    // --- HuggingFace ---
+
+    /// Search HuggingFace for models. Returns JSON array of HuggingFaceModel.
+    pub async fn search_hf(
+        &self,
+        query: String,
+        kind: Option<String>,
+        limit: u32,
+    ) -> Result<String, FfiError> {
+        let models = self
+            .api
+            .search_hf_models(&query, kind.as_deref(), limit as usize)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&models).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    /// Get file tree for a HuggingFace repo. Returns JSON RepoFileTree.
+    pub async fn get_repo_files(&self, repo_id: String) -> Result<String, FfiError> {
+        let tree = self
+            .api
+            .get_hf_repo_files(&repo_id)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&tree).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    // --- Download ---
+
+    /// Start a model download. `request_json` is a JSON DownloadRequest.
+    /// Returns the download ID.
+    pub async fn start_download(&self, request_json: String) -> Result<String, FfiError> {
+        let request: pumas_library::model_library::DownloadRequest =
+            serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
+                message: e.to_string(),
+            })?;
+        self.api
+            .start_hf_download(&request)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })
+    }
+
+    /// Get download progress. Returns JSON ModelDownloadProgress or None.
+    pub async fn get_download_progress(
+        &self,
+        download_id: String,
+    ) -> Result<Option<String>, FfiError> {
+        let progress = self.api.get_hf_download_progress(&download_id).await;
+        match progress {
+            Some(p) => {
+                let json = serde_json::to_string(&p).map_err(|e| FfiError::Serialization {
+                    message: e.to_string(),
+                })?;
+                Ok(Some(json))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Cancel a download. Returns true if cancelled.
+    pub async fn cancel_download(&self, download_id: String) -> Result<bool, FfiError> {
+        self.api
+            .cancel_hf_download(&download_id)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })
+    }
+
+    // --- Import ---
+
+    /// Import a model. `spec_json` is a JSON ModelImportSpec.
+    /// Returns JSON ModelImportResult.
+    pub async fn import_model(&self, spec_json: String) -> Result<String, FfiError> {
+        let spec: pumas_library::model_library::ModelImportSpec =
+            serde_json::from_str(&spec_json).map_err(|e| FfiError::Serialization {
+                message: e.to_string(),
+            })?;
+        let result = self
+            .api
+            .import_model(&spec)
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&result).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    // --- System ---
+
+    /// Get disk space info. Returns JSON DiskSpaceResponse.
+    pub async fn get_disk_space(&self) -> Result<String, FfiError> {
+        let info = self
+            .api
+            .get_disk_space()
+            .await
+            .map_err(|e| FfiError::Other {
+                message: e.to_string(),
+            })?;
+        serde_json::to_string(&info).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })
+    }
+
+    /// Check if Ollama is running.
+    pub async fn is_ollama_running(&self) -> bool {
+        self.api.is_ollama_running().await
+    }
+}
+
+impl FfiPumasApi {
+    fn api_arc(&self) -> Arc<pumas_library::PumasApi> {
+        self.api.clone()
+    }
+}
+
+/// Inject PumasApi into a workflow engine's extensions.
+#[uniffi::export(async_runtime = "tokio")]
+impl FfiWorkflowEngine {
+    /// Set a PumasApi on this engine for model resolution in workflow nodes.
+    pub async fn set_pumas_api(&self, api: Arc<FfiPumasApi>) {
+        let mut exec = self.executor.write().await;
+        exec.extensions_mut()
+            .set(node_engine::extension_keys::PUMAS_API, api.api_arc());
     }
 }
 
