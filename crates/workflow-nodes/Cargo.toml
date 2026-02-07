@@ -14,8 +14,8 @@ inference = { path = "../inference" }
 lancedb = "0.22"
 rig-core = "0.28.0"
 
-# Model management
-pumas-library = { path = "/media/jeremy/OrangeCream/Linux Software/Pumas-Library/rust/crates/pumas-core" }
+# Model management (optional — enable via `model-library` feature)
+pumas-library = { workspace = true, optional = true }
 
 # Arrow for LanceDB
 arrow-array = "56"
@@ -36,3 +36,4 @@ tempfile = "3"
 [features]
 default = ["desktop"]
 desktop = []
+model-library = ["dep:pumas-library"]

@@ -33,3 +33,6 @@ tokenizers = "0.20"
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors"] }
 tokio-stream = "0.1"
+
+# Model management
+pumas-library = { path = "../Pumas-Library/rust/crates/pumas-core" }

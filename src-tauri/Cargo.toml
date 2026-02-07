@@ -28,7 +28,7 @@ tauri-build = { version = "2", features = [] }
 # Local crates
 inference = { path = "../crates/inference", default-features = false }
 node-engine = { path = "../crates/node-engine" }
-workflow-nodes = { path = "../crates/workflow-nodes" }
+workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library"] }
 
 # Workspace dependencies
 serde.workspace = true
