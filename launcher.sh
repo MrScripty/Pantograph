@@ -12,4 +12,8 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-npm run dev:desktop
+if [ "${1:-}" = "--release" ]; then
+  npm run build:desktop
+else
+  npm run dev:desktop
+fi
