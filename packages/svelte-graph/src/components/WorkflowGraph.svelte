@@ -140,20 +140,31 @@
       }
     }
 
-    const edge: GraphEdge = {
-      id: `${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`,
+    const edgeId = `${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`;
+
+    const graphEdge: GraphEdge = {
+      id: edgeId,
       source: connection.source!,
       source_handle: connection.sourceHandle!,
       target: connection.target!,
       target_handle: connection.targetHandle!,
     };
 
+    // Add edge to local store (client is source of truth)
+    stores.workflow.addEdge({
+      id: edgeId,
+      source: connection.source!,
+      sourceHandle: connection.sourceHandle!,
+      target: connection.target!,
+      targetHandle: connection.targetHandle!,
+    });
+
+    // Notify backend (fire-and-forget)
     try {
       const sessionId = get(currentSessionId) || '';
-      const updatedGraph = await backend.addEdge(edge, sessionId);
-      stores.workflow.syncEdgesFromBackend(updatedGraph);
+      await backend.addEdge(graphEdge, sessionId);
     } catch (error) {
-      console.error('[WorkflowGraph] Failed to add edge:', error);
+      console.error('[WorkflowGraph] Failed to notify backend of edge:', error);
     }
   }
 
@@ -163,11 +174,11 @@
     const sessionId = get(currentSessionId) || '';
 
     for (const edge of deletedEdges) {
+      stores.workflow.removeEdge(edge.id);
       try {
-        const updatedGraph = await backend.removeEdge(edge.id, sessionId);
-        stores.workflow.syncEdgesFromBackend(updatedGraph);
+        await backend.removeEdge(edge.id, sessionId);
       } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge:', error);
+        console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
       }
     }
 
@@ -229,21 +240,31 @@
       }
     }
 
+    const newEdgeId = `${newConnection.source}-${newConnection.sourceHandle}-${newConnection.target}-${newConnection.targetHandle}`;
+
+    // Update local store (client is source of truth)
+    stores.workflow.removeEdge(oldEdge.id);
+    stores.workflow.addEdge({
+      id: newEdgeId,
+      source: newConnection.source!,
+      sourceHandle: newConnection.sourceHandle!,
+      target: newConnection.target!,
+      targetHandle: newConnection.targetHandle!,
+    });
+
+    // Notify backend (fire-and-forget)
     try {
       const sessionId = get(currentSessionId) || '';
       await backend.removeEdge(oldEdge.id, sessionId);
-
-      const newEdge: GraphEdge = {
-        id: `${newConnection.source}-${newConnection.sourceHandle}-${newConnection.target}-${newConnection.targetHandle}`,
+      await backend.addEdge({
+        id: newEdgeId,
         source: newConnection.source!,
         source_handle: newConnection.sourceHandle!,
         target: newConnection.target!,
         target_handle: newConnection.targetHandle!,
-      };
-      const updatedGraph = await backend.addEdge(newEdge, sessionId);
-      stores.workflow.syncEdgesFromBackend(updatedGraph);
+      }, sessionId);
     } catch (error) {
-      console.error('[WorkflowGraph] Failed to reconnect edge:', error);
+      console.error('[WorkflowGraph] Failed to notify backend of reconnection:', error);
     }
   }
 
@@ -256,12 +277,12 @@
     if (!canEdit) return;
 
     if (!connectionState.isValid && reconnectingEdgeId) {
+      stores.workflow.removeEdge(reconnectingEdgeId);
       try {
         const sessionId = get(currentSessionId) || '';
-        const updatedGraph = await backend.removeEdge(reconnectingEdgeId, sessionId);
-        stores.workflow.syncEdgesFromBackend(updatedGraph);
+        await backend.removeEdge(reconnectingEdgeId, sessionId);
       } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge on reconnect end:', error);
+        console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
       }
     }
 
@@ -294,18 +315,18 @@
   async function handleEdgesCut(edgeIds: string[]) {
     const sessionId = get(currentSessionId) || '';
     for (const edgeId of edgeIds) {
+      stores.workflow.removeEdge(edgeId);
       try {
-        const updatedGraph = await backend.removeEdge(edgeId, sessionId);
-        stores.workflow.syncEdgesFromBackend(updatedGraph);
+        await backend.removeEdge(edgeId, sessionId);
       } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
+        console.error('[WorkflowGraph] Failed to notify backend of edge cut:', error);
       }
     }
   }
 </script>
 
 <div
-  class="workflow-graph-container w-full h-full"
+  class="workflow-graph-container"
   class:cutting={isCutting}
   bind:this={containerElement}
   ondrop={handleDrop}
@@ -457,6 +478,8 @@
   }
 
   .workflow-graph-container {
+    width: 100%;
+    height: 100%;
     position: relative;
     overflow: hidden;
   }
