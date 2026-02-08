@@ -157,6 +157,8 @@ impl TaskDescriptor for InferenceTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(InferenceTask::descriptor));
+
 #[async_trait]
 impl Task for InferenceTask {
     fn id(&self) -> &str {

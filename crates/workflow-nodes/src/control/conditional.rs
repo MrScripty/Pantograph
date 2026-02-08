@@ -73,6 +73,8 @@ impl TaskDescriptor for ConditionalTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ConditionalTask::descriptor));
+
 #[async_trait]
 impl Task for ConditionalTask {
     fn id(&self) -> &str {

@@ -104,6 +104,8 @@ impl TaskDescriptor for VisionAnalysisTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(VisionAnalysisTask::descriptor));
+
 #[async_trait]
 impl Task for VisionAnalysisTask {
     fn id(&self) -> &str {

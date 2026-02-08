@@ -66,6 +66,8 @@ impl TaskDescriptor for TextInputTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(TextInputTask::descriptor));
+
 #[async_trait]
 impl Task for TextInputTask {
     fn id(&self) -> &str {

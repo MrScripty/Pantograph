@@ -163,6 +163,8 @@ impl TaskDescriptor for JsonFilterTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(JsonFilterTask::descriptor));
+
 #[async_trait]
 impl Task for JsonFilterTask {
     fn id(&self) -> &str {

@@ -87,6 +87,8 @@ impl TaskDescriptor for ReadFileTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ReadFileTask::descriptor));
+
 #[async_trait]
 impl Task for ReadFileTask {
     fn id(&self) -> &str {

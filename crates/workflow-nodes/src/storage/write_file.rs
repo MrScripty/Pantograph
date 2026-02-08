@@ -90,6 +90,8 @@ impl TaskDescriptor for WriteFileTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(WriteFileTask::descriptor));
+
 #[async_trait]
 impl Task for WriteFileTask {
     fn id(&self) -> &str {

@@ -24,6 +24,7 @@ log = "0.4"
 futures-util = "0.3"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 which = "7"
+inventory = "0.3"
 
 # Candle dependencies (shared for consistency)
 candle-core = { git = "https://github.com/huggingface/candle", branch = "main" }

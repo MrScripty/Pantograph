@@ -141,6 +141,8 @@ impl TaskDescriptor for LanceDbTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(LanceDbTask::descriptor));
+
 #[async_trait]
 impl Task for LanceDbTask {
     fn id(&self) -> &str {

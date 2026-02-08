@@ -86,7 +86,7 @@ pub use groups::{
 };
 
 // Re-export descriptor types
-pub use descriptor::{PortMetadata, TaskDescriptor, TaskMetadata};
+pub use descriptor::{DescriptorFn, PortMetadata, TaskDescriptor, TaskMetadata};
 
 // Re-export ContextKeys helper (only framework type from tasks module)
 pub use tasks::ContextKeys;

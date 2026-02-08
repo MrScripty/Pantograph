@@ -42,6 +42,10 @@ use node_engine::{
     WorkflowGraph,
 };
 
+// Force the linker to include workflow-nodes object files,
+// which contain `inventory::submit!()` statics for built-in node types.
+extern crate workflow_nodes;
+
 // ============================================================================
 // Atoms
 // ============================================================================
@@ -883,6 +887,19 @@ fn node_registry_list(
 
     serde_json::to_string(&metadata)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+/// Register all built-in node types from the workflow-nodes crate.
+///
+/// Uses the `inventory` crate to discover all TaskMetadata submitted via
+/// `inventory::submit!()` in workflow-nodes and registers them as metadata-only.
+#[rustler::nif]
+fn node_registry_register_builtins(
+    resource: ResourceArc<NodeRegistryResource>,
+) -> NifResult<Atom> {
+    let mut registry = resource.registry.blocking_write();
+    registry.register_builtins();
+    Ok(atoms::ok())
 }
 
 // ============================================================================

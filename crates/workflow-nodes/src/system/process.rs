@@ -92,6 +92,8 @@ impl TaskDescriptor for ProcessTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ProcessTask::descriptor));
+
 #[async_trait]
 impl Task for ProcessTask {
     fn id(&self) -> &str {

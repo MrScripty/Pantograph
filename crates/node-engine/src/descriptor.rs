@@ -70,6 +70,15 @@ pub struct TaskMetadata {
     pub execution_mode: ExecutionMode,
 }
 
+/// A function pointer that produces a `TaskMetadata`.
+///
+/// Used with `inventory` for link-time collection of built-in node descriptors.
+/// Function pointers are const-constructible, unlike `TaskMetadata` itself
+/// (which contains heap-allocated `String` and `Vec`).
+pub struct DescriptorFn(pub fn() -> TaskMetadata);
+
+inventory::collect!(DescriptorFn);
+
 /// Metadata for a port (input or output)
 ///
 /// Describes a single port on a node, including its data type

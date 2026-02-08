@@ -113,6 +113,8 @@ impl TaskDescriptor for OllamaInferenceTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(OllamaInferenceTask::descriptor));
+
 #[async_trait]
 impl Task for OllamaInferenceTask {
     fn id(&self) -> &str {

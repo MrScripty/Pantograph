@@ -99,6 +99,8 @@ impl TaskDescriptor for ToolExecutorTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ToolExecutorTask::descriptor));
+
 #[async_trait]
 impl Task for ToolExecutorTask {
     fn id(&self) -> &str {

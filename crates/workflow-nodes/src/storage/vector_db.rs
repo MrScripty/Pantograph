@@ -78,6 +78,8 @@ impl TaskDescriptor for VectorDbTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(VectorDbTask::descriptor));
+
 #[async_trait]
 impl Task for VectorDbTask {
     fn id(&self) -> &str {

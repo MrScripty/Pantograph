@@ -153,6 +153,8 @@ impl TaskDescriptor for ToolLoopTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ToolLoopTask::descriptor));
+
 #[async_trait]
 impl Task for ToolLoopTask {
     fn id(&self) -> &str {

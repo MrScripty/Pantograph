@@ -85,6 +85,8 @@ impl TaskDescriptor for HumanInputTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(HumanInputTask::descriptor));
+
 /// State tracking for human input task
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct HumanInputState {

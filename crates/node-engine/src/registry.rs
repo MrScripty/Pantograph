@@ -128,6 +128,25 @@ impl NodeRegistry {
         );
     }
 
+    /// Register all built-in node types collected via `inventory`.
+    ///
+    /// Iterates over all `DescriptorFn` values submitted via
+    /// `inventory::submit!()` across the link unit, calls each
+    /// function pointer to produce `TaskMetadata`, and registers
+    /// each one as metadata-only (no executor factory).
+    pub fn register_builtins(&mut self) {
+        for desc_fn in inventory::iter::<crate::descriptor::DescriptorFn> {
+            self.register_metadata((desc_fn.0)());
+        }
+    }
+
+    /// Create a new registry pre-populated with all built-in node types.
+    pub fn with_builtins() -> Self {
+        let mut registry = Self::new();
+        registry.register_builtins();
+        registry
+    }
+
     /// Get metadata for a node type
     pub fn get_metadata(&self, node_type: &str) -> Option<&TaskMetadata> {
         self.entries.get(node_type).map(|e| &e.metadata)
@@ -497,5 +516,13 @@ mod tests {
 
         assert!(registry.has_node_type("metadata-only"));
         assert!(registry.get_executor("metadata-only").is_none());
+    }
+
+    #[test]
+    fn test_register_builtins_empty() {
+        // In node-engine's test binary, no inventory::submit! calls are linked,
+        // so this verifies the method doesn't panic with zero items.
+        let registry = NodeRegistry::with_builtins();
+        let _ = registry.all_metadata();
     }
 }

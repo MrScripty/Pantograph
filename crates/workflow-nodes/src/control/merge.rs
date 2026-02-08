@@ -98,6 +98,8 @@ impl TaskDescriptor for MergeTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(MergeTask::descriptor));
+
 #[async_trait]
 impl Task for MergeTask {
     fn id(&self) -> &str {

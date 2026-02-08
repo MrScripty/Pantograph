@@ -72,6 +72,9 @@ impl TaskDescriptor for ComponentPreviewTask {
     }
 }
 
+#[cfg(feature = "desktop")]
+inventory::submit!(node_engine::DescriptorFn(ComponentPreviewTask::descriptor));
+
 #[async_trait]
 impl Task for ComponentPreviewTask {
     fn id(&self) -> &str {

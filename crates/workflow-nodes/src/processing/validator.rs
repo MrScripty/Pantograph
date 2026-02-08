@@ -212,6 +212,8 @@ impl TaskDescriptor for ValidatorTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ValidatorTask::descriptor));
+
 #[async_trait]
 impl Task for ValidatorTask {
     fn id(&self) -> &str {

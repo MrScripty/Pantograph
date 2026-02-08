@@ -68,6 +68,8 @@ impl TaskDescriptor for TextOutputTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(TextOutputTask::descriptor));
+
 #[async_trait]
 impl Task for TextOutputTask {
     fn id(&self) -> &str {

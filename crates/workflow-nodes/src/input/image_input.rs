@@ -79,6 +79,8 @@ impl TaskDescriptor for ImageInputTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ImageInputTask::descriptor));
+
 #[async_trait]
 impl Task for ImageInputTask {
     fn id(&self) -> &str {

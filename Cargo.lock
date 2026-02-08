@@ -6475,6 +6475,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "graph-flow",
+ "inventory",
  "log",
  "reqwest",
  "serde",
@@ -7305,6 +7306,7 @@ dependencies = [
  "rustler",
  "serde_json",
  "tokio",
+ "workflow-nodes",
 ]
 
 [[package]]
@@ -12428,6 +12430,7 @@ dependencies = [
  "async-trait",
  "graph-flow",
  "inference",
+ "inventory",
  "lancedb",
  "log",
  "node-engine",

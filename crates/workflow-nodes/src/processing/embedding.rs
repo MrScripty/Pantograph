@@ -103,6 +103,8 @@ impl TaskDescriptor for EmbeddingTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(EmbeddingTask::descriptor));
+
 #[async_trait]
 impl Task for EmbeddingTask {
     fn id(&self) -> &str {

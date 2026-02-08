@@ -105,6 +105,8 @@ impl TaskDescriptor for ModelProviderTask {
     }
 }
 
+inventory::submit!(node_engine::DescriptorFn(ModelProviderTask::descriptor));
+
 #[async_trait]
 impl Task for ModelProviderTask {
     fn id(&self) -> &str {

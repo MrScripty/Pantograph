@@ -62,6 +62,9 @@ impl TaskDescriptor for LinkedInputTask {
     }
 }
 
+#[cfg(feature = "desktop")]
+inventory::submit!(node_engine::DescriptorFn(LinkedInputTask::descriptor));
+
 #[async_trait]
 impl Task for LinkedInputTask {
     fn id(&self) -> &str {
