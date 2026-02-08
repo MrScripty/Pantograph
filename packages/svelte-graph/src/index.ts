@@ -82,4 +82,7 @@ export { default as CutTool } from './components/CutTool.svelte';
 // --- Node/Edge Components ---
 export { default as BaseNode } from './components/nodes/BaseNode.svelte';
 export { default as GenericNode } from './components/nodes/GenericNode.svelte';
+export { default as TextInputNode } from './components/nodes/TextInputNode.svelte';
+export { default as TextOutputNode } from './components/nodes/TextOutputNode.svelte';
+export { default as LlamaCppInferenceNode } from './components/nodes/LlamaCppInferenceNode.svelte';
 export { default as ReconnectableEdge } from './components/edges/ReconnectableEdge.svelte';
