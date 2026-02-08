@@ -17,6 +17,7 @@ pub mod output;
 pub mod processing;
 pub mod storage;
 pub mod system;
+pub mod tool;
 
 // Re-export all tasks for convenience
 pub use control::*;
@@ -25,6 +26,7 @@ pub use output::*;
 pub use processing::*;
 pub use storage::*;
 pub use system::*;
+pub use tool::*;
 
 #[cfg(test)]
 mod tests {
@@ -36,9 +38,9 @@ mod tests {
         let all = registry.all_metadata();
 
         #[cfg(feature = "desktop")]
-        assert_eq!(all.len(), 22, "Expected 22 built-in nodes with desktop feature");
+        assert_eq!(all.len(), 25, "Expected 25 built-in nodes with desktop feature");
         #[cfg(not(feature = "desktop"))]
-        assert_eq!(all.len(), 20, "Expected 20 built-in nodes without desktop feature");
+        assert_eq!(all.len(), 23, "Expected 23 built-in nodes without desktop feature");
 
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
@@ -46,5 +48,8 @@ mod tests {
         assert!(registry.has_node_type("conditional"));
         assert!(registry.has_node_type("text-output"));
         assert!(registry.has_node_type("process"));
+        assert!(registry.has_node_type("llamacpp-inference"));
+        assert!(registry.has_node_type("puma-lib"));
+        assert!(registry.has_node_type("agent-tools"));
     }
 }
