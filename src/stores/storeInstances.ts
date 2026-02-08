@@ -7,7 +7,7 @@
  * to these same instances.
  */
 import { TauriWorkflowBackend } from '../backends/TauriWorkflowBackend';
-import { PANTOGRAPH_NODE_REGISTRY } from '../registry/pantographNodeTypes';
+import { buildPantographRegistry } from '../registry/pantographNodeTypes';
 import {
   createWorkflowStores,
   createViewStores,
@@ -19,7 +19,7 @@ import { workflowService } from '../services/workflow/WorkflowService';
 // --- Singleton backend ---
 
 export const backend = new TauriWorkflowBackend();
-export const registry = PANTOGRAPH_NODE_REGISTRY;
+export const registry = buildPantographRegistry();
 
 // --- Singleton stores ---
 
