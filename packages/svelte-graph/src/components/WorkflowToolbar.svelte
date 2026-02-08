@@ -12,7 +12,6 @@
 
   let { children }: Props = $props();
 
-  // Destructure stores for reactive $-prefix access
   const { workflowGraph, isDirty, isExecuting, edges: edgesStore } = stores.workflow;
   const { isReadOnly, currentGraphId, currentGraphName, currentSessionId } = stores.session;
 
@@ -125,20 +124,17 @@
   }
 </script>
 
-<div class="workflow-toolbar h-12 px-4 bg-neutral-900 border-b border-neutral-700 flex items-center justify-between">
-  <div class="flex items-center gap-3">
+<div class="workflow-toolbar">
+  <div class="toolbar-left">
     {#if children}
       {@render children()}
     {/if}
 
-    <div class="h-6 w-px bg-neutral-700"></div>
+    <div class="toolbar-divider"></div>
 
-    <div class="flex items-center gap-2">
+    <div class="toolbar-actions">
       <button
-        class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
-        class:hover:bg-neutral-700={!$isReadOnly}
-        class:opacity-50={$isReadOnly}
-        class:cursor-not-allowed={$isReadOnly}
+        class="toolbar-btn"
         onclick={handleNew}
         disabled={$isReadOnly}
         title={$isReadOnly ? 'Cannot create new in read-only mode' : 'New Workflow'}
@@ -146,10 +142,7 @@
         [+] New
       </button>
       <button
-        class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
-        class:hover:bg-neutral-700={!$isReadOnly}
-        class:opacity-50={$isReadOnly}
-        class:cursor-not-allowed={$isReadOnly}
+        class="toolbar-btn"
         onclick={handleSave}
         disabled={$isReadOnly}
         title={$isReadOnly ? 'Cannot save read-only graph' : 'Save Workflow'}
@@ -157,10 +150,7 @@
         [S] Save
       </button>
       <button
-        class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors hover:bg-red-900"
-        class:opacity-50={$isReadOnly}
-        class:cursor-not-allowed={$isReadOnly}
-        class:hover:bg-transparent={$isReadOnly}
+        class="toolbar-btn toolbar-btn-danger"
         onclick={handleClear}
         disabled={$isReadOnly}
         title={$isReadOnly ? 'Cannot clear read-only graph' : 'Clear All'}
@@ -170,22 +160,19 @@
     </div>
   </div>
 
-  <div class="flex items-center gap-2">
+  <div class="toolbar-center">
     {#if $isReadOnly}
-      <span class="text-xs text-neutral-500 bg-neutral-800 px-2 py-0.5 rounded">(read-only)</span>
+      <span class="readonly-badge">(read-only)</span>
     {/if}
     {#if $isDirty && !$isReadOnly}
-      <span class="text-amber-400 text-sm" title="Unsaved changes">*</span>
+      <span class="dirty-indicator" title="Unsaved changes">*</span>
     {/if}
   </div>
 
-  <div class="flex items-center gap-2">
+  <div class="toolbar-right">
     <button
-      class="px-4 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      class:bg-green-600={!$isExecuting}
-      class:hover:bg-green-500={!$isExecuting}
-      class:bg-amber-600={$isExecuting}
-      class:text-white={true}
+      class="run-btn"
+      data-executing={$isExecuting || undefined}
       onclick={handleRun}
       disabled={$isExecuting}
     >
@@ -197,3 +184,103 @@
     </button>
   </div>
 </div>
+
+<style>
+  .workflow-toolbar {
+    height: 3rem;
+    padding: 0 1rem;
+    background-color: #171717;
+    border-bottom: 1px solid #404040;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toolbar-left,
+  .toolbar-center,
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .toolbar-left {
+    gap: 0.75rem;
+  }
+
+  .toolbar-divider {
+    height: 1.5rem;
+    width: 1px;
+    background-color: #404040;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* --- Toolbar Buttons --- */
+  .toolbar-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    background-color: #262626;
+    border: 1px solid #525252;
+    border-radius: 0.25rem;
+    color: #e5e5e5;
+    cursor: pointer;
+    transition: background-color 150ms;
+  }
+
+  .toolbar-btn:not(:disabled):hover {
+    background-color: #404040;
+  }
+
+  .toolbar-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .toolbar-btn-danger:not(:disabled):hover {
+    background-color: #7f1d1d;
+  }
+
+  /* --- Status indicators --- */
+  .readonly-badge {
+    font-size: 0.75rem;
+    color: #737373;
+    background-color: #262626;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+  }
+
+  .dirty-indicator {
+    color: #fbbf24;
+    font-size: 0.875rem;
+  }
+
+  /* --- Run Button --- */
+  .run-btn {
+    padding: 0.375rem 1rem;
+    font-size: 0.875rem;
+    border-radius: 0.25rem;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: background-color 150ms;
+    background-color: #16a34a;
+  }
+
+  .run-btn:not(:disabled):hover {
+    background-color: #22c55e;
+  }
+
+  .run-btn[data-executing] {
+    background-color: #d97706;
+  }
+
+  .run-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

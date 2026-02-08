@@ -3,7 +3,7 @@
   import { useGraphContext } from '../context/useGraphContext.js';
   import type { PortMapping, NodeGroup } from '../types/groups.js';
   import type { PortDefinition } from '../types/workflow.js';
-  import { PORT_TYPE_COLORS } from '../constants/portColors.js';
+  import { getPortColor } from '../constants/portColors.js';
 
   const { stores } = useGraphContext();
 
@@ -107,71 +107,43 @@
   function handleSave() {
     onUpdate(exposedInputs, exposedOutputs);
   }
-
-  // Tailwind-style background color classes keyed by data type
-  const typeBgColors: Record<string, string> = {
-    string: 'bg-green-500',
-    prompt: 'bg-blue-500',
-    number: 'bg-amber-500',
-    boolean: 'bg-red-500',
-    image: 'bg-violet-500',
-    audio: 'bg-pink-500',
-    stream: 'bg-cyan-500',
-    json: 'bg-orange-500',
-    component: 'bg-pink-600',
-    document: 'bg-teal-500',
-    tools: 'bg-amber-600',
-    embedding: 'bg-indigo-500',
-    vector_db: 'bg-purple-500',
-    any: 'bg-neutral-500',
-  };
-
-  function getTypeColor(dataType: string): string {
-    return typeBgColors[dataType] || typeBgColors.any;
-  }
 </script>
 
-<div class="port-mapper-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-  <div class="port-mapper bg-neutral-800 rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col">
+<div class="port-mapper-overlay">
+  <div class="port-mapper">
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div class="mapper-header">
+      <div class="mapper-title-row">
+        <svg class="header-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
-        <span class="text-lg font-medium text-neutral-200">Configure Group Ports</span>
+        <span class="mapper-title">Configure Group Ports</span>
       </div>
-      <button
-        class="text-neutral-400 hover:text-neutral-200 transition-colors"
-        onclick={onClose}
-      >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <button class="close-btn" onclick={onClose}>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto p-4 space-y-6">
+    <div class="mapper-content">
       <!-- Exposed Inputs -->
-      <div>
-        <h3 class="text-sm font-medium text-purple-300 mb-2">Exposed Input Ports</h3>
-        <div class="space-y-2">
+      <div class="port-section">
+        <h3 class="section-title">Exposed Input Ports</h3>
+        <div class="port-list">
           {#each exposedInputs as input, i}
-            <div class="flex items-center gap-2 bg-neutral-700/50 rounded px-3 py-2">
-              <span class="w-2 h-2 rounded-full {getTypeColor(input.data_type)}"></span>
+            <div class="port-row">
+              <span class="type-dot" style="background-color: {getPortColor(input.data_type)}"></span>
               <input
                 type="text"
-                class="flex-1 bg-transparent text-sm text-neutral-200 outline-none"
+                class="port-label-input"
                 value={input.group_port_label}
                 oninput={(e) => updateInputLabel(i, (e.target as HTMLInputElement).value)}
               />
-              <span class="text-xs text-neutral-500">{input.internal_node_id}</span>
-              <button
-                class="text-neutral-400 hover:text-red-400 transition-colors"
-                onclick={() => removeInput(i)}
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span class="port-node-id">{input.internal_node_id}</span>
+              <button class="remove-btn" onclick={() => removeInput(i)}>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -179,14 +151,11 @@
           {/each}
 
           {#if availableInputPorts().length > 0}
-            <div class="mt-2">
-              <span class="text-xs text-neutral-400">Add input:</span>
-              <div class="flex flex-wrap gap-1 mt-1">
+            <div class="add-port-section">
+              <span class="add-label">Add input:</span>
+              <div class="add-port-list">
                 {#each availableInputPorts() as { nodeId, nodeName, port }}
-                  <button
-                    class="text-xs px-2 py-1 bg-neutral-700 hover:bg-purple-600/50 rounded text-neutral-300 transition-colors"
-                    onclick={() => addInput(nodeId, port)}
-                  >
+                  <button class="add-port-btn" onclick={() => addInput(nodeId, port)}>
                     {nodeName} / {port.label}
                   </button>
                 {/each}
@@ -197,24 +166,21 @@
       </div>
 
       <!-- Exposed Outputs -->
-      <div>
-        <h3 class="text-sm font-medium text-purple-300 mb-2">Exposed Output Ports</h3>
-        <div class="space-y-2">
+      <div class="port-section">
+        <h3 class="section-title">Exposed Output Ports</h3>
+        <div class="port-list">
           {#each exposedOutputs as output, i}
-            <div class="flex items-center gap-2 bg-neutral-700/50 rounded px-3 py-2">
-              <span class="w-2 h-2 rounded-full {getTypeColor(output.data_type)}"></span>
+            <div class="port-row">
+              <span class="type-dot" style="background-color: {getPortColor(output.data_type)}"></span>
               <input
                 type="text"
-                class="flex-1 bg-transparent text-sm text-neutral-200 outline-none"
+                class="port-label-input"
                 value={output.group_port_label}
                 oninput={(e) => updateOutputLabel(i, (e.target as HTMLInputElement).value)}
               />
-              <span class="text-xs text-neutral-500">{output.internal_node_id}</span>
-              <button
-                class="text-neutral-400 hover:text-red-400 transition-colors"
-                onclick={() => removeOutput(i)}
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span class="port-node-id">{output.internal_node_id}</span>
+              <button class="remove-btn" onclick={() => removeOutput(i)}>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -222,14 +188,11 @@
           {/each}
 
           {#if availableOutputPorts().length > 0}
-            <div class="mt-2">
-              <span class="text-xs text-neutral-400">Add output:</span>
-              <div class="flex flex-wrap gap-1 mt-1">
+            <div class="add-port-section">
+              <span class="add-label">Add output:</span>
+              <div class="add-port-list">
                 {#each availableOutputPorts() as { nodeId, nodeName, port }}
-                  <button
-                    class="text-xs px-2 py-1 bg-neutral-700 hover:bg-purple-600/50 rounded text-neutral-300 transition-colors"
-                    onclick={() => addOutput(nodeId, port)}
-                  >
+                  <button class="add-port-btn" onclick={() => addOutput(nodeId, port)}>
                     {nodeName} / {port.label}
                   </button>
                 {/each}
@@ -241,19 +204,213 @@
     </div>
 
     <!-- Footer -->
-    <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-neutral-700">
-      <button
-        class="px-4 py-2 text-sm text-neutral-300 hover:text-neutral-100 transition-colors"
-        onclick={onClose}
-      >
-        Cancel
-      </button>
-      <button
-        class="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors"
-        onclick={handleSave}
-      >
-        Save Changes
-      </button>
+    <div class="mapper-footer">
+      <button class="cancel-btn" onclick={onClose}>Cancel</button>
+      <button class="save-btn" onclick={handleSave}>Save Changes</button>
     </div>
   </div>
 </div>
+
+<style>
+  .port-mapper-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+
+  .port-mapper {
+    background-color: #262626;
+    border-radius: 0.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* --- Header --- */
+  .mapper-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #404040;
+  }
+
+  .mapper-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .header-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #c084fc;
+  }
+
+  .mapper-title {
+    font-size: 1.125rem;
+    font-weight: 500;
+    color: #e5e5e5;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: #a3a3a3;
+    cursor: pointer;
+    padding: 0;
+    transition: color 150ms;
+  }
+
+  .close-btn:hover {
+    color: #e5e5e5;
+  }
+
+  /* --- Content --- */
+  .mapper-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .port-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .section-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #d8b4fe;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .port-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .port-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: rgba(64, 64, 64, 0.5);
+    border-radius: 0.25rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .type-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+
+  .port-label-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    font-size: 0.875rem;
+    color: #e5e5e5;
+    outline: none;
+  }
+
+  .port-node-id {
+    font-size: 0.75rem;
+    color: #737373;
+  }
+
+  .remove-btn {
+    background: none;
+    border: none;
+    color: #a3a3a3;
+    cursor: pointer;
+    padding: 0;
+    transition: color 150ms;
+  }
+
+  .remove-btn:hover {
+    color: #ef4444;
+  }
+
+  /* --- Add Port --- */
+  .add-port-section {
+    margin-top: 0.5rem;
+  }
+
+  .add-label {
+    font-size: 0.75rem;
+    color: #a3a3a3;
+  }
+
+  .add-port-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+  }
+
+  .add-port-btn {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    background-color: #404040;
+    border: none;
+    border-radius: 0.25rem;
+    color: #d4d4d4;
+    cursor: pointer;
+    transition: background-color 150ms;
+  }
+
+  .add-port-btn:hover {
+    background-color: rgba(147, 51, 234, 0.5);
+  }
+
+  /* --- Footer --- */
+  .mapper-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #404040;
+  }
+
+  .cancel-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    background: none;
+    border: none;
+    color: #d4d4d4;
+    cursor: pointer;
+    transition: color 150ms;
+  }
+
+  .cancel-btn:hover {
+    color: #f5f5f5;
+  }
+
+  .save-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    background-color: #9333ea;
+    border: none;
+    border-radius: 0.25rem;
+    color: white;
+    cursor: pointer;
+    transition: background-color 150ms;
+  }
+
+  .save-btn:hover {
+    background-color: #a855f7;
+  }
+</style>

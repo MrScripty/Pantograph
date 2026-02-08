@@ -29,11 +29,9 @@
 
   const { nodeDefinitions: nodeDefsStore } = stores.workflow;
 
-  // Build types from registry
   const edgeTypes: EdgeTypes = (registry.edgeTypes || { reconnectable: ReconnectableEdge }) as unknown as EdgeTypes;
   const nodeTypes: NodeTypes = registry.nodeTypes as unknown as NodeTypes;
 
-  // Convert group nodes/edges to SvelteFlow format
   let nodes = $state.raw<Node[]>(
     group.nodes.map((n) => {
       const definition = get(nodeDefsStore).find((d) => d.node_type === n.node_type);
@@ -99,39 +97,31 @@
   }
 </script>
 
-<div class="group-editor-container w-full h-full flex flex-col">
+<div class="group-editor-container">
   <!-- Header bar -->
-  <div class="editor-header flex items-center gap-4 px-4 py-2 bg-purple-900/30 border-b border-purple-600/30">
-    <button
-      class="flex items-center gap-2 text-purple-300 hover:text-purple-100 transition-colors"
-      onclick={handleBack}
-    >
-      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <div class="editor-header">
+    <button class="back-btn" onclick={handleBack}>
+      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
       </svg>
       Back
     </button>
 
-    <div class="flex items-center gap-2">
-      <svg class="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div class="editor-title-row">
+      <svg class="title-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
       </svg>
-      <span class="text-lg font-medium text-purple-200">Editing: {group.name}</span>
+      <span class="editor-title">Editing: {group.name}</span>
     </div>
 
-    <div class="ml-auto flex items-center gap-2">
-      <span class="text-sm text-purple-400">{nodes.length} nodes</span>
-      <button
-        class="px-3 py-1 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors"
-        onclick={handleSave}
-      >
-        Save & Close
-      </button>
+    <div class="editor-actions">
+      <span class="node-count">{nodes.length} nodes</span>
+      <button class="save-btn" onclick={handleSave}>Save & Close</button>
     </div>
   </div>
 
   <!-- Graph editor -->
-  <div class="flex-1 relative">
+  <div class="editor-canvas">
     <SvelteFlow
       bind:nodes
       bind:edges
@@ -166,25 +156,25 @@
     </SvelteFlow>
 
     <!-- Exposed ports indicator -->
-    <div class="absolute bottom-4 left-4 bg-neutral-800/90 rounded-lg p-3 text-sm">
-      <div class="text-purple-300 font-medium mb-2">Exposed Ports</div>
-      <div class="flex gap-4">
+    <div class="ports-indicator">
+      <div class="ports-indicator-title">Exposed Ports</div>
+      <div class="ports-indicator-grid">
         <div>
-          <div class="text-neutral-400 text-xs mb-1">Inputs ({exposedInputs.length})</div>
+          <div class="ports-indicator-label">Inputs ({exposedInputs.length})</div>
           {#each exposedInputs as input}
-            <div class="text-purple-400 text-xs">{input.group_port_label}</div>
+            <div class="ports-indicator-item">{input.group_port_label}</div>
           {/each}
           {#if exposedInputs.length === 0}
-            <div class="text-neutral-500 text-xs">None</div>
+            <div class="ports-indicator-empty">None</div>
           {/if}
         </div>
         <div>
-          <div class="text-neutral-400 text-xs mb-1">Outputs ({exposedOutputs.length})</div>
+          <div class="ports-indicator-label">Outputs ({exposedOutputs.length})</div>
           {#each exposedOutputs as output}
-            <div class="text-purple-400 text-xs">{output.group_port_label}</div>
+            <div class="ports-indicator-item">{output.group_port_label}</div>
           {/each}
           {#if exposedOutputs.length === 0}
-            <div class="text-neutral-500 text-xs">None</div>
+            <div class="ports-indicator-empty">None</div>
           {/if}
         </div>
       </div>
@@ -193,6 +183,129 @@
 </div>
 
 <style>
+  .group-editor-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* --- Header --- */
+  .editor-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: rgba(88, 28, 135, 0.3);
+    border-bottom: 1px solid rgba(147, 51, 234, 0.3);
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    color: #d8b4fe;
+    cursor: pointer;
+    font-size: inherit;
+    transition: color 150ms;
+  }
+
+  .back-btn:hover {
+    color: #f3e8ff;
+  }
+
+  .editor-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .title-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #c084fc;
+  }
+
+  .editor-title {
+    font-size: 1.125rem;
+    font-weight: 500;
+    color: #e9d5ff;
+  }
+
+  .editor-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .node-count {
+    font-size: 0.875rem;
+    color: #c084fc;
+  }
+
+  .save-btn {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    background-color: #9333ea;
+    border: none;
+    border-radius: 0.25rem;
+    color: white;
+    cursor: pointer;
+    transition: background-color 150ms;
+  }
+
+  .save-btn:hover {
+    background-color: #a855f7;
+  }
+
+  /* --- Canvas --- */
+  .editor-canvas {
+    flex: 1;
+    position: relative;
+  }
+
+  /* --- Ports Indicator --- */
+  .ports-indicator {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    background-color: rgba(38, 38, 38, 0.9);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .ports-indicator-title {
+    color: #d8b4fe;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+
+  .ports-indicator-grid {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .ports-indicator-label {
+    color: #a3a3a3;
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .ports-indicator-item {
+    color: #c084fc;
+    font-size: 0.75rem;
+  }
+
+  .ports-indicator-empty {
+    color: #737373;
+    font-size: 0.75rem;
+  }
+
+  /* --- SvelteFlow overrides --- */
   :global(.group-editor-container .svelte-flow) {
     background-color: transparent !important;
     background-image: none !important;
