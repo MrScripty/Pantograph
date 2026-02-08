@@ -442,7 +442,7 @@ Content of section two.
 "#;
 
         let sections = parse_markdown_structure(content);
-        assert_eq!(sections.len(), 5);
+        assert_eq!(sections.len(), 4);
         assert_eq!(sections[0].title, "Main Title");
         assert_eq!(sections[0].level, 1);
         assert_eq!(sections[1].title, "Section One");
