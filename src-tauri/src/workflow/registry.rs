@@ -1,24 +1,10 @@
 //! Node registry - manages available node type definitions
 //!
 //! The registry stores node definitions for the UI palette.
-//! Definitions are sourced from node-engine's TaskDescriptor trait,
+//! Definitions are sourced from node-engine's inventory-based registry,
 //! creating a single source of truth for node metadata.
 
 use std::collections::HashMap;
-
-use node_engine::TaskDescriptor;
-use workflow_nodes::{
-    // Input tasks
-    HumanInputTask, ImageInputTask, LinkedInputTask, ModelProviderTask, TextInputTask, VectorDbTask,
-    // Output tasks
-    ComponentPreviewTask, TextOutputTask,
-    // Processing tasks
-    EmbeddingTask, InferenceTask, JsonFilterTask, OllamaInferenceTask, ValidatorTask, VisionAnalysisTask,
-    // Storage tasks
-    LanceDbTask, ReadFileTask, WriteFileTask,
-    // Control tasks
-    ConditionalTask, MergeTask, ToolExecutorTask, ToolLoopTask,
-};
 
 use super::types::{ExecutionMode, NodeCategory, NodeDefinition, PortDataType, PortDefinition};
 
@@ -94,7 +80,7 @@ fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
 ///
 /// Stores node definitions and provides them to the frontend for
 /// the node palette. Definitions are sourced from node-engine's
-/// TaskDescriptor trait.
+/// inventory-based registry.
 pub struct NodeRegistry {
     definitions: HashMap<String, NodeDefinition>,
 }
@@ -104,58 +90,14 @@ impl NodeRegistry {
     pub fn new() -> Self {
         let mut definitions = HashMap::new();
 
-        // Register definitions from workflow-nodes tasks (single source of truth)
-        // Input tasks
-        Self::register_from_task::<TextInputTask>(&mut definitions);
-        Self::register_from_task::<ImageInputTask>(&mut definitions);
-        Self::register_from_task::<HumanInputTask>(&mut definitions);
-        Self::register_from_task::<VectorDbTask>(&mut definitions);
-        Self::register_from_task::<LinkedInputTask>(&mut definitions);
-        Self::register_from_task::<ModelProviderTask>(&mut definitions);
-
-        // Output tasks
-        Self::register_from_task::<TextOutputTask>(&mut definitions);
-        Self::register_from_task::<ComponentPreviewTask>(&mut definitions);
-
-        // Processing tasks
-        Self::register_from_task::<InferenceTask>(&mut definitions);  // Keep for backward compatibility
-        Self::register_from_task::<OllamaInferenceTask>(&mut definitions);
-        Self::register_from_task::<VisionAnalysisTask>(&mut definitions);
-        Self::register_from_task::<EmbeddingTask>(&mut definitions);
-
-        // Storage tasks
-        Self::register_from_task::<LanceDbTask>(&mut definitions);
-        Self::register_from_task::<ReadFileTask>(&mut definitions);
-        Self::register_from_task::<WriteFileTask>(&mut definitions);
-
-        // Control tasks
-        Self::register_from_task::<ToolLoopTask>(&mut definitions);
-        Self::register_from_task::<ToolExecutorTask>(&mut definitions);
-        Self::register_from_task::<ConditionalTask>(&mut definitions);
-        Self::register_from_task::<MergeTask>(&mut definitions);
-
-        // Processing tasks (additional)
-        Self::register_from_task::<ValidatorTask>(&mut definitions);
-        Self::register_from_task::<JsonFilterTask>(&mut definitions);
-
-        // Tauri-only nodes (no node-engine task implementation)
-        Self::register(&mut definitions, Self::puma_lib_definition());
-        Self::register(&mut definitions, Self::agent_tools_definition());
-        Self::register(&mut definitions, Self::llamacpp_inference_definition());
+        // Single source of truth: discover all nodes via inventory
+        let engine_registry = node_engine::NodeRegistry::with_builtins();
+        for meta in engine_registry.all_metadata() {
+            let def = convert_metadata(meta.clone());
+            definitions.insert(def.node_type.clone(), def);
+        }
 
         Self { definitions }
-    }
-
-    /// Register a definition from a TaskDescriptor
-    fn register_from_task<T: TaskDescriptor>(map: &mut HashMap<String, NodeDefinition>) {
-        let meta = T::descriptor();
-        let def = convert_metadata(meta);
-        map.insert(def.node_type.clone(), def);
-    }
-
-    /// Register a node definition
-    fn register(map: &mut HashMap<String, NodeDefinition>, def: NodeDefinition) {
-        map.insert(def.node_type.clone(), def);
     }
 
     /// Get a node definition by type
@@ -193,109 +135,6 @@ impl NodeRegistry {
     /// Check if the registry is empty
     pub fn is_empty(&self) -> bool {
         self.definitions.is_empty()
-    }
-
-    // =========================================================================
-    // Tauri-only Node Definitions (no node-engine task)
-    // =========================================================================
-
-    fn puma_lib_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "puma-lib".to_string(),
-            category: NodeCategory::Input,
-            label: "Puma-Lib".to_string(),
-            description: "Provides AI model file path".to_string(),
-            inputs: vec![],
-            outputs: vec![PortDefinition {
-                id: "model_path".to_string(),
-                label: "Model Path".to_string(),
-                data_type: PortDataType::String,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn agent_tools_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "agent-tools".to_string(),
-            category: NodeCategory::Tool,
-            label: "Agent Tools".to_string(),
-            description: "Configures available tools for agent".to_string(),
-            inputs: vec![],
-            outputs: vec![PortDefinition {
-                id: "tools".to_string(),
-                label: "Tools".to_string(),
-                data_type: PortDataType::Tools,
-                required: false,
-                multiple: false,
-            }],
-            execution_mode: ExecutionMode::Reactive,
-        }
-    }
-
-    fn llamacpp_inference_definition() -> NodeDefinition {
-        NodeDefinition {
-            node_type: "llamacpp-inference".to_string(),
-            category: NodeCategory::Processing,
-            label: "LlamaCpp Inference".to_string(),
-            description: "Run inference via llama.cpp server (no model duplication)".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    id: "model_path".to_string(),
-                    label: "Model Path".to_string(),
-                    data_type: PortDataType::String,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "prompt".to_string(),
-                    label: "Prompt".to_string(),
-                    data_type: PortDataType::Prompt,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "system_prompt".to_string(),
-                    label: "System Prompt".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "temperature".to_string(),
-                    label: "Temperature".to_string(),
-                    data_type: PortDataType::Number,
-                    required: false,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "max_tokens".to_string(),
-                    label: "Max Tokens".to_string(),
-                    data_type: PortDataType::Number,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            outputs: vec![
-                PortDefinition {
-                    id: "response".to_string(),
-                    label: "Response".to_string(),
-                    data_type: PortDataType::String,
-                    required: true,
-                    multiple: false,
-                },
-                PortDefinition {
-                    id: "model_path".to_string(),
-                    label: "Model Path".to_string(),
-                    data_type: PortDataType::String,
-                    required: false,
-                    multiple: false,
-                },
-            ],
-            execution_mode: ExecutionMode::Stream,
-        }
     }
 }
 
@@ -379,9 +218,9 @@ mod tests {
 
     #[test]
     fn test_descriptor_conversion() {
-        // Verify that TaskDescriptor conversion produces correct output
-        let meta = TextInputTask::descriptor();
-        let def = convert_metadata(meta);
+        // Verify that inventory-based conversion produces correct output
+        let registry = NodeRegistry::new();
+        let def = registry.get_definition("text-input").unwrap();
 
         assert_eq!(def.node_type, "text-input");
         assert_eq!(def.category, NodeCategory::Input);

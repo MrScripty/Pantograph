@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Force linker to include workflow-nodes' inventory::submit!() statics
+extern crate workflow_nodes;
+
 mod agent;
 mod config;
 mod constants;
