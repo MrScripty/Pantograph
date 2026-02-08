@@ -86,3 +86,6 @@ export { default as TextInputNode } from './components/nodes/TextInputNode.svelt
 export { default as TextOutputNode } from './components/nodes/TextOutputNode.svelte';
 export { default as LlamaCppInferenceNode } from './components/nodes/LlamaCppInferenceNode.svelte';
 export { default as ReconnectableEdge } from './components/edges/ReconnectableEdge.svelte';
+
+// --- Registry Builder ---
+export { buildRegistry } from './utils/buildRegistry.js';
