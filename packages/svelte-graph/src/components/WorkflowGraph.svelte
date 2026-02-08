@@ -66,10 +66,33 @@
   // ContainerBorder ref
   let containerBorderRef: ContainerBorder;
 
-  // Sync store to local state
+  // Track previous store references so we only push genuine changes to SvelteFlow.
+  // SvelteFlow enriches node/edge objects with internal metadata (measured, internals).
+  // Blindly reassigning from the store overwrites that metadata and causes xyflow to
+  // re-reconcile, which can drop edges or lose measured dimensions.
+  let _prevNodesRef: Node[] | null = null;
+  let _prevEdgesRef: Edge[] | null = null;
+  let _skipNextNodeSync = false;
+
+  // Sync store → SvelteFlow local state (only when the respective store changed)
   $effect(() => {
-    nodes = $nodesStore;
-    edges = $edgesStore;
+    const storeNodes = $nodesStore;
+    const storeEdges = $edgesStore;
+
+    const nodesChanged = storeNodes !== _prevNodesRef;
+    const edgesChanged = storeEdges !== _prevEdgesRef;
+
+    _prevNodesRef = storeNodes;
+    _prevEdgesRef = storeEdges;
+
+    if (nodesChanged && !_skipNextNodeSync) {
+      nodes = storeNodes;
+    }
+    _skipNextNodeSync = false;
+
+    if (edgesChanged) {
+      edges = storeEdges;
+    }
   });
 
   // Reset container border transition when returning to data-graph view
@@ -95,6 +118,9 @@
     event: MouseEvent | TouchEvent;
   }) {
     if (!canEdit || !targetNode) return;
+    // Skip overwriting SvelteFlow's nodes on the next $effect run —
+    // SvelteFlow already has the correct position via bind:nodes.
+    _skipNextNodeSync = true;
     stores.workflow.updateNodePosition(targetNode.id, targetNode.position);
   }
 
