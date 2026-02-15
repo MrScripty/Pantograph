@@ -17,7 +17,11 @@ const PORT_PROMPT: &str = "prompt";
 const PORT_SYSTEM_PROMPT: &str = "system_prompt";
 const PORT_TEMPERATURE: &str = "temperature";
 const PORT_MAX_TOKENS: &str = "max_tokens";
+const PORT_TOOLS: &str = "tools";
 const PORT_RESPONSE: &str = "response";
+const PORT_TOOL_CALLS: &str = "tool_calls";
+const PORT_HAS_TOOL_CALLS: &str = "has_tool_calls";
+const PORT_STREAM: &str = "stream";
 
 /// Stub descriptor for the llama.cpp inference node.
 ///
@@ -54,10 +58,14 @@ impl TaskDescriptor for LlamaCppInferenceTask {
                 ),
                 PortMetadata::optional(PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
+                PortMetadata::optional(PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
+                PortMetadata::optional(PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
+                PortMetadata::optional(PORT_HAS_TOOL_CALLS, "Has Tool Calls", PortDataType::Boolean),
+                PortMetadata::optional(PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             execution_mode: ExecutionMode::Stream,
         }
@@ -94,18 +102,22 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = LlamaCppInferenceTask::descriptor();
 
-        // 5 inputs: model_path, prompt, system_prompt, temperature, max_tokens
-        assert_eq!(meta.inputs.len(), 5);
+        // 6 inputs: model_path, prompt, system_prompt, temperature, max_tokens, tools
+        assert_eq!(meta.inputs.len(), 6);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "system_prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "temperature"));
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));
+        assert!(meta.inputs.iter().any(|p| p.id == "tools"));
 
-        // 2 outputs: response, model_path
-        assert_eq!(meta.outputs.len(), 2);
+        // 5 outputs: response, model_path, tool_calls, has_tool_calls, stream
+        assert_eq!(meta.outputs.len(), 5);
         assert!(meta.outputs.iter().any(|p| p.id == "response"));
         assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
+        assert!(meta.outputs.iter().any(|p| p.id == "tool_calls"));
+        assert!(meta.outputs.iter().any(|p| p.id == "has_tool_calls"));
+        assert!(meta.outputs.iter().any(|p| p.id == "stream"));
     }
 
     #[tokio::test]
