@@ -78,9 +78,9 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       server: {
-        port: 3000,
+        port: 3001,
         host: '0.0.0.0',
-        strictPort: false, // Allow fallback to next available port if 3000 is in use
+        strictPort: true,
         watch: {
           // Ignore Rust build artifacts - target/doc alone is 2.2GB with thousands of files
           ignored: ['**/src-tauri/target/**']
