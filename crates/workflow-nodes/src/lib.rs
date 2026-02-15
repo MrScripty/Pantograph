@@ -40,9 +40,9 @@ mod tests {
         let all = registry.all_metadata();
 
         #[cfg(feature = "desktop")]
-        assert_eq!(all.len(), 25, "Expected 25 built-in nodes with desktop feature");
+        assert_eq!(all.len(), 26, "Expected 26 built-in nodes with desktop feature");
         #[cfg(not(feature = "desktop"))]
-        assert_eq!(all.len(), 23, "Expected 23 built-in nodes without desktop feature");
+        assert_eq!(all.len(), 24, "Expected 24 built-in nodes without desktop feature");
 
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
@@ -53,5 +53,6 @@ mod tests {
         assert!(registry.has_node_type("llamacpp-inference"));
         assert!(registry.has_node_type("puma-lib"));
         assert!(registry.has_node_type("agent-tools"));
+        assert!(registry.has_node_type("unload-model"));
     }
 }
