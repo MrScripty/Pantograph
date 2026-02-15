@@ -60,6 +60,7 @@ pub mod events;
 pub mod extensions;
 pub mod groups;
 pub mod orchestration;
+pub mod port_options;
 pub mod registry;
 pub mod tasks;
 pub mod types;
@@ -87,6 +88,11 @@ pub use groups::{
 
 // Re-export descriptor types
 pub use descriptor::{DescriptorFn, PortMetadata, TaskDescriptor, TaskMetadata};
+
+// Re-export port options types
+pub use port_options::{
+    PortOption, PortOptionsProvider, PortOptionsQuery, PortOptionsResult, PortQueryFn,
+};
 
 // Re-export ContextKeys helper (only framework type from tasks module)
 pub use tasks::ContextKeys;

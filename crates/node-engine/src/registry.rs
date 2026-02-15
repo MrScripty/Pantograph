@@ -26,6 +26,7 @@ use graph_flow::Context;
 use crate::descriptor::TaskMetadata;
 use crate::error::{NodeEngineError, Result};
 use crate::extensions::ExecutorExtensions;
+use crate::port_options::{PortOptionsProvider, PortOptionsQuery, PortOptionsResult, PortQueryFn};
 use crate::types::NodeCategory;
 
 /// Per-node-type executor
@@ -71,6 +72,8 @@ struct RegistryEntry {
 /// ```
 pub struct NodeRegistry {
     entries: HashMap<String, RegistryEntry>,
+    /// Port options providers keyed by (node_type, port_id).
+    port_providers: HashMap<(String, String), Box<dyn PortOptionsProvider>>,
 }
 
 impl NodeRegistry {
@@ -78,6 +81,7 @@ impl NodeRegistry {
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
+            port_providers: HashMap::new(),
         }
     }
 
@@ -134,10 +138,60 @@ impl NodeRegistry {
     /// `inventory::submit!()` across the link unit, calls each
     /// function pointer to produce `TaskMetadata`, and registers
     /// each one as metadata-only (no executor factory).
+    ///
+    /// Also collects `PortQueryFn` entries for port options providers.
     pub fn register_builtins(&mut self) {
         for desc_fn in inventory::iter::<crate::descriptor::DescriptorFn> {
             self.register_metadata((desc_fn.0)());
         }
+
+        for query_fn in inventory::iter::<PortQueryFn> {
+            self.register_port_provider(
+                query_fn.node_type,
+                query_fn.port_id,
+                (query_fn.provider)(),
+            );
+        }
+    }
+
+    /// Register a port options provider for a specific (node_type, port_id) pair.
+    pub fn register_port_provider(
+        &mut self,
+        node_type: &str,
+        port_id: &str,
+        provider: Box<dyn PortOptionsProvider>,
+    ) {
+        self.port_providers
+            .insert((node_type.to_string(), port_id.to_string()), provider);
+    }
+
+    /// Query available options for a port.
+    ///
+    /// Dispatches to the registered `PortOptionsProvider` for the given
+    /// (node_type, port_id) pair. Returns an error if no provider is registered.
+    pub async fn query_port_options(
+        &self,
+        node_type: &str,
+        port_id: &str,
+        query: &PortOptionsQuery,
+        extensions: &ExecutorExtensions,
+    ) -> Result<PortOptionsResult> {
+        let key = (node_type.to_string(), port_id.to_string());
+        let provider = self.port_providers.get(&key).ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(format!(
+                "No options provider for {}:{}",
+                node_type, port_id
+            ))
+        })?;
+        provider.query_options(query, extensions).await
+    }
+
+    /// List all (node_type, port_id) pairs that have options providers registered.
+    pub fn queryable_ports(&self) -> Vec<(&str, &str)> {
+        self.port_providers
+            .keys()
+            .map(|(n, p)| (n.as_str(), p.as_str()))
+            .collect()
     }
 
     /// Create a new registry pre-populated with all built-in node types.
@@ -192,6 +246,7 @@ impl NodeRegistry {
     /// Entries from `other` override entries in `self` if they share the same node_type.
     pub fn merge(&mut self, other: NodeRegistry) {
         self.entries.extend(other.entries);
+        self.port_providers.extend(other.port_providers);
     }
 }
 
