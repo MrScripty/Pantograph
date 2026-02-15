@@ -79,6 +79,7 @@
     'write-file': GenericNode,
     'component-preview': GenericNode,
     'tool-loop': GenericNode,
+    'unload-model': GenericNode,
     // Architecture node types
     'arch-component': ArchComponentNode,
     'arch-service': ArchServiceNode,
