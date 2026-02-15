@@ -22,6 +22,7 @@ const PORT_RESPONSE: &str = "response";
 const PORT_TOOL_CALLS: &str = "tool_calls";
 const PORT_HAS_TOOL_CALLS: &str = "has_tool_calls";
 const PORT_STREAM: &str = "stream";
+const PORT_MODEL_REF: &str = "model_ref";
 
 /// Stub descriptor for the llama.cpp inference node.
 ///
@@ -63,6 +64,7 @@ impl TaskDescriptor for LlamaCppInferenceTask {
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
+                PortMetadata::optional(PORT_MODEL_REF, "Model Reference", PortDataType::Json),
                 PortMetadata::optional(PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
                 PortMetadata::optional(PORT_HAS_TOOL_CALLS, "Has Tool Calls", PortDataType::Boolean),
                 PortMetadata::optional(PORT_STREAM, "Stream", PortDataType::Stream),
@@ -111,8 +113,9 @@ mod tests {
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));
         assert!(meta.inputs.iter().any(|p| p.id == "tools"));
 
-        // 5 outputs: response, model_path, tool_calls, has_tool_calls, stream
-        assert_eq!(meta.outputs.len(), 5);
+        // 6 outputs: response, model_path, model_ref, tool_calls, has_tool_calls, stream
+        assert_eq!(meta.outputs.len(), 6);
+        assert!(meta.outputs.iter().any(|p| p.id == "model_ref"));
         assert!(meta.outputs.iter().any(|p| p.id == "response"));
         assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.outputs.iter().any(|p| p.id == "tool_calls"));

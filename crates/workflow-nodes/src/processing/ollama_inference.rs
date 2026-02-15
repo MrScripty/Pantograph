@@ -62,6 +62,8 @@ impl OllamaInferenceTask {
     pub const PORT_MODEL_OUT: &'static str = "model_used";
     /// Port ID for stream output
     pub const PORT_STREAM: &'static str = "stream";
+    /// Port ID for model reference output (engine + model_id for unload node)
+    pub const PORT_MODEL_REF: &'static str = "model_ref";
 
     /// Create a new Ollama inference task with the given ID
     pub fn new(task_id: impl Into<String>) -> Self {
@@ -106,6 +108,7 @@ impl TaskDescriptor for OllamaInferenceTask {
             outputs: vec![
                 PortMetadata::required(Self::PORT_RESPONSE, "Response", PortDataType::String),
                 PortMetadata::optional(Self::PORT_MODEL_OUT, "Model Used", PortDataType::String),
+                PortMetadata::optional(Self::PORT_MODEL_REF, "Model Reference", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             execution_mode: ExecutionMode::Stream,
