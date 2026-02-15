@@ -77,13 +77,25 @@ fn main() {
     let orchestration_store: workflow::SharedOrchestrationStore =
         Arc::new(RwLock::new(orchestration_store));
 
+    // Create the shared node-engine registry (includes port options providers via inventory)
+    let node_registry: workflow::commands::SharedNodeRegistry =
+        Arc::new(node_engine::NodeRegistry::with_builtins());
+
+    // Create shared executor extensions (populated async in .setup())
+    let shared_extensions: workflow::commands::SharedExtensions =
+        Arc::new(RwLock::new(node_engine::ExecutorExtensions::new()));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(gateway)
         .manage(execution_manager)
         .manage(orchestration_store)
-        .setup(|app| {
+        .manage(node_registry)
+        .manage(shared_extensions.clone())
+        .setup({
+            let shared_extensions = shared_extensions.clone();
+            move |app| {
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -137,8 +149,27 @@ fn main() {
                 app_handle.manage(shared_config);
             });
 
+            // Initialize executor extensions (PumasApi etc.) asynchronously
+            // Auto-detect sibling Pumas-Library directory for model library access
+            let pumas_library_path = project_root
+                .parent()
+                .map(|parent| parent.join("Pumas-Library"))
+                .filter(|p| p.exists());
+            if let Some(ref p) = pumas_library_path {
+                log::info!("Detected sibling Pumas-Library at {:?}", p);
+            }
+
+            let ext_init = shared_extensions.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut ext = ext_init.write().await;
+                workflow_nodes::setup_extensions_with_path(
+                    &mut ext,
+                    pumas_library_path.as_deref(),
+                ).await;
+            });
+
             Ok(())
-        })
+        }})
         .invoke_handler(tauri::generate_handler![
             // LLM commands
             send_vision_prompt,
@@ -248,6 +279,9 @@ fn main() {
             workflow::commands::remove_edge_from_execution,
             workflow::commands::get_execution_graph,
             workflow::commands::remove_execution,
+            // Port options query commands
+            workflow::commands::query_port_options,
+            workflow::commands::get_queryable_ports,
             // Node group commands
             workflow::groups::create_node_group,
             workflow::groups::expand_node_group,

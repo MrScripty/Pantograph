@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{command, ipc::Channel, AppHandle, State};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::agent::rag::SharedRagManager;
@@ -31,6 +32,12 @@ use super::types::{
     WorkflowMetadata,
 };
 use super::validation::validate_connection as validate_connection_internal;
+
+/// Shared node-engine registry with port options providers.
+pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
+
+/// Shared executor extensions (holds PumasApi etc.).
+pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
 
 /// Get the workflows directory path
 fn get_workflows_dir() -> Result<PathBuf, String> {
@@ -661,6 +668,51 @@ fn convert_graph_from_node_engine(graph: &node_engine::WorkflowGraph) -> Workflo
             })
             .collect(),
     }
+}
+
+// ==============================================================================
+// Port Options Query
+// ==============================================================================
+
+/// Query available options for a node's port.
+///
+/// This is a generic command — any node type that has registered a
+/// `PortOptionsProvider` via `inventory` can be queried here. The actual
+/// provider logic lives in `workflow-nodes`, not in this Tauri layer.
+#[command]
+pub async fn query_port_options(
+    registry: State<'_, SharedNodeRegistry>,
+    extensions: State<'_, SharedExtensions>,
+    node_type: String,
+    port_id: String,
+    search: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<node_engine::PortOptionsResult, String> {
+    let ext = extensions.read().await;
+    let query = node_engine::PortOptionsQuery {
+        search,
+        limit,
+        offset,
+    };
+    registry
+        .query_port_options(&node_type, &port_id, &query, &ext)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// List all (node_type, port_id) pairs that have options providers registered.
+///
+/// The frontend can use this to discover which ports support dynamic selection.
+#[command]
+pub fn get_queryable_ports(
+    registry: State<'_, SharedNodeRegistry>,
+) -> Vec<(String, String)> {
+    registry
+        .queryable_ports()
+        .into_iter()
+        .map(|(n, p)| (n.to_string(), p.to_string()))
+        .collect()
 }
 
 #[cfg(test)]
