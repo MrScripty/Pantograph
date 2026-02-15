@@ -38,7 +38,13 @@ export type {
 
 export type { NodeTypeRegistry } from './types/registry.js';
 
-export type { WorkflowBackend, UndoRedoState } from './types/backend.js';
+export type {
+  WorkflowBackend,
+  UndoRedoState,
+  PortOption,
+  PortOptionsResult,
+  PortOptionsQuery,
+} from './types/backend.js';
 
 // --- Constants ---
 export { PORT_TYPE_COLORS, getPortColor } from './constants/portColors.js';
@@ -85,6 +91,7 @@ export { default as GenericNode } from './components/nodes/GenericNode.svelte';
 export { default as TextInputNode } from './components/nodes/TextInputNode.svelte';
 export { default as TextOutputNode } from './components/nodes/TextOutputNode.svelte';
 export { default as LlamaCppInferenceNode } from './components/nodes/LlamaCppInferenceNode.svelte';
+export { default as PumaLibNode } from './components/nodes/PumaLibNode.svelte';
 export { default as ReconnectableEdge } from './components/edges/ReconnectableEdge.svelte';
 
 // --- Registry Builder ---

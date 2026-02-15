@@ -12,6 +12,28 @@ import type {
 } from './workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from './groups.js';
 
+/** A single option for a port dropdown (e.g., model selection) */
+export interface PortOption {
+  value: string | number | boolean;
+  label: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Result from querying port options */
+export interface PortOptionsResult {
+  options: PortOption[];
+  total_count: number;
+  searchable: boolean;
+}
+
+/** Query parameters for port options */
+export interface PortOptionsQuery {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 /** Undo/redo state from the backend */
 export interface UndoRedoState {
   canUndo: boolean;
@@ -108,6 +130,16 @@ export interface WorkflowBackend {
     exposedInputs: PortMapping[],
     exposedOutputs: PortMapping[],
   ): Promise<NodeGroup>;
+
+  // --- Port Options ---
+
+  /** Query available options for a port dropdown (e.g., model selection).
+   *  Optional — returns empty result if not implemented. */
+  queryPortOptions?(
+    nodeType: string,
+    portId: string,
+    query?: PortOptionsQuery,
+  ): Promise<PortOptionsResult>;
 
   // --- Events ---
 
