@@ -1,9 +1,13 @@
-//! Puma-Lib Stub Descriptor
+//! Puma-Lib Node
 //!
 //! This module registers a stub node descriptor for `puma-lib` so that
 //! `register_builtins()` discovers the node via `inventory`. Actual execution
 //! is handled by the host application through the callback bridge — the host
 //! provides the model file path from its local pumas-core library.
+//!
+//! When the `model-library` feature is enabled, this module also registers
+//! a `PortOptionsProvider` for the `model_path` port, enabling hosts to
+//! query available models from the pumas-library.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
@@ -48,6 +52,80 @@ impl TaskDescriptor for PumaLibTask {
 }
 
 inventory::submit!(node_engine::DescriptorFn(PumaLibTask::descriptor));
+
+// ---------------------------------------------------------------------------
+// Port options provider (model-library feature)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "model-library")]
+mod options_provider {
+    use async_trait::async_trait;
+    use node_engine::{
+        extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
+        PortOptionsQuery, PortOptionsResult,
+    };
+    use std::sync::Arc;
+
+    /// Provides available models from pumas-library for the `model_path` port.
+    pub struct PumaLibOptionsProvider;
+
+    #[async_trait]
+    impl PortOptionsProvider for PumaLibOptionsProvider {
+        async fn query_options(
+            &self,
+            query: &PortOptionsQuery,
+            extensions: &ExecutorExtensions,
+        ) -> node_engine::Result<PortOptionsResult> {
+            let api = extensions
+                .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+                .ok_or_else(|| {
+                    NodeEngineError::ExecutionFailed(
+                        "Model library not available".to_string(),
+                    )
+                })?;
+
+            let records = if let Some(ref search) = query.search {
+                let result = api
+                    .search_models(search, query.limit.unwrap_or(50), query.offset.unwrap_or(0))
+                    .await
+                    .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?;
+                result.models
+            } else {
+                api.list_models()
+                    .await
+                    .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?
+            };
+
+            let options: Vec<PortOption> = records
+                .iter()
+                .map(|m| PortOption {
+                    value: serde_json::json!(m.path),
+                    label: m.official_name.clone(),
+                    description: Some(format!("{} | {}", m.model_type, m.tags.join(", "))),
+                    metadata: Some(serde_json::json!({
+                        "id": m.id,
+                        "model_type": m.model_type,
+                        "cleaned_name": m.cleaned_name,
+                    })),
+                })
+                .collect();
+
+            let total = options.len();
+            Ok(PortOptionsResult {
+                options,
+                total_count: total,
+                searchable: true,
+            })
+        }
+    }
+}
+
+#[cfg(feature = "model-library")]
+inventory::submit!(node_engine::PortQueryFn {
+    node_type: "puma-lib",
+    port_id: "model_path",
+    provider: || Box::new(options_provider::PumaLibOptionsProvider),
+});
 
 #[async_trait]
 impl Task for PumaLibTask {
