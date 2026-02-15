@@ -172,6 +172,15 @@ pub struct PumasApiResource {
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
 
+/// Wrapper for ExecutorExtensions shared via ResourceArc.
+///
+/// Extensions hold optional runtime dependencies (e.g. PumasApi) that
+/// port options providers need. Initialized via `extensions_setup`.
+pub struct ExtensionsResource {
+    pub extensions: Arc<tokio::sync::RwLock<node_engine::ExecutorExtensions>>,
+    pub runtime: Arc<tokio::runtime::Runtime>,
+}
+
 /// Pending callback channels for bridging node execution to BEAM.
 static PENDING_CALLBACKS: std::sync::LazyLock<
     Mutex<HashMap<String, oneshot::Sender<Result<String, String>>>>,
@@ -916,6 +925,81 @@ fn node_registry_register_builtins(
 }
 
 // ============================================================================
+// NIF Functions - Extensions & Port Options
+// ============================================================================
+
+/// Create empty executor extensions.
+///
+/// Extensions hold optional runtime dependencies (e.g. PumasApi) needed by
+/// port options providers. Call `extensions_setup` to initialize them.
+#[rustler::nif]
+fn extensions_new() -> ResourceArc<ExtensionsResource> {
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+    ResourceArc::new(ExtensionsResource {
+        extensions: Arc::new(tokio::sync::RwLock::new(
+            node_engine::ExecutorExtensions::new(),
+        )),
+        runtime: Arc::new(runtime),
+    })
+}
+
+/// Initialize extensions with PumasApi model library access.
+///
+/// Wraps `workflow_nodes::setup_extensions_with_path()` — the same function
+/// the Pantograph Tauri app calls. Uses the 3-step discovery chain:
+/// 1. Global registry (~/.config/pumas/registry.db)
+/// 2. Explicit `library_path` parameter (if provided)
+/// 3. `PUMAS_LIBRARY_PATH` environment variable
+#[rustler::nif(schedule = "DirtyCpu")]
+fn extensions_setup(
+    resource: ResourceArc<ExtensionsResource>,
+    library_path: Option<String>,
+) -> NifResult<Atom> {
+    let path_buf = library_path.map(std::path::PathBuf::from);
+    let path_ref = path_buf.as_deref();
+
+    resource.runtime.block_on(async {
+        let mut ext = resource.extensions.write().await;
+        workflow_nodes::setup_extensions_with_path(&mut ext, path_ref).await;
+    });
+
+    Ok(atoms::ok())
+}
+
+/// Query available options for a node's port.
+///
+/// Dispatches to the registered `PortOptionsProvider` for the given node type
+/// and port. Returns JSON-serialized `PortOptionsResult`.
+///
+/// This is the NIF equivalent of the Tauri `query_port_options` command.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn node_registry_query_port_options(
+    registry_resource: ResourceArc<NodeRegistryResource>,
+    extensions_resource: ResourceArc<ExtensionsResource>,
+    node_type: String,
+    port_id: String,
+    query_json: String,
+) -> NifResult<String> {
+    let query: node_engine::PortOptionsQuery = serde_json::from_str(&query_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("JSON parse error: {}", e))))?;
+
+    extensions_resource
+        .runtime
+        .block_on(async {
+            let registry = registry_resource.registry.read().await;
+            let ext = extensions_resource.extensions.read().await;
+            registry
+                .query_port_options(&node_type, &port_id, &query, &ext)
+                .await
+        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("query_port_options error: {}", e))))
+        .and_then(|result| {
+            serde_json::to_string(&result)
+                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
+        })
+}
+
+// ============================================================================
 // ElixirDataGraphExecutor - bridges orchestration to BEAM
 // ============================================================================
 
@@ -1105,10 +1189,29 @@ fn orchestration_store_insert_data_graph(
 // NIF Functions - PumasApi (Model Library)
 // ============================================================================
 
+/// Discover a PumasApi instance via the global registry (~/.config/pumas/registry.db).
+///
+/// Tries to connect to a running instance first, then falls back to creating
+/// a new primary from the registered library path.
+/// Returns {:error, reason} if no libraries are registered.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn pumas_api_discover() -> NifResult<ResourceArc<PumasApiResource>> {
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let api = runtime
+        .block_on(async { pumas_library::PumasApi::discover().await })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("PumasApi discover error: {}", e))))?;
+
+    Ok(ResourceArc::new(PumasApiResource {
+        api: Arc::new(api),
+        runtime: Arc::new(runtime),
+    }))
+}
+
 /// Create a new PumasApi instance.
 ///
 /// `launcher_root_path` is the root directory for the pumas library.
-/// Pass an empty string to use the default/auto-discovered path.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn pumas_api_new(launcher_root_path: String) -> NifResult<ResourceArc<PumasApiResource>> {
     let runtime = tokio::runtime::Runtime::new()
@@ -1397,6 +1500,7 @@ fn load(env: Env, _info: Term) -> bool {
     rustler::resource!(OrchestrationStoreResource, env);
     rustler::resource!(NodeRegistryResource, env);
     rustler::resource!(PumasApiResource, env);
+    rustler::resource!(ExtensionsResource, env);
     true
 }
 

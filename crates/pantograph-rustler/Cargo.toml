@@ -14,7 +14,7 @@ name = "pantograph_rustler"
 node-engine = { path = "../node-engine" }
 
 # Workflow node descriptors (linked to include inventory::submit! statics)
-workflow-nodes = { path = "../workflow-nodes", default-features = false }
+workflow-nodes = { path = "../workflow-nodes", default-features = false, features = ["model-library"] }
 
 # Erlang NIF bindings
 rustler = "0.34"
