@@ -233,16 +233,17 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
         // Serialize inputs to JSON
         let inputs_json = serde_json::to_string(&inputs)?;
 
-        // Send message to Elixir PID — must drop MutexGuard before await
+        // Send message to Elixir PID via spawn_blocking to avoid
+        // "send_and_clear: current thread is managed" panic on DirtyCpu threads
         let pid = self.pid;
         let cb_id = callback_id.clone();
         let t_id = task_id.to_string();
-        {
-            let mut env = self.owned_env.lock().map_err(|e| {
-                node_engine::NodeEngineError::ExecutionFailed(format!("Env lock poisoned: {}", e))
-            })?;
-
-            let _ = env.send_and_clear(&pid, |env| {
+        let owned_env = self.owned_env.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut env = owned_env
+                .lock()
+                .map_err(|e| format!("Env lock poisoned: {}", e))?;
+            env.send_and_clear(&pid, |env| {
                 let msg = (
                     atoms::node_execute().encode(env),
                     cb_id.encode(env),
@@ -250,8 +251,14 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
                     inputs_json.encode(env),
                 );
                 msg.encode(env)
-            });
-        } // MutexGuard dropped here, before the await
+            })
+            .map_err(|_| "Failed to send to Elixir PID".to_string())
+        })
+        .await
+        .map_err(|e| {
+            node_engine::NodeEngineError::ExecutionFailed(format!("Send thread error: {}", e))
+        })?
+        .map_err(|e| node_engine::NodeEngineError::ExecutionFailed(e))?;
 
         // Wait for response with timeout
         let result = tokio::time::timeout(std::time::Duration::from_secs(self.timeout_secs), rx)
@@ -307,14 +314,20 @@ impl EventSink for BeamEventSink {
             message: format!("Serialization error: {}", e),
         })?;
 
+        // Send via std::thread::spawn to avoid "current thread is managed" panic
+        // when called from DirtyCpu scheduler threads
         let pid = self.pid;
-        let mut env = self.owned_env.lock().map_err(|e| node_engine::EventError {
-            message: format!("Lock poisoned: {}", e),
+        let owned_env = self.owned_env.clone();
+        std::thread::spawn(move || {
+            let mut env = owned_env.lock().unwrap();
+            let _ = env.send_and_clear(&pid, |env| {
+                (atoms::workflow_event().encode(env), json.encode(env)).encode(env)
+            });
+        })
+        .join()
+        .map_err(|_| node_engine::EventError {
+            message: "Event send thread panicked".to_string(),
         })?;
-
-        let _ = env.send_and_clear(&pid, |env| {
-            (atoms::workflow_event().encode(env), json.encode(env)).encode(env)
-        });
 
         Ok(())
     }
