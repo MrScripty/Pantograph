@@ -83,6 +83,45 @@ npm run build:desktop
 3. Download a vision model with mmproj file (e.g., GLM-4.6V-Flash GGUF)
 4. In the side panel, enter the model and mmproj paths, then click "Start Sidecar"
 
+## Model Library (Pumas-Library)
+
+The Puma-Lib workflow node can list and select models from a [Pumas-Library](https://github.com/anthropics/pumas-library) instance. There are three ways to configure this (tried in order):
+
+### Option 1: Auto-detection (sibling directory)
+
+If `Pumas-Library` is a sibling directory of `Pantograph`, it is detected automatically:
+
+```text
+parent-dir/
+  Pantograph/
+  Pumas-Library/       # auto-detected
+    launcher-data/
+    shared-resources/
+      models/
+```
+
+### Option 2: Environment variable
+
+Set `PUMAS_LIBRARY_PATH` to your Pumas-Library root directory:
+
+```bash
+PUMAS_LIBRARY_PATH="/path/to/Pumas-Library" npm run dev:desktop
+```
+
+### Option 3: Global registry
+
+If you have a running Pumas-Library instance (via `pumas-rpc` or the desktop app), it registers itself in the global registry at `~/.config/pumas/registry.db`. Pantograph discovers it automatically via `PumasApi::discover()`.
+
+### Verifying
+
+When the model library is connected, you'll see this in the logs:
+
+```text
+PumasApi initialized from "/path/to/Pumas-Library"
+```
+
+In the workflow editor, the Puma-Lib node will show a model dropdown instead of a manual path input.
+
 ## Recommended Vision Models
 
 - **GLM-4.6V-Flash**: Full llama.cpp support with mmproj file. This is the model being used for development testing.
