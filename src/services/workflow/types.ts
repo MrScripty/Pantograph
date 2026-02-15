@@ -123,3 +123,20 @@ export interface NodeExecutionInfo {
   state: NodeExecutionState;
   errorMessage?: string;
 }
+
+// Port options query types (matches node-engine PortOption/PortOptionsResult)
+
+/** A selectable option for a port value */
+export interface PortOption {
+  value: unknown;
+  label: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Result of a port options query */
+export interface PortOptionsResult {
+  options: PortOption[];
+  totalCount: number;
+  searchable: boolean;
+}
