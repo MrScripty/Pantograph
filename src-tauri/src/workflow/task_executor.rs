@@ -805,6 +805,10 @@ impl PantographTaskExecutor {
         let mut outputs = HashMap::new();
         outputs.insert("response".to_string(), serde_json::json!(response_text));
         outputs.insert("model_used".to_string(), serde_json::json!(model_used));
+        outputs.insert(
+            "model_ref".to_string(),
+            serde_json::json!({"engine": "ollama", "model_id": model_used}),
+        );
 
         log::debug!(
             "OllamaInference: completed with {} chars using model '{}'",
@@ -849,7 +853,7 @@ impl PantographTaskExecutor {
             .and_then(|p| p.as_str())
             .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
 
-        let model_path = inputs
+        let model_path_raw = inputs
             .get("model_path")
             .and_then(|m| m.as_str())
             .ok_or_else(|| {
@@ -857,6 +861,10 @@ impl PantographTaskExecutor {
                     "Missing model_path input. Connect a Puma-Lib node.".to_string(),
                 )
             })?;
+
+        // Resolve directory to actual .gguf file if needed
+        let model_path = resolve_gguf_path(model_path_raw)?;
+        let model_path = model_path.as_str();
 
         // Get optional inputs
         let system_prompt = inputs.get("system_prompt").and_then(|s| s.as_str());
@@ -986,6 +994,10 @@ impl PantographTaskExecutor {
         let mut outputs = HashMap::new();
         outputs.insert("response".to_string(), serde_json::json!(response_text));
         outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+        outputs.insert(
+            "model_ref".to_string(),
+            serde_json::json!({"engine": "llamacpp", "model_id": model_path}),
+        );
 
         log::debug!(
             "LlamaCppInference: completed with {} chars",
@@ -993,6 +1005,132 @@ impl PantographTaskExecutor {
         );
 
         Ok(outputs)
+    }
+
+    /// Execute an unload-model task
+    ///
+    /// Parses the model reference to determine the inference engine,
+    /// then performs the appropriate unload operation.
+    async fn execute_unload_model(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let model_ref = inputs
+            .get("model_ref")
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(
+                    "Missing model_ref input. Connect an inference node's Model Reference output."
+                        .to_string(),
+                )
+            })?;
+
+        let engine = model_ref
+            .get("engine")
+            .and_then(|e| e.as_str())
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(
+                    "model_ref missing 'engine' field".to_string(),
+                )
+            })?;
+
+        let model_id = model_ref
+            .get("model_id")
+            .and_then(|m| m.as_str())
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(
+                    "model_ref missing 'model_id' field".to_string(),
+                )
+            })?;
+
+        let trigger_value = inputs.get("trigger").cloned().unwrap_or(serde_json::Value::Null);
+
+        log::info!("UnloadModel: unloading '{}' from engine '{}'", model_id, engine);
+
+        match engine {
+            "llamacpp" => {
+                self.gateway.stop().await;
+                log::info!("UnloadModel: llama.cpp server stopped for model '{}'", model_id);
+            }
+            "ollama" => {
+                // Send a generate request with keep_alive=0 to unload from VRAM
+                let client = reqwest::Client::new();
+                let url = "http://localhost:11434/api/generate";
+                let request_body = serde_json::json!({
+                    "model": model_id,
+                    "keep_alive": 0
+                });
+
+                match client.post(url).json(&request_body).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        log::info!(
+                            "UnloadModel: Ollama model '{}' unloaded from VRAM",
+                            model_id
+                        );
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        log::warn!(
+                            "UnloadModel: Ollama unload returned {} for model '{}': {}",
+                            status, model_id, body
+                        );
+                    }
+                    Err(e) => {
+                        return Err(NodeEngineError::ExecutionFailed(format!(
+                            "Failed to connect to Ollama server to unload model '{}': {}",
+                            model_id, e
+                        )));
+                    }
+                }
+            }
+            other => {
+                return Err(NodeEngineError::ExecutionFailed(format!(
+                    "Unknown inference engine '{}'. Supported: llamacpp, ollama",
+                    other
+                )));
+            }
+        }
+
+        let status_msg = format!("Model '{}' unloaded from {}", model_id, engine);
+
+        let mut outputs = HashMap::new();
+        outputs.insert("status".to_string(), serde_json::json!(status_msg));
+        outputs.insert("trigger_passthrough".to_string(), trigger_value);
+        Ok(outputs)
+    }
+}
+
+/// Resolve a model path that may be a directory to the actual `.gguf` file inside.
+///
+/// The pumas-library model index stores directory paths (e.g. `.../famino-12b-model_stock-i1-gguf`).
+/// llama.cpp needs the actual `.gguf` file. If the path is a directory, find the first `.gguf` file
+/// inside it; otherwise return the path as-is.
+fn resolve_gguf_path(path: &str) -> Result<String> {
+    let p = std::path::Path::new(path);
+    if p.is_dir() {
+        let gguf = std::fs::read_dir(p)
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Cannot read model directory '{}': {}",
+                    path, e
+                ))
+            })?
+            .filter_map(|entry| entry.ok())
+            .find(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
+            })
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "No .gguf file found in model directory '{}'",
+                    path
+                ))
+            })?;
+        Ok(gguf.path().to_string_lossy().into_owned())
+    } else {
+        Ok(path.to_string())
     }
 }
 
@@ -1056,6 +1194,7 @@ impl TaskExecutor for PantographTaskExecutor {
             "ollama-inference" => self.execute_ollama_inference(&inputs).await,
             "puma-lib" => self.execute_puma_lib(&inputs).await,
             "llamacpp-inference" => self.execute_llamacpp_inference(&inputs).await,
+            "unload-model" => self.execute_unload_model(&inputs).await,
             _ => {
                 log::warn!("Unknown node type: {}", node_type);
                 // Return error for unknown types instead of empty output
