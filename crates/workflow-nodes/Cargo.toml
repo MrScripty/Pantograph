@@ -9,17 +9,8 @@ description = "Task/node implementations for Pantograph workflow engine"
 node-engine = { path = "../node-engine" }
 graph-flow = "0.2"
 
-# Backends
-inference = { path = "../inference" }
-lancedb = "0.22"
-rig-core = "0.28.0"
-
 # Model management (optional — enable via `model-library` feature)
 pumas-library = { workspace = true, optional = true }
-
-# Arrow for LanceDB
-arrow-array = "56"
-arrow-schema = "56"
 
 # Async/Serialization
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "time"] }
