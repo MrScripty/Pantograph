@@ -59,6 +59,8 @@ mod atoms {
         workflow_event,
         demand_complete,
         demand_error,
+        node_stream,
+        node_stream_done,
     }
 }
 
@@ -718,11 +720,13 @@ fn executor_new_with_inference(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
+    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
     let core = node_engine::CoreTaskExecutor::new()
-        .with_gateway(gateway_resource.gateway.clone());
+        .with_gateway(gateway_resource.gateway.clone())
+        .with_event_sink(event_sink.clone())
+        .with_execution_id("nif-execution".to_string());
     let elixir = ElixirCallbackTaskExecutor::new(caller_pid);
     let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
 
     let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
 
@@ -751,11 +755,13 @@ fn executor_new_with_inference_timeout(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
+    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
     let core = node_engine::CoreTaskExecutor::new()
-        .with_gateway(gateway_resource.gateway.clone());
+        .with_gateway(gateway_resource.gateway.clone())
+        .with_event_sink(event_sink.clone())
+        .with_execution_id("nif-execution".to_string());
     let elixir = ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs);
     let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
 
     let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
 
@@ -1392,6 +1398,77 @@ fn execute_orchestration(
     let result = runtime.block_on(async {
         orch_executor
             .execute(&graph, initial_data, &event_sink)
+            .await
+    });
+
+    match result {
+        Ok(orch_result) => serde_json::to_string(&orch_result)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))),
+        Err(e) => Err(rustler::Error::Term(Box::new(format!(
+            "Orchestration error: {}",
+            e
+        )))),
+    }
+}
+
+/// Execute an orchestration graph with inference gateway support.
+///
+/// Same as `execute_orchestration` but wires an `InferenceGateway` into
+/// the `CoreTaskExecutor`, enabling native inference node execution
+/// (llamacpp-inference, llm-inference, vision-analysis, unload-model)
+/// with streaming token events via `BeamEventSink`.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn execute_orchestration_with_inference(
+    env: Env,
+    store_resource: ResourceArc<OrchestrationStoreResource>,
+    graph_id: String,
+    initial_data_json: String,
+    callback_pid: rustler::LocalPid,
+    gateway_resource: ResourceArc<InferenceGatewayResource>,
+) -> NifResult<String> {
+    let _ = env;
+
+    let initial_data: HashMap<String, serde_json::Value> =
+        serde_json::from_str(&initial_data_json)
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    // Look up the orchestration graph
+    let graph = {
+        let store = store_resource.store.blocking_read();
+        store.get_graph(&graph_id).cloned().ok_or_else(|| {
+            rustler::Error::Term(Box::new(format!(
+                "Orchestration graph '{}' not found",
+                graph_id
+            )))
+        })?
+    };
+
+    // Create runtime for this execution
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(callback_pid));
+    let core = node_engine::CoreTaskExecutor::new()
+        .with_gateway(gateway_resource.gateway.clone())
+        .with_event_sink(event_sink.clone())
+        .with_execution_id(format!("nif-orch-{}", graph_id));
+    let elixir = ElixirCallbackTaskExecutor::new(callback_pid);
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
+
+    // Create the data graph executor
+    let data_executor = ElixirDataGraphExecutor::new(
+        store_resource.store.clone(),
+        task_executor,
+        callback_pid,
+    );
+
+    // Create and run the orchestration executor
+    let orch_executor = node_engine::OrchestrationExecutor::new(data_executor)
+        .with_execution_id(format!("nif-orch-{}", graph_id));
+
+    let result = runtime.block_on(async {
+        orch_executor
+            .execute(&graph, initial_data, event_sink.as_ref())
             .await
     });
 

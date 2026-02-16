@@ -6474,6 +6474,7 @@ name = "node-engine"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures-util",
  "graph-flow",
  "inference",
  "inventory",
@@ -7285,6 +7286,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "graph-flow",
+ "inference",
  "log",
  "node-engine",
  "pumas-library",
