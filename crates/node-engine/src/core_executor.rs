@@ -9,6 +9,11 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 
+#[cfg(feature = "inference-nodes")]
+use std::sync::Arc;
+#[cfg(feature = "inference-nodes")]
+use inference::InferenceGateway;
+
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
 use crate::extensions::ExecutorExtensions;
@@ -43,6 +48,9 @@ pub fn resolve_node_type(
 pub struct CoreTaskExecutor {
     /// Optional project root for file I/O nodes (read-file, write-file).
     project_root: Option<PathBuf>,
+    /// Inference gateway for LLM nodes (llamacpp, llm-inference, vision, unload-model).
+    #[cfg(feature = "inference-nodes")]
+    gateway: Option<Arc<InferenceGateway>>,
 }
 
 impl CoreTaskExecutor {
@@ -50,12 +58,21 @@ impl CoreTaskExecutor {
     pub fn new() -> Self {
         Self {
             project_root: None,
+            #[cfg(feature = "inference-nodes")]
+            gateway: None,
         }
     }
 
     /// Set the project root directory for file I/O nodes.
     pub fn with_project_root(mut self, root: PathBuf) -> Self {
         self.project_root = Some(root);
+        self
+    }
+
+    /// Set the inference gateway for LLM nodes.
+    #[cfg(feature = "inference-nodes")]
+    pub fn with_gateway(mut self, gateway: Arc<InferenceGateway>) -> Self {
+        self.gateway = Some(gateway);
         self
     }
 }
@@ -631,6 +648,24 @@ impl TaskExecutor for CoreTaskExecutor {
             // Pure HTTP inference
             "ollama-inference" => execute_ollama_inference(&inputs).await,
 
+            // Gateway-backed inference nodes (require `inference-nodes` feature)
+            #[cfg(feature = "inference-nodes")]
+            "llamacpp-inference" => {
+                execute_llamacpp_inference(self.gateway.as_ref(), &inputs).await
+            }
+            #[cfg(feature = "inference-nodes")]
+            "llm-inference" => {
+                execute_llm_inference(self.gateway.as_ref(), &inputs).await
+            }
+            #[cfg(feature = "inference-nodes")]
+            "vision-analysis" => {
+                execute_vision_analysis(self.gateway.as_ref(), &inputs).await
+            }
+            #[cfg(feature = "inference-nodes")]
+            "unload-model" => {
+                execute_unload_model(self.gateway.as_ref(), &inputs).await
+            }
+
             // Unknown — signal that this node requires a host-specific executor
             _ => Err(NodeEngineError::ExecutionFailed(format!(
                 "Node type '{}' requires host-specific executor",
@@ -638,6 +673,423 @@ impl TaskExecutor for CoreTaskExecutor {
             ))),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Gateway-backed inference handlers (behind feature flag)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "inference-nodes")]
+fn require_gateway(
+    gateway: Option<&Arc<InferenceGateway>>,
+) -> Result<&Arc<InferenceGateway>> {
+    gateway.ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "InferenceGateway not configured. Use CoreTaskExecutor::with_gateway().".to_string(),
+        )
+    })
+}
+
+/// Resolve a model path that may be a directory to the actual `.gguf` file inside.
+///
+/// pumas-library stores directory paths; llama.cpp needs the `.gguf` file.
+#[cfg(feature = "inference-nodes")]
+fn resolve_gguf_path(path: &str) -> Result<String> {
+    let p = std::path::Path::new(path);
+    if p.is_dir() {
+        let gguf = std::fs::read_dir(p)
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Cannot read model directory '{}': {}",
+                    path, e
+                ))
+            })?
+            .filter_map(|entry| entry.ok())
+            .find(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
+            })
+            .ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "No .gguf file found in model directory '{}'",
+                    path
+                ))
+            })?;
+        Ok(gguf.path().to_string_lossy().into_owned())
+    } else {
+        Ok(path.to_string())
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_llamacpp_inference(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+
+    let model_path_raw = inputs
+        .get("model_path")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+            )
+        })?;
+
+    let model_path = resolve_gguf_path(model_path_raw)?;
+    let system_prompt = inputs.get("system_prompt").and_then(|s| s.as_str());
+    let temperature = inputs
+        .get("temperature")
+        .and_then(|t| t.as_f64())
+        .unwrap_or(0.7);
+    let max_tokens = inputs
+        .get("max_tokens")
+        .and_then(|m| m.as_i64())
+        .unwrap_or(512);
+
+    // Ensure gateway is ready — start if needed
+    if !gw.is_ready().await {
+        let config = inference::BackendConfig {
+            model_path: Some(PathBuf::from(&model_path)),
+            device: Some("auto".to_string()),
+            gpu_layers: Some(-1),
+            embedding_mode: false,
+            ..Default::default()
+        };
+
+        log::info!(
+            "LlamaCppInference: starting server with model '{}'",
+            model_path
+        );
+        gw.start(&config).await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to start llama.cpp server: {}", e))
+        })?;
+
+        // Wait for readiness with timeout
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while !gw.is_ready().await {
+            if std::time::Instant::now() > deadline {
+                return Err(NodeEngineError::ExecutionFailed(
+                    "Timeout waiting for llama.cpp server to start".to_string(),
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        log::info!("LlamaCppInference: server is ready");
+    }
+
+    let base_url = gw.base_url().await.ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "llama.cpp server started but no URL available".to_string(),
+        )
+    })?;
+
+    let full_prompt = if let Some(sys) = system_prompt {
+        format!("{}\n\n{}", sys, prompt)
+    } else {
+        prompt.to_string()
+    };
+
+    let request_body = serde_json::json!({
+        "prompt": full_prompt,
+        "n_predict": max_tokens,
+        "temperature": temperature,
+        "stop": ["</s>", "<|im_end|>", "<|end|>"],
+        "stream": false
+    });
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/completion", base_url);
+
+    log::debug!("LlamaCppInference: sending request to {}", url);
+
+    let http_response = client
+        .post(&url)
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Failed to connect to llama.cpp server at {}: {}",
+                url, e
+            ))
+        })?;
+
+    if !http_response.status().is_success() {
+        let status = http_response.status();
+        let error_body = http_response.text().await.unwrap_or_default();
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "llama.cpp API error ({}): {}",
+            status, error_body
+        )));
+    }
+
+    let response_json: serde_json::Value = http_response.json().await.map_err(|e| {
+        NodeEngineError::ExecutionFailed(format!("Failed to parse llama.cpp response: {}", e))
+    })?;
+
+    let response_text = response_json["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+
+    let mut outputs = HashMap::new();
+    outputs.insert("response".to_string(), serde_json::json!(response_text));
+    outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+    outputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({"engine": "llamacpp", "model_id": model_path}),
+    );
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_llm_inference(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+
+    let system_prompt = inputs.get("system_prompt").and_then(|p| p.as_str());
+    let extra_context = inputs.get("context").and_then(|c| c.as_str());
+
+    if !gw.is_ready().await {
+        return Err(NodeEngineError::ExecutionFailed(
+            "LLM server is not ready".to_string(),
+        ));
+    }
+
+    let base_url = gw.base_url().await.ok_or_else(|| {
+        NodeEngineError::ExecutionFailed("No LLM server URL available".to_string())
+    })?;
+
+    let full_prompt = if let Some(ctx) = extra_context {
+        format!("{}\n\nContext:\n{}", prompt, ctx)
+    } else {
+        prompt.to_string()
+    };
+
+    let mut messages = Vec::new();
+    if let Some(sys) = system_prompt {
+        messages.push(serde_json::json!({"role": "system", "content": sys}));
+    }
+    messages.push(serde_json::json!({"role": "user", "content": full_prompt}));
+
+    let client = reqwest::Client::new();
+    let http_response = client
+        .post(format!("{}/v1/chat/completions", base_url))
+        .json(&serde_json::json!({
+            "model": "gpt-4",
+            "messages": messages,
+            "stream": false
+        }))
+        .send()
+        .await
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("LLM request failed: {}", e)))?;
+
+    if !http_response.status().is_success() {
+        let error = http_response.text().await.unwrap_or_default();
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "LLM error: {}",
+            error
+        )));
+    }
+
+    let json: serde_json::Value = http_response.json().await.map_err(|e| {
+        NodeEngineError::ExecutionFailed(format!("Failed to parse response: {}", e))
+    })?;
+
+    let response = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+
+    let mut outputs = HashMap::new();
+    outputs.insert("response".to_string(), serde_json::json!(response));
+    outputs.insert("stream".to_string(), serde_json::Value::Null);
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_vision_analysis(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+
+    let image_base64 = inputs
+        .get("image")
+        .and_then(|i| i.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing image input".to_string()))?;
+
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+
+    if !gw.is_ready().await {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Vision server is not ready".to_string(),
+        ));
+    }
+
+    let base_url = gw.base_url().await.ok_or_else(|| {
+        NodeEngineError::ExecutionFailed("No vision server URL available".to_string())
+    })?;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/v1/chat/completions", base_url))
+        .json(&serde_json::json!({
+            "model": "gpt-4-vision-preview",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": format!("data:image/png;base64,{}", image_base64)
+                        }
+                    }
+                ]
+            }],
+            "max_tokens": 4096
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Vision request failed: {}", e))
+        })?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "Vision API error: {}",
+            error_text
+        )));
+    }
+
+    let json: serde_json::Value = response.json().await.map_err(|e| {
+        NodeEngineError::ExecutionFailed(format!("Failed to parse response: {}", e))
+    })?;
+
+    let analysis = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+
+    let mut outputs = HashMap::new();
+    outputs.insert("analysis".to_string(), serde_json::json!(analysis));
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_unload_model(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let model_ref = inputs.get("model_ref").ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "Missing model_ref input. Connect an inference node's Model Reference output."
+                .to_string(),
+        )
+    })?;
+
+    let engine = model_ref
+        .get("engine")
+        .and_then(|e| e.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed("model_ref missing 'engine' field".to_string())
+        })?;
+
+    let model_id = model_ref
+        .get("model_id")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed("model_ref missing 'model_id' field".to_string())
+        })?;
+
+    let trigger_value = inputs
+        .get("trigger")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    log::info!(
+        "UnloadModel: unloading '{}' from engine '{}'",
+        model_id,
+        engine
+    );
+
+    match engine {
+        "llamacpp" => {
+            let gw = require_gateway(gateway)?;
+            gw.stop().await;
+            log::info!(
+                "UnloadModel: llama.cpp server stopped for model '{}'",
+                model_id
+            );
+        }
+        "ollama" => {
+            let client = reqwest::Client::new();
+            let url = "http://localhost:11434/api/generate";
+            let request_body = serde_json::json!({
+                "model": model_id,
+                "keep_alive": 0
+            });
+
+            match client.post(url).json(&request_body).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    log::info!(
+                        "UnloadModel: Ollama model '{}' unloaded from VRAM",
+                        model_id
+                    );
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    log::warn!(
+                        "UnloadModel: Ollama unload returned {} for model '{}': {}",
+                        status,
+                        model_id,
+                        body
+                    );
+                }
+                Err(e) => {
+                    return Err(NodeEngineError::ExecutionFailed(format!(
+                        "Failed to connect to Ollama server to unload model '{}': {}",
+                        model_id, e
+                    )));
+                }
+            }
+        }
+        other => {
+            return Err(NodeEngineError::ExecutionFailed(format!(
+                "Unknown inference engine '{}'. Supported: llamacpp, ollama",
+                other
+            )));
+        }
+    }
+
+    let status_msg = format!("Model '{}' unloaded from {}", model_id, engine);
+
+    let mut outputs = HashMap::new();
+    outputs.insert("status".to_string(), serde_json::json!(status_msg));
+    outputs.insert("trigger_passthrough".to_string(), trigger_value);
+    Ok(outputs)
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,13 @@ inventory = { workspace = true }
 # UUID generation for orchestration execution IDs
 uuid = { version = "1", features = ["v4"] }
 
+# Optional: inference gateway for LLM node handlers
+inference = { path = "../inference", optional = true, default-features = false }
+
+[features]
+# Enable built-in inference node handlers (llamacpp, llm, vision, unload-model)
+inference-nodes = ["dep:inference"]
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3"
