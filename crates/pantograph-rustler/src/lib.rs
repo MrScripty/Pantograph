@@ -32,6 +32,7 @@
 //! ```
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use rustler::{Atom, Encoder, Env, NifResult, NifStruct, NifUnitEnum, OwnedEnv, ResourceArc, Term};
@@ -180,6 +181,17 @@ pub struct PumasApiResource {
 /// port options providers need. Initialized via `extensions_setup`.
 pub struct ExtensionsResource {
     pub extensions: Arc<tokio::sync::RwLock<node_engine::ExecutorExtensions>>,
+    pub runtime: Arc<tokio::runtime::Runtime>,
+}
+
+/// Wrapper for InferenceGateway shared via ResourceArc.
+///
+/// The gateway manages the llama.cpp server lifecycle and should outlive
+/// individual executors so the model stays loaded across demand cycles.
+/// Create once at app startup, pass to every executor via
+/// `executor_new_with_inference`.
+pub struct InferenceGatewayResource {
+    pub gateway: Arc<inference::InferenceGateway>,
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
 
@@ -636,6 +648,111 @@ fn executor_new_with_timeout(
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
     let core = node_engine::CoreTaskExecutor::new();
+    let elixir = ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs);
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
+    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
+
+    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
+
+    Ok(ResourceArc::new(WorkflowExecutorResource {
+        executor: Arc::new(tokio::sync::RwLock::new(executor)),
+        task_executor,
+        runtime: Arc::new(runtime),
+    }))
+}
+
+// ============================================================================
+// NIF Functions - Inference Gateway
+// ============================================================================
+
+/// Create a new InferenceGateway with a StdProcessSpawner.
+///
+/// The gateway manages the llama.cpp server lifecycle and is shared across
+/// executors. Create once at app startup, then pass to `executor_new_with_inference`.
+///
+/// - `binaries_dir`: directory containing the `llama-server-wrapper` binary
+/// - `data_dir`: directory for PID files and runtime data
+#[rustler::nif(schedule = "DirtyCpu")]
+fn inference_gateway_new(
+    env: Env,
+    binaries_dir: String,
+    data_dir: String,
+) -> NifResult<ResourceArc<InferenceGatewayResource>> {
+    let _ = env;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let gateway = Arc::new(inference::InferenceGateway::new());
+    let spawner = Arc::new(inference::StdProcessSpawner::new(
+        PathBuf::from(binaries_dir),
+        PathBuf::from(data_dir),
+    ));
+    runtime.block_on(async { gateway.set_spawner(spawner).await });
+
+    Ok(ResourceArc::new(InferenceGatewayResource {
+        gateway,
+        runtime: Arc::new(runtime),
+    }))
+}
+
+// ============================================================================
+// NIF Functions - Executor with Inference Gateway
+// ============================================================================
+
+/// Create a new WorkflowExecutor with inference gateway support.
+///
+/// Same as `executor_new` but wires an `InferenceGateway` into the
+/// `CoreTaskExecutor`, enabling native handling of `llamacpp-inference`,
+/// `llm-inference`, `vision-analysis`, and `unload-model` nodes.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_new_with_inference(
+    env: Env,
+    graph_json: String,
+    caller_pid: rustler::LocalPid,
+    gateway_resource: ResourceArc<InferenceGatewayResource>,
+) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
+    let _ = env;
+    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let core = node_engine::CoreTaskExecutor::new()
+        .with_gateway(gateway_resource.gateway.clone());
+    let elixir = ElixirCallbackTaskExecutor::new(caller_pid);
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
+    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
+
+    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
+
+    Ok(ResourceArc::new(WorkflowExecutorResource {
+        executor: Arc::new(tokio::sync::RwLock::new(executor)),
+        task_executor,
+        runtime: Arc::new(runtime),
+    }))
+}
+
+/// Create a new WorkflowExecutor with inference gateway and custom timeout.
+///
+/// Combines `executor_new_with_inference` with a custom Elixir callback timeout.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_new_with_inference_timeout(
+    env: Env,
+    graph_json: String,
+    caller_pid: rustler::LocalPid,
+    gateway_resource: ResourceArc<InferenceGatewayResource>,
+    timeout_secs: u64,
+) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
+    let _ = env;
+    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let core = node_engine::CoreTaskExecutor::new()
+        .with_gateway(gateway_resource.gateway.clone());
     let elixir = ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs);
     let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
     let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
@@ -1623,6 +1740,7 @@ fn load(env: Env, _info: Term) -> bool {
     rustler::resource!(NodeRegistryResource, env);
     rustler::resource!(PumasApiResource, env);
     rustler::resource!(ExtensionsResource, env);
+    rustler::resource!(InferenceGatewayResource, env);
     true
 }
 
