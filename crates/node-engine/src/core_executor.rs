@@ -6,16 +6,16 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
-#[cfg(feature = "inference-nodes")]
-use std::sync::Arc;
 #[cfg(feature = "inference-nodes")]
 use inference::InferenceGateway;
 
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
+use crate::events::EventSink;
 use crate::extensions::ExecutorExtensions;
 
 /// Extract the node type from task inputs or infer from the task ID.
@@ -51,6 +51,10 @@ pub struct CoreTaskExecutor {
     /// Inference gateway for LLM nodes (llamacpp, llm-inference, vision, unload-model).
     #[cfg(feature = "inference-nodes")]
     gateway: Option<Arc<InferenceGateway>>,
+    /// Optional event sink for streaming tokens during inference.
+    event_sink: Option<Arc<dyn EventSink>>,
+    /// Execution ID for event correlation.
+    execution_id: Option<String>,
 }
 
 impl CoreTaskExecutor {
@@ -60,6 +64,8 @@ impl CoreTaskExecutor {
             project_root: None,
             #[cfg(feature = "inference-nodes")]
             gateway: None,
+            event_sink: None,
+            execution_id: None,
         }
     }
 
@@ -73,6 +79,18 @@ impl CoreTaskExecutor {
     #[cfg(feature = "inference-nodes")]
     pub fn with_gateway(mut self, gateway: Arc<InferenceGateway>) -> Self {
         self.gateway = Some(gateway);
+        self
+    }
+
+    /// Set the event sink for streaming tokens during inference.
+    pub fn with_event_sink(mut self, sink: Arc<dyn EventSink>) -> Self {
+        self.event_sink = Some(sink);
+        self
+    }
+
+    /// Set the execution ID for event correlation.
+    pub fn with_execution_id(mut self, id: String) -> Self {
+        self.execution_id = Some(id);
         self
     }
 }
@@ -651,11 +669,19 @@ impl TaskExecutor for CoreTaskExecutor {
             // Gateway-backed inference nodes (require `inference-nodes` feature)
             #[cfg(feature = "inference-nodes")]
             "llamacpp-inference" => {
-                execute_llamacpp_inference(self.gateway.as_ref(), &inputs).await
+                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
+                execute_llamacpp_inference(
+                    self.gateway.as_ref(), &inputs, task_id,
+                    self.event_sink.as_ref(), exec_id,
+                ).await
             }
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
-                execute_llm_inference(self.gateway.as_ref(), &inputs).await
+                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
+                execute_llm_inference(
+                    self.gateway.as_ref(), &inputs, task_id,
+                    self.event_sink.as_ref(), exec_id,
+                ).await
             }
             #[cfg(feature = "inference-nodes")]
             "vision-analysis" => {
@@ -727,6 +753,9 @@ fn resolve_gguf_path(path: &str) -> Result<String> {
 async fn execute_llamacpp_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
+    _task_id: &str,
+    _event_sink: Option<&Arc<dyn EventSink>>,
+    _execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let gw = require_gateway(gateway)?;
 
@@ -855,6 +884,9 @@ async fn execute_llamacpp_inference(
 async fn execute_llm_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
+    _task_id: &str,
+    _event_sink: Option<&Arc<dyn EventSink>>,
+    _execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let gw = require_gateway(gateway)?;
 
