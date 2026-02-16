@@ -753,10 +753,12 @@ fn resolve_gguf_path(path: &str) -> Result<String> {
 async fn execute_llamacpp_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
-    _task_id: &str,
-    _event_sink: Option<&Arc<dyn EventSink>>,
-    _execution_id: &str,
+    task_id: &str,
+    event_sink: Option<&Arc<dyn EventSink>>,
+    execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
+    use futures_util::StreamExt;
+
     let gw = require_gateway(gateway)?;
 
     let prompt = inputs
@@ -827,18 +829,19 @@ async fn execute_llamacpp_inference(
         prompt.to_string()
     };
 
+    let streaming = event_sink.is_some();
     let request_body = serde_json::json!({
         "prompt": full_prompt,
         "n_predict": max_tokens,
         "temperature": temperature,
         "stop": ["</s>", "<|im_end|>", "<|end|>"],
-        "stream": false
+        "stream": streaming
     });
 
     let client = reqwest::Client::new();
     let url = format!("{}/completion", base_url);
 
-    log::debug!("LlamaCppInference: sending request to {}", url);
+    log::debug!("LlamaCppInference: sending request to {} (stream={})", url, streaming);
 
     let http_response = client
         .post(&url)
@@ -861,14 +864,53 @@ async fn execute_llamacpp_inference(
         )));
     }
 
-    let response_json: serde_json::Value = http_response.json().await.map_err(|e| {
-        NodeEngineError::ExecutionFailed(format!("Failed to parse llama.cpp response: {}", e))
-    })?;
+    let response_text = if let Some(sink) = event_sink {
+        // Streaming path: parse SSE and emit per-token events
+        let mut full_response = String::new();
+        let mut byte_stream = http_response.bytes_stream();
+        let mut buffer = String::new();
 
-    let response_text = response_json["content"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+        while let Some(chunk_result) = byte_stream.next().await {
+            let chunk = chunk_result.map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!("Stream read error: {}", e))
+            })?;
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            // Process complete lines from buffer
+            while let Some(newline_pos) = buffer.find('\n') {
+                let line = buffer[..newline_pos].trim().to_string();
+                buffer = buffer[newline_pos + 1..].to_string();
+
+                if let Some(token) = parse_llamacpp_sse_content(&line) {
+                    full_response.push_str(&token);
+                    let _ = sink.send(crate::WorkflowEvent::task_stream(
+                        task_id, execution_id, "response",
+                        serde_json::json!(token),
+                    ));
+                }
+            }
+        }
+        // Process any remaining data in buffer
+        let line = buffer.trim().to_string();
+        if let Some(token) = parse_llamacpp_sse_content(&line) {
+            full_response.push_str(&token);
+            let _ = sink.send(crate::WorkflowEvent::task_stream(
+                task_id, execution_id, "response",
+                serde_json::json!(token),
+            ));
+        }
+
+        full_response
+    } else {
+        // Non-streaming path: collect entire response
+        let response_json: serde_json::Value = http_response.json().await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to parse llama.cpp response: {}", e))
+        })?;
+        response_json["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string()
+    };
 
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
@@ -880,14 +922,51 @@ async fn execute_llamacpp_inference(
     Ok(outputs)
 }
 
+/// Parse a llama.cpp `/completion` SSE data line into a content token.
+///
+/// llama.cpp streams `data: {"content": "token", ...}` per line.
+#[cfg(feature = "inference-nodes")]
+fn parse_llamacpp_sse_content(line: &str) -> Option<String> {
+    let data = line.strip_prefix("data: ")?;
+    if data == "[DONE]" {
+        return None;
+    }
+    let json: serde_json::Value = serde_json::from_str(data).ok()?;
+    json.get("content")
+        .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Parse an OpenAI-compatible `/v1/chat/completions` SSE data line into a content token.
+///
+/// Streams `data: {"choices": [{"delta": {"content": "token"}}]}` per line.
+#[cfg(feature = "inference-nodes")]
+fn parse_openai_sse_content(line: &str) -> Option<String> {
+    let data = line.strip_prefix("data: ")?;
+    if data == "[DONE]" {
+        return None;
+    }
+    let json: serde_json::Value = serde_json::from_str(data).ok()?;
+    json.get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("delta"))
+        .and_then(|d| d.get("content"))
+        .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
 #[cfg(feature = "inference-nodes")]
 async fn execute_llm_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
-    _task_id: &str,
-    _event_sink: Option<&Arc<dyn EventSink>>,
-    _execution_id: &str,
+    task_id: &str,
+    event_sink: Option<&Arc<dyn EventSink>>,
+    execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
+    use futures_util::StreamExt;
+
     let gw = require_gateway(gateway)?;
 
     let prompt = inputs
@@ -920,13 +999,14 @@ async fn execute_llm_inference(
     }
     messages.push(serde_json::json!({"role": "user", "content": full_prompt}));
 
+    let streaming = event_sink.is_some();
     let client = reqwest::Client::new();
     let http_response = client
         .post(format!("{}/v1/chat/completions", base_url))
         .json(&serde_json::json!({
             "model": "gpt-4",
             "messages": messages,
-            "stream": false
+            "stream": streaming
         }))
         .send()
         .await
@@ -940,14 +1020,51 @@ async fn execute_llm_inference(
         )));
     }
 
-    let json: serde_json::Value = http_response.json().await.map_err(|e| {
-        NodeEngineError::ExecutionFailed(format!("Failed to parse response: {}", e))
-    })?;
+    let response = if let Some(sink) = event_sink {
+        // Streaming path: parse SSE and emit per-token events
+        let mut full_response = String::new();
+        let mut byte_stream = http_response.bytes_stream();
+        let mut buffer = String::new();
 
-    let response = json["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+        while let Some(chunk_result) = byte_stream.next().await {
+            let chunk = chunk_result.map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!("Stream read error: {}", e))
+            })?;
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(newline_pos) = buffer.find('\n') {
+                let line = buffer[..newline_pos].trim().to_string();
+                buffer = buffer[newline_pos + 1..].to_string();
+
+                if let Some(token) = parse_openai_sse_content(&line) {
+                    full_response.push_str(&token);
+                    let _ = sink.send(crate::WorkflowEvent::task_stream(
+                        task_id, execution_id, "response",
+                        serde_json::json!(token),
+                    ));
+                }
+            }
+        }
+        let line = buffer.trim().to_string();
+        if let Some(token) = parse_openai_sse_content(&line) {
+            full_response.push_str(&token);
+            let _ = sink.send(crate::WorkflowEvent::task_stream(
+                task_id, execution_id, "response",
+                serde_json::json!(token),
+            ));
+        }
+
+        full_response
+    } else {
+        // Non-streaming path: collect entire response
+        let json: serde_json::Value = http_response.json().await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to parse response: {}", e))
+        })?;
+        json["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string()
+    };
 
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response));
