@@ -56,11 +56,11 @@ pub enum ServerMode {
     None,
     /// Connected to external server (remote API or local server like LM Studio)
     External { url: String },
-    /// Sidecar running in inference mode (VLM with vision support)
+    /// Sidecar running in inference mode (text LLM or VLM with optional vision)
     SidecarInference {
         port: u16,
         model_path: String,
-        mmproj_path: String,
+        mmproj_path: Option<String>,
     },
     /// Sidecar running in embedding mode (for RAG indexing)
     SidecarEmbedding { port: u16, model_path: String },
@@ -185,12 +185,15 @@ impl LlamaServer {
         }
     }
 
-    /// Start sidecar in inference mode (VLM with vision support)
+    /// Start sidecar in inference mode (text LLM or VLM with optional vision)
+    ///
+    /// If `mmproj_path` is `Some`, the `--mmproj` flag is passed to enable
+    /// vision/multimodal support. For text-only LLMs, pass `None`.
     pub async fn start_sidecar_inference(
         &mut self,
         spawner: Arc<dyn ProcessSpawner>,
         model_path: &str,
-        mmproj_path: &str,
+        mmproj_path: Option<&str>,
         device: &DeviceConfig,
     ) -> Result<(), String> {
         // Stop any existing connection
@@ -207,12 +210,10 @@ impl LlamaServer {
         let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
         let pid_file_str = pid_file.to_string_lossy().to_string();
 
-        // Build args
+        // Build base args
         let mut args: Vec<String> = vec![
             "-m".to_string(),
             model_path.to_string(),
-            "--mmproj".to_string(),
-            mmproj_path.to_string(),
             "--port".to_string(),
             port_str,
             "-c".to_string(),
@@ -225,6 +226,12 @@ impl LlamaServer {
             "--pid-file".to_string(),
             pid_file_str,
         ];
+
+        // Add mmproj only for vision/multimodal models
+        if let Some(mmproj) = mmproj_path {
+            args.push("--mmproj".to_string());
+            args.push(mmproj.to_string());
+        }
 
         // Add device selection if not "auto"
         if device.device != device_types::AUTO {
@@ -250,7 +257,7 @@ impl LlamaServer {
         self.mode = ServerMode::SidecarInference {
             port,
             model_path: model_path.to_string(),
-            mmproj_path: mmproj_path.to_string(),
+            mmproj_path: mmproj_path.map(|s| s.to_string()),
         };
 
         self.wait_for_ready(rx).await

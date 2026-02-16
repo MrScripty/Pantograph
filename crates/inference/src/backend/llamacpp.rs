@@ -162,21 +162,23 @@ impl InferenceBackend for LlamaCppBackend {
                     }
                 })
         } else {
-            // Start in inference mode (VLM with vision)
+            // Start in inference mode (text LLM or VLM with optional vision)
             let model_path = config
                 .model_path
                 .as_ref()
                 .ok_or_else(|| BackendError::Config("model_path required".to_string()))?;
 
-            let mmproj_path = config.mmproj_path.as_ref().ok_or_else(|| {
-                BackendError::Config("mmproj_path required for inference mode".to_string())
-            })?;
+            // mmproj_path is optional — only needed for vision/multimodal models
+            let mmproj_path = config
+                .mmproj_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string());
 
             self.server
                 .start_sidecar_inference(
                     spawner,
                     &model_path.to_string_lossy(),
-                    &mmproj_path.to_string_lossy(),
+                    mmproj_path.as_deref(),
                     &device_config,
                 )
                 .await
