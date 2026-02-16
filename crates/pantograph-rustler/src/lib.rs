@@ -56,6 +56,8 @@ mod atoms {
         error,
         node_execute,
         workflow_event,
+        demand_complete,
+        demand_error,
     }
 }
 
@@ -647,7 +649,11 @@ fn executor_new_with_timeout(
     }))
 }
 
-/// Demand output from a node (triggers lazy evaluation).
+/// Demand output from a node synchronously (blocks the DirtyCpu scheduler).
+///
+/// **Deprecated**: Use `executor_demand_async` instead for non-blocking execution.
+/// This function blocks the calling scheduler thread until the demand completes,
+/// which can cause throughput issues with many concurrent demands.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn executor_demand(
     resource: ResourceArc<WorkflowExecutorResource>,
@@ -665,6 +671,62 @@ fn executor_demand(
         serde_json::to_string(&result)
             .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
     })
+}
+
+/// Demand output from a node asynchronously (non-blocking).
+///
+/// Returns immediately with `:ok`. The result is sent to `caller_pid` as:
+/// - `{:demand_complete, node_id, outputs_json}` on success
+/// - `{:demand_error, node_id, error_message}` on failure
+///
+/// This is the preferred way to demand nodes from Elixir, as it does not
+/// block any scheduler thread. Multiple demands can run concurrently.
+#[rustler::nif]
+fn executor_demand_async(
+    env: Env,
+    resource: ResourceArc<WorkflowExecutorResource>,
+    node_id: String,
+    caller_pid: rustler::LocalPid,
+) -> Atom {
+    let _ = env;
+    let executor = resource.executor.clone();
+    let task_exec = resource.task_executor.clone();
+    let nid = node_id.clone();
+
+    resource.runtime.spawn(async move {
+        let exec = executor.read().await;
+        let result = exec.demand(&nid, task_exec.as_ref()).await;
+
+        // Send result back to caller via OwnedEnv
+        let mut owned_env = OwnedEnv::new();
+        match result {
+            Ok(outputs) => {
+                let json = serde_json::to_string(&outputs).unwrap_or_else(|e| {
+                    format!("{{\"error\": \"serialization: {}\"}}", e)
+                });
+                let _ = owned_env.send_and_clear(&caller_pid, |env| {
+                    (
+                        atoms::demand_complete().encode(env),
+                        nid.encode(env),
+                        json.encode(env),
+                    )
+                        .encode(env)
+                });
+            }
+            Err(e) => {
+                let _ = owned_env.send_and_clear(&caller_pid, |env| {
+                    (
+                        atoms::demand_error().encode(env),
+                        nid.encode(env),
+                        e.to_string().encode(env),
+                    )
+                        .encode(env)
+                });
+            }
+        }
+    });
+
+    atoms::ok()
 }
 
 /// Update node data on the executor (marks the node modified).
