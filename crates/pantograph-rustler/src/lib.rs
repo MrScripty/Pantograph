@@ -299,6 +299,58 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
     }
 }
 
+// ============================================================================
+// Core-first composite executor for NIF
+// ============================================================================
+
+/// Task executor that tries CoreTaskExecutor first, then falls back to Elixir.
+///
+/// This is the inverse of `CompositeTaskExecutor` (which tries host first).
+/// For the NIF case, we want the core to handle all standard node types
+/// natively in Rust, and only delegate to Elixir for custom node types
+/// that core doesn't know about.
+struct CoreFirstExecutor {
+    core: Arc<node_engine::CoreTaskExecutor>,
+    elixir: Arc<ElixirCallbackTaskExecutor>,
+}
+
+impl CoreFirstExecutor {
+    fn new(core: node_engine::CoreTaskExecutor, elixir: ElixirCallbackTaskExecutor) -> Self {
+        Self {
+            core: Arc::new(core),
+            elixir: Arc::new(elixir),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl TaskExecutor for CoreFirstExecutor {
+    async fn execute_task(
+        &self,
+        task_id: &str,
+        inputs: HashMap<String, serde_json::Value>,
+        context: &graph_flow::Context,
+        extensions: &node_engine::ExecutorExtensions,
+    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
+        // Try core executor first (handles all standard node types)
+        match self
+            .core
+            .execute_task(task_id, inputs.clone(), context, extensions)
+            .await
+        {
+            Err(node_engine::NodeEngineError::ExecutionFailed(ref msg))
+                if msg.contains("requires host-specific executor") =>
+            {
+                // Core doesn't handle this type — delegate to Elixir
+                self.elixir
+                    .execute_task(task_id, inputs, context, extensions)
+                    .await
+            }
+            other => other,
+        }
+    }
+}
+
 /// EventSink that sends events to an Elixir PID.
 pub struct BeamEventSink {
     pid: rustler::LocalPid,
@@ -532,7 +584,11 @@ fn workflow_validate(graph_json: String) -> NifResult<Vec<String>> {
 // NIF Functions - Executor (dirty CPU scheduler)
 // ============================================================================
 
-/// Create a new WorkflowExecutor with callback-based task execution.
+/// Create a new WorkflowExecutor with core-first task execution.
+///
+/// Standard node types (text-input, llm-inference, etc.) are handled natively
+/// in Rust by `CoreTaskExecutor`. Custom node types fall through to Elixir
+/// via the callback bridge.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn executor_new(
     env: Env,
@@ -546,8 +602,9 @@ fn executor_new(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let task_executor: Arc<dyn TaskExecutor> =
-        Arc::new(ElixirCallbackTaskExecutor::new(caller_pid));
+    let core = node_engine::CoreTaskExecutor::new();
+    let elixir = ElixirCallbackTaskExecutor::new(caller_pid);
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
     let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
 
     let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
@@ -560,6 +617,8 @@ fn executor_new(
 }
 
 /// Create a new WorkflowExecutor with a custom callback timeout.
+///
+/// Same as `executor_new` but allows configuring the Elixir callback timeout.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn executor_new_with_timeout(
     env: Env,
@@ -574,9 +633,9 @@ fn executor_new_with_timeout(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(
-        ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs),
-    );
+    let core = node_engine::CoreTaskExecutor::new();
+    let elixir = ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs);
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
     let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
 
     let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
@@ -1135,8 +1194,9 @@ fn execute_orchestration(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let task_executor: Arc<dyn TaskExecutor> =
-        Arc::new(ElixirCallbackTaskExecutor::new(callback_pid));
+    let core = node_engine::CoreTaskExecutor::new();
+    let elixir = ElixirCallbackTaskExecutor::new(callback_pid);
+    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
     let event_sink = BeamEventSink::new(callback_pid);
 
     // Create the data graph executor

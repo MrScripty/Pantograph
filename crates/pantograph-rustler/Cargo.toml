@@ -11,7 +11,7 @@ name = "pantograph_rustler"
 
 [dependencies]
 # Core workflow engine
-node-engine = { path = "../node-engine" }
+node-engine = { path = "../node-engine", features = ["inference-nodes"] }
 
 # Workflow node descriptors (linked to include inventory::submit! statics)
 workflow-nodes = { path = "../workflow-nodes", default-features = false, features = ["model-library"] }
