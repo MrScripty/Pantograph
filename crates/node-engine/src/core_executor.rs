@@ -685,7 +685,7 @@ fn require_gateway(
 ) -> Result<&Arc<InferenceGateway>> {
     gateway.ok_or_else(|| {
         NodeEngineError::ExecutionFailed(
-            "InferenceGateway not configured. Use CoreTaskExecutor::with_gateway().".to_string(),
+            "InferenceGateway not configured: requires host-specific executor".to_string(),
         )
     })
 }
