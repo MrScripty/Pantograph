@@ -1,139 +1,87 @@
-//! Inference Gateway - Single entry point for all inference operations
+//! Inference Gateway - Tauri wrapper around inference::InferenceGateway
 //!
-//! The gateway abstracts over different inference backends (llama.cpp, Ollama, Candle)
-//! providing a unified interface for the rest of the application. It manages backend
-//! lifecycle, switching, and forwards requests to the active backend.
+//! This module wraps the core `inference::InferenceGateway` and adds
+//! Tauri-specific embedding server management for parallel embedding modes.
+//! All backend lifecycle operations delegate to the crate gateway which
+//! uses the `ProcessSpawner` abstraction.
 
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use super::backend::{
-    BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry,
-    InferenceBackend, LlamaCppBackend,
-};
+use inference::process::ProcessSpawner;
+use inference::BackendConfig;
+
 use super::embedding_server::EmbeddingServer;
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 
 /// Error types for gateway operations
 #[derive(Debug, thiserror::Error)]
 pub enum GatewayError {
-    #[error("Backend error: {0}")]
-    Backend(#[from] BackendError),
+    #[error("{0}")]
+    Inner(#[from] inference::GatewayError),
 
-    #[error("Backend switch failed: {0}")]
-    SwitchFailed(String),
+    #[error("Embedding server error: {0}")]
+    EmbeddingServer(String),
 }
 
-/// The single entry point for ALL inference operations.
+/// Tauri inference gateway wrapping the core inference gateway.
 ///
-/// Application code should only interact with InferenceGateway, never
-/// with backends directly. The gateway handles backend lifecycle and
-/// forwards requests to the active backend.
+/// Delegates all backend lifecycle operations to `inference::InferenceGateway`
+/// and adds embedding server management for parallel embedding modes.
 pub struct InferenceGateway {
-    /// The currently active backend
-    backend: Arc<RwLock<Box<dyn InferenceBackend>>>,
-    /// Registry of available backends
-    registry: BackendRegistry,
-    /// Name of the current backend
-    current_backend_name: Arc<RwLock<String>>,
-    /// Whether running in embedding mode (for legacy compatibility)
-    embedding_mode: Arc<RwLock<bool>>,
-    /// Last used inference config (for mode switching)
-    last_inference_config: Arc<RwLock<Option<BackendConfig>>>,
+    /// The core inference gateway
+    inner: inference::InferenceGateway,
     /// Dedicated embedding server for parallel modes (CPU+GPU or GPU+GPU)
     embedding_server: Arc<RwLock<Option<EmbeddingServer>>>,
-    /// Current embedding memory mode
-    embedding_memory_mode: Arc<RwLock<EmbeddingMemoryMode>>,
+    /// Process spawner (shared with inner gateway and embedding server)
+    spawner: Arc<dyn ProcessSpawner>,
 }
 
 impl InferenceGateway {
-    /// Create a new gateway with llama.cpp as the default backend
-    pub fn new() -> Self {
-        Self {
-            backend: Arc::new(RwLock::new(Box::new(LlamaCppBackend::new()))),
-            registry: BackendRegistry::new(),
-            current_backend_name: Arc::new(RwLock::new("llama.cpp".to_string())),
-            embedding_mode: Arc::new(RwLock::new(false)),
-            last_inference_config: Arc::new(RwLock::new(None)),
-            embedding_server: Arc::new(RwLock::new(None)),
-            embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
-        }
-    }
-
-    /// Get the name of the currently active backend
-    pub async fn current_backend_name(&self) -> String {
-        self.current_backend_name.read().await.clone()
-    }
-
-    /// Switch to a different backend
+    /// Create a new gateway wrapping the core inference gateway.
     ///
-    /// This stops the current backend and creates a new instance
-    /// of the specified backend. The backend is not started - call
-    /// `start()` after switching to initialize it.
-    pub async fn switch_backend(&self, name: &str) -> Result<(), GatewayError> {
-        // Create new backend first to validate the name
-        let new_backend = self
-            .registry
-            .create(name)
-            .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
-
-        // Stop current backend
-        {
-            let mut guard = self.backend.write().await;
-            guard.stop();
-            *guard = new_backend;
+    /// The `spawner` is injected into the core gateway for backend process
+    /// management and stored for embedding server use.
+    ///
+    /// **Important**: Call `init()` after construction to complete async setup.
+    pub fn new(spawner: Arc<dyn ProcessSpawner>) -> Self {
+        let inner = inference::InferenceGateway::new();
+        Self {
+            inner,
+            embedding_server: Arc::new(RwLock::new(None)),
+            spawner,
         }
-
-        // Update current backend name
-        {
-            let mut name_guard = self.current_backend_name.write().await;
-            *name_guard = name.to_string();
-        }
-
-        log::info!("Switched to backend: {}", name);
-        Ok(())
     }
 
-    /// List all available backends with their info
-    pub fn available_backends(&self) -> Vec<BackendInfo> {
-        self.registry.list()
+    /// Complete async initialization (sets spawner on inner gateway).
+    pub async fn init(&self) {
+        self.inner.set_spawner(self.spawner.clone()).await;
+    }
+
+    /// Get a reference to the inner crate gateway.
+    ///
+    /// Useful for passing to `CoreTaskExecutor` which needs the crate gateway
+    /// for inference node execution.
+    pub fn inner(&self) -> &inference::InferenceGateway {
+        &self.inner
     }
 
     // ─── LIFECYCLE METHODS ──────────────────────────────────────────
 
-    /// Start the current backend with the given configuration
-    pub async fn start(
-        &self,
-        config: &BackendConfig,
-        app: &tauri::AppHandle,
-    ) -> Result<(), GatewayError> {
-        // Track embedding mode
-        {
-            let mut mode = self.embedding_mode.write().await;
-            *mode = config.embedding_mode;
-        }
-
-        // Store inference config for mode restoration
-        if !config.embedding_mode {
-            let mut last_config = self.last_inference_config.write().await;
-            *last_config = Some(config.clone());
-        }
-
-        let mut guard = self.backend.write().await;
-        guard.start(config, app).await.map_err(GatewayError::Backend)
+    /// Start the current backend with the given configuration.
+    ///
+    /// Delegates to the core gateway which uses the injected `ProcessSpawner`.
+    pub async fn start(&self, config: &BackendConfig) -> Result<(), GatewayError> {
+        self.inner.start(config).await.map_err(GatewayError::Inner)
     }
 
-    /// Stop the current backend
+    /// Stop the current backend.
     pub async fn stop(&self) {
-        let mut guard = self.backend.write().await;
-        guard.stop();
-        // Reset embedding mode
-        let mut mode = self.embedding_mode.write().await;
-        *mode = false;
+        self.inner.stop().await;
     }
 
-    /// Stop the dedicated embedding server (if running)
+    /// Stop the dedicated embedding server (if running).
     pub async fn stop_embedding_server(&self) {
         let mut guard = self.embedding_server.write().await;
         if let Some(ref mut server) = *guard {
@@ -142,7 +90,7 @@ impl InferenceGateway {
         *guard = None;
     }
 
-    /// Stop both the main backend and embedding server
+    /// Stop both the main backend and embedding server.
     pub async fn stop_all(&self) {
         self.stop().await;
         self.stop_embedding_server().await;
@@ -150,29 +98,16 @@ impl InferenceGateway {
 
     // ─── EMBEDDING SERVER MANAGEMENT ───────────────────────────────────
 
-    /// Start the dedicated embedding server for parallel modes
+    /// Start the dedicated embedding server for parallel modes.
     ///
     /// This starts a separate llama.cpp instance for embedding operations,
     /// allowing vector search to work while the main LLM is loaded.
-    ///
-    /// # Arguments
-    /// * `model_path` - Path to the embedding model GGUF file
-    /// * `mode` - Memory mode (CpuParallel, GpuParallel, or Sequential)
-    /// * `devices` - Available device info for VRAM checking
-    /// * `app` - Tauri app handle
     pub async fn start_embedding_server(
         &self,
         model_path: &str,
         mode: EmbeddingMemoryMode,
         devices: &[DeviceInfo],
-        app: &tauri::AppHandle,
     ) -> Result<(), GatewayError> {
-        // Store the memory mode
-        {
-            let mut mode_guard = self.embedding_memory_mode.write().await;
-            *mode_guard = mode.clone();
-        }
-
         // Sequential mode doesn't need a dedicated server
         if mode == EmbeddingMemoryMode::Sequential {
             log::info!("Sequential embedding mode: no dedicated server needed");
@@ -185,9 +120,9 @@ impl InferenceGateway {
         // Create and start new embedding server
         let mut server = EmbeddingServer::new(mode);
         server
-            .start(model_path, app, devices)
+            .start(model_path, &self.spawner, devices)
             .await
-            .map_err(|e| GatewayError::SwitchFailed(e))?;
+            .map_err(GatewayError::EmbeddingServer)?;
 
         // Store the server
         let mut guard = self.embedding_server.write().await;
@@ -197,7 +132,7 @@ impl InferenceGateway {
         Ok(())
     }
 
-    /// Get the URL of the embedding server (if available)
+    /// Get the URL of the embedding server (if available).
     ///
     /// Returns:
     /// - In parallel modes: URL of the dedicated embedding server
@@ -222,7 +157,7 @@ impl InferenceGateway {
         None
     }
 
-    /// Check if the embedding server is ready
+    /// Check if the embedding server is ready.
     pub async fn is_embedding_server_ready(&self) -> bool {
         let server = self.embedding_server.read().await;
         if let Some(ref srv) = *server {
@@ -231,90 +166,75 @@ impl InferenceGateway {
         false
     }
 
-    /// Check if currently in embedding mode
+    // ─── DELEGATED QUERY METHODS ──────────────────────────────────────
+
+    /// Get the name of the currently active backend.
+    pub async fn current_backend_name(&self) -> String {
+        self.inner.current_backend_name().await
+    }
+
+    /// Switch to a different backend.
+    pub async fn switch_backend(&self, name: &str) -> Result<(), GatewayError> {
+        self.inner
+            .switch_backend(name)
+            .await
+            .map_err(GatewayError::Inner)
+    }
+
+    /// List all available backends with their info.
+    pub fn available_backends(&self) -> Vec<inference::BackendInfo> {
+        self.inner.available_backends()
+    }
+
+    /// Check if the current backend is ready.
+    pub async fn is_ready(&self) -> bool {
+        self.inner.is_ready().await
+    }
+
+    /// Get the base URL of the current backend (if HTTP-based).
+    pub async fn base_url(&self) -> Option<String> {
+        self.inner.base_url().await
+    }
+
+    /// Get capabilities of the current backend.
+    pub async fn capabilities(&self) -> inference::BackendCapabilities {
+        self.inner.capabilities().await
+    }
+
+    /// Check if currently in embedding mode.
     pub async fn is_embedding_mode(&self) -> bool {
-        *self.embedding_mode.read().await
+        self.inner.is_embedding_mode().await
     }
 
-    /// Check if currently in inference mode (ready and not embedding)
+    /// Check if currently in inference mode (ready and not embedding).
     pub async fn is_inference_mode(&self) -> bool {
-        self.is_ready().await && !self.is_embedding_mode().await
+        self.inner.is_inference_mode().await
     }
 
-    /// Get the last inference config (for restoring after embedding mode)
+    /// Get the last inference config (for restoring after embedding mode).
     pub async fn last_inference_config(&self) -> Option<BackendConfig> {
-        self.last_inference_config.read().await.clone()
+        self.inner.last_inference_config().await
     }
 
-    /// Get server mode info (for legacy compatibility)
+    /// Get server mode info for the frontend.
     pub async fn mode_info(&self) -> ServerModeInfo {
-        let ready = self.is_ready().await;
-        let is_embedding = self.is_embedding_mode().await;
-        let url = self.base_url().await;
-
+        let info = self.inner.mode_info().await;
+        // Convert from crate type to local config type
         ServerModeInfo {
-            mode: if !ready {
-                "none".to_string()
-            } else if is_embedding {
-                "sidecar_embedding".to_string()
-            } else {
-                "sidecar_inference".to_string()
-            },
-            ready,
-            url,
-            model_path: None, // Could be added if needed
-            is_embedding_mode: is_embedding,
+            mode: info.mode,
+            ready: info.ready,
+            url: info.url,
+            model_path: info.model_path,
+            is_embedding_mode: info.is_embedding_mode,
         }
     }
-
-    /// Check if the current backend is ready
-    pub async fn is_ready(&self) -> bool {
-        let guard = self.backend.read().await;
-        guard.is_ready()
-    }
-
-    /// Get the base URL of the current backend (if HTTP-based)
-    pub async fn base_url(&self) -> Option<String> {
-        let guard = self.backend.read().await;
-        guard.base_url()
-    }
-
-    /// Get capabilities of the current backend
-    pub async fn capabilities(&self) -> BackendCapabilities {
-        let guard = self.backend.read().await;
-        guard.capabilities()
-    }
 }
 
-impl Default for InferenceGateway {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Shared gateway type for Tauri state
+/// Shared gateway type for Tauri state.
 pub type SharedGateway = Arc<InferenceGateway>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_gateway_creation() {
-        let gateway = InferenceGateway::new();
-        assert!(!gateway.registry.list().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_initial_backend_is_llamacpp() {
-        let gateway = InferenceGateway::new();
-        let name = gateway.current_backend_name().await;
-        assert_eq!(name, "llama.cpp");
-    }
-
-    #[tokio::test]
-    async fn test_not_ready_initially() {
-        let gateway = InferenceGateway::new();
-        assert!(!gateway.is_ready().await);
-    }
+    // Integration tests require a ProcessSpawner which needs runtime setup.
+    // The core gateway is tested in the inference crate.
 }

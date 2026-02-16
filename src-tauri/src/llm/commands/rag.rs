@@ -166,7 +166,7 @@ pub async fn search_rag(
 /// If in inference mode, switches to embedding mode, indexes, then switches back
 #[command]
 pub async fn index_docs_with_switch(
-    app: AppHandle,
+    _app: AppHandle,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
@@ -250,7 +250,7 @@ pub async fn index_docs_with_switch(
     };
 
     gateway
-        .start(&embedding_config, &app)
+        .start(&embedding_config)
         .await
         .map_err(|e| format!("Failed to start embedding server: {}", e))?;
 
@@ -263,7 +263,7 @@ pub async fn index_docs_with_switch(
             // Restore VLM mode if needed and return error
             if restore_vlm {
                 if let Some(inference_config) = last_inference_config.clone() {
-                    let _ = gateway.start(&inference_config, &app).await;
+                    let _ = gateway.start(&inference_config).await;
                 }
             }
             return Err(format!(
@@ -348,7 +348,7 @@ pub async fn index_docs_with_switch(
             // Try to restore VLM mode even on error
             if restore_vlm {
                 if let Some(inference_config) = last_inference_config.clone() {
-                    let _ = gateway.start(&inference_config, &app).await;
+                    let _ = gateway.start(&inference_config).await;
                 }
             }
 
@@ -370,7 +370,7 @@ pub async fn index_docs_with_switch(
 
         if let Some(inference_config) = last_inference_config {
             gateway
-                .start(&inference_config, &app)
+                .start(&inference_config)
                 .await
                 .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
         }

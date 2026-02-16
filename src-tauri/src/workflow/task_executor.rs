@@ -879,21 +879,13 @@ impl PantographTaskExecutor {
             .and_then(|m| m.as_i64())
             .unwrap_or(512);
 
-        // Get app handle (required for starting the backend)
-        let app_handle = self.app_handle.as_ref().ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "AppHandle not available. Use with_app_handle() constructor.".to_string(),
-            )
-        })?;
-
         // Build backend config for the model
         let config = BackendConfig {
             model_path: Some(PathBuf::from(model_path)),
-            mmproj_path: None,
-            model_name: None,
             device: Some("auto".to_string()),
             gpu_layers: Some(-1), // Use all GPU layers
             embedding_mode: false,
+            ..Default::default()
         };
 
         // Ensure the gateway is ready with the correct model
@@ -904,7 +896,7 @@ impl PantographTaskExecutor {
                 model_path
             );
             self.gateway
-                .start(&config, app_handle)
+                .start(&config)
                 .await
                 .map_err(|e| {
                     NodeEngineError::ExecutionFailed(format!(

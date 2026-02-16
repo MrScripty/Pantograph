@@ -31,7 +31,7 @@ use llm::{
     set_embedding_server_url, set_model_config, set_sandbox_config, set_system_prompt,
     start_health_monitor, start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm,
     stop_health_monitor, stop_llm, switch_backend, trigger_recovery, undo_component_change,
-    update_svelte_docs, validate_component, InferenceGateway, LlamaServer, SharedAppConfig,
+    update_svelte_docs, validate_component, InferenceGateway, SharedAppConfig,
     SharedGateway,
 };
 use std::sync::Arc;
@@ -46,8 +46,7 @@ fn main() {
 
     log::info!("Pantograph starting...");
 
-    // Create the inference gateway - single entry point for all inference operations
-    let gateway: SharedGateway = Arc::new(InferenceGateway::new());
+    // Gateway is created in setup() where the AppHandle is available for ProcessSpawner
 
     // Create the execution manager for node-engine based workflows
     let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
@@ -88,7 +87,6 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(gateway)
         .manage(execution_manager)
         .manage(orchestration_store)
         .manage(node_registry)
@@ -101,9 +99,16 @@ fn main() {
                 .app_data_dir()
                 .expect("Failed to get app data dir");
 
-            if let Err(err) = LlamaServer::cleanup_stale_sidecar(&app_data_dir) {
+            // Clean up any lingering sidecar processes from previous runs
+            if let Err(err) = inference::LlamaServer::cleanup_stale_sidecar(&app_data_dir) {
                 log::warn!("Failed to clean up stale sidecar: {}", err);
             }
+
+            // Create process spawner and inference gateway
+            let spawner = llm::process_tauri::create_spawner(app.handle().clone());
+            let gateway: SharedGateway = Arc::new(InferenceGateway::new(spawner));
+            tauri::async_runtime::block_on(async { gateway.init().await });
+            app.manage(gateway);
 
             // Get project data directory for docs and RAG storage
             // Use CARGO_MANIFEST_DIR (src-tauri/) and go up one level to get project root.

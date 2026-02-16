@@ -4,9 +4,9 @@
 //! allowing it to run in parallel with the main LLM server.
 
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
-use tauri_plugin_shell::process::CommandChild;
-use tauri_plugin_shell::ShellExt;
+use std::sync::Arc;
+
+use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 
 use crate::config::{DeviceConfig, DeviceInfo, EmbeddingMemoryMode};
 use crate::constants::{device_types, hosts};
@@ -22,7 +22,7 @@ const EMBEDDING_PID_FILE: &str = "embedding-server.pid";
 
 /// Dedicated embedding server that can run alongside the main LLM
 pub struct EmbeddingServer {
-    child: Option<CommandChild>,
+    child: Option<Box<dyn ProcessHandle>>,
     port: u16,
     mode: EmbeddingMemoryMode,
     ready: bool,
@@ -55,7 +55,7 @@ impl EmbeddingServer {
     ///
     /// # Arguments
     /// * `model_path` - Path to the embedding model GGUF file
-    /// * `app` - Tauri app handle for spawning sidecar
+    /// * `spawner` - Process spawner for launching sidecar
     /// * `devices` - Available device info (for VRAM checking in GpuParallel mode)
     ///
     /// # Returns
@@ -64,7 +64,7 @@ impl EmbeddingServer {
     pub async fn start(
         &mut self,
         model_path: &str,
-        app: &AppHandle,
+        spawner: &Arc<dyn ProcessSpawner>,
         devices: &[DeviceInfo],
     ) -> Result<(), String> {
         // Sequential mode doesn't use a dedicated server
@@ -105,14 +105,14 @@ impl EmbeddingServer {
             }
         };
 
-        self.start_server(model_path, app, &device_config).await
+        self.start_server(model_path, spawner, &device_config).await
     }
 
     /// Internal method to start the llama.cpp embedding server
     async fn start_server(
         &mut self,
         model_path: &str,
-        app: &AppHandle,
+        spawner: &Arc<dyn ProcessSpawner>,
         device: &DeviceConfig,
     ) -> Result<(), String> {
         let port_str = self.port.to_string();
@@ -128,8 +128,7 @@ impl EmbeddingServer {
         ];
 
         // Add PID file
-        let pid_file = app
-            .path()
+        let pid_file = spawner
             .app_data_dir()
             .map_err(|e| format!("Failed to get app data dir: {}", e))?
             .join(EMBEDDING_PID_FILE);
@@ -147,16 +146,11 @@ impl EmbeddingServer {
             self.port, device.device, device.gpu_layers
         );
 
-        // Spawn the sidecar
+        // Spawn the sidecar via ProcessSpawner
         let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-        let sidecar = app
-            .shell()
-            .sidecar("llama-server-wrapper")
-            .map_err(|e| format!("Failed to create embedding sidecar: {}", e))?
-            .args(&args_refs);
-
-        let (mut rx, child) = sidecar
-            .spawn()
+        let (mut rx, child) = spawner
+            .spawn_sidecar("llama-server-wrapper", &args_refs)
+            .await
             .map_err(|e| format!("Failed to spawn embedding server: {}", e))?;
 
         self.child = Some(child);
@@ -202,10 +196,8 @@ impl EmbeddingServer {
     /// Wait for the server to signal it's ready
     async fn wait_for_ready(
         &self,
-        rx: &mut tokio::sync::mpsc::Receiver<tauri_plugin_shell::process::CommandEvent>,
+        rx: &mut tokio::sync::mpsc::Receiver<ProcessEvent>,
     ) -> Result<(), String> {
-        use tauri_plugin_shell::process::CommandEvent;
-
         let start = std::time::Instant::now();
         let timeout_ms = 60000; // 60 second timeout
 
@@ -216,7 +208,7 @@ impl EmbeddingServer {
             ).await {
                 Ok(Some(event)) => {
                     match event {
-                        CommandEvent::Stdout(line) => {
+                        ProcessEvent::Stdout(line) => {
                             let line_str = String::from_utf8_lossy(&line);
                             // Skip verbose model loading lines
                             if !line_str.contains("llama_model_loader: - kv")
@@ -231,7 +223,7 @@ impl EmbeddingServer {
                                 return self.verify_http_ready(5000).await;
                             }
                         }
-                        CommandEvent::Stderr(line) => {
+                        ProcessEvent::Stderr(line) => {
                             let line_str = String::from_utf8_lossy(&line);
                             // Skip verbose model loading lines
                             if !line_str.contains("llama_model_loader: - kv")
@@ -251,13 +243,18 @@ impl EmbeddingServer {
                                 return self.verify_http_ready(5000).await;
                             }
                         }
-                        CommandEvent::Terminated(payload) => {
+                        ProcessEvent::Terminated(code) => {
                             return Err(format!(
-                                "Embedding server terminated unexpectedly: {:?}",
-                                payload
+                                "Embedding server terminated unexpectedly with code: {:?}",
+                                code
                             ));
                         }
-                        _ => {}
+                        ProcessEvent::Error(err) => {
+                            return Err(format!(
+                                "Embedding server error: {}",
+                                err
+                            ));
+                        }
                     }
                 }
                 Ok(None) => {
@@ -288,10 +285,11 @@ impl EmbeddingServer {
 
     /// Stop the embedding server
     pub fn stop(&mut self) {
-        if let Some(child) = self.child.take() {
+        if let Some(ref child) = self.child {
             log::info!("Stopping embedding server");
             let _ = child.kill();
         }
+        self.child = None;
         self.ready = false;
         self.model_path = None;
 

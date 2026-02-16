@@ -21,7 +21,7 @@ pub async fn connect_to_server(
 
 #[command]
 pub async fn start_sidecar_llm(
-    app: AppHandle,
+    _app: AppHandle,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
     model_path: String,
@@ -41,7 +41,7 @@ pub async fn start_sidecar_llm(
     };
 
     gateway
-        .start(&backend_config, &app)
+        .start(&backend_config)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -138,7 +138,7 @@ pub async fn start_sidecar_inference(
 
     // Start the main LLM server
     gateway
-        .start(&backend_config, &app)
+        .start(&backend_config)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -151,7 +151,7 @@ pub async fn start_sidecar_inference(
             let devices = list_devices(app.clone()).await.unwrap_or_default();
 
             match gateway
-                .start_embedding_server(emb_path, embedding_memory_mode.clone(), &devices, &app)
+                .start_embedding_server(emb_path, embedding_memory_mode.clone(), &devices)
                 .await
             {
                 Ok(()) => {
@@ -180,7 +180,7 @@ pub async fn start_sidecar_inference(
 
 #[command]
 pub async fn start_sidecar_embedding(
-    app: AppHandle,
+    _app: AppHandle,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
 ) -> Result<ServerModeInfo, String> {
@@ -202,7 +202,7 @@ pub async fn start_sidecar_embedding(
     drop(config_guard);
 
     gateway
-        .start(&backend_config, &app)
+        .start(&backend_config)
         .await
         .map_err(|e| e.to_string())?;
 
