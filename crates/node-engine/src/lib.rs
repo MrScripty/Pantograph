@@ -53,6 +53,8 @@
 //! ```
 
 pub mod builder;
+pub mod composite_executor;
+pub mod core_executor;
 pub mod descriptor;
 pub mod engine;
 pub mod error;
@@ -66,6 +68,10 @@ pub mod tasks;
 pub mod types;
 pub mod undo;
 pub mod validation;
+
+// Re-export core and composite executors
+pub use composite_executor::CompositeTaskExecutor;
+pub use core_executor::{resolve_node_type, CoreTaskExecutor};
 
 // Re-export key types from engine
 pub use engine::{CacheStats, CachedOutput, DemandEngine, TaskExecutor, WorkflowExecutor};

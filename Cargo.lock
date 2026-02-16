@@ -6477,6 +6477,7 @@ dependencies = [
  "graph-flow",
  "inventory",
  "log",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

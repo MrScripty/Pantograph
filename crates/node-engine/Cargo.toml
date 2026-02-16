@@ -26,6 +26,9 @@ thiserror = "1"
 # Logging
 log = "0.4"
 
+# HTTP client (for ollama-inference and other HTTP-based nodes)
+reqwest = { workspace = true }
+
 # Link-time collection of TaskMetadata descriptors
 inventory = { workspace = true }
 
