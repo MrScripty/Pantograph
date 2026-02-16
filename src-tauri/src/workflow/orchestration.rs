@@ -24,14 +24,12 @@ pub use node_engine::{OrchestrationGraphMetadata, OrchestrationStore};
 /// Shared orchestration store type.
 pub type SharedOrchestrationStore = Arc<RwLock<OrchestrationStore>>;
 
-/// Data graph executor that uses the PantographTaskExecutor.
+/// Data graph executor that uses CompositeTaskExecutor (Tauri host + core).
 pub struct PantographDataGraphExecutor {
     store: SharedOrchestrationStore,
     gateway: SharedGateway,
     rag_manager: SharedRagManager,
-    execution_manager: SharedExecutionManager,
     project_root: PathBuf,
-    app_handle: AppHandle,
 }
 
 impl PantographDataGraphExecutor {
@@ -39,17 +37,13 @@ impl PantographDataGraphExecutor {
         store: SharedOrchestrationStore,
         gateway: SharedGateway,
         rag_manager: SharedRagManager,
-        execution_manager: SharedExecutionManager,
         project_root: PathBuf,
-        app_handle: AppHandle,
     ) -> Self {
         Self {
             store,
             gateway,
             rag_manager,
-            execution_manager,
             project_root,
-            app_handle,
         }
     }
 }
@@ -74,12 +68,18 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         let graph = graph.clone();
         drop(store);
 
-        // Create a task executor for this data graph with app handle for backend lifecycle
-        let task_executor = super::task_executor::PantographTaskExecutor::with_app_handle(
-            self.gateway.clone(),
+        // Create composite task executor: Tauri-specific (rag-search) + core (everything else)
+        let core = Arc::new(
+            node_engine::CoreTaskExecutor::new()
+                .with_project_root(self.project_root.clone())
+                .with_gateway(self.gateway.inner_arc()),
+        );
+        let host = Arc::new(super::task_executor::TauriTaskExecutor::new(
             self.rag_manager.clone(),
-            self.project_root.clone(),
-            self.app_handle.clone(),
+        ));
+        let task_executor = node_engine::CompositeTaskExecutor::new(
+            Some(host as Arc<dyn node_engine::TaskExecutor>),
+            core,
         );
 
         // Create graph-flow context and demand engine
@@ -462,13 +462,13 @@ pub async fn register_data_graph(
 /// Execute an orchestration graph.
 #[command]
 pub async fn execute_orchestration(
-    app: AppHandle,
+    _app: AppHandle,
     orchestration_id: String,
     initial_data: HashMap<String, Value>,
     orchestration_store: State<'_, SharedOrchestrationStore>,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
-    execution_manager: State<'_, SharedExecutionManager>,
+    _execution_manager: State<'_, SharedExecutionManager>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<OrchestrationResult, String> {
     // Get the orchestration graph
@@ -482,14 +482,12 @@ pub async fn execute_orchestration(
     // Get project root from environment or use current directory
     let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    // Create the data graph executor with app handle for backend lifecycle
+    // Create the data graph executor with composite task execution
     let data_executor = PantographDataGraphExecutor::new(
         orchestration_store.inner().clone(),
         gateway.inner().clone(),
         rag_manager.inner().clone(),
-        execution_manager.inner().clone(),
         project_root,
-        app,
     );
 
     // Create the orchestration executor

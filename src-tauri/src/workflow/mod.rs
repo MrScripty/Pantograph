@@ -42,7 +42,7 @@ pub use event_adapter::TauriEventAdapter;
 pub use events::WorkflowEvent;
 pub use execution_manager::{ExecutionManager, ExecutionState, SharedExecutionManager, UndoRedoState};
 pub use registry::NodeRegistry;
-pub use task_executor::PantographTaskExecutor;
+pub use task_executor::TauriTaskExecutor;
 pub use types::{
     ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, PortDataType,
     PortDefinition, Position, Viewport, WorkflowFile, WorkflowGraph, WorkflowMetadata,

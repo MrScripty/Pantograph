@@ -30,8 +30,8 @@ pub enum GatewayError {
 /// Delegates all backend lifecycle operations to `inference::InferenceGateway`
 /// and adds embedding server management for parallel embedding modes.
 pub struct InferenceGateway {
-    /// The core inference gateway
-    inner: inference::InferenceGateway,
+    /// The core inference gateway (Arc-wrapped for sharing with CoreTaskExecutor)
+    inner: Arc<inference::InferenceGateway>,
     /// Dedicated embedding server for parallel modes (CPU+GPU or GPU+GPU)
     embedding_server: Arc<RwLock<Option<EmbeddingServer>>>,
     /// Process spawner (shared with inner gateway and embedding server)
@@ -46,7 +46,7 @@ impl InferenceGateway {
     ///
     /// **Important**: Call `init()` after construction to complete async setup.
     pub fn new(spawner: Arc<dyn ProcessSpawner>) -> Self {
-        let inner = inference::InferenceGateway::new();
+        let inner = Arc::new(inference::InferenceGateway::new());
         Self {
             inner,
             embedding_server: Arc::new(RwLock::new(None)),
@@ -59,12 +59,12 @@ impl InferenceGateway {
         self.inner.set_spawner(self.spawner.clone()).await;
     }
 
-    /// Get a reference to the inner crate gateway.
+    /// Get an Arc clone of the inner crate gateway.
     ///
-    /// Useful for passing to `CoreTaskExecutor` which needs the crate gateway
-    /// for inference node execution.
-    pub fn inner(&self) -> &inference::InferenceGateway {
-        &self.inner
+    /// Used to share the gateway with `CoreTaskExecutor` for inference
+    /// node execution.
+    pub fn inner_arc(&self) -> Arc<inference::InferenceGateway> {
+        self.inner.clone()
     }
 
     // ─── LIFECYCLE METHODS ──────────────────────────────────────────

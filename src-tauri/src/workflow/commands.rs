@@ -26,7 +26,7 @@ use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
 use super::registry::NodeRegistry;
-use super::task_executor::PantographTaskExecutor;
+use super::task_executor::TauriTaskExecutor;
 use super::types::{
     GraphEdge, GraphNode, NodeDefinition, PortDataType, WorkflowFile, WorkflowGraph,
     WorkflowMetadata,
@@ -205,7 +205,7 @@ pub fn list_workflows() -> Result<Vec<WorkflowMetadata>, String> {
 /// Returns the execution ID which can be used for subsequent operations.
 #[command]
 pub async fn execute_workflow_v2(
-    app: AppHandle,
+    _app: AppHandle,
     graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
@@ -233,12 +233,16 @@ pub async fn execute_workflow_v2(
         .create_execution(&execution_id, ne_graph, event_adapter.clone())
         .await;
 
-    // Create task executor with app handle for backend lifecycle management
-    let task_executor = PantographTaskExecutor::with_app_handle(
-        gateway.inner().clone(),
-        rag_manager.inner().clone(),
-        project_root,
-        app,
+    // Create composite task executor: Tauri-specific (rag-search) + core (everything else)
+    let core = Arc::new(
+        node_engine::CoreTaskExecutor::new()
+            .with_project_root(project_root)
+            .with_gateway(gateway.inner_arc()),
+    );
+    let host = Arc::new(TauriTaskExecutor::new(rag_manager.inner().clone()));
+    let task_executor = node_engine::CompositeTaskExecutor::new(
+        Some(host as Arc<dyn node_engine::TaskExecutor>),
+        core,
     );
 
     // Find terminal nodes (nodes with no outgoing edges)
@@ -505,7 +509,7 @@ pub async fn create_workflow_session(
 /// executes it by demanding outputs from all terminal nodes (nodes with no outgoing edges).
 #[command]
 pub async fn run_workflow_session(
-    app: AppHandle,
+    _app: AppHandle,
     session_id: String,
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
@@ -522,12 +526,16 @@ pub async fn run_workflow_session(
     // Create event adapter and update the executor's event sink
     let event_adapter = Arc::new(TauriEventAdapter::new(channel, &session_id));
 
-    // Create task executor with app handle for backend lifecycle management
-    let task_executor = PantographTaskExecutor::with_app_handle(
-        gateway.inner().clone(),
-        rag_manager.inner().clone(),
-        project_root,
-        app,
+    // Create composite task executor: Tauri-specific (rag-search) + core (everything else)
+    let core = Arc::new(
+        node_engine::CoreTaskExecutor::new()
+            .with_project_root(project_root)
+            .with_gateway(gateway.inner_arc()),
+    );
+    let host = Arc::new(TauriTaskExecutor::new(rag_manager.inner().clone()));
+    let task_executor = node_engine::CompositeTaskExecutor::new(
+        Some(host as Arc<dyn node_engine::TaskExecutor>),
+        core,
     );
 
     // Get the graph to find terminal nodes, then execute
