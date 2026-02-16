@@ -33,31 +33,6 @@ pub mod task_executor;
 pub mod types;
 pub mod validation;
 
-// Re-export commonly used types
-pub use commands::{
-    get_node_definitions, list_workflows, load_workflow, save_workflow,
-    validate_workflow_connection,
-};
-pub use event_adapter::TauriEventAdapter;
-pub use events::WorkflowEvent;
-pub use execution_manager::{ExecutionManager, ExecutionState, SharedExecutionManager, UndoRedoState};
-pub use registry::NodeRegistry;
-pub use task_executor::TauriTaskExecutor;
-pub use types::{
-    ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, PortDataType,
-    PortDefinition, Position, Viewport, WorkflowFile, WorkflowGraph, WorkflowMetadata,
-};
-pub use validation::{validate_connection, ValidationError, WorkflowValidator};
-
-// Re-export group types and commands
-pub use groups::{
-    collapse_node_group, create_node_group, expand_node_group, rename_node_group,
-    ungroup_nodes, update_group_ports, CreateGroupResult, ExpandGroupResult, NodeGroup,
-    PortMapping,
-};
-
-// Re-export orchestration types and commands
-pub use orchestration::{
-    OrchestrationGraphMetadata, OrchestrationNodeTypeInfo, OrchestrationStore,
-    SharedOrchestrationStore,
-};
+// Re-export types used by main.rs
+pub use execution_manager::{ExecutionManager, SharedExecutionManager};
+pub use orchestration::SharedOrchestrationStore;

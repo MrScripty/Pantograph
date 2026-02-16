@@ -338,7 +338,7 @@ impl NodeExecutorFactory for SharedExecutorFactory {
 /// with the new per-node-type `NodeExecutor` pattern.
 ///
 /// Node type is extracted from `inputs._data.node_type`, matching the
-/// existing dispatch pattern in PantographTaskExecutor.
+/// existing dispatch pattern in CoreTaskExecutor.
 pub struct RegistryTaskExecutor {
     registry: Arc<NodeRegistry>,
 }
@@ -364,7 +364,7 @@ impl crate::engine::TaskExecutor for RegistryTaskExecutor {
         context: &Context,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        // Extract node_type from _data.node_type (same pattern as PantographTaskExecutor)
+        // Extract node_type from _data.node_type (same pattern as CoreTaskExecutor)
         let node_type = inputs
             .get("_data")
             .and_then(|d| d.get("node_type"))
