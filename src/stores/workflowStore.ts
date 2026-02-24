@@ -62,6 +62,10 @@ export const setNodeExecutionState = workflowStores.setNodeExecutionState;
 export const getNodeExecutionInfo = workflowStores.getNodeExecutionInfo;
 export const resetExecutionStates = workflowStores.resetExecutionStates;
 
+// --- Streaming actions ---
+export const appendStreamContent = workflowStores.appendStreamContent;
+export const clearStreamContent = workflowStores.clearStreamContent;
+
 // --- Workflow actions ---
 export const loadWorkflow = workflowStores.loadWorkflow;
 export const clearWorkflow = workflowStores.clearWorkflow;

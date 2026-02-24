@@ -92,7 +92,7 @@ export interface WorkflowEventData {
   Started: { workflow_id: string; node_count: number };
   NodeStarted: { node_id: string; node_type: string };
   NodeProgress: { node_id: string; progress: number; message: string };
-  NodeStream: { node_id: string; port: string; chunk: { type: string; content: string } };
+  NodeStream: { node_id: string; port: string; chunk: unknown };
   NodeCompleted: { node_id: string; outputs: Record<string, unknown> };
   NodeError: { node_id: string; error: string };
   Completed: { outputs: Record<string, unknown> };

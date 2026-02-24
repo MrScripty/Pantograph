@@ -55,6 +55,10 @@ export interface WorkflowStores {
   getNodeExecutionInfo: (nodeId: string) => NodeExecutionInfo | undefined;
   resetExecutionStates: () => void;
 
+  // Actions — streaming
+  appendStreamContent: (nodeId: string, chunk: string) => void;
+  clearStreamContent: () => void;
+
   // Actions — workflow
   loadWorkflow: (graph: WorkflowGraph, metadata?: WorkflowMetadata) => void;
   clearWorkflow: () => void;
@@ -253,6 +257,28 @@ export function createWorkflowStores(
 
   function resetExecutionStates() {
     nodeExecutionStates.set(new Map());
+  }
+
+  // --- Streaming actions ---
+
+  function appendStreamContent(nodeId: string, chunk: string) {
+    nodes.update((n) =>
+      n.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, streamContent: (node.data.streamContent || '') + chunk } }
+          : node
+      )
+    );
+  }
+
+  function clearStreamContent() {
+    nodes.update((n) =>
+      n.map((node) =>
+        node.data.streamContent
+          ? { ...node, data: { ...node.data, streamContent: '' } }
+          : node
+      )
+    );
   }
 
   // --- Workflow actions ---
@@ -501,6 +527,8 @@ export function createWorkflowStores(
     addEdge: addEdgeFn, removeEdge: removeEdgeFn, syncEdgesFromBackend,
     // Execution actions
     setNodeExecutionState, getNodeExecutionInfo, resetExecutionStates,
+    // Streaming actions
+    appendStreamContent, clearStreamContent,
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
     // Group actions
