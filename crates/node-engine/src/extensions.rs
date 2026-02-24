@@ -71,6 +71,9 @@ impl Default for ExecutorExtensions {
 pub mod extension_keys {
     /// Key for `Arc<pumas_library::PumasApi>` — model library access.
     pub const PUMAS_API: &str = "pumas_api";
+
+    /// Key for `Arc<inference::kv_cache::KvCacheStore>` — KV cache storage.
+    pub const KV_CACHE_STORE: &str = "kv_cache_store";
 }
 
 #[cfg(test)]
