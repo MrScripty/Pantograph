@@ -41,9 +41,14 @@ inference = { path = "../inference", optional = true, default-features = false }
 # Optional: streaming support for inference nodes
 futures-util = { workspace = true, optional = true }
 
+# Optional: PyO3 for in-process PyTorch inference
+pyo3 = { workspace = true, optional = true }
+
 [features]
 # Enable built-in inference node handlers (llamacpp, llm, vision, unload-model)
 inference-nodes = ["dep:inference", "dep:futures-util"]
+# Enable PyTorch inference node handler (requires Python 3 + PyTorch at runtime)
+pytorch-nodes = ["inference-nodes", "inference/backend-pytorch", "dep:pyo3"]
 
 [dev-dependencies]
 tokio-test = "0.4"

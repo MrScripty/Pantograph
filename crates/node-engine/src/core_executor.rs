@@ -692,6 +692,16 @@ impl TaskExecutor for CoreTaskExecutor {
                 execute_unload_model(self.gateway.as_ref(), &inputs).await
             }
 
+            // PyTorch inference (in-process via PyO3)
+            #[cfg(feature = "pytorch-nodes")]
+            "pytorch-inference" => {
+                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
+                execute_pytorch_inference(
+                    &inputs, task_id,
+                    self.event_sink.as_ref(), exec_id,
+                ).await
+            }
+
             // Unknown — signal that this node requires a host-specific executor
             _ => Err(NodeEngineError::ExecutionFailed(format!(
                 "Node type '{}' requires host-specific executor",
@@ -1225,9 +1235,30 @@ async fn execute_unload_model(
                 }
             }
         }
+        #[cfg(feature = "pytorch-nodes")]
+        "pytorch" => {
+            use pyo3::types::PyAnyMethods;
+            // Unload via PyO3 in-process call to the Python worker
+            let model_id_owned = model_id.to_string();
+            tokio::task::spawn_blocking(move || {
+                pyo3::Python::with_gil(|py| {
+                    if let Ok(worker) = py.import("pantograph_torch_worker") {
+                        let _ = worker.call_method0("unload_model");
+                    }
+                });
+            })
+            .await
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Failed to unload PyTorch model '{}': {}",
+                    model_id_owned, e
+                ))
+            })?;
+            log::info!("UnloadModel: PyTorch model '{}' unloaded", model_id);
+        }
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
-                "Unknown inference engine '{}'. Supported: llamacpp, ollama",
+                "Unknown inference engine '{}'. Supported: llamacpp, ollama, pytorch",
                 other
             )));
         }
@@ -1238,6 +1269,271 @@ async fn execute_unload_model(
     let mut outputs = HashMap::new();
     outputs.insert("status".to_string(), serde_json::json!(status_msg));
     outputs.insert("trigger_passthrough".to_string(), trigger_value);
+    Ok(outputs)
+}
+
+#[cfg(feature = "pytorch-nodes")]
+async fn execute_pytorch_inference(
+    inputs: &HashMap<String, serde_json::Value>,
+    task_id: &str,
+    event_sink: Option<&Arc<dyn EventSink>>,
+    execution_id: &str,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?
+        .to_string();
+
+    let model_path = inputs
+        .get("model_path")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+            )
+        })?
+        .to_string();
+
+    let system_prompt = inputs
+        .get("system_prompt")
+        .and_then(|s| s.as_str())
+        .map(|s| s.to_string());
+    let temperature = inputs
+        .get("temperature")
+        .and_then(|t| t.as_f64())
+        .unwrap_or(0.7);
+    let max_tokens = inputs
+        .get("max_tokens")
+        .and_then(|m| m.as_i64())
+        .unwrap_or(512);
+    let device = inputs
+        .get("device")
+        .and_then(|d| d.as_str())
+        .unwrap_or("auto")
+        .to_string();
+    let model_type = inputs
+        .get("model_type")
+        .and_then(|t| t.as_str())
+        .map(|s| s.to_string());
+
+    let model_name = std::path::Path::new(&model_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("pytorch-model")
+        .to_string();
+
+    // Phase 1: Check if model is already loaded, load if needed
+    {
+        let mp = model_path.clone();
+        let dev = device.clone();
+        let mt = model_type.clone();
+
+        tokio::task::spawn_blocking(move || {
+            pyo3::Python::with_gil(|py| -> std::result::Result<(), String> {
+                use pyo3::types::{PyAnyMethods, PyDictMethods};
+
+                // Ensure worker is initialised
+                let worker = match py.import("pantograph_torch_worker") {
+                    Ok(w) => w,
+                    Err(_) => {
+                        // First time: load the module from embedded source
+                        let code_str = include_str!("../../inference/torch/worker.py");
+                        let code = std::ffi::CString::new(code_str)
+                            .map_err(|e| format!("Invalid worker source: {}", e))?;
+                        pyo3::types::PyModule::from_code(
+                            py,
+                            &code,
+                            c"pantograph_torch_worker",
+                            c"pantograph_torch_worker",
+                        )
+                        .map_err(|e| format!("Failed to load worker: {}", e))?;
+                        py.import("pantograph_torch_worker")
+                            .map_err(|e| format!("Failed to import worker: {}", e))?
+                    }
+                };
+
+                // Check if the correct model is already loaded
+                let info = worker
+                    .call_method0("get_loaded_info")
+                    .map_err(|e| format!("get_loaded_info failed: {}", e))?;
+
+                let needs_load = if info.is_none() {
+                    true
+                } else {
+                    let loaded_path: String = info
+                        .get_item("model_path")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_default();
+                    loaded_path != mp
+                };
+
+                if needs_load {
+                    log::info!("PyTorchInference: loading model from '{}'", mp);
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("model_path", &mp).unwrap();
+                    kwargs.set_item("device", &dev).unwrap();
+                    if let Some(ref mt_val) = mt {
+                        kwargs.set_item("model_type", mt_val).unwrap();
+                    }
+                    worker
+                        .call_method("load_model", (), Some(&kwargs))
+                        .map_err(|e| format!("Model load failed: {}", e))?;
+                    log::info!("PyTorchInference: model loaded successfully");
+                }
+
+                Ok(())
+            })
+        })
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Task join error: {}", e))
+        })?
+        .map_err(|e| NodeEngineError::ExecutionFailed(e))?;
+    }
+
+    // Phase 2: Generate — streaming or non-streaming
+    let response_text = if let Some(sink) = event_sink {
+        // Streaming: iterate Python generator via mpsc channel
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<std::result::Result<String, String>>(32);
+        let p = prompt.clone();
+        let sp = system_prompt.clone();
+
+        tokio::task::spawn_blocking(move || {
+            pyo3::Python::with_gil(|py| {
+                use pyo3::types::{PyAnyMethods, PyDictMethods};
+
+                let worker = match py.import("pantograph_torch_worker") {
+                    Ok(w) => w,
+                    Err(e) => {
+                        let _ =
+                            tx.blocking_send(Err(format!("Failed to get worker: {}", e)));
+                        return;
+                    }
+                };
+
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("prompt", &p).unwrap();
+                if let Some(ref sys) = sp {
+                    kwargs.set_item("system_prompt", sys).unwrap();
+                }
+                kwargs.set_item("max_tokens", max_tokens).unwrap();
+                kwargs.set_item("temperature", temperature).unwrap();
+
+                let generator =
+                    match worker.call_method("generate_tokens", (), Some(&kwargs)) {
+                        Ok(g) => g,
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(format!(
+                                "Failed to create generator: {}",
+                                e
+                            )));
+                            return;
+                        }
+                    };
+
+                let iter = match generator.try_iter() {
+                    Ok(it) => it,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(format!(
+                            "Generator not iterable: {}",
+                            e
+                        )));
+                        return;
+                    }
+                };
+
+                for item in iter {
+                    match item {
+                        Ok(token_obj) => match token_obj.extract::<String>() {
+                            Ok(token) => {
+                                if tx.blocking_send(Ok(token)).is_err() {
+                                    return;
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.blocking_send(Err(format!(
+                                    "Token extraction failed: {}",
+                                    e
+                                )));
+                                return;
+                            }
+                        },
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(format!(
+                                "Generator error: {}",
+                                e
+                            )));
+                            return;
+                        }
+                    }
+                }
+            });
+        });
+
+        let mut full_response = String::new();
+        while let Some(token_result) = rx.recv().await {
+            let token = token_result.map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", e))
+            })?;
+            full_response.push_str(&token);
+            let _ = sink.send(crate::WorkflowEvent::task_stream(
+                task_id,
+                execution_id,
+                "response",
+                serde_json::json!(token),
+            ));
+        }
+
+        full_response
+    } else {
+        // Non-streaming: single blocking call
+        let p = prompt.clone();
+        let sp = system_prompt.clone();
+
+        tokio::task::spawn_blocking(move || {
+            pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
+                use pyo3::types::{PyAnyMethods, PyDictMethods};
+
+                let worker = py
+                    .import("pantograph_torch_worker")
+                    .map_err(|e| format!("Failed to get worker: {}", e))?;
+
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("prompt", &p).unwrap();
+                if let Some(ref sys) = sp {
+                    kwargs.set_item("system_prompt", sys).unwrap();
+                }
+                kwargs.set_item("max_tokens", max_tokens).unwrap();
+                kwargs.set_item("temperature", temperature).unwrap();
+
+                let result = worker
+                    .call_method("generate", (), Some(&kwargs))
+                    .map_err(|e| format!("Generation failed: {}", e))?;
+
+                result
+                    .extract::<String>()
+                    .map_err(|e| format!("Failed to extract result: {}", e))
+            })
+        })
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Task join error: {}", e))
+        })?
+        .map_err(|e| NodeEngineError::ExecutionFailed(e))?
+    };
+
+    let mut outputs = HashMap::new();
+    outputs.insert("response".to_string(), serde_json::json!(response_text));
+    outputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({
+            "engine": "pytorch",
+            "model_id": model_name,
+            "model_path": model_path,
+        }),
+    );
     Ok(outputs)
 }
 
