@@ -275,6 +275,223 @@ def _setup_block_diffusion(model, input_ids, gen_length, block_length, mask_id):
     return x, attn_mask, position_ids, past_key_values, prompt_length
 
 
+def _build_masked_sequence(segments, tokenizer, mask_id):
+    """Build a pre-anchored token sequence from masked prompt segments.
+
+    Anchored segments get their real token IDs, masked segments get mask_id.
+    Returns (input_ids tensor, anchor_mask tensor).
+    """
+    all_ids = []
+    anchor_mask = []
+    for seg in segments:
+        ids = tokenizer.encode(seg["text"], add_special_tokens=False)
+        all_ids.extend(ids)
+        if seg["masked"]:
+            anchor_mask.extend([False] * len(ids))
+        else:
+            anchor_mask.extend([True] * len(ids))
+
+    input_ids = torch.tensor([all_ids], dtype=torch.long)
+    # Replace masked positions with mask_id
+    anchor_t = torch.tensor(anchor_mask, dtype=torch.bool)
+    input_ids[0, ~anchor_t] = mask_id
+
+    return input_ids, anchor_t
+
+
+def _generate_dllm_masked(model, tokenizer, device, segments, **kwargs):
+    """Generate with masked prompt for block diffusion models.
+
+    Anchored segments are preserved, masked segments are regenerated.
+    """
+    mask_id = getattr(model.config, 'mask_token_id', _DLLM_MASK_ID)
+    input_ids, anchor_mask = _build_masked_sequence(segments, tokenizer, mask_id)
+    input_ids = input_ids.to(device)
+    anchor_mask = anchor_mask.to(device)
+
+    max_tokens = kwargs.get("max_tokens", 512)
+    temperature = kwargs.get("temperature", 0.2)
+    top_p = kwargs.get("top_p", 0.9)
+    block_length = 8
+    denoising_steps = 8
+
+    # Pad to block boundary
+    seq_len = input_ids.shape[1]
+    num_blocks = (seq_len + block_length - 1) // block_length
+    total_length = num_blocks * block_length
+    if total_length > seq_len:
+        pad = torch.full((1, total_length - seq_len), mask_id, dtype=torch.long, device=device)
+        input_ids = torch.cat([input_ids, pad], dim=1)
+        anchor_pad = torch.zeros(total_length - seq_len, dtype=torch.bool, device=device)
+        anchor_mask = torch.cat([anchor_mask, anchor_pad])
+
+    # Build attention mask and positions
+    block_mask = torch.tril(torch.ones(num_blocks, num_blocks, device=device))
+    attn_mask = (
+        block_mask.repeat_interleave(block_length, dim=0)
+        .repeat_interleave(block_length, dim=1)
+        .unsqueeze(0)
+    )
+    position_ids = torch.arange(total_length, device=device).unsqueeze(0)
+
+    x = input_ids.clone()
+    num_transfer = _get_num_transfer_tokens(block_length, denoising_steps)
+    past_key_values = DynamicCache()
+
+    for nb in range(num_blocks):
+        s, e = nb * block_length, (nb + 1) * block_length
+        cur_x = x[:, s:e].clone()
+        cur_anchor = anchor_mask[s:e]
+        cur_attn = attn_mask[:, s:e, :e]
+        if cur_attn.dim() == 3:
+            cur_attn = cur_attn[:, None, :, :]
+        cur_pos = position_ids[:, s:e]
+
+        # Only denoise blocks that have masked positions
+        has_masks = (cur_x[0] == mask_id).any()
+        if not has_masks:
+            # Pure anchor block — just run forward for KV cache
+            with torch.no_grad():
+                model(
+                    cur_x, attention_mask=cur_attn, position_ids=cur_pos,
+                    past_key_values=past_key_values, use_cache=True, store_kv=True,
+                )
+            continue
+
+        for step in range(denoising_steps + 1):
+            mask_index = cur_x == mask_id
+            if mask_index.sum() == 0:
+                with torch.no_grad():
+                    model(
+                        cur_x, attention_mask=cur_attn, position_ids=cur_pos,
+                        past_key_values=past_key_values, use_cache=True, store_kv=True,
+                    )
+                break
+
+            with torch.no_grad():
+                logits = model(
+                    cur_x, attention_mask=cur_attn, position_ids=cur_pos,
+                    past_key_values=past_key_values, use_cache=True, store_kv=False,
+                ).logits
+
+            x0, x0_p = _sample_topk_topp(logits, max(temperature, 0.01), 0, top_p)
+            transfer_index = _select_transfer(
+                x0, x0_p, mask_index, num_transfer[step],
+                "low_confidence_dynamic", 0.85,
+            )
+            # Preserve anchored positions
+            transfer_index[:, cur_anchor] = False
+            cur_x[transfer_index] = x0[transfer_index]
+
+        x[:, s:e] = cur_x
+
+    output_ids = x[0].tolist()
+    return tokenizer.decode(output_ids, skip_special_tokens=True)
+
+
+def _generate_dllm_masked_streaming(model, tokenizer, device, segments, **kwargs):
+    """Streaming version of masked generation. Yields intermediate results."""
+    mask_id = getattr(model.config, 'mask_token_id', _DLLM_MASK_ID)
+    input_ids, anchor_mask = _build_masked_sequence(segments, tokenizer, mask_id)
+    input_ids = input_ids.to(device)
+    anchor_mask = anchor_mask.to(device)
+
+    max_tokens = kwargs.get("max_tokens", 512)
+    temperature = kwargs.get("temperature", 0.2)
+    top_p = kwargs.get("top_p", 0.9)
+    block_length = 8
+    denoising_steps = 8
+    mask_placeholder = "\u00b7"
+
+    # Pad to block boundary
+    seq_len = input_ids.shape[1]
+    num_blocks = (seq_len + block_length - 1) // block_length
+    total_length = num_blocks * block_length
+    if total_length > seq_len:
+        pad = torch.full((1, total_length - seq_len), mask_id, dtype=torch.long, device=device)
+        input_ids = torch.cat([input_ids, pad], dim=1)
+        anchor_pad = torch.zeros(total_length - seq_len, dtype=torch.bool, device=device)
+        anchor_mask = torch.cat([anchor_mask, anchor_pad])
+
+    block_mask = torch.tril(torch.ones(num_blocks, num_blocks, device=device))
+    attn_mask = (
+        block_mask.repeat_interleave(block_length, dim=0)
+        .repeat_interleave(block_length, dim=1)
+        .unsqueeze(0)
+    )
+    position_ids = torch.arange(total_length, device=device).unsqueeze(0)
+
+    x = input_ids.clone()
+    num_transfer = _get_num_transfer_tokens(block_length, denoising_steps)
+    past_key_values = DynamicCache()
+
+    def _decode_full():
+        tokens = x[0].tolist()
+        parts = []
+        i = 0
+        while i < len(tokens):
+            if tokens[i] == mask_id:
+                count = 0
+                while i < len(tokens) and tokens[i] == mask_id:
+                    count += 1
+                    i += 1
+                parts.append(mask_placeholder * count)
+            else:
+                start = i
+                while i < len(tokens) and tokens[i] != mask_id:
+                    i += 1
+                chunk = torch.tensor(tokens[start:i], dtype=torch.long)
+                parts.append(tokenizer.decode(chunk, skip_special_tokens=True))
+        return "".join(parts)
+
+    for nb in range(num_blocks):
+        s, e = nb * block_length, (nb + 1) * block_length
+        cur_x = x[:, s:e].clone()
+        cur_anchor = anchor_mask[s:e]
+        cur_attn = attn_mask[:, s:e, :e]
+        if cur_attn.dim() == 3:
+            cur_attn = cur_attn[:, None, :, :]
+        cur_pos = position_ids[:, s:e]
+
+        has_masks = (cur_x[0] == mask_id).any()
+        if not has_masks:
+            with torch.no_grad():
+                model(
+                    cur_x, attention_mask=cur_attn, position_ids=cur_pos,
+                    past_key_values=past_key_values, use_cache=True, store_kv=True,
+                )
+            continue
+
+        for step in range(denoising_steps + 1):
+            mask_index = cur_x == mask_id
+            if mask_index.sum() == 0:
+                with torch.no_grad():
+                    model(
+                        cur_x, attention_mask=cur_attn, position_ids=cur_pos,
+                        past_key_values=past_key_values, use_cache=True, store_kv=True,
+                    )
+                break
+
+            with torch.no_grad():
+                logits = model(
+                    cur_x, attention_mask=cur_attn, position_ids=cur_pos,
+                    past_key_values=past_key_values, use_cache=True, store_kv=False,
+                ).logits
+
+            x0, x0_p = _sample_topk_topp(logits, max(temperature, 0.01), 0, top_p)
+            transfer_index = _select_transfer(
+                x0, x0_p, mask_index, num_transfer[step],
+                "low_confidence_dynamic", 0.85,
+            )
+            transfer_index[:, cur_anchor] = False
+            cur_x[transfer_index] = x0[transfer_index]
+
+            x[:, s:e] = cur_x
+            yield {"mode": "replace", "text": _decode_full()}
+
+        x[:, s:e] = cur_x
+
+
 def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
                    temperature, top_p):
     """Generate using block diffusion (full response).

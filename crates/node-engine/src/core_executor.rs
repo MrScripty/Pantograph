@@ -118,6 +118,48 @@ fn execute_text_input(inputs: &HashMap<String, serde_json::Value>) -> Result<Has
     Ok(outputs)
 }
 
+fn execute_masked_text_input(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+    // Try to read segments from _data.segments (UI-provided masked segments)
+    let segments = inputs
+        .get("_data")
+        .and_then(|d| d.get("segments"))
+        .and_then(|s| s.as_array());
+
+    let masked_prompt = if let Some(segs) = segments {
+        // Build a MaskedPrompt from the provided segments
+        let prompt_segments: Vec<serde_json::Value> = segs
+            .iter()
+            .map(|seg| {
+                let text = seg.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                let masked = seg.get("masked").and_then(|m| m.as_bool()).unwrap_or(false);
+                serde_json::json!({ "text": text, "masked": masked })
+            })
+            .collect();
+
+        serde_json::json!({
+            "type": "masked_prompt",
+            "segments": prompt_segments
+        })
+    } else {
+        // Fall back to treating the text input as a single masked segment
+        let text = inputs
+            .get("_data")
+            .and_then(|d| d.get("text"))
+            .and_then(|t| t.as_str())
+            .or_else(|| inputs.get("text").and_then(|t| t.as_str()))
+            .unwrap_or("");
+
+        serde_json::json!({
+            "type": "masked_prompt",
+            "segments": [{ "text": text, "masked": true }]
+        })
+    };
+
+    let mut outputs = HashMap::new();
+    outputs.insert("masked_prompt".to_string(), masked_prompt);
+    Ok(outputs)
+}
+
 fn execute_text_output(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
     let text = inputs
         .get("text")
@@ -636,6 +678,7 @@ impl TaskExecutor for CoreTaskExecutor {
         match node_type.as_str() {
             // Input nodes
             "text-input" => execute_text_input(&inputs),
+            "masked-text-input" => execute_masked_text_input(&inputs),
             "linked-input" => execute_linked_input(&inputs),
             "image-input" => execute_image_input(&inputs),
 
@@ -1279,11 +1322,36 @@ async fn execute_pytorch_inference(
     event_sink: Option<&Arc<dyn EventSink>>,
     execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
-    let prompt = inputs
+    // Detect if the prompt input is a masked prompt JSON object
+    let masked_prompt_json = inputs
         .get("prompt")
-        .and_then(|p| p.as_str())
-        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?
-        .to_string();
+        .filter(|p| {
+            p.get("type")
+                .and_then(|t| t.as_str())
+                == Some("masked_prompt")
+        })
+        .map(|p| serde_json::to_string(p).unwrap_or_default());
+
+    let prompt = if let Some(p_str) = inputs.get("prompt").and_then(|p| p.as_str()) {
+        p_str.to_string()
+    } else if let Some(p_obj) = inputs.get("prompt") {
+        // For masked prompt objects, concatenate all segment texts as the plain prompt
+        if let Some(segments) = p_obj.get("segments").and_then(|s| s.as_array()) {
+            segments
+                .iter()
+                .filter_map(|seg| seg.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("")
+        } else {
+            return Err(NodeEngineError::ExecutionFailed(
+                "Missing prompt input: not a string or masked prompt".to_string(),
+            ));
+        }
+    } else {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Missing prompt input".to_string(),
+        ));
+    };
 
     let model_path = inputs
         .get("model_path")
@@ -1396,13 +1464,16 @@ async fn execute_pytorch_inference(
     // Phase 2: Generate — streaming or non-streaming
     let response_text = if let Some(sink) = event_sink {
         // Streaming: iterate Python generator via mpsc channel
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<std::result::Result<String, String>>(32);
+        // Channel carries (mode, text) tuples: mode is "append" or "replace"
+        let (tx, mut rx) =
+            tokio::sync::mpsc::channel::<std::result::Result<(String, String), String>>(32);
         let p = prompt.clone();
         let sp = system_prompt.clone();
+        let mpj = masked_prompt_json.clone();
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| {
-                use pyo3::types::{PyAnyMethods, PyDictMethods};
+                use pyo3::types::{PyAnyMethods, PyDictMethods, PyTypeMethods};
 
                 let worker = match py.import("pantograph_torch_worker") {
                     Ok(w) => w,
@@ -1420,6 +1491,9 @@ async fn execute_pytorch_inference(
                 }
                 kwargs.set_item("max_tokens", max_tokens).unwrap();
                 kwargs.set_item("temperature", temperature).unwrap();
+                if let Some(ref mpj_val) = mpj {
+                    kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
+                }
 
                 let generator =
                     match worker.call_method("generate_tokens", (), Some(&kwargs)) {
@@ -1446,20 +1520,35 @@ async fn execute_pytorch_inference(
 
                 for item in iter {
                     match item {
-                        Ok(token_obj) => match token_obj.extract::<String>() {
-                            Ok(token) => {
-                                if tx.blocking_send(Ok(token)).is_err() {
-                                    return;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = tx.blocking_send(Err(format!(
-                                    "Token extraction failed: {}",
-                                    e
-                                )));
+                        Ok(token_obj) => {
+                            // Try dict first: {"mode": "append"|"replace", "text": "..."}
+                            let result = if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+                                let mode = dict
+                                    .get_item("mode")
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.extract::<String>().ok())
+                                    .unwrap_or_else(|| "append".to_string());
+                                let text = dict
+                                    .get_item("text")
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.extract::<String>().ok())
+                                    .unwrap_or_default();
+                                Ok((mode, text))
+                            } else if let Ok(text) = token_obj.extract::<String>() {
+                                // Backwards compat: plain string → append
+                                Ok(("append".to_string(), text))
+                            } else {
+                                Err(format!(
+                                    "Token extraction failed: expected dict or string, got {:?}",
+                                    token_obj.get_type().name()
+                                ))
+                            };
+                            if tx.blocking_send(result).is_err() {
                                 return;
                             }
-                        },
+                        }
                         Err(e) => {
                             let _ = tx.blocking_send(Err(format!(
                                 "Generator error: {}",
@@ -1474,15 +1563,19 @@ async fn execute_pytorch_inference(
 
         let mut full_response = String::new();
         while let Some(token_result) = rx.recv().await {
-            let token = token_result.map_err(|e| {
+            let (mode, text) = token_result.map_err(|e| {
                 NodeEngineError::ExecutionFailed(format!("PyTorch generation error: {}", e))
             })?;
-            full_response.push_str(&token);
+            if mode == "replace" {
+                full_response = text.clone();
+            } else {
+                full_response.push_str(&text);
+            }
             let _ = sink.send(crate::WorkflowEvent::task_stream(
                 task_id,
                 execution_id,
                 "stream",
-                serde_json::json!(token),
+                serde_json::json!({"mode": mode, "text": text}),
             ));
         }
 
@@ -1491,6 +1584,7 @@ async fn execute_pytorch_inference(
         // Non-streaming: single blocking call
         let p = prompt.clone();
         let sp = system_prompt.clone();
+        let mpj = masked_prompt_json.clone();
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
@@ -1507,6 +1601,9 @@ async fn execute_pytorch_inference(
                 }
                 kwargs.set_item("max_tokens", max_tokens).unwrap();
                 kwargs.set_item("temperature", temperature).unwrap();
+                if let Some(ref mpj_val) = mpj {
+                    kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
+                }
 
                 let result = worker
                     .call_method("generate", (), Some(&kwargs))

@@ -30,6 +30,8 @@ if _self_path.parent.is_dir():
 from block_diffusion import (
     _generate_dllm,
     _generate_dllm_streaming,
+    _generate_dllm_masked,
+    _generate_dllm_masked_streaming,
 )
 from autoregressive import (
     _generate_autoregressive,
@@ -195,13 +197,25 @@ def unload_model():
         logger.info("Model unloaded: %s", name)
 
 
-def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0):
+def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,
+             masked_prompt_json=None):
     """Generate a complete response (non-streaming).
 
     Routes to block diffusion for dLLM models, standard generate otherwise.
+    When masked_prompt_json is provided and the model is dLLM, uses masked
+    generation that preserves anchored segments.
     """
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
+
+    # Masked prompt routing for dLLM models
+    if masked_prompt_json is not None and _model_type == "dllm":
+        mp = json.loads(masked_prompt_json)
+        segments = mp.get("segments", [])
+        return _generate_dllm_masked(
+            _model, _tokenizer, _device, segments,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+        )
 
     formatted = _format_prompt(prompt, system_prompt)
 
@@ -214,14 +228,27 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
     )
 
 
-def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0):
+def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,
+                     masked_prompt_json=None):
     """Generate tokens as a Python generator (for streaming).
 
     dLLM models generate block-by-block; each decoded block is yielded as a
     chunk. Autoregressive models yield one token at a time.
+    When masked_prompt_json is provided and the model is dLLM, uses masked
+    streaming generation that preserves anchored segments.
     """
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
+
+    # Masked prompt streaming routing for dLLM models
+    if masked_prompt_json is not None and _model_type == "dllm":
+        mp = json.loads(masked_prompt_json)
+        segments = mp.get("segments", [])
+        yield from _generate_dllm_masked_streaming(
+            _model, _tokenizer, _device, segments,
+            max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+        )
+        return
 
     formatted = _format_prompt(prompt, system_prompt)
 

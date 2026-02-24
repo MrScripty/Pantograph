@@ -25,17 +25,44 @@ use crate::process::ProcessSpawner;
 /// The Python worker source, embedded at compile time.
 const WORKER_PY: &str = include_str!("../../torch/worker.py");
 
+/// The block diffusion module source, embedded at compile time.
+const BLOCK_DIFFUSION_PY: &str = include_str!("../../torch/block_diffusion.py");
+
+/// The autoregressive module source, embedded at compile time.
+const AUTOREGRESSIVE_PY: &str = include_str!("../../torch/autoregressive.py");
+
 /// Whether the Python worker module has been initialised.
 static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
 
 /// Ensure the worker module is loaded into the Python interpreter.
 ///
 /// Safe to call multiple times — only the first call actually loads.
+/// Registers the sibling modules (`block_diffusion`, `autoregressive`)
+/// into `sys.modules` so the worker can import them normally.
 fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     if WORKER_INITIALISED.load(Ordering::Acquire) {
         return Ok(());
     }
 
+    // Register sibling modules first so worker.py's imports resolve
+    let sys = py.import("sys")?;
+    let modules = sys.getattr("modules")?;
+
+    let bd_code = std::ffi::CString::new(BLOCK_DIFFUSION_PY)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid block_diffusion source: {}", e)))?;
+    let bd_module = PyModule::from_code(
+        py, &bd_code, c"block_diffusion.py", c"block_diffusion",
+    )?;
+    modules.set_item("block_diffusion", &bd_module)?;
+
+    let ar_code = std::ffi::CString::new(AUTOREGRESSIVE_PY)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid autoregressive source: {}", e)))?;
+    let ar_module = PyModule::from_code(
+        py, &ar_code, c"autoregressive.py", c"autoregressive",
+    )?;
+    modules.set_item("autoregressive", &ar_module)?;
+
+    // Now load the worker module (which imports from block_diffusion and autoregressive)
     let code = std::ffi::CString::new(WORKER_PY)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid worker source: {}", e)))?;
     PyModule::from_code(
@@ -46,7 +73,7 @@ fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     )?;
 
     WORKER_INITIALISED.store(true, Ordering::Release);
-    log::info!("PyTorch worker module initialised");
+    log::info!("PyTorch worker module initialised (with block_diffusion + autoregressive siblings)");
     Ok(())
 }
 
@@ -185,6 +212,9 @@ impl PyTorchBackend {
     }
 
     /// Generate a complete response (non-streaming).
+    ///
+    /// When `masked_prompt_json` is `Some`, the JSON is passed through to the
+    /// Python worker so it can perform masked (anchor-preserving) generation.
     pub async fn generate(
         &self,
         prompt: String,
@@ -192,6 +222,7 @@ impl PyTorchBackend {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        masked_prompt_json: Option<String>,
     ) -> Result<String, BackendError> {
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<String, BackendError> {
@@ -207,6 +238,9 @@ impl PyTorchBackend {
                 kwargs.set_item("max_tokens", max_tokens).unwrap();
                 kwargs.set_item("temperature", temperature).unwrap();
                 kwargs.set_item("top_p", top_p).unwrap();
+                if let Some(ref mpj) = masked_prompt_json {
+                    kwargs.set_item("masked_prompt_json", mpj).unwrap();
+                }
 
                 let result = worker
                     .call_method("generate", (), Some(&kwargs))
@@ -226,7 +260,8 @@ impl PyTorchBackend {
     /// Generate tokens as a stream via an mpsc channel.
     ///
     /// Spawns a blocking task that iterates the Python generator and sends
-    /// each token through the channel.
+    /// each token through the channel. When `masked_prompt_json` is `Some`,
+    /// it is forwarded to the Python worker for masked generation.
     pub fn generate_stream(
         &self,
         prompt: String,
@@ -234,6 +269,7 @@ impl PyTorchBackend {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        masked_prompt_json: Option<String>,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
 
@@ -258,6 +294,9 @@ impl PyTorchBackend {
                 kwargs.set_item("max_tokens", max_tokens).unwrap();
                 kwargs.set_item("temperature", temperature).unwrap();
                 kwargs.set_item("top_p", top_p).unwrap();
+                if let Some(ref mpj) = masked_prompt_json {
+                    kwargs.set_item("masked_prompt_json", mpj).unwrap();
+                }
 
                 let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
                     Ok(g) => g,
@@ -454,7 +493,7 @@ impl InferenceBackend for PyTorchBackend {
             .and_then(|v| v.as_f64())
             .unwrap_or(1.0);
 
-        Ok(self.generate_stream(prompt, system_prompt, max_tokens, temperature, top_p))
+        Ok(self.generate_stream(prompt, system_prompt, max_tokens, temperature, top_p, None))
     }
 
     async fn embeddings(
