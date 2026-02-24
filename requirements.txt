@@ -1,0 +1,13 @@
+# PyTorch backend dependencies (used by the pytorch-inference node via PyO3)
+# Install into the project venv: ./launcher.sh --install
+# worker.py shims removed names (e.g. SlidingWindowCache, LossKwargs) so
+# older model code loaded via trust_remote_code=True works across versions.
+# Pinned <4.54: models like TraDo ship auto-generated code from 4.52.4 that
+# depends on internals (ROPE_INIT_FUNCTIONS["default"], LossKwargs, etc.)
+# removed in 4.54+. The shims handle cache_utils and LossKwargs but not the
+# deeper rope/config changes in 5.x.
+torch
+transformers>=4.52,<4.54
+accelerate
+protobuf
+sentencepiece
