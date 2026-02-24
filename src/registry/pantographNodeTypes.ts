@@ -12,6 +12,7 @@ import TextInputNode from '../components/nodes/workflow/TextInputNode.svelte';
 import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svelte';
 import OllamaInferenceNode from '../components/nodes/workflow/OllamaInferenceNode.svelte';
 import LlamaCppInferenceNode from '../components/nodes/workflow/LlamaCppInferenceNode.svelte';
+import PyTorchInferenceNode from '../components/nodes/workflow/PyTorchInferenceNode.svelte';
 import ModelProviderNode from '../components/nodes/workflow/ModelProviderNode.svelte';
 import TextOutputNode from '../components/nodes/workflow/TextOutputNode.svelte';
 import PumaLibNode from '../components/nodes/workflow/PumaLibNode.svelte';
@@ -33,6 +34,7 @@ const SPECIALIZED_NODES: Record<string, any> = {
   'llm-inference': LLMInferenceNode,
   'ollama-inference': OllamaInferenceNode,
   'llamacpp-inference': LlamaCppInferenceNode,
+  'pytorch-inference': PyTorchInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,
   'puma-lib': PumaLibNode,

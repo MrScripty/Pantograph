@@ -33,6 +33,7 @@
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
+  import PyTorchInferenceNode from './nodes/workflow/PyTorchInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
@@ -64,6 +65,7 @@
     'llm-inference': LLMInferenceNode,
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
+    'pytorch-inference': PyTorchInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
     'puma-lib': PumaLibNode,
