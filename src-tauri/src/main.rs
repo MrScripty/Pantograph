@@ -138,6 +138,7 @@ fn main() {
 
             // Load app configuration
             let app_handle = app.handle().clone();
+            let kv_cache_dir = app_data_dir.join("kv_cache");
             tauri::async_runtime::spawn(async move {
                 let config = match AppConfig::load(&app_data_dir).await {
                     Ok(config) => {
@@ -171,6 +172,14 @@ fn main() {
                     &mut ext,
                     pumas_library_path.as_deref(),
                 ).await;
+
+                // Initialize KV cache store for cache save/load/truncate nodes
+                let kv_store = std::sync::Arc::new(inference::kv_cache::KvCacheStore::new(
+                    kv_cache_dir,
+                    inference::kv_cache::StoragePolicy::MemoryAndDisk,
+                ));
+                ext.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
+                log::info!("Initialized KV cache store");
             });
 
             Ok(())

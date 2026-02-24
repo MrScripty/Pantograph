@@ -1568,6 +1568,27 @@ fn executor_set_pumas_api(
     Ok(atoms::ok())
 }
 
+/// Set a KV cache store on the workflow executor for cache save/load/truncate nodes.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn executor_set_kv_cache_store(
+    executor_resource: ResourceArc<WorkflowExecutorResource>,
+    cache_dir: String,
+) -> NifResult<Atom> {
+    let rt = &executor_resource.runtime;
+    rt.block_on(async {
+        let mut exec = executor_resource.executor.write().await;
+        let store = std::sync::Arc::new(inference::kv_cache::KvCacheStore::new(
+            std::path::PathBuf::from(&cache_dir),
+            inference::kv_cache::StoragePolicy::MemoryAndDisk,
+        ));
+        exec.extensions_mut().set(
+            node_engine::extension_keys::KV_CACHE_STORE,
+            store,
+        );
+    });
+    Ok(atoms::ok())
+}
+
 // --- Local library NIFs ---
 
 /// List all models in the local library. Returns JSON array of ModelRecord.
