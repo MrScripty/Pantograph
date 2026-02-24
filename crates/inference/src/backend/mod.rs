@@ -15,6 +15,9 @@ pub mod ollama;
 #[cfg(feature = "backend-candle")]
 pub mod candle;
 
+#[cfg(feature = "backend-pytorch")]
+pub mod pytorch;
+
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -32,6 +35,9 @@ pub use ollama::OllamaBackend;
 
 #[cfg(feature = "backend-candle")]
 pub use candle::CandleBackend;
+
+#[cfg(feature = "backend-pytorch")]
+pub use pytorch::PyTorchBackend;
 
 pub use registry::{BackendFactory, BackendRegistry};
 
@@ -118,6 +124,9 @@ pub struct BackendConfig {
     pub context_size: Option<u32>,
     /// Embedding mode
     pub embedding_mode: bool,
+    /// Model type hint for PyTorch backend (dllm, sherry, text-generation).
+    /// If None, auto-detected from config.json.
+    pub model_type: Option<String>,
 }
 
 /// A streaming chunk from chat completion

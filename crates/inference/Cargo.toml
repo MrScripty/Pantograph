@@ -21,6 +21,7 @@ backend-candle = [     # In-process Candle inference (CUDA required)
     "dep:axum",
     "dep:tower-http",
 ]
+backend-pytorch = ["dep:pyo3", "dep:tokio-stream"]  # In-process PyTorch via PyO3 (dLLM/Sherry/HF)
 
 # Optional: standard process spawner for non-Tauri use
 std-process = []
@@ -44,6 +45,9 @@ tokenizers = { workspace = true, optional = true }
 tokio-stream = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
+
+# PyO3 (optional, for PyTorch backend)
+pyo3 = { workspace = true, optional = true }
 
 [dev-dependencies]
 env_logger = "0.11"

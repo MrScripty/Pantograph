@@ -17,6 +17,9 @@ use super::OllamaBackend;
 #[cfg(feature = "backend-candle")]
 use super::CandleBackend;
 
+#[cfg(feature = "backend-pytorch")]
+use super::PyTorchBackend;
+
 /// Factory trait for creating backend instances
 pub trait BackendFactory: Send + Sync {
     /// Create a new backend instance
@@ -101,6 +104,31 @@ impl BackendFactory for CandleFactory {
     }
 }
 
+/// Factory for PyTorch backend
+#[cfg(feature = "backend-pytorch")]
+pub struct PyTorchFactory;
+
+#[cfg(feature = "backend-pytorch")]
+impl BackendFactory for PyTorchFactory {
+    fn create(&self) -> Result<Box<dyn InferenceBackend>, BackendError> {
+        Ok(Box::new(PyTorchBackend::new()))
+    }
+
+    fn info(&self) -> BackendInfo {
+        let (available, unavailable_reason) = PyTorchBackend::check_availability();
+        BackendInfo {
+            name: "PyTorch".to_string(),
+            description: "In-process PyTorch inference for dLLM, Sherry, and HuggingFace models"
+                .to_string(),
+            capabilities: PyTorchBackend::static_capabilities(),
+            active: false,
+            available,
+            unavailable_reason,
+            can_install: false, // Requires Python + PyTorch to be pre-installed
+        }
+    }
+}
+
 /// Registry of available inference backends
 ///
 /// Backends are registered at compile time based on feature flags.
@@ -128,6 +156,10 @@ impl BackendRegistry {
         // Register Candle backend if feature is enabled
         #[cfg(feature = "backend-candle")]
         registry.register("Candle", Box::new(CandleFactory));
+
+        // Register PyTorch backend if feature is enabled
+        #[cfg(feature = "backend-pytorch")]
+        registry.register("PyTorch", Box::new(PyTorchFactory));
 
         registry
     }

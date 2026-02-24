@@ -1,0 +1,575 @@
+//! PyTorch backend implementation (in-process via PyO3)
+//!
+//! Embeds a Python interpreter to run PyTorch inference directly in the
+//! Pantograph process. Supports HuggingFace models, dLLMs (e.g., TraDo),
+//! and Sherry ternary quantized models.
+//!
+//! The Python worker module (`torch/worker.py`) is embedded at compile time
+//! via `include_str!` and loaded into `sys.modules` on first use.
+
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use futures_util::Stream;
+use pyo3::prelude::*;
+use pyo3::types::PyModule;
+
+use super::{
+    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
+    InferenceBackend,
+};
+use crate::process::ProcessSpawner;
+
+/// The Python worker source, embedded at compile time.
+const WORKER_PY: &str = include_str!("../../torch/worker.py");
+
+/// Whether the Python worker module has been initialised.
+static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
+
+/// Ensure the worker module is loaded into the Python interpreter.
+///
+/// Safe to call multiple times — only the first call actually loads.
+fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
+    if WORKER_INITIALISED.load(Ordering::Acquire) {
+        return Ok(());
+    }
+
+    let code = std::ffi::CString::new(WORKER_PY)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid worker source: {}", e)))?;
+    PyModule::from_code(
+        py,
+        &code,
+        c"pantograph_torch_worker",
+        c"pantograph_torch_worker",
+    )?;
+
+    WORKER_INITIALISED.store(true, Ordering::Release);
+    log::info!("PyTorch worker module initialised");
+    Ok(())
+}
+
+/// Get a reference to the already-loaded worker module.
+fn worker_module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
+    ensure_worker_initialised(py)?;
+    py.import("pantograph_torch_worker")
+}
+
+/// PyTorch backend using in-process PyO3 embedded Python.
+///
+/// Loads models via HuggingFace transformers with `trust_remote_code=True`,
+/// supporting standard models, dLLM architectures, and Sherry quantised models.
+pub struct PyTorchBackend {
+    /// Whether the backend has been initialised and is ready
+    ready: bool,
+    /// Currently loaded model metadata
+    loaded_model: Option<LoadedModelInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoadedModelInfo {
+    pub model_path: String,
+    pub model_type: String,
+    pub device: String,
+}
+
+impl PyTorchBackend {
+    pub fn new() -> Self {
+        Self {
+            ready: false,
+            loaded_model: None,
+        }
+    }
+
+    /// Get static capabilities (for registry info before instantiation)
+    pub fn static_capabilities() -> BackendCapabilities {
+        BackendCapabilities {
+            vision: false,
+            embeddings: false,
+            gpu: true,
+            device_selection: true,
+            streaming: true,
+            tool_calling: false,
+        }
+    }
+
+    /// Check if Python 3 is available on the system
+    pub fn check_availability() -> (bool, Option<String>) {
+        match which::which("python3") {
+            Ok(_) => (true, None),
+            Err(_) => (
+                false,
+                Some("python3 not found in PATH. Install Python 3 with PyTorch.".to_string()),
+            ),
+        }
+    }
+
+    /// Load a model into the embedded Python runtime.
+    pub async fn load_model(
+        &mut self,
+        model_path: &str,
+        device: &str,
+        model_type: Option<&str>,
+    ) -> Result<LoadedModelInfo, BackendError> {
+        let model_path = model_path.to_string();
+        let device = device.to_string();
+        let model_type = model_type.map(|s| s.to_string());
+
+        let info = tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+                let worker = worker_module(py).map_err(|e| {
+                    BackendError::StartupFailed(format!("Failed to load worker module: {}", e))
+                })?;
+
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("model_path", &model_path).unwrap();
+                kwargs.set_item("device", &device).unwrap();
+                if let Some(ref mt) = model_type {
+                    kwargs.set_item("model_type", mt).unwrap();
+                }
+
+                let result = worker
+                    .call_method("load_model", (), Some(&kwargs))
+                    .map_err(|e| {
+                        BackendError::Inference(format!("Model load failed: {}", e))
+                    })?;
+
+                let info = LoadedModelInfo {
+                    model_path: result
+                        .get_item("model_path")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_default(),
+                    model_type: result
+                        .get_item("model_type")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_else(|| "text-generation".to_string()),
+                    device: result
+                        .get_item("device")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_else(|| "cpu".to_string()),
+                };
+
+                Ok(info)
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))??;
+
+        self.loaded_model = Some(info.clone());
+        self.ready = true;
+        Ok(info)
+    }
+
+    /// Unload the current model and free GPU memory.
+    pub async fn unload_model(&mut self) -> Result<(), BackendError> {
+        tokio::task::spawn_blocking(|| {
+            Python::with_gil(|py| -> Result<(), BackendError> {
+                let worker = worker_module(py).map_err(|e| {
+                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                })?;
+                worker.call_method0("unload_model").map_err(|e| {
+                    BackendError::Inference(format!("Unload failed: {}", e))
+                })?;
+                Ok(())
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))??;
+
+        self.loaded_model = None;
+        Ok(())
+    }
+
+    /// Generate a complete response (non-streaming).
+    pub async fn generate(
+        &self,
+        prompt: String,
+        system_prompt: Option<String>,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
+    ) -> Result<String, BackendError> {
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<String, BackendError> {
+                let worker = worker_module(py).map_err(|e| {
+                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                })?;
+
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("prompt", &prompt).unwrap();
+                if let Some(ref sys) = system_prompt {
+                    kwargs.set_item("system_prompt", sys).unwrap();
+                }
+                kwargs.set_item("max_tokens", max_tokens).unwrap();
+                kwargs.set_item("temperature", temperature).unwrap();
+                kwargs.set_item("top_p", top_p).unwrap();
+
+                let result = worker
+                    .call_method("generate", (), Some(&kwargs))
+                    .map_err(|e| {
+                        BackendError::Inference(format!("Generation failed: {}", e))
+                    })?;
+
+                result.extract::<String>().map_err(|e| {
+                    BackendError::Inference(format!("Failed to extract result: {}", e))
+                })
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    }
+
+    /// Generate tokens as a stream via an mpsc channel.
+    ///
+    /// Spawns a blocking task that iterates the Python generator and sends
+    /// each token through the channel.
+    pub fn generate_stream(
+        &self,
+        prompt: String,
+        system_prompt: Option<String>,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<ChatChunk, BackendError>>(32);
+
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| {
+                let worker = match worker_module(py) {
+                    Ok(w) => w,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
+                            "Failed to get worker module: {}",
+                            e
+                        ))));
+                        return;
+                    }
+                };
+
+                let kwargs = pyo3::types::PyDict::new(py);
+                kwargs.set_item("prompt", &prompt).unwrap();
+                if let Some(ref sys) = system_prompt {
+                    kwargs.set_item("system_prompt", sys).unwrap();
+                }
+                kwargs.set_item("max_tokens", max_tokens).unwrap();
+                kwargs.set_item("temperature", temperature).unwrap();
+                kwargs.set_item("top_p", top_p).unwrap();
+
+                let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
+                            "Failed to create generator: {}",
+                            e
+                        ))));
+                        return;
+                    }
+                };
+
+                // Iterate the Python generator
+                let iter = match generator.try_iter() {
+                    Ok(it) => it,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(BackendError::Inference(format!(
+                            "Generator is not iterable: {}",
+                            e
+                        ))));
+                        return;
+                    }
+                };
+
+                for item in iter {
+                    match item {
+                        Ok(token_obj) => match token_obj.extract::<String>() {
+                            Ok(token) => {
+                                if tx
+                                    .blocking_send(Ok(ChatChunk {
+                                        content: Some(token),
+                                        done: false,
+                                    }))
+                                    .is_err()
+                                {
+                                    return;
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.blocking_send(Err(BackendError::Inference(
+                                    format!("Token extraction failed: {}", e),
+                                )));
+                                return;
+                            }
+                        },
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(BackendError::Inference(format!(
+                                "Generator error: {}",
+                                e
+                            ))));
+                            return;
+                        }
+                    }
+                }
+
+                // Signal completion
+                let _ = tx.blocking_send(Ok(ChatChunk {
+                    content: None,
+                    done: true,
+                }));
+            });
+        });
+
+        Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
+    }
+}
+
+impl Default for PyTorchBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl InferenceBackend for PyTorchBackend {
+    fn name(&self) -> &'static str {
+        "PyTorch"
+    }
+
+    fn description(&self) -> &'static str {
+        "In-process PyTorch inference for dLLM, Sherry, and HuggingFace models"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        Self::static_capabilities()
+    }
+
+    async fn start(
+        &mut self,
+        config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<(), BackendError> {
+        // Initialise the Python worker module
+        tokio::task::spawn_blocking(|| {
+            Python::with_gil(|py| {
+                ensure_worker_initialised(py).map_err(|e| {
+                    BackendError::StartupFailed(format!(
+                        "Failed to initialise Python worker: {}",
+                        e
+                    ))
+                })
+            })
+        })
+        .await
+        .map_err(|e| BackendError::StartupFailed(format!("Task join error: {}", e)))??;
+
+        // Log the transformers version for diagnostics
+        let tf_version = tokio::task::spawn_blocking(|| {
+            Python::with_gil(|py| -> String {
+                py.import("transformers")
+                    .and_then(|m| m.getattr("__version__"))
+                    .and_then(|v| v.extract::<String>())
+                    .unwrap_or_else(|_| "unknown".into())
+            })
+        })
+        .await
+        .unwrap_or_else(|_| "unknown".into());
+        log::info!("PyTorch backend: transformers {}", tf_version);
+
+        self.ready = true;
+
+        // If config includes a model_path, load it immediately
+        if let Some(ref model_path) = config.model_path {
+            let device = config.device.as_deref().unwrap_or("auto");
+            let model_type = config.model_type.as_deref();
+
+            self.load_model(&model_path.to_string_lossy(), device, model_type)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        // Best-effort unload — can't await in a sync fn, so use blocking
+        let had_model = self.loaded_model.is_some();
+        self.loaded_model = None;
+        self.ready = false;
+
+        if had_model {
+            std::thread::spawn(|| {
+                Python::with_gil(|py| {
+                    if let Ok(worker) = worker_module(py) {
+                        let _ = worker.call_method0("unload_model");
+                    }
+                });
+            });
+        }
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready
+    }
+
+    async fn health_check(&self) -> bool {
+        if !self.ready {
+            return false;
+        }
+        tokio::task::spawn_blocking(|| {
+            Python::with_gil(|py| worker_module(py).is_ok())
+        })
+        .await
+        .unwrap_or(false)
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        if !self.ready {
+            return Err(BackendError::NotReady);
+        }
+
+        let request: serde_json::Value = serde_json::from_str(&request_json)
+            .map_err(|e| BackendError::Inference(format!("Invalid request JSON: {}", e)))?;
+
+        let prompt = extract_prompt_from_messages(&request)?;
+        let system_prompt = extract_system_prompt(&request);
+        let max_tokens = request
+            .get("max_tokens")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(512);
+        let temperature = request
+            .get("temperature")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.7);
+        let top_p = request
+            .get("top_p")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+
+        Ok(self.generate_stream(prompt, system_prompt, max_tokens, temperature, top_p))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Inference(
+            "Embeddings not supported by PyTorch backend".to_string(),
+        ))
+    }
+}
+
+/// Extract the last user message from OpenAI-format messages array.
+fn extract_prompt_from_messages(request: &serde_json::Value) -> Result<String, BackendError> {
+    let messages = request
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .ok_or_else(|| BackendError::Inference("Missing 'messages' array".to_string()))?;
+
+    messages
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+        .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+        .map(|s| s.to_string())
+        .ok_or_else(|| BackendError::Inference("No user message found".to_string()))
+}
+
+/// Extract the system prompt from OpenAI-format messages array, if present.
+fn extract_system_prompt(request: &serde_json::Value) -> Option<String> {
+    request
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .and_then(|msgs| {
+            msgs.iter()
+                .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))
+                .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+                .map(|s| s.to_string())
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_backend_name() {
+        let backend = PyTorchBackend::new();
+        assert_eq!(backend.name(), "PyTorch");
+    }
+
+    #[test]
+    fn test_capabilities() {
+        let caps = PyTorchBackend::static_capabilities();
+        assert!(!caps.vision);
+        assert!(!caps.embeddings);
+        assert!(caps.gpu);
+        assert!(caps.device_selection);
+        assert!(caps.streaming);
+        assert!(!caps.tool_calling);
+    }
+
+    #[test]
+    fn test_not_ready_initially() {
+        let backend = PyTorchBackend::new();
+        assert!(!backend.is_ready());
+        assert!(backend.base_url().is_none());
+    }
+
+    #[test]
+    fn test_no_loaded_model_initially() {
+        let backend = PyTorchBackend::new();
+        assert!(backend.loaded_model.is_none());
+    }
+
+    #[test]
+    fn test_in_process_no_base_url() {
+        let backend = PyTorchBackend::new();
+        assert!(backend.base_url().is_none());
+    }
+
+    #[test]
+    fn test_extract_prompt() {
+        let req = serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "You are helpful."},
+                {"role": "user", "content": "Hello!"}
+            ]
+        });
+        assert_eq!(
+            extract_prompt_from_messages(&req).unwrap(),
+            "Hello!"
+        );
+    }
+
+    #[test]
+    fn test_extract_system_prompt() {
+        let req = serde_json::json!({
+            "messages": [
+                {"role": "system", "content": "Be concise."},
+                {"role": "user", "content": "Hi"}
+            ]
+        });
+        assert_eq!(
+            extract_system_prompt(&req),
+            Some("Be concise.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_system_prompt_missing() {
+        let req = serde_json::json!({
+            "messages": [{"role": "user", "content": "Hi"}]
+        });
+        assert_eq!(extract_system_prompt(&req), None);
+    }
+}
