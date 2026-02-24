@@ -124,6 +124,18 @@ export interface NodeExecutionInfo {
   errorMessage?: string;
 }
 
+// Masked text input types for selective dLLM regeneration
+
+export interface PromptSegment {
+  text: string;
+  masked: boolean;
+}
+
+export interface MaskedPrompt {
+  type: 'masked_prompt';
+  segments: PromptSegment[];
+}
+
 // Port options query types (matches node-engine PortOption/PortOptionsResult)
 
 /** A selectable option for a port value */

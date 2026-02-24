@@ -42,6 +42,7 @@
   import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
   import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
   import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
+  import MaskedTextInputNode from './nodes/workflow/MaskedTextInputNode.svelte';
 
 
   // Import architecture node components
@@ -73,6 +74,7 @@
     'vector-db': VectorDbNode,
     'node-group': NodeGroupNode,
     'linked-input': LinkedInputNode,
+    'masked-text-input': MaskedTextInputNode,
     // Generic fallback for other node types
     'image-input': GenericNode,
     'vision-analysis': GenericNode,
