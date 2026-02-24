@@ -7,6 +7,7 @@ mod inference;
 mod json_filter;
 mod llamacpp_inference;
 mod ollama_inference;
+mod pytorch_inference;
 mod unload_model;
 mod validator;
 mod vision_analysis;
@@ -16,6 +17,7 @@ pub use inference::{InferenceConfig, InferenceTask, ToolCall as InferenceToolCal
 pub use json_filter::{JsonFilterConfig, JsonFilterTask};
 pub use llamacpp_inference::LlamaCppInferenceTask;
 pub use ollama_inference::OllamaInferenceTask;
+pub use pytorch_inference::PyTorchInferenceTask;
 pub use unload_model::UnloadModelTask;
 pub use validator::{ValidationResult, ValidatorConfig, ValidatorTask};
 pub use vision_analysis::{VisionAnalysisTask, VisionConfig};
