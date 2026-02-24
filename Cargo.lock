@@ -4938,11 +4938,13 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tokenizers",
  "tokio",
  "tokio-stream",
  "tower-http 0.5.2",
+ "uuid",
  "which",
 ]
 

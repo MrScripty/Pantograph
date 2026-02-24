@@ -49,5 +49,9 @@ tower-http = { workspace = true, optional = true }
 # PyO3 (optional, for PyTorch backend)
 pyo3 = { workspace = true, optional = true }
 
+# Utilities
+uuid.workspace = true
+
 [dev-dependencies]
 env_logger = "0.11"
+tempfile = "3"

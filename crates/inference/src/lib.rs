@@ -29,6 +29,7 @@ pub mod config;
 pub mod constants;
 pub mod device;
 pub mod gateway;
+pub mod kv_cache;
 pub mod process;
 pub mod server;
 pub mod types;

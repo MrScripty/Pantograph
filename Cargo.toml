@@ -38,5 +38,8 @@ tokio-stream = "0.1"
 # Python interop
 pyo3 = { version = "0.23", features = ["auto-initialize"] }
 
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+
 # Model management
 pumas-library = { path = "../Pumas-Library/rust/crates/pumas-core" }
