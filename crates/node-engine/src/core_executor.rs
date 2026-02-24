@@ -1323,6 +1323,66 @@ async fn execute_unload_model(
     Ok(outputs)
 }
 
+/// Ensure the PyTorch worker module (and its sibling modules) are loaded into
+/// the Python interpreter.  Safe to call multiple times — only the first call
+/// actually loads.
+#[cfg(feature = "pytorch-nodes")]
+fn ensure_torch_worker_initialised(py: pyo3::Python<'_>) -> std::result::Result<(), String> {
+    if py.import("pantograph_torch_worker").is_ok() {
+        return Ok(());
+    }
+
+    use pyo3::types::PyAnyMethods;
+
+    let sys = py
+        .import("sys")
+        .map_err(|e| format!("Failed to import sys: {}", e))?;
+    let modules = sys
+        .getattr("modules")
+        .map_err(|e| format!("Failed to get sys.modules: {}", e))?;
+
+    // Register sibling modules first so worker.py's imports resolve
+    let bd_code = std::ffi::CString::new(include_str!("../../inference/torch/block_diffusion.py"))
+        .map_err(|e| format!("Invalid block_diffusion source: {}", e))?;
+    let bd_module = pyo3::types::PyModule::from_code(
+        py,
+        &bd_code,
+        c"block_diffusion.py",
+        c"block_diffusion",
+    )
+    .map_err(|e| format!("Failed to load block_diffusion: {}", e))?;
+    modules
+        .set_item("block_diffusion", &bd_module)
+        .map_err(|e| format!("Failed to register block_diffusion: {}", e))?;
+
+    let ar_code = std::ffi::CString::new(include_str!("../../inference/torch/autoregressive.py"))
+        .map_err(|e| format!("Invalid autoregressive source: {}", e))?;
+    let ar_module = pyo3::types::PyModule::from_code(
+        py,
+        &ar_code,
+        c"autoregressive.py",
+        c"autoregressive",
+    )
+    .map_err(|e| format!("Failed to load autoregressive: {}", e))?;
+    modules
+        .set_item("autoregressive", &ar_module)
+        .map_err(|e| format!("Failed to register autoregressive: {}", e))?;
+
+    // Now load the worker module (which imports from block_diffusion and autoregressive)
+    let code = std::ffi::CString::new(include_str!("../../inference/torch/worker.py"))
+        .map_err(|e| format!("Invalid worker source: {}", e))?;
+    pyo3::types::PyModule::from_code(
+        py,
+        &code,
+        c"pantograph_torch_worker",
+        c"pantograph_torch_worker",
+    )
+    .map_err(|e| format!("Failed to load worker: {}", e))?;
+
+    log::info!("PyTorch worker module initialised (with block_diffusion + autoregressive siblings)");
+    Ok(())
+}
+
 #[cfg(feature = "pytorch-nodes")]
 async fn execute_pytorch_inference(
     inputs: &HashMap<String, serde_json::Value>,
@@ -1409,25 +1469,11 @@ async fn execute_pytorch_inference(
             pyo3::Python::with_gil(|py| -> std::result::Result<(), String> {
                 use pyo3::types::{PyAnyMethods, PyDictMethods};
 
-                // Ensure worker is initialised
-                let worker = match py.import("pantograph_torch_worker") {
-                    Ok(w) => w,
-                    Err(_) => {
-                        // First time: load the module from embedded source
-                        let code_str = include_str!("../../inference/torch/worker.py");
-                        let code = std::ffi::CString::new(code_str)
-                            .map_err(|e| format!("Invalid worker source: {}", e))?;
-                        pyo3::types::PyModule::from_code(
-                            py,
-                            &code,
-                            c"pantograph_torch_worker",
-                            c"pantograph_torch_worker",
-                        )
-                        .map_err(|e| format!("Failed to load worker: {}", e))?;
-                        py.import("pantograph_torch_worker")
-                            .map_err(|e| format!("Failed to import worker: {}", e))?
-                    }
-                };
+                // Ensure worker + sibling modules are initialised
+                ensure_torch_worker_initialised(py)?;
+                let worker = py
+                    .import("pantograph_torch_worker")
+                    .map_err(|e| format!("Failed to import worker: {}", e))?;
 
                 // Check if the correct model is already loaded
                 let info = worker
@@ -1483,6 +1529,10 @@ async fn execute_pytorch_inference(
             pyo3::Python::with_gil(|py| {
                 use pyo3::types::{PyAnyMethods, PyDictMethods, PyTypeMethods};
 
+                if let Err(e) = ensure_torch_worker_initialised(py) {
+                    let _ = tx.blocking_send(Err(e));
+                    return;
+                }
                 let worker = match py.import("pantograph_torch_worker") {
                     Ok(w) => w,
                     Err(e) => {
@@ -1598,6 +1648,7 @@ async fn execute_pytorch_inference(
             pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
                 use pyo3::types::{PyAnyMethods, PyDictMethods};
 
+                ensure_torch_worker_initialised(py)?;
                 let worker = py
                     .import("pantograph_torch_worker")
                     .map_err(|e| format!("Failed to get worker: {}", e))?;
