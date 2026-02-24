@@ -6,11 +6,12 @@ authors = ["you"]
 edition = "2021"
 
 [features]
-default = ["backend-llamacpp", "backend-ollama", "backend-candle"]
+default = ["backend-llamacpp", "backend-ollama", "backend-candle", "backend-pytorch"]
 
 # Inference backends - at least one must be enabled
 backend-llamacpp = ["inference/backend-llamacpp"]
 backend-ollama = ["inference/backend-ollama"]
+backend-pytorch = ["inference/backend-pytorch", "node-engine/pytorch-nodes"]
 backend-candle = [
     "inference/backend-candle",
     "dep:candle-core",
