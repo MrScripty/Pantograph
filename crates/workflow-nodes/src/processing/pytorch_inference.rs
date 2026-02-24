@@ -47,7 +47,7 @@ impl TaskDescriptor for PyTorchInferenceTask {
             category: NodeCategory::Processing,
             label: "PyTorch Inference".to_string(),
             description:
-                "Run inference via PyTorch server (dLLM, Sherry, HuggingFace models)".to_string(),
+                "Run inference via PyTorch (dLLM, Sherry, HF models; supports masked prompts)".to_string(),
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_PROMPT, "Prompt", PortDataType::Prompt),

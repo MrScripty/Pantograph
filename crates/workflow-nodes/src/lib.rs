@@ -58,5 +58,6 @@ mod tests {
         assert!(registry.has_node_type("kv-cache-save"));
         assert!(registry.has_node_type("kv-cache-load"));
         assert!(registry.has_node_type("kv-cache-truncate"));
+        assert!(registry.has_node_type("masked-text-input"));
     }
 }
