@@ -40,9 +40,9 @@ mod tests {
         let all = registry.all_metadata();
 
         #[cfg(feature = "desktop")]
-        assert_eq!(all.len(), 27, "Expected 27 built-in nodes with desktop feature");
+        assert_eq!(all.len(), 31, "Expected 31 built-in nodes with desktop feature");
         #[cfg(not(feature = "desktop"))]
-        assert_eq!(all.len(), 25, "Expected 25 built-in nodes without desktop feature");
+        assert_eq!(all.len(), 29, "Expected 29 built-in nodes without desktop feature");
 
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
@@ -55,5 +55,8 @@ mod tests {
         assert!(registry.has_node_type("agent-tools"));
         assert!(registry.has_node_type("unload-model"));
         assert!(registry.has_node_type("pytorch-inference"));
+        assert!(registry.has_node_type("kv-cache-save"));
+        assert!(registry.has_node_type("kv-cache-load"));
+        assert!(registry.has_node_type("kv-cache-truncate"));
     }
 }
