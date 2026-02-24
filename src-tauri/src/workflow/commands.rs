@@ -237,7 +237,9 @@ pub async fn execute_workflow_v2(
     let core = Arc::new(
         node_engine::CoreTaskExecutor::new()
             .with_project_root(project_root)
-            .with_gateway(gateway.inner_arc()),
+            .with_gateway(gateway.inner_arc())
+            .with_event_sink(event_adapter.clone() as Arc<dyn EventSink>)
+            .with_execution_id(execution_id.clone()),
     );
     let host = Arc::new(TauriTaskExecutor::new(rag_manager.inner().clone()));
     let task_executor = node_engine::CompositeTaskExecutor::new(
@@ -530,7 +532,9 @@ pub async fn run_workflow_session(
     let core = Arc::new(
         node_engine::CoreTaskExecutor::new()
             .with_project_root(project_root)
-            .with_gateway(gateway.inner_arc()),
+            .with_gateway(gateway.inner_arc())
+            .with_event_sink(event_adapter.clone() as Arc<dyn EventSink>)
+            .with_execution_id(session_id.clone()),
     );
     let host = Arc::new(TauriTaskExecutor::new(rag_manager.inner().clone()));
     let task_executor = node_engine::CompositeTaskExecutor::new(
