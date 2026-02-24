@@ -5,13 +5,36 @@ and streaming token output for HuggingFace, dLLM, and Sherry models.
 
 All public functions are called from Rust through PyO3's Python::with_gil.
 Module-level globals hold the loaded model state.
+
+Generation logic is split into sibling modules:
+  - block_diffusion: dLLM / SDAR / TraDo block diffusion generation
+  - autoregressive: standard token-by-token HuggingFace generation
 """
 
 import json
 import logging
+import sys
 from pathlib import Path
 
 import torch
+
+# When loaded from the filesystem, ensure sibling modules are importable.
+# When embedded via PyO3's PyModule::from_code(), __file__ won't be a real
+# path and this is a no-op — the Rust host must register siblings separately.
+_self_path = Path(__file__).resolve()
+if _self_path.parent.is_dir():
+    _torch_dir = str(_self_path.parent)
+    if _torch_dir not in sys.path:
+        sys.path.insert(0, _torch_dir)
+
+from block_diffusion import (
+    _generate_dllm,
+    _generate_dllm_streaming,
+)
+from autoregressive import (
+    _generate_autoregressive,
+    _generate_autoregressive_streaming,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pantograph.pytorch")
@@ -101,7 +124,6 @@ def load_model(model_path, device="auto", model_type=None):
     Returns:
         Dict with model_path, model_type, device.
     """
-    import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     _apply_compatibility_shims()
@@ -165,7 +187,6 @@ def unload_model():
         _model_type = None
 
         try:
-            import torch
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except Exception:
@@ -182,9 +203,15 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
 
+    formatted = _format_prompt(prompt, system_prompt)
+
     if _model_type == "dllm":
-        return _generate_dllm(prompt, system_prompt, max_tokens, temperature, top_p)
-    return _generate_autoregressive(prompt, system_prompt, max_tokens, temperature, top_p)
+        return _generate_dllm(
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+        )
+    return _generate_autoregressive(
+        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+    )
 
 
 def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0):
@@ -196,334 +223,16 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
     if _model is None:
         raise RuntimeError("No model loaded. Call load_model() first.")
 
+    formatted = _format_prompt(prompt, system_prompt)
+
     if _model_type == "dllm":
-        yield from _generate_dllm_streaming(prompt, system_prompt, max_tokens, temperature, top_p)
+        yield from _generate_dllm_streaming(
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+        )
     else:
-        yield from _generate_autoregressive_streaming(prompt, system_prompt, max_tokens, temperature, top_p)
-
-
-# --- Autoregressive generation (standard HuggingFace models) ---
-
-def _generate_autoregressive(prompt, system_prompt, max_tokens, temperature, top_p):
-    import torch
-
-    text = _format_prompt(prompt, system_prompt)
-    inputs = _tokenizer(text, return_tensors="pt").to(_device)
-
-    with torch.no_grad():
-        outputs = _model.generate(
-            **inputs,
-            max_new_tokens=max_tokens,
-            temperature=max(temperature, 0.01),
-            top_p=top_p,
-            do_sample=temperature > 0,
+        yield from _generate_autoregressive_streaming(
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
         )
-
-    input_len = inputs["input_ids"].shape[1]
-    generated = outputs[0][input_len:]
-    return _tokenizer.decode(generated, skip_special_tokens=True)
-
-
-def _generate_autoregressive_streaming(prompt, system_prompt, max_tokens, temperature, top_p):
-    import torch
-
-    text = _format_prompt(prompt, system_prompt)
-    inputs = _tokenizer(text, return_tensors="pt").to(_device)
-    input_ids = inputs["input_ids"]
-
-    for _ in range(max_tokens):
-        with torch.no_grad():
-            outputs = _model(input_ids)
-            logits = outputs.logits[:, -1, :]
-
-            if temperature > 0:
-                logits = logits / max(temperature, 0.01)
-                probs = torch.softmax(logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1)
-            else:
-                next_token = logits.argmax(dim=-1, keepdim=True)
-
-        if next_token.item() == _tokenizer.eos_token_id:
-            break
-
-        token_str = _tokenizer.decode(next_token[0], skip_special_tokens=True)
-        yield token_str
-
-        input_ids = torch.cat([input_ids, next_token], dim=-1)
-
-
-# --- Block diffusion generation (dLLM / SDAR / TraDo models) ---
-
-# Mask token ID used by SDAR-family models
-_DLLM_MASK_ID = 151669
-
-def _generate_dllm(prompt, system_prompt, max_tokens, temperature, top_p):
-    """Generate using block diffusion (full response)."""
-    import torch
-
-    text = _format_prompt(prompt, system_prompt)
-    tokens = _tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(_device)
-    prompt_length = tokens["input_ids"].shape[1]
-
-    output_ids = _block_diffusion_generate(
-        _model,
-        prompt=tokens,
-        mask_id=_DLLM_MASK_ID,
-        gen_length=max_tokens,
-        temperature=max(temperature, 0.01),
-        top_p=top_p,
-    )
-
-    generated = output_ids[0][prompt_length:]
-    return _tokenizer.decode(generated, skip_special_tokens=True)
-
-
-def _generate_dllm_streaming(prompt, system_prompt, max_tokens, temperature, top_p):
-    """Generate using block diffusion, yielding text after each block."""
-    import torch
-
-    text = _format_prompt(prompt, system_prompt)
-    tokens = _tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(_device)
-    prompt_length = tokens["input_ids"].shape[1]
-
-    # Use the streaming variant that yields per-block
-    for block_ids in _block_diffusion_generate_blocks(
-        _model,
-        prompt=tokens,
-        mask_id=_DLLM_MASK_ID,
-        gen_length=max_tokens,
-        temperature=max(temperature, 0.01),
-        top_p=top_p,
-    ):
-        chunk = _tokenizer.decode(block_ids, skip_special_tokens=True)
-        if chunk:
-            yield chunk
-
-
-@torch.no_grad()
-def _block_diffusion_generate(
-    model, prompt, mask_id,
-    gen_length=128, block_length=8, denoising_steps=8,
-    temperature=1.0, top_k=0, top_p=1.0,
-    remasking_strategy="low_confidence_dynamic",
-    confidence_threshold=0.85,
-):
-    """Block diffusion generation adapted from dLLM-RL/generate.py."""
-    import torch
-    from torch.nn import functional as F
-    from transformers.cache_utils import DynamicCache
-
-    model.eval()
-    input_ids = prompt["input_ids"]
-    prompt_length = input_ids.shape[1]
-    past_key_values = DynamicCache()
-
-    num_blocks = (prompt_length + gen_length + block_length - 1) // block_length
-    total_length = num_blocks * block_length
-
-    block_mask = torch.tril(torch.ones(num_blocks, num_blocks, device=model.device))
-    attn_mask = (
-        block_mask.repeat_interleave(block_length, dim=0)
-        .repeat_interleave(block_length, dim=1)
-        .unsqueeze(0)
-    )
-    position_ids = torch.arange(total_length, device=model.device).unsqueeze(0)
-
-    x = torch.full((1, total_length), mask_id, dtype=torch.long, device=model.device)
-    x[:, :prompt_length] = input_ids
-    prefill_blocks = prompt_length // block_length
-    prefill_length = prefill_blocks * block_length
-
-    # Prefill stage
-    if prefill_length > 0:
-        cur_attn = attn_mask[:, :prefill_length, :prefill_length]
-        if cur_attn.dim() == 3:
-            cur_attn = cur_attn[:, None, :, :]
-        model(
-            x[:, :prefill_length],
-            attention_mask=cur_attn,
-            position_ids=position_ids[:, :prefill_length],
-            past_key_values=past_key_values,
-            use_cache=True,
-            store_kv=True,
-        )
-
-    num_transfer = _get_num_transfer_tokens(block_length, denoising_steps)
-
-    # Decode stage
-    for nb in range(prefill_blocks, num_blocks):
-        s, e = nb * block_length, (nb + 1) * block_length
-        cur_x = x[:, s:e].clone()
-        cur_attn = attn_mask[:, s:e, :e]
-        if cur_attn.dim() == 3:
-            cur_attn = cur_attn[:, None, :, :]
-        cur_pos = position_ids[:, s:e]
-
-        for step in range(denoising_steps + 1):
-            mask_index = cur_x == mask_id
-            if mask_index.sum() == 0:
-                model(cur_x, attention_mask=cur_attn, position_ids=cur_pos,
-                      past_key_values=past_key_values, use_cache=True, store_kv=True)
-                break
-
-            logits = model(cur_x, attention_mask=cur_attn, position_ids=cur_pos,
-                           past_key_values=past_key_values, use_cache=True, store_kv=False).logits
-
-            x0, x0_p = _sample_topk_topp(logits, temperature, top_k, top_p)
-            transfer_index = _select_transfer(
-                x0, x0_p, mask_index, num_transfer[step], remasking_strategy, confidence_threshold
-            )
-            cur_x[transfer_index] = x0[transfer_index]
-
-        x[:, s:e] = cur_x
-
-    return x
-
-
-@torch.no_grad()
-def _block_diffusion_generate_blocks(
-    model, prompt, mask_id,
-    gen_length=128, block_length=8, denoising_steps=8,
-    temperature=1.0, top_k=0, top_p=1.0,
-    remasking_strategy="low_confidence_dynamic",
-    confidence_threshold=0.85,
-):
-    """Like _block_diffusion_generate but yields decoded block token IDs."""
-    import torch
-    from transformers.cache_utils import DynamicCache
-
-    model.eval()
-    input_ids = prompt["input_ids"]
-    prompt_length = input_ids.shape[1]
-    past_key_values = DynamicCache()
-
-    num_blocks = (prompt_length + gen_length + block_length - 1) // block_length
-    total_length = num_blocks * block_length
-
-    block_mask = torch.tril(torch.ones(num_blocks, num_blocks, device=model.device))
-    attn_mask = (
-        block_mask.repeat_interleave(block_length, dim=0)
-        .repeat_interleave(block_length, dim=1)
-        .unsqueeze(0)
-    )
-    position_ids = torch.arange(total_length, device=model.device).unsqueeze(0)
-
-    x = torch.full((1, total_length), mask_id, dtype=torch.long, device=model.device)
-    x[:, :prompt_length] = input_ids
-    prefill_blocks = prompt_length // block_length
-    prefill_length = prefill_blocks * block_length
-
-    if prefill_length > 0:
-        cur_attn = attn_mask[:, :prefill_length, :prefill_length]
-        if cur_attn.dim() == 3:
-            cur_attn = cur_attn[:, None, :, :]
-        model(
-            x[:, :prefill_length],
-            attention_mask=cur_attn,
-            position_ids=position_ids[:, :prefill_length],
-            past_key_values=past_key_values,
-            use_cache=True,
-            store_kv=True,
-        )
-
-    num_transfer = _get_num_transfer_tokens(block_length, denoising_steps)
-
-    for nb in range(prefill_blocks, num_blocks):
-        s, e = nb * block_length, (nb + 1) * block_length
-        cur_x = x[:, s:e].clone()
-        cur_attn = attn_mask[:, s:e, :e]
-        if cur_attn.dim() == 3:
-            cur_attn = cur_attn[:, None, :, :]
-        cur_pos = position_ids[:, s:e]
-
-        for step in range(denoising_steps + 1):
-            mask_index = cur_x == mask_id
-            if mask_index.sum() == 0:
-                model(cur_x, attention_mask=cur_attn, position_ids=cur_pos,
-                      past_key_values=past_key_values, use_cache=True, store_kv=True)
-                break
-
-            logits = model(cur_x, attention_mask=cur_attn, position_ids=cur_pos,
-                           past_key_values=past_key_values, use_cache=True, store_kv=False).logits
-
-            x0, x0_p = _sample_topk_topp(logits, temperature, top_k, top_p)
-            transfer_index = _select_transfer(
-                x0, x0_p, mask_index, num_transfer[step], remasking_strategy, confidence_threshold
-            )
-            cur_x[transfer_index] = x0[transfer_index]
-
-        x[:, s:e] = cur_x
-        # Yield only the non-mask tokens from this block
-        block_tokens = cur_x[0][cur_x[0] != mask_id]
-        if len(block_tokens) > 0:
-            yield block_tokens
-
-
-def _get_num_transfer_tokens(block_length, steps):
-    import torch
-    base = block_length // steps
-    remainder = block_length % steps
-    t = torch.zeros(steps, dtype=torch.int64) + base
-    t[:remainder] += 1
-    return t
-
-
-def _sample_topk_topp(logits, temperature=1.0, top_k=0, top_p=1.0):
-    import torch
-    from torch.nn import functional as F
-
-    orig_shape = logits.shape[:-1]
-    vocab_size = logits.shape[-1]
-    logits = logits.reshape(-1, vocab_size)
-
-    if temperature != 1.0:
-        logits = logits / temperature
-    if top_k > 0:
-        values, _ = torch.topk(logits, top_k)
-        logits = torch.where(logits < values[..., -1, None], float("-inf"), logits)
-    if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cum_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-        mask = cum_probs > top_p
-        mask[..., 1:] = mask[..., :-1].clone()
-        mask[..., 0] = False
-        scatter_mask = torch.scatter(torch.full_like(logits, False, dtype=torch.bool), -1, sorted_indices, mask)
-        logits = logits.masked_fill(scatter_mask, float("-inf"))
-
-    probs = F.softmax(logits, dim=-1)
-    token = torch.multinomial(probs, num_samples=1)
-    token_prob = torch.gather(probs, -1, token)
-    return token.view(*orig_shape), token_prob.view(*orig_shape)
-
-
-def _select_transfer(x0, x0_p, mask_index, num_to_transfer, strategy, confidence_threshold):
-    import torch
-
-    if strategy == "low_confidence_dynamic":
-        confidence = torch.where(mask_index, x0_p, -torch.inf)
-        transfer = torch.zeros_like(x0, dtype=torch.bool)
-        for j in range(confidence.shape[0]):
-            high_conf = confidence[j] > confidence_threshold
-            if high_conf.sum() >= num_to_transfer:
-                transfer[j] = high_conf
-            else:
-                _, idx = torch.topk(confidence[j], num_to_transfer)
-                transfer[j, idx] = True
-        return transfer
-    elif strategy == "low_confidence_static":
-        confidence = torch.where(mask_index, x0_p, -torch.inf)
-        transfer = torch.zeros_like(x0, dtype=torch.bool)
-        for j in range(confidence.shape[0]):
-            _, idx = torch.topk(confidence[j], num_to_transfer)
-            transfer[j, idx] = True
-        return transfer
-    else:  # sequential
-        transfer = torch.zeros_like(x0, dtype=torch.bool)
-        for j in range(x0.shape[0]):
-            if mask_index[j].any():
-                first = mask_index[j].nonzero(as_tuple=True)[0].min().item()
-                transfer[j, first:first + num_to_transfer] = True
-        return transfer
 
 
 # --- Internal helpers ---
@@ -590,8 +299,6 @@ def _resolve_device(device_str):
 
     "auto" picks the best available: cuda > mps > cpu.
     """
-    import torch
-
     if device_str == "auto":
         if torch.cuda.is_available():
             return torch.device("cuda")
