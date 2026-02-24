@@ -1481,7 +1481,7 @@ async fn execute_pytorch_inference(
             let _ = sink.send(crate::WorkflowEvent::task_stream(
                 task_id,
                 execution_id,
-                "response",
+                "stream",
                 serde_json::json!(token),
             ));
         }

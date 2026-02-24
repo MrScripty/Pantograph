@@ -97,7 +97,14 @@
       case 'NodeStream': {
         const streamData = event.data as { node_id: string; port: string; chunk: unknown };
         const text = typeof streamData.chunk === 'string' ? streamData.chunk : String(streamData.chunk);
-        appendStreamContent(streamData.node_id, text);
+        // Follow edges from (node_id, port) to update connected target nodes
+        const currentEdges = get(edges);
+        const outgoing = currentEdges.filter(
+          e => e.source === streamData.node_id && e.sourceHandle === streamData.port
+        );
+        for (const edge of outgoing) {
+          appendStreamContent(edge.target, text);
+        }
         break;
       }
       case 'NodeError': {

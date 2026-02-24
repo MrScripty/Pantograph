@@ -8,7 +8,6 @@
     data: {
       definition?: NodeDefinition;
       label?: string;
-      streamContent?: string;
     };
     selected?: boolean;
   }
@@ -18,16 +17,6 @@
   // Get execution info (new format with state and errorMessage)
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
-  let streamContent = $derived(data.streamContent || '');
-  let isStreaming = $derived(executionState === 'running' && streamContent.length > 0);
-
-  let streamContainer: HTMLDivElement | undefined = $state();
-
-  $effect(() => {
-    if (streamContainer && streamContent) {
-      streamContainer.scrollTop = streamContainer.scrollHeight;
-    }
-  });
 
   // Check if model_path input is connected
   let isModelConnected = $derived(
@@ -69,12 +58,6 @@
           <div class="text-[10px] text-amber-400">
             Connect a Puma-Lib node
           </div>
-        {/if}
-        {#if streamContent || isStreaming}
-          <div
-            bind:this={streamContainer}
-            class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-40 overflow-y-auto whitespace-pre-wrap"
-          >{streamContent}{#if isStreaming}<span class="animate-pulse">|</span>{/if}</div>
         {/if}
       </div>
     {/snippet}

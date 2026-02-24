@@ -9,14 +9,27 @@
       definition?: NodeDefinition;
       label?: string;
       text?: string;
+      streamContent?: string;
     };
     selected?: boolean;
   }
 
   let { id, data, selected = false }: Props = $props();
 
-  let executionState = $derived($nodeExecutionStates.get(id) || 'idle');
+  let executionInfo = $derived($nodeExecutionStates.get(id));
+  let executionState = $derived(executionInfo?.state || 'idle');
   let text = $derived(data.text || '');
+  let streamContent = $derived(data.streamContent || '');
+  let displayText = $derived(streamContent || text);
+  let isStreaming = $derived(executionState === 'running' && streamContent.length > 0);
+
+  let outputContainer: HTMLDivElement | undefined = $state();
+
+  $effect(() => {
+    if (outputContainer && streamContent) {
+      outputContainer.scrollTop = outputContainer.scrollHeight;
+    }
+  });
 
   let statusColor = $derived(
     {
@@ -43,10 +56,11 @@
     {/snippet}
 
     {#snippet children()}
-      {#if text}
-        <div class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-32 overflow-y-auto whitespace-pre-wrap">
-          {text}
-        </div>
+      {#if displayText}
+        <div
+          bind:this={outputContainer}
+          class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-32 overflow-y-auto whitespace-pre-wrap"
+        >{displayText}{#if isStreaming}<span class="animate-pulse">|</span>{/if}</div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
           No output yet
