@@ -11,6 +11,8 @@
     nodeDefinitions,
     edges,
     updateNodeData,
+    appendStreamContent,
+    clearStreamContent,
   } from '../stores/workflowStore';
   import {
     isReadOnly,
@@ -35,6 +37,7 @@
 
     isExecuting.set(true);
     resetExecutionStates();
+    clearStreamContent();
 
     // Subscribe to events - will be cleaned up in handleWorkflowEvent on completion/failure
     currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
@@ -89,6 +92,12 @@
             }
           }
         }
+        break;
+      }
+      case 'NodeStream': {
+        const streamData = event.data as { node_id: string; port: string; chunk: unknown };
+        const text = typeof streamData.chunk === 'string' ? streamData.chunk : String(streamData.chunk);
+        appendStreamContent(streamData.node_id, text);
         break;
       }
       case 'NodeError': {
