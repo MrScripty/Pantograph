@@ -51,6 +51,7 @@ pyo3 = { workspace = true, optional = true }
 
 # Utilities
 uuid.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 env_logger = "0.11"

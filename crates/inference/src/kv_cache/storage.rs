@@ -131,8 +131,8 @@ impl StorageBackend for MemoryStorage {
 ///
 /// All I/O is performed through `tokio::fs` for async compatibility.
 ///
-/// NOTE: The `compressed` flag in metadata is reserved for future zstd
-/// support. Currently data is always stored uncompressed.
+/// When `compressed` is set in metadata, data is stored with zstd compression
+/// (level 3) and transparently decompressed on load.
 pub struct DiskStorage {
     base_dir: PathBuf,
 }
@@ -173,8 +173,14 @@ impl StorageBackend for DiskStorage {
         tokio::fs::write(self.metadata_path(&entry.metadata.cache_id), meta_json).await?;
 
         // Write data
-        // TODO: When compressed == true, apply zstd compression before writing.
-        tokio::fs::write(self.data_path(&entry.metadata.cache_id), &entry.data).await?;
+        let data_to_write = if entry.metadata.compressed {
+            zstd::encode_all(entry.data.as_slice(), 3).map_err(|e| KvCacheError::Codec {
+                message: format!("zstd compression failed: {e}"),
+            })?
+        } else {
+            entry.data.clone()
+        };
+        tokio::fs::write(self.data_path(&entry.metadata.cache_id), &data_to_write).await?;
 
         Ok(())
     }
@@ -186,9 +192,15 @@ impl StorageBackend for DiskStorage {
                 cache_id: cache_id.to_string(),
             });
         }
-        // TODO: When compressed == true, decompress data after reading.
-        let data = tokio::fs::read(&path).await?;
-        Ok(data)
+        let raw = tokio::fs::read(&path).await?;
+        let metadata = self.load_metadata(cache_id).await?;
+        if metadata.compressed {
+            zstd::decode_all(raw.as_slice()).map_err(|e| KvCacheError::Codec {
+                message: format!("zstd decompression failed: {e}"),
+            })
+        } else {
+            Ok(raw)
+        }
     }
 
     async fn load_metadata(&self, cache_id: &str) -> Result<KvCacheMetadata, KvCacheError> {
@@ -394,5 +406,40 @@ mod tests {
             .expect("delete should succeed");
         assert!(!storage.exists("disk-del").await.unwrap());
         assert!(!tmp.path().join("disk-del").exists());
+    }
+
+    #[tokio::test]
+    async fn test_disk_save_compressed_roundtrip() {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let storage = DiskStorage::new(tmp.path().to_path_buf());
+        let mut entry = make_test_entry("compressed-1");
+        entry.metadata.compressed = true;
+        // Use data large enough that compression produces different output
+        entry.data = vec![42; 1024];
+
+        storage.save(&entry).await.expect("save should succeed");
+
+        // Verify on-disk data differs from raw (it's compressed)
+        let on_disk = std::fs::read(tmp.path().join("compressed-1/data.bin")).unwrap();
+        assert_ne!(on_disk, entry.data, "compressed data should differ from raw");
+        assert!(on_disk.len() < entry.data.len(), "compressed data should be smaller");
+
+        // Verify load_data returns the original uncompressed data
+        let loaded = storage.load_data("compressed-1").await.expect("load should succeed");
+        assert_eq!(loaded, entry.data);
+    }
+
+    #[tokio::test]
+    async fn test_disk_save_uncompressed_data_matches_raw() {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let storage = DiskStorage::new(tmp.path().to_path_buf());
+        let entry = make_test_entry("uncompressed-1");
+        // entry.metadata.compressed is false by default from make_test_entry
+
+        storage.save(&entry).await.expect("save should succeed");
+
+        // Verify on-disk data is identical to raw bytes
+        let on_disk = std::fs::read(tmp.path().join("uncompressed-1/data.bin")).unwrap();
+        assert_eq!(on_disk, entry.data, "uncompressed data should match raw bytes");
     }
 }
