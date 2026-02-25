@@ -73,6 +73,47 @@ mod options_provider {
     /// Provides available models from pumas-library for the `model_path` port.
     pub struct PumaLibOptionsProvider;
 
+    /// Extract inference settings from a model record, falling back to computed
+    /// defaults when the stored metadata has no settings (pre-existing models).
+    fn resolve_inference_settings(record: &pumas_library::ModelRecord) -> serde_json::Value {
+        // Try the stored value first
+        if let Some(stored) = record.metadata.get("inference_settings") {
+            if stored.is_array() && !stored.as_array().map_or(true, |a| a.is_empty()) {
+                return stored.clone();
+            }
+        }
+
+        // Lazy fallback: compute from model_type + file format.
+        // record.path is a directory; try to infer format from files in metadata.
+        let file_format = record
+            .metadata
+            .get("files")
+            .and_then(|f| f.as_array())
+            .and_then(|files| {
+                files.iter().find_map(|f| {
+                    let name = f.get("name")?.as_str()?;
+                    std::path::Path::new(name)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|s| s.to_lowercase())
+                })
+            })
+            .unwrap_or_default();
+        let subtype = record
+            .metadata
+            .get("subtype")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        pumas_library::models::default_inference_settings(
+            &record.model_type,
+            &file_format,
+            subtype.as_deref(),
+        )
+        .map(|s| serde_json::to_value(s).unwrap_or_default())
+        .unwrap_or(serde_json::Value::Null)
+    }
+
     #[async_trait]
     impl PortOptionsProvider for PumaLibOptionsProvider {
         async fn query_options(
@@ -110,7 +151,7 @@ mod options_provider {
                         "id": m.id,
                         "model_type": m.model_type,
                         "cleaned_name": m.cleaned_name,
-                        "inference_settings": m.metadata.get("inference_settings"),
+                        "inference_settings": resolve_inference_settings(m),
                     })),
                 })
                 .collect();
