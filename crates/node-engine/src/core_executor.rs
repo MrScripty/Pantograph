@@ -908,7 +908,7 @@ async fn execute_llamacpp_inference(
         if let Some(v) = extra_settings.get("gpu_layers").and_then(|v| v.as_i64()) {
             config.gpu_layers = Some(v as i32);
         }
-        if let Some(v) = extra_settings.get("context_size").and_then(|v| v.as_i64()) {
+        if let Some(v) = extra_settings.get("context_length").and_then(|v| v.as_i64()) {
             config.context_size = Some(v as u32);
         }
 

@@ -83,9 +83,14 @@ export interface WorkflowStores {
 export interface InferenceParamSchema {
   key: string;
   label: string;
-  param_type: string;
+  param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
   default: unknown;
   description?: string;
+  constraints?: {
+    min?: number;
+    max?: number;
+    allowed_values?: unknown[];
+  };
 }
 
 /**
