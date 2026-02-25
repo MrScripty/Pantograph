@@ -43,7 +43,7 @@
   import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
   import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
   import MaskedTextInputNode from './nodes/workflow/MaskedTextInputNode.svelte';
-
+  import ExpandSettingsNode from './nodes/workflow/ExpandSettingsNode.svelte';
 
   // Import architecture node components
   import ArchComponentNode from './nodes/architecture/ArchComponentNode.svelte';
@@ -75,6 +75,7 @@
     'node-group': NodeGroupNode,
     'linked-input': LinkedInputNode,
     'masked-text-input': MaskedTextInputNode,
+    'expand-settings': ExpandSettingsNode,
     // Generic fallback for other node types
     'image-input': GenericNode,
     'vision-analysis': GenericNode,

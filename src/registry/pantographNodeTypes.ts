@@ -20,6 +20,7 @@ import AgentToolsNode from '../components/nodes/workflow/AgentToolsNode.svelte';
 import VectorDbNode from '../components/nodes/workflow/VectorDbNode.svelte';
 import NodeGroupNode from '../components/nodes/workflow/NodeGroupNode.svelte';
 import LinkedInputNode from '../components/nodes/workflow/LinkedInputNode.svelte';
+import ExpandSettingsNode from '../components/nodes/workflow/ExpandSettingsNode.svelte';
 
 // Architecture node components (Pantograph-only, not engine nodes)
 import ArchComponentNode from '../components/nodes/architecture/ArchComponentNode.svelte';
@@ -41,6 +42,7 @@ const SPECIALIZED_NODES: Record<string, any> = {
   'agent-tools': AgentToolsNode,
   'vector-db': VectorDbNode,
   'linked-input': LinkedInputNode,
+  'expand-settings': ExpandSettingsNode,
 };
 
 /** Non-engine nodes (architecture + grouping, Pantograph desktop only) */
