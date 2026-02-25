@@ -64,6 +64,7 @@ export const resetExecutionStates = workflowStores.resetExecutionStates;
 
 // --- Streaming actions ---
 export const appendStreamContent = workflowStores.appendStreamContent;
+export const setStreamContent = workflowStores.setStreamContent;
 export const clearStreamContent = workflowStores.clearStreamContent;
 
 // --- Workflow actions ---
@@ -71,6 +72,11 @@ export const loadWorkflow = workflowStores.loadWorkflow;
 export const clearWorkflow = workflowStores.clearWorkflow;
 export const loadDefaultWorkflow = workflowStores.loadDefaultWorkflow;
 export const updateViewport = workflowStores.updateViewport;
+
+// --- Inference settings actions ---
+export const syncInferencePorts = workflowStores.syncInferencePorts;
+export const syncExpandPorts = workflowStores.syncExpandPorts;
+export const autoConnectExpandToInference = workflowStores.autoConnectExpandToInference;
 
 // --- Group actions ---
 export const createGroup = workflowStores.createGroup;

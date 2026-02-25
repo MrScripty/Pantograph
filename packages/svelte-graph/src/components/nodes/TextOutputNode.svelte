@@ -21,6 +21,7 @@
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
   let text = $derived(data.text || '');
+  let streamContent = $derived((data.streamContent as string) || '');
 </script>
 
 <div class="output-node-wrapper">
@@ -40,7 +41,11 @@
     {/snippet}
 
     {#snippet children()}
-      {#if text}
+      {#if streamContent}
+        <div class="output-text stream-active">
+          {streamContent}
+        </div>
+      {:else if text}
         <div class="output-text">
           {text}
         </div>
@@ -132,5 +137,9 @@
     font-size: 0.75rem;
     color: #737373;
     font-style: italic;
+  }
+
+  .stream-active {
+    border-left: 2px solid #0891b2;
   }
 </style>

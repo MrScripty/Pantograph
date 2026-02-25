@@ -12,6 +12,7 @@
     edges,
     updateNodeData,
     appendStreamContent,
+    setStreamContent,
     clearStreamContent,
   } from '../stores/workflowStore';
   import {
@@ -96,14 +97,27 @@
       }
       case 'NodeStream': {
         const streamData = event.data as { node_id: string; port: string; chunk: unknown };
-        const text = typeof streamData.chunk === 'string' ? streamData.chunk : String(streamData.chunk);
+        // Parse structured chunk: { mode: "append"|"replace", text: string }
+        let mode = 'append';
+        let text: string;
+        if (streamData.chunk && typeof streamData.chunk === 'object' && 'text' in streamData.chunk) {
+          const structured = streamData.chunk as { mode?: string; text: string };
+          mode = structured.mode || 'append';
+          text = structured.text;
+        } else {
+          text = typeof streamData.chunk === 'string' ? streamData.chunk : String(streamData.chunk);
+        }
         // Follow edges from (node_id, port) to update connected target nodes
         const currentEdges = get(edges);
         const outgoing = currentEdges.filter(
           e => e.source === streamData.node_id && e.sourceHandle === streamData.port
         );
         for (const edge of outgoing) {
-          appendStreamContent(edge.target, text);
+          if (mode === 'replace') {
+            setStreamContent(edge.target, text);
+          } else {
+            appendStreamContent(edge.target, text);
+          }
         }
         break;
       }
