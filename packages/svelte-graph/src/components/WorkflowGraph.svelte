@@ -14,7 +14,7 @@
   import { get } from 'svelte/store';
 
   import { useGraphContext } from '../context/useGraphContext.js';
-  import type { NodeDefinition, GraphEdge } from '../types/workflow.js';
+  import type { NodeDefinition, GraphEdge, PortDataType } from '../types/workflow.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
@@ -107,6 +107,27 @@
     const definitions = await backend.getNodeDefinitions();
     nodeDefsStore.set(definitions);
   });
+
+  // --- Port type compatibility (mirrors Rust is_compatible_with) ---
+
+  function isPortTypeCompatible(source: PortDataType, target: PortDataType): boolean {
+    if (source === 'any' || target === 'any') return true;
+    if (source === 'prompt' && target === 'string') return true;
+    if (source === 'string' && target === 'prompt') return true;
+    return source === target;
+  }
+
+  /** Synchronous connection gate — prevents SvelteFlow from creating invalid edges. */
+  function checkValidConnection(connection: Edge | Connection): boolean {
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
+    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
+    const sourcePort = sourceDef?.outputs?.find((p) => p.id === connection.sourceHandle);
+    const targetPort = targetDef?.inputs?.find((p) => p.id === connection.targetHandle);
+    if (!sourcePort || !targetPort) return true; // allow if definitions are missing
+    return isPortTypeCompatible(sourcePort.data_type, targetPort.data_type);
+  }
 
   // --- Event handlers ---
 
@@ -377,6 +398,7 @@
     maxZoom={2}
     deleteKey={canEdit ? 'Delete' : null}
     edgesReconnectable={canEdit}
+    isValidConnection={checkValidConnection}
     onnodedragstop={onNodeDragStop}
     onnodeclick={onNodeClick}
     onconnect={handleConnect}
