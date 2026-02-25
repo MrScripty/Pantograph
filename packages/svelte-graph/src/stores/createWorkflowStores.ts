@@ -12,6 +12,8 @@ import type {
   NodeExecutionState,
   NodeExecutionInfo,
   NodeDefinition,
+  PortDefinition,
+  PortDataType,
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
@@ -57,6 +59,7 @@ export interface WorkflowStores {
 
   // Actions — streaming
   appendStreamContent: (nodeId: string, chunk: string) => void;
+  setStreamContent: (nodeId: string, content: string) => void;
   clearStreamContent: () => void;
 
   // Actions — workflow
@@ -65,12 +68,24 @@ export interface WorkflowStores {
   loadDefaultWorkflow: (definitions: NodeDefinition[]) => void;
   updateViewport: (viewport: ViewportState) => void;
 
+  // Actions — inference settings
+  syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
+
   // Actions — groups
   createGroup: (name: string, nodeIds: string[]) => Promise<NodeGroup | null>;
   ungroupNodes: (groupId: string) => Promise<boolean>;
   updateGroupPorts: (groupId: string, exposedInputs: PortMapping[], exposedOutputs: PortMapping[]) => Promise<boolean>;
   getGroupById: (groupId: string) => NodeGroup | undefined;
   collapseGroup: () => void;
+}
+
+/** Schema for a model-specific inference parameter (from pumas-library). */
+export interface InferenceParamSchema {
+  key: string;
+  label: string;
+  param_type: string;
+  default: unknown;
+  description?: string;
 }
 
 /**
@@ -271,6 +286,16 @@ export function createWorkflowStores(
     );
   }
 
+  function setStreamContent(nodeId: string, content: string) {
+    nodes.update((n) =>
+      n.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, streamContent: content } }
+          : node
+      )
+    );
+  }
+
   function clearStreamContent() {
     nodes.update((n) =>
       n.map((node) =>
@@ -359,6 +384,87 @@ export function createWorkflowStores(
 
   function updateViewport(viewport: ViewportState) {
     currentViewport.set(viewport);
+  }
+
+  // --- Inference settings actions ---
+
+  /**
+   * Map a pumas-library param_type string to a Pantograph PortDataType.
+   */
+  function paramTypeToPortDataType(paramType: string): PortDataType {
+    switch (paramType) {
+      case 'Number':
+      case 'Integer':
+        return 'number';
+      case 'String':
+        return 'string';
+      case 'Boolean':
+        return 'boolean';
+      default:
+        return 'any';
+    }
+  }
+
+  /**
+   * Find downstream target node IDs connected via a specific source handle.
+   */
+  function findConnectedTargets(sourceId: string, sourceHandle: string): string[] {
+    return get(edges)
+      .filter((e) => e.source === sourceId && e.sourceHandle === sourceHandle)
+      .map((e) => e.target);
+  }
+
+  /**
+   * Sync model-derived inference ports to downstream inference nodes.
+   *
+   * When a puma-lib or model-provider node's model selection changes,
+   * this function finds connected inference nodes and updates their
+   * definition inputs to include model-specific parameter ports.
+   *
+   * Ports not in the base NodeDefinition are considered model-derived
+   * and are stripped before appending the new set.
+   */
+  function syncInferencePorts(sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) {
+    // Find inference nodes connected downstream via model_path or inference_settings
+    const downstreamIds = new Set([
+      ...findConnectedTargets(sourceNodeId, 'model_path'),
+      ...findConnectedTargets(sourceNodeId, 'inference_settings'),
+    ]);
+
+    const defs = get(nodeDefinitions);
+
+    for (const nodeId of downstreamIds) {
+      const node = getNodeById(nodeId);
+      if (!node?.data?.definition) continue;
+
+      const nodeDef = node.data.definition as NodeDefinition;
+
+      // Get the base definition for this node type (static ports only)
+      const baseDef = defs.find((d) => d.node_type === nodeDef.node_type);
+      if (!baseDef) continue;
+
+      const basePortIds = new Set(baseDef.inputs.map((p) => p.id));
+
+      // Strip any previously-appended model-derived ports
+      const staticPorts = nodeDef.inputs.filter((p: PortDefinition) => basePortIds.has(p.id));
+
+      // Convert inference_settings schema to PortDefinitions
+      const modelPorts: PortDefinition[] = inferenceSettings.map((s) => ({
+        id: s.key,
+        label: s.label,
+        data_type: paramTypeToPortDataType(s.param_type),
+        required: false,
+        multiple: false,
+      }));
+
+      // Update definition with static + model-derived ports
+      updateNodeData(nodeId, {
+        definition: {
+          ...nodeDef,
+          inputs: [...staticPorts, ...modelPorts],
+        },
+      });
+    }
   }
 
   // --- Group actions ---
@@ -528,9 +634,11 @@ export function createWorkflowStores(
     // Execution actions
     setNodeExecutionState, getNodeExecutionInfo, resetExecutionStates,
     // Streaming actions
-    appendStreamContent, clearStreamContent,
+    appendStreamContent, setStreamContent, clearStreamContent,
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
+    // Inference settings actions
+    syncInferencePorts,
     // Group actions
     createGroup, ungroupNodes, updateGroupPorts: updateGroupPortsFn,
     getGroupById, collapseGroup,
