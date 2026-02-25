@@ -31,6 +31,9 @@ pub struct ModelInfo {
     pub id: Option<String>,
     /// Canonical name from pumas-core
     pub official_name: Option<String>,
+    /// Inference parameter schema from model metadata
+    #[serde(default)]
+    pub inference_settings: Option<Vec<serde_json::Value>>,
 }
 
 // Port constants
@@ -40,6 +43,7 @@ const PORT_MODEL_NAME_OUT: &str = "model_name";
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_MODEL_INFO: &str = "model_info";
 const PORT_SEARCH_RESULTS: &str = "search_results";
+const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
 
 /// Model Provider Task
 ///
@@ -67,6 +71,7 @@ impl ModelProviderTask {
     pub const PORT_MODEL_PATH: &'static str = PORT_MODEL_PATH;
     pub const PORT_MODEL_INFO: &'static str = PORT_MODEL_INFO;
     pub const PORT_SEARCH_RESULTS: &'static str = PORT_SEARCH_RESULTS;
+    pub const PORT_INFERENCE_SETTINGS: &'static str = PORT_INFERENCE_SETTINGS;
 
     pub fn new(task_id: impl Into<String>) -> Self {
         Self {
@@ -99,6 +104,11 @@ impl TaskDescriptor for ModelProviderTask {
                     "Search Results",
                     PortDataType::Json,
                 ),
+                PortMetadata::optional(
+                    PORT_INFERENCE_SETTINGS,
+                    "Inference Settings",
+                    PortDataType::Json,
+                ),
             ],
             execution_mode: ExecutionMode::Reactive,
         }
@@ -126,6 +136,7 @@ impl Task for ModelProviderTask {
             model_type: Some("llm".to_string()),
             id: None,
             official_name: None,
+            inference_settings: None,
         };
 
         let name_out_key = ContextKeys::output(&self.task_id, PORT_MODEL_NAME_OUT);
@@ -213,6 +224,12 @@ impl NodeExecutor for ModelProviderExecutor {
                 if let Some(search_results) = resolved.search_results {
                     outputs.insert(PORT_SEARCH_RESULTS.to_string(), search_results);
                 }
+                if let Some(ref settings) = resolved.info.inference_settings {
+                    outputs.insert(
+                        PORT_INFERENCE_SETTINGS.to_string(),
+                        serde_json::Value::Array(settings.clone()),
+                    );
+                }
                 return Ok(outputs);
             }
         }
@@ -227,6 +244,7 @@ impl NodeExecutor for ModelProviderExecutor {
             model_type: Some("llm".to_string()),
             id: None,
             official_name: None,
+            inference_settings: None,
         };
 
         outputs.insert(
@@ -306,6 +324,12 @@ mod library_support {
         // Resolve the specified model name against the local library
         if let Ok(search) = api.search_models(model_name, 1, 0).await {
             if let Some(record) = search.models.first() {
+                let inference_settings = record
+                    .metadata
+                    .get("inference_settings")
+                    .and_then(|v| v.as_array())
+                    .cloned();
+
                 return Some(ResolvedModel {
                     info: ModelInfo {
                         name: record.official_name.clone(),
@@ -313,6 +337,7 @@ mod library_support {
                         model_type: Some(record.model_type.clone()),
                         id: Some(record.id.clone()),
                         official_name: Some(record.official_name.clone()),
+                        inference_settings,
                     },
                     search_results: search_results_json,
                 });
@@ -328,6 +353,7 @@ mod library_support {
                     model_type: Some("llm".to_string()),
                     id: None,
                     official_name: None,
+                    inference_settings: None,
                 },
                 search_results: search_results_json,
             });
@@ -377,8 +403,10 @@ mod tests {
         let meta = ModelProviderTask::descriptor();
 
         assert_eq!(meta.node_type, "model-provider");
+        assert_eq!(meta.outputs.len(), 5);
         assert!(meta.outputs.iter().any(|p| p.id == "model_name"));
         assert!(meta.outputs.iter().any(|p| p.id == "search_results"));
+        assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"));
     }
 
     #[tokio::test]
@@ -434,6 +462,7 @@ mod tests {
             model_type: Some("llm".to_string()),
             id: Some("uuid-123".to_string()),
             official_name: Some("Test Model".to_string()),
+            inference_settings: None,
         };
         let json = serde_json::to_value(&info).unwrap();
         assert_eq!(json["name"], "test-model");

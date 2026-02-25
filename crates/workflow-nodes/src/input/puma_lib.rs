@@ -14,6 +14,7 @@ use graph_flow::{Context, GraphError, Task, TaskResult};
 use node_engine::{ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata};
 
 const PORT_MODEL_PATH: &str = "model_path";
+const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
 
 /// Stub task for the puma-lib node.
 ///
@@ -41,11 +42,14 @@ impl TaskDescriptor for PumaLibTask {
             label: "Puma-Lib".to_string(),
             description: "Provides AI model file path".to_string(),
             inputs: vec![],
-            outputs: vec![PortMetadata::optional(
-                PORT_MODEL_PATH,
-                "Model Path",
-                PortDataType::String,
-            )],
+            outputs: vec![
+                PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
+                PortMetadata::optional(
+                    PORT_INFERENCE_SETTINGS,
+                    "Inference Settings",
+                    PortDataType::Json,
+                ),
+            ],
             execution_mode: ExecutionMode::Reactive,
         }
     }
@@ -106,6 +110,7 @@ mod options_provider {
                         "id": m.id,
                         "model_type": m.model_type,
                         "cleaned_name": m.cleaned_name,
+                        "inference_settings": m.metadata.get("inference_settings"),
                     })),
                 })
                 .collect();
@@ -155,12 +160,12 @@ mod tests {
         let meta = PumaLibTask::descriptor();
 
         assert!(meta.inputs.is_empty());
-        assert_eq!(meta.outputs.len(), 1);
+        assert_eq!(meta.outputs.len(), 2);
 
-        let port = &meta.outputs[0];
-        assert_eq!(port.id, "model_path");
-        assert_eq!(port.data_type, PortDataType::String);
-        assert!(!port.required);
+        assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
+        assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"
+            && p.data_type == PortDataType::Json
+            && !p.required));
     }
 
     #[tokio::test]
