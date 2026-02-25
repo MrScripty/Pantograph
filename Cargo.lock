@@ -4946,6 +4946,7 @@ dependencies = [
  "tower-http 0.5.2",
  "uuid",
  "which",
+ "zstd",
 ]
 
 [[package]]
@@ -12497,6 +12498,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
