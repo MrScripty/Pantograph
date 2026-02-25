@@ -60,6 +60,7 @@ impl TaskDescriptor for LlamaCppInferenceTask {
                 PortMetadata::optional(PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
                 PortMetadata::optional(PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
+                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),
@@ -104,14 +105,15 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = LlamaCppInferenceTask::descriptor();
 
-        // 6 inputs: model_path, prompt, system_prompt, temperature, max_tokens, tools
-        assert_eq!(meta.inputs.len(), 6);
+        // 7 inputs: model_path, prompt, system_prompt, temperature, max_tokens, tools, inference_settings
+        assert_eq!(meta.inputs.len(), 7);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "system_prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "temperature"));
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));
         assert!(meta.inputs.iter().any(|p| p.id == "tools"));
+        assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
 
         // 6 outputs: response, model_path, model_ref, tool_calls, has_tool_calls, stream
         assert_eq!(meta.outputs.len(), 6);

@@ -145,6 +145,7 @@ impl TaskDescriptor for InferenceTask {
                 ),
                 PortMetadata::optional(Self::PORT_CONTEXT, "Context", PortDataType::String),
                 PortMetadata::optional(Self::PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
+                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_RESPONSE, "Response", PortDataType::String),
@@ -379,6 +380,7 @@ mod tests {
 
         // Check for tools input
         assert!(meta.inputs.iter().any(|p| p.id == "tools"));
+        assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
 
         // Check for tool_calls output
         assert!(meta.outputs.iter().any(|p| p.id == "tool_calls"));

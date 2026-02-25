@@ -60,6 +60,7 @@ impl TaskDescriptor for PyTorchInferenceTask {
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
                 PortMetadata::optional(PORT_DEVICE, "Device", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
+                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),
@@ -100,8 +101,8 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = PyTorchInferenceTask::descriptor();
 
-        // 7 inputs: model_path, prompt, system_prompt, temperature, max_tokens, device, model_type
-        assert_eq!(meta.inputs.len(), 7);
+        // 8 inputs: model_path, prompt, system_prompt, temperature, max_tokens, device, model_type, inference_settings
+        assert_eq!(meta.inputs.len(), 8);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "system_prompt"));
@@ -109,6 +110,7 @@ mod tests {
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));
         assert!(meta.inputs.iter().any(|p| p.id == "device"));
         assert!(meta.inputs.iter().any(|p| p.id == "model_type"));
+        assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
 
         // 3 outputs: response, model_ref, stream
         assert_eq!(meta.outputs.len(), 3);

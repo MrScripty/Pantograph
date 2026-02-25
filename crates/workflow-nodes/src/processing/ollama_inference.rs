@@ -104,6 +104,7 @@ impl TaskDescriptor for OllamaInferenceTask {
                 ),
                 PortMetadata::optional(Self::PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(Self::PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
+                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
             ],
             outputs: vec![
                 PortMetadata::required(Self::PORT_RESPONSE, "Response", PortDataType::String),
