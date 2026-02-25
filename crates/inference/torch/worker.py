@@ -198,7 +198,8 @@ def unload_model():
 
 
 def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,
-             masked_prompt_json=None):
+             masked_prompt_json=None, denoising_steps=None, block_length=None,
+             **kwargs):
     """Generate a complete response (non-streaming).
 
     Routes to block diffusion for dLLM models, standard generate otherwise.
@@ -215,6 +216,7 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         return _generate_dllm_masked(
             _model, _tokenizer, _device, segments,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            denoising_steps=denoising_steps, block_length=block_length,
         )
 
     formatted = _format_prompt(prompt, system_prompt)
@@ -222,6 +224,7 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
     if _model_type == "dllm":
         return _generate_dllm(
             _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+            denoising_steps=denoising_steps, block_length=block_length,
         )
     return _generate_autoregressive(
         _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
@@ -229,7 +232,8 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
 
 
 def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,
-                     masked_prompt_json=None):
+                     masked_prompt_json=None, denoising_steps=None, block_length=None,
+                     **kwargs):
     """Generate tokens as a Python generator (for streaming).
 
     dLLM models generate block-by-block; each decoded block is yielded as a
@@ -247,6 +251,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         yield from _generate_dllm_masked_streaming(
             _model, _tokenizer, _device, segments,
             max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+            denoising_steps=denoising_steps, block_length=block_length,
         )
         return
 
@@ -255,6 +260,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
     if _model_type == "dllm":
         yield from _generate_dllm_streaming(
             _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+            denoising_steps=denoising_steps, block_length=block_length,
         )
     else:
         yield from _generate_autoregressive_streaming(

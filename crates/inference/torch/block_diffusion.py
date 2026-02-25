@@ -312,8 +312,9 @@ def _generate_dllm_masked(model, tokenizer, device, segments, **kwargs):
     max_tokens = kwargs.get("max_tokens", 512)
     temperature = kwargs.get("temperature", 0.2)
     top_p = kwargs.get("top_p", 0.9)
-    block_length = 8
-    denoising_steps = 8
+    block_length = kwargs.get("block_length", 8) or 8
+    denoising_steps = kwargs.get("denoising_steps", 8) or 8
+    denoising_steps = min(denoising_steps, block_length)
 
     # Pad to block boundary
     seq_len = input_ids.shape[1]
@@ -399,8 +400,9 @@ def _generate_dllm_masked_streaming(model, tokenizer, device, segments, **kwargs
     max_tokens = kwargs.get("max_tokens", 512)
     temperature = kwargs.get("temperature", 0.2)
     top_p = kwargs.get("top_p", 0.9)
-    block_length = 8
-    denoising_steps = 8
+    block_length = kwargs.get("block_length", 8) or 8
+    denoising_steps = kwargs.get("denoising_steps", 8) or 8
+    denoising_steps = min(denoising_steps, block_length)
     mask_placeholder = "\u00b7"
 
     # Pad to block boundary
@@ -493,7 +495,7 @@ def _generate_dllm_masked_streaming(model, tokenizer, device, segments, **kwargs
 
 
 def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
-                   temperature, top_p):
+                   temperature, top_p, denoising_steps=None, block_length=None):
     """Generate using block diffusion (full response).
 
     Args:
@@ -504,17 +506,23 @@ def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
         max_tokens: Maximum generation length.
         temperature: Sampling temperature.
         top_p: Nucleus sampling threshold.
+        denoising_steps: Number of denoising steps per block (default 8).
+        block_length: Block size in tokens (default 8).
 
     Returns:
         Decoded string of generated text.
     """
+    block_length = block_length or 8
+    denoising_steps = denoising_steps or 8
+    denoising_steps = min(denoising_steps, block_length)
+
     tokens = tokenizer(
         formatted_prompt, return_tensors="pt", padding=True, truncation=True,
     ).to(device)
 
     x, attn_mask, position_ids, past_key_values, prompt_length = (
         _setup_block_diffusion(
-            model, tokens["input_ids"], max_tokens, block_length=8,
+            model, tokens["input_ids"], max_tokens, block_length=block_length,
             mask_id=_DLLM_MASK_ID,
         )
     )
@@ -522,8 +530,8 @@ def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
     # _block_diffusion_decode with yield_blocks=False yields the final x once
     for result in _block_diffusion_decode(
         model, x, prompt_length, past_key_values,
-        attn_mask, position_ids, block_length=8,
-        denoising_steps=8, mask_id=_DLLM_MASK_ID,
+        attn_mask, position_ids, block_length=block_length,
+        denoising_steps=denoising_steps, mask_id=_DLLM_MASK_ID,
         temperature=max(temperature, 0.01), top_k=0, top_p=top_p,
         remasking_strategy="low_confidence_dynamic",
         confidence_threshold=0.85, yield_blocks=False,
@@ -535,7 +543,8 @@ def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
 
 
 def _generate_dllm_streaming(model, tokenizer, device, formatted_prompt,
-                             max_tokens, temperature, top_p):
+                             max_tokens, temperature, top_p,
+                             denoising_steps=None, block_length=None):
     """Generate using block diffusion, yielding full text after each denoising step.
 
     Each yield is the entire decoded sequence so far (replace mode), allowing the
@@ -549,25 +558,31 @@ def _generate_dllm_streaming(model, tokenizer, device, formatted_prompt,
         max_tokens: Maximum generation length.
         temperature: Sampling temperature.
         top_p: Nucleus sampling threshold.
+        denoising_steps: Number of denoising steps per block (default 8).
+        block_length: Block size in tokens (default 8).
 
     Yields:
         Dicts with {"mode": "replace", "text": ...} for each refinement step.
     """
+    block_length = block_length or 8
+    denoising_steps = denoising_steps or 8
+    denoising_steps = min(denoising_steps, block_length)
+
     tokens = tokenizer(
         formatted_prompt, return_tensors="pt", padding=True, truncation=True,
     ).to(device)
 
     x, attn_mask, position_ids, past_key_values, prompt_length = (
         _setup_block_diffusion(
-            model, tokens["input_ids"], max_tokens, block_length=8,
+            model, tokens["input_ids"], max_tokens, block_length=block_length,
             mask_id=_DLLM_MASK_ID,
         )
     )
 
     for full_text in _block_diffusion_decode_refining(
         model, x, prompt_length, past_key_values,
-        attn_mask, position_ids, block_length=8,
-        denoising_steps=8, mask_id=_DLLM_MASK_ID,
+        attn_mask, position_ids, block_length=block_length,
+        denoising_steps=denoising_steps, mask_id=_DLLM_MASK_ID,
         temperature=max(temperature, 0.01), top_k=0, top_p=top_p,
         remasking_strategy="low_confidence_dynamic",
         confidence_threshold=0.85, tokenizer=tokenizer,
