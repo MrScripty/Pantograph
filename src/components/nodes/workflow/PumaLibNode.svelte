@@ -10,6 +10,15 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
 
+  interface InferenceParamSchema {
+    key: string;
+    label: string;
+    param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
+    default: unknown;
+    description?: string;
+    constraints?: { min?: number; max?: number; allowed_values?: unknown[] };
+  }
+
   interface Props {
     id: string;
     data: {
@@ -18,6 +27,7 @@
       modelPath?: string;
       modelName?: string;
       selectionMode?: 'library' | 'manual';
+      inference_settings?: InferenceParamSchema[];
     };
     selected?: boolean;
   }
@@ -45,6 +55,17 @@
 
   onMount(async () => {
     await loadModels();
+    // Re-sync inference settings when model already selected (e.g. workflow reload)
+    if (data.modelPath && availableModels.length > 0) {
+      const match = availableModels.find((m) => String(m.value) === data.modelPath);
+      if (match) {
+        const settings = (match.metadata?.inference_settings ?? []) as InferenceParamSchema[];
+        if (settings.length > 0) {
+          syncInferencePorts(id, settings);
+          syncExpandPorts(id, settings);
+        }
+      }
+    }
   });
 
   async function loadModels() {
@@ -72,21 +93,16 @@
     const selected = availableModels.find((m) => String(m.value) === target.value);
     if (selected) {
       modelPath = String(selected.value);
+      const settings = (selected.metadata?.inference_settings ?? []) as InferenceParamSchema[];
+
       updateNodeData(id, {
         modelPath,
         modelName: selected.label,
         selectionMode: 'library',
+        inference_settings: settings,
       });
 
       // Sync inference settings to downstream expand-settings and inference nodes
-      const settings = (selected.metadata?.inference_settings ?? []) as Array<{
-        key: string;
-        label: string;
-        param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
-        default: unknown;
-        description?: string;
-        constraints?: { min?: number; max?: number; allowed_values?: unknown[] };
-      }>;
       if (settings.length > 0) {
         syncInferencePorts(id, settings);
         syncExpandPorts(id, settings);

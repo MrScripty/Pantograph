@@ -232,6 +232,7 @@ export function createWorkflowStores(
   // --- Edge actions ---
 
   function addEdgeFn(edge: Edge) {
+    let added = false;
     edges.update((e) => {
       const exists = e.some(
         (existing) =>
@@ -241,9 +242,21 @@ export function createWorkflowStores(
           existing.targetHandle === edge.targetHandle
       );
       if (exists) return e;
+      added = true;
       return [...e, edge];
     });
+    if (!added) return;
     isDirty.set(true);
+
+    // Auto-sync when connecting an inference_settings edge
+    if (edge.sourceHandle === 'inference_settings') {
+      const sourceNode = getNodeById(edge.source);
+      const settings = sourceNode?.data?.inference_settings as InferenceParamSchema[] | undefined;
+      if (settings && settings.length > 0) {
+        syncExpandPorts(edge.source, settings);
+        syncInferencePorts(edge.source, settings);
+      }
+    }
   }
 
   function removeEdgeFn(edgeId: string) {

@@ -12,6 +12,9 @@
     addNode,
     removeNode,
     syncEdgesFromBackend,
+    getNodeById,
+    syncInferencePorts,
+    syncExpandPorts,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
   import type { GraphEdge } from '../services/workflow/types';
@@ -349,6 +352,21 @@
     try {
       const updatedGraph = await workflowService.addEdge(edge);
       syncEdgesFromBackend(updatedGraph);
+
+      // Auto-sync when connecting an inference_settings edge
+      if (connection.sourceHandle === 'inference_settings') {
+        const srcNode = getNodeById(connection.source!);
+        const settings = srcNode?.data?.inference_settings as Array<{
+          key: string; label: string;
+          param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
+          default: unknown; description?: string;
+          constraints?: { min?: number; max?: number; allowed_values?: unknown[] };
+        }> | undefined;
+        if (settings && settings.length > 0) {
+          syncExpandPorts(connection.source!, settings);
+          syncInferencePorts(connection.source!, settings);
+        }
+      }
     } catch (error) {
       console.error('[WorkflowGraph] Failed to add edge:', error);
     }
