@@ -66,3 +66,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+.venv/
