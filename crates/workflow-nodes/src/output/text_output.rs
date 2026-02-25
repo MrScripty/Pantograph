@@ -4,7 +4,7 @@
 //! Stores the text in context and can optionally pass it through for chaining.
 
 use async_trait::async_trait;
-use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
+use graph_flow::{Context, NextAction, Task, TaskResult};
 use node_engine::{
     ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
     TaskMetadata,
@@ -32,6 +32,8 @@ pub struct TextOutputTask {
 impl TextOutputTask {
     /// Port ID for text input/output
     pub const PORT_TEXT: &'static str = "text";
+    /// Port ID for streaming input
+    pub const PORT_STREAM: &'static str = "stream";
 
     /// Create a new text output task
     pub fn new(task_id: impl Into<String>) -> Self {
@@ -53,11 +55,18 @@ impl TaskDescriptor for TextOutputTask {
             category: NodeCategory::Output,
             label: "Text Output".to_string(),
             description: "Displays text output from the workflow".to_string(),
-            inputs: vec![PortMetadata::required(
-                Self::PORT_TEXT,
-                "Text",
-                PortDataType::String,
-            )],
+            inputs: vec![
+                PortMetadata::optional(
+                    Self::PORT_TEXT,
+                    "Text",
+                    PortDataType::String,
+                ),
+                PortMetadata::optional(
+                    Self::PORT_STREAM,
+                    "Stream",
+                    PortDataType::Stream,
+                ),
+            ],
             outputs: vec![PortMetadata::optional(
                 Self::PORT_TEXT,
                 "Text",
@@ -77,39 +86,43 @@ impl Task for TextOutputTask {
     }
 
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
-        // Get required input: text
+        // Get optional text input
         let input_key = ContextKeys::input(&self.task_id, Self::PORT_TEXT);
-        let text: String = context.get(&input_key).await.ok_or_else(|| {
-            GraphError::TaskExecutionFailed(format!(
-                "Missing required input 'text' at key '{}'",
-                input_key
-            ))
-        })?;
+        let text: Option<String> = context.get(&input_key).await;
 
-        // Store output in context (for chaining)
-        let output_key = ContextKeys::output(&self.task_id, Self::PORT_TEXT);
-        context.set(&output_key, text.clone()).await;
+        if let Some(ref text) = text {
+            // Store output in context (for chaining)
+            let output_key = ContextKeys::output(&self.task_id, Self::PORT_TEXT);
+            context.set(&output_key, text.clone()).await;
 
-        // Store stream data for frontend display
-        // The frontend can watch for this key to display the output
-        let stream_key = ContextKeys::stream(&self.task_id, Self::PORT_TEXT);
-        context
-            .set(
-                &stream_key,
-                serde_json::json!({
-                    "type": "text",
-                    "content": &text
-                }),
-            )
-            .await;
+            // Store stream data for frontend display
+            let stream_key = ContextKeys::stream(&self.task_id, Self::PORT_TEXT);
+            context
+                .set(
+                    &stream_key,
+                    serde_json::json!({
+                        "type": "text",
+                        "content": text
+                    }),
+                )
+                .await;
 
-        log::debug!(
-            "TextOutputTask {}: outputting {} chars",
-            self.task_id,
-            text.len()
-        );
+            log::debug!(
+                "TextOutputTask {}: outputting {} chars",
+                self.task_id,
+                text.len()
+            );
+        } else {
+            log::debug!(
+                "TextOutputTask {}: no text input (stream-only mode)",
+                self.task_id,
+            );
+        }
 
-        Ok(TaskResult::new(Some(text), NextAction::Continue))
+        // Stream input is handled by the frontend event system (NodeStream events
+        // propagate through edges), so no backend processing needed for it.
+
+        Ok(TaskResult::new(text, NextAction::Continue))
     }
 }
 
@@ -154,12 +167,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_missing_text_error() {
+    async fn test_missing_text_ok() {
         let task = TextOutputTask::new("test_output");
         let context = Context::new();
 
-        // Run without setting text - should error
-        let result = task.run(context).await;
-        assert!(result.is_err());
+        // Run without setting text - should succeed (stream-only mode)
+        let result = task.run(context).await.unwrap();
+        assert!(matches!(result.next_action, NextAction::Continue));
+        assert_eq!(result.response, None);
     }
 }
