@@ -2,7 +2,11 @@
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition, PortOption, PortOptionsResult } from '../../../services/workflow/types';
-  import { updateNodeData } from '../../../stores/workflowStore';
+  import {
+    updateNodeData,
+    syncInferencePorts,
+    syncExpandPorts,
+  } from '../../../stores/workflowStore';
   import { open } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
 
@@ -73,6 +77,20 @@
         modelName: selected.label,
         selectionMode: 'library',
       });
+
+      // Sync inference settings to downstream expand-settings and inference nodes
+      const settings = (selected.metadata?.inference_settings ?? []) as Array<{
+        key: string;
+        label: string;
+        param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
+        default: unknown;
+        description?: string;
+        constraints?: { min?: number; max?: number; allowed_values?: unknown[] };
+      }>;
+      if (settings.length > 0) {
+        syncInferencePorts(id, settings);
+        syncExpandPorts(id, settings);
+      }
     }
   }
 

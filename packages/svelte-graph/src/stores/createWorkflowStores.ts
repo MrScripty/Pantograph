@@ -70,6 +70,8 @@ export interface WorkflowStores {
 
   // Actions — inference settings
   syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
+  syncExpandPorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
+  autoConnectExpandToInference: (expandNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
 
   // Actions — groups
   createGroup: (name: string, nodeIds: string[]) => Promise<NodeGroup | null>;
@@ -472,6 +474,77 @@ export function createWorkflowStores(
     }
   }
 
+  /**
+   * Sync dynamic output ports on downstream expand-settings nodes from inference schema.
+   *
+   * Called with the source node ID (puma-lib / model-provider). Finds connected
+   * expand-settings nodes via the inference_settings handle, strips old dynamic
+   * output ports, and appends new ones from the schema.
+   */
+  function syncExpandPorts(sourceNodeId: string, inferenceSettings: InferenceParamSchema[]): void {
+    const expandIds = findConnectedTargets(sourceNodeId, 'inference_settings');
+    const defs = get(nodeDefinitions);
+    const baseDef = defs.find((d) => d.node_type === 'expand-settings');
+    if (!baseDef) return;
+
+    const basePortIds = new Set(baseDef.outputs.map((p) => p.id));
+
+    const modelPorts: PortDefinition[] = inferenceSettings.map((s) => ({
+      id: s.key,
+      label: s.label,
+      data_type: paramTypeToPortDataType(s.param_type),
+      required: false,
+      multiple: false,
+    }));
+
+    for (const expandId of expandIds) {
+      const node = getNodeById(expandId);
+      if (!node?.data?.definition) continue;
+
+      const nodeDef = node.data.definition as NodeDefinition;
+      // Only operate on expand-settings nodes
+      if (nodeDef.node_type !== 'expand-settings') continue;
+
+      // Strip model-derived ports, keep static ports from base definition
+      const staticPorts = nodeDef.outputs.filter((p: PortDefinition) => basePortIds.has(p.id));
+
+      updateNodeData(expandId, {
+        definition: { ...nodeDef, outputs: [...staticPorts, ...modelPorts] },
+        inference_settings: inferenceSettings,
+      });
+
+      // Also sync inference ports on nodes downstream of this expand node,
+      // and auto-connect the expand outputs to their inputs
+      syncInferencePorts(expandId, inferenceSettings);
+      autoConnectExpandToInference(expandId, inferenceSettings);
+    }
+  }
+
+  /**
+   * Auto-create edges from expand-settings output ports to downstream inference input ports.
+   *
+   * Finds inference nodes connected via the expand node's inference_settings
+   * output and creates edges for each matching parameter port.
+   */
+  function autoConnectExpandToInference(
+    expandNodeId: string,
+    inferenceSettings: InferenceParamSchema[]
+  ): void {
+    const downstreamIds = findConnectedTargets(expandNodeId, 'inference_settings');
+
+    for (const targetId of downstreamIds) {
+      for (const param of inferenceSettings) {
+        addEdgeFn({
+          id: `${expandNodeId}-${param.key}-${targetId}-${param.key}`,
+          source: expandNodeId,
+          sourceHandle: param.key,
+          target: targetId,
+          targetHandle: param.key,
+        });
+      }
+    }
+  }
+
   // --- Group actions ---
 
   async function createGroup(name: string, nodeIds: string[]): Promise<NodeGroup | null> {
@@ -643,7 +716,7 @@ export function createWorkflowStores(
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
     // Inference settings actions
-    syncInferencePorts,
+    syncInferencePorts, syncExpandPorts, autoConnectExpandToInference,
     // Group actions
     createGroup, ungroupNodes, updateGroupPorts: updateGroupPortsFn,
     getGroupById, collapseGroup,

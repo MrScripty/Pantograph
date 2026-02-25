@@ -552,6 +552,40 @@ async fn execute_write_file(
 }
 
 // ---------------------------------------------------------------------------
+// Expand settings — decompose inference schema into individual port outputs
+// ---------------------------------------------------------------------------
+
+/// Expand inference settings schema into individual per-parameter outputs.
+///
+/// Reads the `inference_settings` JSON array, passes it through unchanged,
+/// and emits each parameter's default value on a port keyed by `param.key`.
+fn execute_expand_settings(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let settings_value = inputs
+        .get("inference_settings")
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(vec![]));
+
+    let mut outputs = HashMap::new();
+    // Pass through schema unchanged for downstream inference node
+    outputs.insert("inference_settings".to_string(), settings_value.clone());
+
+    // Emit each parameter's default as an individual output port
+    if let Some(schema) = settings_value.as_array() {
+        for param in schema {
+            if let Some(key) = param.get("key").and_then(|k| k.as_str()) {
+                if let Some(default) = param.get("default") {
+                    outputs.insert(key.to_string(), default.clone());
+                }
+            }
+        }
+    }
+
+    Ok(outputs)
+}
+
+// ---------------------------------------------------------------------------
 // Inference settings helper
 // ---------------------------------------------------------------------------
 
@@ -741,6 +775,7 @@ impl TaskExecutor for CoreTaskExecutor {
             // Processing nodes
             "validator" => execute_validator(&inputs),
             "json-filter" => execute_json_filter(&inputs),
+            "expand-settings" => execute_expand_settings(&inputs),
 
             // File I/O nodes
             "read-file" => execute_read_file(self.project_root.as_ref(), &inputs).await,
@@ -2280,5 +2315,45 @@ mod tests {
         );
         let settings = build_extra_settings(&inputs);
         assert!(!settings.contains_key("optional_param"));
+    }
+
+    #[test]
+    fn test_execute_expand_settings_empty_schema_passes_through() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([]),
+        );
+        let result = execute_expand_settings(&inputs).unwrap();
+        assert_eq!(result["inference_settings"], serde_json::json!([]));
+        // Only the passthrough output, no parameter ports
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_execute_expand_settings_emits_defaults_as_ports() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "denoising_steps", "label": "Denoising Steps", "param_type": "Integer", "default": 8},
+                {"key": "block_length", "label": "Block Length", "param_type": "Integer", "default": 16},
+            ]),
+        );
+        let result = execute_expand_settings(&inputs).unwrap();
+        // Schema passthrough + 2 parameter outputs
+        assert_eq!(result.len(), 3);
+        assert_eq!(result["denoising_steps"], 8);
+        assert_eq!(result["block_length"], 16);
+        // Schema is passed through unchanged
+        assert!(result["inference_settings"].is_array());
+    }
+
+    #[test]
+    fn test_execute_expand_settings_missing_input_returns_empty_array() {
+        let inputs = HashMap::new();
+        let result = execute_expand_settings(&inputs).unwrap();
+        assert_eq!(result["inference_settings"], serde_json::json!([]));
+        assert_eq!(result.len(), 1);
     }
 }

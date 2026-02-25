@@ -40,9 +40,9 @@ mod tests {
         let all = registry.all_metadata();
 
         #[cfg(feature = "desktop")]
-        assert_eq!(all.len(), 31, "Expected 31 built-in nodes with desktop feature");
+        assert_eq!(all.len(), 32, "Expected 32 built-in nodes with desktop feature");
         #[cfg(not(feature = "desktop"))]
-        assert_eq!(all.len(), 29, "Expected 29 built-in nodes without desktop feature");
+        assert_eq!(all.len(), 30, "Expected 30 built-in nodes without desktop feature");
 
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
@@ -59,5 +59,6 @@ mod tests {
         assert!(registry.has_node_type("kv-cache-load"));
         assert!(registry.has_node_type("kv-cache-truncate"));
         assert!(registry.has_node_type("masked-text-input"));
+        assert!(registry.has_node_type("expand-settings"));
     }
 }
