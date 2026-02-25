@@ -552,6 +552,43 @@ async fn execute_write_file(
 }
 
 // ---------------------------------------------------------------------------
+// Inference settings helper
+// ---------------------------------------------------------------------------
+
+/// Build a settings map from the `inference_settings` schema and port inputs.
+///
+/// The `inference_settings` input carries a JSON array of parameter schemas
+/// (from pumas-library). For each param in the schema, uses the connected
+/// port value if present, otherwise falls back to the schema's default.
+fn build_extra_settings(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> HashMap<String, serde_json::Value> {
+    let mut settings = HashMap::new();
+
+    let schema: Vec<serde_json::Value> = inputs
+        .get("inference_settings")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    for param in &schema {
+        if let Some(key) = param.get("key").and_then(|k| k.as_str()) {
+            let value = inputs.get(key).cloned().unwrap_or_else(|| {
+                param
+                    .get("default")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null)
+            });
+            if !value.is_null() {
+                settings.insert(key.to_string(), value);
+            }
+        }
+    }
+
+    settings
+}
+
+// ---------------------------------------------------------------------------
 // Ollama (pure HTTP, no gateway needed)
 // ---------------------------------------------------------------------------
 
@@ -593,6 +630,13 @@ async fn execute_ollama_inference(
     if let Some(max) = max_tokens {
         options.insert("num_predict".to_string(), serde_json::json!(max));
     }
+
+    // Forward model-specific inference settings into Ollama options
+    let extra_settings = build_extra_settings(inputs);
+    for (key, value) in &extra_settings {
+        options.insert(key.clone(), value.clone());
+    }
+
     if !options.is_empty() {
         request_body["options"] = serde_json::Value::Object(options);
     }
@@ -847,15 +891,26 @@ async fn execute_llamacpp_inference(
         .and_then(|m| m.as_i64())
         .unwrap_or(512);
 
+    // Read model-specific inference settings
+    let extra_settings = build_extra_settings(inputs);
+
     // Ensure gateway is ready — start if needed
     if !gw.is_ready().await {
-        let config = inference::BackendConfig {
+        let mut config = inference::BackendConfig {
             model_path: Some(PathBuf::from(&model_path)),
             device: Some("auto".to_string()),
             gpu_layers: Some(-1),
             embedding_mode: false,
             ..Default::default()
         };
+
+        // Apply model-specific settings to backend config
+        if let Some(v) = extra_settings.get("gpu_layers").and_then(|v| v.as_i64()) {
+            config.gpu_layers = Some(v as i32);
+        }
+        if let Some(v) = extra_settings.get("context_size").and_then(|v| v.as_i64()) {
+            config.context_size = Some(v as u32);
+        }
 
         log::info!(
             "LlamaCppInference: starting server with model '{}'",
@@ -1061,14 +1116,22 @@ async fn execute_llm_inference(
     messages.push(serde_json::json!({"role": "user", "content": full_prompt}));
 
     let streaming = event_sink.is_some();
+    let mut request_body = serde_json::json!({
+        "model": "gpt-4",
+        "messages": messages,
+        "stream": streaming
+    });
+
+    // Forward model-specific inference settings into the request body
+    let extra_settings = build_extra_settings(inputs);
+    for (key, value) in &extra_settings {
+        request_body[key] = value.clone();
+    }
+
     let client = reqwest::Client::new();
     let http_response = client
         .post(format!("{}/v1/chat/completions", base_url))
-        .json(&serde_json::json!({
-            "model": "gpt-4",
-            "messages": messages,
-            "stream": streaming
-        }))
+        .json(&request_body)
         .send()
         .await
         .map_err(|e| NodeEngineError::ExecutionFailed(format!("LLM request failed: {}", e)))?;
@@ -1515,6 +1578,9 @@ async fn execute_pytorch_inference(
         .map_err(|e| NodeEngineError::ExecutionFailed(e))?;
     }
 
+    // Read model-specific inference settings to forward as Python kwargs
+    let extra_settings = build_extra_settings(inputs);
+
     // Phase 2: Generate — streaming or non-streaming
     let response_text = if let Some(sink) = event_sink {
         // Streaming: iterate Python generator via mpsc channel
@@ -1524,6 +1590,7 @@ async fn execute_pytorch_inference(
         let p = prompt.clone();
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
+        let extra = extra_settings.clone();
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| {
@@ -1551,6 +1618,19 @@ async fn execute_pytorch_inference(
                 kwargs.set_item("temperature", temperature).unwrap();
                 if let Some(ref mpj_val) = mpj {
                     kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
+                }
+
+                // Forward model-specific inference settings as kwargs
+                for (key, value) in &extra {
+                    if let Some(n) = value.as_i64() {
+                        kwargs.set_item(key.as_str(), n).unwrap();
+                    } else if let Some(n) = value.as_f64() {
+                        kwargs.set_item(key.as_str(), n).unwrap();
+                    } else if let Some(s) = value.as_str() {
+                        kwargs.set_item(key.as_str(), s).unwrap();
+                    } else if let Some(b) = value.as_bool() {
+                        kwargs.set_item(key.as_str(), b).unwrap();
+                    }
                 }
 
                 let generator =
@@ -1643,6 +1723,7 @@ async fn execute_pytorch_inference(
         let p = prompt.clone();
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
+        let extra = extra_settings;
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
@@ -1662,6 +1743,19 @@ async fn execute_pytorch_inference(
                 kwargs.set_item("temperature", temperature).unwrap();
                 if let Some(ref mpj_val) = mpj {
                     kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
+                }
+
+                // Forward model-specific inference settings as kwargs
+                for (key, value) in &extra {
+                    if let Some(n) = value.as_i64() {
+                        kwargs.set_item(key.as_str(), n).unwrap();
+                    } else if let Some(n) = value.as_f64() {
+                        kwargs.set_item(key.as_str(), n).unwrap();
+                    } else if let Some(s) = value.as_str() {
+                        kwargs.set_item(key.as_str(), s).unwrap();
+                    } else if let Some(b) = value.as_bool() {
+                        kwargs.set_item(key.as_str(), b).unwrap();
+                    }
                 }
 
                 let result = worker
@@ -2136,5 +2230,55 @@ mod tests {
         assert_eq!(result["all_success"], true);
         let results = result["results"].as_array().unwrap();
         assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_build_extra_settings_empty() {
+        let inputs = HashMap::new();
+        let settings = build_extra_settings(&inputs);
+        assert!(settings.is_empty());
+    }
+
+    #[test]
+    fn test_build_extra_settings_uses_defaults() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "denoising_steps", "default": 8},
+                {"key": "block_length", "default": 8},
+            ]),
+        );
+        let settings = build_extra_settings(&inputs);
+        assert_eq!(settings["denoising_steps"], 8);
+        assert_eq!(settings["block_length"], 8);
+    }
+
+    #[test]
+    fn test_build_extra_settings_port_overrides_default() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "denoising_steps", "default": 8},
+            ]),
+        );
+        // User connected a value to the denoising_steps port
+        inputs.insert("denoising_steps".to_string(), serde_json::json!(4));
+        let settings = build_extra_settings(&inputs);
+        assert_eq!(settings["denoising_steps"], 4);
+    }
+
+    #[test]
+    fn test_build_extra_settings_skips_null() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "optional_param"},
+            ]),
+        );
+        let settings = build_extra_settings(&inputs);
+        assert!(!settings.contains_key("optional_param"));
     }
 }
