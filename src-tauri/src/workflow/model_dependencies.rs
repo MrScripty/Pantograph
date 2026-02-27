@@ -344,10 +344,32 @@ impl TauriModelDependencyResolver {
             backend_key: binding.backend_key.clone(),
             platform_selector: binding.platform_selector.clone(),
             env_id: binding.env_id.clone(),
-            pin_summary: None,
-            required_pins: Vec::new(),
-            missing_pins: Vec::new(),
+            pin_summary: Some(Self::map_pin_summary(&binding.pin_summary)),
+            required_pins: Self::map_required_pins(&binding.required_pins),
+            missing_pins: binding.missing_pins.clone(),
         }
+    }
+
+    fn map_pin_summary(
+        summary: &pumas_library::model_library::ModelDependencyPinSummary,
+    ) -> ModelDependencyPinSummary {
+        ModelDependencyPinSummary {
+            pinned: summary.pinned,
+            required_count: summary.required_count,
+            pinned_count: summary.pinned_count,
+            missing_count: summary.missing_count,
+        }
+    }
+
+    fn map_required_pins(
+        pins: &[pumas_library::model_library::ModelDependencyRequiredPin],
+    ) -> Vec<ModelDependencyRequiredPin> {
+        pins.iter()
+            .map(|pin| ModelDependencyRequiredPin {
+                name: pin.name.clone(),
+                reasons: pin.reasons.clone(),
+            })
+            .collect()
     }
 
     fn map_binding_status(
@@ -377,14 +399,14 @@ impl TauriModelDependencyResolver {
             binding_id: binding.binding_id.clone(),
             env_id: binding.env_id.clone(),
             state,
-            code: None,
+            code: binding.error_code.clone(),
             missing_components,
             installed_components: Vec::new(),
             failed_components,
             message: binding.message.clone(),
-            pin_summary: None,
-            required_pins: Vec::new(),
-            missing_pins: Vec::new(),
+            pin_summary: Some(Self::map_pin_summary(&binding.pin_summary)),
+            required_pins: Self::map_required_pins(&binding.required_pins),
+            missing_pins: binding.missing_pins.clone(),
         }
     }
 
@@ -659,7 +681,7 @@ impl TauriModelDependencyResolver {
             bindings: mapped_bindings,
             selected_binding_ids,
             required_binding_ids,
-            missing_pins: Vec::new(),
+            missing_pins: raw_plan.missing_pins,
         })
     }
 
@@ -742,7 +764,7 @@ impl TauriModelDependencyResolver {
             )),
             bindings: mapped_bindings,
             checked_at: Some(Utc::now().to_rfc3339()),
-            missing_pins: Vec::new(),
+            missing_pins: result.missing_pins,
         };
 
         let mut cache = self.status_cache.write().await;
@@ -866,7 +888,7 @@ impl TauriModelDependencyResolver {
             )),
             bindings: mapped_bindings.clone(),
             installed_at: Some(Utc::now().to_rfc3339()),
-            missing_pins: Vec::new(),
+            missing_pins: result.missing_pins.clone(),
         };
 
         let status_after_install = ModelDependencyStatus {
@@ -877,7 +899,7 @@ impl TauriModelDependencyResolver {
             plan_id: install.plan_id.clone(),
             bindings: mapped_bindings,
             checked_at: Some(Utc::now().to_rfc3339()),
-            missing_pins: Vec::new(),
+            missing_pins: result.missing_pins,
         };
         let mut cache = self.status_cache.write().await;
         cache.insert(Self::cache_key(&request), status_after_install);
@@ -1013,6 +1035,67 @@ mod tests {
         assert!(!TauriModelDependencyResolver::is_required_binding_kind(
             "optional"
         ));
+    }
+
+    fn sample_pumas_binding() -> pumas_library::model_library::ModelDependencyBindingPlan {
+        pumas_library::model_library::ModelDependencyBindingPlan {
+            binding_id: "binding-a".to_string(),
+            model_id: "model-a".to_string(),
+            profile_id: "profile-a".to_string(),
+            profile_version: 2,
+            profile_hash: Some("hash-a".to_string()),
+            environment_kind: "python".to_string(),
+            binding_kind: "required".to_string(),
+            backend_key: Some("pytorch".to_string()),
+            platform_selector: Some("linux-x86_64".to_string()),
+            priority: 0,
+            env_id: "env-a".to_string(),
+            state: pumas_library::model_library::DependencyState::ManualInterventionRequired,
+            error_code: Some("unpinned_dependency".to_string()),
+            message: Some("missing torch pin".to_string()),
+            pin_summary: pumas_library::model_library::ModelDependencyPinSummary {
+                pinned: false,
+                required_count: 2,
+                pinned_count: 1,
+                missing_count: 1,
+            },
+            required_pins: vec![
+                pumas_library::model_library::ModelDependencyRequiredPin {
+                    name: "torch".to_string(),
+                    reasons: vec!["backend_required".to_string()],
+                },
+                pumas_library::model_library::ModelDependencyRequiredPin {
+                    name: "torchvision".to_string(),
+                    reasons: vec!["modality_required".to_string()],
+                },
+            ],
+            missing_pins: vec!["torch".to_string()],
+        }
+    }
+
+    #[test]
+    fn maps_binding_pin_fields_from_pumas_payload() {
+        let mapped = TauriModelDependencyResolver::map_binding(&sample_pumas_binding());
+        let summary = mapped.pin_summary.expect("pin summary should be mapped");
+        assert!(!summary.pinned);
+        assert_eq!(summary.required_count, 2);
+        assert_eq!(mapped.required_pins.len(), 2);
+        assert_eq!(mapped.required_pins[0].name, "torch");
+        assert_eq!(mapped.required_pins[1].name, "torchvision");
+        assert_eq!(mapped.missing_pins, vec!["torch".to_string()]);
+    }
+
+    #[test]
+    fn maps_binding_status_code_and_pin_fields_from_pumas_payload() {
+        let mapped = TauriModelDependencyResolver::map_binding_status(&sample_pumas_binding());
+        assert_eq!(mapped.state, DependencyState::ManualInterventionRequired);
+        assert_eq!(mapped.code.as_deref(), Some("unpinned_dependency"));
+        assert_eq!(
+            mapped.pin_summary.as_ref().map(|s| s.missing_count),
+            Some(1)
+        );
+        assert_eq!(mapped.required_pins.len(), 2);
+        assert_eq!(mapped.missing_pins, vec!["torch".to_string()]);
     }
 
     #[test]
