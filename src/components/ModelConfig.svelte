@@ -94,7 +94,7 @@
 
 <div class="space-y-3">
   <!-- Header with toggle -->
-  <button
+  <button type="button"
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
     onclick={() => toggleSection('model')}
   >
@@ -136,7 +136,7 @@
               class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
               title={vlmModelPath}
             />
-            <button
+            <button type="button"
               onclick={pickVlmModel}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
@@ -160,7 +160,7 @@
               class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
               title={vlmMmprojPath}
             />
-            <button
+            <button type="button"
               onclick={pickMmproj}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
@@ -211,7 +211,7 @@
               class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
               title={embeddingModelPath}
             />
-            <button
+            <button type="button"
               onclick={pickEmbeddingModel}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
@@ -235,7 +235,7 @@
               class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
               title={candleEmbeddingModelPath}
             />
-            <button
+            <button type="button"
               onclick={pickCandleEmbeddingModel}
               class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
             >
@@ -253,7 +253,7 @@
 
       <!-- Save Button -->
       {#if hasChanges}
-        <button
+        <button type="button"
           onclick={saveConfig}
           disabled={isSaving}
           class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"

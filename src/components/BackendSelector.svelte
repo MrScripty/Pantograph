@@ -207,10 +207,10 @@
     <p class="text-sm text-neutral-500 mt-2">Size: {DOWNLOAD_SIZES[confirmDownload.name] || 'Unknown'}</p>
   {/if}
   {#snippet footer()}
-    <button onclick={cancelDownload} class="px-4 py-2 text-sm text-neutral-400 hover:text-white">
+    <button type="button" onclick={cancelDownload} class="px-4 py-2 text-sm text-neutral-400 hover:text-white">
       Cancel
     </button>
-    <button
+    <button type="button"
       onclick={startDownload}
       class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded"
     >
@@ -239,7 +239,7 @@
         <div class="flex flex-wrap gap-2">
           {#each backends as backend}
             <div class="flex flex-col">
-              <button
+              <button type="button"
                 class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.name ===
                   currentBackend && serverRunning
                   ? 'bg-blue-600 text-white'
@@ -381,7 +381,7 @@
       {/if}
 
       <!-- Refresh button -->
-      <button
+      <button type="button"
         onclick={loadBackends}
         disabled={isLoading}
         class="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors disabled:opacity-50"

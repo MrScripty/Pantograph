@@ -75,7 +75,7 @@
   <div class="flex-1 overflow-y-auto">
     {#each [...filteredByCategory()] as [category, definitions]}
       <div class="category">
-        <button
+        <button type="button"
           class="w-full px-3 py-2 bg-neutral-800/50 border-b border-neutral-700 flex items-center gap-2 text-left hover:bg-neutral-800 transition-colors"
           onclick={() => toggleCategory(category)}
         >

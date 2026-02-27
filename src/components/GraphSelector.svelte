@@ -41,7 +41,7 @@
 </script>
 
 <div class="graph-selector relative" bind:this={dropdownRef}>
-  <button
+  <button type="button"
     class="selector-button flex items-center gap-2 px-3 py-1.5 text-sm bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 rounded text-neutral-200 transition-colors"
     onclick={handleToggle}
     title="Switch graph"
@@ -78,7 +78,7 @@
           <div class="px-3 py-2 text-sm text-neutral-500 italic">No saved workflows</div>
         {:else}
           {#each $availableWorkflows as workflow}
-            <button
+            <button type="button"
               class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
               class:bg-neutral-700={$currentGraphId === workflow.id && $currentGraphType === 'workflow'}
               onclick={() => handleSelect(workflow.id ?? workflow.name, 'workflow')}
@@ -104,7 +104,7 @@
           System
         </div>
         {#each SYSTEM_GRAPHS as graph}
-          <button
+          <button type="button"
             class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
             class:bg-neutral-700={$currentGraphId === graph.id && $currentGraphType === 'system'}
             onclick={() => handleSelect(graph.id, 'system')}

@@ -143,7 +143,7 @@
 
             <!-- Commit nodes (reversed so oldest is on left, newest on right) -->
             {#each [...commits].reverse() as commit, index (commit.hash)}
-              <button
+              <button type="button"
                 class="relative z-10 w-3 h-3 rounded-full transition-all duration-150 hover:scale-150 focus:outline-none focus:ring-2 focus:ring-blue-400/50 flex-shrink-0
                   {commit.is_current ? 'bg-blue-400 shadow-sm shadow-blue-400/50' : 'bg-neutral-400'}
                   {hoveredCommit === commit.hash ? 'scale-125' : ''}"

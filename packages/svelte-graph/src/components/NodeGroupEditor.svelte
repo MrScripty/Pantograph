@@ -100,7 +100,7 @@
 <div class="group-editor-container">
   <!-- Header bar -->
   <div class="editor-header">
-    <button class="back-btn" onclick={handleBack}>
+    <button type="button" class="back-btn" onclick={handleBack}>
       <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
       </svg>
@@ -116,7 +116,7 @@
 
     <div class="editor-actions">
       <span class="node-count">{nodes.length} nodes</span>
-      <button class="save-btn" onclick={handleSave}>Save & Close</button>
+      <button type="button" class="save-btn" onclick={handleSave}>Save & Close</button>
     </div>
   </div>
 

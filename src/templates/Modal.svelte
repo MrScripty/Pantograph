@@ -60,7 +60,7 @@
       {#if title}
         <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-700">
           <h2 class="text-lg font-semibold text-neutral-100">{title}</h2>
-          <button
+          <button type="button"
             onclick={onclose}
             class="p-1 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 transition-colors"
             aria-label="Close"

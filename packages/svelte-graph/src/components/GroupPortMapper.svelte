@@ -119,7 +119,7 @@
         </svg>
         <span class="mapper-title">Configure Group Ports</span>
       </div>
-      <button class="close-btn" onclick={onClose}>
+      <button type="button" class="close-btn" onclick={onClose}>
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -142,7 +142,7 @@
                 oninput={(e) => updateInputLabel(i, (e.target as HTMLInputElement).value)}
               />
               <span class="port-node-id">{input.internal_node_id}</span>
-              <button class="remove-btn" onclick={() => removeInput(i)}>
+              <button type="button" class="remove-btn" onclick={() => removeInput(i)}>
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -155,7 +155,7 @@
               <span class="add-label">Add input:</span>
               <div class="add-port-list">
                 {#each availableInputPorts() as { nodeId, nodeName, port }}
-                  <button class="add-port-btn" onclick={() => addInput(nodeId, port)}>
+                  <button type="button" class="add-port-btn" onclick={() => addInput(nodeId, port)}>
                     {nodeName} / {port.label}
                   </button>
                 {/each}
@@ -179,7 +179,7 @@
                 oninput={(e) => updateOutputLabel(i, (e.target as HTMLInputElement).value)}
               />
               <span class="port-node-id">{output.internal_node_id}</span>
-              <button class="remove-btn" onclick={() => removeOutput(i)}>
+              <button type="button" class="remove-btn" onclick={() => removeOutput(i)}>
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -192,7 +192,7 @@
               <span class="add-label">Add output:</span>
               <div class="add-port-list">
                 {#each availableOutputPorts() as { nodeId, nodeName, port }}
-                  <button class="add-port-btn" onclick={() => addOutput(nodeId, port)}>
+                  <button type="button" class="add-port-btn" onclick={() => addOutput(nodeId, port)}>
                     {nodeName} / {port.label}
                   </button>
                 {/each}
@@ -205,8 +205,8 @@
 
     <!-- Footer -->
     <div class="mapper-footer">
-      <button class="cancel-btn" onclick={onClose}>Cancel</button>
-      <button class="save-btn" onclick={handleSave}>Save Changes</button>
+      <button type="button" class="cancel-btn" onclick={onClose}>Cancel</button>
+      <button type="button" class="save-btn" onclick={handleSave}>Save Changes</button>
     </div>
   </div>
 </div>

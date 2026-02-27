@@ -66,7 +66,7 @@
         <div class="space-y-1">
           <audio controls src={audioSrc} class="w-full h-8"></audio>
           <div class="flex justify-end">
-            <button
+            <button type="button"
               class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
               onclick={downloadAudio}
             >

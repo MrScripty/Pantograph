@@ -172,7 +172,7 @@
 
 <div class="space-y-3">
   <!-- Header with toggle -->
-  <button
+  <button type="button"
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
     onclick={() => toggleSection('server')}
   >
@@ -197,7 +197,7 @@
     <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
       <!-- Connection Type Tabs -->
       <div class="flex gap-1 p-1 bg-neutral-900 rounded">
-        <button
+        <button type="button"
           class="flex-1 px-2 py-1 text-xs rounded transition-colors {connectionType === 'external'
             ? 'bg-neutral-700 text-neutral-200'
             : 'text-neutral-500 hover:text-neutral-400'}"
@@ -205,7 +205,7 @@
         >
           External
         </button>
-        <button
+        <button type="button"
           class="flex-1 px-2 py-1 text-xs rounded transition-colors {connectionType === 'sidecar'
             ? 'bg-neutral-700 text-neutral-200'
             : 'text-neutral-500 hover:text-neutral-400'}"
@@ -237,14 +237,14 @@
           />
           <div class="flex gap-2">
             {#if llmState.status.ready && llmState.status.mode === 'external'}
-              <button
+              <button type="button"
                 onclick={disconnectExternal}
                 class="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-xs transition-colors"
               >
                 Disconnect
               </button>
             {:else}
-              <button
+              <button type="button"
                 onclick={connectExternal}
                 disabled={isConnecting || !externalUrl.trim()}
                 class="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
@@ -269,7 +269,7 @@
         </div>
 
         <!-- Health Status -->
-        <button
+        <button type="button"
           class="w-full flex items-center justify-between text-xs py-1 hover:bg-neutral-800/50 rounded px-1 transition-colors"
           onclick={() => (showHealthDetails = !showHealthDetails)}
         >
@@ -307,14 +307,14 @@
 
             <!-- Health actions -->
             <div class="flex gap-2">
-              <button
+              <button type="button"
                 onclick={checkHealthNow}
                 class="flex-1 px-2 py-1 text-[10px] bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
               >
                 Check Now
               </button>
               {#if healthState.lastResult?.healthy === false}
-                <button
+                <button type="button"
                   onclick={triggerRecovery}
                   disabled={healthState.isRecovering}
                   class="flex-1 px-2 py-1 text-[10px] bg-yellow-700 hover:bg-yellow-600 disabled:opacity-50 rounded transition-colors"

@@ -191,7 +191,7 @@
       disabled={isLoading || $linkModeActive}
       onkeydown={handleKeyDown}
     />
-    <button
+    <button type="button"
       onclick={handleGo}
       disabled={isLoading || !inputValue.trim()}
       class="px-6 py-3 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed border-l border-neutral-700 transition-colors text-sm font-bold tracking-wider"

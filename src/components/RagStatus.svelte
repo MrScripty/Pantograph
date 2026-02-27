@@ -162,7 +162,7 @@
 
 <div class="space-y-3">
   <!-- Header with toggle -->
-  <button
+  <button type="button"
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
     onclick={() => toggleSection('rag')}
   >
@@ -202,7 +202,7 @@
           {/if}
         </div>
         {#if !ragState.status.docs_available && !isDownloadingDocs}
-          <button
+          <button type="button"
             onclick={downloadDocs}
             class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-colors"
           >
@@ -268,7 +268,7 @@
       <div class="space-y-2">
         {#if configState.config.models.embedding_model_path}
           <!-- Primary: Index with automatic mode switching -->
-          <button
+          <button type="button"
             onclick={indexWithSwitch}
             disabled={!canIndexWithSwitch}
             class="w-full px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
@@ -284,7 +284,7 @@
         {/if}
 
         <!-- Toggle for external embedding server option -->
-        <button
+        <button type="button"
           class="w-full text-left text-[10px] text-neutral-600 hover:text-neutral-500 transition-colors"
           onclick={() => (useExternalEmbedding = !useExternalEmbedding)}
         >
@@ -300,7 +300,7 @@
                 placeholder="http://127.0.0.1:8081"
                 class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
               />
-              <button
+              <button type="button"
                 onclick={testExternalServer}
                 disabled={isTestingServer}
                 class="px-2 py-1 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-500 rounded text-xs transition-colors"
@@ -314,7 +314,7 @@
                 <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                 Connected
               </div>
-              <button
+              <button type="button"
                 onclick={indexExternal}
                 disabled={!canIndexExternal}
                 class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-500 rounded text-xs transition-colors"
@@ -328,7 +328,7 @@
 
       <!-- Clear cache -->
       {#if ragState.status.vectors_indexed}
-        <button
+        <button type="button"
           onclick={clearCache}
           class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
         >
@@ -338,7 +338,7 @@
 
       <!-- Chunk Preview button -->
       {#if ragState.status.docs_available}
-        <button
+        <button type="button"
           onclick={openChunkPreview}
           class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors flex items-center justify-center gap-2"
         >

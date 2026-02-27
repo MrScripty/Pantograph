@@ -45,7 +45,7 @@
 >
   <!-- Back button -->
   {#if $canNavigateBack}
-    <button
+    <button type="button"
       class="back-button"
       onclick={() => navigateBack()}
       aria-label="Navigate back"
@@ -88,7 +88,7 @@
           </span>
         {/if}
 
-        <button
+        <button type="button"
           class="breadcrumb-button"
           class:current={index === $breadcrumb.length - 1}
           onclick={() => handleBreadcrumbClick(item, index)}

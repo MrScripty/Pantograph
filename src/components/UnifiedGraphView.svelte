@@ -207,7 +207,7 @@
               {#if currentGroup.description}
                 <p class="group-description">{currentGroup.description}</p>
               {/if}
-              <button class="exit-group-btn" onclick={() => tabOutOfGroup()}>
+              <button type="button" class="exit-group-btn" onclick={() => tabOutOfGroup()}>
                 Exit Group
               </button>
             </div>
@@ -267,7 +267,7 @@
 
   <!-- Zoom controls -->
   <div class="zoom-controls">
-    <button
+    <button type="button"
       class="zoom-button"
       onclick={() => zoomToOrchestration()}
       disabled={$viewLevel === 'orchestration' || $isAnimating}
@@ -285,7 +285,7 @@
         <path d="M21 21l-4.35-4.35M8 11h6" />
       </svg>
     </button>
-    <button
+    <button type="button"
       class="zoom-button"
       onclick={() => navigateBack()}
       disabled={$viewLevel === 'orchestration' || $isAnimating}

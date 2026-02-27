@@ -133,7 +133,7 @@
     <div class="toolbar-divider"></div>
 
     <div class="toolbar-actions">
-      <button
+      <button type="button"
         class="toolbar-btn"
         onclick={handleNew}
         disabled={$isReadOnly}
@@ -141,7 +141,7 @@
       >
         [+] New
       </button>
-      <button
+      <button type="button"
         class="toolbar-btn"
         onclick={handleSave}
         disabled={$isReadOnly}
@@ -149,7 +149,7 @@
       >
         [S] Save
       </button>
-      <button
+      <button type="button"
         class="toolbar-btn toolbar-btn-danger"
         onclick={handleClear}
         disabled={$isReadOnly}
@@ -170,7 +170,7 @@
   </div>
 
   <div class="toolbar-right">
-    <button
+    <button type="button"
       class="run-btn"
       data-executing={$isExecuting || undefined}
       onclick={handleRun}

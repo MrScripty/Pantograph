@@ -124,7 +124,7 @@
                 bind:value={newDbName}
                 onkeydown={handleKeydown}
               />
-              <button
+              <button type="button"
                 class="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
                 onclick={createDatabase}
               >
@@ -132,7 +132,7 @@
               </button>
             </div>
           {:else}
-            <button
+            <button type="button"
               class="w-full px-2 py-1 bg-neutral-700 text-neutral-300 text-xs rounded hover:bg-neutral-600 flex items-center justify-center gap-1"
               onclick={() => showCreateDialog = true}
             >

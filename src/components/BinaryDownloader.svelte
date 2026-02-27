@@ -111,7 +111,7 @@
           </ul>
         </details>
       {/if}
-      <button
+      <button type="button"
         onclick={download}
         class="w-full py-2 px-3 bg-amber-600 hover:bg-amber-500 text-white rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
       >

@@ -68,6 +68,8 @@
       renderer.setSize(width, height);
       canvasContainer.innerHTML = '';
       canvasContainer.appendChild(renderer.domElement);
+      renderer.domElement.addEventListener('pointerdown', (event) => event.stopPropagation());
+      renderer.domElement.addEventListener('wheel', (event) => event.stopPropagation());
 
       const controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
@@ -143,13 +145,10 @@
     {#snippet children()}
       {#if hasData}
         <div class="space-y-1">
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             bind:this={canvasContainer}
             class="w-full rounded overflow-hidden nodrag nowheel nopan"
             style="height: 160px; background: #1a1a1a;"
-            onpointerdown={(e) => e.stopPropagation()}
-            onwheel={(e) => e.stopPropagation()}
           ></div>
           <div class="text-[10px] text-neutral-500 text-right">
             {pointCount.toLocaleString()} points

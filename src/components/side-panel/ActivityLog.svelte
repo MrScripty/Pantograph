@@ -106,7 +106,7 @@
     <div transition:slide>
       {#if item.type === 'system_prompt'}
         <!-- System Prompt Card (collapsible) -->
-        <button
+        <button type="button"
           onclick={() => toggleExpanded(item.id)}
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
@@ -134,7 +134,7 @@
 
       {:else if item.type === 'tool_call'}
         <!-- Tool Call Card with status -->
-        <button
+        <button type="button"
           onclick={() => toggleExpanded(item.id)}
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
@@ -173,7 +173,7 @@
 
       {:else if item.type === 'tool_call_streaming'}
         <!-- Streaming Tool Call Card - shows tool call as it's being generated -->
-        <button
+        <button type="button"
           onclick={() => toggleExpanded(item.id)}
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
@@ -203,7 +203,7 @@
 
       {:else if item.type === 'tool_result'}
         <!-- Tool Result Card - Legacy, kept for backwards compatibility but results now merge into tool_call -->
-        <button
+        <button type="button"
           onclick={() => toggleExpanded(item.id)}
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
@@ -248,7 +248,7 @@
 
       {:else if item.type === 'reasoning'}
         <!-- Reasoning (collapsible) -->
-        <button
+        <button type="button"
           onclick={() => toggleExpanded(item.id)}
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}

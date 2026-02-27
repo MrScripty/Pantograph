@@ -106,7 +106,7 @@
 
 <div class="space-y-3">
   <!-- Header with toggle -->
-  <button
+  <button type="button"
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
     onclick={() => toggleSection('sandbox')}
   >
@@ -207,7 +207,7 @@
 
       <!-- Save Button -->
       {#if hasChanges}
-        <button
+        <button type="button"
           onclick={saveConfig}
           disabled={isSaving}
           class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"

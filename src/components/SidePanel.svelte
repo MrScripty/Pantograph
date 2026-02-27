@@ -106,7 +106,7 @@
 
 <div class="fixed right-0 top-0 h-full z-50 flex">
   <!-- Handle - always visible -->
-  <button
+  <button type="button"
     onclick={toggleSidePanel}
     class="h-full w-5 bg-neutral-800/90 backdrop-blur-md border-l border-neutral-700 flex items-center justify-center hover:bg-neutral-700/90 transition-colors cursor-pointer"
     aria-label={$sidePanelOpen ? 'Close AI panel' : 'Open AI panel'}
@@ -133,13 +133,13 @@
 
       <!-- Tab Bar -->
       <div class="flex border-b border-neutral-700">
-        <button
+        <button type="button"
           onclick={() => setActiveTab('settings')}
           class="flex-1 px-4 py-2 text-xs font-medium uppercase tracking-wider transition-colors {$activeSidePanelTab === 'settings' ? 'text-neutral-100 bg-neutral-800 border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'}"
         >
           Settings
         </button>
-        <button
+        <button type="button"
           onclick={() => setActiveTab('history')}
           class="flex-1 px-4 py-2 text-xs font-medium uppercase tracking-wider transition-colors {$activeSidePanelTab === 'history' ? 'text-neutral-100 bg-neutral-800 border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'}"
         >

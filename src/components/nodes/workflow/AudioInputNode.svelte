@@ -52,7 +52,7 @@
 
     {#snippet children()}
       <div class="space-y-2">
-        <button
+        <button type="button"
           class="w-full text-xs px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-300 border border-neutral-600 cursor-pointer"
           onclick={pickFile}
         >

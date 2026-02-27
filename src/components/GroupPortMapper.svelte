@@ -144,7 +144,7 @@
         </svg>
         <span class="text-lg font-medium text-neutral-200">Configure Group Ports</span>
       </div>
-      <button
+      <button type="button"
         class="text-neutral-400 hover:text-neutral-200 transition-colors"
         onclick={onClose}
       >
@@ -170,7 +170,7 @@
                 oninput={(e) => updateInputLabel(i, (e.target as HTMLInputElement).value)}
               />
               <span class="text-xs text-neutral-500">{input.internal_node_id}</span>
-              <button
+              <button type="button"
                 class="text-neutral-400 hover:text-red-400 transition-colors"
                 onclick={() => removeInput(i)}
               >
@@ -186,7 +186,7 @@
               <span class="text-xs text-neutral-400">Add input:</span>
               <div class="flex flex-wrap gap-1 mt-1">
                 {#each availableInputPorts() as { nodeId, nodeName, port }}
-                  <button
+                  <button type="button"
                     class="text-xs px-2 py-1 bg-neutral-700 hover:bg-purple-600/50 rounded text-neutral-300 transition-colors"
                     onclick={() => addInput(nodeId, port)}
                   >
@@ -213,7 +213,7 @@
                 oninput={(e) => updateOutputLabel(i, (e.target as HTMLInputElement).value)}
               />
               <span class="text-xs text-neutral-500">{output.internal_node_id}</span>
-              <button
+              <button type="button"
                 class="text-neutral-400 hover:text-red-400 transition-colors"
                 onclick={() => removeOutput(i)}
               >
@@ -229,7 +229,7 @@
               <span class="text-xs text-neutral-400">Add output:</span>
               <div class="flex flex-wrap gap-1 mt-1">
                 {#each availableOutputPorts() as { nodeId, nodeName, port }}
-                  <button
+                  <button type="button"
                     class="text-xs px-2 py-1 bg-neutral-700 hover:bg-purple-600/50 rounded text-neutral-300 transition-colors"
                     onclick={() => addOutput(nodeId, port)}
                   >
@@ -245,13 +245,13 @@
 
     <!-- Footer -->
     <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-neutral-700">
-      <button
+      <button type="button"
         class="px-4 py-2 text-sm text-neutral-300 hover:text-neutral-100 transition-colors"
         onclick={onClose}
       >
         Cancel
       </button>
-      <button
+      <button type="button"
         class="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors"
         onclick={handleSave}
       >

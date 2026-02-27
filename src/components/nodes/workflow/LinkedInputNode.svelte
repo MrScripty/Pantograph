@@ -95,7 +95,7 @@
       <div class="linked-input-content">
         {#if status === 'unlinked'}
           <!-- Unlinked state -->
-          <button
+          <button type="button"
             class="link-button w-full px-3 py-2 bg-neutral-700 hover:bg-neutral-600 rounded text-sm text-neutral-300 flex items-center justify-center gap-2 transition-colors"
             onclick={handleLink}
             disabled={$linkModeActive}
@@ -123,13 +123,13 @@
               {truncateValue(linkedValue) || '(empty)'}
             </div>
             <div class="flex gap-1">
-              <button
+              <button type="button"
                 class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-xs text-neutral-300 transition-colors"
                 onclick={handleUnlink}
               >
                 Unlink
               </button>
-              <button
+              <button type="button"
                 class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-xs text-neutral-300 transition-colors"
                 onclick={handleRelink}
                 disabled={$linkModeActive}
@@ -156,14 +156,14 @@
               Previously: {elementLabel}
             </div>
             <div class="flex gap-1">
-              <button
+              <button type="button"
                 class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-xs text-neutral-300 transition-colors"
                 onclick={handleRelink}
                 disabled={$linkModeActive}
               >
                 Re-link
               </button>
-              <button
+              <button type="button"
                 class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-red-900/50 rounded text-xs text-neutral-300 transition-colors"
                 onclick={handleClear}
               >

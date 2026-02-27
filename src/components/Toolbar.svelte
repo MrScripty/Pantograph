@@ -117,7 +117,7 @@
   class="fixed bottom-8 left-1/2 flex items-center gap-6 px-6 py-3 bg-neutral-900/80 backdrop-blur-md border border-neutral-700 rounded-full z-50 transition-transform duration-300 ease-out"
   style="transform: translateX(calc(-50% - {$panelWidth / 2}px));"
 >
-  <button
+  <button type="button"
     class="p-2 rounded-lg transition-colors {state.currentStroke === null ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400'}"
     title="Pen Tool"
   >
@@ -128,7 +128,7 @@
 
   <div class="flex gap-3">
     {#each COLORS as color}
-      <button
+      <button type="button"
         onclick={() => engine.setColor(color)}
         class="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 {state.currentColor === color ? 'border-white scale-125' : 'border-transparent'}"
         style="background-color: {color};"
@@ -139,7 +139,7 @@
 
   <div class="w-[1px] h-6 bg-neutral-700"></div>
 
-  <button
+  <button type="button"
     onclick={() => engine.undo()}
     class="p-2 text-neutral-400 hover:text-white transition-colors"
     title="Undo Drawing (Ctrl+Z)"
@@ -147,7 +147,7 @@
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
   </button>
 
-  <button
+  <button type="button"
     onclick={handleClear}
     class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
     title="Clear Canvas & History"
@@ -159,7 +159,7 @@
 
   <!-- Component Undo/Redo (git versioning) -->
   <div class="flex items-center gap-1">
-    <button
+    <button type="button"
       onclick={handleComponentUndo}
       class="p-2 text-neutral-400 hover:text-white transition-colors"
       title="Undo Component Change (Alt+Ctrl+Z)"
@@ -167,7 +167,7 @@
       <!-- Undo2 icon -->
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
     </button>
-    <button
+    <button type="button"
       onclick={handleComponentRedo}
       class="p-2 text-neutral-400 hover:text-white transition-colors"
       title="Redo Component Change (Ctrl+Shift+Z)"
@@ -180,7 +180,7 @@
   <div class="w-[1px] h-6 bg-neutral-700"></div>
 
   <!-- Draw/Interact Mode Toggle -->
-  <button
+  <button type="button"
     onclick={toggleInteractionMode}
     class="relative flex items-center gap-1 p-1 bg-neutral-800 rounded-full"
     title="Toggle Draw/Interact Mode (Tab)"

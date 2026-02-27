@@ -66,20 +66,20 @@
     {#snippet children()}
       {#if imageSrc}
         <div class="space-y-1">
-          <button
+          <button type="button"
             class="w-full cursor-pointer border-0 bg-transparent p-0"
             onclick={() => (showModal = true)}
           >
             <img src={imageSrc} alt="Output" class="max-h-40 w-full object-contain rounded" />
           </button>
           <div class="flex justify-end gap-1">
-            <button
+            <button type="button"
               class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
               onclick={downloadImage}
             >
               Download
             </button>
-            <button
+            <button type="button"
               class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
               onclick={() => (showModal = true)}
             >
@@ -97,7 +97,7 @@
 </div>
 
 {#if showModal && imageSrc}
-  <button
+  <button type="button"
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 border-0 cursor-default p-4"
     onclick={() => (showModal = false)}
     onkeydown={(e) => e.key === 'Escape' && (showModal = false)}

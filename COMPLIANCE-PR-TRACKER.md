@@ -1,6 +1,6 @@
 # Compliance Remediation Tracker
 
-Last updated: 2026-02-27 (PR-3 implementation pass 1)
+Last updated: 2026-02-27 (PR-4 implementation pass 1)
 
 ## PR-1 Security Boundary Hardening
 
@@ -82,10 +82,27 @@ Status: Completed
 
 ## PR-4 Accessibility Baseline
 
-Status: Not started
+Status: Completed
 
-- [ ] Remove high-risk `svelte-ignore a11y*` suppressions.
-- [ ] Fix semantic interactive elements and button `type`.
+- [x] Remove high-risk `svelte-ignore a11y*` suppressions.
+- [x] Fix semantic interactive elements and button `type`.
+
+### Verification run (2026-02-27)
+
+- `rg -n "svelte-ignore\\s+a11y" src packages --glob "*.svelte"` (expects no matches)
+- `perl -Mstrict -Mwarnings -e 'use File::Find; my @files; find(sub { return unless /\\.svelte\\z/; return unless $File::Find::name =~ m{^(?:src|packages)/}; push @files, $File::Find::name; }, "." ); for my $f (@files) { open my $fh, "<", $f or next; local $/; my $c=<$fh>; while ($c =~ m{<button\\b(.*?)>}sg) { my $attrs=$1; next if $attrs =~ /\\btype\\s*=/s; my $pos = pos($c); my $prefix = substr($c, 0, $pos); my $line = ($prefix =~ tr/\\n//) + 1; print "$f:$line\\n"; } }'` (expects no matches)
+- `npm run typecheck`
+- `npm test`
+- `npm run lint:full` (fails on pre-existing non-PR-4 strict-rule violations in multiple files)
+
+### Files touched in PR-4
+
+- `src/components/WorkflowGraph.svelte`
+- `packages/svelte-graph/src/components/ContainerBorder.svelte`
+- `src/components/nodes/workflow/NodeGroupNode.svelte`
+- `src/components/nodes/workflow/MaskedTextInputNode.svelte`
+- `src/components/nodes/workflow/PointCloudOutputNode.svelte`
+- Button `type="button"` normalization across interactive Svelte components in `src/` and `packages/svelte-graph/src/` (41 files total changed in this PR)
 
 ## PR-5 Documentation Compliance
 

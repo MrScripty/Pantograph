@@ -68,7 +68,7 @@
   <div class="palette-list">
     {#each [...filteredByCategory()] as [category, definitions]}
       <div class="category">
-        <button
+        <button type="button"
           class="category-header"
           onclick={() => toggleCategory(category)}
         >

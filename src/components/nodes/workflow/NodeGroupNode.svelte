@@ -62,19 +62,17 @@
     return typeColors[port.data_type] || typeColors.any;
   }
 
-  function handleDoubleClick() {
+  function handleOpenGroup() {
     if (group) {
       tabIntoGroup(id);
     }
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="node-group bg-gradient-to-br from-purple-900/50 to-indigo-900/50 rounded-lg min-w-[200px] relative"
   class:selected
   class:expanded={isExpanded}
-  ondblclick={handleDoubleClick}
 >
   <!-- Group Header -->
   <div class="group-header px-3 py-2 bg-purple-800/50 rounded-t-lg border-b border-purple-600/50 flex items-center gap-2">
@@ -108,8 +106,11 @@
   </div>
 
   <!-- Double-click hint -->
-  <div class="hint-section px-3 py-2 border-t border-purple-700/30">
-    <span class="text-[10px] text-purple-400/60">Double-click to expand</span>
+  <div class="hint-section px-3 py-2 border-t border-purple-700/30 flex items-center justify-between">
+    <span class="text-[10px] text-purple-400/60">Open group to edit internals</span>
+    <button type="button" class="open-group-btn text-[10px]" onclick={handleOpenGroup}>
+      Open
+    </button>
   </div>
 
   <!-- Handles positioned absolutely on edges -->
@@ -154,6 +155,21 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
+  }
+
+  .open-group-btn {
+    border: 1px solid rgba(167, 139, 250, 0.45);
+    background: rgba(124, 58, 237, 0.2);
+    color: #ddd6fe;
+    border-radius: 9999px;
+    padding: 0.15rem 0.45rem;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .open-group-btn:hover {
+    background: rgba(124, 58, 237, 0.35);
+    border-color: rgba(167, 139, 250, 0.8);
   }
 
   :global(.node-group .svelte-flow__handle) {

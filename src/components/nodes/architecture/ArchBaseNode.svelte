@@ -50,7 +50,7 @@
   }
 </script>
 
-<button
+<button type="button"
   class="arch-node bg-neutral-800 rounded-lg min-w-[180px] relative cursor-pointer transition-all hover:brightness-110"
   class:selected
   onclick={handleClick}

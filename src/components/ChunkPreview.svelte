@@ -117,7 +117,7 @@
             </span>
           {/if}
         </div>
-        <button
+        <button type="button"
           onclick={closeChunkPreview}
           class="p-1 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 transition-colors"
           aria-label="Close"
@@ -217,7 +217,7 @@
           <div class="text-xs text-neutral-500">
             Chunks are split at H2/H3 headers with context preservation
           </div>
-          <button
+          <button type="button"
             onclick={closeChunkPreview}
             class="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded-lg text-sm font-medium transition-colors"
           >

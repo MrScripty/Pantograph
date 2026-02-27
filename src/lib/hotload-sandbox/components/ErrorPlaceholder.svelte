@@ -127,7 +127,7 @@
   <!-- Action Buttons -->
   <div class="flex gap-2">
     {#if showRetry && onRetry}
-      <button
+      <button type="button"
         onclick={handleRetry}
         class="px-3 py-1 text-xs font-medium bg-red-800/50 hover:bg-red-700/50 text-red-200 rounded transition-colors"
       >
@@ -135,7 +135,7 @@
       </button>
     {/if}
     {#if canFix}
-      <button
+      <button type="button"
         onclick={handleFixWithAgent}
         disabled={isFixing}
         class="px-3 py-1 text-xs font-medium bg-blue-800/50 hover:bg-blue-700/50 text-blue-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

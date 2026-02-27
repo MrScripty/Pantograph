@@ -146,7 +146,7 @@
 <div class="group-editor-container w-full h-full flex flex-col">
   <!-- Header bar -->
   <div class="editor-header flex items-center gap-4 px-4 py-2 bg-purple-900/30 border-b border-purple-600/30">
-    <button
+    <button type="button"
       class="flex items-center gap-2 text-purple-300 hover:text-purple-100 transition-colors"
       onclick={handleBack}
     >
@@ -165,7 +165,7 @@
 
     <div class="ml-auto flex items-center gap-2">
       <span class="text-sm text-purple-400">{nodes.length} nodes</span>
-      <button
+      <button type="button"
         class="px-3 py-1 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded transition-colors"
         onclick={handleSave}
       >

@@ -751,74 +751,84 @@
     ></div>
 
     <!-- Clickable edge zones (invisible, only for click detection) -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
+    <button
+      type="button"
       class="container-edge top"
       onclick={handleContainerClick}
+      aria-label="Select orchestration boundary"
       style="
         position: absolute;
         left: {x}px;
         top: {y - edgeWidth/2}px;
         width: {w}px;
         height: {edgeWidth}px;
+        border: 0;
+        padding: 0;
+        background: transparent;
         cursor: pointer;
         pointer-events: auto;
         z-index: 2;
       "
-    ></div>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
+    ></button>
+    <button
+      type="button"
       class="container-edge bottom"
       onclick={handleContainerClick}
+      aria-label="Select orchestration boundary"
       style="
         position: absolute;
         left: {x}px;
         top: {y + h - edgeWidth/2}px;
         width: {w}px;
         height: {edgeWidth}px;
+        border: 0;
+        padding: 0;
+        background: transparent;
         cursor: pointer;
         pointer-events: auto;
         z-index: 2;
       "
-    ></div>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
+    ></button>
+    <button
+      type="button"
       class="container-edge left"
       onclick={handleContainerClick}
+      aria-label="Select orchestration boundary"
       style="
         position: absolute;
         left: {x - edgeWidth/2}px;
         top: {y}px;
         width: {edgeWidth}px;
         height: {h}px;
+        border: 0;
+        padding: 0;
+        background: transparent;
         cursor: pointer;
         pointer-events: auto;
         z-index: 2;
       "
-    ></div>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
+    ></button>
+    <button
+      type="button"
       class="container-edge right"
       onclick={handleContainerClick}
+      aria-label="Select orchestration boundary"
       style="
         position: absolute;
         left: {x + w - edgeWidth/2}px;
         top: {y}px;
         width: {edgeWidth}px;
         height: {h}px;
+        border: 0;
+        padding: 0;
+        background: transparent;
         cursor: pointer;
         pointer-events: auto;
         z-index: 2;
       "
-    ></div>
+    ></button>
 
     <!-- Input anchor (left side) -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="container-anchor input"
       style="
@@ -836,8 +846,6 @@
       "
     ></div>
     <!-- Output anchor (right side) -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="container-anchor output"
       style="

@@ -183,7 +183,7 @@
     <div class="h-6 w-px bg-neutral-700"></div>
 
     <div class="flex items-center gap-2">
-      <button
+      <button type="button"
         class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
         class:hover:bg-neutral-700={!$isReadOnly}
         class:opacity-50={$isReadOnly}
@@ -194,7 +194,7 @@
       >
         [+] New
       </button>
-      <button
+      <button type="button"
         class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
         class:hover:bg-neutral-700={!$isReadOnly}
         class:opacity-50={$isReadOnly}
@@ -205,7 +205,7 @@
       >
         [S] Save
       </button>
-      <button
+      <button type="button"
         class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors hover:bg-red-900"
         class:opacity-50={$isReadOnly}
         class:cursor-not-allowed={$isReadOnly}
@@ -229,7 +229,7 @@
   </div>
 
   <div class="flex items-center gap-2">
-    <button
+    <button type="button"
       class="px-4 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       class:bg-green-600={!$isExecuting}
       class:hover:bg-green-500={!$isExecuting}
