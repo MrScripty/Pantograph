@@ -1,27 +1,35 @@
 # Pantograph
 
-Transform drawings into Svelte GUI's with fully local AI.
+Pantograph is a local-first desktop app that turns sketches and prompts into editable Svelte UI.
 
-This is a stand-alone feature demo for Studio Whip, prototyping how GUI creation and editing works. Users draw images of what they want, and provide a short text prompt describing it. The AI sees the drawing and generates the matching Svelte UI elements.
+## Quick Start
 
-## Features
+1. Clone the repository.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the desktop app:
+   ```bash
+   npm run dev:desktop
+   ```
 
-- **Drawing Canvas**: Freehand drawing with customizable tools
-- **Vision LLM Integration**: Send your drawings to a vision-capable LLM for analysis
-  - Connect to external OpenAI-compatible servers (e.g., LM Studio)
-  - Or use a bundled llama.cpp sidecar with your own model files
-- **Streaming Responses**: Real-time streaming of LLM responses in a side panel
+## Installation
 
-## Prerequisites
+### Prerequisites
 
-Install Node.js (for npm) and the Rust toolchain (Cargo).
+- Node.js (for `npm`)
+- Rust toolchain (`cargo`, `rustc`)
+- Tauri system libraries for your OS
+
+Install Rust:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
-Install Tauri system dependencies (includes `libsoup-2.4` and `javascriptcoregtk-4.0`):
+Install Tauri system dependencies:
 
 ```bash
 # Debian/Ubuntu
@@ -34,125 +42,88 @@ sudo dnf install pkgconf-pkg-config libsoup-devel javascriptcoregtk4.0-devel
 sudo pacman -S pkgconf libsoup2 webkit2gtk
 ```
 
-## Development (Desktop)
+Install project dependencies:
 
 ```bash
 npm install
+```
+
+## Usage
+
+### Desktop Mode (recommended)
+
+```bash
 npm run dev:desktop
 ```
 
-Requires the Rust toolchain and Tauri system dependencies for your OS.
-Runtime assets are local (no CDN), so the app is offline-safe once dependencies are installed.
-
-## Development (Web Preview)
+### Web Preview
 
 ```bash
 npm run dev
 ```
 
-## Build Desktop App
+### Build Desktop App
 
 ```bash
 npm run build:desktop
 ```
 
-## Launcher
+### Launcher Script
 
 ```bash
-./launcher.sh
+./launcher.sh --help
 ```
 
-## Using the Vision LLM
+### Vision Backend Options
 
-### Option 1: External Server (e.g., LM Studio)
+- External OpenAI-compatible server (for example LM Studio)
+- Bundled `llama.cpp` sidecar with local model files
 
-1. Start LM Studio and load a vision-capable model (e.g., GLM-4.6V-Flash)
-2. Enable the local server in LM Studio (default: `http://localhost:1234`)
-3. In Pantograph, open the side panel and enter the server URL
-4. Click "Connect"
-5. Draw on the canvas, enter a prompt, and click "Go"
+## Development
 
-### Option 2: Bundled llama.cpp Sidecar
+### Prerequisites
 
-1. Download `llama-server` from [llama.cpp releases](https://github.com/ggerganov/llama.cpp/releases)
-2. Rename it with the target triple suffix and place in `src-tauri/binaries/`:
-   - Linux: `llama-server-x86_64-unknown-linux-gnu`
-   - macOS Intel: `llama-server-x86_64-apple-darwin`
-   - macOS Apple Silicon: `llama-server-aarch64-apple-darwin`
-   - Windows: `llama-server-x86_64-pc-windows-msvc.exe`
-3. Download a vision model with mmproj file (e.g., GLM-4.6V-Flash GGUF)
-4. In the side panel, enter the model and mmproj paths, then click "Start Sidecar"
+- Node.js + npm
+- Rust toolchain
+- Tauri system dependencies (above)
 
-## Model Library (Pumas-Library)
-
-The Puma-Lib workflow node can list and select models from a [Pumas-Library](https://github.com/anthropics/pumas-library) instance. There are three ways to configure this (tried in order):
-
-### Option 1: Auto-detection (sibling directory)
-
-If `Pumas-Library` is a sibling directory of `Pantograph`, it is detected automatically:
-
-```text
-parent-dir/
-  Pantograph/
-  Pumas-Library/       # auto-detected
-    launcher-data/
-    shared-resources/
-      models/
-```
-
-### Option 2: Environment variable
-
-Set `PUMAS_LIBRARY_PATH` to your Pumas-Library root directory:
+### Useful Commands
 
 ```bash
-PUMAS_LIBRARY_PATH="/path/to/Pumas-Library" npm run dev:desktop
+# Lint (configured scope)
+npm run lint
+
+# Full lint scan
+npm run lint:full
+
+# Type check
+npm run typecheck
+
+# Tests
+npm test
+
+# All quality gates
+npm run check
 ```
 
-### Option 3: Global registry
+## Project Structure
 
-If you have a running Pumas-Library instance (via `pumas-rpc` or the desktop app), it registers itself in the global registry at `~/.config/pumas/registry.db`. Pantograph discovers it automatically via `PumasApi::discover()`.
+| Path | Description |
+| ---- | ----------- |
+| `src/` | Frontend Svelte app, UI components, stores, and services |
+| `src-tauri/src/` | Tauri backend commands and runtime wiring |
+| `crates/` | Shared Rust crates (`inference`, `node-engine`, `workflow-nodes`, bindings) |
+| `packages/svelte-graph/src/` | Reusable graph editor package modules |
+| `scripts/` | Validation and tooling scripts |
+| `docs/` | Architecture and process documentation |
 
-### Verifying
+## Contributing
 
-When the model library is connected, you'll see this in the logs:
+1. Create a focused branch for one logical change.
+2. Follow coding, tooling, accessibility, and documentation standards.
+3. Run `npm run check` and relevant targeted Rust tests before opening a PR.
+4. Use Conventional Commits for all commits.
 
-```text
-PumasApi initialized from "/path/to/Pumas-Library"
-```
+## License
 
-In the workflow editor, the Puma-Lib node will show a model dropdown instead of a manual path input.
-
-## Recommended Vision Models
-
-- **GLM-4.6V-Flash**: Full llama.cpp support with mmproj file. This is the model being used for development testing.
-- Any vision model compatible with LM Studio or llama.cpp
-
-## Keyboard Shortcuts
-
-| Shortcut       | Action                                     |
-| -------------- | ------------------------------------------ |
-| `Ctrl+Z`       | Undo canvas drawing stroke                 |
-| `Ctrl+Shift+Z` | Unified undo (unhide commits, etc.)        |
-| `Alt+Ctrl+Z`   | Undo component change (git)                |
-| `Ctrl+Y`       | Redo component change (git)                |
-| `Alt+Ctrl+Y`   | Unified redo                               |
-| `Tab`          | Toggle between Draw and Interact modes     |
-| `Ctrl+\``      | Toggle between Canvas and Node Graph views |
-
-## Commit Timeline
-
-A minimal commit timeline appears above the toolbar when you have generated components. Hover to expand it.
-
-| Action                         | Effect                                            |
-| ------------------------------ | ------------------------------------------------- |
-| **Click** a commit node        | Soft delete (hide) - can undo with `Ctrl+Shift+Z` |
-| **Ctrl+Click** a commit node   | Hard delete (permanent, with confirmation)        |
-| **Double-click** a commit node | Checkout that commit                              |
-
-**Note:** Soft-deleted commits are automatically hard-deleted after 32 undo steps to keep history clean.
-
-## Tech Stack
-
-- **Frontend**: Svelte 5, TypeScript, Tailwind CSS
-- **Backend**: Tauri 2.9, Rust
-- **Build**: Vite
+Workspace crates declare `MIT OR Apache-2.0` in Cargo metadata. Review individual package metadata for any exceptions.

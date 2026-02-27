@@ -1,6 +1,6 @@
 # Compliance Remediation Tracker
 
-Last updated: 2026-02-27 (PR-1 completion pass 2)
+Last updated: 2026-02-27 (PR-5 implementation pass 1)
 
 ## PR-1 Security Boundary Hardening
 
@@ -111,11 +111,28 @@ Status: Completed
 
 ## PR-5 Documentation Compliance
 
-Status: Not started
+Status: Completed
 
-- [ ] Add missing source directory `README.md` files.
-- [ ] Add root `CHANGELOG.md`.
-- [ ] Align root `README.md` with required sections.
+- [x] Add missing source directory `README.md` files.
+- [x] Add root `CHANGELOG.md`.
+- [x] Align root `README.md` with required sections.
+
+### Verification run (2026-02-27)
+
+- `for d in src src-tauri/src crates/inference/src crates/node-engine/src crates/pantograph-rustler/src crates/pantograph-uniffi/src crates/workflow-nodes/src packages/svelte-graph/src; do find "$d" -type d | awk '!/\\/\\.git(\\/|$)/{print}'; done | sort | awk '$0!="src/generated"' | while read -r dir; do [ -f "$dir/README.md" ] || echo "$dir"; done` (expects no output; `src/generated` is a separate nested VCS workspace)
+- `test -f CHANGELOG.md`
+- Manual review: root `README.md` contains required sections (`Quick Start`, `Installation`, `Usage`, `Development`, `Project Structure`, `Contributing`, `License`)
+
+### Files touched in PR-5
+
+- `README.md`
+- `CHANGELOG.md`
+- `COMPLIANCE-PR-TRACKER.md`
+- `README.md` added to 71 tracked source directories under:
+  - `src/` (excluding nested `src/generated` workspace)
+  - `src-tauri/src/`
+  - `crates/*/src/`
+  - `packages/svelte-graph/src/`
 
 ## PR-6 Large File Decomposition
 

@@ -1,0 +1,32 @@
+# src/components/orchestration
+
+## Purpose
+Svelte UI components for the frontend experience, organized by feature and composition boundaries.
+
+## Contents
+| File/Folder | Description |
+| ----------- | ----------- |
+| ConditionNode.svelte | Source file used by modules in this directory. |
+| DataGraphNode.svelte | Source file used by modules in this directory. |
+| EndNode.svelte | Source file used by modules in this directory. |
+| LoopNode.svelte | Source file used by modules in this directory. |
+| MergeNode.svelte | Source file used by modules in this directory. |
+| OrchestrationBaseNode.svelte | Source file used by modules in this directory. |
+| OrchestrationGraph.svelte | Source file used by modules in this directory. |
+| StartNode.svelte | Source file used by modules in this directory. |
+| index.ts | Source file used by modules in this directory. |
+
+## Design Decisions
+- Keep files in this directory scoped to a single responsibility boundary.
+- Prefer explicit module boundaries over cross-cutting utility placement.
+- Maintain predictable naming so callers can discover related modules quickly.
+
+## Dependencies
+**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
+**External:** Dependencies declared in the corresponding manifest files.
+
+## Usage Examples
+```ts
+// Example: import API from this directory.
+import { value } from './module';
+```

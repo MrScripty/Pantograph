@@ -1,0 +1,38 @@
+# src-tauri/src/llm/commands
+
+## Purpose
+LLM gateway, process management, and Tauri command handlers for model and server operations.
+
+## Contents
+| File/Folder | Description |
+| ----------- | ----------- |
+| agent.rs | Source file used by modules in this directory. |
+| backend.rs | Source file used by modules in this directory. |
+| binary.rs | Source file used by modules in this directory. |
+| config.rs | Source file used by modules in this directory. |
+| docs.rs | Source file used by modules in this directory. |
+| embedding.rs | Source file used by modules in this directory. |
+| health.rs | Source file used by modules in this directory. |
+| mod.rs | Source file used by modules in this directory. |
+| port.rs | Source file used by modules in this directory. |
+| rag.rs | Source file used by modules in this directory. |
+| sandbox.rs | Source file used by modules in this directory. |
+| server.rs | Source file used by modules in this directory. |
+| shared.rs | Source file used by modules in this directory. |
+| version.rs | Source file used by modules in this directory. |
+| vision.rs | Source file used by modules in this directory. |
+
+## Design Decisions
+- Keep files in this directory scoped to a single responsibility boundary.
+- Prefer explicit module boundaries over cross-cutting utility placement.
+- Maintain predictable naming so callers can discover related modules quickly.
+
+## Dependencies
+**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
+**External:** Dependencies declared in the corresponding manifest files.
+
+## Usage Examples
+```rust
+// Example: expose modules from this directory in the crate root.
+mod module_name;
+```
