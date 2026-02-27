@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { updateNodeData } from '../../../stores/workflowStore';
@@ -19,241 +18,179 @@
     selected?: boolean;
   }
 
+  const EMPTY_SEGMENT: PromptSegment = { text: '', masked: false };
+
+  function normalizeSegments(input: PromptSegment[]): PromptSegment[] {
+    const merged: PromptSegment[] = [];
+    for (const seg of input) {
+      if (!seg.text) continue;
+      const last = merged[merged.length - 1];
+      if (last && last.masked === seg.masked) {
+        last.text += seg.text;
+      } else {
+        merged.push({ text: seg.text, masked: seg.masked });
+      }
+    }
+    return merged.length > 0 ? merged : [{ ...EMPTY_SEGMENT }];
+  }
+
+  function segmentsToText(input: PromptSegment[]): string {
+    return input.map((seg) => seg.text).join('');
+  }
+
+  function expandSegmentsToFlags(text: string, input: PromptSegment[]): boolean[] {
+    const flags: boolean[] = [];
+    for (const seg of input) {
+      for (let i = 0; i < seg.text.length; i++) {
+        flags.push(seg.masked);
+      }
+    }
+
+    if (flags.length > text.length) {
+      flags.length = text.length;
+    }
+    while (flags.length < text.length) {
+      flags.push(false);
+    }
+    return flags;
+  }
+
+  function segmentsFromTextAndFlags(text: string, flags: boolean[]): PromptSegment[] {
+    if (text.length === 0) return [{ ...EMPTY_SEGMENT }];
+
+    const segments: PromptSegment[] = [];
+    let currentMasked = flags[0] ?? false;
+    let currentText = text[0];
+
+    for (let i = 1; i < text.length; i++) {
+      const nextMasked = flags[i] ?? false;
+      if (nextMasked === currentMasked) {
+        currentText += text[i];
+      } else {
+        segments.push({ text: currentText, masked: currentMasked });
+        currentMasked = nextMasked;
+        currentText = text[i];
+      }
+    }
+
+    segments.push({ text: currentText, masked: currentMasked });
+    return normalizeSegments(segments);
+  }
+
+  function applyTextEditToSegments(
+    oldText: string,
+    newText: string,
+    currentSegments: PromptSegment[]
+  ): PromptSegment[] {
+    const oldFlags = expandSegmentsToFlags(oldText, currentSegments);
+
+    let prefix = 0;
+    while (
+      prefix < oldText.length &&
+      prefix < newText.length &&
+      oldText[prefix] === newText[prefix]
+    ) {
+      prefix++;
+    }
+
+    let oldSuffixStart = oldText.length;
+    let newSuffixStart = newText.length;
+    while (
+      oldSuffixStart > prefix &&
+      newSuffixStart > prefix &&
+      oldText[oldSuffixStart - 1] === newText[newSuffixStart - 1]
+    ) {
+      oldSuffixStart--;
+      newSuffixStart--;
+    }
+
+    const nextFlags: boolean[] = [];
+    for (let i = 0; i < prefix; i++) {
+      nextFlags.push(oldFlags[i] ?? false);
+    }
+
+    const insertedLength = newSuffixStart - prefix;
+    const inheritedMask =
+      (prefix > 0 ? oldFlags[prefix - 1] : oldFlags[oldSuffixStart]) ?? false;
+    for (let i = 0; i < insertedLength; i++) {
+      nextFlags.push(inheritedMask);
+    }
+
+    for (let i = oldSuffixStart; i < oldText.length; i++) {
+      nextFlags.push(oldFlags[i] ?? false);
+    }
+
+    return segmentsFromTextAndFlags(newText, nextFlags);
+  }
+
   let { id, data, selected = false }: Props = $props();
 
-  // Node color: teal
   const nodeColor = '#14b8a6';
-
-  // Internal segment state
-  let segments = $state<PromptSegment[]>(data.segments && data.segments.length > 0
+  const initialSegments = normalizeSegments(data.segments && data.segments.length > 0
     ? data.segments
-    : [{ text: '', masked: false }]);
+    : [{ ...EMPTY_SEGMENT }]);
 
-  // Reference to the contenteditable div
-  let editorRef = $state<HTMLDivElement | null>(null);
-
-  // Track whether we need to suppress the next input sync (to avoid cursor jump)
-  let suppressSync = $state(false);
+  let segments = $state<PromptSegment[]>(initialSegments);
+  let editorText = $state(segmentsToText(initialSegments));
+  let editorRef = $state<HTMLTextAreaElement | null>(null);
+  let cachedSelection = $state({ start: 0, end: 0 });
 
   // Persist segments to node data whenever they change
   $effect(() => {
     updateNodeData(id, { segments });
   });
 
-  // Sync segments from external data changes (e.g. undo/redo)
+  // Sync from external data changes (e.g. undo/redo)
   $effect(() => {
-    if (data.segments && data.segments.length > 0) {
-      // Only update if meaningfully different
-      const incoming = JSON.stringify(data.segments);
-      const current = JSON.stringify(segments);
-      if (incoming !== current) {
-        segments = data.segments;
-      }
+    const incoming = normalizeSegments(data.segments && data.segments.length > 0
+      ? data.segments
+      : [{ ...EMPTY_SEGMENT }]);
+
+    if (JSON.stringify(incoming) !== JSON.stringify(segments)) {
+      segments = incoming;
+      editorText = segmentsToText(incoming);
     }
   });
 
-  /**
-   * Render segments into the contenteditable div as styled spans.
-   */
-  function renderSegments() {
+  function cacheSelection() {
     if (!editorRef) return;
-
-    editorRef.innerHTML = '';
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const span = document.createElement('span');
-      span.dataset.segmentIndex = String(i);
-      span.textContent = seg.text;
-      if (!seg.masked) {
-        // Anchored: green highlight
-        span.style.backgroundColor = 'rgba(34, 197, 94, 0.25)';
-        span.style.borderRadius = '2px';
-        span.style.padding = '0 1px';
-      } else {
-        // Masked: dimmed
-        span.style.opacity = '0.5';
-      }
-      editorRef.appendChild(span);
-    }
-  }
-
-  onMount(() => {
-    renderSegments();
-  });
-
-  // Re-render when segments change (but not during active editing)
-  $effect(() => {
-    // Trigger on segments array reference change
-    const _deps = segments;
-    if (!suppressSync) {
-      renderSegments();
-    }
-  });
-
-  /**
-   * Parse the contenteditable div back into segments, preserving
-   * masked/anchored state based on data-segment-index attributes.
-   */
-  function parseEditorContent(): PromptSegment[] {
-    if (!editorRef) return segments;
-
-    const result: PromptSegment[] = [];
-    const childNodes = editorRef.childNodes;
-
-    for (const node of childNodes) {
-      let text = '';
-      let masked = false;
-
-      if (node.nodeType === Node.TEXT_NODE) {
-        // Bare text node (user typed outside a span) — default to not masked
-        text = node.textContent || '';
-        masked = false;
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as HTMLElement;
-        text = el.textContent || '';
-        const idx = el.dataset.segmentIndex;
-        if (idx !== undefined && segments[Number(idx)]) {
-          masked = segments[Number(idx)].masked;
-        }
-      }
-
-      if (text.length > 0) {
-        result.push({ text, masked });
-      }
-    }
-
-    return result.length > 0 ? result : [{ text: '', masked: false }];
-  }
-
-  /**
-   * Get the current selection range relative to the segments.
-   * Returns { startSeg, startOff, endSeg, endOff } or null.
-   */
-  function getSegmentSelection(): {
-    startSeg: number;
-    startOffset: number;
-    endSeg: number;
-    endOffset: number;
-  } | null {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || !editorRef) return null;
-
-    const range = sel.getRangeAt(0);
-
-    // Find segment index from a container node
-    function findSegIndex(container: globalThis.Node, offset: number): { seg: number; off: number } | null {
-      // Walk up to find the span with data-segment-index
-      let node: globalThis.Node | null = container;
-      while (node && node !== editorRef) {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const el = node as HTMLElement;
-          if (el.dataset.segmentIndex !== undefined) {
-            return { seg: Number(el.dataset.segmentIndex), off: offset };
-          }
-        }
-        node = node.parentNode;
-      }
-      // If we're directly in the editor, count through child nodes
-      if (container === editorRef) {
-        let charCount = 0;
-        for (let i = 0; i < editorRef.childNodes.length; i++) {
-          const child = editorRef.childNodes[i];
-          const len = (child.textContent || '').length;
-          if (charCount + len >= offset) {
-            const el = child as HTMLElement;
-            const idx = el.dataset?.segmentIndex;
-            return { seg: idx !== undefined ? Number(idx) : i, off: offset - charCount };
-          }
-          charCount += len;
-        }
-      }
-      return null;
-    }
-
-    const start = findSegIndex(range.startContainer, range.startOffset);
-    const end = findSegIndex(range.endContainer, range.endOffset);
-
-    if (!start || !end) return null;
-
-    return {
-      startSeg: start.seg,
-      startOffset: start.off,
-      endSeg: end.seg,
-      endOffset: end.off,
+    cachedSelection = {
+      start: editorRef.selectionStart ?? 0,
+      end: editorRef.selectionEnd ?? 0,
     };
   }
 
-  /**
-   * Apply mask state to the selected text range.
-   * This splits segments at selection boundaries as needed.
-   */
   function applyMaskToSelection(masked: boolean) {
-    const sel = getSegmentSelection();
-    if (!sel) return;
+    const start = editorRef?.selectionStart ?? cachedSelection.start;
+    const end = editorRef?.selectionEnd ?? cachedSelection.end;
+    const from = Math.max(0, Math.min(start, end));
+    const to = Math.min(editorText.length, Math.max(start, end));
+    if (from === to) return;
 
-    // First, sync segments from the editor in case user typed
-    segments = parseEditorContent();
-
-    const { startSeg, startOffset, endSeg, endOffset } = sel;
-
-    // If selection is collapsed (no range), do nothing
-    if (startSeg === endSeg && startOffset === endOffset) return;
-
-    // Build new segment array with the selection range set to the given mask state
-    const newSegments: PromptSegment[] = [];
-
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-
-      if (i < startSeg || i > endSeg) {
-        // Outside selection — keep as-is
-        newSegments.push({ ...seg });
-        continue;
-      }
-
-      const isStart = i === startSeg;
-      const isEnd = i === endSeg;
-      const sOff = isStart ? startOffset : 0;
-      const eOff = isEnd ? endOffset : seg.text.length;
-
-      // Part before selection in this segment
-      if (sOff > 0) {
-        newSegments.push({ text: seg.text.substring(0, sOff), masked: seg.masked });
-      }
-
-      // The selected part
-      const selectedText = seg.text.substring(sOff, eOff);
-      if (selectedText.length > 0) {
-        newSegments.push({ text: selectedText, masked });
-      }
-
-      // Part after selection in this segment
-      if (eOff < seg.text.length) {
-        newSegments.push({ text: seg.text.substring(eOff), masked: seg.masked });
-      }
+    const flags = expandSegmentsToFlags(editorText, segments);
+    for (let i = from; i < to; i++) {
+      flags[i] = masked;
     }
 
-    // Merge adjacent segments with the same mask state
-    const merged: PromptSegment[] = [];
-    for (const seg of newSegments) {
-      if (seg.text.length === 0) continue;
-      const last = merged[merged.length - 1];
-      if (last && last.masked === seg.masked) {
-        last.text += seg.text;
-      } else {
-        merged.push({ ...seg });
-      }
-    }
+    segments = segmentsFromTextAndFlags(editorText, flags);
 
-    segments = merged.length > 0 ? merged : [{ text: '', masked: false }];
-    suppressSync = false;
-    renderSegments();
+    if (editorRef) {
+      editorRef.focus();
+      editorRef.setSelectionRange(from, to);
+      cacheSelection();
+    }
   }
 
-  function handleInput() {
-    suppressSync = true;
-    segments = parseEditorContent();
-    suppressSync = false;
+  function handleInput(e: Event) {
+    const target = e.currentTarget as HTMLTextAreaElement;
+    const nextText = target.value;
+    const prevText = editorText;
+
+    if (nextText === prevText) return;
+
+    segments = applyTextEditToSegments(prevText, nextText, segments);
+    editorText = nextText;
+    cacheSelection();
   }
 
   function handleAnchor() {
@@ -262,6 +199,10 @@
 
   function handleMask() {
     applyMaskToSelection(true);
+  }
+
+  function preserveSelection(e: MouseEvent) {
+    e.preventDefault();
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -297,6 +238,7 @@
         <div class="toolbar flex gap-1 mb-2">
           <button type="button"
             class="toolbar-btn anchor-btn px-2 py-1 rounded text-xs font-medium transition-colors"
+            onmousedown={preserveSelection}
             onclick={handleAnchor}
             title="Mark selection as anchored (preserved during regeneration)"
           >
@@ -304,6 +246,7 @@
           </button>
           <button type="button"
             class="toolbar-btn mask-btn px-2 py-1 rounded text-xs font-medium transition-colors"
+            onmousedown={preserveSelection}
             onclick={handleMask}
             title="Mark selection as masked (regenerated by dLLM)"
           >
@@ -311,19 +254,37 @@
           </button>
         </div>
 
-        <!-- Contenteditable editor -->
-        <div
+        <textarea
           bind:this={editorRef}
           class="editor-area w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1.5 text-sm text-neutral-200 focus:outline-none"
-          contenteditable="true"
+          value={editorText}
           oninput={handleInput}
+          onselect={cacheSelection}
+          onmouseup={cacheSelection}
+          onkeyup={cacheSelection}
           onkeydown={handleKeyDown}
-          role="textbox"
           aria-label="Masked text editor"
-          aria-multiline="true"
-          tabindex="0"
           spellcheck="false"
-        ></div>
+        ></textarea>
+
+        <div class="segment-preview mt-1.5">
+          {#if editorText.length === 0}
+            <span class="text-[10px] text-neutral-600 italic">No segments yet</span>
+          {:else}
+            {#each segments as seg, index (`${index}-${seg.masked}-${seg.text}`)}
+              {#if seg.text.length > 0}
+                <span
+                  class="segment-chip"
+                  class:segment-chip--anchored={!seg.masked}
+                  class:segment-chip--masked={seg.masked}
+                  title={seg.masked ? 'Masked segment' : 'Anchored segment'}
+                >
+                  {seg.text}
+                </span>
+              {/if}
+            {/each}
+          {/if}
+        </div>
 
         <!-- Legend -->
         <div class="flex items-center gap-3 mt-1.5 text-[10px] text-neutral-500">
@@ -376,13 +337,45 @@
   .editor-area {
     min-height: 3rem;
     max-height: 8rem;
+    width: 100%;
     overflow-y: auto;
+    resize: vertical;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    word-break: break-word;
     line-height: 1.5;
+    font-family: inherit;
   }
 
   .editor-area:focus {
     border-color: #14b8a6;
+  }
+
+  .segment-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    white-space: pre-wrap;
+  }
+
+  .segment-chip {
+    display: inline-block;
+    font-size: 0.625rem;
+    line-height: 1.3;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  .segment-chip--anchored {
+    color: #86efac;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.2);
+  }
+
+  .segment-chip--masked {
+    color: #d4d4d4;
+    border: 1px solid rgba(163, 163, 163, 0.35);
+    background: rgba(163, 163, 163, 0.15);
   }
 </style>

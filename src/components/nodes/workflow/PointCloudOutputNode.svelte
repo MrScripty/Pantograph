@@ -39,93 +39,123 @@
     data.point_cloud?.positions?.length ?? 0
   );
 
-  // Three.js canvas reference — lazily initialized
-  let canvasContainer: HTMLDivElement | undefined = $state();
-  let threeInitialized = $state(false);
+  let canvasRef: HTMLCanvasElement | undefined = $state();
+  let renderError = $state(false);
 
   $effect(() => {
-    if (canvasContainer && hasData && !threeInitialized) {
-      initThreeScene();
+    if (!canvasRef || !hasData || !data.point_cloud) {
+      return;
     }
+
+    let cancelled = false;
+    let frameId: number | null = null;
+    let removeResizeListener: (() => void) | null = null;
+    let cleanupScene: (() => void) | null = null;
+
+    renderError = false;
+
+    void (async () => {
+      try {
+        const THREE = await import('three');
+        const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+        if (cancelled || !canvasRef || !data.point_cloud) return;
+
+        const height = 160;
+        const width = Math.max(canvasRef.clientWidth, 1);
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 5);
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvasRef, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
+
+        const controls = new OrbitControls(camera, canvasRef);
+        controls.enableDamping = true;
+
+        // Build point cloud geometry
+        const positions = data.point_cloud.positions;
+        const colors = data.point_cloud.colors;
+        const sampleCount = Math.min(positions.length, colors.length);
+
+        const geometry = new THREE.BufferGeometry();
+        const posArray = new Float32Array(sampleCount * 3);
+        const colArray = new Float32Array(sampleCount * 3);
+
+        for (let i = 0; i < sampleCount; i++) {
+          posArray[i * 3] = positions[i][0];
+          posArray[i * 3 + 1] = -positions[i][1]; // Flip Y for display
+          posArray[i * 3 + 2] = -positions[i][2]; // Flip Z for display
+          colArray[i * 3] = colors[i][0];
+          colArray[i * 3 + 1] = colors[i][1];
+          colArray[i * 3 + 2] = colors[i][2];
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colArray, 3));
+
+        const material = new THREE.PointsMaterial({
+          size: 0.02,
+          vertexColors: true,
+        });
+
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+
+        // Center camera on point cloud
+        geometry.computeBoundingSphere();
+        if (geometry.boundingSphere) {
+          const center = geometry.boundingSphere.center;
+          controls.target.copy(center);
+          camera.position.set(
+            center.x,
+            center.y,
+            center.z + geometry.boundingSphere.radius * 2
+          );
+        }
+
+        const handleResize = () => {
+          if (!canvasRef) return;
+          const nextWidth = Math.max(canvasRef.clientWidth, 1);
+          camera.aspect = nextWidth / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(nextWidth, height, false);
+        };
+
+        window.addEventListener('resize', handleResize);
+        removeResizeListener = () => window.removeEventListener('resize', handleResize);
+
+        const animate = () => {
+          if (cancelled) return;
+          frameId = requestAnimationFrame(animate);
+          controls.update();
+          renderer.render(scene, camera);
+        };
+        animate();
+
+        cleanupScene = () => {
+          controls.dispose();
+          geometry.dispose();
+          material.dispose();
+          renderer.dispose();
+        };
+      } catch {
+        renderError = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      removeResizeListener?.();
+      cleanupScene?.();
+    };
   });
-
-  async function initThreeScene() {
-    if (!canvasContainer || !data.point_cloud) return;
-    try {
-      const THREE = await import('three');
-      const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-
-      const width = canvasContainer.clientWidth;
-      const height = 160;
-
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x1a1a1a);
-
-      const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-      camera.position.set(0, 0, 5);
-
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(width, height);
-      canvasContainer.innerHTML = '';
-      canvasContainer.appendChild(renderer.domElement);
-      renderer.domElement.addEventListener('pointerdown', (event) => event.stopPropagation());
-      renderer.domElement.addEventListener('wheel', (event) => event.stopPropagation());
-
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-
-      // Build point cloud geometry
-      const positions = data.point_cloud.positions;
-      const colors = data.point_cloud.colors;
-
-      const geometry = new THREE.BufferGeometry();
-      const posArray = new Float32Array(positions.length * 3);
-      const colArray = new Float32Array(colors.length * 3);
-
-      for (let i = 0; i < positions.length; i++) {
-        posArray[i * 3] = positions[i][0];
-        posArray[i * 3 + 1] = -positions[i][1]; // Flip Y for display
-        posArray[i * 3 + 2] = -positions[i][2]; // Flip Z for display
-        colArray[i * 3] = colors[i][0];
-        colArray[i * 3 + 1] = colors[i][1];
-        colArray[i * 3 + 2] = colors[i][2];
-      }
-
-      geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-      geometry.setAttribute('color', new THREE.BufferAttribute(colArray, 3));
-
-      const material = new THREE.PointsMaterial({
-        size: 0.02,
-        vertexColors: true,
-      });
-
-      const points = new THREE.Points(geometry, material);
-      scene.add(points);
-
-      // Center camera on point cloud
-      geometry.computeBoundingSphere();
-      if (geometry.boundingSphere) {
-        const center = geometry.boundingSphere.center;
-        controls.target.copy(center);
-        camera.position.set(
-          center.x,
-          center.y,
-          center.z + geometry.boundingSphere.radius * 2
-        );
-      }
-
-      function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-      }
-      animate();
-
-      threeInitialized = true;
-    } catch {
-      // Three.js not available — show fallback
-    }
-  }
 </script>
 
 <div class="pc-output-wrapper" style="--node-color: {nodeColor}">
@@ -145,14 +175,21 @@
     {#snippet children()}
       {#if hasData}
         <div class="space-y-1">
-          <div
-            bind:this={canvasContainer}
+          <canvas
+            bind:this={canvasRef}
             class="w-full rounded overflow-hidden nodrag nowheel nopan"
             style="height: 160px; background: #1a1a1a;"
-          ></div>
+            onpointerdown={(event) => event.stopPropagation()}
+            onwheel={(event) => event.stopPropagation()}
+          ></canvas>
           <div class="text-[10px] text-neutral-500 text-right">
             {pointCount.toLocaleString()} points
           </div>
+          {#if renderError}
+            <div class="text-[10px] text-red-400 text-right">
+              3D preview unavailable
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
