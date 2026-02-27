@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { open } from '@tauri-apps/plugin-dialog';
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { updateNodeData } from '../../../stores/workflowStore';
@@ -20,8 +21,6 @@
 
   async function pickFile() {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
-
       const result = await open({
         filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'ogg', 'flac'] }],
       });

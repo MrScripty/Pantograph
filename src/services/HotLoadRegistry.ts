@@ -17,6 +17,7 @@ import {
   type Size as SandboxSize,
   type ComponentError,
 } from '$lib/hotload-sandbox';
+import { invoke } from '@tauri-apps/api/core';
 import { Logger } from './Logger';
 
 // Re-export types for backwards compatibility
@@ -137,9 +138,6 @@ function loadStoredPositions(): Record<string, StoredPosition> {
  * Called on app startup to restore previous session's components.
  */
 export async function loadWorkspace(): Promise<number> {
-  // Dynamic import to avoid circular dependencies
-  const { invoke } = await import('@tauri-apps/api/core');
-
   interface GeneratedComponentInfo {
     path: string;
     content: string;

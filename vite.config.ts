@@ -137,6 +137,21 @@ export default defineConfig(() => {
           // @xyflow/svelte is excluded from module compilation via experimental.compileModule.exclude
           // in the svelte() plugin config above (see plugins array)
         ],
-      }
+      },
+      build: {
+        // three.module.js is a single large upstream module; keep warnings focused on true regressions.
+        chunkSizeWarningLimit: 800,
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (id.includes('node_modules/three')) return 'three';
+              if (id.includes('node_modules/@xyflow')) return 'xyflow';
+              if (id.includes('node_modules/@tauri-apps')) return 'tauri';
+              if (id.includes('node_modules')) return 'vendor';
+              return undefined;
+            },
+          },
+        },
+      },
     };
 });
