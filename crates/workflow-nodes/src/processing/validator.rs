@@ -139,8 +139,14 @@ impl ValidatorTask {
         // Forbidden patterns for Svelte 5 runes mode
         let forbidden_patterns: &[(&str, &str)] = &[
             // Props - must use $props() not export let
-            ("export let ", "Use `let { prop } = $props()` instead of `export let prop`"),
-            ("export let\t", "Use `let { prop } = $props()` instead of `export let prop`"),
+            (
+                "export let ",
+                "Use `let { prop } = $props()` instead of `export let prop`",
+            ),
+            (
+                "export let\t",
+                "Use `let { prop } = $props()` instead of `export let prop`",
+            ),
             // Event handlers - must use lowercase without colon
             ("on:click", "Use `onclick` instead of `on:click`"),
             ("on:change", "Use `onchange` instead of `on:change`"),
@@ -149,11 +155,23 @@ impl ValidatorTask {
             ("on:keydown", "Use `onkeydown` instead of `on:keydown`"),
             ("on:keyup", "Use `onkeyup` instead of `on:keyup`"),
             ("on:keypress", "Use `onkeypress` instead of `on:keypress`"),
-            ("on:mouseenter", "Use `onmouseenter` instead of `on:mouseenter`"),
-            ("on:mouseleave", "Use `onmouseleave` instead of `on:mouseleave`"),
-            ("on:mouseover", "Use `onmouseover` instead of `on:mouseover`"),
+            (
+                "on:mouseenter",
+                "Use `onmouseenter` instead of `on:mouseenter`",
+            ),
+            (
+                "on:mouseleave",
+                "Use `onmouseleave` instead of `on:mouseleave`",
+            ),
+            (
+                "on:mouseover",
+                "Use `onmouseover` instead of `on:mouseover`",
+            ),
             ("on:mouseout", "Use `onmouseout` instead of `on:mouseout`"),
-            ("on:mousedown", "Use `onmousedown` instead of `on:mousedown`"),
+            (
+                "on:mousedown",
+                "Use `onmousedown` instead of `on:mousedown`",
+            ),
             ("on:mouseup", "Use `onmouseup` instead of `on:mouseup`"),
             ("on:focus", "Use `onfocus` instead of `on:focus`"),
             ("on:blur", "Use `onblur` instead of `on:blur`"),
@@ -181,10 +199,7 @@ impl ValidatorTask {
         let script_opens = code.matches("<script").count();
         let script_closes = code.matches("</script>").count();
         if script_opens != script_closes {
-            return Err((
-                "Unbalanced <script> tags".to_string(),
-                "SvelteCompiler",
-            ));
+            return Err(("Unbalanced <script> tags".to_string(), "SvelteCompiler"));
         }
 
         Ok(())
@@ -273,12 +288,18 @@ impl Task for ValidatorTask {
 
         let error_key = ContextKeys::output(&self.task_id, Self::PORT_ERROR);
         context
-            .set(&error_key, validation_result.error.clone().unwrap_or_default())
+            .set(
+                &error_key,
+                validation_result.error.clone().unwrap_or_default(),
+            )
             .await;
 
         let category_key = ContextKeys::output(&self.task_id, Self::PORT_CATEGORY);
         context
-            .set(&category_key, validation_result.category.clone().unwrap_or_default())
+            .set(
+                &category_key,
+                validation_result.category.clone().unwrap_or_default(),
+            )
             .await;
 
         log::debug!(

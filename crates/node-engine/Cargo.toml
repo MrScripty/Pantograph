@@ -49,6 +49,8 @@ pyo3 = { workspace = true, optional = true }
 inference-nodes = ["dep:inference", "dep:futures-util"]
 # Enable PyTorch inference node handler (requires Python 3 + PyTorch at runtime)
 pytorch-nodes = ["inference-nodes", "inference/backend-pytorch", "dep:pyo3"]
+# Enable audio generation node handler (requires Python 3 + stable-audio-tools at runtime)
+audio-nodes = ["dep:pyo3"]
 
 [dev-dependencies]
 tokio-test = "0.4"

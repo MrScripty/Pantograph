@@ -36,6 +36,7 @@ from block_diffusion import (
 from autoregressive import (
     _generate_autoregressive,
     _generate_autoregressive_streaming,
+    _generate_sdar_cached,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +48,50 @@ _tokenizer = None
 _device = None
 _model_path = None
 _model_type = None
+
+
+def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
+    """Generate for TraDo/SDAR via native generate(), with empty-output retry.
+
+    Some SDAR exports include chat delimiters in generation_config.eos_token_id,
+    which can terminate immediately and decode to an empty string. Retry with a
+    single EOS and a small min_new_tokens floor when that happens.
+    """
+    text = _generate_sdar_cached(
+        _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p, top_k=top_k,
+    )
+    if text and text.strip():
+        return text
+
+    logger.warning("Empty dllm decode on SDAR path; retrying with stricter EOS settings")
+
+    inputs = _tokenizer(formatted_prompt, return_tensors="pt").to(_device)
+    retry_min_new = min(max_tokens, 24)
+    eos_id = getattr(_tokenizer, "eos_token_id", None)
+    pad_id = getattr(_tokenizer, "pad_token_id", eos_id)
+
+    with torch.no_grad():
+        outputs = _model.generate(
+            **inputs,
+            max_new_tokens=max_tokens,
+            min_new_tokens=retry_min_new if retry_min_new > 0 else None,
+            temperature=max(temperature, 0.01),
+            top_p=top_p,
+            top_k=int(top_k) if top_k is not None else getattr(_model.generation_config, "top_k", 0),
+            do_sample=temperature > 0,
+            eos_token_id=eos_id,
+            pad_token_id=pad_id,
+        )
+
+    input_len = inputs["input_ids"].shape[1]
+    generated = outputs[0][input_len:]
+    decoded = _tokenizer.decode(generated, skip_special_tokens=True)
+    if decoded and decoded.strip():
+        return decoded
+
+    # Last resort: include special tokens so callers can see what happened.
+    raw = _tokenizer.decode(generated, skip_special_tokens=False)
+    return raw.strip()
 
 
 def is_loaded():
@@ -96,6 +141,111 @@ def _apply_compatibility_shims():
             num_items_in_batch: Optional["torch.Tensor"]
         tu.LossKwargs = LossKwargs
         logger.info("Shimmed LossKwargs stub into transformers.utils (transformers %s)", version)
+
+    # accelerate's dispatch_model calls model.to(device) which explodes when
+    # any parameter is still on the meta device (common with trust_remote_code
+    # models whose __init__ creates extra buffers or padded embeddings).
+    # Patch it to materialise meta tensors via to_empty before moving.
+    import transformers.modeling_utils as _mu
+    if not getattr(_mu, "_pantograph_dispatch_patched", False):
+        _orig_dispatch = _mu.dispatch_model
+
+        def _safe_dispatch(model, device_map, **kwargs):
+            has_meta = any(p.device.type == "meta" for p in model.parameters())
+            if not has_meta:
+                return _orig_dispatch(model, device_map, **kwargs)
+            # Single-device map: materialise then move
+            if isinstance(device_map, dict) and len(device_map) == 1 and "" in device_map:
+                device = device_map[""]
+            elif isinstance(device_map, str):
+                device = device_map
+            else:
+                return _orig_dispatch(model, device_map, **kwargs)
+
+            # Collect names of meta parameters that need loading
+            meta_names = {n for n, p in model.named_parameters()
+                          if p.device.type == "meta"}
+
+            if meta_names and hasattr(model.config, "_name_or_path"):
+                # Reload missing weights from safetensors with key remapping.
+                # We assign tensors directly via setattr to bypass shape
+                # validation (embed_tokens may differ between checkpoint and
+                # config) and avoid resize_token_embeddings on meta tensors.
+                import glob as _glob
+                from safetensors.torch import load_file as _load_file
+                model_dir = Path(model.config._name_or_path)
+                if model_dir.is_dir():
+                    # Expected shapes from meta params — truncate oversized
+                    # checkpoint tensors (e.g. padded embeddings) to match.
+                    expected_shapes = {n: p.shape for n, p in model.named_parameters()
+                                       if n in meta_names}
+                    loaded_count = 0
+                    for shard in sorted(_glob.glob(str(model_dir / "*.safetensors"))):
+                        sd = _load_file(shard, device=str(device))
+                        for k, v in sd.items():
+                            candidates = [k]
+                            if k.startswith("language_model."):
+                                candidates.append(k.replace("language_model.", "model.", 1))
+                            for cand in candidates:
+                                if cand in meta_names:
+                                    exp = expected_shapes.get(cand)
+                                    if exp is not None and v.shape != exp:
+                                        slices = tuple(slice(0, s) for s in exp)
+                                        v = v[slices].contiguous()
+                                    parts = cand.split(".")
+                                    mod = model
+                                    for p in parts[:-1]:
+                                        mod = getattr(mod, p)
+                                    setattr(mod, parts[-1], torch.nn.Parameter(
+                                        v, requires_grad=False,
+                                    ))
+                                    meta_names.discard(cand)
+                                    loaded_count += 1
+                                    break
+                        del sd
+                    logger.info("  Reloaded %d params from safetensors (%d still meta)",
+                                loaded_count, len(meta_names))
+
+            # Move any remaining real params to device; zero-fill any still-meta
+            for name, param in list(model.named_parameters()):
+                if param.device.type == "meta":
+                    parts = name.split(".")
+                    mod = model
+                    for p in parts[:-1]:
+                        mod = getattr(mod, p)
+                    setattr(mod, parts[-1], torch.nn.Parameter(
+                        torch.empty(param.shape, dtype=param.dtype, device=device),
+                        requires_grad=param.requires_grad,
+                    ))
+                elif str(param.device) != str(torch.device(device)):
+                    parts = name.split(".")
+                    mod = model
+                    for p in parts[:-1]:
+                        mod = getattr(mod, p)
+                    setattr(mod, parts[-1], torch.nn.Parameter(
+                        param.data.to(device), requires_grad=param.requires_grad,
+                    ))
+            for name, buf in list(model.named_buffers()):
+                if buf.device.type == "meta":
+                    parts = name.split(".")
+                    mod = model
+                    for p in parts[:-1]:
+                        mod = getattr(mod, p)
+                    setattr(mod, parts[-1],
+                            torch.empty(buf.shape, dtype=buf.dtype, device=device))
+                elif str(buf.device) != str(torch.device(device)):
+                    parts = name.split(".")
+                    mod = model
+                    for p in parts[:-1]:
+                        mod = getattr(mod, p)
+                    setattr(mod, parts[-1], buf.to(device))
+            model.tie_weights()
+            logger.info("Shimmed dispatch_model: materialised meta tensors onto %s", device)
+            return model
+
+        _mu.dispatch_model = _safe_dispatch
+        _mu._pantograph_dispatch_patched = True
+        logger.info("Shimmed dispatch_model for meta-tensor safety (transformers %s)", version)
 
     # PretrainedConfig no longer sets default token IDs in 5.x — patch __init__
     # so older custom config classes that never set these still work.
@@ -150,6 +300,16 @@ def load_model(model_path, device="auto", model_type=None):
     tokenizer = AutoTokenizer.from_pretrained(
         str(path), trust_remote_code=True
     )
+    # Some local model exports ship chat_template.jinja without wiring it into
+    # tokenizer_config.json. Load it explicitly so apply_chat_template works.
+    if not getattr(tokenizer, "chat_template", None):
+        chat_template_path = path / "chat_template.jinja"
+        if chat_template_path.exists():
+            try:
+                tokenizer.chat_template = chat_template_path.read_text(encoding="utf-8")
+                logger.info("Loaded chat template from %s", chat_template_path)
+            except OSError as e:
+                logger.warning("Failed to read chat template %s: %s", chat_template_path, e)
 
     model = AutoModelForCausalLM.from_pretrained(
         str(path),
@@ -220,14 +380,17 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         )
 
     formatted = _format_prompt(prompt, system_prompt)
+    top_k = kwargs.get("top_k")
 
     if _model_type == "dllm":
-        return _generate_dllm(
-            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
-            denoising_steps=denoising_steps, block_length=block_length,
+        # For TraDo/SDAR instruct models in Pantograph, the model's native
+        # autoregressive generation path is significantly more stable than the
+        # experimental custom block-diffusion decode path.
+        return _generate_dllm_autoregressive_safe(
+            formatted, max_tokens, temperature, top_p, top_k=top_k,
         )
     return _generate_autoregressive(
-        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+        _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
     )
 
 
@@ -256,15 +419,17 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         return
 
     formatted = _format_prompt(prompt, system_prompt)
+    top_k = kwargs.get("top_k")
 
     if _model_type == "dllm":
-        yield from _generate_dllm_streaming(
-            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
-            denoising_steps=denoising_steps, block_length=block_length,
+        # Stream a single final replacement for stability on TraDo/SDAR.
+        final_text = _generate_dllm_autoregressive_safe(
+            formatted, max_tokens, temperature, top_p, top_k=top_k,
         )
+        yield {"mode": "replace", "text": final_text}
     else:
         yield from _generate_autoregressive_streaming(
-            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p,
+            _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
         )
 
 
@@ -289,6 +454,19 @@ def _format_prompt(prompt, system_prompt=None):
             )
         except Exception:
             pass
+
+    # Fallback for Qwen/TraDo-style chat models that use ChatML tokens.
+    try:
+        special_tokens = set(getattr(_tokenizer, "additional_special_tokens", []) or [])
+    except Exception:
+        special_tokens = set()
+    if "<|im_start|>" in special_tokens and "<|im_end|>" in special_tokens:
+        parts = []
+        if system_prompt:
+            parts.append(f"<|im_start|>system\n{system_prompt}<|im_end|>")
+        parts.append(f"<|im_start|>user\n{prompt}<|im_end|>")
+        parts.append("<|im_start|>assistant\n")
+        return "\n".join(parts)
 
     # Fallback: simple text format
     parts = []

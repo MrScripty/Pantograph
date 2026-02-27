@@ -1,9 +1,9 @@
 //! Tauri commands for orchestration graph management and execution.
 
 use node_engine::{
-    DataGraphExecutor, EventSink, OrchestrationEdge, OrchestrationExecutor,
-    OrchestrationGraph, OrchestrationNode, OrchestrationNodeType,
-    OrchestrationResult, Result as EngineResult, WorkflowGraph,
+    DataGraphExecutor, EventSink, OrchestrationEdge, OrchestrationExecutor, OrchestrationGraph,
+    OrchestrationNode, OrchestrationNodeType, OrchestrationResult, Result as EngineResult,
+    WorkflowGraph,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -116,9 +116,7 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         let terminal_nodes: Vec<String> = modified_graph
             .nodes
             .iter()
-            .filter(|node| {
-                !modified_graph.edges.iter().any(|e| e.source == node.id)
-            })
+            .filter(|node| !modified_graph.edges.iter().any(|e| e.source == node.id))
             .map(|n| n.id.clone())
             .collect();
 
@@ -217,15 +215,13 @@ pub async fn create_orchestration(
 
     // Add default edge from Start to End
     graph.edges.push(OrchestrationEdge::new(
-        "e1",
-        "start",
-        "next",
-        "end",
-        "input",
+        "e1", "start", "next", "end", "input",
     ));
 
     let mut store = orchestration_store.write().await;
-    store.insert_graph(graph.clone()).map_err(|e| e.to_string())?;
+    store
+        .insert_graph(graph.clone())
+        .map_err(|e| e.to_string())?;
 
     Ok(graph)
 }
@@ -292,7 +288,9 @@ pub async fn add_orchestration_node(
     let updated = graph.clone();
 
     // Persist the change
-    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    store
+        .insert_graph(updated.clone())
+        .map_err(|e| e.to_string())?;
     Ok(updated)
 }
 
@@ -318,7 +316,9 @@ pub async fn remove_orchestration_node(
     let updated = graph.clone();
 
     // Persist the change
-    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    store
+        .insert_graph(updated.clone())
+        .map_err(|e| e.to_string())?;
     Ok(updated)
 }
 
@@ -338,7 +338,9 @@ pub async fn add_orchestration_edge(
     let updated = graph.clone();
 
     // Persist the change
-    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    store
+        .insert_graph(updated.clone())
+        .map_err(|e| e.to_string())?;
     Ok(updated)
 }
 
@@ -358,7 +360,9 @@ pub async fn remove_orchestration_edge(
     let updated = graph.clone();
 
     // Persist the change
-    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    store
+        .insert_graph(updated.clone())
+        .map_err(|e| e.to_string())?;
     Ok(updated)
 }
 
@@ -384,7 +388,9 @@ pub async fn update_orchestration_node(
     let updated = graph.clone();
 
     // Persist the change
-    store.insert_graph(updated.clone()).map_err(|e| e.to_string())?;
+    store
+        .insert_graph(updated.clone())
+        .map_err(|e| e.to_string())?;
     Ok(updated)
 }
 

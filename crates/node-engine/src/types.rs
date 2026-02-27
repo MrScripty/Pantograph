@@ -103,7 +103,11 @@ pub struct PortDefinition {
 
 impl PortDefinition {
     /// Create a required port
-    pub fn required(id: impl Into<String>, label: impl Into<String>, data_type: PortDataType) -> Self {
+    pub fn required(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        data_type: PortDataType,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -115,7 +119,11 @@ impl PortDefinition {
     }
 
     /// Create an optional port
-    pub fn optional(id: impl Into<String>, label: impl Into<String>, data_type: PortDataType) -> Self {
+    pub fn optional(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        data_type: PortDataType,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -259,12 +267,18 @@ impl WorkflowGraph {
     }
 
     /// Get edges coming into a node
-    pub fn incoming_edges<'a>(&'a self, node_id: &'a str) -> impl Iterator<Item = &'a GraphEdge> + 'a {
+    pub fn incoming_edges<'a>(
+        &'a self,
+        node_id: &'a str,
+    ) -> impl Iterator<Item = &'a GraphEdge> + 'a {
         self.edges.iter().filter(move |e| e.target == node_id)
     }
 
     /// Get edges going out of a node
-    pub fn outgoing_edges<'a>(&'a self, node_id: &'a str) -> impl Iterator<Item = &'a GraphEdge> + 'a {
+    pub fn outgoing_edges<'a>(
+        &'a self,
+        node_id: &'a str,
+    ) -> impl Iterator<Item = &'a GraphEdge> + 'a {
         self.edges.iter().filter(move |e| e.source == node_id)
     }
 

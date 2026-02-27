@@ -151,9 +151,11 @@ impl TaskDescriptor for JsonFilterTask {
             category: NodeCategory::Processing,
             label: "JSON Filter".to_string(),
             description: "Extracts values from JSON using path expressions".to_string(),
-            inputs: vec![
-                PortMetadata::required(Self::PORT_JSON, "JSON", PortDataType::Json),
-            ],
+            inputs: vec![PortMetadata::required(
+                Self::PORT_JSON,
+                "JSON",
+                PortDataType::Json,
+            )],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_VALUE, "Value", PortDataType::Any),
                 PortMetadata::optional(Self::PORT_FOUND, "Found", PortDataType::Boolean),
@@ -221,7 +223,10 @@ impl Task for JsonFilterTask {
             found
         );
 
-        Ok(TaskResult::new(Some(serde_json::to_string(&value).unwrap_or_default()), NextAction::Continue))
+        Ok(TaskResult::new(
+            Some(serde_json::to_string(&value).unwrap_or_default()),
+            NextAction::Continue,
+        ))
     }
 }
 

@@ -10,8 +10,7 @@ use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::DeviceConfig;
 use crate::process::ProcessSpawner;
@@ -142,12 +141,9 @@ impl InferenceBackend for LlamaCppBackend {
 
         if config.embedding_mode {
             // Start in embedding mode
-            let model_path = config
-                .model_path
-                .as_ref()
-                .ok_or_else(|| {
-                    BackendError::Config("model_path required for embedding mode".to_string())
-                })?;
+            let model_path = config.model_path.as_ref().ok_or_else(|| {
+                BackendError::Config("model_path required for embedding mode".to_string())
+            })?;
 
             self.server
                 .start_sidecar_embedding(spawner, &model_path.to_string_lossy(), &device_config)
@@ -290,12 +286,9 @@ impl InferenceBackend for LlamaCppBackend {
             .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
 
         // Parse OpenAI embedding response format
-        let data = json
-            .get("data")
-            .and_then(|d| d.as_array())
-            .ok_or_else(|| {
-                BackendError::Inference("Invalid embedding response format".to_string())
-            })?;
+        let data = json.get("data").and_then(|d| d.as_array()).ok_or_else(|| {
+            BackendError::Inference("Invalid embedding response format".to_string())
+        })?;
 
         let mut results = Vec::new();
         for item in data {

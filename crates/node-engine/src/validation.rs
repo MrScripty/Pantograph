@@ -15,15 +15,9 @@ pub enum ValidationError {
     /// Cycle detected in the graph
     CycleDetected,
     /// A node has an unknown type (not in registry)
-    UnknownNodeType {
-        node_id: String,
-        node_type: String,
-    },
+    UnknownNodeType { node_id: String, node_type: String },
     /// A required input port is not connected and has no default
-    UnconnectedRequiredInput {
-        node_id: String,
-        port_id: String,
-    },
+    UnconnectedRequiredInput { node_id: String, port_id: String },
     /// An edge connects incompatible port types
     IncompatiblePortTypes {
         edge_id: String,
@@ -31,14 +25,9 @@ pub enum ValidationError {
         target_type: String,
     },
     /// An edge references a non-existent node
-    UnknownNode {
-        edge_id: String,
-        node_id: String,
-    },
+    UnknownNode { edge_id: String, node_id: String },
     /// A node has no connections (orphaned)
-    OrphanedNode {
-        node_id: String,
-    },
+    OrphanedNode { node_id: String },
     /// Orchestration graph is missing a Start node
     MissingStartNode,
     /// Orchestration graph is missing an End node
@@ -46,10 +35,7 @@ pub enum ValidationError {
     /// Orchestration graph has multiple Start nodes
     MultipleStartNodes,
     /// A node has an unconnected required handle
-    MissingRequiredHandle {
-        node_id: String,
-        handle: String,
-    },
+    MissingRequiredHandle { node_id: String, handle: String },
 }
 
 impl std::fmt::Display for ValidationError {
@@ -57,7 +43,11 @@ impl std::fmt::Display for ValidationError {
         match self {
             Self::CycleDetected => write!(f, "Cycle detected in graph"),
             Self::UnknownNodeType { node_id, node_type } => {
-                write!(f, "Unknown node type '{}' for node '{}'", node_type, node_id)
+                write!(
+                    f,
+                    "Unknown node type '{}' for node '{}'",
+                    node_type, node_id
+                )
             }
             Self::UnconnectedRequiredInput { node_id, port_id } => {
                 write!(
@@ -78,7 +68,11 @@ impl std::fmt::Display for ValidationError {
                 )
             }
             Self::UnknownNode { edge_id, node_id } => {
-                write!(f, "Edge '{}' references unknown node '{}'", edge_id, node_id)
+                write!(
+                    f,
+                    "Edge '{}' references unknown node '{}'",
+                    edge_id, node_id
+                )
             }
             Self::OrphanedNode { node_id } => {
                 write!(f, "Node '{}' has no connections", node_id)
@@ -221,12 +215,10 @@ fn validate_required_inputs(
     for node in &graph.nodes {
         if let Some(metadata) = registry.get_metadata(&node.node_type) {
             for port in &metadata.inputs {
-                if port.required
-                    && !connected_inputs.contains(&(node.id.clone(), port.id.clone()))
+                if port.required && !connected_inputs.contains(&(node.id.clone(), port.id.clone()))
                 {
                     // Check if the node data has a value for this port
-                    let has_data_value = !node.data.is_null()
-                        && node.data.get(&port.id).is_some();
+                    let has_data_value = !node.data.is_null() && node.data.get(&port.id).is_some();
 
                     if !has_data_value {
                         errors.push(ValidationError::UnconnectedRequiredInput {
@@ -241,10 +233,7 @@ fn validate_required_inputs(
 }
 
 /// Check Start/End node presence in orchestration graph
-fn validate_start_end_presence(
-    graph: &OrchestrationGraph,
-    errors: &mut Vec<ValidationError>,
-) {
+fn validate_start_end_presence(graph: &OrchestrationGraph, errors: &mut Vec<ValidationError>) {
     let start_count = graph
         .nodes
         .iter()
@@ -268,10 +257,7 @@ fn validate_start_end_presence(
 }
 
 /// Detect cycles in orchestration graph using Kahn's algorithm
-fn detect_orchestration_cycles(
-    graph: &OrchestrationGraph,
-    errors: &mut Vec<ValidationError>,
-) {
+fn detect_orchestration_cycles(graph: &OrchestrationGraph, errors: &mut Vec<ValidationError>) {
     let mut in_degree: HashMap<&str, usize> = HashMap::new();
     for node in &graph.nodes {
         in_degree.insert(&node.id, 0);
@@ -360,7 +346,9 @@ mod tests {
             .build();
 
         let errors = validate_workflow(&graph, None);
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::CycleDetected)));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::CycleDetected)));
     }
 
     #[test]
@@ -374,7 +362,9 @@ mod tests {
             .build();
 
         let errors = validate_workflow(&graph, None);
-        assert!(!errors.iter().any(|e| matches!(e, ValidationError::CycleDetected)));
+        assert!(!errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::CycleDetected)));
     }
 
     #[test]
@@ -423,7 +413,9 @@ mod tests {
             .build();
 
         let errors = validate_orchestration(&graph);
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::MissingStartNode)));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::MissingStartNode)));
     }
 
     #[test]
@@ -433,7 +425,9 @@ mod tests {
             .build();
 
         let errors = validate_orchestration(&graph);
-        assert!(errors.iter().any(|e| matches!(e, ValidationError::MissingEndNode)));
+        assert!(errors
+            .iter()
+            .any(|e| matches!(e, ValidationError::MissingEndNode)));
     }
 
     #[test]

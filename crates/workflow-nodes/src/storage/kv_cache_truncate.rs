@@ -66,11 +66,7 @@ impl TaskDescriptor for KvCacheTruncateTask {
             description: "Truncate KV cache to a marker or position".to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_CACHE_ID, "Cache ID", PortDataType::String),
-                PortMetadata::optional(
-                    Self::PORT_MARKER_NAME,
-                    "Marker Name",
-                    PortDataType::String,
-                ),
+                PortMetadata::optional(Self::PORT_MARKER_NAME, "Marker Name", PortDataType::String),
                 PortMetadata::optional(
                     Self::PORT_TOKEN_POSITION,
                     "Token Position",
@@ -97,10 +93,7 @@ impl Task for KvCacheTruncateTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         // Read required inputs
         let cache_id_key = ContextKeys::input(&self.task_id, Self::PORT_CACHE_ID);
-        let cache_id: String = context
-            .get(&cache_id_key)
-            .await
-            .unwrap_or_default();
+        let cache_id: String = context.get(&cache_id_key).await.unwrap_or_default();
 
         // Read optional truncation targets
         let marker_key = ContextKeys::input(&self.task_id, Self::PORT_MARKER_NAME);

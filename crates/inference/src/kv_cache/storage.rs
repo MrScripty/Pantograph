@@ -165,11 +165,10 @@ impl StorageBackend for DiskStorage {
         tokio::fs::create_dir_all(&dir).await?;
 
         // Write metadata
-        let meta_json = serde_json::to_string_pretty(&entry.metadata).map_err(|e| {
-            KvCacheError::Codec {
+        let meta_json =
+            serde_json::to_string_pretty(&entry.metadata).map_err(|e| KvCacheError::Codec {
                 message: format!("failed to serialize metadata: {e}"),
-            }
-        })?;
+            })?;
         tokio::fs::write(self.metadata_path(&entry.metadata.cache_id), meta_json).await?;
 
         // Write data
@@ -421,11 +420,20 @@ mod tests {
 
         // Verify on-disk data differs from raw (it's compressed)
         let on_disk = std::fs::read(tmp.path().join("compressed-1/data.bin")).unwrap();
-        assert_ne!(on_disk, entry.data, "compressed data should differ from raw");
-        assert!(on_disk.len() < entry.data.len(), "compressed data should be smaller");
+        assert_ne!(
+            on_disk, entry.data,
+            "compressed data should differ from raw"
+        );
+        assert!(
+            on_disk.len() < entry.data.len(),
+            "compressed data should be smaller"
+        );
 
         // Verify load_data returns the original uncompressed data
-        let loaded = storage.load_data("compressed-1").await.expect("load should succeed");
+        let loaded = storage
+            .load_data("compressed-1")
+            .await
+            .expect("load should succeed");
         assert_eq!(loaded, entry.data);
     }
 
@@ -440,6 +448,9 @@ mod tests {
 
         // Verify on-disk data is identical to raw bytes
         let on_disk = std::fs::read(tmp.path().join("uncompressed-1/data.bin")).unwrap();
-        assert_eq!(on_disk, entry.data, "uncompressed data should match raw bytes");
+        assert_eq!(
+            on_disk, entry.data,
+            "uncompressed data should match raw bytes"
+        );
     }
 }

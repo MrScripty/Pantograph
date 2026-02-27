@@ -40,15 +40,29 @@ mod tests {
         let all = registry.all_metadata();
 
         #[cfg(feature = "desktop")]
-        assert_eq!(all.len(), 32, "Expected 32 built-in nodes with desktop feature");
+        assert_eq!(
+            all.len(),
+            39,
+            "Expected 39 built-in nodes with desktop feature"
+        );
         #[cfg(not(feature = "desktop"))]
-        assert_eq!(all.len(), 30, "Expected 30 built-in nodes without desktop feature");
+        assert_eq!(
+            all.len(),
+            36,
+            "Expected 36 built-in nodes without desktop feature"
+        );
 
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
         assert!(registry.has_node_type("llm-inference"));
         assert!(registry.has_node_type("conditional"));
         assert!(registry.has_node_type("text-output"));
+        assert!(registry.has_node_type("image-output"));
+        assert!(registry.has_node_type("diffusion-inference"));
+        assert!(registry.has_node_type("audio-input"));
+        assert!(registry.has_node_type("audio-output"));
+        assert!(registry.has_node_type("audio-generation"));
+        assert!(registry.has_node_type("depth-estimation"));
         assert!(registry.has_node_type("process"));
         assert!(registry.has_node_type("llamacpp-inference"));
         assert!(registry.has_node_type("puma-lib"));
@@ -60,5 +74,8 @@ mod tests {
         assert!(registry.has_node_type("kv-cache-truncate"));
         assert!(registry.has_node_type("masked-text-input"));
         assert!(registry.has_node_type("expand-settings"));
+
+        #[cfg(feature = "desktop")]
+        assert!(registry.has_node_type("point-cloud-output"));
     }
 }

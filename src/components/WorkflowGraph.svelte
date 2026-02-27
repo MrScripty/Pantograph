@@ -37,8 +37,15 @@
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
   import PyTorchInferenceNode from './nodes/workflow/PyTorchInferenceNode.svelte';
+  import DiffusionInferenceNode from './nodes/workflow/DiffusionInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
+  import ImageOutputNode from './nodes/workflow/ImageOutputNode.svelte';
+  import AudioInputNode from './nodes/workflow/AudioInputNode.svelte';
+  import AudioOutputNode from './nodes/workflow/AudioOutputNode.svelte';
+  import AudioGenerationNode from './nodes/workflow/AudioGenerationNode.svelte';
+  import DepthEstimationNode from './nodes/workflow/DepthEstimationNode.svelte';
+  import PointCloudOutputNode from './nodes/workflow/PointCloudOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
@@ -70,8 +77,15 @@
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
     'pytorch-inference': PyTorchInferenceNode,
+    'diffusion-inference': DiffusionInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
+    'image-output': ImageOutputNode,
+    'audio-input': AudioInputNode,
+    'audio-output': AudioOutputNode,
+    'audio-generation': AudioGenerationNode,
+    'depth-estimation': DepthEstimationNode,
+    'point-cloud-output': PointCloudOutputNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
     'vector-db': VectorDbNode,

@@ -175,8 +175,16 @@ mod tests {
             category: NodeCategory::Processing,
             label: "Test Task".to_string(),
             description: "A test task".to_string(),
-            inputs: vec![PortMetadata::required("input", "Input", PortDataType::String)],
-            outputs: vec![PortMetadata::optional("output", "Output", PortDataType::String)],
+            inputs: vec![PortMetadata::required(
+                "input",
+                "Input",
+                PortDataType::String,
+            )],
+            outputs: vec![PortMetadata::optional(
+                "output",
+                "Output",
+                PortDataType::String,
+            )],
             execution_mode: ExecutionMode::Reactive,
         };
 

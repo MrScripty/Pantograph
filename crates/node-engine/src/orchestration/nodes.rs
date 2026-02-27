@@ -76,7 +76,10 @@ impl OrchestrationContext {
 
     /// Increment and return the iteration count for a loop node.
     pub fn increment_loop_iteration(&mut self, loop_node_id: &str) -> u32 {
-        let count = self.loop_iterations.entry(loop_node_id.to_string()).or_insert(0);
+        let count = self
+            .loop_iterations
+            .entry(loop_node_id.to_string())
+            .or_insert(0);
         *count += 1;
         *count
     }
@@ -139,14 +142,20 @@ impl NodeExecutionResult {
 /// Execute a Start node.
 ///
 /// Start nodes simply pass through to the next node.
-pub fn execute_start(_node: &OrchestrationNode, _context: &OrchestrationContext) -> Result<NodeExecutionResult> {
+pub fn execute_start(
+    _node: &OrchestrationNode,
+    _context: &OrchestrationContext,
+) -> Result<NodeExecutionResult> {
     Ok(NodeExecutionResult::next().with_message("Orchestration started"))
 }
 
 /// Execute an End node.
 ///
 /// End nodes signal completion of the orchestration.
-pub fn execute_end(_node: &OrchestrationNode, _context: &OrchestrationContext) -> Result<NodeExecutionResult> {
+pub fn execute_end(
+    _node: &OrchestrationNode,
+    _context: &OrchestrationContext,
+) -> Result<NodeExecutionResult> {
     // End nodes don't have a next handle - this signals completion
     Ok(NodeExecutionResult::handle("").with_message("Orchestration completed"))
 }
@@ -154,7 +163,10 @@ pub fn execute_end(_node: &OrchestrationNode, _context: &OrchestrationContext) -
 /// Execute a Condition node.
 ///
 /// Condition nodes evaluate a boolean condition and branch accordingly.
-pub fn execute_condition(node: &OrchestrationNode, context: &OrchestrationContext) -> Result<NodeExecutionResult> {
+pub fn execute_condition(
+    node: &OrchestrationNode,
+    context: &OrchestrationContext,
+) -> Result<NodeExecutionResult> {
     // Parse the condition config
     let config: ConditionConfig = serde_json::from_value(node.config.clone())
         .map_err(|e| NodeEngineError::failed(format!("Invalid condition config: {}", e)))?;
@@ -172,14 +184,19 @@ pub fn execute_condition(node: &OrchestrationNode, context: &OrchestrationContex
     };
 
     let handle = if condition_met { "true" } else { "false" };
-    Ok(NodeExecutionResult::handle(handle)
-        .with_message(format!("Condition '{}' evaluated to {}", config.condition_key, condition_met)))
+    Ok(NodeExecutionResult::handle(handle).with_message(format!(
+        "Condition '{}' evaluated to {}",
+        config.condition_key, condition_met
+    )))
 }
 
 /// Execute a Loop node.
 ///
 /// Loop nodes manage iteration, checking exit conditions and max iterations.
-pub fn execute_loop(node: &OrchestrationNode, context: &mut OrchestrationContext) -> Result<NodeExecutionResult> {
+pub fn execute_loop(
+    node: &OrchestrationNode,
+    context: &mut OrchestrationContext,
+) -> Result<NodeExecutionResult> {
     // Parse the loop config
     let config: LoopConfig = serde_json::from_value(node.config.clone()).unwrap_or_default();
 
@@ -189,8 +206,12 @@ pub fn execute_loop(node: &OrchestrationNode, context: &mut OrchestrationContext
     // Check max iterations
     if config.max_iterations > 0 && iteration > config.max_iterations {
         context.reset_loop_iteration(&node.id);
-        return Ok(NodeExecutionResult::handle("complete")
-            .with_message(format!("Loop completed after {} iterations (max reached)", iteration - 1)));
+        return Ok(
+            NodeExecutionResult::handle("complete").with_message(format!(
+                "Loop completed after {} iterations (max reached)",
+                iteration - 1
+            )),
+        );
     }
 
     // Check exit condition if specified
@@ -198,8 +219,12 @@ pub fn execute_loop(node: &OrchestrationNode, context: &mut OrchestrationContext
         if let Some(exit_value) = context.get(exit_key) {
             if is_truthy(exit_value) {
                 context.reset_loop_iteration(&node.id);
-                return Ok(NodeExecutionResult::handle("complete")
-                    .with_message(format!("Loop completed after {} iterations (exit condition met)", iteration - 1)));
+                return Ok(
+                    NodeExecutionResult::handle("complete").with_message(format!(
+                        "Loop completed after {} iterations (exit condition met)",
+                        iteration - 1
+                    )),
+                );
             }
         }
     }
@@ -213,7 +238,10 @@ pub fn execute_loop(node: &OrchestrationNode, context: &mut OrchestrationContext
 /// Execute a Merge node.
 ///
 /// Merge nodes combine multiple execution paths. They simply pass through.
-pub fn execute_merge(_node: &OrchestrationNode, _context: &OrchestrationContext) -> Result<NodeExecutionResult> {
+pub fn execute_merge(
+    _node: &OrchestrationNode,
+    _context: &OrchestrationContext,
+) -> Result<NodeExecutionResult> {
     Ok(NodeExecutionResult::next().with_message("Paths merged"))
 }
 

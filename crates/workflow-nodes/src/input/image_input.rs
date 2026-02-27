@@ -148,10 +148,7 @@ mod tests {
         // Verify output was stored
         let output_key = ContextKeys::output("test_image", "image");
         let output: Option<String> = context.get(&output_key).await;
-        assert_eq!(
-            output,
-            Some("iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB".to_string())
-        );
+        assert_eq!(output, Some("iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB".to_string()));
     }
 
     #[tokio::test]

@@ -48,20 +48,12 @@ impl TaskDescriptor for UnloadModelTask {
             label: "Unload Model".to_string(),
             description: "Unloads a model from an inference engine when triggered".to_string(),
             inputs: vec![
-                PortMetadata::required(
-                    PORT_MODEL_REF,
-                    "Model Reference",
-                    PortDataType::Json,
-                ),
+                PortMetadata::required(PORT_MODEL_REF, "Model Reference", PortDataType::Json),
                 PortMetadata::required(PORT_TRIGGER, "Trigger", PortDataType::Any),
             ],
             outputs: vec![
                 PortMetadata::optional(PORT_STATUS, "Status", PortDataType::String),
-                PortMetadata::optional(
-                    PORT_TRIGGER_PASSTHROUGH,
-                    "Trigger Data",
-                    PortDataType::Any,
-                ),
+                PortMetadata::optional(PORT_TRIGGER_PASSTHROUGH, "Trigger Data", PortDataType::Any),
             ],
             execution_mode: ExecutionMode::Reactive,
         }

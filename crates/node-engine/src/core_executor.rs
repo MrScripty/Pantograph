@@ -16,16 +16,17 @@ use inference::InferenceGateway;
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
-use crate::extensions::ExecutorExtensions;
+use crate::extensions::{extension_keys, ExecutorExtensions};
+use crate::model_dependencies::{
+    DependencyState, ModelDependencyBinding, ModelDependencyRequest, ModelDependencyResolver,
+    ModelRefV2,
+};
 
 /// Extract the node type from task inputs or infer from the task ID.
 ///
 /// Checks `_data.node_type` first (injected by the graph converter),
 /// then falls back to stripping the trailing `-N` suffix from the task ID.
-pub fn resolve_node_type(
-    task_id: &str,
-    inputs: &HashMap<String, serde_json::Value>,
-) -> String {
+pub fn resolve_node_type(task_id: &str, inputs: &HashMap<String, serde_json::Value>) -> String {
     inputs
         .get("_data")
         .and_then(|d| d.get("node_type"))
@@ -105,7 +106,9 @@ impl Default for CoreTaskExecutor {
 // Pure node handlers
 // ---------------------------------------------------------------------------
 
-fn execute_text_input(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_text_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let text = inputs
         .get("_data")
         .and_then(|d| d.get("text"))
@@ -118,7 +121,9 @@ fn execute_text_input(inputs: &HashMap<String, serde_json::Value>) -> Result<Has
     Ok(outputs)
 }
 
-fn execute_masked_text_input(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_masked_text_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     // Try to read segments from _data.segments (UI-provided masked segments)
     let segments = inputs
         .get("_data")
@@ -160,18 +165,74 @@ fn execute_masked_text_input(inputs: &HashMap<String, serde_json::Value>) -> Res
     Ok(outputs)
 }
 
-fn execute_text_output(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
-    let text = inputs
-        .get("text")
-        .and_then(|t| t.as_str())
-        .unwrap_or("");
+fn execute_text_output(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let text = inputs.get("text").and_then(|t| t.as_str()).unwrap_or("");
 
     let mut outputs = HashMap::new();
     outputs.insert("text".to_string(), serde_json::json!(text));
     Ok(outputs)
 }
 
-fn execute_linked_input(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_image_output(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let image = inputs
+        .get("image")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    let mut outputs = HashMap::new();
+    outputs.insert("image".to_string(), image);
+    Ok(outputs)
+}
+
+fn execute_audio_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let audio = inputs
+        .get("_data")
+        .and_then(|d| d.get("audio_data"))
+        .cloned()
+        .or_else(|| inputs.get("audio_data").cloned())
+        .unwrap_or(serde_json::Value::Null);
+
+    let mut outputs = HashMap::new();
+    outputs.insert("audio".to_string(), audio);
+    Ok(outputs)
+}
+
+fn execute_audio_output(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let audio = inputs
+        .get("audio")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    let mut outputs = HashMap::new();
+    outputs.insert("audio".to_string(), audio);
+    Ok(outputs)
+}
+
+/// Point cloud output — passthrough; the frontend renders the 3D view.
+fn execute_point_cloud_output(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let point_cloud = inputs
+        .get("point_cloud")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    let mut outputs = HashMap::new();
+    outputs.insert("point_cloud".to_string(), point_cloud);
+    Ok(outputs)
+}
+
+fn execute_linked_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let value = inputs
         .get("_data")
         .and_then(|d| d.get("linked_value"))
@@ -183,7 +244,9 @@ fn execute_linked_input(inputs: &HashMap<String, serde_json::Value>) -> Result<H
     Ok(outputs)
 }
 
-fn execute_image_input(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_image_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let image = inputs
         .get("_data")
         .and_then(|d| d.get("image"))
@@ -196,9 +259,17 @@ fn execute_image_input(inputs: &HashMap<String, serde_json::Value>) -> Result<Ha
     Ok(outputs)
 }
 
-fn execute_component_preview(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
-    let component = inputs.get("component").cloned().unwrap_or(serde_json::Value::Null);
-    let props = inputs.get("props").cloned().unwrap_or(serde_json::json!({}));
+fn execute_component_preview(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let component = inputs
+        .get("component")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let props = inputs
+        .get("props")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
 
     let mut outputs = HashMap::new();
     outputs.insert(
@@ -208,7 +279,9 @@ fn execute_component_preview(inputs: &HashMap<String, serde_json::Value>) -> Res
     Ok(outputs)
 }
 
-fn execute_model_provider(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_model_provider(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let model_name = inputs
         .get("_data")
         .and_then(|d| d.get("model_name"))
@@ -227,21 +300,34 @@ fn execute_model_provider(inputs: &HashMap<String, serde_json::Value>) -> Result
     Ok(outputs)
 }
 
-fn execute_puma_lib(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_puma_lib(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let model_path = inputs
         .get("_data")
         .and_then(|d| d.get("modelPath"))
         .and_then(|m| m.as_str())
         .unwrap_or("");
 
+    let inference_settings = inputs
+        .get("_data")
+        .and_then(|d| d.get("inference_settings"))
+        .or_else(|| inputs.get("inference_settings"))
+        .filter(|v| v.is_array())
+        .cloned()
+        .unwrap_or(serde_json::json!([]));
+
     let mut outputs = HashMap::new();
     outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+    outputs.insert("inference_settings".to_string(), inference_settings);
 
     log::debug!("PumaLib: providing model path '{}'", model_path);
     Ok(outputs)
 }
 
-fn execute_conditional(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_conditional(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let condition = inputs
         .get("condition")
         .and_then(|c| c.as_bool())
@@ -263,7 +349,9 @@ fn execute_conditional(inputs: &HashMap<String, serde_json::Value>) -> Result<Ha
     Ok(outputs)
 }
 
-fn execute_merge(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_merge(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let input_values: Vec<String> =
         if let Some(arr) = inputs.get("inputs").and_then(|v| v.as_array()) {
             arr.iter()
@@ -289,14 +377,19 @@ fn execute_merge(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<
     Ok(outputs)
 }
 
-fn execute_validator(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_validator(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let code = inputs
         .get("code")
         .and_then(|c| c.as_str())
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing code input".to_string()))?;
 
     let forbidden_patterns: &[(&str, &str)] = &[
-        ("export let ", "Use `let { prop } = $props()` instead of `export let prop`"),
+        (
+            "export let ",
+            "Use `let { prop } = $props()` instead of `export let prop`",
+        ),
         ("on:click", "Use `onclick` instead of `on:click`"),
         ("on:change", "Use `onchange` instead of `on:change`"),
         ("on:input", "Use `oninput` instead of `on:input`"),
@@ -349,7 +442,9 @@ fn execute_validator(inputs: &HashMap<String, serde_json::Value>) -> Result<Hash
     Ok(outputs)
 }
 
-fn execute_json_filter(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_json_filter(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let json = inputs
         .get("json")
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing json input".to_string()))?;
@@ -426,7 +521,9 @@ fn extract_json_path(json: &serde_json::Value, path: &str) -> (serde_json::Value
     (current.clone(), true)
 }
 
-fn execute_human_input(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_human_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let prompt = inputs
         .get("_data")
         .and_then(|d| d.get("prompt"))
@@ -447,7 +544,9 @@ fn execute_human_input(inputs: &HashMap<String, serde_json::Value>) -> Result<Ha
     Ok(outputs)
 }
 
-fn execute_tool_executor(inputs: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>> {
+fn execute_tool_executor(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
     let tool_calls = inputs
         .get("tool_calls")
         .cloned()
@@ -531,11 +630,9 @@ async fn execute_write_file(
     };
 
     if let Some(parent) = full_path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!("Failed to create directories: {}", e))
-            })?;
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to create directories: {}", e))
+        })?;
     }
 
     tokio::fs::write(&full_path, content)
@@ -622,6 +719,254 @@ fn build_extra_settings(
     settings
 }
 
+fn read_optional_input_string(
+    inputs: &HashMap<String, serde_json::Value>,
+    key: &str,
+) -> Option<String> {
+    inputs
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            inputs
+                .get("_data")
+                .and_then(|d| d.get(key))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+}
+
+fn read_optional_input_value(
+    inputs: &HashMap<String, serde_json::Value>,
+    key: &str,
+) -> Option<serde_json::Value> {
+    inputs
+        .get(key)
+        .cloned()
+        .or_else(|| inputs.get("_data").and_then(|d| d.get(key)).cloned())
+}
+
+fn read_input_dependency_bindings(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Vec<ModelDependencyBinding> {
+    let Some(raw) = read_optional_input_value(inputs, "dependency_bindings") else {
+        return Vec::new();
+    };
+    if raw.is_null() {
+        return Vec::new();
+    }
+    serde_json::from_value(raw).unwrap_or_default()
+}
+
+fn read_input_selected_binding_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
+    let Some(raw) = read_optional_input_value(inputs, "selected_binding_ids") else {
+        return Vec::new();
+    };
+
+    raw.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .filter(|s| !s.trim().is_empty())
+        .collect()
+}
+
+#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+fn infer_task_type_primary(node_type: &str, inputs: &HashMap<String, serde_json::Value>) -> String {
+    if let Some(task) = read_optional_input_string(inputs, "task_type_primary") {
+        if !task.trim().is_empty() {
+            return task;
+        }
+    }
+
+    let model_type = read_optional_input_string(inputs, "model_type")
+        .or_else(|| {
+            inputs
+                .get("_data")
+                .and_then(|d| d.get("model_type"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_default()
+        .to_lowercase();
+
+    if node_type == "audio-generation" || model_type == "audio" {
+        return "text-to-audio".to_string();
+    }
+
+    match model_type.as_str() {
+        "diffusion" => "text-to-image".to_string(),
+        "vision" => "image-to-text".to_string(),
+        "embedding" => "feature-extraction".to_string(),
+        _ => "text-generation".to_string(),
+    }
+}
+
+fn build_model_ref_v2(
+    resolved: Option<ModelRefV2>,
+    engine: &str,
+    model_id: &str,
+    model_path: &str,
+    task_type_primary: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> ModelRefV2 {
+    let fallback_dependency_bindings = read_input_dependency_bindings(inputs);
+    let fallback_dependency_plan_id = read_optional_input_string(inputs, "dependency_plan_id");
+
+    let mut model_ref = resolved.unwrap_or(ModelRefV2 {
+        contract_version: 2,
+        engine: engine.to_string(),
+        model_id: model_id.to_string(),
+        model_path: model_path.to_string(),
+        task_type_primary: task_type_primary.to_string(),
+        dependency_bindings: fallback_dependency_bindings.clone(),
+        dependency_plan_id: fallback_dependency_plan_id.clone(),
+    });
+
+    if model_ref.contract_version != 2 {
+        model_ref.contract_version = 2;
+    }
+    if model_ref.engine.trim().is_empty() {
+        model_ref.engine = engine.to_string();
+    }
+    if model_ref.model_id.trim().is_empty() {
+        model_ref.model_id = model_id.to_string();
+    }
+    if model_ref.model_path.trim().is_empty() {
+        model_ref.model_path = model_path.to_string();
+    }
+    if model_ref.task_type_primary.trim().is_empty() {
+        model_ref.task_type_primary = task_type_primary.to_string();
+    }
+    if model_ref.dependency_bindings.is_empty() {
+        model_ref.dependency_bindings = fallback_dependency_bindings;
+    }
+    if model_ref.dependency_plan_id.is_none() {
+        model_ref.dependency_plan_id = fallback_dependency_plan_id;
+    }
+
+    model_ref
+}
+
+#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+fn infer_backend_key(node_type: &str) -> String {
+    match node_type {
+        "audio-generation" => "stable_audio".to_string(),
+        "pytorch-inference" => "pytorch".to_string(),
+        "llamacpp-inference" => "llamacpp".to_string(),
+        "ollama-inference" => "ollama".to_string(),
+        _ => "pytorch".to_string(),
+    }
+}
+
+#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+fn build_model_dependency_request(
+    node_type: &str,
+    model_path: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> ModelDependencyRequest {
+    let backend_key = read_optional_input_string(inputs, "backend_key")
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| infer_backend_key(node_type));
+
+    ModelDependencyRequest {
+        node_type: node_type.to_string(),
+        model_path: model_path.to_string(),
+        model_id: read_optional_input_string(inputs, "model_id"),
+        model_type: read_optional_input_string(inputs, "model_type"),
+        task_type_primary: Some(infer_task_type_primary(node_type, inputs)),
+        backend_key: Some(backend_key),
+        platform_context: read_optional_input_value(inputs, "platform_context"),
+        selected_binding_ids: read_input_selected_binding_ids(inputs),
+    }
+}
+
+#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+async fn enforce_dependency_preflight(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+) -> Result<Option<ModelRefV2>> {
+    if node_type != "pytorch-inference" && node_type != "audio-generation" {
+        return Ok(None);
+    }
+
+    let Some(resolver) = extensions
+        .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
+    else {
+        return Ok(None);
+    };
+
+    let model_path = inputs
+        .get("model_path")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+            )
+        })?;
+
+    let request = build_model_dependency_request(node_type, model_path, inputs);
+    let plan = resolver
+        .resolve_model_dependency_plan(request.clone())
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Dependency preflight plan resolution failed for '{}': {}",
+                node_type, e
+            ))
+        })?;
+
+    let status = resolver
+        .check_dependencies(request.clone())
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Dependency preflight check failed for '{}': {}",
+                node_type, e
+            ))
+        })?;
+
+    if status.state != DependencyState::Ready {
+        let payload = serde_json::json!({
+            "kind": "dependency_preflight",
+            "node_type": node_type,
+            "model_path": model_path,
+            "plan_state": plan.state,
+            "plan_code": plan.code,
+            "plan_message": plan.message,
+            "review_reasons": plan.review_reasons,
+            "required_binding_ids": plan.required_binding_ids,
+            "selected_binding_ids": plan.selected_binding_ids,
+            "state": status.state,
+            "code": status.code,
+            "bindings": status.bindings,
+            "message": status.message,
+        });
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "Dependency preflight blocked execution: {}",
+            payload
+        )));
+    }
+
+    let resolved = resolver
+        .resolve_model_ref(request, Some(plan))
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Dependency preflight failed to resolve model_ref: {}",
+                e
+            ))
+        })?;
+    if let Some(ref model_ref) = resolved {
+        model_ref
+            .validate()
+            .map_err(NodeEngineError::ExecutionFailed)?;
+    }
+
+    Ok(resolved)
+}
+
 // ---------------------------------------------------------------------------
 // Ollama (pure HTTP, no gateway needed)
 // ---------------------------------------------------------------------------
@@ -678,7 +1023,11 @@ async fn execute_ollama_inference(
     let client = reqwest::Client::new();
     let url = "http://localhost:11434/api/generate";
 
-    log::debug!("OllamaInference: sending request to {} with model '{}'", url, model);
+    log::debug!(
+        "OllamaInference: sending request to {} with model '{}'",
+        url,
+        model
+    );
 
     let http_response = client
         .post(url)
@@ -705,23 +1054,32 @@ async fn execute_ollama_inference(
         NodeEngineError::ExecutionFailed(format!("Failed to parse Ollama response: {}", e))
     })?;
 
-    let response_text = response_json["response"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let response_text = response_json["response"].as_str().unwrap_or("").to_string();
 
-    let model_used = response_json["model"]
-        .as_str()
-        .unwrap_or(model)
-        .to_string();
+    let model_used = response_json["model"].as_str().unwrap_or(model).to_string();
 
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
     outputs.insert("model_used".to_string(), serde_json::json!(model_used));
-    outputs.insert(
-        "model_ref".to_string(),
-        serde_json::json!({"engine": "ollama", "model_id": model_used}),
+    let model_ref = build_model_ref_v2(
+        None,
+        "ollama",
+        &model_used,
+        &model_used,
+        "text-generation",
+        inputs,
     );
+    let model_ref_value = match serde_json::to_value(model_ref) {
+        Ok(v) => v,
+        Err(_) => serde_json::json!({
+            "contractVersion": 2,
+            "engine": "ollama",
+            "modelId": model_used.clone(),
+            "modelPath": model_used.clone(),
+            "taskTypePrimary": "text-generation",
+        }),
+    };
+    outputs.insert("model_ref".to_string(), model_ref_value);
 
     log::debug!(
         "OllamaInference: completed with {} chars using model '{}'",
@@ -743,9 +1101,10 @@ impl TaskExecutor for CoreTaskExecutor {
         task_id: &str,
         inputs: HashMap<String, serde_json::Value>,
         _context: &graph_flow::Context,
-        _extensions: &ExecutorExtensions,
+        extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         let node_type = resolve_node_type(task_id, &inputs);
+        let _ = extensions;
 
         log::debug!(
             "CoreTaskExecutor: executing '{}' (type '{}')",
@@ -759,9 +1118,13 @@ impl TaskExecutor for CoreTaskExecutor {
             "masked-text-input" => execute_masked_text_input(&inputs),
             "linked-input" => execute_linked_input(&inputs),
             "image-input" => execute_image_input(&inputs),
+            "audio-input" => execute_audio_input(&inputs),
 
             // Output nodes
             "text-output" => execute_text_output(&inputs),
+            "image-output" => execute_image_output(&inputs),
+            "audio-output" => execute_audio_output(&inputs),
+            "point-cloud-output" => execute_point_cloud_output(&inputs),
             "component-preview" => execute_component_preview(&inputs),
 
             // Model/provider nodes
@@ -793,43 +1156,61 @@ impl TaskExecutor for CoreTaskExecutor {
             "llamacpp-inference" => {
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 execute_llamacpp_inference(
-                    self.gateway.as_ref(), &inputs, task_id,
-                    self.event_sink.as_ref(), exec_id,
-                ).await
+                    self.gateway.as_ref(),
+                    &inputs,
+                    task_id,
+                    self.event_sink.as_ref(),
+                    exec_id,
+                )
+                .await
             }
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 execute_llm_inference(
-                    self.gateway.as_ref(), &inputs, task_id,
-                    self.event_sink.as_ref(), exec_id,
-                ).await
+                    self.gateway.as_ref(),
+                    &inputs,
+                    task_id,
+                    self.event_sink.as_ref(),
+                    exec_id,
+                )
+                .await
             }
             #[cfg(feature = "inference-nodes")]
-            "vision-analysis" => {
-                execute_vision_analysis(self.gateway.as_ref(), &inputs).await
-            }
+            "vision-analysis" => execute_vision_analysis(self.gateway.as_ref(), &inputs).await,
             #[cfg(feature = "inference-nodes")]
-            "unload-model" => {
-                execute_unload_model(self.gateway.as_ref(), &inputs).await
-            }
+            "unload-model" => execute_unload_model(self.gateway.as_ref(), &inputs).await,
 
             // KV cache operations (require inference-nodes feature)
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-save" => execute_kv_cache_save(&inputs, _extensions).await,
+            "kv-cache-save" => execute_kv_cache_save(&inputs, extensions).await,
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-load" => execute_kv_cache_load(&inputs, _extensions).await,
+            "kv-cache-load" => execute_kv_cache_load(&inputs, extensions).await,
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-truncate" => execute_kv_cache_truncate(&inputs, _extensions).await,
+            "kv-cache-truncate" => execute_kv_cache_truncate(&inputs, extensions).await,
 
             // PyTorch inference (in-process via PyO3)
             #[cfg(feature = "pytorch-nodes")]
             "pytorch-inference" => {
+                let resolved_model_ref =
+                    enforce_dependency_preflight("pytorch-inference", &inputs, extensions).await?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 execute_pytorch_inference(
-                    &inputs, task_id,
-                    self.event_sink.as_ref(), exec_id,
-                ).await
+                    &inputs,
+                    task_id,
+                    self.event_sink.as_ref(),
+                    exec_id,
+                    resolved_model_ref,
+                )
+                .await
+            }
+
+            // Audio generation (in-process via PyO3 + Stable Audio)
+            #[cfg(feature = "audio-nodes")]
+            "audio-generation" => {
+                let resolved_model_ref =
+                    enforce_dependency_preflight("audio-generation", &inputs, extensions).await?;
+                execute_audio_generation(&inputs, resolved_model_ref).await
             }
 
             // Unknown — signal that this node requires a host-specific executor
@@ -846,9 +1227,7 @@ impl TaskExecutor for CoreTaskExecutor {
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "inference-nodes")]
-fn require_gateway(
-    gateway: Option<&Arc<InferenceGateway>>,
-) -> Result<&Arc<InferenceGateway>> {
+fn require_gateway(gateway: Option<&Arc<InferenceGateway>>) -> Result<&Arc<InferenceGateway>> {
     gateway.ok_or_else(|| {
         NodeEngineError::ExecutionFailed(
             "InferenceGateway not configured: requires host-specific executor".to_string(),
@@ -943,7 +1322,10 @@ async fn execute_llamacpp_inference(
         if let Some(v) = extra_settings.get("gpu_layers").and_then(|v| v.as_i64()) {
             config.gpu_layers = Some(v as i32);
         }
-        if let Some(v) = extra_settings.get("context_length").and_then(|v| v.as_i64()) {
+        if let Some(v) = extra_settings
+            .get("context_length")
+            .and_then(|v| v.as_i64())
+        {
             config.context_size = Some(v as u32);
         }
 
@@ -992,7 +1374,11 @@ async fn execute_llamacpp_inference(
     let client = reqwest::Client::new();
     let url = format!("{}/completion", base_url);
 
-    log::debug!("LlamaCppInference: sending request to {} (stream={})", url, streaming);
+    log::debug!(
+        "LlamaCppInference: sending request to {} (stream={})",
+        url,
+        streaming
+    );
 
     let http_response = client
         .post(&url)
@@ -1035,7 +1421,9 @@ async fn execute_llamacpp_inference(
                 if let Some(token) = parse_llamacpp_sse_content(&line) {
                     full_response.push_str(&token);
                     let _ = sink.send(crate::WorkflowEvent::task_stream(
-                        task_id, execution_id, "response",
+                        task_id,
+                        execution_id,
+                        "response",
                         serde_json::json!(token),
                     ));
                 }
@@ -1046,7 +1434,9 @@ async fn execute_llamacpp_inference(
         if let Some(token) = parse_llamacpp_sse_content(&line) {
             full_response.push_str(&token);
             let _ = sink.send(crate::WorkflowEvent::task_stream(
-                task_id, execution_id, "response",
+                task_id,
+                execution_id,
+                "response",
                 serde_json::json!(token),
             ));
         }
@@ -1057,18 +1447,31 @@ async fn execute_llamacpp_inference(
         let response_json: serde_json::Value = http_response.json().await.map_err(|e| {
             NodeEngineError::ExecutionFailed(format!("Failed to parse llama.cpp response: {}", e))
         })?;
-        response_json["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string()
+        response_json["content"].as_str().unwrap_or("").to_string()
     };
 
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
     outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+    let model_ref = build_model_ref_v2(
+        None,
+        "llamacpp",
+        &model_path,
+        &model_path,
+        "text-generation",
+        inputs,
+    );
     outputs.insert(
         "model_ref".to_string(),
-        serde_json::json!({"engine": "llamacpp", "model_id": model_path}),
+        serde_json::to_value(model_ref).unwrap_or_else(|_| {
+            serde_json::json!({
+                "contractVersion": 2,
+                "engine": "llamacpp",
+                "modelId": model_path,
+                "modelPath": model_path,
+                "taskTypePrimary": "text-generation",
+            })
+        }),
     );
     Ok(outputs)
 }
@@ -1198,7 +1601,9 @@ async fn execute_llm_inference(
                 if let Some(token) = parse_openai_sse_content(&line) {
                     full_response.push_str(&token);
                     let _ = sink.send(crate::WorkflowEvent::task_stream(
-                        task_id, execution_id, "response",
+                        task_id,
+                        execution_id,
+                        "response",
                         serde_json::json!(token),
                     ));
                 }
@@ -1208,7 +1613,9 @@ async fn execute_llm_inference(
         if let Some(token) = parse_openai_sse_content(&line) {
             full_response.push_str(&token);
             let _ = sink.send(crate::WorkflowEvent::task_stream(
-                task_id, execution_id, "response",
+                task_id,
+                execution_id,
+                "response",
                 serde_json::json!(token),
             ));
         }
@@ -1279,9 +1686,7 @@ async fn execute_vision_analysis(
         }))
         .send()
         .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!("Vision request failed: {}", e))
-        })?;
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Vision request failed: {}", e)))?;
 
     if !response.status().is_success() {
         let error_text = response.text().await.unwrap_or_default();
@@ -1310,26 +1715,17 @@ async fn execute_unload_model(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
-    let model_ref = inputs.get("model_ref").ok_or_else(|| {
+    let model_ref_value = inputs.get("model_ref").ok_or_else(|| {
         NodeEngineError::ExecutionFailed(
             "Missing model_ref input. Connect an inference node's Model Reference output."
                 .to_string(),
         )
     })?;
+    let model_ref =
+        ModelRefV2::validate_value(model_ref_value).map_err(NodeEngineError::ExecutionFailed)?;
 
-    let engine = model_ref
-        .get("engine")
-        .and_then(|e| e.as_str())
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed("model_ref missing 'engine' field".to_string())
-        })?;
-
-    let model_id = model_ref
-        .get("model_id")
-        .and_then(|m| m.as_str())
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed("model_ref missing 'model_id' field".to_string())
-        })?;
+    let engine = model_ref.engine.as_str();
+    let model_id = model_ref.model_id.as_str();
 
     let trigger_value = inputs
         .get("trigger")
@@ -1405,9 +1801,29 @@ async fn execute_unload_model(
             })?;
             log::info!("UnloadModel: PyTorch model '{}' unloaded", model_id);
         }
+        #[cfg(feature = "audio-nodes")]
+        "stable_audio" => {
+            use pyo3::types::PyAnyMethods;
+            let model_id_owned = model_id.to_string();
+            tokio::task::spawn_blocking(move || {
+                pyo3::Python::with_gil(|py| {
+                    if let Ok(worker) = py.import("pantograph_audio_worker") {
+                        let _ = worker.call_method0("unload_model");
+                    }
+                });
+            })
+            .await
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Failed to unload audio model '{}': {}",
+                    model_id_owned, e
+                ))
+            })?;
+            log::info!("UnloadModel: audio model '{}' unloaded", model_id);
+        }
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
-                "Unknown inference engine '{}'. Supported: llamacpp, ollama, pytorch",
+                "Unknown inference engine '{}'. Supported: llamacpp, ollama, pytorch, stable_audio",
                 other
             )));
         }
@@ -1442,26 +1858,18 @@ fn ensure_torch_worker_initialised(py: pyo3::Python<'_>) -> std::result::Result<
     // Register sibling modules first so worker.py's imports resolve
     let bd_code = std::ffi::CString::new(include_str!("../../inference/torch/block_diffusion.py"))
         .map_err(|e| format!("Invalid block_diffusion source: {}", e))?;
-    let bd_module = pyo3::types::PyModule::from_code(
-        py,
-        &bd_code,
-        c"block_diffusion.py",
-        c"block_diffusion",
-    )
-    .map_err(|e| format!("Failed to load block_diffusion: {}", e))?;
+    let bd_module =
+        pyo3::types::PyModule::from_code(py, &bd_code, c"block_diffusion.py", c"block_diffusion")
+            .map_err(|e| format!("Failed to load block_diffusion: {}", e))?;
     modules
         .set_item("block_diffusion", &bd_module)
         .map_err(|e| format!("Failed to register block_diffusion: {}", e))?;
 
     let ar_code = std::ffi::CString::new(include_str!("../../inference/torch/autoregressive.py"))
         .map_err(|e| format!("Invalid autoregressive source: {}", e))?;
-    let ar_module = pyo3::types::PyModule::from_code(
-        py,
-        &ar_code,
-        c"autoregressive.py",
-        c"autoregressive",
-    )
-    .map_err(|e| format!("Failed to load autoregressive: {}", e))?;
+    let ar_module =
+        pyo3::types::PyModule::from_code(py, &ar_code, c"autoregressive.py", c"autoregressive")
+            .map_err(|e| format!("Failed to load autoregressive: {}", e))?;
     modules
         .set_item("autoregressive", &ar_module)
         .map_err(|e| format!("Failed to register autoregressive: {}", e))?;
@@ -1477,7 +1885,52 @@ fn ensure_torch_worker_initialised(py: pyo3::Python<'_>) -> std::result::Result<
     )
     .map_err(|e| format!("Failed to load worker: {}", e))?;
 
-    log::info!("PyTorch worker module initialised (with block_diffusion + autoregressive siblings)");
+    log::info!(
+        "PyTorch worker module initialised (with block_diffusion + autoregressive siblings)"
+    );
+    Ok(())
+}
+
+/// Ensure the Stable Audio worker module (and its sibling) are loaded into
+/// the Python interpreter.  Safe to call multiple times — only the first call
+/// actually loads.
+#[cfg(feature = "audio-nodes")]
+fn ensure_audio_worker_initialised(py: pyo3::Python<'_>) -> std::result::Result<(), String> {
+    if py.import("pantograph_audio_worker").is_ok() {
+        return Ok(());
+    }
+
+    use pyo3::types::PyAnyMethods;
+
+    let sys = py
+        .import("sys")
+        .map_err(|e| format!("Failed to import sys: {}", e))?;
+    let modules = sys
+        .getattr("modules")
+        .map_err(|e| format!("Failed to get sys.modules: {}", e))?;
+
+    // Register sibling module first so worker.py's imports resolve
+    let sa_code = std::ffi::CString::new(include_str!("../../inference/audio/stable_audio.py"))
+        .map_err(|e| format!("Invalid stable_audio source: {}", e))?;
+    let sa_module =
+        pyo3::types::PyModule::from_code(py, &sa_code, c"stable_audio.py", c"stable_audio")
+            .map_err(|e| format!("Failed to load stable_audio: {}", e))?;
+    modules
+        .set_item("stable_audio", &sa_module)
+        .map_err(|e| format!("Failed to register stable_audio: {}", e))?;
+
+    // Now load the worker module (which imports from stable_audio)
+    let code = std::ffi::CString::new(include_str!("../../inference/audio/worker.py"))
+        .map_err(|e| format!("Invalid audio worker source: {}", e))?;
+    pyo3::types::PyModule::from_code(
+        py,
+        &code,
+        c"pantograph_audio_worker",
+        c"pantograph_audio_worker",
+    )
+    .map_err(|e| format!("Failed to load audio worker: {}", e))?;
+
+    log::info!("Audio worker module initialised (with stable_audio sibling)");
     Ok(())
 }
 
@@ -1487,15 +1940,12 @@ async fn execute_pytorch_inference(
     task_id: &str,
     event_sink: Option<&Arc<dyn EventSink>>,
     execution_id: &str,
+    resolved_model_ref: Option<ModelRefV2>,
 ) -> Result<HashMap<String, serde_json::Value>> {
     // Detect if the prompt input is a masked prompt JSON object
     let masked_prompt_json = inputs
         .get("prompt")
-        .filter(|p| {
-            p.get("type")
-                .and_then(|t| t.as_str())
-                == Some("masked_prompt")
-        })
+        .filter(|p| p.get("type").and_then(|t| t.as_str()) == Some("masked_prompt"))
         .map(|p| serde_json::to_string(p).unwrap_or_default());
 
     let prompt = if let Some(p_str) = inputs.get("prompt").and_then(|p| p.as_str()) {
@@ -1607,14 +2057,18 @@ async fn execute_pytorch_inference(
             })
         })
         .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!("Task join error: {}", e))
-        })?
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
         .map_err(|e| NodeEngineError::ExecutionFailed(e))?;
     }
 
     // Read model-specific inference settings to forward as Python kwargs
     let extra_settings = build_extra_settings(inputs);
+    // Keep top_p explicit even when inference_settings schema is missing.
+    let top_p = inputs
+        .get("top_p")
+        .and_then(|v| v.as_f64())
+        .or_else(|| extra_settings.get("top_p").and_then(|v| v.as_f64()))
+        .unwrap_or(0.95);
 
     // Phase 2: Generate — streaming or non-streaming
     let response_text = if let Some(sink) = event_sink {
@@ -1626,6 +2080,7 @@ async fn execute_pytorch_inference(
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings.clone();
+        let top_p = top_p;
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| {
@@ -1638,8 +2093,7 @@ async fn execute_pytorch_inference(
                 let worker = match py.import("pantograph_torch_worker") {
                     Ok(w) => w,
                     Err(e) => {
-                        let _ =
-                            tx.blocking_send(Err(format!("Failed to get worker: {}", e)));
+                        let _ = tx.blocking_send(Err(format!("Failed to get worker: {}", e)));
                         return;
                     }
                 };
@@ -1651,6 +2105,7 @@ async fn execute_pytorch_inference(
                 }
                 kwargs.set_item("max_tokens", max_tokens).unwrap();
                 kwargs.set_item("temperature", temperature).unwrap();
+                kwargs.set_item("top_p", top_p).unwrap();
                 if let Some(ref mpj_val) = mpj {
                     kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
                 }
@@ -1668,25 +2123,18 @@ async fn execute_pytorch_inference(
                     }
                 }
 
-                let generator =
-                    match worker.call_method("generate_tokens", (), Some(&kwargs)) {
-                        Ok(g) => g,
-                        Err(e) => {
-                            let _ = tx.blocking_send(Err(format!(
-                                "Failed to create generator: {}",
-                                e
-                            )));
-                            return;
-                        }
-                    };
+                let generator = match worker.call_method("generate_tokens", (), Some(&kwargs)) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(format!("Failed to create generator: {}", e)));
+                        return;
+                    }
+                };
 
                 let iter = match generator.try_iter() {
                     Ok(it) => it,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(format!(
-                            "Generator not iterable: {}",
-                            e
-                        )));
+                        let _ = tx.blocking_send(Err(format!("Generator not iterable: {}", e)));
                         return;
                     }
                 };
@@ -1695,38 +2143,36 @@ async fn execute_pytorch_inference(
                     match item {
                         Ok(token_obj) => {
                             // Try dict first: {"mode": "append"|"replace", "text": "..."}
-                            let result = if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
-                                let mode = dict
-                                    .get_item("mode")
-                                    .ok()
-                                    .flatten()
-                                    .and_then(|v| v.extract::<String>().ok())
-                                    .unwrap_or_else(|| "append".to_string());
-                                let text = dict
-                                    .get_item("text")
-                                    .ok()
-                                    .flatten()
-                                    .and_then(|v| v.extract::<String>().ok())
-                                    .unwrap_or_default();
-                                Ok((mode, text))
-                            } else if let Ok(text) = token_obj.extract::<String>() {
-                                // Backwards compat: plain string → append
-                                Ok(("append".to_string(), text))
-                            } else {
-                                Err(format!(
+                            let result =
+                                if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+                                    let mode = dict
+                                        .get_item("mode")
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.extract::<String>().ok())
+                                        .unwrap_or_else(|| "append".to_string());
+                                    let text = dict
+                                        .get_item("text")
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.extract::<String>().ok())
+                                        .unwrap_or_default();
+                                    Ok((mode, text))
+                                } else if let Ok(text) = token_obj.extract::<String>() {
+                                    // Backwards compat: plain string → append
+                                    Ok(("append".to_string(), text))
+                                } else {
+                                    Err(format!(
                                     "Token extraction failed: expected dict or string, got {:?}",
                                     token_obj.get_type().name()
                                 ))
-                            };
+                                };
                             if tx.blocking_send(result).is_err() {
                                 return;
                             }
                         }
                         Err(e) => {
-                            let _ = tx.blocking_send(Err(format!(
-                                "Generator error: {}",
-                                e
-                            )));
+                            let _ = tx.blocking_send(Err(format!("Generator error: {}", e)));
                             return;
                         }
                     }
@@ -1759,6 +2205,7 @@ async fn execute_pytorch_inference(
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings;
+        let top_p = top_p;
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
@@ -1776,6 +2223,7 @@ async fn execute_pytorch_inference(
                 }
                 kwargs.set_item("max_tokens", max_tokens).unwrap();
                 kwargs.set_item("temperature", temperature).unwrap();
+                kwargs.set_item("top_p", top_p).unwrap();
                 if let Some(ref mpj_val) = mpj {
                     kwargs.set_item("masked_prompt_json", mpj_val).unwrap();
                 }
@@ -1803,23 +2251,204 @@ async fn execute_pytorch_inference(
             })
         })
         .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!("Task join error: {}", e))
-        })?
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
         .map_err(|e| NodeEngineError::ExecutionFailed(e))?
     };
 
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
+    let task_type_primary = infer_task_type_primary("pytorch-inference", inputs);
+    let model_ref = build_model_ref_v2(
+        resolved_model_ref,
+        "pytorch",
+        &model_name,
+        &model_path,
+        &task_type_primary,
+        inputs,
+    );
     outputs.insert(
         "model_ref".to_string(),
-        serde_json::json!({
-            "engine": "pytorch",
-            "model_id": model_name,
-            "model_path": model_path,
+        serde_json::to_value(model_ref).unwrap_or_else(|_| {
+            serde_json::json!({
+                "contractVersion": 2,
+                "engine": "pytorch",
+                "modelId": model_name,
+                "modelPath": model_path,
+                "taskTypePrimary": task_type_primary,
+            })
         }),
     );
     Ok(outputs)
+}
+
+// ---------------------------------------------------------------------------
+// Audio generation handler (behind audio-nodes feature)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "audio-nodes")]
+async fn execute_audio_generation(
+    inputs: &HashMap<String, serde_json::Value>,
+    resolved_model_ref: Option<ModelRefV2>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let model_path = inputs
+        .get("model_path")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+            )
+        })?
+        .to_string();
+
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?
+        .to_string();
+
+    let duration = inputs
+        .get("duration")
+        .and_then(|d| d.as_f64())
+        .unwrap_or(30.0);
+    let steps = inputs
+        .get("num_inference_steps")
+        .and_then(|s| s.as_i64())
+        .unwrap_or(100);
+    let guidance_scale = inputs
+        .get("guidance_scale")
+        .and_then(|g| g.as_f64())
+        .unwrap_or(7.0);
+    let seed = inputs.get("seed").and_then(|s| s.as_i64()).unwrap_or(-1);
+
+    // Phase 1: Load model if needed
+    {
+        let mp = model_path.clone();
+        tokio::task::spawn_blocking(move || {
+            pyo3::Python::with_gil(|py| -> std::result::Result<(), String> {
+                use pyo3::types::{PyAnyMethods, PyDictMethods};
+
+                ensure_audio_worker_initialised(py)?;
+                let worker = py
+                    .import("pantograph_audio_worker")
+                    .map_err(|e| format!("Failed to import audio worker: {}", e))?;
+
+                let info = worker
+                    .call_method0("get_loaded_info")
+                    .map_err(|e| format!("get_loaded_info failed: {}", e))?;
+
+                let needs_load = if info.is_none() {
+                    true
+                } else {
+                    let loaded_path: String = info
+                        .get_item("model_path")
+                        .ok()
+                        .and_then(|v| v.extract::<String>().ok())
+                        .unwrap_or_default();
+                    loaded_path != mp
+                };
+
+                if needs_load {
+                    log::info!("AudioGeneration: loading model from '{}'", mp);
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("model_path", &mp).unwrap();
+                    kwargs.set_item("device", "auto").unwrap();
+                    worker
+                        .call_method("load_model", (), Some(&kwargs))
+                        .map_err(|e| format!("Audio model load failed: {}", e))?;
+                    log::info!("AudioGeneration: model loaded successfully");
+                }
+
+                Ok(())
+            })
+        })
+        .await
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
+        .map_err(NodeEngineError::ExecutionFailed)?;
+    }
+
+    // Phase 2: Generate audio
+    let mut result = {
+        let p = prompt;
+        tokio::task::spawn_blocking(move || {
+            pyo3::Python::with_gil(
+                |py| -> std::result::Result<HashMap<String, serde_json::Value>, String> {
+                    use pyo3::types::PyAnyMethods;
+
+                    let worker = py
+                        .import("pantograph_audio_worker")
+                        .map_err(|e| format!("Failed to get audio worker: {}", e))?;
+
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("prompt", &p).unwrap();
+                    kwargs.set_item("duration", duration).unwrap();
+                    kwargs.set_item("steps", steps).unwrap();
+                    kwargs.set_item("guidance_scale", guidance_scale).unwrap();
+                    kwargs.set_item("seed", seed).unwrap();
+
+                    let result = worker
+                        .call_method("generate_audio_from_text", (), Some(&kwargs))
+                        .map_err(|e| format!("Audio generation failed: {}", e))?;
+
+                    // Extract dict fields
+                    let audio_base64: String = result
+                        .get_item("audio_base64")
+                        .ok()
+                        .and_then(|v| v.extract().ok())
+                        .unwrap_or_default();
+                    let duration_seconds: f64 = result
+                        .get_item("duration_seconds")
+                        .ok()
+                        .and_then(|v| v.extract().ok())
+                        .unwrap_or(0.0);
+                    let sample_rate: i64 = result
+                        .get_item("sample_rate")
+                        .ok()
+                        .and_then(|v| v.extract().ok())
+                        .unwrap_or(44100);
+
+                    let mut outputs = HashMap::new();
+                    outputs.insert("audio".to_string(), serde_json::json!(audio_base64));
+                    outputs.insert(
+                        "duration_seconds".to_string(),
+                        serde_json::json!(duration_seconds),
+                    );
+                    outputs.insert("sample_rate".to_string(), serde_json::json!(sample_rate));
+                    Ok(outputs)
+                },
+            )
+        })
+        .await
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
+        .map_err(NodeEngineError::ExecutionFailed)?
+    };
+
+    let model_name = std::path::Path::new(&model_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("audio-model")
+        .to_string();
+    let model_ref = build_model_ref_v2(
+        resolved_model_ref,
+        "stable_audio",
+        &model_name,
+        &model_path,
+        "text-to-audio",
+        inputs,
+    );
+    result.insert(
+        "model_ref".to_string(),
+        serde_json::to_value(model_ref).unwrap_or_else(|_| {
+            serde_json::json!({
+                "contractVersion": 2,
+                "engine": "stable_audio",
+                "modelId": model_name,
+                "modelPath": model_path,
+                "taskTypePrimary": "text-to-audio",
+            })
+        }),
+    );
+
+    Ok(result)
 }
 
 // ---------------------------------------------------------------------------
@@ -1855,7 +2484,10 @@ async fn execute_kv_cache_save(
     let model_fingerprint: ModelFingerprint = serde_json::from_value(fingerprint_val.clone())?;
 
     // Parse optional inputs
-    let label = inputs.get("label").and_then(|v| v.as_str()).map(String::from);
+    let label = inputs
+        .get("label")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     let compressed = inputs
         .get("compressed")
         .and_then(|v| v.as_bool())
@@ -2094,10 +2726,7 @@ mod tests {
     #[test]
     fn test_merge_array() {
         let mut inputs = HashMap::new();
-        inputs.insert(
-            "inputs".to_string(),
-            serde_json::json!(["hello", "world"]),
-        );
+        inputs.insert("inputs".to_string(), serde_json::json!(["hello", "world"]));
         let result = execute_merge(&inputs).unwrap();
         assert_eq!(result["merged"], "hello\nworld");
         assert_eq!(result["count"], 2);
@@ -2150,10 +2779,7 @@ mod tests {
             "json".to_string(),
             serde_json::json!({"items": [10, 20, 30]}),
         );
-        inputs.insert(
-            "_data".to_string(),
-            serde_json::json!({"path": "items[1]"}),
-        );
+        inputs.insert("_data".to_string(), serde_json::json!({"path": "items[1]"}));
         let result = execute_json_filter(&inputs).unwrap();
         assert_eq!(result["value"], 20);
         assert_eq!(result["found"], true);
@@ -2235,10 +2861,35 @@ mod tests {
         let mut inputs = HashMap::new();
         inputs.insert(
             "_data".to_string(),
+            serde_json::json!({
+                "modelPath": "/models/test.gguf",
+                "inference_settings": [
+                    {"key": "temperature", "default": 0.6},
+                    {"key": "top_p", "default": 0.95}
+                ]
+            }),
+        );
+        let result = execute_puma_lib(&inputs).unwrap();
+        assert_eq!(result["model_path"], "/models/test.gguf");
+        assert_eq!(
+            result["inference_settings"],
+            serde_json::json!([
+                {"key": "temperature", "default": 0.6},
+                {"key": "top_p", "default": 0.95}
+            ])
+        );
+    }
+
+    #[test]
+    fn test_puma_lib_missing_inference_settings_defaults_to_empty_array() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "_data".to_string(),
             serde_json::json!({"modelPath": "/models/test.gguf"}),
         );
         let result = execute_puma_lib(&inputs).unwrap();
         assert_eq!(result["model_path"], "/models/test.gguf");
+        assert_eq!(result["inference_settings"], serde_json::json!([]));
     }
 
     #[test]
@@ -2320,10 +2971,7 @@ mod tests {
     #[test]
     fn test_execute_expand_settings_empty_schema_passes_through() {
         let mut inputs = HashMap::new();
-        inputs.insert(
-            "inference_settings".to_string(),
-            serde_json::json!([]),
-        );
+        inputs.insert("inference_settings".to_string(), serde_json::json!([]));
         let result = execute_expand_settings(&inputs).unwrap();
         assert_eq!(result["inference_settings"], serde_json::json!([]));
         // Only the passthrough output, no parameter ports

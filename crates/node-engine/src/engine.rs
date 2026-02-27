@@ -115,7 +115,11 @@ impl DemandEngine {
     }
 
     /// Get the cached output for a node, if valid
-    pub fn get_cached(&self, node_id: &NodeId, graph: &WorkflowGraph) -> Option<&serde_json::Value> {
+    pub fn get_cached(
+        &self,
+        node_id: &NodeId,
+        graph: &WorkflowGraph,
+    ) -> Option<&serde_json::Value> {
         let cached = self.cache.get(node_id)?;
         let current_version = self.compute_input_version(node_id, graph);
         if cached.version == current_version {
@@ -126,12 +130,15 @@ impl DemandEngine {
     }
 
     /// Store a computed output in the cache
-    pub fn cache_output(&mut self, node_id: &NodeId, value: serde_json::Value, graph: &WorkflowGraph) {
+    pub fn cache_output(
+        &mut self,
+        node_id: &NodeId,
+        value: serde_json::Value,
+        graph: &WorkflowGraph,
+    ) {
         let version = self.compute_input_version(node_id, graph);
-        self.cache.insert(
-            node_id.clone(),
-            CachedOutput { version, value },
-        );
+        self.cache
+            .insert(node_id.clone(), CachedOutput { version, value });
     }
 
     /// Compute the version hash for a node's inputs
@@ -193,8 +200,16 @@ impl DemandEngine {
     ) -> Result<HashMap<String, serde_json::Value>> {
         // Track which nodes we're currently computing to detect cycles
         let mut computing = HashSet::new();
-        self.demand_internal(node_id, graph, executor, context, event_sink, extensions, &mut computing)
-            .await
+        self.demand_internal(
+            node_id,
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+            &mut computing,
+        )
+        .await
     }
 
     /// Internal demand method with cycle detection
@@ -210,7 +225,13 @@ impl DemandEngine {
         event_sink: &'a dyn EventSink,
         extensions: &'a ExecutorExtensions,
         computing: &'a mut HashSet<NodeId>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>> + Send + 'a>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>>
+                + Send
+                + 'a,
+        >,
+    > {
         Box::pin(async move {
             // Cycle detection
             if computing.contains(node_id) {
@@ -231,7 +252,9 @@ impl DemandEngine {
             for dep_id in &dependencies {
                 // Recursively demand the dependency
                 let dep_outputs = self
-                    .demand_internal(dep_id, graph, executor, context, event_sink, extensions, computing)
+                    .demand_internal(
+                        dep_id, graph, executor, context, event_sink, extensions, computing,
+                    )
                     .await?;
 
                 // Find the edge(s) connecting this dependency to our node
@@ -251,7 +274,11 @@ impl DemandEngine {
             // 3. Check cache - if version matches, return cached result
             if let Some(cached) = self.cache.get(node_id) {
                 if cached.version == input_version {
-                    log::debug!("Cache hit for node '{}' (version {})", node_id, input_version);
+                    log::debug!(
+                        "Cache hit for node '{}' (version {})",
+                        node_id,
+                        input_version
+                    );
                     // Parse cached value back to HashMap
                     let outputs: HashMap<String, serde_json::Value> =
                         serde_json::from_value(cached.value.clone())?;
@@ -280,7 +307,9 @@ impl DemandEngine {
             });
 
             // 5. Execute this node
-            let outputs = executor.execute_task(node_id, inputs, context, extensions).await?;
+            let outputs = executor
+                .execute_task(node_id, inputs, context, extensions)
+                .await?;
 
             // Send task completed event
             let _ = event_sink.send(WorkflowEvent::TaskCompleted {
@@ -328,7 +357,9 @@ impl DemandEngine {
         // more complex dependency analysis to find independent subgraphs.
         // This is a future optimization.
         for node_id in node_ids {
-            let output = self.demand(node_id, graph, executor, context, event_sink, extensions).await?;
+            let output = self
+                .demand(node_id, graph, executor, context, event_sink, extensions)
+                .await?;
             results.insert(node_id.clone(), output);
         }
 
@@ -447,11 +478,7 @@ impl WorkflowExecutor {
     }
 
     /// Set a value in the context
-    pub async fn set_context_value<T: serde::Serialize + Send + Sync>(
-        &self,
-        key: &str,
-        value: T,
-    ) {
+    pub async fn set_context_value<T: serde::Serialize + Send + Sync>(&self, key: &str, value: T) {
         self.context.set(key, value).await;
     }
 
@@ -464,7 +491,10 @@ impl WorkflowExecutor {
     }
 
     /// Send an event to the event sink
-    pub fn send_event(&self, event: WorkflowEvent) -> std::result::Result<(), crate::events::EventError> {
+    pub fn send_event(
+        &self,
+        event: WorkflowEvent,
+    ) -> std::result::Result<(), crate::events::EventError> {
         self.event_sink.send(event)
     }
 
@@ -486,7 +516,14 @@ impl WorkflowExecutor {
         let mut engine = self.demand_engine.write().await;
 
         engine
-            .demand(node_id, &graph, executor, &self.context, self.event_sink.as_ref(), &self.extensions)
+            .demand(
+                node_id,
+                &graph,
+                executor,
+                &self.context,
+                self.event_sink.as_ref(),
+                &self.extensions,
+            )
             .await
     }
 
@@ -500,7 +537,14 @@ impl WorkflowExecutor {
         let mut engine = self.demand_engine.write().await;
 
         engine
-            .demand_multiple(node_ids, &graph, executor, &self.context, self.event_sink.as_ref(), &self.extensions)
+            .demand_multiple(
+                node_ids,
+                &graph,
+                executor,
+                &self.context,
+                self.event_sink.as_ref(),
+                &self.extensions,
+            )
             .await
     }
 
@@ -746,11 +790,7 @@ mod tests {
         let mut engine = DemandEngine::new("test");
 
         // Cache output for 'b'
-        engine.cache_output(
-            &"b".to_string(),
-            serde_json::json!("cached_value"),
-            &graph,
-        );
+        engine.cache_output(&"b".to_string(), serde_json::json!("cached_value"), &graph);
 
         // Should be able to get cached value
         assert!(engine.get_cached(&"b".to_string(), &graph).is_some());
@@ -825,7 +865,14 @@ mod tests {
 
         // Demand 'c' - should execute a, b, c
         let result = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"c".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
 
         assert!(result.is_ok());
@@ -843,13 +890,27 @@ mod tests {
 
         // First demand
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"c".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
         assert_eq!(executor.count(), 3);
 
         // Second demand - should use cache
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"c".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
         assert_eq!(executor.count(), 3); // No additional executions
     }
@@ -865,7 +926,14 @@ mod tests {
 
         // First demand
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"c".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
         assert_eq!(executor.count(), 3);
 
@@ -874,7 +942,14 @@ mod tests {
 
         // Demand again - should only recompute b and c (not a)
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"c".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
         // Note: Due to version-based invalidation, this depends on implementation details.
         // The current implementation uses sum of dependency versions, so modifying 'b'
@@ -892,7 +967,14 @@ mod tests {
 
         // Demand 'd' - should execute a, b, c, d (a only once despite diamond)
         let result = engine
-            .demand(&"d".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"d".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
 
         assert!(result.is_ok());
@@ -909,7 +991,14 @@ mod tests {
         let extensions = ExecutorExtensions::new();
 
         let _ = engine
-            .demand(&"c".to_string(), &graph, &executor, &context, &event_sink, &extensions)
+            .demand(
+                &"c".to_string(),
+                &graph,
+                &executor,
+                &context,
+                &event_sink,
+                &extensions,
+            )
             .await;
 
         let events = event_sink.events();

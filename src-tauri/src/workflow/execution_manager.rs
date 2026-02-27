@@ -130,7 +130,9 @@ impl ExecutionManager {
     }
 
     /// Get direct access to the executions map for async operations
-    pub async fn executions(&self) -> tokio::sync::RwLockWriteGuard<'_, HashMap<String, ExecutionState>> {
+    pub async fn executions(
+        &self,
+    ) -> tokio::sync::RwLockWriteGuard<'_, HashMap<String, ExecutionState>> {
         self.executions.write().await
     }
 
@@ -239,9 +241,7 @@ mod tests {
         let graph = make_test_graph();
         let event_sink = Arc::new(NullEventSink);
 
-        let id = manager
-            .create_execution("exec-1", graph, event_sink)
-            .await;
+        let id = manager.create_execution("exec-1", graph, event_sink).await;
 
         assert_eq!(id, "exec-1");
         assert!(manager.has_execution("exec-1").await);
@@ -254,9 +254,7 @@ mod tests {
         let graph = make_test_graph();
         let event_sink = Arc::new(NullEventSink);
 
-        manager
-            .create_execution("exec-1", graph, event_sink)
-            .await;
+        manager.create_execution("exec-1", graph, event_sink).await;
 
         assert!(manager.has_execution("exec-1").await);
 
@@ -271,9 +269,7 @@ mod tests {
         let graph = make_test_graph();
         let event_sink = Arc::new(NullEventSink);
 
-        manager
-            .create_execution("exec-1", graph, event_sink)
-            .await;
+        manager.create_execution("exec-1", graph, event_sink).await;
 
         assert_eq!(manager.execution_count().await, 1);
 
@@ -291,9 +287,7 @@ mod tests {
         let graph = make_test_graph();
         let event_sink = Arc::new(NullEventSink);
 
-        manager
-            .create_execution("exec-1", graph, event_sink)
-            .await;
+        manager.create_execution("exec-1", graph, event_sink).await;
 
         let result = manager
             .with_execution("exec-1", |state| state.can_undo())

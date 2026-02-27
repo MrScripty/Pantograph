@@ -197,9 +197,7 @@ mod tests {
         context.set(&path_key, "output.txt".to_string()).await;
 
         let content_key = ContextKeys::input("test_writer", "content");
-        context
-            .set(&content_key, "Hello, file!".to_string())
-            .await;
+        context.set(&content_key, "Hello, file!".to_string()).await;
 
         // Run task
         let result = task.run(context.clone()).await.unwrap();

@@ -74,13 +74,9 @@ if [ "${1:-}" = "--install" ]; then
 
   echo "=== Pantograph dependency installer ==="
 
-  # 1. Node modules
-  if [ -d "node_modules" ]; then
-    echo "[npm] node_modules exists, skipping"
-  else
-    echo "[npm] Installing node dependencies..."
-    npm install
-  fi
+  # 1. Node modules (always run to pick up new packages)
+  echo "[npm] Installing node dependencies..."
+  npm install
 
   # 2. Python venv
   SYSTEM_PYTHON="$(command -v python3 2>/dev/null || true)"

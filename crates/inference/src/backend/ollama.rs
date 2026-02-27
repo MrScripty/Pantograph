@@ -10,8 +10,7 @@ use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
 
@@ -59,7 +58,10 @@ impl OllamaBackend {
         if which::which("ollama").is_ok() {
             (true, None)
         } else {
-            (false, Some("Ollama not found in PATH. Install from ollama.ai".to_string()))
+            (
+                false,
+                Some("Ollama not found in PATH. Install from ollama.ai".to_string()),
+            )
         }
     }
 
@@ -264,12 +266,9 @@ impl InferenceBackend for OllamaBackend {
             .await
             .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
 
-        let data = json
-            .get("data")
-            .and_then(|d| d.as_array())
-            .ok_or_else(|| {
-                BackendError::Inference("Invalid embedding response format".to_string())
-            })?;
+        let data = json.get("data").and_then(|d| d.as_array()).ok_or_else(|| {
+            BackendError::Inference("Invalid embedding response format".to_string())
+        })?;
 
         let mut results = Vec::new();
         for item in data {

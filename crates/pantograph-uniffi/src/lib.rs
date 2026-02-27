@@ -24,8 +24,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use node_engine::{
-    Context, EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowExecutor,
-    WorkflowGraph, WorkflowEvent,
+    Context, EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowEvent,
+    WorkflowExecutor, WorkflowGraph,
 };
 use tokio::sync::RwLock;
 
@@ -231,9 +231,10 @@ pub fn version() -> String {
 /// Validate a workflow graph JSON string, returning error messages.
 #[uniffi::export]
 pub fn validate_workflow_json(graph_json: String) -> Result<Vec<String>, FfiError> {
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json).map_err(|e| FfiError::Serialization {
-        message: e.to_string(),
-    })?;
+    let graph: WorkflowGraph =
+        serde_json::from_str(&graph_json).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })?;
     let errors = node_engine::validation::validate_workflow(&graph, None);
     Ok(errors.iter().map(|e| e.to_string()).collect())
 }
@@ -241,11 +242,10 @@ pub fn validate_workflow_json(graph_json: String) -> Result<Vec<String>, FfiErro
 /// Validate an orchestration graph JSON string, returning error messages.
 #[uniffi::export]
 pub fn validate_orchestration_json(graph_json: String) -> Result<Vec<String>, FfiError> {
-    let graph: OrchestrationGraph = serde_json::from_str(&graph_json).map_err(|e| {
-        FfiError::Serialization {
+    let graph: OrchestrationGraph =
+        serde_json::from_str(&graph_json).map_err(|e| FfiError::Serialization {
             message: e.to_string(),
-        }
-    })?;
+        })?;
     let errors = node_engine::validation::validate_orchestration(&graph);
     Ok(errors.iter().map(|e| e.to_string()).collect())
 }
@@ -281,13 +281,15 @@ struct BufferedEventSink {
 }
 
 impl EventSink for BufferedEventSink {
-    fn send(
-        &self,
-        event: WorkflowEvent,
-    ) -> std::result::Result<(), node_engine::EventError> {
-        let event_type = format!("{:?}", event).split('(').next().unwrap_or("Unknown").to_string();
-        let event_json = serde_json::to_string(&event)
-            .map_err(|e| node_engine::EventError { message: e.to_string() })?;
+    fn send(&self, event: WorkflowEvent) -> std::result::Result<(), node_engine::EventError> {
+        let event_type = format!("{:?}", event)
+            .split('(')
+            .next()
+            .unwrap_or("Unknown")
+            .to_string();
+        let event_json = serde_json::to_string(&event).map_err(|e| node_engine::EventError {
+            message: e.to_string(),
+        })?;
 
         // Use try_write to avoid blocking in sync context
         if let Ok(mut buf) = self.buffer.try_write() {
@@ -322,11 +324,10 @@ impl FfiWorkflowEngine {
     /// Create from a JSON-serialized workflow graph.
     #[uniffi::constructor]
     pub fn from_json(graph_json: String) -> Result<Arc<Self>, FfiError> {
-        let graph: WorkflowGraph = serde_json::from_str(&graph_json).map_err(|e| {
-            FfiError::Serialization {
+        let graph: WorkflowGraph =
+            serde_json::from_str(&graph_json).map_err(|e| FfiError::Serialization {
                 message: e.to_string(),
-            }
-        })?;
+            })?;
         let event_buffer = Arc::new(RwLock::new(Vec::new()));
         let event_sink: Arc<dyn EventSink> = Arc::new(BufferedEventSink {
             buffer: event_buffer.clone(),
@@ -376,7 +377,10 @@ impl FfiWorkflowEngine {
         target: String,
         target_handle: String,
     ) -> Result<(), FfiError> {
-        let edge_id = format!("e-{}-{}-{}-{}", source, source_handle, target, target_handle);
+        let edge_id = format!(
+            "e-{}-{}-{}-{}",
+            source, source_handle, target, target_handle
+        );
         let edge = node_engine::GraphEdge {
             id: edge_id,
             source,
@@ -398,7 +402,11 @@ impl FfiWorkflowEngine {
     }
 
     /// Update a node's data.
-    pub async fn update_node_data(&self, node_id: String, data_json: String) -> Result<(), FfiError> {
+    pub async fn update_node_data(
+        &self,
+        node_id: String,
+        data_json: String,
+    ) -> Result<(), FfiError> {
         let data: serde_json::Value =
             serde_json::from_str(&data_json).unwrap_or(serde_json::Value::Null);
 
@@ -507,11 +515,10 @@ impl FfiOrchestrationStore {
 
     /// Insert an orchestration graph (as JSON).
     pub async fn insert_graph(&self, graph_json: String) -> Result<(), FfiError> {
-        let graph: OrchestrationGraph = serde_json::from_str(&graph_json).map_err(|e| {
-            FfiError::Serialization {
+        let graph: OrchestrationGraph =
+            serde_json::from_str(&graph_json).map_err(|e| FfiError::Serialization {
                 message: e.to_string(),
-            }
-        })?;
+            })?;
         let mut guard = self.store.write().await;
         guard.insert_graph(graph).map_err(FfiError::from)
     }
@@ -560,9 +567,7 @@ impl FfiPumasApi {
                 message: format!("PumasApi init error: {}", e),
             })?;
 
-        Ok(Arc::new(Self {
-            api: Arc::new(api),
-        }))
+        Ok(Arc::new(Self { api: Arc::new(api) }))
     }
 
     // --- Local library ---
@@ -700,8 +705,8 @@ impl FfiPumasApi {
     /// Import a model. `spec_json` is a JSON ModelImportSpec.
     /// Returns JSON ModelImportResult.
     pub async fn import_model(&self, spec_json: String) -> Result<String, FfiError> {
-        let spec: pumas_library::model_library::ModelImportSpec =
-            serde_json::from_str(&spec_json).map_err(|e| FfiError::Serialization {
+        let spec: pumas_library::model_library::ModelImportSpec = serde_json::from_str(&spec_json)
+            .map_err(|e| FfiError::Serialization {
                 message: e.to_string(),
             })?;
         let result = self

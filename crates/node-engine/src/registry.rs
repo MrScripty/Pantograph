@@ -86,11 +86,7 @@ impl NodeRegistry {
     }
 
     /// Register a node type with metadata and an executor factory
-    pub fn register(
-        &mut self,
-        metadata: TaskMetadata,
-        factory: Arc<dyn NodeExecutorFactory>,
-    ) {
+    pub fn register(&mut self, metadata: TaskMetadata, factory: Arc<dyn NodeExecutorFactory>) {
         self.entries.insert(
             metadata.node_type.clone(),
             RegistryEntry {
@@ -106,12 +102,12 @@ impl NodeRegistry {
     pub fn register_callback<F, Fut>(&mut self, metadata: TaskMetadata, callback: F)
     where
         F: Fn(String, HashMap<String, serde_json::Value>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<HashMap<String, serde_json::Value>>> + Send + 'static,
+        Fut: std::future::Future<Output = Result<HashMap<String, serde_json::Value>>>
+            + Send
+            + 'static,
     {
         let executor = Arc::new(CallbackNodeExecutor {
-            callback: Box::new(move |task_id, inputs| {
-                Box::pin(callback(task_id, inputs))
-            }),
+            callback: Box::new(move |task_id, inputs| Box::pin(callback(task_id, inputs))),
         });
         let factory = Arc::new(SharedExecutorFactory {
             executor: executor as Arc<dyn NodeExecutor>,
@@ -265,8 +261,12 @@ pub struct CallbackNodeExecutor {
         dyn Fn(
                 String,
                 HashMap<String, serde_json::Value>,
-            ) -> Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>> + Send>>
-            + Send
+            ) -> Pin<
+                Box<
+                    dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>>
+                        + Send,
+                >,
+            > + Send
             + Sync,
     >,
 }
@@ -289,7 +289,10 @@ impl NodeExecutor for CallbackNodeExecutor {
 /// Wraps a synchronous closure for simpler FFI scenarios.
 pub struct SyncCallbackNodeExecutor {
     callback: Box<
-        dyn Fn(&str, HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>>
+        dyn Fn(
+                &str,
+                HashMap<String, serde_json::Value>,
+            ) -> Result<HashMap<String, serde_json::Value>>
             + Send
             + Sync,
     >,
@@ -297,7 +300,10 @@ pub struct SyncCallbackNodeExecutor {
 
 impl SyncCallbackNodeExecutor {
     pub fn new(
-        callback: impl Fn(&str, HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>>
+        callback: impl Fn(
+                &str,
+                HashMap<String, serde_json::Value>,
+            ) -> Result<HashMap<String, serde_json::Value>>
             + Send
             + Sync
             + 'static,
@@ -404,8 +410,16 @@ mod tests {
             category: NodeCategory::Processing,
             label: format!("Test {}", node_type),
             description: "Test node".to_string(),
-            inputs: vec![PortMetadata::optional("input", "Input", PortDataType::String)],
-            outputs: vec![PortMetadata::optional("output", "Output", PortDataType::String)],
+            inputs: vec![PortMetadata::optional(
+                "input",
+                "Input",
+                PortDataType::String,
+            )],
+            outputs: vec![PortMetadata::optional(
+                "output",
+                "Output",
+                PortDataType::String,
+            )],
             execution_mode: ExecutionMode::Reactive,
         }
     }
@@ -458,10 +472,7 @@ mod tests {
         registry2.register_metadata(meta2);
 
         registry1.merge(registry2);
-        assert_eq!(
-            registry1.get_metadata("node-a").unwrap().label,
-            "Override"
-        );
+        assert_eq!(registry1.get_metadata("node-a").unwrap().label, "Override");
     }
 
     #[tokio::test]
@@ -497,7 +508,10 @@ mod tests {
         inputs.insert("value".to_string(), serde_json::json!("hello"));
 
         let extensions = ExecutorExtensions::new();
-        let result = executor.execute("echo-1", inputs, &context, &extensions).await.unwrap();
+        let result = executor
+            .execute("echo-1", inputs, &context, &extensions)
+            .await
+            .unwrap();
         assert_eq!(result.get("value").unwrap(), "hello");
     }
 
@@ -542,8 +556,9 @@ mod tests {
         );
 
         let extensions = ExecutorExtensions::new();
-        let result: Result<HashMap<String, serde_json::Value>> =
-            task_executor.execute_task("unknown-1", inputs, &context, &extensions).await;
+        let result: Result<HashMap<String, serde_json::Value>> = task_executor
+            .execute_task("unknown-1", inputs, &context, &extensions)
+            .await;
         assert!(result.is_err());
     }
 

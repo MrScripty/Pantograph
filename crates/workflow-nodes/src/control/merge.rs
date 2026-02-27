@@ -87,7 +87,8 @@ impl TaskDescriptor for MergeTask {
             label: "Merge".to_string(),
             description: "Combines multiple string inputs into one".to_string(),
             inputs: vec![
-                PortMetadata::optional(Self::PORT_INPUTS, "Inputs", PortDataType::String).multiple(),
+                PortMetadata::optional(Self::PORT_INPUTS, "Inputs", PortDataType::String)
+                    .multiple(),
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_MERGED, "Merged", PortDataType::String),
@@ -141,7 +142,11 @@ impl Task for MergeTask {
 
         // Filter and merge
         let filtered: Vec<&str> = if config.filter_empty {
-            inputs.iter().map(|s| s.as_str()).filter(|s| !s.trim().is_empty()).collect()
+            inputs
+                .iter()
+                .map(|s| s.as_str())
+                .filter(|s| !s.trim().is_empty())
+                .collect()
         } else {
             inputs.iter().map(|s| s.as_str()).collect()
         };
@@ -212,7 +217,16 @@ mod tests {
 
         // Set inputs as array
         let inputs_key = ContextKeys::input("test_merge", "inputs");
-        context.set(&inputs_key, vec!["First".to_string(), "Second".to_string(), "Third".to_string()]).await;
+        context
+            .set(
+                &inputs_key,
+                vec![
+                    "First".to_string(),
+                    "Second".to_string(),
+                    "Third".to_string(),
+                ],
+            )
+            .await;
 
         // Run task
         let result = task.run(context.clone()).await.unwrap();
@@ -236,7 +250,12 @@ mod tests {
 
         // Set inputs with empty strings
         let inputs_key = ContextKeys::input("test_merge", "inputs");
-        context.set(&inputs_key, vec!["First".to_string(), "".to_string(), "Third".to_string()]).await;
+        context
+            .set(
+                &inputs_key,
+                vec!["First".to_string(), "".to_string(), "Third".to_string()],
+            )
+            .await;
 
         // Run task
         task.run(context.clone()).await.unwrap();
@@ -296,7 +315,12 @@ mod tests {
 
         // Set inputs
         let inputs_key = ContextKeys::input("test_merge", "inputs");
-        context.set(&inputs_key, vec!["A".to_string(), "B".to_string(), "C".to_string()]).await;
+        context
+            .set(
+                &inputs_key,
+                vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            )
+            .await;
 
         // Run task
         task.run(context.clone()).await.unwrap();

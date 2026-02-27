@@ -272,14 +272,15 @@ impl Task for ToolLoopTask {
             );
 
             // Make LLM request
-            let http_response = client
-                .post(&url)
-                .json(&request_body)
-                .send()
-                .await
-                .map_err(|e| {
-                    GraphError::TaskExecutionFailed(format!("LLM request failed: {}", e))
-                })?;
+            let http_response =
+                client
+                    .post(&url)
+                    .json(&request_body)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        GraphError::TaskExecutionFailed(format!("LLM request failed: {}", e))
+                    })?;
 
             if !http_response.status().is_success() {
                 let status = http_response.status();
@@ -290,9 +291,10 @@ impl Task for ToolLoopTask {
                 )));
             }
 
-            let json: serde_json::Value = http_response.json().await.map_err(|e| {
-                GraphError::TaskExecutionFailed(format!("Parse error: {}", e))
-            })?;
+            let json: serde_json::Value = http_response
+                .json()
+                .await
+                .map_err(|e| GraphError::TaskExecutionFailed(format!("Parse error: {}", e)))?;
 
             let message = &json["choices"][0]["message"];
             let content = message["content"].as_str().unwrap_or("").to_string();
@@ -332,9 +334,7 @@ impl Task for ToolLoopTask {
             if let Some(calls) = tool_calls_json.and_then(|t| t.as_array()) {
                 for call in calls {
                     let tool_name = call["function"]["name"].as_str().unwrap_or("unknown");
-                    let tool_args_str = call["function"]["arguments"]
-                        .as_str()
-                        .unwrap_or("{}");
+                    let tool_args_str = call["function"]["arguments"].as_str().unwrap_or("{}");
                     let tool_args: serde_json::Value =
                         serde_json::from_str(tool_args_str).unwrap_or(serde_json::json!({}));
                     let call_id = call["id"].as_str().map(String::from);
@@ -377,15 +377,8 @@ impl Task for ToolLoopTask {
 
         // If we hit max turns without a final response, use the last content
         if final_response.is_empty() && !messages.is_empty() {
-            if let Some(last_assistant) = messages
-                .iter()
-                .rev()
-                .find(|m| m["role"] == "assistant")
-            {
-                final_response = last_assistant["content"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string();
+            if let Some(last_assistant) = messages.iter().rev().find(|m| m["role"] == "assistant") {
+                final_response = last_assistant["content"].as_str().unwrap_or("").to_string();
             }
         }
 

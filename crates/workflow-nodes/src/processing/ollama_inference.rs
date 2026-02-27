@@ -104,7 +104,11 @@ impl TaskDescriptor for OllamaInferenceTask {
                 ),
                 PortMetadata::optional(Self::PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(Self::PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
-                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
+                PortMetadata::optional(
+                    "inference_settings",
+                    "Inference Settings",
+                    PortDataType::Json,
+                ),
             ],
             outputs: vec![
                 PortMetadata::required(Self::PORT_RESPONSE, "Response", PortDataType::String),
@@ -214,10 +218,14 @@ impl Task for OllamaInferenceTask {
 
         // Store outputs in context
         let output_key = ContextKeys::output(&self.task_id, Self::PORT_RESPONSE);
-        context.set(&output_key, response_data.response.clone()).await;
+        context
+            .set(&output_key, response_data.response.clone())
+            .await;
 
         let model_out_key = ContextKeys::output(&self.task_id, Self::PORT_MODEL_OUT);
-        context.set(&model_out_key, response_data.model.clone()).await;
+        context
+            .set(&model_out_key, response_data.model.clone())
+            .await;
 
         log::debug!(
             "OllamaInferenceTask {}: completed with {} chars response using model '{}'",
@@ -226,7 +234,10 @@ impl Task for OllamaInferenceTask {
             response_data.model
         );
 
-        Ok(TaskResult::new(Some(response_data.response), NextAction::Continue))
+        Ok(TaskResult::new(
+            Some(response_data.response),
+            NextAction::Continue,
+        ))
     }
 }
 

@@ -459,29 +459,36 @@ export function createWorkflowStores(
 
       const nodeDef = node.data.definition as NodeDefinition;
 
+      // Skip expand-settings nodes — they only need output port sync, not inputs
+      if (nodeDef.node_type === 'expand-settings') continue;
+
       // Get the base definition for this node type (static ports only)
       const baseDef = defs.find((d) => d.node_type === nodeDef.node_type);
       if (!baseDef) continue;
 
-      const basePortIds = new Set(baseDef.inputs.map((p) => p.id));
-
-      // Strip any previously-appended model-derived ports
-      const staticPorts = nodeDef.inputs.filter((p: PortDefinition) => basePortIds.has(p.id));
-
       // Convert inference_settings schema to PortDefinitions
-      const modelPorts: PortDefinition[] = inferenceSettings.map((s) => ({
-        id: s.key,
-        label: s.label,
-        data_type: paramTypeToPortDataType(s.param_type),
-        required: false,
-        multiple: false,
-      }));
+      const modelPortMap = new Map<string, PortDefinition>();
+      for (const s of inferenceSettings) {
+        modelPortMap.set(s.key, {
+          id: s.key,
+          label: s.label,
+          data_type: paramTypeToPortDataType(s.param_type),
+          required: false,
+          multiple: false,
+        });
+      }
 
-      // Update definition with static + model-derived ports
+      // Build deduplicated port list: base ports first (excluding those
+      // overridden by model ports), then model-derived ports
+      const staticPorts = baseDef.inputs.filter(
+        (p) => !modelPortMap.has(p.id)
+      );
+
+      // Update definition with static + model-derived ports (unique by ID)
       updateNodeData(nodeId, {
         definition: {
           ...nodeDef,
-          inputs: [...staticPorts, ...modelPorts],
+          inputs: [...staticPorts, ...modelPortMap.values()],
         },
       });
     }
@@ -500,15 +507,16 @@ export function createWorkflowStores(
     const baseDef = defs.find((d) => d.node_type === 'expand-settings');
     if (!baseDef) return;
 
-    const basePortIds = new Set(baseDef.outputs.map((p) => p.id));
-
-    const modelPorts: PortDefinition[] = inferenceSettings.map((s) => ({
-      id: s.key,
-      label: s.label,
-      data_type: paramTypeToPortDataType(s.param_type),
-      required: false,
-      multiple: false,
-    }));
+    const modelPortMap = new Map<string, PortDefinition>();
+    for (const s of inferenceSettings) {
+      modelPortMap.set(s.key, {
+        id: s.key,
+        label: s.label,
+        data_type: paramTypeToPortDataType(s.param_type),
+        required: false,
+        multiple: false,
+      });
+    }
 
     for (const expandId of expandIds) {
       const node = getNodeById(expandId);
@@ -518,11 +526,13 @@ export function createWorkflowStores(
       // Only operate on expand-settings nodes
       if (nodeDef.node_type !== 'expand-settings') continue;
 
-      // Strip model-derived ports, keep static ports from base definition
-      const staticPorts = nodeDef.outputs.filter((p: PortDefinition) => basePortIds.has(p.id));
+      // Use base definition outputs (not persisted nodeDef which may have duplicates)
+      const staticPorts = baseDef.outputs.filter(
+        (p) => !modelPortMap.has(p.id)
+      );
 
       updateNodeData(expandId, {
-        definition: { ...nodeDef, outputs: [...staticPorts, ...modelPorts] },
+        definition: { ...nodeDef, outputs: [...staticPorts, ...modelPortMap.values()] },
         inference_settings: inferenceSettings,
       });
 

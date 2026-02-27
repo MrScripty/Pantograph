@@ -47,20 +47,21 @@ impl TaskDescriptor for PyTorchInferenceTask {
             category: NodeCategory::Processing,
             label: "PyTorch Inference".to_string(),
             description:
-                "Run inference via PyTorch (dLLM, Sherry, HF models; supports masked prompts)".to_string(),
+                "Run inference via PyTorch (dLLM, Sherry, HF models; supports masked prompts)"
+                    .to_string(),
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_PROMPT, "Prompt", PortDataType::Prompt),
-                PortMetadata::optional(
-                    PORT_SYSTEM_PROMPT,
-                    "System Prompt",
-                    PortDataType::String,
-                ),
+                PortMetadata::optional(PORT_SYSTEM_PROMPT, "System Prompt", PortDataType::String),
                 PortMetadata::optional(PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
                 PortMetadata::optional(PORT_DEVICE, "Device", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
-                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
+                PortMetadata::optional(
+                    "inference_settings",
+                    "Inference Settings",
+                    PortDataType::Json,
+                ),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),

@@ -13,8 +13,15 @@ import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svel
 import OllamaInferenceNode from '../components/nodes/workflow/OllamaInferenceNode.svelte';
 import LlamaCppInferenceNode from '../components/nodes/workflow/LlamaCppInferenceNode.svelte';
 import PyTorchInferenceNode from '../components/nodes/workflow/PyTorchInferenceNode.svelte';
+import DiffusionInferenceNode from '../components/nodes/workflow/DiffusionInferenceNode.svelte';
 import ModelProviderNode from '../components/nodes/workflow/ModelProviderNode.svelte';
 import TextOutputNode from '../components/nodes/workflow/TextOutputNode.svelte';
+import ImageOutputNode from '../components/nodes/workflow/ImageOutputNode.svelte';
+import AudioInputNode from '../components/nodes/workflow/AudioInputNode.svelte';
+import AudioOutputNode from '../components/nodes/workflow/AudioOutputNode.svelte';
+import AudioGenerationNode from '../components/nodes/workflow/AudioGenerationNode.svelte';
+import DepthEstimationNode from '../components/nodes/workflow/DepthEstimationNode.svelte';
+import PointCloudOutputNode from '../components/nodes/workflow/PointCloudOutputNode.svelte';
 import PumaLibNode from '../components/nodes/workflow/PumaLibNode.svelte';
 import AgentToolsNode from '../components/nodes/workflow/AgentToolsNode.svelte';
 import VectorDbNode from '../components/nodes/workflow/VectorDbNode.svelte';
@@ -36,8 +43,15 @@ const SPECIALIZED_NODES: Record<string, any> = {
   'ollama-inference': OllamaInferenceNode,
   'llamacpp-inference': LlamaCppInferenceNode,
   'pytorch-inference': PyTorchInferenceNode,
+  'diffusion-inference': DiffusionInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,
+  'image-output': ImageOutputNode,
+  'audio-input': AudioInputNode,
+  'audio-output': AudioOutputNode,
+  'audio-generation': AudioGenerationNode,
+  'depth-estimation': DepthEstimationNode,
+  'point-cloud-output': PointCloudOutputNode,
   'puma-lib': PumaLibNode,
   'agent-tools': AgentToolsNode,
   'vector-db': VectorDbNode,

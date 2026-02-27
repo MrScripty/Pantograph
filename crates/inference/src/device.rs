@@ -138,7 +138,10 @@ mod tests {
         assert_eq!(DeviceBackend::Cpu.to_arg(), Some("none".to_string()));
         assert_eq!(DeviceBackend::Auto.to_arg(), None);
         assert_eq!(DeviceBackend::Cuda(0).to_arg(), Some("CUDA0".to_string()));
-        assert_eq!(DeviceBackend::Vulkan(1).to_arg(), Some("Vulkan1".to_string()));
+        assert_eq!(
+            DeviceBackend::Vulkan(1).to_arg(),
+            Some("Vulkan1".to_string())
+        );
     }
 
     #[test]

@@ -2,6 +2,7 @@
 //!
 //! Nodes that accept user input or external data.
 
+mod audio_input;
 mod human_input;
 mod image_input;
 #[cfg(feature = "desktop")]
@@ -11,6 +12,7 @@ mod model_provider;
 mod puma_lib;
 mod text_input;
 
+pub use audio_input::AudioInputTask;
 pub use human_input::HumanInputTask;
 pub use image_input::{ImageBounds, ImageInputTask};
 #[cfg(feature = "desktop")]

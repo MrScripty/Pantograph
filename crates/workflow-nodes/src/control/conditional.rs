@@ -117,7 +117,10 @@ impl Task for ConditionalTask {
             log::debug!("ConditionalTask {}: routed to false_out", self.task_id);
         }
 
-        Ok(TaskResult::new(Some(serde_json::to_string(&value).unwrap_or_default()), NextAction::Continue))
+        Ok(TaskResult::new(
+            Some(serde_json::to_string(&value).unwrap_or_default()),
+            NextAction::Continue,
+        ))
     }
 }
 
@@ -158,7 +161,9 @@ mod tests {
         context.set(&condition_key, true).await;
 
         let value_key = ContextKeys::input("test_cond", "value");
-        context.set(&value_key, serde_json::json!("test_value")).await;
+        context
+            .set(&value_key, serde_json::json!("test_value"))
+            .await;
 
         // Run task
         let result = task.run(context.clone()).await.unwrap();
@@ -185,7 +190,9 @@ mod tests {
         context.set(&condition_key, false).await;
 
         let value_key = ContextKeys::input("test_cond", "value");
-        context.set(&value_key, serde_json::json!({"data": 123})).await;
+        context
+            .set(&value_key, serde_json::json!({"data": 123}))
+            .await;
 
         // Run task
         let result = task.run(context.clone()).await.unwrap();

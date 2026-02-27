@@ -61,8 +61,8 @@ impl PortDataType {
         // String/Prompt are interchangeable
         if matches!(
             (self, target),
-            (PortDataType::String, PortDataType::Prompt) |
-            (PortDataType::Prompt, PortDataType::String)
+            (PortDataType::String, PortDataType::Prompt)
+                | (PortDataType::Prompt, PortDataType::String)
         ) {
             return true;
         }
@@ -98,7 +98,11 @@ pub struct PortDefinition {
 
 impl PortDefinition {
     /// Create a new required port
-    pub fn required(id: impl Into<String>, label: impl Into<String>, data_type: PortDataType) -> Self {
+    pub fn required(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        data_type: PortDataType,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -109,7 +113,11 @@ impl PortDefinition {
     }
 
     /// Create a new optional port
-    pub fn optional(id: impl Into<String>, label: impl Into<String>, data_type: PortDataType) -> Self {
+    pub fn optional(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        data_type: PortDataType,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -244,12 +252,18 @@ impl WorkflowGraph {
     }
 
     /// Get all edges that feed into a specific node
-    pub fn incoming_edges<'a>(&'a self, node_id: &'a str) -> impl Iterator<Item = &'a GraphEdge> + 'a {
+    pub fn incoming_edges<'a>(
+        &'a self,
+        node_id: &'a str,
+    ) -> impl Iterator<Item = &'a GraphEdge> + 'a {
         self.edges.iter().filter(move |e| e.target == node_id)
     }
 
     /// Get all edges that come out of a specific node
-    pub fn outgoing_edges<'a>(&'a self, node_id: &'a str) -> impl Iterator<Item = &'a GraphEdge> + 'a {
+    pub fn outgoing_edges<'a>(
+        &'a self,
+        node_id: &'a str,
+    ) -> impl Iterator<Item = &'a GraphEdge> + 'a {
         self.edges.iter().filter(move |e| e.source == node_id)
     }
 }
@@ -362,14 +376,12 @@ mod tests {
     #[test]
     fn test_graph_find_node() {
         let graph = WorkflowGraph {
-            nodes: vec![
-                GraphNode {
-                    id: "node1".into(),
-                    node_type: "test".into(),
-                    position: Position::default(),
-                    data: serde_json::Value::Null,
-                },
-            ],
+            nodes: vec![GraphNode {
+                id: "node1".into(),
+                node_type: "test".into(),
+                position: Position::default(),
+                data: serde_json::Value::Null,
+            }],
             edges: vec![],
         };
 
@@ -381,15 +393,13 @@ mod tests {
     fn test_graph_has_edge_to() {
         let graph = WorkflowGraph {
             nodes: vec![],
-            edges: vec![
-                GraphEdge {
-                    id: "e1".into(),
-                    source: "a".into(),
-                    source_handle: "out".into(),
-                    target: "b".into(),
-                    target_handle: "in".into(),
-                },
-            ],
+            edges: vec![GraphEdge {
+                id: "e1".into(),
+                source: "a".into(),
+                source_handle: "out".into(),
+                target: "b".into(),
+                target_handle: "in".into(),
+            }],
         };
 
         assert!(graph.has_edge_to("b", "in"));

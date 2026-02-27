@@ -107,7 +107,9 @@ mod std_process {
         fn kill(&self) -> Result<(), String> {
             let mut guard = self.child.lock().map_err(|e| e.to_string())?;
             if let Some(child) = guard.as_mut() {
-                child.kill().map_err(|e| format!("Failed to kill process: {}", e))?;
+                child
+                    .kill()
+                    .map_err(|e| format!("Failed to kill process: {}", e))?;
             }
             Ok(())
         }
@@ -170,7 +172,11 @@ mod std_process {
                 let tx = tx.clone();
                 tokio::spawn(async move {
                     let Ok(async_stdout) = tokio::process::ChildStdout::from_std(stdout) else {
-                        let _ = tx.send(ProcessEvent::Error("Failed to convert stdout to async".to_string())).await;
+                        let _ = tx
+                            .send(ProcessEvent::Error(
+                                "Failed to convert stdout to async".to_string(),
+                            ))
+                            .await;
                         return;
                     };
                     let reader = BufReader::new(async_stdout);
@@ -186,7 +192,11 @@ mod std_process {
                 let tx = tx.clone();
                 tokio::spawn(async move {
                     let Ok(async_stderr) = tokio::process::ChildStderr::from_std(stderr) else {
-                        let _ = tx.send(ProcessEvent::Error("Failed to convert stderr to async".to_string())).await;
+                        let _ = tx
+                            .send(ProcessEvent::Error(
+                                "Failed to convert stderr to async".to_string(),
+                            ))
+                            .await;
                         return;
                     };
                     let reader = BufReader::new(async_stderr);
@@ -218,9 +228,7 @@ mod std_process {
 
                     match check_result {
                         Ok(Some(status)) => {
-                            let _ = tx
-                                .send(ProcessEvent::Terminated(status.code()))
-                                .await;
+                            let _ = tx.send(ProcessEvent::Terminated(status.code())).await;
                             break;
                         }
                         Ok(None) => continue,

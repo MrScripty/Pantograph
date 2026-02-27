@@ -92,7 +92,11 @@ impl TaskDescriptor for ToolExecutorTask {
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_RESULTS, "Results", PortDataType::Json),
-                PortMetadata::optional(Self::PORT_ALL_SUCCESS, "All Success", PortDataType::Boolean),
+                PortMetadata::optional(
+                    Self::PORT_ALL_SUCCESS,
+                    "All Success",
+                    PortDataType::Boolean,
+                ),
             ],
             execution_mode: ExecutionMode::Reactive,
         }
@@ -110,12 +114,13 @@ impl Task for ToolExecutorTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         // Get required input: tool_calls
         let tool_calls_key = ContextKeys::input(&self.task_id, Self::PORT_TOOL_CALLS);
-        let tool_calls: Vec<ToolCallRequest> = context.get(&tool_calls_key).await.ok_or_else(|| {
-            GraphError::TaskExecutionFailed(format!(
-                "Missing required input 'tool_calls' at key '{}'",
-                tool_calls_key
-            ))
-        })?;
+        let tool_calls: Vec<ToolCallRequest> =
+            context.get(&tool_calls_key).await.ok_or_else(|| {
+                GraphError::TaskExecutionFailed(format!(
+                    "Missing required input 'tool_calls' at key '{}'",
+                    tool_calls_key
+                ))
+            })?;
 
         // Get required input: tools (for now we just validate they exist)
         let tools_key = ContextKeys::input(&self.task_id, Self::PORT_TOOLS);

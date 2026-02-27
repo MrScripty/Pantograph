@@ -132,7 +132,12 @@ pub enum WorkflowEvent {
 
 impl WorkflowEvent {
     /// Create a task progress event
-    pub fn task_progress(task_id: &str, execution_id: &str, progress: f32, message: Option<String>) -> Self {
+    pub fn task_progress(
+        task_id: &str,
+        execution_id: &str,
+        progress: f32,
+        message: Option<String>,
+    ) -> Self {
         Self::TaskProgress {
             task_id: task_id.to_string(),
             execution_id: execution_id.to_string(),
@@ -142,7 +147,12 @@ impl WorkflowEvent {
     }
 
     /// Create a task stream event
-    pub fn task_stream(task_id: &str, execution_id: &str, port: &str, data: serde_json::Value) -> Self {
+    pub fn task_stream(
+        task_id: &str,
+        execution_id: &str,
+        port: &str,
+        data: serde_json::Value,
+    ) -> Self {
         Self::TaskStream {
             task_id: task_id.to_string(),
             execution_id: execution_id.to_string(),
@@ -324,14 +334,21 @@ mod tests {
     fn test_vec_event_sink() {
         let sink = VecEventSink::new();
 
-        sink.send(WorkflowEvent::task_progress("task1", "exec1", 0.5, Some("halfway".to_string())))
-            .unwrap();
+        sink.send(WorkflowEvent::task_progress(
+            "task1",
+            "exec1",
+            0.5,
+            Some("halfway".to_string()),
+        ))
+        .unwrap();
 
         let events = sink.events();
         assert_eq!(events.len(), 1);
 
         match &events[0] {
-            WorkflowEvent::TaskProgress { task_id, progress, .. } => {
+            WorkflowEvent::TaskProgress {
+                task_id, progress, ..
+            } => {
                 assert_eq!(task_id, "task1");
                 assert_eq!(*progress, 0.5);
             }

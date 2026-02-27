@@ -56,16 +56,8 @@ impl TaskDescriptor for TextOutputTask {
             label: "Text Output".to_string(),
             description: "Displays text output from the workflow".to_string(),
             inputs: vec![
-                PortMetadata::optional(
-                    Self::PORT_TEXT,
-                    "Text",
-                    PortDataType::String,
-                ),
-                PortMetadata::optional(
-                    Self::PORT_STREAM,
-                    "Stream",
-                    PortDataType::Stream,
-                ),
+                PortMetadata::optional(Self::PORT_TEXT, "Text", PortDataType::String),
+                PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             outputs: vec![PortMetadata::optional(
                 Self::PORT_TEXT,
@@ -143,9 +135,7 @@ mod tests {
 
         // Set input text
         let input_key = ContextKeys::input("test_output", "text");
-        context
-            .set(&input_key, "Hello, world!".to_string())
-            .await;
+        context.set(&input_key, "Hello, world!".to_string()).await;
 
         // Run task
         let result = task.run(context.clone()).await.unwrap();

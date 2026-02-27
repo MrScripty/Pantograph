@@ -17,8 +17,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
 
@@ -48,23 +47,22 @@ fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     let sys = py.import("sys")?;
     let modules = sys.getattr("modules")?;
 
-    let bd_code = std::ffi::CString::new(BLOCK_DIFFUSION_PY)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid block_diffusion source: {}", e)))?;
-    let bd_module = PyModule::from_code(
-        py, &bd_code, c"block_diffusion.py", c"block_diffusion",
-    )?;
+    let bd_code = std::ffi::CString::new(BLOCK_DIFFUSION_PY).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid block_diffusion source: {}", e))
+    })?;
+    let bd_module = PyModule::from_code(py, &bd_code, c"block_diffusion.py", c"block_diffusion")?;
     modules.set_item("block_diffusion", &bd_module)?;
 
-    let ar_code = std::ffi::CString::new(AUTOREGRESSIVE_PY)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid autoregressive source: {}", e)))?;
-    let ar_module = PyModule::from_code(
-        py, &ar_code, c"autoregressive.py", c"autoregressive",
-    )?;
+    let ar_code = std::ffi::CString::new(AUTOREGRESSIVE_PY).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid autoregressive source: {}", e))
+    })?;
+    let ar_module = PyModule::from_code(py, &ar_code, c"autoregressive.py", c"autoregressive")?;
     modules.set_item("autoregressive", &ar_module)?;
 
     // Now load the worker module (which imports from block_diffusion and autoregressive)
-    let code = std::ffi::CString::new(WORKER_PY)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid worker source: {}", e)))?;
+    let code = std::ffi::CString::new(WORKER_PY).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid worker source: {}", e))
+    })?;
     PyModule::from_code(
         py,
         &code,
@@ -73,7 +71,9 @@ fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     )?;
 
     WORKER_INITIALISED.store(true, Ordering::Release);
-    log::info!("PyTorch worker module initialised (with block_diffusion + autoregressive siblings)");
+    log::info!(
+        "PyTorch worker module initialised (with block_diffusion + autoregressive siblings)"
+    );
     Ok(())
 }
 
@@ -158,9 +158,7 @@ impl PyTorchBackend {
 
                 let result = worker
                     .call_method("load_model", (), Some(&kwargs))
-                    .map_err(|e| {
-                        BackendError::Inference(format!("Model load failed: {}", e))
-                    })?;
+                    .map_err(|e| BackendError::Inference(format!("Model load failed: {}", e)))?;
 
                 let info = LoadedModelInfo {
                     model_path: result
@@ -198,9 +196,9 @@ impl PyTorchBackend {
                 let worker = worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
-                worker.call_method0("unload_model").map_err(|e| {
-                    BackendError::Inference(format!("Unload failed: {}", e))
-                })?;
+                worker
+                    .call_method0("unload_model")
+                    .map_err(|e| BackendError::Inference(format!("Unload failed: {}", e)))?;
                 Ok(())
             })
         })
@@ -244,9 +242,7 @@ impl PyTorchBackend {
 
                 let result = worker
                     .call_method("generate", (), Some(&kwargs))
-                    .map_err(|e| {
-                        BackendError::Inference(format!("Generation failed: {}", e))
-                    })?;
+                    .map_err(|e| BackendError::Inference(format!("Generation failed: {}", e)))?;
 
                 result.extract::<String>().map_err(|e| {
                     BackendError::Inference(format!("Failed to extract result: {}", e))
@@ -336,9 +332,10 @@ impl PyTorchBackend {
                                 }
                             }
                             Err(e) => {
-                                let _ = tx.blocking_send(Err(BackendError::Inference(
-                                    format!("Token extraction failed: {}", e),
-                                )));
+                                let _ = tx.blocking_send(Err(BackendError::Inference(format!(
+                                    "Token extraction failed: {}",
+                                    e
+                                ))));
                                 return;
                             }
                         },
@@ -455,11 +452,9 @@ impl InferenceBackend for PyTorchBackend {
         if !self.ready {
             return false;
         }
-        tokio::task::spawn_blocking(|| {
-            Python::with_gil(|py| worker_module(py).is_ok())
-        })
-        .await
-        .unwrap_or(false)
+        tokio::task::spawn_blocking(|| Python::with_gil(|py| worker_module(py).is_ok()))
+            .await
+            .unwrap_or(false)
     }
 
     fn base_url(&self) -> Option<String> {
@@ -488,10 +483,7 @@ impl InferenceBackend for PyTorchBackend {
             .get("temperature")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.7);
-        let top_p = request
-            .get("top_p")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0);
+        let top_p = request.get("top_p").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
         Ok(self.generate_stream(prompt, system_prompt, max_tokens, temperature, top_p, None))
     }
@@ -584,10 +576,7 @@ mod tests {
                 {"role": "user", "content": "Hello!"}
             ]
         });
-        assert_eq!(
-            extract_prompt_from_messages(&req).unwrap(),
-            "Hello!"
-        );
+        assert_eq!(extract_prompt_from_messages(&req).unwrap(), "Hello!");
     }
 
     #[test]
@@ -598,10 +587,7 @@ mod tests {
                 {"role": "user", "content": "Hi"}
             ]
         });
-        assert_eq!(
-            extract_system_prompt(&req),
-            Some("Be concise.".to_string())
-        );
+        assert_eq!(extract_system_prompt(&req), Some("Be concise.".to_string()));
     }
 
     #[test]

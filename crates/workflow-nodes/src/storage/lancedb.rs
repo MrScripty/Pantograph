@@ -246,7 +246,11 @@ impl Task for LanceDbTask {
         );
 
         Ok(TaskResult::new(
-            Some(format!("LanceDB: {} results from '{}'", results.len(), db_path)),
+            Some(format!(
+                "LanceDB: {} results from '{}'",
+                results.len(),
+                db_path
+            )),
             NextAction::Continue,
         ))
     }
@@ -325,7 +329,9 @@ mod tests {
 
         // Set custom database path
         let path_key = ContextKeys::input("test_db", "database_path");
-        context.set(&path_key, "/custom/path.lancedb".to_string()).await;
+        context
+            .set(&path_key, "/custom/path.lancedb".to_string())
+            .await;
 
         // Run task
         let result = task.run(context.clone()).await.unwrap();

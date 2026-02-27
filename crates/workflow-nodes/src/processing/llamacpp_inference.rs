@@ -52,22 +52,26 @@ impl TaskDescriptor for LlamaCppInferenceTask {
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_PROMPT, "Prompt", PortDataType::Prompt),
-                PortMetadata::optional(
-                    PORT_SYSTEM_PROMPT,
-                    "System Prompt",
-                    PortDataType::String,
-                ),
+                PortMetadata::optional(PORT_SYSTEM_PROMPT, "System Prompt", PortDataType::String),
                 PortMetadata::optional(PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
                 PortMetadata::optional(PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
-                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
+                PortMetadata::optional(
+                    "inference_settings",
+                    "Inference Settings",
+                    PortDataType::Json,
+                ),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_REF, "Model Reference", PortDataType::Json),
                 PortMetadata::optional(PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
-                PortMetadata::optional(PORT_HAS_TOOL_CALLS, "Has Tool Calls", PortDataType::Boolean),
+                PortMetadata::optional(
+                    PORT_HAS_TOOL_CALLS,
+                    "Has Tool Calls",
+                    PortDataType::Boolean,
+                ),
                 PortMetadata::optional(PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             execution_mode: ExecutionMode::Stream,

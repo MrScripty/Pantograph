@@ -20,7 +20,9 @@ pub enum ValidationError {
     #[error("Node '{node_id}' has unconnected required input '{port}'")]
     UnconnectedInput { node_id: String, port: String },
 
-    #[error("Type mismatch on edge '{edge_id}': {source_type:?} cannot connect to {target_type:?}")]
+    #[error(
+        "Type mismatch on edge '{edge_id}': {source_type:?} cannot connect to {target_type:?}"
+    )]
     TypeMismatch {
         edge_id: String,
         source_type: PortDataType,
@@ -209,7 +211,10 @@ impl<'a> WorkflowValidator<'a> {
                     port: edge.target_handle.clone(),
                 })?;
 
-            if !source_port.data_type.is_compatible_with(&target_port.data_type) {
+            if !source_port
+                .data_type
+                .is_compatible_with(&target_port.data_type)
+            {
                 return Err(ValidationError::TypeMismatch {
                     edge_id: edge.id.clone(),
                     source_type: source_port.data_type.clone(),

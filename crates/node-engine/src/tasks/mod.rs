@@ -52,10 +52,7 @@ mod tests {
 
     #[test]
     fn test_context_keys() {
-        assert_eq!(
-            ContextKeys::input("task1", "prompt"),
-            "task1.input.prompt"
-        );
+        assert_eq!(ContextKeys::input("task1", "prompt"), "task1.input.prompt");
         assert_eq!(
             ContextKeys::output("task1", "response"),
             "task1.output.response"
@@ -64,9 +61,6 @@ mod tests {
             ContextKeys::stream("task1", "chunks"),
             "task1.stream.chunks"
         );
-        assert_eq!(
-            ContextKeys::meta("task1", "config"),
-            "task1.meta.config"
-        );
+        assert_eq!(ContextKeys::meta("task1", "config"), "task1.meta.config");
     }
 }

@@ -68,7 +68,11 @@ impl TaskDescriptor for HumanInputTask {
             inputs: vec![
                 PortMetadata::optional(Self::PORT_PROMPT, "Prompt", PortDataType::String),
                 PortMetadata::optional(Self::PORT_DEFAULT, "Default Value", PortDataType::String),
-                PortMetadata::optional(Self::PORT_AUTO_ACCEPT, "Auto Accept", PortDataType::Boolean),
+                PortMetadata::optional(
+                    Self::PORT_AUTO_ACCEPT,
+                    "Auto Accept",
+                    PortDataType::Boolean,
+                ),
                 PortMetadata::optional(
                     Self::PORT_USER_RESPONSE,
                     "User Response",
@@ -115,7 +119,10 @@ impl Task for HumanInputTask {
             let output_key = ContextKeys::output(&self.task_id, Self::PORT_VALUE);
             context.set(&output_key, response.clone()).await;
 
-            log::debug!("HumanInputTask {}: received input, continuing", self.task_id);
+            log::debug!(
+                "HumanInputTask {}: received input, continuing",
+                self.task_id
+            );
             return Ok(TaskResult::new(Some(response), NextAction::Continue));
         }
 

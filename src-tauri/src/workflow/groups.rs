@@ -356,10 +356,7 @@ mod tests {
                 make_node("b", 100.0, 0.0),
                 make_node("c", 200.0, 0.0),
             ],
-            edges: vec![
-                make_edge("e1", "a", "b"),
-                make_edge("e2", "b", "c"),
-            ],
+            edges: vec![make_edge("e1", "a", "b"), make_edge("e2", "b", "c")],
         };
 
         let result = create_node_group(

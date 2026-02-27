@@ -154,7 +154,10 @@ impl NodeGroup {
 
     /// Get edges that connect to external nodes (edges that cross the group boundary)
     /// These are edges where one end is inside the group and the other is outside
-    pub fn boundary_edges<'a>(&'a self, all_edges: &'a [GraphEdge]) -> impl Iterator<Item = &'a GraphEdge> {
+    pub fn boundary_edges<'a>(
+        &'a self,
+        all_edges: &'a [GraphEdge],
+    ) -> impl Iterator<Item = &'a GraphEdge> {
         let node_ids: std::collections::HashSet<&str> = self.node_ids().into_iter().collect();
         all_edges.iter().filter(move |e| {
             let source_inside = node_ids.contains(e.source.as_str());
@@ -188,9 +191,8 @@ impl NodeGroup {
 
     /// Calculate the center position of the group
     pub fn center(&self) -> Option<(f64, f64)> {
-        self.bounding_box().map(|(min_x, min_y, max_x, max_y)| {
-            ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
-        })
+        self.bounding_box()
+            .map(|(min_x, min_y, max_x, max_y)| ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0))
     }
 }
 
@@ -490,7 +492,8 @@ mod tests {
         ];
 
         let selected = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        let result = GroupOperations::create_group_from_selection("My Group", &selected, &nodes, &edges);
+        let result =
+            GroupOperations::create_group_from_selection("My Group", &selected, &nodes, &edges);
 
         assert_eq!(result.group.nodes.len(), 3);
         assert_eq!(result.group.edges.len(), 2); // Internal edges
@@ -501,17 +504,16 @@ mod tests {
 
     #[test]
     fn test_bounding_box() {
-        let group = NodeGroup::new("g1", "Group")
-            .with_nodes(vec![
-                make_node("a", 0.0, 0.0),
-                make_node("b", 100.0, 50.0),
-                make_node("c", 50.0, 100.0),
-            ]);
+        let group = NodeGroup::new("g1", "Group").with_nodes(vec![
+            make_node("a", 0.0, 0.0),
+            make_node("b", 100.0, 50.0),
+            make_node("c", 50.0, 100.0),
+        ]);
 
         let bbox = group.bounding_box().unwrap();
         assert_eq!(bbox.0, 0.0); // min_x
         assert_eq!(bbox.1, 0.0); // min_y
-        // max_x and max_y include node size offset
+                                 // max_x and max_y include node size offset
     }
 
     #[test]

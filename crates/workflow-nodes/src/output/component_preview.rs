@@ -121,7 +121,10 @@ impl Task for ComponentPreviewTask {
             component_path
         );
 
-        Ok(TaskResult::new(Some("rendered".to_string()), NextAction::Continue))
+        Ok(TaskResult::new(
+            Some("rendered".to_string()),
+            NextAction::Continue,
+        ))
     }
 }
 
@@ -143,7 +146,10 @@ mod tests {
         // Set component input
         let component_key = ContextKeys::input("test_preview", "component");
         context
-            .set(&component_key, "src/components/MyComponent.svelte".to_string())
+            .set(
+                &component_key,
+                "src/components/MyComponent.svelte".to_string(),
+            )
             .await;
 
         // Run task

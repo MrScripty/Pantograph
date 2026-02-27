@@ -3,7 +3,9 @@
 //! This module provides the executor for running orchestration graphs,
 //! handling control flow between data graphs.
 
-use super::nodes::{execute_node, prepare_data_graph_execution, NodeExecutionResult, OrchestrationContext};
+use super::nodes::{
+    execute_node, prepare_data_graph_execution, NodeExecutionResult, OrchestrationContext,
+};
 use super::types::{OrchestrationGraph, OrchestrationNodeType, OrchestrationResult};
 use crate::events::{EventSink, WorkflowEvent};
 use crate::{NodeEngineError, Result, WorkflowGraph};
@@ -47,10 +49,7 @@ pub enum OrchestrationEvent {
         node_count: usize,
     },
     /// An orchestration node started executing.
-    NodeStarted {
-        node_id: String,
-        node_type: String,
-    },
+    NodeStarted { node_id: String, node_type: String },
     /// An orchestration node completed.
     NodeCompleted {
         node_id: String,
@@ -75,15 +74,9 @@ pub enum OrchestrationEvent {
         error: String,
     },
     /// Loop iteration started.
-    LoopIteration {
-        node_id: String,
-        iteration: u32,
-    },
+    LoopIteration { node_id: String, iteration: u32 },
     /// Condition evaluated.
-    ConditionEvaluated {
-        node_id: String,
-        result: bool,
-    },
+    ConditionEvaluated { node_id: String, result: bool },
     /// Orchestration completed successfully.
     Completed {
         outputs: HashMap<String, Value>,
@@ -145,9 +138,9 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         self.emit_workflow_started(event_sink, &graph.id);
 
         // Find the start node
-        let start_node = graph.find_start_node().ok_or_else(|| {
-            NodeEngineError::failed("Orchestration graph has no Start node")
-        })?;
+        let start_node = graph
+            .find_start_node()
+            .ok_or_else(|| NodeEngineError::failed("Orchestration graph has no Start node"))?;
 
         // Begin execution from the start node
         let mut current_node_id = start_node.id.clone();
@@ -199,7 +192,14 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                         event_sink,
                         &node.id,
                         1.0,
-                        Some(format!("Condition: {}", if result.next_handle == "true" { "true" } else { "false" })),
+                        Some(format!(
+                            "Condition: {}",
+                            if result.next_handle == "true" {
+                                "true"
+                            } else {
+                                "false"
+                            }
+                        )),
                     );
                 }
                 OrchestrationNodeType::Loop => {
@@ -223,7 +223,11 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
 
                 self.emit_workflow_completed(event_sink, &graph.id);
 
-                return Ok(OrchestrationResult::success(outputs, nodes_executed, elapsed));
+                return Ok(OrchestrationResult::success(
+                    outputs,
+                    nodes_executed,
+                    elapsed,
+                ));
             }
 
             // Find the next node by following the edge
@@ -359,7 +363,12 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         });
     }
 
-    fn emit_task_completed(&self, event_sink: &dyn EventSink, task_id: &str, output: Option<String>) {
+    fn emit_task_completed(
+        &self,
+        event_sink: &dyn EventSink,
+        task_id: &str,
+        output: Option<String>,
+    ) {
         let _ = event_sink.send(WorkflowEvent::TaskCompleted {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
@@ -375,7 +384,13 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         });
     }
 
-    fn emit_task_progress(&self, event_sink: &dyn EventSink, task_id: &str, progress: f32, message: Option<String>) {
+    fn emit_task_progress(
+        &self,
+        event_sink: &dyn EventSink,
+        task_id: &str,
+        progress: f32,
+        message: Option<String>,
+    ) {
         let _ = event_sink.send(WorkflowEvent::TaskProgress {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
@@ -445,11 +460,7 @@ mod tests {
 
         // Add edge
         graph.edges.push(OrchestrationEdge::new(
-            "e1",
-            "start",
-            "next",
-            "end",
-            "input",
+            "e1", "start", "next", "end", "input",
         ));
 
         graph
@@ -501,15 +512,28 @@ mod tests {
             (200.0, 50.0),
         ));
 
-        graph.edges.push(OrchestrationEdge::new("e1", "start", "next", "cond", "input"));
-        graph.edges.push(OrchestrationEdge::new("e2", "cond", "true", "end_true", "input"));
-        graph.edges.push(OrchestrationEdge::new("e3", "cond", "false", "end_false", "input"));
+        graph.edges.push(OrchestrationEdge::new(
+            "e1", "start", "next", "cond", "input",
+        ));
+        graph.edges.push(OrchestrationEdge::new(
+            "e2", "cond", "true", "end_true", "input",
+        ));
+        graph.edges.push(OrchestrationEdge::new(
+            "e3",
+            "cond",
+            "false",
+            "end_false",
+            "input",
+        ));
 
         // Test true path
         let mut initial_data = HashMap::new();
         initial_data.insert("isValid".to_string(), Value::Bool(true));
 
-        let result = executor.execute(&graph, initial_data, &event_sink).await.unwrap();
+        let result = executor
+            .execute(&graph, initial_data, &event_sink)
+            .await
+            .unwrap();
         assert!(result.success);
         assert_eq!(result.nodes_executed, 3); // Start + Condition + End
     }
@@ -539,11 +563,24 @@ mod tests {
             (200.0, 0.0),
         ));
 
-        graph.edges.push(OrchestrationEdge::new("e1", "start", "next", "loop", "input"));
-        graph.edges.push(OrchestrationEdge::new("e2", "loop", "iteration", "loop", "loop_back"));
-        graph.edges.push(OrchestrationEdge::new("e3", "loop", "complete", "end", "input"));
+        graph.edges.push(OrchestrationEdge::new(
+            "e1", "start", "next", "loop", "input",
+        ));
+        graph.edges.push(OrchestrationEdge::new(
+            "e2",
+            "loop",
+            "iteration",
+            "loop",
+            "loop_back",
+        ));
+        graph.edges.push(OrchestrationEdge::new(
+            "e3", "loop", "complete", "end", "input",
+        ));
 
-        let result = executor.execute(&graph, HashMap::new(), &event_sink).await.unwrap();
+        let result = executor
+            .execute(&graph, HashMap::new(), &event_sink)
+            .await
+            .unwrap();
         assert!(result.success);
         // Start + 3 iterations + 1 complete check + End = 6
         // Actually: Start(1) + Loop(4 times: 3 iterations + 1 for hitting max) + End(1) = 6
@@ -582,10 +619,17 @@ mod tests {
             (200.0, 0.0),
         ));
 
-        graph.edges.push(OrchestrationEdge::new("e1", "start", "next", "data", "input"));
-        graph.edges.push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
+        graph.edges.push(OrchestrationEdge::new(
+            "e1", "start", "next", "data", "input",
+        ));
+        graph
+            .edges
+            .push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
 
-        let result = executor.execute(&graph, HashMap::new(), &event_sink).await.unwrap();
+        let result = executor
+            .execute(&graph, HashMap::new(), &event_sink)
+            .await
+            .unwrap();
         assert!(result.success);
         assert_eq!(
             result.outputs.get("output_value"),

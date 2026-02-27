@@ -296,7 +296,11 @@ pub struct OrchestrationResult {
 
 impl OrchestrationResult {
     /// Create a successful result.
-    pub fn success(outputs: HashMap<String, serde_json::Value>, nodes_executed: u32, execution_time_ms: u64) -> Self {
+    pub fn success(
+        outputs: HashMap<String, serde_json::Value>,
+        nodes_executed: u32,
+        execution_time_ms: u64,
+    ) -> Self {
         Self {
             success: true,
             outputs,

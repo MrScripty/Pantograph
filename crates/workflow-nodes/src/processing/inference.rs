@@ -135,7 +135,8 @@ impl TaskDescriptor for InferenceTask {
             node_type: "llm-inference".to_string(),
             category: NodeCategory::Processing,
             label: "LLM Inference".to_string(),
-            description: "Runs text through a language model with optional tool calling".to_string(),
+            description: "Runs text through a language model with optional tool calling"
+                .to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::optional(
@@ -145,12 +146,20 @@ impl TaskDescriptor for InferenceTask {
                 ),
                 PortMetadata::optional(Self::PORT_CONTEXT, "Context", PortDataType::String),
                 PortMetadata::optional(Self::PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
-                PortMetadata::optional("inference_settings", "Inference Settings", PortDataType::Json),
+                PortMetadata::optional(
+                    "inference_settings",
+                    "Inference Settings",
+                    PortDataType::Json,
+                ),
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_RESPONSE, "Response", PortDataType::String),
                 PortMetadata::optional(Self::PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
-                PortMetadata::optional(Self::PORT_HAS_TOOL_CALLS, "Has Tool Calls", PortDataType::Boolean),
+                PortMetadata::optional(
+                    Self::PORT_HAS_TOOL_CALLS,
+                    "Has Tool Calls",
+                    PortDataType::Boolean,
+                ),
                 PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             execution_mode: ExecutionMode::Stream,
@@ -277,18 +286,14 @@ impl Task for InferenceTask {
             )));
         }
 
-        let json: serde_json::Value = http_response
-            .json()
-            .await
-            .map_err(|e| GraphError::TaskExecutionFailed(format!("Failed to parse response: {}", e)))?;
+        let json: serde_json::Value = http_response.json().await.map_err(|e| {
+            GraphError::TaskExecutionFailed(format!("Failed to parse response: {}", e))
+        })?;
 
         let message = &json["choices"][0]["message"];
 
         // Extract text response
-        let response = message["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let response = message["content"].as_str().unwrap_or("").to_string();
 
         // Extract tool calls if present
         let tool_calls_json = message.get("tool_calls");
@@ -309,7 +314,11 @@ impl Task for InferenceTask {
                             let args_str = call["function"]["arguments"].as_str().unwrap_or("{}");
                             let arguments: serde_json::Value =
                                 serde_json::from_str(args_str).unwrap_or(serde_json::json!({}));
-                            Some(ToolCall { id, name, arguments })
+                            Some(ToolCall {
+                                id,
+                                name,
+                                arguments,
+                            })
                         })
                         .collect()
                 })

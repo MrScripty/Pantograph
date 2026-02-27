@@ -42,11 +42,15 @@
 
     {#snippet children()}
       {#if streamContent}
-        <div class="output-text stream-active">
+        <div
+          class="output-text copyable-output stream-active nodrag nopan nowheel"
+        >
           {streamContent}
         </div>
       {:else if text}
-        <div class="output-text">
+        <div
+          class="output-text copyable-output nodrag nopan nowheel"
+        >
           {text}
         </div>
       {:else}
@@ -131,6 +135,12 @@
     max-height: 8rem;
     overflow-y: auto;
     white-space: pre-wrap;
+  }
+
+  .copyable-output {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 
   .no-output {

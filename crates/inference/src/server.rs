@@ -28,8 +28,7 @@ fn is_oom_line(line: &str) -> bool {
     if lower.contains("device memory allocation") {
         return true;
     }
-    if lower.contains("failed to allocate")
-        && (lower.contains("vulkan") || lower.contains("cuda"))
+    if lower.contains("failed to allocate") && (lower.contains("vulkan") || lower.contains("cuda"))
     {
         return true;
     }

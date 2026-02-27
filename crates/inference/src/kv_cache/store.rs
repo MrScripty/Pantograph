@@ -9,9 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::codec::KvCacheCodec;
 use super::error::KvCacheError;
 use super::storage::{DiskStorage, MemoryStorage, StorageBackend};
-use super::types::{
-    CacheMarker, KvCacheEntry, KvCacheMetadata, ModelFingerprint, StoragePolicy,
-};
+use super::types::{CacheMarker, KvCacheEntry, KvCacheMetadata, ModelFingerprint, StoragePolicy};
 
 /// High-level KV cache manager combining memory and disk storage.
 ///
@@ -442,16 +440,19 @@ mod tests {
         let store = KvCacheStore::memory_only();
         let entry = make_entry("llama-7b", "abc");
 
-        let cache_id = store
-            .save(entry, None)
-            .await
-            .expect("save should succeed");
+        let cache_id = store.save(entry, None).await.expect("save should succeed");
 
         let loaded = store.load(&cache_id, &matching_fingerprint()).await;
-        assert!(loaded.is_ok(), "load with matching fingerprint should succeed");
+        assert!(
+            loaded.is_ok(),
+            "load with matching fingerprint should succeed"
+        );
 
         let loaded_entry = loaded.unwrap();
-        assert_eq!(loaded_entry.data, vec![10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
+        assert_eq!(
+            loaded_entry.data,
+            vec![10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        );
     }
 
     #[tokio::test]
@@ -459,10 +460,7 @@ mod tests {
         let store = KvCacheStore::memory_only();
         let entry = make_entry("llama-7b", "abc");
 
-        let cache_id = store
-            .save(entry, None)
-            .await
-            .expect("save should succeed");
+        let cache_id = store.save(entry, None).await.expect("save should succeed");
 
         let result = store.load(&cache_id, &different_fingerprint()).await;
         assert!(result.is_err());
@@ -484,10 +482,7 @@ mod tests {
         let store = KvCacheStore::memory_only();
         let entry = make_entry("llama-7b", "abc");
 
-        let cache_id = store
-            .save(entry, None)
-            .await
-            .expect("save should succeed");
+        let cache_id = store.save(entry, None).await.expect("save should succeed");
 
         // Add markers
         store
@@ -549,10 +544,7 @@ mod tests {
         let store = KvCacheStore::memory_only();
         let entry = make_entry("llama-7b", "abc");
 
-        let cache_id = store
-            .save(entry, None)
-            .await
-            .expect("save should succeed");
+        let cache_id = store.save(entry, None).await.expect("save should succeed");
 
         // Add markers at different positions
         store
@@ -605,10 +597,7 @@ mod tests {
         let store = KvCacheStore::memory_only();
         let entry = make_entry("llama-7b", "abc");
 
-        let cache_id = store
-            .save(entry, None)
-            .await
-            .expect("save should succeed");
+        let cache_id = store.save(entry, None).await.expect("save should succeed");
 
         // Initially no label (from make_entry)
         let meta = store.get_metadata(&cache_id).await.unwrap();

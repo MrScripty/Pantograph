@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_engine::{core_executor::resolve_node_type, Context, NodeEngineError, Result, TaskExecutor};
+use node_engine::{
+    core_executor::resolve_node_type, Context, NodeEngineError, Result, TaskExecutor,
+};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::RagManager;
@@ -62,7 +64,10 @@ impl TauriTaskExecutor {
             .join("\n\n---\n\n");
 
         let mut outputs = HashMap::new();
-        outputs.insert("documents".to_string(), serde_json::to_value(&docs).unwrap());
+        outputs.insert(
+            "documents".to_string(),
+            serde_json::to_value(&docs).unwrap(),
+        );
         outputs.insert("context".to_string(), serde_json::json!(context_str));
         Ok(outputs)
     }

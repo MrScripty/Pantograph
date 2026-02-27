@@ -36,8 +36,8 @@ pub mod types;
 
 // Re-exports for convenience
 pub use backend::{
-    BackendCapabilities, BackendConfig, BackendError, BackendFactory, BackendInfo,
-    BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, BackendFactory, BackendInfo, BackendRegistry,
+    ChatChunk, EmbeddingResult, InferenceBackend,
 };
 
 #[cfg(feature = "backend-llamacpp")]

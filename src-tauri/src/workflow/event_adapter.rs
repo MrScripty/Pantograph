@@ -60,7 +60,9 @@ impl EventSink for TauriEventAdapter {
                 }
             }
 
-            node_engine::WorkflowEvent::TaskCompleted { task_id, output, .. } => {
+            node_engine::WorkflowEvent::TaskCompleted {
+                task_id, output, ..
+            } => {
                 // Convert the output to HashMap<String, PortValue>
                 let outputs: HashMap<String, PortValue> = output
                     .and_then(|v| v.as_object().cloned())
@@ -102,7 +104,9 @@ impl EventSink for TauriEventAdapter {
                 chunk: data,
             },
 
-            node_engine::WorkflowEvent::WaitingForInput { task_id, prompt, .. } => {
+            node_engine::WorkflowEvent::WaitingForInput {
+                task_id, prompt, ..
+            } => {
                 // Map to NodeProgress with a special message for now
                 // TODO: Add proper WaitingForInput event to Tauri events
                 TauriWorkflowEvent::NodeProgress {

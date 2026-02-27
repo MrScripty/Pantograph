@@ -99,11 +99,7 @@ impl TaskDescriptor for ModelProviderTask {
                 PortMetadata::required(PORT_MODEL_NAME_OUT, "Model Name", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_INFO, "Model Info", PortDataType::Json),
-                PortMetadata::optional(
-                    PORT_SEARCH_RESULTS,
-                    "Search Results",
-                    PortDataType::Json,
-                ),
+                PortMetadata::optional(PORT_SEARCH_RESULTS, "Search Results", PortDataType::Json),
                 PortMetadata::optional(
                     PORT_INFERENCE_SETTINGS,
                     "Inference Settings",
@@ -204,8 +200,12 @@ impl NodeExecutor for ModelProviderExecutor {
         // Try pumas-core resolution when available
         #[cfg(feature = "model-library")]
         {
-            if let Some(resolved) =
-                library_support::resolve_with_library(extensions, &model_name, search_query.as_deref()).await
+            if let Some(resolved) = library_support::resolve_with_library(
+                extensions,
+                &model_name,
+                search_query.as_deref(),
+            )
+            .await
             {
                 outputs.insert(
                     PORT_MODEL_NAME_OUT.to_string(),

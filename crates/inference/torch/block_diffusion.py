@@ -12,6 +12,42 @@ from transformers.cache_utils import DynamicCache
 _DLLM_MASK_ID = 151669
 
 
+def _resolve_eos_token_ids(model, tokenizer):
+    """Collect EOS token IDs from generation config and tokenizer."""
+    eos_ids = set()
+
+    # Prefer tokenizer EOS only. Some chat model generation configs include
+    # chat delimiters (e.g. <|im_end|>) as eos_token_id, which can produce
+    # empty truncation even when useful text follows.
+    tok_eos = getattr(tokenizer, "eos_token_id", None)
+    if isinstance(tok_eos, int):
+        eos_ids.add(tok_eos)
+    elif isinstance(tok_eos, (list, tuple)):
+        eos_ids.update(int(x) for x in tok_eos if x is not None)
+
+    return eos_ids
+
+
+def _truncate_ids_at_eos(token_ids, eos_ids):
+    """Truncate a 1D token tensor at first EOS token (exclusive)."""
+    if token_ids is None or token_ids.numel() == 0 or not eos_ids:
+        return token_ids
+
+    # Move to CPU once for cheap scalar reads.
+    ids_cpu = token_ids.detach().cpu().tolist()
+    cut = None
+    for i, tid in enumerate(ids_cpu):
+        if int(tid) in eos_ids:
+            cut = i
+            break
+    if cut is None:
+        return token_ids
+    if cut == 0:
+        # Avoid collapsing to an empty response; let downstream decode decide.
+        return token_ids
+    return token_ids[:cut]
+
+
 def _sample_topk_topp(logits, temperature=1.0, top_k=0, top_p=1.0):
     """Sample from logits with top-k and top-p filtering."""
     orig_shape = logits.shape[:-1]
@@ -515,6 +551,7 @@ def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
     block_length = block_length or 8
     denoising_steps = denoising_steps or 8
     denoising_steps = min(denoising_steps, block_length)
+    mask_id = getattr(model.config, "mask_token_id", _DLLM_MASK_ID)
 
     tokens = tokenizer(
         formatted_prompt, return_tensors="pt", padding=True, truncation=True,
@@ -523,7 +560,7 @@ def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
     x, attn_mask, position_ids, past_key_values, prompt_length = (
         _setup_block_diffusion(
             model, tokens["input_ids"], max_tokens, block_length=block_length,
-            mask_id=_DLLM_MASK_ID,
+            mask_id=mask_id,
         )
     )
 
@@ -531,60 +568,35 @@ def _generate_dllm(model, tokenizer, device, formatted_prompt, max_tokens,
     for result in _block_diffusion_decode(
         model, x, prompt_length, past_key_values,
         attn_mask, position_ids, block_length=block_length,
-        denoising_steps=denoising_steps, mask_id=_DLLM_MASK_ID,
+        denoising_steps=denoising_steps, mask_id=mask_id,
         temperature=max(temperature, 0.01), top_k=0, top_p=top_p,
         remasking_strategy="low_confidence_dynamic",
         confidence_threshold=0.85, yield_blocks=False,
     ):
         output_ids = result
 
-    generated = output_ids[0][prompt_length:]
-    return tokenizer.decode(generated, skip_special_tokens=True)
+    generated_full = output_ids[0][prompt_length:]
+    generated = _truncate_ids_at_eos(
+        generated_full, _resolve_eos_token_ids(model, tokenizer),
+    )
+    decoded = tokenizer.decode(generated, skip_special_tokens=True)
+    if not decoded.strip():
+        # Safety fallback: if EOS truncation yields empty text, decode full.
+        decoded = tokenizer.decode(generated_full, skip_special_tokens=True)
+    return decoded
 
 
 def _generate_dllm_streaming(model, tokenizer, device, formatted_prompt,
                              max_tokens, temperature, top_p,
                              denoising_steps=None, block_length=None):
-    """Generate using block diffusion, yielding full text after each denoising step.
+    """Generate using block diffusion and stream a final replace update.
 
-    Each yield is the entire decoded sequence so far (replace mode), allowing the
-    UI to show text refining in-place as denoising progresses.
-
-    Args:
-        model: The loaded model.
-        tokenizer: The loaded tokenizer.
-        device: torch.device to use.
-        formatted_prompt: Already-formatted prompt string.
-        max_tokens: Maximum generation length.
-        temperature: Sampling temperature.
-        top_p: Nucleus sampling threshold.
-        denoising_steps: Number of denoising steps per block (default 8).
-        block_length: Block size in tokens (default 8).
-
-    Yields:
-        Dicts with {"mode": "replace", "text": ...} for each refinement step.
+    The refinement stream can look like gibberish for diffusion models, so we
+    emit a single final replacement chunk for stable UX.
     """
-    block_length = block_length or 8
-    denoising_steps = denoising_steps or 8
-    denoising_steps = min(denoising_steps, block_length)
-
-    tokens = tokenizer(
-        formatted_prompt, return_tensors="pt", padding=True, truncation=True,
-    ).to(device)
-
-    x, attn_mask, position_ids, past_key_values, prompt_length = (
-        _setup_block_diffusion(
-            model, tokens["input_ids"], max_tokens, block_length=block_length,
-            mask_id=_DLLM_MASK_ID,
-        )
+    final_text = _generate_dllm(
+        model, tokenizer, device, formatted_prompt, max_tokens,
+        temperature, top_p, denoising_steps=denoising_steps,
+        block_length=block_length,
     )
-
-    for full_text in _block_diffusion_decode_refining(
-        model, x, prompt_length, past_key_values,
-        attn_mask, position_ids, block_length=block_length,
-        denoising_steps=denoising_steps, mask_id=_DLLM_MASK_ID,
-        temperature=max(temperature, 0.01), top_k=0, top_p=top_p,
-        remasking_strategy="low_confidence_dynamic",
-        confidence_threshold=0.85, tokenizer=tokenizer,
-    ):
-        yield {"mode": "replace", "text": full_text}
+    yield {"mode": "replace", "text": final_text}

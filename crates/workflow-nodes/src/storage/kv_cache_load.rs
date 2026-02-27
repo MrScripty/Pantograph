@@ -123,9 +123,7 @@ impl Task for KvCacheLoadTask {
 
         // Store outputs in context
         let cache_data_key = ContextKeys::output(&self.task_id, Self::PORT_CACHE_DATA);
-        context
-            .set(&cache_data_key, serde_json::Value::Null)
-            .await;
+        context.set(&cache_data_key, serde_json::Value::Null).await;
 
         let metadata_key = ContextKeys::output(&self.task_id, Self::PORT_METADATA);
         context
@@ -142,10 +140,7 @@ impl Task for KvCacheLoadTask {
         context.set(&valid_key, valid).await;
 
         Ok(TaskResult::new(
-            Some(format!(
-                "KV cache load '{}': valid={}",
-                cache_id_str, valid
-            )),
+            Some(format!("KV cache load '{}': valid={}", cache_id_str, valid)),
             NextAction::Continue,
         ))
     }

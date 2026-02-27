@@ -59,7 +59,7 @@
       {#if displayText}
         <div
           bind:this={outputContainer}
-          class="p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-32 overflow-y-auto whitespace-pre-wrap"
+          class="copyable-output nodrag nopan nowheel p-2 bg-neutral-900 rounded text-xs text-neutral-300 max-h-32 overflow-y-auto whitespace-pre-wrap"
         >{displayText}{#if isStreaming}<span class="animate-pulse">|</span>{/if}</div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
@@ -78,5 +78,11 @@
   .output-node-wrapper :global(.node-header) {
     background-color: rgba(8, 145, 178, 0.2);
     border-color: rgba(8, 145, 178, 0.3);
+  }
+
+  .copyable-output {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 </style>

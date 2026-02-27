@@ -118,7 +118,10 @@ mod tests {
 
         // Set linked value (as frontend would)
         context
-            .set(&"test_linked.linked_value".to_string(), "Hello from GUI!".to_string())
+            .set(
+                &"test_linked.linked_value".to_string(),
+                "Hello from GUI!".to_string(),
+            )
             .await;
 
         // Run task

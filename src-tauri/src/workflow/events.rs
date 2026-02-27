@@ -131,10 +131,7 @@ impl WorkflowEvent {
     }
 
     /// Create a NodeCompleted event
-    pub fn node_completed(
-        node_id: impl Into<String>,
-        outputs: HashMap<String, PortValue>,
-    ) -> Self {
+    pub fn node_completed(node_id: impl Into<String>, outputs: HashMap<String, PortValue>) -> Self {
         Self::NodeCompleted {
             node_id: node_id.into(),
             outputs,
@@ -177,11 +174,8 @@ mod tests {
 
     #[test]
     fn test_node_stream_event() {
-        let event = WorkflowEvent::node_stream(
-            "node1",
-            "output",
-            serde_json::json!({"text": "hello"}),
-        );
+        let event =
+            WorkflowEvent::node_stream("node1", "output", serde_json::json!({"text": "hello"}));
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("NodeStream"));
         assert!(json.contains("hello"));

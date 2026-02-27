@@ -306,8 +306,7 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
 
         match result {
             Ok(json_str) => {
-                let outputs: HashMap<String, serde_json::Value> =
-                    serde_json::from_str(&json_str)?;
+                let outputs: HashMap<String, serde_json::Value> = serde_json::from_str(&json_str)?;
                 Ok(outputs)
             }
             Err(err_msg) => Err(node_engine::NodeEngineError::ExecutionFailed(err_msg)),
@@ -540,7 +539,10 @@ fn workflow_add_edge(
     let mut graph: WorkflowGraph = serde_json::from_str(&graph_json)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
 
-    let edge_id = format!("e-{}-{}-{}-{}", source, source_handle, target, target_handle);
+    let edge_id = format!(
+        "e-{}-{}-{}-{}",
+        source, source_handle, target, target_handle
+    );
     let edge = node_engine::GraphEdge {
         id: edge_id,
         source,
@@ -788,9 +790,10 @@ fn executor_demand(
 
     rt.block_on(async {
         let exec = executor.read().await;
-        let result = exec.demand(&node_id, task_exec.as_ref()).await.map_err(|e| {
-            rustler::Error::Term(Box::new(format!("Demand error: {}", e)))
-        })?;
+        let result = exec
+            .demand(&node_id, task_exec.as_ref())
+            .await
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Demand error: {}", e))))?;
         serde_json::to_string(&result)
             .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
     })
@@ -824,9 +827,8 @@ fn executor_demand_async(
         let mut owned_env = OwnedEnv::new();
         match result {
             Ok(outputs) => {
-                let json = serde_json::to_string(&outputs).unwrap_or_else(|e| {
-                    format!("{{\"error\": \"serialization: {}\"}}", e)
-                });
+                let json = serde_json::to_string(&outputs)
+                    .unwrap_or_else(|e| format!("{{\"error\": \"serialization: {}\"}}", e));
                 let _ = owned_env.send_and_clear(&caller_pid, |env| {
                     (
                         atoms::demand_complete().encode(env),
@@ -866,9 +868,9 @@ fn executor_update_node_data(
 
     rt.block_on(async {
         let exec = executor.read().await;
-        exec.update_node_data(&node_id, data).await.map_err(|e| {
-            rustler::Error::Term(Box::new(format!("Update error: {}", e)))
-        })?;
+        exec.update_node_data(&node_id, data)
+            .await
+            .map_err(|e| rustler::Error::Term(Box::new(format!("Update error: {}", e))))?;
         Ok(atoms::ok())
     })
 }
@@ -1037,9 +1039,7 @@ fn orchestration_store_new() -> ResourceArc<OrchestrationStoreResource> {
 
 /// Create a persistent orchestration store.
 #[rustler::nif]
-fn orchestration_store_with_persistence(
-    path: String,
-) -> ResourceArc<OrchestrationStoreResource> {
+fn orchestration_store_with_persistence(path: String) -> ResourceArc<OrchestrationStoreResource> {
     ResourceArc::new(OrchestrationStoreResource {
         store: Arc::new(tokio::sync::RwLock::new(
             OrchestrationStore::with_persistence(path),
@@ -1145,9 +1145,7 @@ fn node_registry_register(
 
 /// List all registered node types and their metadata as JSON.
 #[rustler::nif]
-fn node_registry_list(
-    resource: ResourceArc<NodeRegistryResource>,
-) -> NifResult<String> {
+fn node_registry_list(resource: ResourceArc<NodeRegistryResource>) -> NifResult<String> {
     let registry = resource.registry.blocking_read();
     let metadata: Vec<&node_engine::TaskMetadata> = registry.all_metadata();
 
@@ -1160,9 +1158,7 @@ fn node_registry_list(
 /// Uses the `inventory` crate to discover all TaskMetadata submitted via
 /// `inventory::submit!()` in workflow-nodes and registers them as metadata-only.
 #[rustler::nif]
-fn node_registry_register_builtins(
-    resource: ResourceArc<NodeRegistryResource>,
-) -> NifResult<Atom> {
+fn node_registry_register_builtins(resource: ResourceArc<NodeRegistryResource>) -> NifResult<Atom> {
     let mut registry = resource.registry.blocking_write();
     registry.register_builtins();
     Ok(atoms::ok())
@@ -1360,9 +1356,8 @@ fn execute_orchestration(
 ) -> NifResult<String> {
     let _ = env;
 
-    let initial_data: HashMap<String, serde_json::Value> =
-        serde_json::from_str(&initial_data_json)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let initial_data: HashMap<String, serde_json::Value> = serde_json::from_str(&initial_data_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
 
     // Look up the orchestration graph
     let graph = {
@@ -1385,11 +1380,8 @@ fn execute_orchestration(
     let event_sink = BeamEventSink::new(callback_pid);
 
     // Create the data graph executor
-    let data_executor = ElixirDataGraphExecutor::new(
-        store_resource.store.clone(),
-        task_executor,
-        callback_pid,
-    );
+    let data_executor =
+        ElixirDataGraphExecutor::new(store_resource.store.clone(), task_executor, callback_pid);
 
     // Create and run the orchestration executor
     let orch_executor = node_engine::OrchestrationExecutor::new(data_executor)
@@ -1428,9 +1420,8 @@ fn execute_orchestration_with_inference(
 ) -> NifResult<String> {
     let _ = env;
 
-    let initial_data: HashMap<String, serde_json::Value> =
-        serde_json::from_str(&initial_data_json)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let initial_data: HashMap<String, serde_json::Value> = serde_json::from_str(&initial_data_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
 
     // Look up the orchestration graph
     let graph = {
@@ -1456,11 +1447,8 @@ fn execute_orchestration_with_inference(
     let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
 
     // Create the data graph executor
-    let data_executor = ElixirDataGraphExecutor::new(
-        store_resource.store.clone(),
-        task_executor,
-        callback_pid,
-    );
+    let data_executor =
+        ElixirDataGraphExecutor::new(store_resource.store.clone(), task_executor, callback_pid);
 
     // Create and run the orchestration executor
     let orch_executor = node_engine::OrchestrationExecutor::new(data_executor)
@@ -1533,15 +1521,16 @@ fn pumas_api_new(launcher_root_path: String) -> NifResult<ResourceArc<PumasApiRe
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let api = runtime.block_on(async {
-        pumas_library::PumasApi::builder(&launcher_root_path)
-            .auto_create_dirs(true)
-            .with_hf_client(true)
-            .with_process_manager(false)
-            .build()
-            .await
-    })
-    .map_err(|e| rustler::Error::Term(Box::new(format!("PumasApi init error: {}", e))))?;
+    let api = runtime
+        .block_on(async {
+            pumas_library::PumasApi::builder(&launcher_root_path)
+                .auto_create_dirs(true)
+                .with_hf_client(true)
+                .with_process_manager(false)
+                .build()
+                .await
+        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("PumasApi init error: {}", e))))?;
 
     Ok(ResourceArc::new(PumasApiResource {
         api: Arc::new(api),
@@ -1581,10 +1570,8 @@ fn executor_set_kv_cache_store(
             std::path::PathBuf::from(&cache_dir),
             inference::kv_cache::StoragePolicy::MemoryAndDisk,
         ));
-        exec.extensions_mut().set(
-            node_engine::extension_keys::KV_CACHE_STORE,
-            store,
-        );
+        exec.extensions_mut()
+            .set(node_engine::extension_keys::KV_CACHE_STORE, store);
     });
     Ok(atoms::ok())
 }
@@ -1759,9 +1746,8 @@ fn pumas_import_model(
     resource: ResourceArc<PumasApiResource>,
     spec_json: String,
 ) -> NifResult<String> {
-    let spec: pumas_library::model_library::ModelImportSpec =
-        serde_json::from_str(&spec_json)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let spec: pumas_library::model_library::ModelImportSpec = serde_json::from_str(&spec_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
 
     let result = resource
         .runtime
@@ -1811,9 +1797,7 @@ fn pumas_get_system_resources(resource: ResourceArc<PumasApiResource>) -> NifRes
     resource
         .runtime
         .block_on(async { resource.api.get_system_resources().await })
-        .map_err(|e| {
-            rustler::Error::Term(Box::new(format!("get_system_resources error: {}", e)))
-        })
+        .map_err(|e| rustler::Error::Term(Box::new(format!("get_system_resources error: {}", e))))
         .and_then(|info| {
             serde_json::to_string(&info)
                 .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
@@ -1842,10 +1826,7 @@ fn load(env: Env, _info: Term) -> bool {
     true
 }
 
-rustler::init!(
-    "Elixir.Pantograph.Native",
-    load = load
-);
+rustler::init!("Elixir.Pantograph.Native", load = load);
 
 // Note: NIF-annotated functions cannot be called directly in Rust tests.
 // Integration testing of NIF functions requires an Elixir/Erlang runtime.

@@ -107,4 +107,5 @@ pub async fn setup_extensions(_extensions: &mut ExecutorExtensions) {}
 pub async fn setup_extensions_with_path(
     _extensions: &mut ExecutorExtensions,
     _library_path: Option<&std::path::Path>,
-) {}
+) {
+}

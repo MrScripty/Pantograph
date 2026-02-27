@@ -37,7 +37,11 @@ impl TaskDescriptor for AgentToolsTask {
             label: "Agent Tools".to_string(),
             description: "Configures available tools for agent".to_string(),
             inputs: vec![],
-            outputs: vec![PortMetadata::optional(PORT_TOOLS, "Tools", PortDataType::Tools)],
+            outputs: vec![PortMetadata::optional(
+                PORT_TOOLS,
+                "Tools",
+                PortDataType::Tools,
+            )],
             execution_mode: ExecutionMode::Reactive,
         }
     }

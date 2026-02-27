@@ -76,11 +76,7 @@ impl TaskDescriptor for KvCacheSaveTask {
             label: "KV Cache Save".to_string(),
             description: "Save KV cache to memory or disk".to_string(),
             inputs: vec![
-                PortMetadata::required(
-                    Self::PORT_CACHE_DATA,
-                    "Cache Data",
-                    PortDataType::Json,
-                ),
+                PortMetadata::required(Self::PORT_CACHE_DATA, "Cache Data", PortDataType::Json),
                 PortMetadata::required(
                     Self::PORT_MODEL_FINGERPRINT,
                     "Model Fingerprint",
@@ -94,11 +90,7 @@ impl TaskDescriptor for KvCacheSaveTask {
                     PortDataType::String,
                 ),
                 PortMetadata::optional(Self::PORT_CACHE_DIR, "Cache Dir", PortDataType::String),
-                PortMetadata::optional(
-                    Self::PORT_COMPRESSED,
-                    "Compressed",
-                    PortDataType::Boolean,
-                ),
+                PortMetadata::optional(Self::PORT_COMPRESSED, "Compressed", PortDataType::Boolean),
             ],
             outputs: vec![
                 PortMetadata::required(Self::PORT_CACHE_ID, "Cache ID", PortDataType::String),

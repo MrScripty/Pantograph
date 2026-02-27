@@ -7249,6 +7249,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pumas-library",
  "regex",
  "reqwest",
  "rig-core",

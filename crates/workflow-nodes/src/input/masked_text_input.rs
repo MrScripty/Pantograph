@@ -69,7 +69,9 @@ impl TaskDescriptor for MaskedTextInputTask {
             node_type: "masked-text-input".to_string(),
             category: NodeCategory::Input,
             label: "Masked Text Input".to_string(),
-            description: "Text input with masked and anchored regions for selective dLLM regeneration".to_string(),
+            description:
+                "Text input with masked and anchored regions for selective dLLM regeneration"
+                    .to_string(),
             inputs: vec![PortMetadata::optional(
                 Self::PORT_TEXT,
                 "Text",
@@ -136,11 +138,7 @@ impl Task for MaskedTextInputTask {
 
         let summary = format!("Masked prompt with {} segment(s)", segment_count);
 
-        log::debug!(
-            "MaskedTextInputTask {}: produced {}",
-            self.task_id,
-            summary
-        );
+        log::debug!("MaskedTextInputTask {}: produced {}", self.task_id, summary);
 
         Ok(TaskResult::new(Some(summary), NextAction::Continue))
     }
@@ -174,7 +172,10 @@ mod tests {
         assert_eq!(meta.inputs.len(), 1);
         assert!(!meta.inputs[0].required, "text input should be optional");
         assert_eq!(meta.outputs.len(), 1);
-        assert!(meta.outputs[0].required, "masked_prompt output should be required");
+        assert!(
+            meta.outputs[0].required,
+            "masked_prompt output should be required"
+        );
     }
 
     #[test]

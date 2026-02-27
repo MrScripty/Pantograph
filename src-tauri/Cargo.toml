@@ -6,12 +6,13 @@ authors = ["you"]
 edition = "2021"
 
 [features]
-default = ["backend-llamacpp", "backend-ollama", "backend-candle", "backend-pytorch"]
+default = ["backend-llamacpp", "backend-ollama", "backend-candle", "backend-pytorch", "backend-audio"]
 
 # Inference backends - at least one must be enabled
 backend-llamacpp = ["inference/backend-llamacpp"]
 backend-ollama = ["inference/backend-ollama"]
 backend-pytorch = ["inference/backend-pytorch", "node-engine/pytorch-nodes"]
+backend-audio = ["node-engine/audio-nodes"]
 backend-candle = [
     "inference/backend-candle",
     "dep:candle-core",
@@ -41,6 +42,7 @@ log.workspace = true
 futures-util.workspace = true
 reqwest.workspace = true
 which.workspace = true
+pumas-library.workspace = true
 
 # Tauri-specific dependencies
 tauri = { version = "2.9.0", features = [] }

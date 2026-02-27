@@ -247,7 +247,10 @@ impl Task for ProcessTask {
         );
 
         Ok(TaskResult::new(
-            Some(format!("Process '{}' exited with code {}", command, exit_code)),
+            Some(format!(
+                "Process '{}' exited with code {}",
+                command, exit_code
+            )),
             NextAction::Continue,
         ))
     }

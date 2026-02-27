@@ -158,15 +158,21 @@ impl OrchestrationBuilder {
 
     /// Add a Start node
     pub fn add_start(mut self, id: impl Into<String>, position: (f64, f64)) -> Self {
-        self.nodes
-            .push(OrchestrationNode::new(id, OrchestrationNodeType::Start, position));
+        self.nodes.push(OrchestrationNode::new(
+            id,
+            OrchestrationNodeType::Start,
+            position,
+        ));
         self
     }
 
     /// Add an End node
     pub fn add_end(mut self, id: impl Into<String>, position: (f64, f64)) -> Self {
-        self.nodes
-            .push(OrchestrationNode::new(id, OrchestrationNodeType::End, position));
+        self.nodes.push(OrchestrationNode::new(
+            id,
+            OrchestrationNodeType::End,
+            position,
+        ));
         self
     }
 
@@ -228,8 +234,11 @@ impl OrchestrationBuilder {
 
     /// Add a Merge node
     pub fn add_merge(mut self, id: impl Into<String>, position: (f64, f64)) -> Self {
-        self.nodes
-            .push(OrchestrationNode::new(id, OrchestrationNodeType::Merge, position));
+        self.nodes.push(OrchestrationNode::new(
+            id,
+            OrchestrationNodeType::Merge,
+            position,
+        ));
         self
     }
 
