@@ -16,7 +16,7 @@ export interface ValidationResult {
 }
 
 // All allowed Tailwind color classes from our design system
-const allowedColorClasses = new Set(Object.values(designTokens.colors));
+const allowedColorClasses: Set<string> = new Set(Object.values(designTokens.colors));
 
 // Additional commonly allowed Tailwind classes (non-color utilities)
 const allowedUtilityPatterns = [
