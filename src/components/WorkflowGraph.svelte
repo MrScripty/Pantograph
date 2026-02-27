@@ -646,6 +646,7 @@
 
 <svelte:window onkeydown={handleKeyDown} onkeyup={handleKeyUp} />
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="workflow-graph-container w-full h-full"
   class:cutting={isCutting}

@@ -23,7 +23,11 @@
     { id: 'shell', label: 'Shell Command', description: 'Run shell commands' },
   ];
 
-  let enabledTools = $state<string[]>(data.enabledTools || []);
+  let enabledTools = $state<string[]>([]);
+
+  $effect(() => {
+    enabledTools = data.enabledTools || [];
+  });
 
   function toggleTool(toolId: string) {
     if (enabledTools.includes(toolId)) {

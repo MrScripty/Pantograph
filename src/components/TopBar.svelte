@@ -20,8 +20,8 @@
   } from '../stores/linkStore';
 
   let inputValue = $state($topBarInputValue);
-  let isLoading = false;
-  let errorMessage = '';
+  let isLoading = $state(false);
+  let errorMessage = $state('');
 
   // Sync input value back to store when it changes (so it persists across view switches)
   $effect(() => {
@@ -63,14 +63,6 @@
     if ($linkModeActive) {
       e.preventDefault();
       e.stopPropagation();
-      createLink('topbar-input');
-    }
-  }
-
-  // Handle keyboard events during link mode (a11y)
-  function handleLinkKeyDown(e: KeyboardEvent) {
-    if ($linkModeActive && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
       createLink('topbar-input');
     }
   }
@@ -174,20 +166,15 @@
     class="flex bg-neutral-900/90 backdrop-blur-md border border-neutral-700 rounded-lg overflow-hidden shadow-2xl relative"
     class:link-mode-highlight={$linkModeActive}
     data-linkable-id="topbar-input"
-    onclick={handleLinkClick}
-    onkeydown={handleLinkKeyDown}
-    role={$linkModeActive ? 'button' : undefined}
-    tabindex={$linkModeActive ? 0 : -1}
   >
     <!-- Click overlay during link mode - captures clicks that disabled input would swallow -->
     {#if $linkModeActive}
-      <div
-        class="absolute inset-0 cursor-pointer z-10"
+      <button
+        type="button"
+        class="absolute inset-0 cursor-pointer z-10 bg-transparent border-0 p-0"
         onclick={handleLinkClick}
-        role="button"
-        tabindex="0"
-        onkeydown={handleLinkKeyDown}
-      />
+        aria-label="Create link from command input"
+      ></button>
     {/if}
     <input
       type="text"

@@ -126,12 +126,14 @@
   let { id, data, selected = false }: Props = $props();
 
   const nodeColor = '#14b8a6';
-  const initialSegments = normalizeSegments(data.segments && data.segments.length > 0
-    ? data.segments
-    : [{ ...EMPTY_SEGMENT }]);
+  const segmentsFromData = () => normalizeSegments(
+    data.segments && data.segments.length > 0
+      ? data.segments
+      : [{ ...EMPTY_SEGMENT }],
+  );
 
-  let segments = $state<PromptSegment[]>(initialSegments);
-  let editorText = $state(segmentsToText(initialSegments));
+  let segments = $state<PromptSegment[]>(segmentsFromData());
+  let editorText = $state(segmentsToText(segmentsFromData()));
   let editorRef = $state<HTMLTextAreaElement | null>(null);
   let cachedSelection = $state({ start: 0, end: 0 });
 

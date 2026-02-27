@@ -15,7 +15,11 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let text = $state(data.text || '');
+  let text = $state('');
+
+  $effect(() => {
+    text = data.text || '';
+  });
 
   // Port type colors (same as BaseNode)
   const typeColors: Record<string, string> = {

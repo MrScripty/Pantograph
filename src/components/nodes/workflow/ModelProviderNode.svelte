@@ -15,7 +15,12 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelName = $state(data.model_name || 'llama2');
+  let modelName = $state('');
+  const modelNameInputId = $derived(`model-provider-${id}-model-name`);
+
+  $effect(() => {
+    modelName = data.model_name || 'llama2';
+  });
 
   // Input category color (blue)
   const nodeColor = '#2563eb';
@@ -52,8 +57,9 @@
         </div>
       {:else}
         <div class="flex flex-col gap-1">
-          <label class="text-[10px] text-neutral-400">Model Name</label>
+          <label class="text-[10px] text-neutral-400" for={modelNameInputId}>Model Name</label>
           <input
+            id={modelNameInputId}
             type="text"
             class="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-blue-500"
             placeholder="e.g., llama2, codellama:7b"

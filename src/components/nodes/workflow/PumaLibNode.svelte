@@ -107,16 +107,25 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelPath = $state(data.modelPath || '');
-  let selectionMode = $state<'library' | 'manual'>(data.selectionMode || 'library');
+  let modelPath = $state('');
+  let selectionMode = $state<'library' | 'manual'>('library');
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
   let libraryAvailable = $state(true);
   let searchQuery = $state('');
   let isDependencyActionRunning = $state(false);
-  let dependencyPlan = $state<ModelDependencyPlan | null>(data.dependency_plan ?? null);
-  let dependencyStatus = $state<ModelDependencyStatus | null>(data.dependency_status ?? null);
-  let selectedBindingIds = $state<string[]>(Array.isArray(data.selected_binding_ids) ? data.selected_binding_ids : []);
+  let dependencyPlan = $state<ModelDependencyPlan | null>(null);
+  let dependencyStatus = $state<ModelDependencyStatus | null>(null);
+  let selectedBindingIds = $state<string[]>([]);
+  const manualModelPathInputId = $derived(`puma-lib-${id}-model-path`);
+
+  $effect(() => {
+    modelPath = data.modelPath || '';
+    selectionMode = data.selectionMode || 'library';
+    dependencyPlan = data.dependency_plan ?? null;
+    dependencyStatus = data.dependency_status ?? null;
+    selectedBindingIds = Array.isArray(data.selected_binding_ids) ? data.selected_binding_ids : [];
+  });
 
   let filteredModels = $derived(
     searchQuery
@@ -670,9 +679,10 @@
           {/if}
         {:else}
           <div class="space-y-1">
-            <label class="text-xs text-neutral-400">Model Path</label>
+            <label class="text-xs text-neutral-400" for={manualModelPathInputId}>Model Path</label>
             <div class="flex gap-1">
               <input
+                id={manualModelPathInputId}
                 type="text"
                 class="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-amber-500 font-mono truncate"
                 placeholder="/path/to/model.gguf"

@@ -24,11 +24,15 @@
   let { id, data, selected = false }: Props = $props();
 
   let databases = $state<DatabaseInfo[]>([]);
-  let selectedDb = $state(data.database_path || '');
+  let selectedDb = $state('');
   let newDbName = $state('');
   let showCreateDialog = $state(false);
   let isLoading = $state(true);
   let error = $state<string | null>(null);
+
+  $effect(() => {
+    selectedDb = data.database_path || '';
+  });
 
   onMount(async () => {
     await loadDatabases();
