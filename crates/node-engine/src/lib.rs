@@ -63,6 +63,7 @@ pub mod extensions;
 pub mod groups;
 pub mod model_dependencies;
 pub mod orchestration;
+pub mod path_validation;
 pub mod port_options;
 pub mod registry;
 pub mod tasks;
@@ -100,6 +101,7 @@ pub use model_dependencies::{
     ModelDependencyInstallResult, ModelDependencyPlan, ModelDependencyRequest,
     ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
 };
+pub use path_validation::resolve_path_within_root;
 
 // Re-export port options types
 pub use port_options::{

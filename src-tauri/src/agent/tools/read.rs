@@ -1,3 +1,4 @@
+use node_engine::resolve_path_within_root;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::Deserialize;
@@ -56,24 +57,9 @@ impl Tool for ReadGuiFileTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // Sanitize path to prevent directory traversal
-        let sanitized = args
-            .path
-            .replace("..", "")
-            .trim_start_matches('/')
-            .to_string();
-        let full_path = self.get_generated_path().join(&sanitized);
-
-        // Verify the path is within the generated directory
-        let canonical = full_path.canonicalize().map_err(ToolError::Io)?;
-        let generated_canonical = self
-            .get_generated_path()
-            .canonicalize()
-            .map_err(ToolError::Io)?;
-
-        if !canonical.starts_with(&generated_canonical) {
-            return Err(ToolError::PathNotAllowed(args.path));
-        }
+        let generated_root = self.get_generated_path();
+        let full_path = resolve_path_within_root(&args.path, &generated_root)
+            .map_err(|e| ToolError::PathNotAllowed(format!("{} ({})", args.path, e)))?;
 
         tokio::fs::read_to_string(full_path)
             .await

@@ -2,6 +2,7 @@
 
 use super::shared::SharedAppConfig;
 use crate::config::SandboxConfig;
+use node_engine::resolve_path_within_root;
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::{command, AppHandle, Manager, State};
@@ -95,6 +96,7 @@ fn get_project_root_internal() -> PathBuf {
 #[command]
 pub async fn validate_component(relative_path: String) -> Result<ValidationResult, String> {
     let project_root = get_project_root_internal();
+    let generated_root = project_root.join("src").join("generated");
     let script_path = project_root.join("scripts").join("validate-esbuild.mjs");
 
     if !script_path.exists() {
@@ -104,10 +106,13 @@ pub async fn validate_component(relative_path: String) -> Result<ValidationResul
         ));
     }
 
-    // Convert relative path to absolute
-    // Remove leading slash if present for path joining
+    // Restrict validation targets to src/generated only.
     let clean_relative = relative_path.trim_start_matches('/');
-    let file_path = project_root.join(clean_relative);
+    let generated_relative = clean_relative
+        .strip_prefix("src/generated/")
+        .unwrap_or(clean_relative);
+    let file_path = resolve_path_within_root(generated_relative, &generated_root)
+        .map_err(|e| format!("Invalid component path '{}': {}", relative_path, e))?;
 
     let output = tokio::process::Command::new("node")
         .arg(&script_path)

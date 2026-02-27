@@ -1,3 +1,4 @@
+use node_engine::resolve_path_within_root;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::Deserialize;
@@ -222,18 +223,10 @@ impl Tool for ReadTemplateTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        // Sanitize name - remove any path separators and extensions
-        let sanitized = args
-            .name
-            .replace("..", "")
-            .replace('/', "")
-            .replace('\\', "")
-            .trim_end_matches(".svelte")
-            .to_string();
-
-        let full_path = self
-            .get_templates_path()
-            .join(format!("{}.svelte", sanitized));
+        let templates_root = self.get_templates_path();
+        let requested = format!("{}.svelte", args.name.trim_end_matches(".svelte"));
+        let full_path = resolve_path_within_root(&requested, &templates_root)
+            .map_err(|e| ToolError::PathNotAllowed(format!("{} ({})", args.name, e)))?;
 
         if !full_path.exists() {
             return Err(ToolError::Io(std::io::Error::new(

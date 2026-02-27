@@ -6,8 +6,8 @@
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
 use node_engine::{
-    ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
-    TaskMetadata,
+    resolve_path_within_root, ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata,
+    TaskDescriptor, TaskMetadata,
 };
 use std::path::PathBuf;
 use tokio::fs;
@@ -114,8 +114,9 @@ impl Task for ReadFileTask {
             .or_else(|| self.default_project_root.clone())
             .unwrap_or_else(|| PathBuf::from("."));
 
-        // Resolve path relative to project root
-        let full_path = project_root.join(&path_str);
+        let full_path = resolve_path_within_root(&path_str, &project_root).map_err(|e| {
+            GraphError::TaskExecutionFailed(format!("Invalid read path '{}': {}", path_str, e))
+        })?;
 
         log::debug!(
             "ReadFileTask {}: reading file at '{}'",
@@ -234,6 +235,19 @@ mod tests {
         let context = Context::new();
 
         // Run without setting path - should error
+        let result = task.run(context).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_read_rejects_path_traversal() {
+        let dir = tempdir().unwrap();
+        let task = ReadFileTask::with_project_root("test_reader", dir.path().to_path_buf());
+        let context = Context::new();
+
+        let path_key = ContextKeys::input("test_reader", "path");
+        context.set(&path_key, "../secret.txt".to_string()).await;
+
         let result = task.run(context).await;
         assert!(result.is_err());
     }

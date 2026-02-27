@@ -648,13 +648,16 @@ async fn execute_read_file(
         .and_then(|p| p.as_str())
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing path input".to_string()))?;
 
-    let full_path = if std::path::Path::new(path).is_absolute() {
-        PathBuf::from(path)
-    } else if let Some(root) = project_root {
-        root.join(path)
-    } else {
-        PathBuf::from(path)
+    let allowed_root = match project_root {
+        Some(root) => root.clone(),
+        None => std::env::current_dir().map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to resolve current directory: {e}"))
+        })?,
     };
+    let full_path =
+        crate::path_validation::resolve_path_within_root(path, &allowed_root).map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Invalid read path '{}': {}", path, e))
+        })?;
 
     let content = tokio::fs::read_to_string(&full_path)
         .await
@@ -683,13 +686,16 @@ async fn execute_write_file(
         .and_then(|c| c.as_str())
         .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing content input".to_string()))?;
 
-    let full_path = if std::path::Path::new(path).is_absolute() {
-        PathBuf::from(path)
-    } else if let Some(root) = project_root {
-        root.join(path)
-    } else {
-        PathBuf::from(path)
+    let allowed_root = match project_root {
+        Some(root) => root.clone(),
+        None => std::env::current_dir().map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to resolve current directory: {e}"))
+        })?,
     };
+    let full_path =
+        crate::path_validation::resolve_path_within_root(path, &allowed_root).map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Invalid write path '{}': {}", path, e))
+        })?;
 
     if let Some(parent) = full_path.parent() {
         tokio::fs::create_dir_all(parent).await.map_err(|e| {
@@ -2759,6 +2765,7 @@ async fn execute_kv_cache_truncate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_resolve_node_type_from_data() {
@@ -3131,5 +3138,38 @@ mod tests {
         let result = execute_expand_settings(&inputs).unwrap();
         assert_eq!(result["inference_settings"], serde_json::json!([]));
         assert_eq!(result.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_execute_read_file_rejects_traversal() {
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let outside_file = outside.path().join("secret.txt");
+        std::fs::write(&outside_file, "secret").unwrap();
+        let root_path = root.path().to_path_buf();
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "path".to_string(),
+            serde_json::json!(format!(
+                "../{}/secret.txt",
+                outside.path().file_name().unwrap().to_string_lossy()
+            )),
+        );
+
+        let result = execute_read_file(Some(&root_path), &inputs).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_write_file_rejects_traversal() {
+        let root = tempdir().unwrap();
+        let root_path = root.path().to_path_buf();
+        let mut inputs = HashMap::new();
+        inputs.insert("path".to_string(), serde_json::json!("../secret.txt"));
+        inputs.insert("content".to_string(), serde_json::json!("blocked"));
+
+        let result = execute_write_file(Some(&root_path), &inputs).await;
+        assert!(result.is_err());
     }
 }

@@ -1,3 +1,4 @@
+use node_engine::resolve_path_within_root;
 use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::Deserialize;
@@ -679,13 +680,20 @@ impl Tool for WriteGuiFileTool {
             return Err(self.validation_error(msg, category).await);
         }
 
-        // Sanitize path to prevent directory traversal
-        let sanitized = args
-            .path
-            .replace("..", "")
-            .trim_start_matches('/')
-            .to_string();
-        let full_path = self.get_generated_path().join(&sanitized);
+        let generated_root = self.get_generated_path();
+        tokio::fs::create_dir_all(&generated_root)
+            .await
+            .map_err(ToolError::Io)?;
+        let full_path = resolve_path_within_root(&args.path, &generated_root)
+            .map_err(|e| ToolError::PathNotAllowed(format!("{} ({})", args.path, e)))?;
+        let generated_root_canonical = generated_root.canonicalize().map_err(ToolError::Io)?;
+        let relative_path = full_path
+            .strip_prefix(&generated_root_canonical)
+            .map_err(|_| ToolError::PathNotAllowed(args.path.clone()))?;
+        if relative_path.as_os_str().is_empty() {
+            return Err(ToolError::PathNotAllowed(args.path));
+        }
+        let sanitized = relative_path.to_string_lossy().replace('\\', "/");
 
         // Ensure the generated directory exists
         if let Some(parent) = full_path.parent() {

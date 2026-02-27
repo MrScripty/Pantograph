@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::gateway::SharedGateway;
-use node_engine::EventSink;
+use node_engine::{resolve_path_within_root, EventSink};
 
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
@@ -199,7 +199,8 @@ pub fn load_workflow(path: String) -> Result<WorkflowFile, String> {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let full_path = project_root.join(&path);
+    let full_path = resolve_path_within_root(&path, &project_root)
+        .map_err(|e| format!("Invalid workflow path '{}': {}", path, e))?;
 
     let content = fs::read_to_string(&full_path)
         .map_err(|e| format!("Failed to read workflow file: {}", e))?;
