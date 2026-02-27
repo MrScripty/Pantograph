@@ -4,6 +4,11 @@ Date: 2026-02-27
 
 ## Completed
 
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::model_dependency_commands::tests -- --nocapture` (pass)
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::model_dependencies::tests -- --nocapture` (pass)
+- `cargo check --manifest-path src-tauri/Cargo.toml -p pantograph` (pass)
+- `npm run typecheck` (pass)
+- `npm run lint:full` (fails with existing repository-wide lint baseline; no new lint gate introduced by this dependency pinning update)
 - `npx tsc --noEmit` (pass)
 - `cargo check -p node-engine --features inference-nodes` (pass)
 - `cargo check -p pantograph` (pass)

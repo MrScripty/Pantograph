@@ -1,4 +1,4 @@
-# Pumas v2 Dependency Contract Freeze
+# Pumas v2 Dependency Consumer Contract
 
 Date: 2026-02-27
 Scope: Pantograph workflow dependency preflight and Puma-Lib dependency UI commands.
@@ -12,7 +12,7 @@ Scope: Pantograph workflow dependency preflight and Puma-Lib dependency UI comma
 - Resolver must not perform speculative local dependency authority logic.
 - Pantograph must not mutate `pumas-library` dependency tables directly; dependency writes belong to `pumas-library` APIs.
 
-## Frozen Commands and Request Context
+## Commands and Request Context
 
 Pantograph command surface:
 
@@ -20,6 +20,7 @@ Pantograph command surface:
 - `check_model_dependencies`
 - `install_model_dependencies`
 - `get_model_dependency_status`
+- `audit_dependency_pin_compliance`
 - `list_models_needing_review`
 - `submit_model_review`
 - `reset_model_review`
@@ -38,9 +39,9 @@ Request context fields:
 
 `platform_context` is normalized to a stable `platform_key` string in resolver logic.
 
-## Frozen Result States and Codes
+## Result State and Code Policy
 
-Pantograph dependency state enum includes:
+Pantograph supports known dependency states:
 
 - `ready`
 - `missing`
@@ -51,29 +52,37 @@ Pantograph dependency state enum includes:
 - `profile_conflict`
 - `required_binding_omitted`
 
-Canonical non-ready codes:
+Pantograph also handles unknown/additive state values by rendering fallback labels instead of hard-failing.
+
+Known non-ready codes:
 
 - `unknown_profile`
 - `manual_intervention_required`
 - `profile_conflict`
 - `required_binding_omitted`
+- `unpinned_dependency`
+- `modality_resolution_unknown`
 
 Mapping rule:
 
 - Pumas `error_code=required_binding_omitted` maps to Pantograph `state=required_binding_omitted`.
 
-## Frozen DTO Shapes (Pantograph)
+## DTO Shape Policy (Pantograph)
 
 Plan:
 
-- top-level: `state`, `code`, `message`, `review_reasons`, `plan_id`
-- binding list: `binding_id`, `profile_id`, `profile_version`, `profile_hash`, `binding_kind`, `backend_key`, `platform_selector`, `env_id`
+- top-level: `state`, `code`, `message`, `review_reasons`, `plan_id`, `missing_pins`
+- binding list: `binding_id`, `profile_id`, `profile_version`, `profile_hash`, `binding_kind`, `backend_key`, `platform_selector`, `env_id`, `pin_summary`, `required_pins`, `missing_pins`
 - selection data: `selected_binding_ids`, `required_binding_ids`
 
 Status/install:
 
-- top-level: `state`, `code`, `message`, `review_reasons`, `plan_id`, timestamp (`checked_at`/`installed_at`)
-- per-binding rows include state and component buckets (`missing_components`, `installed_components`, `failed_components`) for UI rendering.
+- top-level: `state`, `code`, `message`, `review_reasons`, `plan_id`, timestamp (`checked_at`/`installed_at`), `missing_pins`
+- per-binding rows include state, `code`, pinning fields (`pin_summary`, `required_pins`, `missing_pins`) and component buckets (`missing_components`, `installed_components`, `failed_components`) for UI rendering.
+
+Audit:
+
+- `audit_dependency_pin_compliance` returns pumas-library audit report payload as-is for downstream rendering/logging.
 
 Model ref contract:
 
@@ -81,6 +90,11 @@ Model ref contract:
 - `engine`, `model_id`, `model_path`, `task_type_primary`
 - `dependency_bindings[]`
 - optional `dependency_plan_id`
+
+Contract compatibility rules:
+
+- Pantograph consumes known fields and tolerates additive unknown keys.
+- Pantograph does not assume fixed array lengths for dependency bindings, pins, inference settings, or metadata collections.
 
 ## Determinism Rules
 
