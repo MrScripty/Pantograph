@@ -1,6 +1,6 @@
 # Compliance Remediation Tracker
 
-Last updated: 2026-02-27 (PR-1 implementation pass 1)
+Last updated: 2026-02-27 (PR-2 implementation pass 1)
 
 ## PR-1 Security Boundary Hardening
 
@@ -40,10 +40,20 @@ Status: In progress
 
 ## PR-2 Launcher Contract
 
-Status: Not started
+Status: Completed
 
-- [ ] Implement full required CLI contract in `launcher.sh`.
-- [ ] Add usage/exit-code coverage tests or smoke checks.
+- [x] Implement full required CLI contract in `launcher.sh`.
+- [x] Add usage/exit-code coverage tests or smoke checks.
+
+### Verification run (2026-02-27)
+
+- `bash -n launcher.sh`
+- `./launcher.sh --help`
+- `./launcher.sh --unknown` (expects exit `2`)
+- `./launcher.sh --build --run` (expects exit `2`)
+- `./launcher.sh --install extra` (expects exit `2`)
+- `./launcher.sh -- --foo` (expects exit `2`)
+- `./launcher.sh --run-release` (expects exit `4` when artifact missing)
 
 ## PR-3 Tooling and Quality Gates
 

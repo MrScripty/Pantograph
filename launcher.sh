@@ -1,149 +1,290 @@
 #!/usr/bin/env bash
 set -euo pipefail
+IFS=$'\n\t'
 
+SCRIPT_NAME="$(basename "$0")"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+APP_BIN="pantograph"
+RELEASE_BIN_PATH="./src-tauri/target/release/${APP_BIN}"
+RELEASE_BIN_PATH_EXE="./src-tauri/target/release/${APP_BIN}.exe"
 VENV_DIR="$ROOT_DIR/.venv"
 VENV_PYTHON="$VENV_DIR/bin/python3"
 
-# Increase file descriptor limit to prevent "too many open files" errors
-# Vite + Tauri both watch files, requiring many open handles
+EXIT_SUCCESS=0
+EXIT_OPERATION_FAILED=1
+EXIT_USAGE_ERROR=2
+EXIT_MISSING_DEP=3
+EXIT_MISSING_RELEASE_ARTIFACT=4
+
+INSTALL_DEPENDENCIES=("npm" "cargo" "python3" "node_modules" "venv" "python_base_requirements")
+RUNTIME_DEPENDENCIES=("npm" "cargo" "python3" "node_modules" "venv")
+
+# Raise file descriptor limits for local dev watchers where possible.
 ulimit -n 65536 2>/dev/null || ulimit -n 16384 2>/dev/null || ulimit -n 4096 2>/dev/null || true
 
-# --- Helper: check if a requirements file is satisfied ---
+usage() {
+  cat <<EOF
+Pantograph launcher for install, build, and runtime operations.
+
+Usage:
+  ./${SCRIPT_NAME} --help
+  ./${SCRIPT_NAME} --install
+  ./${SCRIPT_NAME} --build
+  ./${SCRIPT_NAME} --build-release
+  ./${SCRIPT_NAME} --run [-- <app args...>]
+  ./${SCRIPT_NAME} --run-release [-- <app args...>]
+
+Required action flags (choose exactly one):
+  --run            Run the desktop app in development mode
+  --run-release    Run the release binary artifact directly
+  --build          Build development artifacts
+  --build-release  Build release artifacts
+  --install        Install/verify dependencies
+  --help           Print this help and exit
+
+Examples:
+  ./${SCRIPT_NAME} --install
+  ./${SCRIPT_NAME} --build
+  ./${SCRIPT_NAME} --build-release
+  ./${SCRIPT_NAME} --run
+  ./${SCRIPT_NAME} --run -- --verbose
+  ./${SCRIPT_NAME} --run-release
+  ./${SCRIPT_NAME} --run-release -- --help
+
+Exit codes:
+  ${EXIT_SUCCESS} success
+  ${EXIT_OPERATION_FAILED} operation failed
+  ${EXIT_USAGE_ERROR} usage error
+  ${EXIT_MISSING_DEP} missing dependency for runtime
+  ${EXIT_MISSING_RELEASE_ARTIFACT} missing release artifact for --run-release
+  130 interrupted
+EOF
+}
+
+log() {
+  printf '[launcher] %s\n' "$*"
+}
+
+die() {
+  log "error: $*"
+  exit "$EXIT_OPERATION_FAILED"
+}
+
+die_usage() {
+  log "usage error: $*"
+  usage
+  exit "$EXIT_USAGE_ERROR"
+}
+
 check_requirements() {
   local req_file="$1"
   while IFS= read -r line; do
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
     [[ -z "${line// /}" ]] && continue
+
     local pkg
     if [[ "$line" =~ ^https?:// ]]; then
-      # URL-based requirement: extract package name from wheel filename
-      # e.g. .../flash_attn-2.8.3+cu128torch2.10-cp312-cp312-linux_x86_64.whl
       local filename="${line##*/}"
-      pkg="${filename%%-*}"          # everything before first dash
+      pkg="${filename%%-*}"
     else
-      # Standard requirement: strip version/url specifiers
-      pkg="${line%% @*}"             # strip " @ git+..." suffix
-      pkg="${pkg%%[>=<\[]*}"         # strip version specifiers
-      pkg="${pkg// /}"               # strip whitespace
+      pkg="${line%% @*}"
+      pkg="${pkg%%[>=<\[]*}"
+      pkg="${pkg// /}"
     fi
-    pkg="${pkg//-/_}"                # dashes to underscores for import
-    if ! "$VENV_PYTHON" -c "import $pkg" 2>/dev/null; then
+    pkg="${pkg//-/_}"
+
+    if ! "$VENV_PYTHON" -c "import $pkg" >/dev/null 2>&1; then
       return 1
     fi
   done < "$req_file"
   return 0
 }
 
-# --- Helper: install from a requirements file if needed ---
-install_requirements() {
-  local req_file="$1"
-  local label="$2"
+check_npm() { command -v npm >/dev/null 2>&1; }
+install_npm() { die "npm is required. Install Node.js/npm, then rerun --install"; }
 
-  if check_requirements "$req_file"; then
-    echo "[python] $label dependencies satisfied, skipping"
-  else
-    echo "[python] Installing $label dependencies..."
-    "$VENV_PYTHON" -m pip install -r "$req_file"
-  fi
+check_cargo() { command -v cargo >/dev/null 2>&1; }
+install_cargo() { die "cargo is required. Install Rust toolchain, then rerun --install"; }
+
+check_python3() { command -v python3 >/dev/null 2>&1; }
+install_python3() { die "python3 is required. Install Python 3.10+, then rerun --install"; }
+
+check_node_modules() { [[ -d "$ROOT_DIR/node_modules" ]]; }
+install_node_modules() { npm install; }
+
+check_venv() { [[ -x "$VENV_PYTHON" ]]; }
+install_venv() {
+  check_python3 || return 1
+  python3 -m venv "$VENV_DIR"
+  "$VENV_PYTHON" -m pip install --upgrade pip -q
 }
 
-# --- Helper: list available extras ---
-list_extras() {
-  local found=false
-  for f in "$ROOT_DIR"/requirements-*.txt; do
-    [ -f "$f" ] || continue
-    found=true
-    local name desc
-    name="$(basename "$f" .txt)"
-    name="${name#requirements-}"
-    desc="$(head -1 "$f" | sed 's/^#[[:space:]]*//')"
-    printf "  %-12s %s\n" "$name" "$desc"
+check_python_base_requirements() {
+  check_venv || return 1
+  check_requirements "$ROOT_DIR/requirements.txt"
+}
+install_python_base_requirements() {
+  check_venv || install_venv
+  "$VENV_PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt"
+}
+
+check_dep() { "check_$1"; }
+install_dep() { "install_$1"; }
+
+install_dependencies() {
+  local dep
+  for dep in "${INSTALL_DEPENDENCIES[@]}"; do
+    if check_dep "$dep"; then
+      log "[ok] $dep already satisfied"
+      continue
+    fi
+
+    log "[install] $dep missing; installing"
+    if install_dep "$dep"; then
+      if check_dep "$dep"; then
+        log "[done] $dep installed"
+      else
+        log "[error] $dep install failed verification"
+        exit "$EXIT_OPERATION_FAILED"
+      fi
+    else
+      log "[error] $dep install failed"
+      exit "$EXIT_OPERATION_FAILED"
+    fi
   done
-  if [ "$found" = false ]; then
-    echo "  (none)"
+}
+
+ensure_runtime_dependencies() {
+  local dep
+  for dep in "${RUNTIME_DEPENDENCIES[@]}"; do
+    if ! check_dep "$dep"; then
+      log "missing dependency: $dep"
+      log "run ./${SCRIPT_NAME} --install first"
+      exit "$EXIT_MISSING_DEP"
+    fi
+  done
+}
+
+activate_python_env() {
+  if check_venv; then
+    export PYO3_PYTHON="$VENV_PYTHON"
+    export VIRTUAL_ENV="$VENV_DIR"
+    export PATH="$VENV_DIR/bin:$PATH"
   fi
 }
 
-# --- Install mode ---
-if [ "${1:-}" = "--install" ]; then
-  shift
-  EXTRAS=("${@}")
+build_app() {
+  local mode="$1"
+  ensure_runtime_dependencies
+  activate_python_env
 
-  echo "=== Pantograph dependency installer ==="
+  case "$mode" in
+    dev)
+      log "[build] building development artifacts"
+      npm run build
+      ;;
+    release)
+      log "[build] building release artifacts"
+      npm run build:desktop
+      ;;
+    *)
+      die_usage "invalid build mode: $mode"
+      ;;
+  esac
+}
 
-  # 1. Node modules (always run to pick up new packages)
-  echo "[npm] Installing node dependencies..."
-  npm install
-
-  # 2. Python venv
-  SYSTEM_PYTHON="$(command -v python3 2>/dev/null || true)"
-  if [ -z "$SYSTEM_PYTHON" ]; then
-    echo "[python] ERROR: python3 not found. Install Python 3.10+ first."
-    exit 1
+run_app() {
+  ensure_runtime_dependencies
+  activate_python_env
+  log "[run] starting development runtime"
+  if [[ ${#RUN_ARGS[@]} -gt 0 ]]; then
+    exec npm run dev:desktop -- "${RUN_ARGS[@]}"
   fi
+  exec npm run dev:desktop
+}
 
-  if [ ! -d "$VENV_DIR" ]; then
-    echo "[python] Creating venv at $VENV_DIR..."
-    "$SYSTEM_PYTHON" -m venv "$VENV_DIR"
-    "$VENV_PYTHON" -m pip install --upgrade pip -q
+run_release_app() {
+  ensure_runtime_dependencies
+  activate_python_env
+
+  local release_bin=""
+  if [[ -x "$RELEASE_BIN_PATH" ]]; then
+    release_bin="$RELEASE_BIN_PATH"
+  elif [[ -x "$RELEASE_BIN_PATH_EXE" ]]; then
+    release_bin="$RELEASE_BIN_PATH_EXE"
   else
-    echo "[python] venv exists at $VENV_DIR"
+    log "missing release artifact"
+    log "expected one of:"
+    log "  $RELEASE_BIN_PATH"
+    log "  $RELEASE_BIN_PATH_EXE"
+    log "run ./${SCRIPT_NAME} --build-release first"
+    exit "$EXIT_MISSING_RELEASE_ARTIFACT"
   fi
 
-  # 3. Base requirements
-  install_requirements "$ROOT_DIR/requirements.txt" "base"
-
-  # 4. Extras
-  if [ ${#EXTRAS[@]} -eq 0 ]; then
-    echo ""
-    echo "Extras available (install with: ./launcher.sh --install <extra> ...):"
-    list_extras
-  else
-    for extra in "${EXTRAS[@]}"; do
-      if [ "$extra" = "all" ]; then
-        for f in "$ROOT_DIR"/requirements-*.txt; do
-          [ -f "$f" ] || continue
-          ename="$(basename "$f" .txt)"
-          ename="${ename#requirements-}"
-          install_requirements "$f" "$ename"
-        done
-        break
-      fi
-
-      req_file="$ROOT_DIR/requirements-${extra}.txt"
-      if [ ! -f "$req_file" ]; then
-        echo "[python] ERROR: Unknown extra '$extra'. Available:"
-        list_extras
-        exit 1
-      fi
-      install_requirements "$req_file" "$extra"
-    done
+  log "[run] starting release binary: $release_bin"
+  if [[ ${#RUN_ARGS[@]} -gt 0 ]]; then
+    exec "$release_bin" "${RUN_ARGS[@]}"
   fi
+  exec "$release_bin"
+}
 
-  echo ""
-  echo "=== Install complete ==="
-  echo "Run ./launcher.sh to start development server"
-  exit 0
+ACTION=""
+RUN_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --run|--run-release|--build|--build-release|--install|--help)
+      if [[ -n "$ACTION" ]]; then
+        die_usage "exactly one action flag is allowed"
+      fi
+      ACTION="$1"
+      shift
+      ;;
+    --)
+      if [[ "$ACTION" != "--run" && "$ACTION" != "--run-release" ]]; then
+        die_usage "'--' is only valid with --run or --run-release"
+      fi
+      shift
+      RUN_ARGS=("$@")
+      break
+      ;;
+    --*)
+      die_usage "unknown flag: $1"
+      ;;
+    *)
+      die_usage "positional arguments are not allowed: $1"
+      ;;
+  esac
+done
+
+if [[ -z "$ACTION" ]]; then
+  die_usage "missing action flag"
 fi
 
-# --- Activate venv for PyO3 if available ---
-if [ -x "$VENV_PYTHON" ]; then
-  export PYO3_PYTHON="$VENV_PYTHON"
-  export VIRTUAL_ENV="$VENV_DIR"
-  export PATH="$VENV_DIR/bin:$PATH"
-fi
-
-# --- Ensure node_modules ---
-if [ ! -d "node_modules" ]; then
-  npm install
-fi
-
-# --- Launch ---
-if [ "${1:-}" = "--release" ]; then
-  npm run build:desktop
-else
-  npm run dev:desktop
-fi
+case "$ACTION" in
+  --help)
+    usage
+    exit "$EXIT_SUCCESS"
+    ;;
+  --install)
+    install_dependencies
+    exit "$EXIT_SUCCESS"
+    ;;
+  --build)
+    build_app dev
+    ;;
+  --build-release)
+    build_app release
+    ;;
+  --run)
+    run_app
+    ;;
+  --run-release)
+    run_release_app
+    ;;
+  *)
+    die_usage "invalid action: $ACTION"
+    ;;
+esac
