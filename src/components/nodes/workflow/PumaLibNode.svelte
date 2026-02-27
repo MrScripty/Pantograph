@@ -503,6 +503,23 @@
     return value.replaceAll('_', ' ');
   }
 
+  function dependencyReasonLabel(reason: string): string {
+    switch (reason) {
+      case 'backend_required':
+        return 'backend';
+      case 'modality_required':
+        return 'modality';
+      case 'profile_policy_required':
+        return 'policy';
+      default:
+        return dependencyTokenLabel(reason);
+    }
+  }
+
+  function normalizePinList(values?: string[]): string[] {
+    return (values ?? []).filter((value) => value.trim().length > 0);
+  }
+
   function dependencyCodeLabel(code?: string): string | null {
     switch (code) {
       case 'unpinned_dependency':
@@ -563,6 +580,11 @@
   });
 
   const dependencyCodeText = $derived.by(() => dependencyCodeLabel(deriveDisplayCode() ?? undefined));
+  const aggregateMissingPins = $derived.by(() => {
+    const statusPins = normalizePinList(dependencyStatus?.missingPins);
+    if (statusPins.length > 0) return statusPins;
+    return normalizePinList(dependencyPlan?.missingPins);
+  });
 </script>
 
 <div class="puma-lib-node-wrapper">
@@ -624,6 +646,11 @@
                 {(dependencyStatus?.reviewReasons ?? dependencyPlan?.reviewReasons ?? []).join(', ')}
               </div>
             {/if}
+            {#if aggregateMissingPins.length > 0}
+              <div class="mt-1 text-[9px] text-amber-300">
+                missing pins: {aggregateMissingPins.join(', ')}
+              </div>
+            {/if}
           </div>
         {/if}
 
@@ -632,6 +659,9 @@
             {#each dependencyPlan?.bindings ?? [] as binding}
               {@const required = (dependencyPlan?.requiredBindingIds ?? []).includes(binding.bindingId)}
               {@const row = bindingStatusById.get(binding.bindingId)}
+              {@const pinSummary = row?.pinSummary ?? binding.pinSummary}
+              {@const requiredPins = row?.requiredPins ?? binding.requiredPins ?? []}
+              {@const missingPins = normalizePinList(row?.missingPins ?? binding.missingPins)}
               <div class="rounded border border-neutral-800 px-2 py-1">
                 <div class="flex items-center gap-2">
                   <input
@@ -663,6 +693,27 @@
                       failed: {row.failedComponents?.join(', ')}
                     </div>
                   {/if}
+                {/if}
+                {#if pinSummary}
+                  <div class="text-[9px] text-neutral-400">
+                    pins: {pinSummary.pinnedCount}/{pinSummary.requiredCount} pinned
+                  </div>
+                {/if}
+                {#if requiredPins.length > 0}
+                  <div class="text-[9px] text-neutral-300">
+                    required pins:
+                    {#each requiredPins as pin, pinIndex (pin.name + ':' + pinIndex)}
+                      <span>
+                        {pin.name}
+                        {#if (pin.reasons?.length ?? 0) > 0}
+                          ({(pin.reasons ?? []).map(dependencyReasonLabel).join(', ')})
+                        {/if}
+                      </span>{pinIndex < requiredPins.length - 1 ? ', ' : ''}
+                    {/each}
+                  </div>
+                {/if}
+                {#if missingPins.length > 0}
+                  <div class="text-[9px] text-amber-300">missing pins: {missingPins.join(', ')}</div>
                 {/if}
               </div>
             {/each}
