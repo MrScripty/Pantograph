@@ -10,8 +10,9 @@ use tokio::sync::RwLock;
 
 use node_engine::{
     extension_keys, DependencyState, ModelDependencyBinding, ModelDependencyBindingStatus,
-    ModelDependencyInstallResult, ModelDependencyPlan, ModelDependencyRequest,
-    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+    ModelDependencyInstallResult, ModelDependencyPinSummary, ModelDependencyPlan,
+    ModelDependencyRequest, ModelDependencyRequiredPin, ModelDependencyResolver,
+    ModelDependencyStatus, ModelRefV2,
 };
 
 /// Shared dependency resolver state.
@@ -343,6 +344,9 @@ impl TauriModelDependencyResolver {
             backend_key: binding.backend_key.clone(),
             platform_selector: binding.platform_selector.clone(),
             env_id: binding.env_id.clone(),
+            pin_summary: None,
+            required_pins: Vec::new(),
+            missing_pins: Vec::new(),
         }
     }
 
@@ -373,10 +377,14 @@ impl TauriModelDependencyResolver {
             binding_id: binding.binding_id.clone(),
             env_id: binding.env_id.clone(),
             state,
+            code: None,
             missing_components,
             installed_components: Vec::new(),
             failed_components,
             message: binding.message.clone(),
+            pin_summary: None,
+            required_pins: Vec::new(),
+            missing_pins: Vec::new(),
         }
     }
 
@@ -531,6 +539,7 @@ impl TauriModelDependencyResolver {
             bindings: Vec::new(),
             selected_binding_ids,
             required_binding_ids: Vec::new(),
+            missing_pins: Vec::new(),
         }
     }
 
@@ -554,6 +563,7 @@ impl TauriModelDependencyResolver {
             )),
             bindings: Vec::new(),
             checked_at: Some(Utc::now().to_rfc3339()),
+            missing_pins: Vec::new(),
         }
     }
 
@@ -577,6 +587,7 @@ impl TauriModelDependencyResolver {
             )),
             bindings: Vec::new(),
             installed_at: Some(Utc::now().to_rfc3339()),
+            missing_pins: Vec::new(),
         }
     }
 
@@ -648,6 +659,7 @@ impl TauriModelDependencyResolver {
             bindings: mapped_bindings,
             selected_binding_ids,
             required_binding_ids,
+            missing_pins: Vec::new(),
         })
     }
 
@@ -730,6 +742,7 @@ impl TauriModelDependencyResolver {
             )),
             bindings: mapped_bindings,
             checked_at: Some(Utc::now().to_rfc3339()),
+            missing_pins: Vec::new(),
         };
 
         let mut cache = self.status_cache.write().await;
@@ -783,6 +796,7 @@ impl TauriModelDependencyResolver {
                     )),
                     bindings: Vec::new(),
                     checked_at: Some(Utc::now().to_rfc3339()),
+                    missing_pins: Vec::new(),
                 },
             );
         }
@@ -852,6 +866,7 @@ impl TauriModelDependencyResolver {
             )),
             bindings: mapped_bindings.clone(),
             installed_at: Some(Utc::now().to_rfc3339()),
+            missing_pins: Vec::new(),
         };
 
         let status_after_install = ModelDependencyStatus {
@@ -862,6 +877,7 @@ impl TauriModelDependencyResolver {
             plan_id: install.plan_id.clone(),
             bindings: mapped_bindings,
             checked_at: Some(Utc::now().to_rfc3339()),
+            missing_pins: Vec::new(),
         };
         let mut cache = self.status_cache.write().await;
         cache.insert(Self::cache_key(&request), status_after_install);
@@ -1091,6 +1107,9 @@ mod tests {
                     backend_key: Some("pytorch".to_string()),
                     platform_selector: Some("linux-x86_64".to_string()),
                     env_id: "env-a".to_string(),
+                    pin_summary: None,
+                    required_pins: Vec::new(),
+                    missing_pins: Vec::new(),
                 },
                 ModelDependencyBinding {
                     binding_id: "binding-b".to_string(),
@@ -1101,10 +1120,14 @@ mod tests {
                     backend_key: Some("pytorch".to_string()),
                     platform_selector: Some("linux-x86_64".to_string()),
                     env_id: "env-b".to_string(),
+                    pin_summary: None,
+                    required_pins: Vec::new(),
+                    missing_pins: Vec::new(),
                 },
             ],
             selected_binding_ids: vec!["binding-a".to_string()],
             required_binding_ids: vec!["binding-a".to_string()],
+            missing_pins: Vec::new(),
         };
 
         let model_ref = resolver

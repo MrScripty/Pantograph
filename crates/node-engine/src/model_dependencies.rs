@@ -65,6 +65,31 @@ pub struct ModelDependencyBinding {
     #[serde(default)]
     pub platform_selector: Option<String>,
     pub env_id: String,
+    #[serde(default)]
+    pub pin_summary: Option<ModelDependencyPinSummary>,
+    #[serde(default)]
+    pub required_pins: Vec<ModelDependencyRequiredPin>,
+    #[serde(default)]
+    pub missing_pins: Vec<String>,
+}
+
+/// Per-binding dependency pin summary for UI and policy checks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDependencyPinSummary {
+    pub pinned: bool,
+    pub required_count: u32,
+    pub pinned_count: u32,
+    pub missing_count: u32,
+}
+
+/// Per-binding required pin entry with requirement provenance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDependencyRequiredPin {
+    pub name: String,
+    #[serde(default)]
+    pub reasons: Vec<String>,
 }
 
 /// Structured dependency plan result.
@@ -86,6 +111,8 @@ pub struct ModelDependencyPlan {
     pub selected_binding_ids: Vec<String>,
     #[serde(default)]
     pub required_binding_ids: Vec<String>,
+    #[serde(default)]
+    pub missing_pins: Vec<String>,
 }
 
 /// Per-binding status row returned by check/install APIs.
@@ -96,6 +123,8 @@ pub struct ModelDependencyBindingStatus {
     pub env_id: String,
     pub state: DependencyState,
     #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
     pub missing_components: Vec<String>,
     #[serde(default)]
     pub installed_components: Vec<String>,
@@ -103,6 +132,12 @@ pub struct ModelDependencyBindingStatus {
     pub failed_components: Vec<String>,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default)]
+    pub pin_summary: Option<ModelDependencyPinSummary>,
+    #[serde(default)]
+    pub required_pins: Vec<ModelDependencyRequiredPin>,
+    #[serde(default)]
+    pub missing_pins: Vec<String>,
 }
 
 /// Structured result for dependency checks.
@@ -122,6 +157,8 @@ pub struct ModelDependencyStatus {
     pub bindings: Vec<ModelDependencyBindingStatus>,
     #[serde(default)]
     pub checked_at: Option<String>,
+    #[serde(default)]
+    pub missing_pins: Vec<String>,
 }
 
 /// Structured result for dependency installation actions.
@@ -141,6 +178,8 @@ pub struct ModelDependencyInstallResult {
     pub bindings: Vec<ModelDependencyBindingStatus>,
     #[serde(default)]
     pub installed_at: Option<String>,
+    #[serde(default)]
+    pub missing_pins: Vec<String>,
 }
 
 /// Canonical model reference contract emitted by inference nodes.

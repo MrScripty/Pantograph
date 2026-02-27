@@ -98,8 +98,9 @@ pub use groups::{
 pub use descriptor::{DescriptorFn, PortMetadata, TaskDescriptor, TaskMetadata};
 pub use model_dependencies::{
     DependencyState, ModelDependencyBinding, ModelDependencyBindingStatus,
-    ModelDependencyInstallResult, ModelDependencyPlan, ModelDependencyRequest,
-    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+    ModelDependencyInstallResult, ModelDependencyPinSummary, ModelDependencyPlan,
+    ModelDependencyRequest, ModelDependencyRequiredPin, ModelDependencyResolver,
+    ModelDependencyStatus, ModelRefV2,
 };
 pub use path_validation::resolve_path_within_root;
 
