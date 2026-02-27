@@ -4,6 +4,8 @@ Date: 2026-02-27
 
 ## Completed
 
+- `npm run check` (pass)
+- `cargo check --manifest-path src-tauri/Cargo.toml -p pantograph` (pass)
 - `cargo test --manifest-path src-tauri/Cargo.toml workflow::model_dependency_commands::tests -- --nocapture` (pass)
 - `cargo test --manifest-path src-tauri/Cargo.toml workflow::model_dependencies::tests -- --nocapture` (pass)
 - `cargo check --manifest-path src-tauri/Cargo.toml -p pantograph` (pass)
