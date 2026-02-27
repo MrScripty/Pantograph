@@ -143,3 +143,26 @@ pub async fn validate_component(relative_path: String) -> Result<ValidationResul
 
     Ok(ValidationResult { valid, error })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_validate_component_rejects_parent_traversal() {
+        let err = match validate_component("../Cargo.toml".to_string()).await {
+            Ok(_) => panic!("must reject traversal path"),
+            Err(err) => err,
+        };
+        assert!(err.contains("Invalid component path"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_component_rejects_generated_prefix_traversal() {
+        let err = match validate_component("src/generated/../../Cargo.toml".to_string()).await {
+            Ok(_) => panic!("must reject traversal under generated prefix"),
+            Err(err) => err,
+        };
+        assert!(err.contains("Invalid component path"));
+    }
+}

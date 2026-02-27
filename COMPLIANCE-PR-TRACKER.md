@@ -1,10 +1,10 @@
 # Compliance Remediation Tracker
 
-Last updated: 2026-02-27 (PR-4 implementation pass 1)
+Last updated: 2026-02-27 (PR-1 completion pass 2)
 
 ## PR-1 Security Boundary Hardening
 
-Status: In progress
+Status: Completed
 
 - [x] Add shared canonical path validator utility.
 - [x] Apply validator to node-engine read/write file handlers.
@@ -13,7 +13,7 @@ Status: In progress
 - [x] Apply validator to Tauri sandbox `validate_component` command.
 - [x] Replace agent read/write tool path sanitization with canonical root validation.
 - [x] Add traversal-focused unit tests in node-engine/workflow-nodes.
-- [ ] Add/expand tests for Tauri command/tool path validation.
+- [x] Add/expand tests for Tauri command/tool path validation.
 - [x] Run targeted test suites and fix regressions.
 
 ### Verification run (2026-02-27)
@@ -24,6 +24,11 @@ Status: In progress
 - `cargo test -p workflow-nodes test_read_rejects_path_traversal -- --nocapture`
 - `cargo test -p workflow-nodes test_write_rejects_path_traversal -- --nocapture`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml test_load_workflow_ -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml test_validate_component_rejects_ -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml test_read_gui_file_ -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml test_write_gui_file_rejects_parent_traversal -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml test_read_template_ -- --nocapture`
 
 ### Files touched in PR-1
 

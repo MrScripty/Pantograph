@@ -66,3 +66,53 @@ impl Tool for ReadGuiFileTool {
             .map_err(ToolError::Io)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use uuid::Uuid;
+
+    fn make_temp_project_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("pantograph-read-tool-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("src").join("generated")).expect("create generated dir");
+        root
+    }
+
+    #[tokio::test]
+    async fn test_read_gui_file_rejects_parent_traversal() {
+        let project_root = make_temp_project_root();
+        let tool = ReadGuiFileTool::new(project_root.clone());
+
+        let err = tool
+            .call(ReadGuiFileArgs {
+                path: "../secret.svelte".to_string(),
+            })
+            .await
+            .expect_err("must reject traversal path");
+
+        assert!(matches!(err, ToolError::PathNotAllowed(_)));
+        let _ = fs::remove_dir_all(project_root);
+    }
+
+    #[tokio::test]
+    async fn test_read_gui_file_allows_relative_file_inside_generated_root() {
+        let project_root = make_temp_project_root();
+        let file_path = project_root
+            .join("src")
+            .join("generated")
+            .join("TestComponent.svelte");
+        fs::write(&file_path, "<div>ok</div>").expect("write component");
+
+        let tool = ReadGuiFileTool::new(project_root.clone());
+        let content = tool
+            .call(ReadGuiFileArgs {
+                path: "TestComponent.svelte".to_string(),
+            })
+            .await
+            .expect("read component");
+
+        assert_eq!(content, "<div>ok</div>");
+        let _ = fs::remove_dir_all(project_root);
+    }
+}

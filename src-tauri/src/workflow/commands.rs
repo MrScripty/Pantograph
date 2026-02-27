@@ -1022,6 +1022,17 @@ pub async fn get_model_dependency_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn project_root() -> PathBuf {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        std::path::Path::new(manifest_dir)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
 
     #[test]
     fn test_validate_connection() {
@@ -1071,6 +1082,53 @@ mod tests {
 
         let missing = get_node_definition("nonexistent".to_string());
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_load_workflow_rejects_parent_traversal() {
+        let err = load_workflow("../Cargo.toml".to_string()).expect_err("must reject traversal");
+        assert!(err.contains("Invalid workflow path"));
+    }
+
+    #[test]
+    fn test_load_workflow_rejects_absolute_path_outside_project_root() {
+        let temp_file = std::env::temp_dir().join(format!(
+            "pantograph-workflow-outside-{}.json",
+            Uuid::new_v4()
+        ));
+        fs::write(&temp_file, "{}").expect("write temp file");
+
+        let err = load_workflow(temp_file.to_string_lossy().to_string())
+            .expect_err("must reject absolute path outside project root");
+        assert!(err.contains("Invalid workflow path"));
+
+        let _ = fs::remove_file(&temp_file);
+    }
+
+    #[test]
+    fn test_load_workflow_accepts_file_inside_project_root() {
+        let root = project_root();
+        let workflows_dir = root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+
+        let file_name = format!("test-load-workflow-{}.json", Uuid::new_v4());
+        let workflow_path = workflows_dir.join(&file_name);
+        let relative_path = format!(".pantograph/workflows/{}", file_name);
+
+        let workflow = WorkflowFile::new(
+            "test workflow".to_string(),
+            WorkflowGraph {
+                nodes: vec![],
+                edges: vec![],
+            },
+        );
+        let json = serde_json::to_string_pretty(&workflow).expect("serialize workflow");
+        fs::write(&workflow_path, json).expect("write workflow");
+
+        let loaded = load_workflow(relative_path).expect("load workflow");
+        assert_eq!(loaded.metadata.name, "test workflow");
+
+        let _ = fs::remove_file(&workflow_path);
     }
 
     #[test]

@@ -861,3 +861,37 @@ impl Tool for WriteGuiFileTool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::types::WriteTracker;
+    use std::fs;
+    use std::sync::{Arc, Mutex};
+    use uuid::Uuid;
+
+    fn make_temp_project_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("pantograph-write-tool-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("create temp root");
+        root
+    }
+
+    #[tokio::test]
+    async fn test_write_gui_file_rejects_parent_traversal() {
+        let project_root = make_temp_project_root();
+        let tracker: WriteTracker = Arc::new(Mutex::new(Vec::new()));
+        let enricher_registry = Arc::new(EnricherRegistry::new());
+        let tool = WriteGuiFileTool::with_tracker(project_root.clone(), tracker, enricher_registry);
+
+        let err = tool
+            .call(WriteGuiFileArgs {
+                path: "../escape.svelte".to_string(),
+                content: "<div>ok</div>".to_string(),
+            })
+            .await
+            .expect_err("must reject traversal path");
+
+        assert!(matches!(err, ToolError::PathNotAllowed(_)));
+        let _ = fs::remove_dir_all(project_root);
+    }
+}

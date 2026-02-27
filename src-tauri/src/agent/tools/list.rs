@@ -240,3 +240,50 @@ impl Tool for ReadTemplateTool {
             .map_err(ToolError::Io)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use uuid::Uuid;
+
+    fn make_temp_project_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("pantograph-list-tool-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("src").join("templates")).expect("create templates dir");
+        root
+    }
+
+    #[tokio::test]
+    async fn test_read_template_rejects_parent_traversal() {
+        let project_root = make_temp_project_root();
+        let tool = ReadTemplateTool::new(project_root.clone());
+
+        let err = tool
+            .call(ReadTemplateArgs {
+                name: "../Secret".to_string(),
+            })
+            .await
+            .expect_err("must reject traversal path");
+        assert!(matches!(err, ToolError::PathNotAllowed(_)));
+
+        let _ = fs::remove_dir_all(project_root);
+    }
+
+    #[tokio::test]
+    async fn test_read_template_allows_template_inside_templates_root() {
+        let project_root = make_temp_project_root();
+        let template_path = project_root.join("src").join("templates").join("Card.svelte");
+        fs::write(&template_path, "<div>Card</div>").expect("write template");
+        let tool = ReadTemplateTool::new(project_root.clone());
+
+        let content = tool
+            .call(ReadTemplateArgs {
+                name: "Card".to_string(),
+            })
+            .await
+            .expect("read template");
+        assert_eq!(content, "<div>Card</div>");
+
+        let _ = fs::remove_dir_all(project_root);
+    }
+}
