@@ -20,7 +20,11 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let text = $state(data.text || '');
+  let text = $state('');
+
+  $effect(() => {
+    text = data.text || '';
+  });
 
   // Default color (blue — input category)
   const defaultColor = '#2563eb';

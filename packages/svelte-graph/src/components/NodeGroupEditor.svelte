@@ -32,8 +32,13 @@
   const edgeTypes: EdgeTypes = (registry.edgeTypes || { reconnectable: ReconnectableEdge }) as unknown as EdgeTypes;
   const nodeTypes: NodeTypes = registry.nodeTypes as unknown as NodeTypes;
 
-  let nodes = $state.raw<Node[]>(
-    group.nodes.map((n) => {
+  let nodes = $state.raw<Node[]>([]);
+  let edges = $state.raw<Edge[]>([]);
+  let exposedInputs = $state<PortMapping[]>([]);
+  let exposedOutputs = $state<PortMapping[]>([]);
+
+  $effect(() => {
+    nodes = group.nodes.map((n) => {
       const definition = get(nodeDefsStore).find((d) => d.node_type === n.node_type);
       return {
         id: n.id,
@@ -44,21 +49,19 @@
           definition,
         },
       };
-    })
-  );
+    });
 
-  let edges = $state.raw<Edge[]>(
-    group.edges.map((e) => ({
+    edges = group.edges.map((e) => ({
       id: e.id,
       source: e.source,
       sourceHandle: e.source_handle,
       target: e.target,
       targetHandle: e.target_handle,
-    }))
-  );
+    }));
 
-  let exposedInputs = $state<PortMapping[]>([...group.exposed_inputs]);
-  let exposedOutputs = $state<PortMapping[]>([...group.exposed_outputs]);
+    exposedInputs = [...group.exposed_inputs];
+    exposedOutputs = [...group.exposed_outputs];
+  });
 
   async function handleConnect(connection: Connection) {
     const newEdge: Edge = {

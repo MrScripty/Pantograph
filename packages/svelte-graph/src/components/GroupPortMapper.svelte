@@ -17,8 +17,13 @@
 
   const { nodeDefinitions: nodeDefsStore } = stores.workflow;
 
-  let exposedInputs = $state<PortMapping[]>([...group.exposed_inputs]);
-  let exposedOutputs = $state<PortMapping[]>([...group.exposed_outputs]);
+  let exposedInputs = $state<PortMapping[]>([]);
+  let exposedOutputs = $state<PortMapping[]>([]);
+
+  $effect(() => {
+    exposedInputs = [...group.exposed_inputs];
+    exposedOutputs = [...group.exposed_outputs];
+  });
 
   let availableInputPorts = $derived(() => {
     const defs = get(nodeDefsStore);
@@ -119,7 +124,7 @@
         </svg>
         <span class="mapper-title">Configure Group Ports</span>
       </div>
-      <button type="button" class="close-btn" onclick={onClose}>
+      <button type="button" class="close-btn" onclick={onClose} aria-label="Close port mapper">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -142,7 +147,7 @@
                 oninput={(e) => updateInputLabel(i, (e.target as HTMLInputElement).value)}
               />
               <span class="port-node-id">{input.internal_node_id}</span>
-              <button type="button" class="remove-btn" onclick={() => removeInput(i)}>
+              <button type="button" class="remove-btn" onclick={() => removeInput(i)} aria-label="Remove exposed input">
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -179,7 +184,7 @@
                 oninput={(e) => updateOutputLabel(i, (e.target as HTMLInputElement).value)}
               />
               <span class="port-node-id">{output.internal_node_id}</span>
-              <button type="button" class="remove-btn" onclick={() => removeOutput(i)}>
+              <button type="button" class="remove-btn" onclick={() => removeOutput(i)} aria-label="Remove exposed output">
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>

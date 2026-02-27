@@ -53,7 +53,7 @@
   const DOUBLE_CLICK_THRESHOLD = 300;
 
   // Container element reference for size calculations
-  let containerElement: HTMLElement;
+  let containerElement = $state<HTMLElement | null>(null);
 
   // Current viewport state for container border rendering
   let currentViewport = $state<{ x: number; y: number; zoom: number } | null>(null);
@@ -372,6 +372,7 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="workflow-graph-container"
   class:cutting={isCutting}

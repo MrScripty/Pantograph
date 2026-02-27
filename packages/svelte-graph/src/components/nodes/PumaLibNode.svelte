@@ -20,10 +20,14 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelPath = $state(data.modelPath || '');
+  let modelPath = $state('');
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
   let searchQuery = $state('');
+
+  $effect(() => {
+    modelPath = data.modelPath || '';
+  });
 
   let filteredModels = $derived(
     searchQuery
