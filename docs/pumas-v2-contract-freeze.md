@@ -10,6 +10,7 @@ Scope: Pantograph workflow dependency preflight and Puma-Lib dependency UI comma
   - UI (`src/`) -> Tauri commands (`src-tauri/src/workflow/commands.rs`) -> resolver/service (`src-tauri/src/workflow/model_dependencies.rs`) -> infrastructure API client (`pumas-library::PumasApi`).
 - The resolver may only return conservative non-ready states when the API or model identity is unavailable.
 - Resolver must not perform speculative local dependency authority logic.
+- Pantograph must not mutate `pumas-library` dependency tables directly; dependency writes belong to `pumas-library` APIs.
 
 ## Frozen Commands and Request Context
 
@@ -19,6 +20,10 @@ Pantograph command surface:
 - `check_model_dependencies`
 - `install_model_dependencies`
 - `get_model_dependency_status`
+- `list_models_needing_review`
+- `submit_model_review`
+- `reset_model_review`
+- `get_effective_model_metadata`
 
 Request context fields:
 
@@ -83,4 +88,3 @@ Model ref contract:
 - Cache keys include model identity, backend key, platform key, and selected binding set.
 - `plan_id` format is deterministic:
   - `{model_id}:{backend_key|unspecified}:{platform_key}:{selected_binding_ids_csv}`
-
