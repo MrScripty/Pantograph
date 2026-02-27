@@ -303,6 +303,31 @@ fn execute_model_provider(
 fn execute_puma_lib(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
+    fn data_string(
+        inputs: &HashMap<String, serde_json::Value>,
+        snake: &str,
+        camel: &str,
+    ) -> Option<String> {
+        inputs
+            .get("_data")
+            .and_then(|d| d.get(snake).or_else(|| d.get(camel)))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    fn data_value(
+        inputs: &HashMap<String, serde_json::Value>,
+        snake: &str,
+        camel: &str,
+    ) -> Option<serde_json::Value> {
+        inputs
+            .get("_data")
+            .and_then(|d| d.get(snake).or_else(|| d.get(camel)))
+            .cloned()
+            .filter(|v| !v.is_null())
+    }
+
     let model_path = inputs
         .get("_data")
         .and_then(|d| d.get("modelPath"))
@@ -320,6 +345,43 @@ fn execute_puma_lib(
     let mut outputs = HashMap::new();
     outputs.insert("model_path".to_string(), serde_json::json!(model_path));
     outputs.insert("inference_settings".to_string(), inference_settings);
+    if let Some(model_id) = data_string(inputs, "model_id", "modelId") {
+        outputs.insert("model_id".to_string(), serde_json::json!(model_id));
+    }
+    if let Some(model_type) = data_string(inputs, "model_type", "modelType") {
+        outputs.insert("model_type".to_string(), serde_json::json!(model_type));
+    }
+    if let Some(task_type_primary) = data_string(inputs, "task_type_primary", "taskTypePrimary") {
+        outputs.insert(
+            "task_type_primary".to_string(),
+            serde_json::json!(task_type_primary),
+        );
+    }
+    if let Some(backend_key) = data_string(inputs, "backend_key", "backendKey") {
+        outputs.insert("backend_key".to_string(), serde_json::json!(backend_key));
+    }
+    if let Some(selected_binding_ids) =
+        data_value(inputs, "selected_binding_ids", "selectedBindingIds").filter(|v| v.is_array())
+    {
+        outputs.insert("selected_binding_ids".to_string(), selected_binding_ids);
+    }
+    if let Some(platform_context) =
+        data_value(inputs, "platform_context", "platformContext").filter(|v| v.is_object())
+    {
+        outputs.insert("platform_context".to_string(), platform_context);
+    }
+    if let Some(dependency_bindings) =
+        data_value(inputs, "dependency_bindings", "dependencyBindings").filter(|v| v.is_array())
+    {
+        outputs.insert("dependency_bindings".to_string(), dependency_bindings);
+    }
+    if let Some(dependency_plan_id) = data_string(inputs, "dependency_plan_id", "dependencyPlanId")
+    {
+        outputs.insert(
+            "dependency_plan_id".to_string(),
+            serde_json::json!(dependency_plan_id),
+        );
+    }
 
     log::debug!("PumaLib: providing model path '{}'", model_path);
     Ok(outputs)
@@ -746,6 +808,24 @@ fn read_optional_input_value(
         .or_else(|| inputs.get("_data").and_then(|d| d.get(key)).cloned())
 }
 
+fn read_optional_input_string_aliases(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<String> {
+    aliases
+        .iter()
+        .find_map(|key| read_optional_input_string(inputs, key))
+}
+
+fn read_optional_input_value_aliases(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<serde_json::Value> {
+    aliases
+        .iter()
+        .find_map(|key| read_optional_input_value(inputs, key))
+}
+
 fn read_input_dependency_bindings(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Vec<ModelDependencyBinding> {
@@ -759,7 +839,9 @@ fn read_input_dependency_bindings(
 }
 
 fn read_input_selected_binding_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
-    let Some(raw) = read_optional_input_value(inputs, "selected_binding_ids") else {
+    let Some(raw) =
+        read_optional_input_value_aliases(inputs, &["selected_binding_ids", "selectedBindingIds"])
+    else {
         return Vec::new();
     };
 
@@ -771,15 +853,17 @@ fn read_input_selected_binding_ids(inputs: &HashMap<String, serde_json::Value>) 
         .collect()
 }
 
-#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn infer_task_type_primary(node_type: &str, inputs: &HashMap<String, serde_json::Value>) -> String {
-    if let Some(task) = read_optional_input_string(inputs, "task_type_primary") {
+    if let Some(task) =
+        read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
+    {
         if !task.trim().is_empty() {
             return task;
         }
     }
 
-    let model_type = read_optional_input_string(inputs, "model_type")
+    let model_type = read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
         .or_else(|| {
             inputs
                 .get("_data")
@@ -848,7 +932,7 @@ fn build_model_ref_v2(
     model_ref
 }
 
-#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn infer_backend_key(node_type: &str) -> String {
     match node_type {
         "audio-generation" => "stable_audio".to_string(),
@@ -859,42 +943,56 @@ fn infer_backend_key(node_type: &str) -> String {
     }
 }
 
-#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn build_model_dependency_request(
     node_type: &str,
     model_path: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
-    let backend_key = read_optional_input_string(inputs, "backend_key")
+    let backend_key = read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| infer_backend_key(node_type));
+
+    let task_type_primary =
+        read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| infer_task_type_primary(node_type, inputs));
 
     ModelDependencyRequest {
         node_type: node_type.to_string(),
         model_path: model_path.to_string(),
-        model_id: read_optional_input_string(inputs, "model_id"),
-        model_type: read_optional_input_string(inputs, "model_type"),
-        task_type_primary: Some(infer_task_type_primary(node_type, inputs)),
+        model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"]),
+        model_type: read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
+        task_type_primary: Some(task_type_primary),
         backend_key: Some(backend_key),
-        platform_context: read_optional_input_value(inputs, "platform_context"),
+        platform_context: read_optional_input_value_aliases(
+            inputs,
+            &["platform_context", "platformContext"],
+        ),
         selected_binding_ids: read_input_selected_binding_ids(inputs),
     }
 }
 
-#[cfg(any(feature = "pytorch-nodes", feature = "audio-nodes"))]
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 async fn enforce_dependency_preflight(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
 ) -> Result<Option<ModelRefV2>> {
-    if node_type != "pytorch-inference" && node_type != "audio-generation" {
+    if node_type != "pytorch-inference"
+        && node_type != "audio-generation"
+        && node_type != "llamacpp-inference"
+    {
         return Ok(None);
     }
 
     let Some(resolver) = extensions
         .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
     else {
-        return Ok(None);
+        return Err(NodeEngineError::ExecutionFailed(
+            "Dependency preflight blocked execution: dependency resolver is not configured"
+                .to_string(),
+        ));
     };
 
     let model_path = inputs
@@ -1154,6 +1252,8 @@ impl TaskExecutor for CoreTaskExecutor {
             // Gateway-backed inference nodes (require `inference-nodes` feature)
             #[cfg(feature = "inference-nodes")]
             "llamacpp-inference" => {
+                let resolved_model_ref =
+                    enforce_dependency_preflight("llamacpp-inference", &inputs, extensions).await?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 execute_llamacpp_inference(
                     self.gateway.as_ref(),
@@ -1161,6 +1261,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     task_id,
                     self.event_sink.as_ref(),
                     exec_id,
+                    resolved_model_ref,
                 )
                 .await
             }
@@ -1275,6 +1376,7 @@ async fn execute_llamacpp_inference(
     task_id: &str,
     event_sink: Option<&Arc<dyn EventSink>>,
     execution_id: &str,
+    resolved_model_ref: Option<ModelRefV2>,
 ) -> Result<HashMap<String, serde_json::Value>> {
     use futures_util::StreamExt;
 
@@ -1453,12 +1555,13 @@ async fn execute_llamacpp_inference(
     let mut outputs = HashMap::new();
     outputs.insert("response".to_string(), serde_json::json!(response_text));
     outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+    let task_type_primary = infer_task_type_primary("llamacpp-inference", inputs);
     let model_ref = build_model_ref_v2(
-        None,
+        resolved_model_ref,
         "llamacpp",
         &model_path,
         &model_path,
-        "text-generation",
+        &task_type_primary,
         inputs,
     );
     outputs.insert(
@@ -1469,7 +1572,7 @@ async fn execute_llamacpp_inference(
                 "engine": "llamacpp",
                 "modelId": model_path,
                 "modelPath": model_path,
-                "taskTypePrimary": "text-generation",
+                "taskTypePrimary": task_type_primary,
             })
         }),
     );
@@ -2863,6 +2966,14 @@ mod tests {
             "_data".to_string(),
             serde_json::json!({
                 "modelPath": "/models/test.gguf",
+                "model_id": "llm/example/test",
+                "model_type": "llm",
+                "task_type_primary": "text-generation",
+                "backend_key": "pytorch",
+                "selected_binding_ids": ["binding-a", "binding-b"],
+                "platform_context": {"os":"linux","arch":"x86_64"},
+                "dependency_bindings": [{"binding_id":"binding-a"}],
+                "dependency_plan_id": "plan-1",
                 "inference_settings": [
                     {"key": "temperature", "default": 0.6},
                     {"key": "top_p", "default": 0.95}
@@ -2871,6 +2982,23 @@ mod tests {
         );
         let result = execute_puma_lib(&inputs).unwrap();
         assert_eq!(result["model_path"], "/models/test.gguf");
+        assert_eq!(result["model_id"], "llm/example/test");
+        assert_eq!(result["model_type"], "llm");
+        assert_eq!(result["task_type_primary"], "text-generation");
+        assert_eq!(result["backend_key"], "pytorch");
+        assert_eq!(
+            result["selected_binding_ids"],
+            serde_json::json!(["binding-a", "binding-b"])
+        );
+        assert_eq!(
+            result["platform_context"],
+            serde_json::json!({"os":"linux","arch":"x86_64"})
+        );
+        assert_eq!(
+            result["dependency_bindings"],
+            serde_json::json!([{"binding_id":"binding-a"}])
+        );
+        assert_eq!(result["dependency_plan_id"], "plan-1");
         assert_eq!(
             result["inference_settings"],
             serde_json::json!([

@@ -264,6 +264,30 @@ impl DemandEngine {
                         if let Some(value) = dep_outputs.get(&edge.source_handle) {
                             inputs.insert(edge.target_handle.clone(), value.clone());
                         }
+
+                        // Model dependency context rides along the model_path connection.
+                        // This keeps runtime preflight aligned with the selections made
+                        // in the Puma-Lib node even when those fields are not explicitly
+                        // wired as separate graph edges.
+                        if edge.target_handle == "model_path" {
+                            for context_key in [
+                                "model_id",
+                                "model_type",
+                                "task_type_primary",
+                                "backend_key",
+                                "selected_binding_ids",
+                                "platform_context",
+                                "dependency_bindings",
+                                "dependency_plan_id",
+                            ] {
+                                if inputs.contains_key(context_key) {
+                                    continue;
+                                }
+                                if let Some(value) = dep_outputs.get(context_key) {
+                                    inputs.insert(context_key.to_string(), value.clone());
+                                }
+                            }
+                        }
                     }
                 }
             }

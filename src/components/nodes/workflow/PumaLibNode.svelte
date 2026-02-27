@@ -91,6 +91,9 @@
       model_id?: string;
       model_type?: string;
       task_type_primary?: string;
+      backend_key?: string;
+      platform_context?: Record<string, string>;
+      dependency_plan_id?: string;
       dependency_bindings?: ModelDependencyBinding[];
       review_reasons?: string[];
       selected_binding_ids?: string[];
@@ -162,10 +165,13 @@
           const dependencyBindings = Array.isArray(match.metadata?.dependency_bindings)
             ? (match.metadata?.dependency_bindings as ModelDependencyBinding[])
             : [];
+          const taskTypePrimary = match.metadata?.task_type_primary as string | undefined;
           updateNodeData(id, {
             model_id: match.metadata.id,
             model_type: match.metadata?.model_type,
-            task_type_primary: match.metadata?.task_type_primary,
+            task_type_primary: taskTypePrimary,
+            backend_key: inferBackendKeyFromTask(taskTypePrimary),
+            platform_context: detectPlatformContext(),
             dependency_bindings: dependencyBindings,
             review_reasons: reviewReasons,
           });
@@ -202,12 +208,20 @@
     return data.task_type_primary === 'text-to-audio' ? 'audio-generation' : 'pytorch-inference';
   }
 
-  function inferBackendKey(): string {
-    const task = (data.task_type_primary ?? '').toLowerCase();
+  function inferBackendKeyFromTask(taskTypePrimary?: string): string {
+    const task = (taskTypePrimary ?? '').toLowerCase();
     if (task === 'text-to-audio' || task === 'audio-to-text') {
       return 'stable_audio';
     }
     return 'pytorch';
+  }
+
+  function inferBackendKey(): string {
+    const explicit = ((data.backend_key as string | undefined) ?? '').trim();
+    if (explicit.length > 0) {
+      return explicit;
+    }
+    return inferBackendKeyFromTask(data.task_type_primary as string | undefined);
   }
 
   function detectPlatformContext(): Record<string, string> {
@@ -233,6 +247,8 @@
   }
 
   function dependencyRequestPayload() {
+    const platformContext =
+      (data.platform_context as Record<string, string> | undefined) ?? detectPlatformContext();
     return {
       nodeType: inferNodeType(),
       modelPath,
@@ -240,7 +256,7 @@
       modelType: (data.model_type as string | undefined) ?? undefined,
       taskTypePrimary: (data.task_type_primary as string | undefined) ?? undefined,
       backendKey: inferBackendKey(),
-      platformContext: detectPlatformContext(),
+      platformContext,
       selectedBindingIds,
     };
   }
@@ -265,6 +281,7 @@
 
     updateNodeData(id, {
       dependency_plan: plan,
+      dependency_plan_id: plan.planId,
       selected_binding_ids: selectedBindingIds,
     });
   }
@@ -353,6 +370,8 @@
       const reviewReasons = Array.isArray(selected.metadata?.review_reasons)
         ? (selected.metadata?.review_reasons as string[])
         : [];
+      const taskTypePrimary = selected.metadata?.task_type_primary as string | undefined;
+      const backendKey = inferBackendKeyFromTask(taskTypePrimary);
 
       selectedBindingIds = [];
       updateNodeData(id, {
@@ -360,7 +379,9 @@
         modelName: selected.label,
         model_id: selected.metadata?.id,
         model_type: selected.metadata?.model_type,
-        task_type_primary: selected.metadata?.task_type_primary,
+        task_type_primary: taskTypePrimary,
+        backend_key: backendKey,
+        platform_context: detectPlatformContext(),
         dependency_bindings: dependencyBindings,
         review_reasons: reviewReasons,
         selected_binding_ids: selectedBindingIds,
@@ -386,6 +407,14 @@
     updateNodeData(id, {
       modelPath,
       selectionMode: 'manual',
+      model_id: undefined,
+      model_type: undefined,
+      task_type_primary: undefined,
+      backend_key: undefined,
+      platform_context: undefined,
+      dependency_bindings: [],
+      review_reasons: [],
+      dependency_plan_id: undefined,
       dependency_plan: null,
       dependency_status: null,
       selected_binding_ids: selectedBindingIds,
@@ -412,6 +441,14 @@
         updateNodeData(id, {
           modelPath,
           selectionMode: 'manual',
+          model_id: undefined,
+          model_type: undefined,
+          task_type_primary: undefined,
+          backend_key: undefined,
+          platform_context: undefined,
+          dependency_bindings: [],
+          review_reasons: [],
+          dependency_plan_id: undefined,
           dependency_plan: null,
           dependency_status: null,
           selected_binding_ids: selectedBindingIds,
