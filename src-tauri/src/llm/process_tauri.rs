@@ -4,7 +4,7 @@
 //! to spawn and manage sidecar processes.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
@@ -15,33 +15,25 @@ use tokio::sync::mpsc;
 
 /// Tauri process handle wrapper
 struct TauriProcessHandle {
-    child: CommandChild,
+    pid: u32,
+    child: Mutex<Option<CommandChild>>,
 }
 
 impl ProcessHandle for TauriProcessHandle {
     fn pid(&self) -> u32 {
-        self.child.pid()
+        self.pid
     }
 
     fn kill(&self) -> Result<(), String> {
-        // CommandChild::kill takes ownership in Tauri's API
-        // But we need to keep the reference for pid(), so we use system kill
-        #[cfg(unix)]
-        {
-            use std::process::Command;
-            let pid_arg = self.child.pid().to_string();
-            Command::new("kill")
-                .arg("-TERM")
-                .arg(&pid_arg)
-                .status()
-                .map_err(|e| format!("Failed to kill process: {}", e))?;
-        }
+        let mut guard = self
+            .child
+            .lock()
+            .map_err(|e| format!("Failed to acquire process lock: {}", e))?;
 
-        #[cfg(not(unix))]
-        {
-            // On Windows, we'd need a different approach
-            // For now, just return an error
-            return Err("Process termination not implemented for this platform".to_string());
+        if let Some(child) = guard.take() {
+            child
+                .kill()
+                .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
 
         Ok(())
@@ -105,7 +97,10 @@ impl ProcessSpawner for TauriProcessSpawner {
             }
         });
 
-        let handle = TauriProcessHandle { child };
+        let handle = TauriProcessHandle {
+            pid: child.pid(),
+            child: Mutex::new(Some(child)),
+        };
 
         Ok((out_rx, Box::new(handle)))
     }

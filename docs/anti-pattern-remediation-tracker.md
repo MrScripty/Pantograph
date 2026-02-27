@@ -1,6 +1,6 @@
 # Anti-Pattern Remediation Tracker
 
-Last updated: 2026-02-27
+Last updated: 2026-02-27 (Phase 1 complete)
 
 ## Objective
 
@@ -11,7 +11,7 @@ Track remediation of repo anti-pattern findings with phased, testable changes.
 | Phase | Title | Status | Owner | Exit Criteria |
 |---|---|---|---|---|
 | 0 | Tracker + baseline | Complete | Codex | Tracker added and scoped issues mapped |
-| 1 | Runtime/process correctness | In Progress | Codex | No orphan process on timeout; llama lifecycle non-blocking and cross-platform |
+| 1 | Runtime/process correctness | Complete | Codex | No orphan process on timeout; llama lifecycle non-blocking and cross-platform |
 | 2 | Svelte DOM manipulation cleanup | Pending | Codex | `svelte/no-dom-manipulating` resolved without regressing generated-component HMR/state |
 | 3 | Quality gate realignment | Pending | Codex | `check` blocks critical anti-patterns in app/package code |
 | 4 | Store/service efficiency + retention | Pending | Codex | Link sync no longer global 100ms polling; logger bounded |
@@ -52,6 +52,13 @@ Track remediation of repo anti-pattern findings with phased, testable changes.
 - `cargo test -p workflow-nodes process -- --nocapture`
 - `cargo check -p inference`
 - `cargo check -p pantograph`
+
+### Phase 1 Completion Notes
+
+- `ProcessTask` timeout path now kills and reaps the child process and keeps partial output handling.
+- Added regression test ensuring timed-out process does not continue and perform delayed side effects.
+- Removed shell `kill` usage and blocking sleeps from `LlamaServer` shutdown/cleanup path.
+- Implemented cross-platform `kill()` in Tauri process handle using `CommandChild::kill`.
 
 ## Notes on Standards Follow-up
 

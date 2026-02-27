@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::sync::RwLock;
 
 use crate::config::DeviceConfig;
@@ -46,6 +47,26 @@ fn oom_error_message(hint: Option<&str>) -> String {
         Some(line) if !line.is_empty() => format!("Out of GPU memory (OOM): {}", line),
         _ => "Out of GPU memory (OOM).".to_string(),
     }
+}
+
+fn terminate_pid(pid: i32) -> bool {
+    if pid <= 0 {
+        return false;
+    }
+
+    let mut system = System::new();
+    let target_pid = Pid::from_u32(pid as u32);
+    system.refresh_processes(ProcessesToUpdate::Some(&[target_pid]), true);
+
+    let Some(process) = system.process(target_pid) else {
+        return false;
+    };
+
+    if process.kill_with(Signal::Term).unwrap_or(false) {
+        return true;
+    }
+
+    process.kill()
 }
 
 /// Server operating mode
@@ -116,33 +137,10 @@ impl LlamaServer {
             }
         };
 
-        #[cfg(unix)]
-        {
-            use std::process::Command;
-            use std::thread;
-            use std::time::Duration;
-
-            let pid_arg = pid.to_string();
-            let is_running = Command::new("kill")
-                .arg("-0")
-                .arg(&pid_arg)
-                .status()
-                .map(|status| status.success())
-                .unwrap_or(false);
-
-            if is_running {
-                let _ = Command::new("kill").arg("-TERM").arg(&pid_arg).status();
-                thread::sleep(Duration::from_millis(200));
-                let still_running = Command::new("kill")
-                    .arg("-0")
-                    .arg(&pid_arg)
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false);
-                if still_running {
-                    let _ = Command::new("kill").arg("-KILL").arg(&pid_arg).status();
-                }
-            }
+        if terminate_pid(pid) {
+            log::info!("Terminated stale sidecar process (PID: {})", pid);
+        } else {
+            log::debug!("No running stale sidecar process found for PID {}", pid);
         }
 
         let _ = fs::remove_file(&pid_path);
@@ -543,37 +541,10 @@ impl LlamaServer {
             let pid = child.pid();
             log::debug!("Stopping llama-server (PID: {})", pid);
 
-            // Kill the process
             if let Err(e) = child.kill() {
                 log::warn!("Failed to kill llama-server: {}", e);
             }
-
-            #[cfg(unix)]
-            {
-                use std::process::Command;
-                use std::thread;
-                use std::time::Duration;
-
-                // Wait a bit for graceful exit
-                thread::sleep(Duration::from_millis(500));
-
-                // Check if still running and force kill if needed
-                let pid_arg = pid.to_string();
-                let still_running = Command::new("kill")
-                    .arg("-0")
-                    .arg(&pid_arg)
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false);
-
-                if still_running {
-                    log::warn!("Process didn't exit gracefully, forcing kill");
-                    let _ = Command::new("kill").arg("-KILL").arg(&pid_arg).status();
-                    thread::sleep(Duration::from_millis(200));
-                }
-
-                log::debug!("llama-server stopped");
-            }
+            log::debug!("llama-server stop signal sent");
         }
 
         // Clean up PID file

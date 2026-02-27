@@ -12,10 +12,22 @@ use node_engine::{
     ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
     TaskMetadata,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 /// Default timeout in seconds for process execution
 const DEFAULT_TIMEOUT_SECS: u64 = 300;
+
+async fn collect_pipe_output(handle: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {
+    match tokio::time::timeout(Duration::from_secs(1), handle).await {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(err)) => {
+            log::warn!("Pipe reader task failed: {}", err);
+            Vec::new()
+        }
+        Err(_) => Vec::new(),
+    }
+}
 
 /// Process Execution Task
 ///
@@ -165,6 +177,7 @@ impl Task for ProcessTask {
         // Build the command
         let mut cmd = Command::new(&command);
         cmd.args(&args);
+        cmd.kill_on_drop(true);
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
 
@@ -182,46 +195,87 @@ impl Task for ProcessTask {
             cmd.env(k, v);
         }
 
-        // Spawn and run with timeout
-        let result = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
-            let mut child = cmd.spawn().map_err(|e| {
-                GraphError::TaskExecutionFailed(format!(
-                    "Failed to spawn process '{}': {}",
-                    command, e
-                ))
-            })?;
+        let mut child = cmd.spawn().map_err(|e| {
+            GraphError::TaskExecutionFailed(format!("Failed to spawn process '{}': {}", command, e))
+        })?;
 
-            // Write stdin if provided
-            if let Some(ref data) = stdin_data {
-                if let Some(mut stdin) = child.stdin.take() {
-                    use tokio::io::AsyncWriteExt;
-                    let _ = stdin.write_all(data.as_bytes()).await;
-                    drop(stdin);
-                }
+        let stdout_pipe = child.stdout.take().ok_or_else(|| {
+            GraphError::TaskExecutionFailed(format!(
+                "Failed to capture stdout for process '{}'",
+                command
+            ))
+        })?;
+        let stderr_pipe = child.stderr.take().ok_or_else(|| {
+            GraphError::TaskExecutionFailed(format!(
+                "Failed to capture stderr for process '{}'",
+                command
+            ))
+        })?;
+
+        let stdout_reader = tokio::spawn(async move {
+            let mut reader = stdout_pipe;
+            let mut buf = Vec::new();
+            let _ = reader.read_to_end(&mut buf).await;
+            buf
+        });
+        let stderr_reader = tokio::spawn(async move {
+            let mut reader = stderr_pipe;
+            let mut buf = Vec::new();
+            let _ = reader.read_to_end(&mut buf).await;
+            buf
+        });
+
+        // Write stdin if provided.
+        if let Some(ref data) = stdin_data {
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin.write_all(data.as_bytes()).await.map_err(|e| {
+                    GraphError::TaskExecutionFailed(format!(
+                        "Failed to write stdin for process '{}': {}",
+                        command, e
+                    ))
+                })?;
             }
+        }
 
-            let output = child.wait_with_output().await.map_err(|e| {
-                GraphError::TaskExecutionFailed(format!(
+        let wait_result =
+            tokio::time::timeout(Duration::from_secs(timeout_secs), child.wait()).await;
+
+        let (exit_code, stdout, stderr, success) = match wait_result {
+            Ok(Ok(status)) => {
+                let out = collect_pipe_output(stdout_reader).await;
+                let err = collect_pipe_output(stderr_reader).await;
+                (
+                    status.code().unwrap_or(-1),
+                    String::from_utf8_lossy(&out).to_string(),
+                    String::from_utf8_lossy(&err).to_string(),
+                    status.success(),
+                )
+            }
+            Ok(Err(e)) => {
+                return Err(GraphError::TaskExecutionFailed(format!(
                     "Failed to wait for process '{}': {}",
                     command, e
-                ))
-            })?;
-
-            Ok::<_, GraphError>(output)
-        })
-        .await;
-
-        let (exit_code, stdout, stderr, success) = match result {
-            Ok(Ok(output)) => {
-                let code = output.status.code().unwrap_or(-1);
-                let out = String::from_utf8_lossy(&output.stdout).to_string();
-                let err = String::from_utf8_lossy(&output.stderr).to_string();
-                (code, out, err, output.status.success())
+                )));
             }
-            Ok(Err(e)) => return Err(e),
             Err(_) => {
-                // Timeout - report as failure
-                (-1i32, String::new(), "Process timed out".to_string(), false)
+                let timeout_msg = match child.kill().await {
+                    Ok(_) => "Process timed out and was terminated".to_string(),
+                    Err(e) => format!("Process timed out; failed to terminate child: {}", e),
+                };
+                let _ = child.wait().await;
+                let out = collect_pipe_output(stdout_reader).await;
+                let err = collect_pipe_output(stderr_reader).await;
+                let mut stderr_msg = String::from_utf8_lossy(&err).to_string();
+                if !stderr_msg.is_empty() {
+                    stderr_msg.push('\n');
+                }
+                stderr_msg.push_str(&timeout_msg);
+                (
+                    -1i32,
+                    String::from_utf8_lossy(&out).to_string(),
+                    stderr_msg,
+                    false,
+                )
             }
         };
 
@@ -259,6 +313,7 @@ impl Task for ProcessTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_descriptor() {
@@ -397,5 +452,39 @@ mod tests {
         let stdout: String = context.get(&stdout_key).await.unwrap();
         // /tmp might resolve to a real path on some systems
         assert!(stdout.trim() == "/tmp" || stdout.trim().ends_with("/tmp"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_timeout_terminates_process() {
+        let dir = tempdir().unwrap();
+        let marker = dir.path().join("should_not_exist.txt");
+
+        let task = ProcessTask::new("test_timeout");
+        let context = Context::new();
+
+        let cmd_key = ContextKeys::input("test_timeout", ProcessTask::PORT_COMMAND);
+        context.set(&cmd_key, "sh".to_string()).await;
+
+        let args_key = ContextKeys::input("test_timeout", ProcessTask::PORT_ARGS);
+        let script = format!("sleep 2; echo orphan > \"{}\"", marker.display());
+        context
+            .set(&args_key, serde_json::json!(["-c", script]))
+            .await;
+
+        let timeout_key = ContextKeys::input("test_timeout", ProcessTask::PORT_TIMEOUT);
+        context.set(&timeout_key, 1.0f64).await;
+
+        let _result = task.run(context.clone()).await.unwrap();
+
+        let success_key = ContextKeys::output("test_timeout", ProcessTask::PORT_SUCCESS);
+        let success: bool = context.get(&success_key).await.unwrap();
+        assert!(!success);
+
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert!(
+            !marker.exists(),
+            "Timed-out process continued running after timeout"
+        );
     }
 }
