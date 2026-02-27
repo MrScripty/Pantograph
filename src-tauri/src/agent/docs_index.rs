@@ -2,8 +2,8 @@
 //!
 //! Provides data structures and logic for building a searchable index from markdown docs.
 
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use super::docs::DocsError;
 
@@ -92,13 +92,12 @@ impl SearchIndex {
 
         // Extract title from content if not in frontmatter
         let title = title.unwrap_or_else(|| {
-            Self::extract_title_from_content(&main_content)
-                .unwrap_or_else(|| {
-                    file_path
-                        .file_stem()
-                        .map(|s| s.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "Unknown".to_string())
-                })
+            Self::extract_title_from_content(&main_content).unwrap_or_else(|| {
+                file_path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Unknown".to_string())
+            })
         });
 
         // Generate ID from path
@@ -258,11 +257,36 @@ impl SearchIndex {
 
         // Look for Svelte-specific patterns
         let svelte_patterns = [
-            "$state", "$derived", "$effect", "$props", "$bindable", "$inspect", "$host",
-            "onclick", "onchange", "oninput", "onsubmit", "onkeydown",
-            "bind:", "class:", "style:", "use:", "transition:", "animate:",
-            "#if", "#each", "#await", "#key", "@html", "@const", "@debug", "@render",
-            "<svelte:", "runes", "snippet", "render",
+            "$state",
+            "$derived",
+            "$effect",
+            "$props",
+            "$bindable",
+            "$inspect",
+            "$host",
+            "onclick",
+            "onchange",
+            "oninput",
+            "onsubmit",
+            "onkeydown",
+            "bind:",
+            "class:",
+            "style:",
+            "use:",
+            "transition:",
+            "animate:",
+            "#if",
+            "#each",
+            "#await",
+            "#key",
+            "@html",
+            "@const",
+            "@debug",
+            "@render",
+            "<svelte:",
+            "runes",
+            "snippet",
+            "render",
         ];
 
         for pattern in svelte_patterns {
@@ -278,4 +302,3 @@ impl SearchIndex {
         keywords
     }
 }
-

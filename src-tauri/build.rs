@@ -108,7 +108,10 @@ fn copy_binaries_to_target() {
         if let Err(e) = copy_dir_if_changed(&cuda_src, &cuda_dst, &mut copied, &mut skipped) {
             println!("cargo:warning=Failed to copy cuda directory: {}", e);
         } else if copied > 0 {
-            println!("cargo:warning=Copied {} files to {:?} ({} unchanged)", copied, cuda_dst, skipped);
+            println!(
+                "cargo:warning=Copied {} files to {:?} ({} unchanged)",
+                copied, cuda_dst, skipped
+            );
         }
         // Silent if all files were skipped (already up to date)
     }
@@ -119,7 +122,12 @@ fn copy_binaries_to_target() {
     println!("cargo:rerun-if-changed=binaries/cuda/libggml-cuda.so");
 }
 
-fn copy_dir_if_changed(src: &Path, dst: &Path, copied: &mut usize, skipped: &mut usize) -> std::io::Result<()> {
+fn copy_dir_if_changed(
+    src: &Path,
+    dst: &Path,
+    copied: &mut usize,
+    skipped: &mut usize,
+) -> std::io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
     }

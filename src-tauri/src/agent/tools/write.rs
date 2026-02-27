@@ -32,7 +32,11 @@ pub struct WriteGuiFileTool {
 }
 
 impl WriteGuiFileTool {
-    pub fn with_tracker(project_root: PathBuf, tracker: WriteTracker, enricher_registry: Arc<EnricherRegistry>) -> Self {
+    pub fn with_tracker(
+        project_root: PathBuf,
+        tracker: WriteTracker,
+        enricher_registry: Arc<EnricherRegistry>,
+    ) -> Self {
         Self {
             project_root,
             write_tracker: Some(tracker),
@@ -104,8 +108,14 @@ impl WriteGuiFileTool {
 
         let forbidden_patterns: &[(&str, &str)] = &[
             // Props - must use $props() not export let
-            ("export let ", "Use `let { prop } = $props()` instead of `export let prop`"),
-            ("export let\t", "Use `let { prop } = $props()` instead of `export let prop`"),
+            (
+                "export let ",
+                "Use `let { prop } = $props()` instead of `export let prop`",
+            ),
+            (
+                "export let\t",
+                "Use `let { prop } = $props()` instead of `export let prop`",
+            ),
             // Event handlers - must use lowercase without colon
             ("on:click", "Use `onclick` instead of `on:click`"),
             ("on:change", "Use `onchange` instead of `on:change`"),
@@ -114,11 +124,23 @@ impl WriteGuiFileTool {
             ("on:keydown", "Use `onkeydown` instead of `on:keydown`"),
             ("on:keyup", "Use `onkeyup` instead of `on:keyup`"),
             ("on:keypress", "Use `onkeypress` instead of `on:keypress`"),
-            ("on:mouseenter", "Use `onmouseenter` instead of `on:mouseenter`"),
-            ("on:mouseleave", "Use `onmouseleave` instead of `on:mouseleave`"),
-            ("on:mouseover", "Use `onmouseover` instead of `on:mouseover`"),
+            (
+                "on:mouseenter",
+                "Use `onmouseenter` instead of `on:mouseenter`",
+            ),
+            (
+                "on:mouseleave",
+                "Use `onmouseleave` instead of `on:mouseleave`",
+            ),
+            (
+                "on:mouseover",
+                "Use `onmouseover` instead of `on:mouseover`",
+            ),
             ("on:mouseout", "Use `onmouseout` instead of `on:mouseout`"),
-            ("on:mousedown", "Use `onmousedown` instead of `on:mousedown`"),
+            (
+                "on:mousedown",
+                "Use `onmousedown` instead of `on:mousedown`",
+            ),
             ("on:mouseup", "Use `onmouseup` instead of `on:mouseup`"),
             ("on:focus", "Use `onfocus` instead of `on:focus`"),
             ("on:blur", "Use `onblur` instead of `on:blur`"),
@@ -148,7 +170,10 @@ impl WriteGuiFileTool {
         // ============================================================
         // CSS Validation - Tailwind only
         // ============================================================
-        if content.contains("<style>") && !content.contains("@apply") && !content.contains("global(") {
+        if content.contains("<style>")
+            && !content.contains("@apply")
+            && !content.contains("global(")
+        {
             // Allow style blocks only if they use @apply or :global()
             let style_start = content.find("<style>");
             let style_end = content.find("</style>");
@@ -157,7 +182,8 @@ impl WriteGuiFileTool {
                 // Check if the style block contains non-Tailwind CSS
                 if !style_content.contains("@apply") && !style_content.contains(":global") {
                     return Err((
-                        "Custom CSS not allowed. Use Tailwind classes only, or @apply directive.".to_string(),
+                        "Custom CSS not allowed. Use Tailwind classes only, or @apply directive."
+                            .to_string(),
                         ErrorCategory::Styling,
                     ));
                 }
@@ -244,14 +270,19 @@ impl WriteGuiFileTool {
             .arg(&self.project_root);
 
         // Add allowed packages for import resolution mode
-        if matches!(self.sandbox_config.import_validation_mode, ImportValidationMode::ImportResolve) && !allowed_packages_json.is_empty() {
+        if matches!(
+            self.sandbox_config.import_validation_mode,
+            ImportValidationMode::ImportResolve
+        ) && !allowed_packages_json.is_empty()
+        {
             cmd.arg(&allowed_packages_json);
         }
 
         let result = tokio::time::timeout(
             std::time::Duration::from_millis(self.sandbox_config.validation_timeout_ms),
-            cmd.output()
-        ).await;
+            cmd.output(),
+        )
+        .await;
 
         match result {
             Ok(Ok(output)) => {
@@ -260,23 +291,26 @@ impl WriteGuiFileTool {
 
                     // Parse JSON error output
                     if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                        let error_msg = error_json.get("error")
+                        let error_msg = error_json
+                            .get("error")
                             .and_then(|e| e.as_str())
                             .unwrap_or("Unknown import validation error")
                             .to_string();
 
-                        let line = error_json.get("line")
-                            .and_then(|l| l.as_u64());
+                        let line = error_json.get("line").and_then(|l| l.as_u64());
 
                         // Extract suggestions from the JSON response
-                        let suggestions: Vec<String> = error_json.get("errors")
+                        let suggestions: Vec<String> = error_json
+                            .get("errors")
                             .and_then(|e| e.as_array())
                             .and_then(|arr| arr.first())
                             .and_then(|e| e.get("suggestions"))
                             .and_then(|s| s.as_array())
-                            .map(|arr| arr.iter()
-                                .filter_map(|v| v.as_str().map(String::from))
-                                .collect())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
                             .unwrap_or_default();
 
                         let mut full_error = format!("IMPORT VALIDATION ERROR: {}", error_msg);
@@ -286,10 +320,18 @@ impl WriteGuiFileTool {
 
                         // Use dynamic suggestions if available, otherwise show generic help
                         if !suggestions.is_empty() {
-                            full_error.push_str(&format!("\n\nDid you mean: {}?",
-                                suggestions.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", ")));
+                            full_error.push_str(&format!(
+                                "\n\nDid you mean: {}?",
+                                suggestions
+                                    .iter()
+                                    .map(|s| format!("\"{}\"", s))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ));
                         }
-                        full_error.push_str("\n\nEnsure the package is listed in package.json dependencies.");
+                        full_error.push_str(
+                            "\n\nEnsure the package is listed in package.json dependencies.",
+                        );
 
                         return Err((full_error, ErrorCategory::ImportResolution));
                     } else {
@@ -303,7 +345,10 @@ impl WriteGuiFileTool {
             }
             Ok(Err(e)) => {
                 // Script failed to run - log but don't block
-                log::warn!("Import validation script failed to run: {}. Skipping import validation.", e);
+                log::warn!(
+                    "Import validation script failed to run: {}. Skipping import validation.",
+                    e
+                );
                 Ok(())
             }
             Err(_) => {
@@ -334,8 +379,9 @@ impl WriteGuiFileTool {
                 .arg(&lint_script)
                 .arg(file_path)
                 .arg(&self.project_root)
-                .output()
-        ).await;
+                .output(),
+        )
+        .await;
 
         match result {
             Ok(Ok(output)) => {
@@ -344,13 +390,13 @@ impl WriteGuiFileTool {
                 if !output.status.success() {
                     // Parse JSON error output
                     if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                        let error_msg = error_json.get("error")
+                        let error_msg = error_json
+                            .get("error")
                             .and_then(|e| e.as_str())
                             .unwrap_or("Unknown linting error")
                             .to_string();
 
-                        let line = error_json.get("line")
-                            .and_then(|l| l.as_u64());
+                        let line = error_json.get("line").and_then(|l| l.as_u64());
 
                         let mut full_error = format!("LINTING ERROR: {}", error_msg);
                         if let Some(line_num) = line {
@@ -374,7 +420,10 @@ impl WriteGuiFileTool {
             }
             Ok(Err(e)) => {
                 // Script failed to run - log but don't block
-                log::warn!("Lint validation script failed to run: {}. Skipping lint validation.", e);
+                log::warn!(
+                    "Lint validation script failed to run: {}. Skipping lint validation.",
+                    e
+                );
                 Ok(())
             }
             Err(_) => {
@@ -388,7 +437,10 @@ impl WriteGuiFileTool {
     /// Validate design system compliance (advisory - returns warnings, not errors)
     /// This checks for non-design-system colors, emoji usage, etc.
     async fn validate_design_system(&self, file_path: &PathBuf) -> Vec<String> {
-        let validation_script = self.project_root.join("scripts").join("validate-design-system.mjs");
+        let validation_script = self
+            .project_root
+            .join("scripts")
+            .join("validate-design-system.mjs");
 
         // Skip if validation script doesn't exist
         if !validation_script.exists() {
@@ -401,8 +453,9 @@ impl WriteGuiFileTool {
             tokio::process::Command::new("node")
                 .arg(&validation_script)
                 .arg(file_path)
-                .output()
-        ).await;
+                .output(),
+        )
+        .await;
 
         match result {
             Ok(Ok(output)) => {
@@ -459,11 +512,19 @@ impl WriteGuiFileTool {
                     .current_dir(&generated_dir)
                     .output();
                 let _ = std::process::Command::new("git")
-                    .args(["commit", "-m", "Initialize generated components", "--allow-empty"])
+                    .args([
+                        "commit",
+                        "-m",
+                        "Initialize generated components",
+                        "--allow-empty",
+                    ])
                     .current_dir(&generated_dir)
                     .output();
             } else {
-                log::warn!("[write_gui_file] Failed to initialize git repo: {:?}", String::from_utf8_lossy(&output.stderr));
+                log::warn!(
+                    "[write_gui_file] Failed to initialize git repo: {:?}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
         }
 
@@ -520,8 +581,14 @@ impl WriteGuiFileTool {
     /// Validate that template expressions don't contain JSX syntax
     /// This catches React-style patterns like {condition && <element>} that would
     /// cause cryptic "Unexpected token" errors from the Svelte compiler.
-    async fn validate_jsx_in_template(&self, file_path: &PathBuf) -> Result<(), (String, ErrorCategory)> {
-        let validation_script = self.project_root.join("scripts").join("validate-jsx-in-template.mjs");
+    async fn validate_jsx_in_template(
+        &self,
+        file_path: &PathBuf,
+    ) -> Result<(), (String, ErrorCategory)> {
+        let validation_script = self
+            .project_root
+            .join("scripts")
+            .join("validate-jsx-in-template.mjs");
 
         // Skip if validation script doesn't exist
         if !validation_script.exists() {
@@ -534,8 +601,9 @@ impl WriteGuiFileTool {
             tokio::process::Command::new("node")
                 .arg(&validation_script)
                 .arg(file_path)
-                .output()
-        ).await;
+                .output(),
+        )
+        .await;
 
         match result {
             Ok(Ok(output)) => {
@@ -544,7 +612,8 @@ impl WriteGuiFileTool {
                 if !output.status.success() {
                     // Parse JSON error output
                     if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                        let error_msg = error_json.get("error")
+                        let error_msg = error_json
+                            .get("error")
                             .and_then(|e| e.as_str())
                             .unwrap_or("Found JSX syntax in template")
                             .to_string();
@@ -562,7 +631,10 @@ impl WriteGuiFileTool {
             }
             Ok(Err(e)) => {
                 // Script failed to run - log but don't block
-                log::warn!("JSX validation script failed to run: {}. Skipping JSX validation.", e);
+                log::warn!(
+                    "JSX validation script failed to run: {}. Skipping JSX validation.",
+                    e
+                );
                 Ok(())
             }
             Err(_) => {
@@ -608,17 +680,25 @@ impl Tool for WriteGuiFileTool {
         }
 
         // Sanitize path to prevent directory traversal
-        let sanitized = args.path.replace("..", "").trim_start_matches('/').to_string();
+        let sanitized = args
+            .path
+            .replace("..", "")
+            .trim_start_matches('/')
+            .to_string();
         let full_path = self.get_generated_path().join(&sanitized);
 
         // Ensure the generated directory exists
         if let Some(parent) = full_path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(ToolError::Io)?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(ToolError::Io)?;
         }
 
         // Step 2: Write to a temp file first for validation
         let temp_path = full_path.with_extension("svelte.tmp");
-        tokio::fs::write(&temp_path, &args.content).await.map_err(ToolError::Io)?;
+        tokio::fs::write(&temp_path, &args.content)
+            .await
+            .map_err(ToolError::Io)?;
 
         // Step 2.5: Check for JSX patterns in template (before Svelte compiler)
         // This provides helpful error messages instead of cryptic "Unexpected token" errors
@@ -628,7 +708,10 @@ impl Tool for WriteGuiFileTool {
         }
 
         // Step 3: Validate with Svelte compiler
-        let validation_script = self.project_root.join("scripts").join("validate-svelte.mjs");
+        let validation_script = self
+            .project_root
+            .join("scripts")
+            .join("validate-svelte.mjs");
         let validation_result = tokio::process::Command::new("node")
             .arg(&validation_script)
             .arg(&temp_path)
@@ -644,29 +727,30 @@ impl Tool for WriteGuiFileTool {
                     let _ = tokio::fs::remove_file(&temp_path).await;
 
                     // Try to parse JSON error output
-                    let (error_msg, line) = if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                        let msg = error_json.get("error")
+                    let (error_msg, line) = if let Ok(error_json) =
+                        serde_json::from_str::<serde_json::Value>(&stdout)
+                    {
+                        let msg = error_json
+                            .get("error")
                             .and_then(|e| e.as_str())
                             .unwrap_or("Unknown compilation error")
                             .to_string();
-                        let line_num = error_json.get("line")
-                            .and_then(|l| l.as_u64());
+                        let line_num = error_json.get("line").and_then(|l| l.as_u64());
                         (msg, line_num)
                     } else {
                         (stdout.trim().to_string(), None)
                     };
 
-                    let mut full_error = format!(
-                        "SVELTE COMPILATION ERROR: {}",
-                        error_msg
-                    );
+                    let mut full_error = format!("SVELTE COMPILATION ERROR: {}", error_msg);
                     if let Some(line_num) = line {
                         full_error.push_str(&format!(" (line {})", line_num));
                     }
                     full_error.push_str(". Please fix the syntax and try again.");
 
                     // Use enricher pipeline to add relevant documentation
-                    return Err(self.validation_error(full_error, ErrorCategory::SvelteCompiler).await);
+                    return Err(self
+                        .validation_error(full_error, ErrorCategory::SvelteCompiler)
+                        .await);
                 }
 
                 // Step 3.5: Import validation based on sandbox config
@@ -732,7 +816,9 @@ impl Tool for WriteGuiFileTool {
                 let is_new_file = !full_path.exists();
 
                 // Compilation and runtime validation succeeded - move temp file to final location
-                tokio::fs::rename(&temp_path, &full_path).await.map_err(ToolError::Io)?;
+                tokio::fs::rename(&temp_path, &full_path)
+                    .await
+                    .map_err(ToolError::Io)?;
 
                 // Git versioning - commit the change for undo/redo support
                 self.commit_change(&sanitized, is_new_file);
@@ -751,7 +837,9 @@ impl Tool for WriteGuiFileTool {
                 // (validation script might not be available)
                 log::warn!("Svelte validation script failed to run: {}. Proceeding without compiler validation.", e);
                 let _ = tokio::fs::remove_file(&temp_path).await;
-                tokio::fs::write(&full_path, &args.content).await.map_err(ToolError::Io)?;
+                tokio::fs::write(&full_path, &args.content)
+                    .await
+                    .map_err(ToolError::Io)?;
 
                 // Record successful write
                 if let Some(ref tracker) = self.write_tracker {

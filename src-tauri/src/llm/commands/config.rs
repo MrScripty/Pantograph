@@ -145,9 +145,7 @@ pub async fn list_devices(app: AppHandle) -> Result<Vec<DeviceInfo>, String> {
             let id = line[..colon_pos].trim();
             // Skip if it doesn't look like a device ID (e.g., "Available devices")
             if !id.contains(' ')
-                && (id.starts_with("Vulkan")
-                    || id.starts_with("CUDA")
-                    || id.starts_with("Metal"))
+                && (id.starts_with("Vulkan") || id.starts_with("CUDA") || id.starts_with("Metal"))
             {
                 let rest = line[colon_pos + 1..].trim();
 

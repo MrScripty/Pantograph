@@ -50,7 +50,10 @@ impl EnricherRegistry {
 
     /// Register an enricher
     pub fn register(&mut self, enricher: Box<dyn ErrorEnricher>) {
-        log::info!("[EnricherRegistry] Registered enricher: {}", enricher.name());
+        log::info!(
+            "[EnricherRegistry] Registered enricher: {}",
+            enricher.name()
+        );
         self.enrichers.push(enricher);
     }
 

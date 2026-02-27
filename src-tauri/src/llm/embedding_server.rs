@@ -46,9 +46,9 @@ impl EmbeddingServer {
     /// Check if there's enough free VRAM for the embedding model
     pub fn check_vram_available(devices: &[DeviceInfo]) -> bool {
         // Find a GPU device (not "none"/CPU) with sufficient free VRAM
-        devices.iter().any(|device| {
-            device.id != "none" && device.free_vram_mb >= EMBEDDING_MODEL_VRAM_MB
-        })
+        devices
+            .iter()
+            .any(|device| device.id != "none" && device.free_vram_mb >= EMBEDDING_MODEL_VRAM_MB)
     }
 
     /// Start the embedding server based on memory mode
@@ -120,11 +120,15 @@ impl EmbeddingServer {
 
         // Build arguments
         let mut args: Vec<String> = vec![
-            "-m".to_string(), model_path.to_string(),
-            "--port".to_string(), port_str,
-            "--host".to_string(), hosts::LOCAL.to_string(),
+            "-m".to_string(),
+            model_path.to_string(),
+            "--port".to_string(),
+            port_str,
+            "--host".to_string(),
+            hosts::LOCAL.to_string(),
             "--embedding".to_string(),
-            "-ngl".to_string(), gpu_layers_str,
+            "-ngl".to_string(),
+            gpu_layers_str,
         ];
 
         // Add PID file
@@ -143,7 +147,9 @@ impl EmbeddingServer {
 
         log::info!(
             "Starting embedding server on port {} with device={}, gpu_layers={}",
-            self.port, device.device, device.gpu_layers
+            self.port,
+            device.device,
+            device.gpu_layers
         );
 
         // Spawn the sidecar via ProcessSpawner
@@ -202,10 +208,7 @@ impl EmbeddingServer {
         let timeout_ms = 60000; // 60 second timeout
 
         while start.elapsed().as_millis() < timeout_ms {
-            match tokio::time::timeout(
-                std::time::Duration::from_millis(100),
-                rx.recv(),
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await {
                 Ok(Some(event)) => {
                     match event {
                         ProcessEvent::Stdout(line) => {
@@ -219,7 +222,9 @@ impl EmbeddingServer {
 
                             // Check for ready signal (same pattern as main server)
                             if Self::is_server_listening(&line_str) {
-                                log::debug!("Stdout reports embedding server listening, verifying HTTP...");
+                                log::debug!(
+                                    "Stdout reports embedding server listening, verifying HTTP..."
+                                );
                                 return self.verify_http_ready(5000).await;
                             }
                         }
@@ -239,7 +244,9 @@ impl EmbeddingServer {
 
                             // Also check stderr for ready signal (llama.cpp may output there)
                             if Self::is_server_listening(&line_str) {
-                                log::debug!("Stderr reports embedding server listening, verifying HTTP...");
+                                log::debug!(
+                                    "Stderr reports embedding server listening, verifying HTTP..."
+                                );
                                 return self.verify_http_ready(5000).await;
                             }
                         }
@@ -250,10 +257,7 @@ impl EmbeddingServer {
                             ));
                         }
                         ProcessEvent::Error(err) => {
-                            return Err(format!(
-                                "Embedding server error: {}",
-                                err
-                            ));
+                            return Err(format!("Embedding server error: {}", err));
                         }
                     }
                 }
@@ -299,7 +303,6 @@ impl EmbeddingServer {
         }
         self.pid_file = None;
     }
-
 }
 
 impl Drop for EmbeddingServer {
@@ -314,34 +317,28 @@ mod tests {
 
     #[test]
     fn test_check_vram_available() {
-        let devices_with_vram = vec![
-            DeviceInfo {
-                id: "Vulkan0".to_string(),
-                name: "Test GPU".to_string(),
-                total_vram_mb: 8000,
-                free_vram_mb: 4000,
-            }
-        ];
+        let devices_with_vram = vec![DeviceInfo {
+            id: "Vulkan0".to_string(),
+            name: "Test GPU".to_string(),
+            total_vram_mb: 8000,
+            free_vram_mb: 4000,
+        }];
         assert!(EmbeddingServer::check_vram_available(&devices_with_vram));
 
-        let devices_low_vram = vec![
-            DeviceInfo {
-                id: "Vulkan0".to_string(),
-                name: "Test GPU".to_string(),
-                total_vram_mb: 8000,
-                free_vram_mb: 500, // Below threshold
-            }
-        ];
+        let devices_low_vram = vec![DeviceInfo {
+            id: "Vulkan0".to_string(),
+            name: "Test GPU".to_string(),
+            total_vram_mb: 8000,
+            free_vram_mb: 500, // Below threshold
+        }];
         assert!(!EmbeddingServer::check_vram_available(&devices_low_vram));
 
-        let devices_cpu_only = vec![
-            DeviceInfo {
-                id: "none".to_string(),
-                name: "CPU".to_string(),
-                total_vram_mb: 0,
-                free_vram_mb: 0,
-            }
-        ];
+        let devices_cpu_only = vec![DeviceInfo {
+            id: "none".to_string(),
+            name: "CPU".to_string(),
+            total_vram_mb: 0,
+            free_vram_mb: 0,
+        }];
         assert!(!EmbeddingServer::check_vram_available(&devices_cpu_only));
     }
 

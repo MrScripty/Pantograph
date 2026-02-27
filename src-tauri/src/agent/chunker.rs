@@ -243,11 +243,12 @@ pub fn sections_to_chunks(
             // Split at paragraph boundaries
             let split_chunks = split_large_content(&pending_content, config.max_chunk_size);
             for (i, split_content) in split_chunks.into_iter().enumerate() {
-                let chunk_content = if config.include_header_context && !pending_context.is_empty() && i == 0 {
-                    format!("Context: {}\n\n{}", pending_context, split_content.trim())
-                } else {
-                    split_content.trim().to_string()
-                };
+                let chunk_content =
+                    if config.include_header_context && !pending_context.is_empty() && i == 0 {
+                        format!("Context: {}\n\n{}", pending_context, split_content.trim())
+                    } else {
+                        split_content.trim().to_string()
+                    };
 
                 if chunk_content.len() >= config.min_chunk_size || chunks.is_empty() {
                     chunks.push(DocChunk {

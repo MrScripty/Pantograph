@@ -39,7 +39,9 @@ impl Tool for ReadGuiFileTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Read the source code of an existing Svelte component from the generated directory".to_string(),
+            description:
+                "Read the source code of an existing Svelte component from the generated directory"
+                    .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -55,17 +57,26 @@ impl Tool for ReadGuiFileTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         // Sanitize path to prevent directory traversal
-        let sanitized = args.path.replace("..", "").trim_start_matches('/').to_string();
+        let sanitized = args
+            .path
+            .replace("..", "")
+            .trim_start_matches('/')
+            .to_string();
         let full_path = self.get_generated_path().join(&sanitized);
 
         // Verify the path is within the generated directory
         let canonical = full_path.canonicalize().map_err(ToolError::Io)?;
-        let generated_canonical = self.get_generated_path().canonicalize().map_err(ToolError::Io)?;
+        let generated_canonical = self
+            .get_generated_path()
+            .canonicalize()
+            .map_err(ToolError::Io)?;
 
         if !canonical.starts_with(&generated_canonical) {
             return Err(ToolError::PathNotAllowed(args.path));
         }
 
-        tokio::fs::read_to_string(full_path).await.map_err(ToolError::Io)
+        tokio::fs::read_to_string(full_path)
+            .await
+            .map_err(ToolError::Io)
     }
 }

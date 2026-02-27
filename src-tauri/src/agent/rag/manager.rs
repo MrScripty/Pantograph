@@ -25,7 +25,9 @@ use super::types::{IndexingProgress, RagStatus, SvelteDoc};
 use crate::agent::chunker::{chunk_document, ChunkConfig};
 use crate::agent::docs::DocsManager;
 use crate::agent::docs_index::IndexEntry;
-use crate::agent::embeddings::{check_embedding_server, create_embedding_client, get_embedding_model_name};
+use crate::agent::embeddings::{
+    check_embedding_server, create_embedding_client, get_embedding_model_name,
+};
 use crate::agent::types::DocChunk;
 
 /// Number of chunks to process per embedding batch for progress updates.
@@ -197,7 +199,8 @@ impl RagManager {
             EMBEDDING_BATCH_SIZE
         );
 
-        let mut all_embeddings: Vec<(DocChunk, rig::embeddings::Embedding)> = Vec::with_capacity(total_chunks);
+        let mut all_embeddings: Vec<(DocChunk, rig::embeddings::Embedding)> =
+            Vec::with_capacity(total_chunks);
         let mut processed = 0;
 
         for batch in all_chunks.chunks(EMBEDDING_BATCH_SIZE) {

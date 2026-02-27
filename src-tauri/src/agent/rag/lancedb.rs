@@ -107,10 +107,7 @@ pub fn embeddings_to_record_batch(
 }
 
 /// Helper to extract string column from a RecordBatch
-pub fn get_string_col<'a>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a StringArray, RagError> {
+pub fn get_string_col<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a StringArray, RagError> {
     batch
         .column_by_name(name)
         .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
@@ -120,10 +117,7 @@ pub fn get_string_col<'a>(
 }
 
 /// Helper to extract i32 column from a RecordBatch
-pub fn get_i32_col<'a>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a Int32Array, RagError> {
+pub fn get_i32_col<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Int32Array, RagError> {
     batch
         .column_by_name(name)
         .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?
@@ -133,10 +127,7 @@ pub fn get_i32_col<'a>(
 }
 
 /// Helper to extract bool column from a RecordBatch
-pub fn get_bool_col<'a>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a BooleanArray, RagError> {
+pub fn get_bool_col<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a BooleanArray, RagError> {
     batch
         .column_by_name(name)
         .ok_or_else(|| RagError::LanceDb(format!("Missing {} column", name)))?

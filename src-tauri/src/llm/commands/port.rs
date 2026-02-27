@@ -19,10 +19,7 @@ pub async fn check_port_status(port: Option<u16>) -> Result<PortStatus, String> 
 
 /// Resolve a port conflict using the specified action
 #[command]
-pub async fn resolve_conflict(
-    port: u16,
-    action: PortConflictAction,
-) -> Result<u16, String> {
+pub async fn resolve_conflict(port: u16, action: PortConflictAction) -> Result<u16, String> {
     let status = check_port_available(port);
     if status.available {
         return Ok(port);

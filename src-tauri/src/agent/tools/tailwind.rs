@@ -37,7 +37,9 @@ impl Tool for GetTailwindColorsTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Get the available Tailwind CSS color palette with all color names and their shades".to_string(),
+            description:
+                "Get the available Tailwind CSS color palette with all color names and their shades"
+                    .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
@@ -53,12 +55,17 @@ impl Tool for GetTailwindColorsTool {
 
         // Standard Tailwind color palette
         let shades = vec![
-            "50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"
-        ].into_iter().map(String::from).collect::<Vec<_>>();
+            "50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>();
 
-        for color in &["slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber",
-                       "yellow", "lime", "green", "emerald", "teal", "cyan", "sky", "blue",
-                       "indigo", "violet", "purple", "fuchsia", "pink", "rose"] {
+        for color in &[
+            "slate", "gray", "zinc", "neutral", "stone", "red", "orange", "amber", "yellow",
+            "lime", "green", "emerald", "teal", "cyan", "sky", "blue", "indigo", "violet",
+            "purple", "fuchsia", "pink", "rose",
+        ] {
             colors.insert(color.to_string(), shades.clone());
         }
 

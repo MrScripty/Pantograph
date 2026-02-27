@@ -38,7 +38,8 @@ impl Tool for ListComponentsTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List all existing Svelte component files in the generated directory".to_string(),
+            description: "List all existing Svelte component files in the generated directory"
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
@@ -55,7 +56,11 @@ impl Tool for ListComponentsTool {
             return Ok(components);
         }
 
-        fn collect_svelte_files(dir: &PathBuf, base: &PathBuf, files: &mut Vec<String>) -> std::io::Result<()> {
+        fn collect_svelte_files(
+            dir: &PathBuf,
+            base: &PathBuf,
+            files: &mut Vec<String>,
+        ) -> std::io::Result<()> {
             if dir.is_dir() {
                 for entry in std::fs::read_dir(dir)? {
                     let entry = entry?;
@@ -110,7 +115,8 @@ impl Tool for ListTemplatesTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List available UI component templates that can be used as reference".to_string(),
+            description: "List available UI component templates that can be used as reference"
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
@@ -132,18 +138,20 @@ impl Tool for ListTemplatesTool {
             let path = entry.path();
 
             if path.extension().map_or(false, |ext| ext == "svelte") {
-                let name = path.file_stem()
+                let name = path
+                    .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default();
 
                 // Try to extract description from the first comment in the file
                 let description = if let Ok(content) = std::fs::read_to_string(&path) {
-                    content.lines()
+                    content
+                        .lines()
                         .find(|line| line.trim().starts_with("<!--"))
                         .and_then(|line| {
                             let trimmed = line.trim();
                             if trimmed.ends_with("-->") {
-                                Some(trimmed[4..trimmed.len()-3].trim().to_string())
+                                Some(trimmed[4..trimmed.len() - 3].trim().to_string())
                             } else {
                                 None
                             }
@@ -198,7 +206,8 @@ impl Tool for ReadTemplateTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Read the source code of a UI template component for reference".to_string(),
+            description: "Read the source code of a UI template component for reference"
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -214,22 +223,27 @@ impl Tool for ReadTemplateTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         // Sanitize name - remove any path separators and extensions
-        let sanitized = args.name
+        let sanitized = args
+            .name
             .replace("..", "")
             .replace('/', "")
             .replace('\\', "")
             .trim_end_matches(".svelte")
             .to_string();
 
-        let full_path = self.get_templates_path().join(format!("{}.svelte", sanitized));
+        let full_path = self
+            .get_templates_path()
+            .join(format!("{}.svelte", sanitized));
 
         if !full_path.exists() {
             return Err(ToolError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Template '{}' not found", args.name)
+                format!("Template '{}' not found", args.name),
             )));
         }
 
-        tokio::fs::read_to_string(full_path).await.map_err(ToolError::Io)
+        tokio::fs::read_to_string(full_path)
+            .await
+            .map_err(ToolError::Io)
     }
 }

@@ -54,7 +54,10 @@ pub enum ServerEvent {
     /// Recovery attempt started
     RecoveryStarted,
     /// Recovery completed
-    RecoveryComplete { success: bool, error: Option<String> },
+    RecoveryComplete {
+        success: bool,
+        error: Option<String>,
+    },
 }
 
 /// Health monitor configuration
@@ -174,9 +177,13 @@ impl HealthMonitor {
 
                         let reason = format!("HTTP {}", resp.status());
                         let status = if fail_count >= config.failure_threshold {
-                            HealthStatus::Unhealthy { reason: reason.clone() }
+                            HealthStatus::Unhealthy {
+                                reason: reason.clone(),
+                            }
                         } else {
-                            HealthStatus::Degraded { reason: reason.clone() }
+                            HealthStatus::Degraded {
+                                reason: reason.clone(),
+                            }
                         };
 
                         HealthCheckResult {
@@ -203,9 +210,13 @@ impl HealthMonitor {
                         };
 
                         let status = if fail_count >= config.failure_threshold {
-                            HealthStatus::Unhealthy { reason: reason.clone() }
+                            HealthStatus::Unhealthy {
+                                reason: reason.clone(),
+                            }
                         } else {
-                            HealthStatus::Degraded { reason: reason.clone() }
+                            HealthStatus::Degraded {
+                                reason: reason.clone(),
+                            }
                         };
 
                         HealthCheckResult {
@@ -228,7 +239,10 @@ impl HealthMonitor {
                     if state_changed && !current_healthy {
                         // Server just became unhealthy
                         let event = ServerEvent::ServerCrashed {
-                            error: result.error.clone().unwrap_or_else(|| "Unknown error".to_string()),
+                            error: result
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Unknown error".to_string()),
                         };
                         if let Err(e) = app.emit("server-health", &event) {
                             log::warn!("Failed to emit server crashed event: {}", e);

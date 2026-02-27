@@ -93,9 +93,7 @@ fn get_project_root_internal() -> PathBuf {
 /// The `relative_path` should be relative to project root (e.g., "/src/generated/MyComponent.svelte")
 /// and the backend will resolve the actual filesystem path.
 #[command]
-pub async fn validate_component(
-    relative_path: String,
-) -> Result<ValidationResult, String> {
+pub async fn validate_component(relative_path: String) -> Result<ValidationResult, String> {
     let project_root = get_project_root_internal();
     let script_path = project_root.join("scripts").join("validate-esbuild.mjs");
 

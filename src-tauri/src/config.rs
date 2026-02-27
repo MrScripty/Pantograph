@@ -178,30 +178,30 @@ impl AppConfig {
             return Ok(Self::default());
         }
 
-        let contents = fs::read_to_string(&config_path).await
+        let contents = fs::read_to_string(&config_path)
+            .await
             .map_err(ConfigError::Io)?;
 
-        serde_json::from_str(&contents)
-            .map_err(ConfigError::Parse)
+        serde_json::from_str(&contents).map_err(ConfigError::Parse)
     }
 
     /// Save configuration to disk
     pub async fn save(&self, app_data_dir: &PathBuf) -> Result<(), ConfigError> {
         // Ensure directory exists
-        fs::create_dir_all(app_data_dir).await
+        fs::create_dir_all(app_data_dir)
+            .await
             .map_err(ConfigError::Io)?;
 
         let config_path = app_data_dir.join("config.json");
-        let contents = serde_json::to_string_pretty(self)
-            .map_err(ConfigError::Serialize)?;
+        let contents = serde_json::to_string_pretty(self).map_err(ConfigError::Serialize)?;
 
-        fs::write(&config_path, contents).await
+        fs::write(&config_path, contents)
+            .await
             .map_err(ConfigError::Io)?;
 
         log::info!("Configuration saved to {:?}", config_path);
         Ok(())
     }
-
 }
 
 /// Configuration errors

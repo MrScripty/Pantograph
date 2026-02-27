@@ -245,8 +245,8 @@ pub async fn undo_component_change() -> Result<VersionResult, String> {
     let current = get_current_position(&generated_dir)?;
 
     // Get the commit message before undoing (to know what was undone)
-    let current_message = get_commit_message(&generated_dir, &current)
-        .unwrap_or_else(|| "Unknown".to_string());
+    let current_message =
+        get_commit_message(&generated_dir, &current).unwrap_or_else(|| "Unknown".to_string());
 
     // Get parent commit
     let parent = match get_parent_commit(&generated_dir, &current) {
@@ -323,7 +323,11 @@ pub async fn redo_component_change() -> Result<VersionResult, String> {
     // git rev-list --ancestry-path returns commits from current to tip (exclusive of current)
     // The last one in the list is the immediate child (next commit toward tip)
     let output = Command::new("git")
-        .args(["rev-list", "--ancestry-path", &format!("{}..{}", current, tip)])
+        .args([
+            "rev-list",
+            "--ancestry-path",
+            &format!("{}..{}", current, tip),
+        ])
         .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to find redo path: {}", e))?;
@@ -351,8 +355,8 @@ pub async fn redo_component_change() -> Result<VersionResult, String> {
     let next_commit = last_commit.trim().to_string();
 
     // Get the commit message for the next commit
-    let next_message = get_commit_message(&generated_dir, &next_commit)
-        .unwrap_or_else(|| "Unknown".to_string());
+    let next_message =
+        get_commit_message(&generated_dir, &next_commit).unwrap_or_else(|| "Unknown".to_string());
 
     // Sync working directory to next commit (handles both updates and new files)
     sync_working_dir_to_commit(&generated_dir, &next_commit)?;
@@ -717,8 +721,8 @@ pub async fn checkout_commit(hash: String) -> Result<VersionResult, String> {
         }
     }
 
-    let message = get_commit_message(&generated_dir, &hash)
-        .unwrap_or_else(|| "Unknown".to_string());
+    let message =
+        get_commit_message(&generated_dir, &hash).unwrap_or_else(|| "Unknown".to_string());
 
     Ok(VersionResult {
         success: true,
@@ -733,8 +737,8 @@ fn collect_svelte_files(
     current_dir: &PathBuf,
     components: &mut Vec<GeneratedComponentInfo>,
 ) -> Result<(), String> {
-    let entries = std::fs::read_dir(current_dir)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries =
+        std::fs::read_dir(current_dir).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries.filter_map(|e| e.ok()) {
         let path = entry.path();

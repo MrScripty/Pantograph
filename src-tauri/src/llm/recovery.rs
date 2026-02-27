@@ -9,10 +9,10 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
+use crate::constants::ports;
 use crate::llm::health_monitor::ServerEvent;
 use crate::llm::port_manager::{check_port_available, find_available_port};
 use crate::llm::SharedGateway;
-use crate::constants::ports;
 
 /// Recovery strategy to use
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,11 +160,7 @@ impl RecoveryManager {
 
             // Calculate and apply backoff
             let backoff = self.calculate_backoff(attempt);
-            log::info!(
-                "Recovery attempt {} (waiting {:?})",
-                attempt + 1,
-                backoff
-            );
+            log::info!("Recovery attempt {} (waiting {:?})", attempt + 1, backoff);
             tokio::time::sleep(backoff).await;
 
             // Determine strategy based on attempt and config
@@ -239,10 +235,15 @@ impl RecoveryManager {
                 let port_status = check_port_available(ports::SERVER);
                 if !port_status.available {
                     // Find alternate port
-                    let alt_port = find_available_port(ports::ALTERNATE_START, ports::ALTERNATE_RANGE)
-                        .ok_or_else(|| "No alternate ports available".to_string())?;
+                    let alt_port =
+                        find_available_port(ports::ALTERNATE_START, ports::ALTERNATE_RANGE)
+                            .ok_or_else(|| "No alternate ports available".to_string())?;
 
-                    log::info!("Using alternate port {} (default {} is blocked)", alt_port, ports::SERVER);
+                    log::info!(
+                        "Using alternate port {} (default {} is blocked)",
+                        alt_port,
+                        ports::SERVER
+                    );
                     self.do_restart(app, gateway, Some(alt_port)).await
                 } else {
                     self.do_restart(app, gateway, None).await
@@ -256,9 +257,7 @@ impl RecoveryManager {
                 // Then restart
                 self.do_restart(app, gateway, None).await
             }
-            RecoveryStrategy::Abandon => {
-                Err("Abandoning recovery".to_string())
-            }
+            RecoveryStrategy::Abandon => Err("Abandoning recovery".to_string()),
         }
     }
 
@@ -281,7 +280,10 @@ impl RecoveryManager {
         // For now, this is a placeholder - the actual implementation would need
         // to store and restore the full server configuration
 
-        Err("Restart not fully implemented - manual restart required. Use the UI to reconnect.".to_string())
+        Err(
+            "Restart not fully implemented - manual restart required. Use the UI to reconnect."
+                .to_string(),
+        )
     }
 
     /// Get the configuration

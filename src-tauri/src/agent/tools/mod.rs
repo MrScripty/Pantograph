@@ -19,11 +19,7 @@ pub use read::ReadGuiFileTool;
 pub use write::{WriteGuiFileArgs, WriteGuiFileTool};
 
 // Re-export list tools
-pub use list::{
-    ListComponentsTool,
-    ListTemplatesTool,
-    ReadTemplateTool,
-};
+pub use list::{ListComponentsTool, ListTemplatesTool, ReadTemplateTool};
 
 // Re-export tailwind tool
 pub use tailwind::GetTailwindColorsTool;

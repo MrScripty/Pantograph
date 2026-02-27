@@ -60,11 +60,9 @@ pub fn create_ui_agent(
     write_tracker: WriteTracker,
     sandbox_config: SandboxConfig,
 ) -> rig::agent::Agent<CompletionModel> {
-    let write_tool = WriteGuiFileTool::with_tracker(
-        project_root.clone(),
-        write_tracker,
-        enricher_registry,
-    ).with_sandbox_config(sandbox_config);
+    let write_tool =
+        WriteGuiFileTool::with_tracker(project_root.clone(), write_tracker, enricher_registry)
+            .with_sandbox_config(sandbox_config);
 
     // NO doc search tools - documentation is served automatically via the enricher pipeline
     client

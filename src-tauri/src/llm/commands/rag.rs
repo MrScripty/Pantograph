@@ -223,11 +223,15 @@ pub async fn index_docs_with_switch(
             // Candle uses local SafeTensors model directories (not GGUF files)
             // Get the path from config (user must download model manually from HuggingFace)
             let config_guard = config.read().await;
-            let candle_path = config_guard.models.candle_embedding_model_path.clone()
+            let candle_path = config_guard
+                .models
+                .candle_embedding_model_path
+                .clone()
                 .ok_or_else(|| {
                     "Candle embedding model path not configured. \
                      Download a SafeTensors model from HuggingFace (e.g., BAAI/bge-small-en-v1.5) \
-                     and set the path in Settings.".to_string()
+                     and set the path in Settings."
+                        .to_string()
                 })?;
             drop(config_guard);
 

@@ -10,6 +10,7 @@ use crate::agent::{
 };
 use crate::llm::gateway::SharedGateway;
 use crate::llm::types::*;
+use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
 use rig::streaming::{
@@ -18,7 +19,6 @@ use rig::streaming::{
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{command, ipc::Channel, AppHandle, State};
-use futures_util::StreamExt;
 
 #[command]
 pub async fn run_agent(
@@ -54,8 +54,8 @@ pub async fn run_agent(
 
     // Get the project root - in dev mode, current_dir is src-tauri, so we go up one level
     // to get to the actual project root where src/generated lives
-    let current_dir = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+    let current_dir =
+        std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
     let project_root = current_dir
         .parent()
         .map(PathBuf::from)
@@ -155,9 +155,15 @@ pub async fn run_agent(
     } else {
         format_agent_prompt_with_analysis(&request, &vision_analysis, &project_root)
     };
-    log::info!("[run_agent] Agent prompt ({}): {}",
-        if request.fix_mode { "fix mode" } else { "normal mode" },
-        prompt);
+    log::info!(
+        "[run_agent] Agent prompt ({}): {}",
+        if request.fix_mode {
+            "fix mode"
+        } else {
+            "normal mode"
+        },
+        prompt
+    );
 
     // Send the prompt to the frontend for visibility
     channel
@@ -295,11 +301,7 @@ pub async fn run_agent(
                         })),
                     })
                     .ok();
-                log::info!(
-                    "[run_agent] Tool result for {}: {}",
-                    result.id,
-                    result_text
-                );
+                log::info!("[run_agent] Tool result for {}: {}", result.id, result_text);
 
                 // Early termination: if write_gui_file succeeded, send ComponentCreated and stop
                 if result_text == "true" {
@@ -312,12 +314,12 @@ pub async fn run_agent(
                                 .replace('/', "_")
                                 .replace('\\', "_");
 
-                            let (x, y, width, height) = if let Some(bounds) = &request.drawing_bounds
-                            {
-                                (bounds.min_x, bounds.min_y, bounds.width, bounds.height)
-                            } else {
-                                (100.0, 100.0, 200.0, 100.0)
-                            };
+                            let (x, y, width, height) =
+                                if let Some(bounds) = &request.drawing_bounds {
+                                    (bounds.min_x, bounds.min_y, bounds.width, bounds.height)
+                                } else {
+                                    (100.0, 100.0, 200.0, 100.0)
+                                };
 
                             let component_update = ComponentUpdate {
                                 id,
@@ -482,10 +484,7 @@ fn format_agent_prompt_with_analysis(
     let mut prompt = String::new();
 
     // Add vision analysis
-    prompt.push_str(&format!(
-        "## Drawing Analysis\n{}\n\n",
-        vision_analysis
-    ));
+    prompt.push_str(&format!("## Drawing Analysis\n{}\n\n", vision_analysis));
 
     // Add drawing bounds context
     if let Some(bounds) = &request.drawing_bounds {
@@ -509,9 +508,15 @@ fn format_agent_prompt_with_analysis(
                 Preserve functionality that wasn't requested to change.\n\n",
                 target_path, existing_source, target_path
             ));
-            log::info!("[format_agent_prompt] Edit mode: including source for {}", target_path);
+            log::info!(
+                "[format_agent_prompt] Edit mode: including source for {}",
+                target_path
+            );
         } else {
-            log::warn!("[format_agent_prompt] Could not read component at {:?}", full_path);
+            log::warn!(
+                "[format_agent_prompt] Could not read component at {:?}",
+                full_path
+            );
         }
     }
 

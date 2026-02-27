@@ -189,7 +189,10 @@ pub fn validate_runtime_semantics(
 
         match result {
             Ok(value) => {
-                let result_str = value.to_string(&mut context).map(|s| s.to_std_string_escaped()).unwrap_or_default();
+                let result_str = value
+                    .to_string(&mut context)
+                    .map(|s| s.to_std_string_escaped())
+                    .unwrap_or_default();
                 Ok(result_str)
             }
             Err(e) => Err(e.to_string()),
@@ -236,7 +239,10 @@ fn handle_validation_result(result: &str) -> Result<(), RuntimeValidationError> 
 
 fn handle_js_error(error_str: &str) -> Result<(), RuntimeValidationError> {
     // Check if it's a timeout
-    if error_str.contains("timeout") || error_str.contains("Timeout") || error_str.contains("timed out") {
+    if error_str.contains("timeout")
+        || error_str.contains("Timeout")
+        || error_str.contains("timed out")
+    {
         return Err(RuntimeValidationError::Timeout);
     }
 
@@ -264,7 +270,14 @@ fn handle_js_error(error_str: &str) -> Result<(), RuntimeValidationError> {
         // - $effect, $effect.pre, $effect.tracking, $effect.root
         // - $props, $bindable, $inspect, $host, $id
         let svelte_runes = [
-            "$props", "$state", "$derived", "$effect", "$bindable", "$inspect", "$host", "$id",
+            "$props",
+            "$state",
+            "$derived",
+            "$effect",
+            "$bindable",
+            "$inspect",
+            "$host",
+            "$id",
         ];
         if svelte_runes.iter().any(|rune| error_str.contains(rune)) {
             log::debug!("Ignoring expected rune undefined error: {}", error_str);

@@ -2,14 +2,15 @@
 //!
 //! Handles downloading, caching, and managing local copies of Svelte documentation.
 
-use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use thiserror::Error;
 
 use super::docs_index::SearchIndex;
 
-const SVELTE_DOCS_BASE_URL: &str = "https://raw.githubusercontent.com/sveltejs/svelte/svelte%405.46.3/documentation/docs";
+const SVELTE_DOCS_BASE_URL: &str =
+    "https://raw.githubusercontent.com/sveltejs/svelte/svelte%405.46.3/documentation/docs";
 const DOCS_STALENESS_DAYS: i64 = 30;
 
 #[derive(Debug, Error)]
@@ -82,7 +83,10 @@ impl DocsManager {
         if let Ok(metadata) = self.load_metadata() {
             let age = Utc::now().signed_duration_since(metadata.downloaded_at);
             if age.num_days() > DOCS_STALENESS_DAYS {
-                log::info!("Svelte docs are stale ({} days old), consider updating via the UI", age.num_days());
+                log::info!(
+                    "Svelte docs are stale ({} days old), consider updating via the UI",
+                    age.num_days()
+                );
             }
         }
 
@@ -101,57 +105,72 @@ impl DocsManager {
         // These are the key sections for Svelte 5
         // Svelte 5.46.3 documentation structure (verified from GitHub)
         let doc_sections = vec![
-            ("01-introduction", vec![
-                "01-overview.md",
-                "02-getting-started.md",
-                "03-svelte-files.md",
-                "04-svelte-js-files.md",
-            ]),
-            ("02-runes", vec![
-                "01-what-are-runes.md",
-                "02-$state.md",
-                "03-$derived.md",
-                "04-$effect.md",
-                "05-$props.md",
-                "06-$bindable.md",
-                "07-$inspect.md",
-                "08-$host.md",
-            ]),
-            ("03-template-syntax", vec![
-                "01-basic-markup.md",
-                "02-if.md",
-                "03-each.md",
-                "04-key.md",
-                "05-await.md",
-                "06-snippet.md",
-                "07-@render.md",
-                "08-@html.md",
-                "09-@attach.md",
-                "10-@const.md",
-                "11-@debug.md",
-                "12-bind.md",
-                "13-use.md",
-                "14-transition.md",
-                "15-in-and-out.md",
-                "16-animate.md",
-                "17-style.md",
-                "18-class.md",
-            ]),
-            ("04-styling", vec![
-                "01-scoped-styles.md",
-                "02-global-styles.md",
-                "03-custom-properties.md",
-                "04-nested-style-elements.md",
-            ]),
-            ("05-special-elements", vec![
-                "01-svelte-boundary.md",
-                "02-svelte-window.md",
-                "03-svelte-document.md",
-                "04-svelte-body.md",
-                "05-svelte-head.md",
-                "06-svelte-element.md",
-                "07-svelte-options.md",
-            ]),
+            (
+                "01-introduction",
+                vec![
+                    "01-overview.md",
+                    "02-getting-started.md",
+                    "03-svelte-files.md",
+                    "04-svelte-js-files.md",
+                ],
+            ),
+            (
+                "02-runes",
+                vec![
+                    "01-what-are-runes.md",
+                    "02-$state.md",
+                    "03-$derived.md",
+                    "04-$effect.md",
+                    "05-$props.md",
+                    "06-$bindable.md",
+                    "07-$inspect.md",
+                    "08-$host.md",
+                ],
+            ),
+            (
+                "03-template-syntax",
+                vec![
+                    "01-basic-markup.md",
+                    "02-if.md",
+                    "03-each.md",
+                    "04-key.md",
+                    "05-await.md",
+                    "06-snippet.md",
+                    "07-@render.md",
+                    "08-@html.md",
+                    "09-@attach.md",
+                    "10-@const.md",
+                    "11-@debug.md",
+                    "12-bind.md",
+                    "13-use.md",
+                    "14-transition.md",
+                    "15-in-and-out.md",
+                    "16-animate.md",
+                    "17-style.md",
+                    "18-class.md",
+                ],
+            ),
+            (
+                "04-styling",
+                vec![
+                    "01-scoped-styles.md",
+                    "02-global-styles.md",
+                    "03-custom-properties.md",
+                    "04-nested-style-elements.md",
+                ],
+            ),
+            (
+                "05-special-elements",
+                vec![
+                    "01-svelte-boundary.md",
+                    "02-svelte-window.md",
+                    "03-svelte-document.md",
+                    "04-svelte-body.md",
+                    "05-svelte-head.md",
+                    "06-svelte-element.md",
+                    "07-svelte-options.md",
+                ],
+            ),
         ];
 
         let client = reqwest::Client::new();
@@ -173,7 +192,12 @@ impl DocsManager {
                             doc_count += 1;
                             log::debug!("Downloaded: {}/{}", section, file);
                         } else {
-                            log::warn!("Failed to download {}/{}: {}", section, file, response.status());
+                            log::warn!(
+                                "Failed to download {}/{}: {}",
+                                section,
+                                file,
+                                response.status()
+                            );
                         }
                     }
                     Err(e) => {
@@ -214,7 +238,9 @@ impl DocsManager {
     pub fn load_index(&self) -> Result<SearchIndex, DocsError> {
         let index_path = self.index_path();
         if !index_path.exists() {
-            return Err(DocsError::NotAvailable("Search index not found".to_string()));
+            return Err(DocsError::NotAvailable(
+                "Search index not found".to_string(),
+            ));
         }
 
         let content = std::fs::read_to_string(index_path)?;
@@ -251,5 +277,4 @@ impl DocsManager {
             is_stale,
         }
     }
-
 }

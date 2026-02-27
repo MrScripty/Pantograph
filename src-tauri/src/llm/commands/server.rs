@@ -88,10 +88,7 @@ pub async fn start_sidecar_inference(
     rag_manager: State<'_, SharedRagManager>,
 ) -> Result<ServerModeInfo, String> {
     let backend_name = gateway.current_backend_name().await;
-    log::info!(
-        "Starting sidecar inference with backend: {}",
-        backend_name
-    );
+    log::info!("Starting sidecar inference with backend: {}", backend_name);
 
     let config_guard = config.read().await;
 
