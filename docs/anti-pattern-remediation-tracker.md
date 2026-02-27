@@ -1,6 +1,6 @@
 # Anti-Pattern Remediation Tracker
 
-Last updated: 2026-02-27 (Phase 2 complete)
+Last updated: 2026-02-27 (Phase 3 complete)
 
 ## Objective
 
@@ -13,7 +13,7 @@ Track remediation of repo anti-pattern findings with phased, testable changes.
 | 0 | Tracker + baseline | Complete | Codex | Tracker added and scoped issues mapped |
 | 1 | Runtime/process correctness | Complete | Codex | No orphan process on timeout; llama lifecycle non-blocking and cross-platform |
 | 2 | Svelte DOM manipulation cleanup | Complete | Codex | `svelte/no-dom-manipulating` resolved without regressing generated-component HMR/state |
-| 3 | Quality gate realignment | Pending | Codex | `check` blocks critical anti-patterns in app/package code |
+| 3 | Quality gate realignment | Complete | Codex | `check` blocks critical anti-patterns in app/package code |
 | 4 | Store/service efficiency + retention | Pending | Codex | Link sync no longer global 100ms polling; logger bounded |
 | 5 | Deferred process-node hardening | Backlog | Codex | Capability gating + policy controls for untrusted workflows |
 
@@ -96,3 +96,32 @@ Potential standards improvement identified during Phase 1 work:
 Potential standards improvement identified during Phase 2 work:
 
 - Add a frontend standard requiring reactive/declarative updates over direct DOM mutation in component code, with an explicit exception process for generator/HMR edge cases (documented rationale + scoped suppression).
+
+## Phase 3 Plan
+
+### Scope
+
+- `package.json`
+- `scripts/check-critical-antipatterns.mjs`
+- `README.md`
+
+### Work Items
+
+1. Add a cross-platform critical anti-pattern gate targeting `src/` and `packages/`.
+2. Wire the new gate into the primary `npm run check` path.
+3. Keep full lint available (`lint:full`) while avoiding blockage from unrelated baseline lint debt.
+
+### Validation
+
+- `npm run lint:critical`
+- `npm run check`
+
+### Phase 3 Completion Notes
+
+- Added `scripts/check-critical-antipatterns.mjs` as a cross-platform Node quality gate.
+- Added `npm run lint:critical` and integrated it into `npm run check`.
+- Gate now blocks high-risk anti-patterns in app/package code without requiring full-lint debt burn-down first.
+
+Potential standards improvement identified during Phase 3 work:
+
+- Add a standards requirement for **tiered quality gates**: keep `check` blocking critical anti-patterns repo-wide, while allowing broader style/strictness debt to be burned down incrementally via a separate full-lint target.

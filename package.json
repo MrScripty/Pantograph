@@ -14,9 +14,10 @@
     "build:desktop": "tauri build",
     "lint": "eslint scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:full": "eslint src packages scripts eslint.config.mjs vite.config.ts --max-warnings 0",
+    "lint:critical": "node scripts/check-critical-antipatterns.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "test": "cargo test -p node-engine --lib && cargo test -p workflow-nodes --lib",
-    "check": "npm run lint && npm run typecheck && npm run test",
+    "check": "npm run lint && npm run lint:critical && npm run typecheck && npm run test",
     "hooks:install": "npx lefthook install"
   },
   "dependencies": {

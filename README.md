@@ -96,6 +96,9 @@ npm run lint
 # Full lint scan
 npm run lint:full
 
+# Critical anti-pattern gate (src/ + packages/)
+npm run lint:critical
+
 # Type check
 npm run typecheck
 
