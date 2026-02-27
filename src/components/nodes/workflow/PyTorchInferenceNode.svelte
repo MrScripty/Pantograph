@@ -32,6 +32,9 @@
   let dependencyState = $derived(
     (upstreamModelNode?.data?.dependency_status as { state?: string } | undefined)?.state ?? null
   );
+  let dependencyCode = $derived(
+    (upstreamModelNode?.data?.dependency_status as { code?: string } | undefined)?.code ?? null
+  );
 
   // PyTorch orange
   const nodeColor = '#ee4c2c';
@@ -45,7 +48,17 @@
     }[executionState]
   );
 
+  function dependencyTokenLabel(value: string): string {
+    return value.replaceAll('_', ' ');
+  }
+
   let dependencyText = $derived.by(() => {
+    if (dependencyCode === 'unpinned_dependency') {
+      return 'pinning required';
+    }
+    if (dependencyCode === 'modality_resolution_unknown') {
+      return 'modality unresolved';
+    }
     switch (dependencyState) {
       case 'ready':
         return 'deps ready';
@@ -64,7 +77,7 @@
       case 'failed':
         return 'deps failed';
       default:
-        return null;
+        return dependencyState ? `deps ${dependencyTokenLabel(dependencyState)}` : null;
     }
   });
 </script>

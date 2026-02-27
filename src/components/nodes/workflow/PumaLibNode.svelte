@@ -19,15 +19,19 @@
     constraints?: { min?: number; max?: number; allowed_values?: unknown[] };
   }
 
-  type DependencyState =
-    | 'ready'
-    | 'missing'
-    | 'installing'
-    | 'failed'
-    | 'unknown_profile'
-    | 'manual_intervention_required'
-    | 'profile_conflict'
-    | 'required_binding_omitted';
+  type DependencyState = string;
+
+  interface ModelDependencyPinSummary {
+    pinned: boolean;
+    requiredCount: number;
+    pinnedCount: number;
+    missingCount: number;
+  }
+
+  interface ModelDependencyRequiredPin {
+    name: string;
+    reasons?: string[];
+  }
 
   interface ModelDependencyBinding {
     bindingId: string;
@@ -38,6 +42,9 @@
     backendKey?: string;
     platformSelector?: string;
     envId: string;
+    pinSummary?: ModelDependencyPinSummary;
+    requiredPins?: ModelDependencyRequiredPin[];
+    missingPins?: string[];
   }
 
   interface ModelDependencyPlan {
@@ -49,16 +56,21 @@
     bindings?: ModelDependencyBinding[];
     selectedBindingIds?: string[];
     requiredBindingIds?: string[];
+    missingPins?: string[];
   }
 
   interface ModelDependencyBindingStatus {
     bindingId: string;
     envId: string;
     state: DependencyState;
+    code?: string;
     missingComponents?: string[];
     installedComponents?: string[];
     failedComponents?: string[];
     message?: string;
+    pinSummary?: ModelDependencyPinSummary;
+    requiredPins?: ModelDependencyRequiredPin[];
+    missingPins?: string[];
   }
 
   interface ModelDependencyStatus {
@@ -69,6 +81,7 @@
     planId?: string;
     bindings?: ModelDependencyBindingStatus[];
     checkedAt?: string;
+    missingPins?: string[];
   }
 
   interface ModelDependencyInstallResult {
@@ -79,6 +92,7 @@
     planId?: string;
     bindings?: ModelDependencyBindingStatus[];
     installedAt?: string;
+    missingPins?: string[];
   }
 
   interface Props {
@@ -485,9 +499,38 @@
     persistBindingSelection();
   }
 
-  function deriveDisplayState(): DependencyState | null {
+  function dependencyTokenLabel(value: string): string {
+    return value.replaceAll('_', ' ');
+  }
+
+  function dependencyCodeLabel(code?: string): string | null {
+    switch (code) {
+      case 'unpinned_dependency':
+        return 'pinning required';
+      case 'modality_resolution_unknown':
+        return 'modality unresolved';
+      case 'required_binding_omitted':
+        return 'binding omitted';
+      case 'profile_conflict':
+        return 'profile conflict';
+      case 'unknown_profile':
+        return 'unknown profile';
+      case 'manual_intervention_required':
+        return 'manual review';
+      default:
+        return code ? dependencyTokenLabel(code) : null;
+    }
+  }
+
+  function deriveDisplayState(): string | null {
     if (dependencyStatus) return dependencyStatus.state;
     if (dependencyPlan) return dependencyPlan.state;
+    return null;
+  }
+
+  function deriveDisplayCode(): string | null {
+    if (dependencyStatus?.code) return dependencyStatus.code;
+    if (dependencyPlan?.code) return dependencyPlan.code;
     return null;
   }
 
@@ -509,10 +552,17 @@
         return { label: 'profile conflict', className: 'text-orange-400 border-orange-500/40' };
       case 'required_binding_omitted':
         return { label: 'binding omitted', className: 'text-fuchsia-400 border-fuchsia-500/40' };
-      default:
+      case 'failed':
         return { label: 'deps failed', className: 'text-red-400 border-red-500/40' };
+      default:
+        return {
+          label: `deps ${dependencyTokenLabel(state)}`,
+          className: 'text-neutral-300 border-neutral-600/50',
+        };
     }
   });
+
+  const dependencyCodeText = $derived.by(() => dependencyCodeLabel(deriveDisplayCode() ?? undefined));
 </script>
 
 <div class="puma-lib-node-wrapper">
@@ -564,6 +614,11 @@
                 {dependencyStatus?.message ?? dependencyPlan?.message}
               </div>
             {/if}
+            {#if dependencyCodeText}
+              <div class="mt-1 text-[9px] text-amber-300 truncate" title={deriveDisplayCode() ?? undefined}>
+                code: {dependencyCodeText}
+              </div>
+            {/if}
             {#if (dependencyStatus?.reviewReasons?.length ?? 0) > 0 || (dependencyPlan?.reviewReasons?.length ?? 0) > 0}
               <div class="mt-1 text-[9px] text-rose-300">
                 {(dependencyStatus?.reviewReasons ?? dependencyPlan?.reviewReasons ?? []).join(', ')}
@@ -594,7 +649,10 @@
                   {binding.profileId} v{binding.profileVersion}
                 </div>
                 {#if row}
-                  <div class="text-[9px] text-neutral-400">{row.state}</div>
+                  <div class="text-[9px] text-neutral-400">{dependencyTokenLabel(row.state)}</div>
+                  {#if row.code}
+                    <div class="text-[9px] text-amber-300">{dependencyCodeLabel(row.code)}</div>
+                  {/if}
                   {#if (row.missingComponents?.length ?? 0) > 0}
                     <div class="text-[9px] text-amber-300 truncate" title={row.missingComponents?.join(', ')}>
                       missing: {row.missingComponents?.join(', ')}
