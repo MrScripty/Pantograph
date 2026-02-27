@@ -330,6 +330,7 @@ fn main() {
             workflow::commands::check_model_dependencies,
             workflow::commands::install_model_dependencies,
             workflow::commands::get_model_dependency_status,
+            workflow::commands::audit_dependency_pin_compliance,
             // Node group commands
             workflow::groups::create_node_group,
             workflow::groups::expand_node_group,

@@ -1,5 +1,8 @@
 use super::model_dependencies::SharedModelDependencyResolver;
+use std::sync::Arc;
 use tauri::State;
+
+use super::commands::SharedExtensions;
 
 fn build_model_dependency_request(
     node_type: String,
@@ -161,6 +164,25 @@ pub async fn get_model_dependency_status(
     }
 }
 
+async fn require_pumas_api(
+    extensions: &State<'_, SharedExtensions>,
+) -> Result<Arc<pumas_library::PumasApi>, String> {
+    let ext = extensions.read().await;
+    ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+        .cloned()
+        .ok_or_else(|| "Pumas API not available in executor extensions".to_string())
+}
+
+/// Return current dependency pin compliance audit report from pumas-library.
+pub async fn audit_dependency_pin_compliance(
+    extensions: State<'_, SharedExtensions>,
+) -> Result<pumas_library::model_library::DependencyPinAuditReport, String> {
+    let api = require_pumas_api(&extensions).await?;
+    api.audit_dependency_pin_compliance()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +245,36 @@ mod tests {
             request.selected_binding_ids,
             vec!["binding-a".to_string(), "binding-b".to_string()]
         );
+    }
+
+    #[test]
+    fn test_dependency_pin_audit_report_serializes_expected_shape() {
+        let report = pumas_library::model_library::DependencyPinAuditReport {
+            generated_at: "2026-02-27T00:00:00Z".to_string(),
+            total_models_scanned: 1,
+            total_bindings_scanned: 2,
+            issue_count: 1,
+            binding_issues: vec![pumas_library::model_library::DependencyPinAuditBindingIssue {
+                model_id: "m1".to_string(),
+                binding_id: "b1".to_string(),
+                profile_id: "p1".to_string(),
+                profile_version: 2,
+                binding_kind: "required".to_string(),
+                backend_key: Some("pytorch".to_string()),
+                error_code: "unpinned_dependency".to_string(),
+                message: Some("missing torch".to_string()),
+                missing_pins: vec!["torch".to_string()],
+                required_pins: vec![pumas_library::model_library::ModelDependencyRequiredPin {
+                    name: "torch".to_string(),
+                    reasons: vec!["backend_required".to_string()],
+                }],
+            }],
+            profile_issues: Vec::new(),
+        };
+
+        let value = serde_json::to_value(report).expect("report should serialize");
+        assert!(value.get("generated_at").is_some());
+        assert!(value.get("total_models_scanned").is_some());
+        assert!(value.get("binding_issues").is_some());
     }
 }

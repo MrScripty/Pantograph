@@ -369,3 +369,10 @@ pub async fn get_model_dependency_status(
     )
     .await
 }
+
+#[command]
+pub async fn audit_dependency_pin_compliance(
+    extensions: State<'_, SharedExtensions>,
+) -> Result<pumas_library::model_library::DependencyPinAuditReport, String> {
+    super::model_dependency_commands::audit_dependency_pin_compliance(extensions).await
+}
