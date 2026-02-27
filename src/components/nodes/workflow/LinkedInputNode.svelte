@@ -33,11 +33,6 @@
   let elementLabel = $derived(mapping?.elementLabel ?? '');
   let errorMessage = $derived(mapping?.errorMessage ?? '');
 
-  // Debug: log when mapping changes
-  $effect(() => {
-    console.log('[LinkedInputNode] id:', id, 'mapping:', mapping, 'status:', status);
-  });
-
   // Sync linked value to node data for execution
   $effect(() => {
     if (status === 'linked' && linkedValue !== data.linked_value) {

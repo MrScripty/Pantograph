@@ -14,6 +14,7 @@
   import { promptHistoryStore } from '../stores/promptHistoryStore';
   import {
     registerLinkable,
+    notifyLinkableValueChanged,
     linkModeActive,
     createLink,
   } from '../stores/linkStore';
@@ -25,6 +26,11 @@
   // Sync input value back to store when it changes (so it persists across view switches)
   $effect(() => {
     topBarInputValue.set(inputValue);
+  });
+
+  // Push value updates to linked-input mappings without global polling.
+  $effect(() => {
+    notifyLinkableValueChanged('topbar-input', inputValue);
   });
 
   // Prompt history state - synced with persistent store

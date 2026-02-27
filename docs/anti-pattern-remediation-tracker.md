@@ -1,6 +1,6 @@
 # Anti-Pattern Remediation Tracker
 
-Last updated: 2026-02-27 (Phase 3 complete)
+Last updated: 2026-02-27 (Phase 4 complete)
 
 ## Objective
 
@@ -14,7 +14,7 @@ Track remediation of repo anti-pattern findings with phased, testable changes.
 | 1 | Runtime/process correctness | Complete | Codex | No orphan process on timeout; llama lifecycle non-blocking and cross-platform |
 | 2 | Svelte DOM manipulation cleanup | Complete | Codex | `svelte/no-dom-manipulating` resolved without regressing generated-component HMR/state |
 | 3 | Quality gate realignment | Complete | Codex | `check` blocks critical anti-patterns in app/package code |
-| 4 | Store/service efficiency + retention | Pending | Codex | Link sync no longer global 100ms polling; logger bounded |
+| 4 | Store/service efficiency + retention | Complete | Codex | Link sync no longer global 100ms polling; logger bounded |
 | 5 | Deferred process-node hardening | Backlog | Codex | Capability gating + policy controls for untrusted workflows |
 
 ## Finding-to-Phase Mapping
@@ -125,3 +125,33 @@ Potential standards improvement identified during Phase 2 work:
 Potential standards improvement identified during Phase 3 work:
 
 - Add a standards requirement for **tiered quality gates**: keep `check` blocking critical anti-patterns repo-wide, while allowing broader style/strictness debt to be burned down incrementally via a separate full-lint target.
+
+## Phase 4 Plan
+
+### Scope
+
+- `src/stores/linkStore.ts`
+- `src/components/TopBar.svelte`
+- `src/components/side-panel/FollowUpInput.svelte`
+- `src/services/Logger.ts`
+
+### Work Items
+
+1. Remove global 100ms link-value polling and replace with event-driven updates.
+2. Push value change notifications from linkable inputs to keep `LinkedInputNode` previews current.
+3. Bound in-memory logger retention to prevent unbounded growth.
+
+### Validation
+
+- `npm run typecheck`
+- `npm run check`
+
+### Phase 4 Completion Notes
+
+- Removed interval-based link synchronization from `linkStore` and replaced it with targeted update helpers driven by element notifications/subscriptions.
+- Updated `TopBar` and `FollowUpInput` to emit direct value-change notifications so link mappings stay fresh without background polling.
+- `Logger` now uses a bounded ring buffer with retention stats (`maxEvents`, `retainedEvents`, `droppedEvents`) to cap memory usage.
+
+Potential standards improvement identified during Phase 4 work:
+
+- Add an explicit frontend/runtime rule to **forbid global high-frequency polling loops for UI state synchronization** when event-driven hooks are feasible, and require explicit retention limits for in-memory observability buffers.

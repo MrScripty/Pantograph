@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import {
     registerLinkable,
+    notifyLinkableValueChanged,
     linkModeActive,
     createLink,
   } from '../../stores/linkStore';
@@ -21,6 +22,11 @@
   }: Props = $props();
 
   let followUpInput = $state('');
+
+  // Push value updates to linked-input mappings without global polling.
+  $effect(() => {
+    notifyLinkableValueChanged('follow-up-input', followUpInput);
+  });
 
   // Register this input as linkable
   onMount(() => {
