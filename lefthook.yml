@@ -1,0 +1,28 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.{js,mjs,cjs,ts,svelte}"
+      run: npx eslint {staged_files} --max-warnings 0
+
+    typecheck:
+      glob: "*.{ts}"
+      run: npm run typecheck
+
+pre-push:
+  commands:
+    test:
+      run: npm test
+
+commit-msg:
+  commands:
+    conventional:
+      run: |
+        commit_msg=$(cat {1})
+        pattern="^(feat|fix|refactor|chore|docs|style|test|perf|ci)(\(.+\))?: .{1,}"
+        if ! echo "$commit_msg" | grep -qE "$pattern"; then
+          echo "Invalid commit message format."
+          echo "Expected: <type>(<scope>): <description>"
+          echo "Types: feat, fix, refactor, chore, docs, style, test, perf, ci"
+          exit 1
+        fi

@@ -18,6 +18,10 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "allowJs": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": [
         "./src/*"
@@ -43,5 +47,18 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "packages/svelte-graph/src/**/*.ts",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src-tauri",
+    "target",
+    ".venv"
+  ]
 }

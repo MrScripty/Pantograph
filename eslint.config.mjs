@@ -12,27 +12,65 @@ const pantographPlugin = {
 };
 
 export default [
+  {
+    // Flat-config ignores must be in a standalone object.
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'target/**',
+      '.venv/**',
+      'src-tauri/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...svelte.configs['flat/recommended'],
   {
+    files: ['scripts/**/*.mjs', '*.config.{js,mjs,cjs}', 'vite.config.ts', 'eslint.config.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrors: 'none',
+        },
+      ],
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['src/**/*.{ts,svelte}', 'packages/svelte-graph/src/**/*.{ts,svelte}'],
     languageOptions: {
       globals: {
         ...globals.browser,
       },
     },
+    rules: {
+      // Use TS-aware variant; base rule causes duplicate reports on TS files.
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
+    files: ['src/generated/**/*.svelte'],
     plugins: {
       pantograph: pantographPlugin,
     },
     rules: {
-      // Catch suspicious undefined usage - explicit undefined assignment is almost always a mistake
+      // Keep stricter guardrails for generated components.
       'no-undefined': 'error',
-      // Catch unused variables (ignore underscore-prefixed for intentional unused params)
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      // Catch implicit type coercion (e.g., +value, !!value)
       'no-implicit-coercion': 'error',
-      // Catch unused expressions that don't affect anything
       'no-unused-expressions': 'error',
+      'pantograph/no-svg-text-content': 'error',
     },
   },
   {
@@ -46,12 +84,6 @@ export default [
       // Svelte 5 uses runes like $state, $derived which look like undefined globals
       // These are compile-time constructs, not runtime variables
       'no-undef': 'off',
-      // Catch string interpolation inside SVG elements (common agent mistake)
-      'pantograph/no-svg-text-content': 'error',
     },
-  },
-  {
-    // Ignore generated files and node_modules
-    ignores: ['node_modules/**', 'dist/**', 'src-tauri/**'],
-  },
+  }
 ];

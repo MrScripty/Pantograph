@@ -1,6 +1,6 @@
 # Compliance Remediation Tracker
 
-Last updated: 2026-02-27 (PR-2 implementation pass 1)
+Last updated: 2026-02-27 (PR-3 implementation pass 1)
 
 ## PR-1 Security Boundary Hardening
 
@@ -57,12 +57,28 @@ Status: Completed
 
 ## PR-3 Tooling and Quality Gates
 
-Status: Not started
+Status: Completed
 
-- [ ] Add `.editorconfig`.
-- [ ] Add `lefthook.yml`.
-- [ ] Add `lint`, `typecheck`, `test` scripts.
-- [ ] Tighten `tsconfig` strictness and lint config.
+- [x] Add `.editorconfig`.
+- [x] Add `lefthook.yml`.
+- [x] Add `lint`, `typecheck`, `test` scripts.
+- [x] Tighten `tsconfig` strictness and lint config.
+
+### Verification run (2026-02-27)
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+
+### Files touched in PR-3
+
+- `.editorconfig`
+- `lefthook.yml`
+- `package.json`
+- `tsconfig.json`
+- `eslint.config.mjs`
+- `vite.config.ts`
+- `scripts/validate-vite.mjs`
 
 ## PR-4 Accessibility Baseline
 

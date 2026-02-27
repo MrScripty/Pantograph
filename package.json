@@ -11,7 +11,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "dev:desktop": "tauri dev",
-    "build:desktop": "tauri build"
+    "build:desktop": "tauri build",
+    "lint": "eslint scripts eslint.config.mjs vite.config.ts --max-warnings 0",
+    "lint:full": "eslint src packages scripts eslint.config.mjs vite.config.ts --max-warnings 0",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
+    "test": "cargo test -p node-engine --lib && cargo test -p workflow-nodes --lib",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "hooks:install": "npx lefthook install"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",

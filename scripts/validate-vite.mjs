@@ -16,7 +16,6 @@
 import { createServer } from 'vite';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 
 const filepath = process.argv[2];
 const projectRoot = process.argv[3] || process.cwd();

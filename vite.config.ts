@@ -1,5 +1,5 @@
 import path from 'path';
-import { defineConfig, loadEnv, Plugin } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 // Pattern for generated components - used to split Svelte plugin instances
@@ -70,12 +70,13 @@ function generatedComponentsHMR(): Plugin {
         // Return empty array to prevent default HMR and stop propagation to Svelte plugin
         return [];
       }
+
+      return undefined;
     }
   };
 }
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
     return {
       server: {
         port: 3001,
