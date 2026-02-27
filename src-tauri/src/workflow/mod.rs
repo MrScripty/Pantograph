@@ -27,6 +27,7 @@ pub mod event_adapter;
 pub mod events;
 pub mod execution_manager;
 pub mod groups;
+pub mod model_dependencies;
 pub mod orchestration;
 pub mod registry;
 pub mod task_executor;
@@ -35,4 +36,5 @@ pub mod validation;
 
 // Re-export types used by main.rs
 pub use execution_manager::{ExecutionManager, SharedExecutionManager};
+pub use model_dependencies::SharedModelDependencyResolver;
 pub use orchestration::SharedOrchestrationStore;

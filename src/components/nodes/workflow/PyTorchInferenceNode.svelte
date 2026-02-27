@@ -1,7 +1,7 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
-  import { nodeExecutionStates, edges } from '../../../stores/workflowStore';
+  import { nodeExecutionStates, edges, nodes } from '../../../stores/workflowStore';
 
   interface Props {
     id: string;
@@ -23,6 +23,16 @@
     $edges.some((edge) => edge.target === id && edge.targetHandle === 'model_path')
   );
 
+  let upstreamModelNode = $derived.by(() => {
+    const edge = $edges.find((e) => e.target === id && e.targetHandle === 'model_path');
+    if (!edge) return null;
+    return $nodes.find((n) => n.id === edge.source) ?? null;
+  });
+
+  let dependencyState = $derived(
+    (upstreamModelNode?.data?.dependency_status as { state?: string } | undefined)?.state ?? null
+  );
+
   // PyTorch orange
   const nodeColor = '#ee4c2c';
 
@@ -34,6 +44,29 @@
       error: 'Error',
     }[executionState]
   );
+
+  let dependencyText = $derived.by(() => {
+    switch (dependencyState) {
+      case 'ready':
+        return 'deps ready';
+      case 'missing':
+        return 'deps missing';
+      case 'installing':
+        return 'deps installing';
+      case 'manual_intervention_required':
+        return 'manual review';
+      case 'unknown_profile':
+        return 'unknown profile';
+      case 'profile_conflict':
+        return 'profile conflict';
+      case 'required_binding_omitted':
+        return 'binding omitted';
+      case 'failed':
+        return 'deps failed';
+      default:
+        return null;
+    }
+  });
 </script>
 
 <div class="pytorch-node-wrapper" style="--node-color: {nodeColor}">
@@ -53,6 +86,9 @@
       <div class="space-y-2">
         <div class="flex items-center gap-2 text-xs text-neutral-400">
           <span>{statusText}</span>
+          {#if dependencyText}
+            <span class="text-[10px] text-neutral-500">| {dependencyText}</span>
+          {/if}
         </div>
         {#if !isModelConnected}
           <div class="text-[10px] text-amber-400">

@@ -61,6 +61,7 @@ pub mod error;
 pub mod events;
 pub mod extensions;
 pub mod groups;
+pub mod model_dependencies;
 pub mod orchestration;
 pub mod port_options;
 pub mod registry;
@@ -76,11 +77,11 @@ pub use core_executor::{resolve_node_type, CoreTaskExecutor};
 // Re-export key types from engine
 pub use engine::{CacheStats, CachedOutput, DemandEngine, TaskExecutor, WorkflowExecutor};
 pub use error::{NodeEngineError, Result};
-pub use extensions::{extension_keys, ExecutorExtensions};
 pub use events::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,
     NullEventSink, VecEventSink, WorkflowEvent,
 };
+pub use extensions::{extension_keys, ExecutorExtensions};
 pub use types::{
     EdgeId, ExecutionMode, GraphEdge, GraphNode, NodeCategory, NodeDefinition, NodeId,
     PortDataType, PortDefinition, PortId, WorkflowGraph,
@@ -94,6 +95,11 @@ pub use groups::{
 
 // Re-export descriptor types
 pub use descriptor::{DescriptorFn, PortMetadata, TaskDescriptor, TaskMetadata};
+pub use model_dependencies::{
+    DependencyState, ModelDependencyBinding, ModelDependencyBindingStatus,
+    ModelDependencyInstallResult, ModelDependencyPlan, ModelDependencyRequest,
+    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+};
 
 // Re-export port options types
 pub use port_options::{

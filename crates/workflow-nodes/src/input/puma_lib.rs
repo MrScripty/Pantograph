@@ -11,7 +11,9 @@
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, Task, TaskResult};
-use node_engine::{ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata};
+use node_engine::{
+    ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata,
+};
 
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
@@ -114,6 +116,25 @@ mod options_provider {
         .unwrap_or(serde_json::Value::Null)
     }
 
+    fn metadata_string(record: &pumas_library::ModelRecord, keys: &[&str]) -> Option<String> {
+        let obj = record.metadata.as_object()?;
+        keys.iter()
+            .find_map(|k| obj.get(*k).and_then(|v| v.as_str()).map(|s| s.to_string()))
+    }
+
+    fn pipeline_tag_to_task(pipeline_tag: &str) -> String {
+        match pipeline_tag.to_lowercase().as_str() {
+            "text-to-audio" | "text-to-speech" => "text-to-audio".to_string(),
+            "automatic-speech-recognition" => "audio-to-text".to_string(),
+            "text-to-image" | "image-to-image" => "text-to-image".to_string(),
+            "image-classification" | "object-detection" | "image-to-text" => {
+                "image-to-text".to_string()
+            }
+            "feature-extraction" | "sentence-similarity" => "feature-extraction".to_string(),
+            _ => "text-generation".to_string(),
+        }
+    }
+
     #[async_trait]
     impl PortOptionsProvider for PumaLibOptionsProvider {
         async fn query_options(
@@ -124,9 +145,7 @@ mod options_provider {
             let api = extensions
                 .get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
                 .ok_or_else(|| {
-                    NodeEngineError::ExecutionFailed(
-                        "Model library not available".to_string(),
-                    )
+                    NodeEngineError::ExecutionFailed("Model library not available".to_string())
                 })?;
 
             let records = if let Some(ref search) = query.search {
@@ -143,16 +162,55 @@ mod options_provider {
 
             let options: Vec<PortOption> = records
                 .iter()
-                .map(|m| PortOption {
-                    value: serde_json::json!(m.path),
-                    label: m.official_name.clone(),
-                    description: Some(format!("{} | {}", m.model_type, m.tags.join(", "))),
-                    metadata: Some(serde_json::json!({
-                        "id": m.id,
-                        "model_type": m.model_type,
-                        "cleaned_name": m.cleaned_name,
-                        "inference_settings": resolve_inference_settings(m),
-                    })),
+                .map(|m| {
+                    let pipeline_tag = metadata_string(m, &["pipeline_tag", "pipelineTag"]);
+                    let task_type_primary = metadata_string(
+                        m,
+                        &[
+                            "task_type_primary",
+                            "taskTypePrimary",
+                            "task_type",
+                            "taskType",
+                        ],
+                    )
+                    .or_else(|| pipeline_tag.as_deref().map(pipeline_tag_to_task))
+                    .unwrap_or_else(|| {
+                        if m.model_type.eq_ignore_ascii_case("audio") {
+                            "text-to-audio".to_string()
+                        } else {
+                            "text-generation".to_string()
+                        }
+                    });
+                    let dependency_bindings = m
+                        .metadata
+                        .get("dependency_bindings")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Array(Vec::new()));
+                    let review_reasons =
+                        m.metadata
+                            .get("review_reasons")
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                metadata_string(m, &["review_reason", "reviewReason"])
+                                    .map(|reason| serde_json::json!([reason]))
+                                    .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
+                            });
+
+                    PortOption {
+                        value: serde_json::json!(m.path),
+                        label: m.official_name.clone(),
+                        description: Some(format!("{} | {}", m.model_type, m.tags.join(", "))),
+                        metadata: Some(serde_json::json!({
+                            "id": m.id,
+                            "model_type": m.model_type,
+                            "cleaned_name": m.cleaned_name,
+                            "pipeline_tag": pipeline_tag,
+                            "task_type_primary": task_type_primary,
+                            "dependency_bindings": dependency_bindings,
+                            "review_reasons": review_reasons,
+                            "inference_settings": resolve_inference_settings(m),
+                        })),
+                    }
                 })
                 .collect();
 

@@ -13,14 +13,13 @@ mod workflow;
 use agent::create_rag_manager;
 use config::AppConfig;
 use constants::paths::DATA_DIR;
-use workflow::ExecutionManager;
 use llm::{
     check_embedding_server, check_health_now, check_llama_binaries, check_ollama_binary,
-    check_port_status, clear_rag_cache, connect_to_server, create_vector_database,
+    check_port_status, checkout_commit, clear_rag_cache, connect_to_server, create_vector_database,
     download_llama_binaries, download_ollama_binary, find_alternate_port, get_app_config,
-    get_backend_capabilities, checkout_commit, get_component_history, get_current_backend,
-    get_current_commit_info, get_default_port, get_device_config, get_embedding_memory_mode,
-    get_embedding_server_url, get_health_status, get_llm_status, get_model_config, get_rag_status,
+    get_backend_capabilities, get_component_history, get_current_backend, get_current_commit_info,
+    get_default_port, get_device_config, get_embedding_memory_mode, get_embedding_server_url,
+    get_health_status, get_llm_status, get_model_config, get_rag_status,
     get_recovery_attempt_count, get_recovery_config, get_redo_count, get_sandbox_config,
     get_server_mode, get_svelte_docs_status, get_system_prompt, get_timeline_commits,
     hard_delete_commit, index_docs_with_switch, index_rag_documents, is_embedding_server_ready,
@@ -31,12 +30,12 @@ use llm::{
     set_embedding_server_url, set_model_config, set_sandbox_config, set_system_prompt,
     start_health_monitor, start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm,
     stop_health_monitor, stop_llm, switch_backend, trigger_recovery, undo_component_change,
-    update_svelte_docs, validate_component, InferenceGateway, SharedAppConfig,
-    SharedGateway,
+    update_svelte_docs, validate_component, InferenceGateway, SharedAppConfig, SharedGateway,
 };
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
+use workflow::{ExecutionManager, SharedModelDependencyResolver};
 
 fn main() {
     // Initialize logging - shows logs in terminal when running in dev mode
@@ -59,13 +58,18 @@ fn main() {
         .expect("Failed to get project root from CARGO_MANIFEST_DIR");
     let orchestrations_path = project_root.join(".pantograph/orchestrations");
 
-    let mut orchestration_store = node_engine::OrchestrationStore::with_persistence(&orchestrations_path);
+    let mut orchestration_store =
+        node_engine::OrchestrationStore::with_persistence(&orchestrations_path);
 
     // Load existing orchestrations from disk
     match orchestration_store.load_from_disk() {
         Ok(count) => {
             if count > 0 {
-                log::info!("Loaded {} orchestrations from {:?}", count, orchestrations_path);
+                log::info!(
+                    "Loaded {} orchestrations from {:?}",
+                    count,
+                    orchestrations_path
+                );
             }
         }
         Err(e) => {
@@ -84,6 +88,14 @@ fn main() {
     let shared_extensions: workflow::commands::SharedExtensions =
         Arc::new(RwLock::new(node_engine::ExecutorExtensions::new()));
 
+    // Dependency resolver used by execution preflight and workflow dependency commands.
+    let model_dependency_resolver: SharedModelDependencyResolver = Arc::new(
+        workflow::model_dependencies::TauriModelDependencyResolver::new(
+            shared_extensions.clone(),
+            project_root.to_path_buf(),
+        ),
+    );
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -91,8 +103,10 @@ fn main() {
         .manage(orchestration_store)
         .manage(node_registry)
         .manage(shared_extensions.clone())
+        .manage(model_dependency_resolver.clone())
         .setup({
             let shared_extensions = shared_extensions.clone();
+            let model_dependency_resolver = model_dependency_resolver.clone();
             move |app| {
             let app_data_dir = app
                 .path()
@@ -166,12 +180,20 @@ fn main() {
             }
 
             let ext_init = shared_extensions.clone();
+            let resolver_for_ext = model_dependency_resolver.clone();
             tauri::async_runtime::spawn(async move {
                 let mut ext = ext_init.write().await;
                 workflow_nodes::setup_extensions_with_path(
                     &mut ext,
                     pumas_library_path.as_deref(),
                 ).await;
+
+                let resolver_trait: Arc<dyn node_engine::ModelDependencyResolver> =
+                    resolver_for_ext.clone();
+                ext.set(
+                    node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+                    resolver_trait,
+                );
 
                 // Initialize KV cache store for cache save/load/truncate nodes
                 let kv_store = std::sync::Arc::new(inference::kv_cache::KvCacheStore::new(
@@ -296,6 +318,10 @@ fn main() {
             // Port options query commands
             workflow::commands::query_port_options,
             workflow::commands::get_queryable_ports,
+            workflow::commands::resolve_model_dependency_plan,
+            workflow::commands::check_model_dependencies,
+            workflow::commands::install_model_dependencies,
+            workflow::commands::get_model_dependency_status,
             // Node group commands
             workflow::groups::create_node_group,
             workflow::groups::expand_node_group,

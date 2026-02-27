@@ -25,6 +25,7 @@ use node_engine::EventSink;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
+use super::model_dependencies::SharedModelDependencyResolver;
 use super::registry::NodeRegistry;
 use super::task_executor::TauriTaskExecutor;
 use super::types::{
@@ -38,6 +39,55 @@ pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
 
 /// Shared executor extensions (holds PumasApi etc.).
 pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
+
+#[derive(Clone, Default)]
+struct RuntimeExtensionsSnapshot {
+    pumas_api: Option<Arc<pumas_library::PumasApi>>,
+    kv_cache_store: Option<Arc<inference::kv_cache::KvCacheStore>>,
+    dependency_resolver: Option<Arc<dyn node_engine::ModelDependencyResolver>>,
+}
+
+fn snapshot_runtime_extensions(
+    shared: &node_engine::ExecutorExtensions,
+) -> RuntimeExtensionsSnapshot {
+    RuntimeExtensionsSnapshot {
+        pumas_api: shared
+            .get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+            .cloned(),
+        kv_cache_store: shared
+            .get::<Arc<inference::kv_cache::KvCacheStore>>(
+                node_engine::extension_keys::KV_CACHE_STORE,
+            )
+            .cloned(),
+        dependency_resolver: shared
+            .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
+                node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+            )
+            .cloned(),
+    }
+}
+
+fn apply_runtime_extensions(
+    executor: &mut node_engine::WorkflowExecutor,
+    snapshot: &RuntimeExtensionsSnapshot,
+) {
+    if let Some(api) = &snapshot.pumas_api {
+        executor
+            .extensions_mut()
+            .set(node_engine::extension_keys::PUMAS_API, api.clone());
+    }
+    if let Some(store) = &snapshot.kv_cache_store {
+        executor
+            .extensions_mut()
+            .set(node_engine::extension_keys::KV_CACHE_STORE, store.clone());
+    }
+    if let Some(resolver) = &snapshot.dependency_resolver {
+        executor.extensions_mut().set(
+            node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+            resolver.clone(),
+        );
+    }
+}
 
 /// Get the workflows directory path
 fn get_workflows_dir() -> Result<PathBuf, String> {
@@ -102,7 +152,13 @@ pub fn save_workflow(name: String, graph: WorkflowGraph) -> Result<String, Strin
     // Sanitize the name for filesystem
     let safe_name: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
 
     let file_path = workflows_dir.join(format!("{}.json", safe_name));
@@ -126,8 +182,7 @@ pub fn save_workflow(name: String, graph: WorkflowGraph) -> Result<String, Strin
     let json = serde_json::to_string_pretty(&workflow_file)
         .map_err(|e| format!("Failed to serialize workflow: {}", e))?;
 
-    fs::write(&file_path, json)
-        .map_err(|e| format!("Failed to write workflow file: {}", e))?;
+    fs::write(&file_path, json).map_err(|e| format!("Failed to write workflow file: {}", e))?;
 
     Ok(file_path.to_string_lossy().to_string())
 }
@@ -210,6 +265,7 @@ pub async fn execute_workflow_v2(
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
     execution_manager: State<'_, SharedExecutionManager>,
+    extensions: State<'_, SharedExtensions>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<String, String> {
     // Get project root
@@ -256,12 +312,18 @@ pub async fn execute_workflow_v2(
         .collect();
 
     // Execute by demanding outputs from terminal nodes
+    let runtime_ext = {
+        let shared = extensions.read().await;
+        snapshot_runtime_extensions(&shared)
+    };
+
     {
         let mut executions = execution_manager.executions().await;
         let state = executions
             .get_mut(&execution_id)
             .ok_or_else(|| "Execution not found".to_string())?;
         state.touch();
+        apply_runtime_extensions(&mut state.executor, &runtime_ext);
 
         // Push initial snapshot for undo
         let _ = state.push_undo_snapshot().await;
@@ -516,6 +578,7 @@ pub async fn run_workflow_session(
     gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
     execution_manager: State<'_, SharedExecutionManager>,
+    extensions: State<'_, SharedExtensions>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
     // Get project root
@@ -543,11 +606,17 @@ pub async fn run_workflow_session(
     );
 
     // Get the graph to find terminal nodes, then execute
+    let runtime_ext = {
+        let shared = extensions.read().await;
+        snapshot_runtime_extensions(&shared)
+    };
+
     let mut executions = execution_manager.executions().await;
     let state = executions
         .get_mut(&session_id)
         .ok_or_else(|| format!("Session '{}' not found", session_id))?;
     state.touch();
+    apply_runtime_extensions(&mut state.executor, &runtime_ext);
 
     // Update the executor's event sink to use the channel
     state.executor.set_event_sink(event_adapter.clone());
@@ -609,10 +678,8 @@ pub async fn remove_execution(
 
 /// Convert Tauri WorkflowGraph to node-engine WorkflowGraph
 fn convert_graph_to_node_engine(graph: &WorkflowGraph) -> node_engine::WorkflowGraph {
-    let mut ne_graph = node_engine::WorkflowGraph::new(
-        Uuid::new_v4().to_string(),
-        "Workflow".to_string(),
-    );
+    let mut ne_graph =
+        node_engine::WorkflowGraph::new(Uuid::new_v4().to_string(), "Workflow".to_string());
 
     for node in &graph.nodes {
         ne_graph.nodes.push(convert_node_to_node_engine(node));
@@ -717,14 +784,142 @@ pub async fn query_port_options(
 ///
 /// The frontend can use this to discover which ports support dynamic selection.
 #[command]
-pub fn get_queryable_ports(
-    registry: State<'_, SharedNodeRegistry>,
-) -> Vec<(String, String)> {
+pub fn get_queryable_ports(registry: State<'_, SharedNodeRegistry>) -> Vec<(String, String)> {
     registry
         .queryable_ports()
         .into_iter()
         .map(|(n, p)| (n.to_string(), p.to_string()))
         .collect()
+}
+
+fn build_model_dependency_request(
+    node_type: String,
+    model_path: String,
+    model_id: Option<String>,
+    model_type: Option<String>,
+    task_type_primary: Option<String>,
+    backend_key: Option<String>,
+    platform_context: Option<serde_json::Value>,
+    selected_binding_ids: Option<Vec<String>>,
+) -> node_engine::ModelDependencyRequest {
+    node_engine::ModelDependencyRequest {
+        node_type,
+        model_path,
+        model_id,
+        model_type,
+        task_type_primary,
+        backend_key,
+        platform_context,
+        selected_binding_ids: selected_binding_ids.unwrap_or_default(),
+    }
+}
+
+/// Resolve model dependency plan for a model-backed workflow node.
+#[command]
+pub async fn resolve_model_dependency_plan(
+    resolver: State<'_, SharedModelDependencyResolver>,
+    node_type: String,
+    model_path: String,
+    model_id: Option<String>,
+    model_type: Option<String>,
+    task_type_primary: Option<String>,
+    backend_key: Option<String>,
+    platform_context: Option<serde_json::Value>,
+    selected_binding_ids: Option<Vec<String>>,
+) -> Result<node_engine::ModelDependencyPlan, String> {
+    let request = build_model_dependency_request(
+        node_type,
+        model_path,
+        model_id,
+        model_type,
+        task_type_primary,
+        backend_key,
+        platform_context,
+        selected_binding_ids,
+    );
+    resolver.resolve_plan_request(request).await
+}
+
+/// Check model dependencies for a model-backed workflow node.
+#[command]
+pub async fn check_model_dependencies(
+    resolver: State<'_, SharedModelDependencyResolver>,
+    node_type: String,
+    model_path: String,
+    model_id: Option<String>,
+    model_type: Option<String>,
+    task_type_primary: Option<String>,
+    backend_key: Option<String>,
+    platform_context: Option<serde_json::Value>,
+    selected_binding_ids: Option<Vec<String>>,
+) -> Result<node_engine::ModelDependencyStatus, String> {
+    let request = build_model_dependency_request(
+        node_type,
+        model_path,
+        model_id,
+        model_type,
+        task_type_primary,
+        backend_key,
+        platform_context,
+        selected_binding_ids,
+    );
+    resolver.check_request(request).await
+}
+
+/// Install dependencies for a model-backed workflow node.
+#[command]
+pub async fn install_model_dependencies(
+    resolver: State<'_, SharedModelDependencyResolver>,
+    node_type: String,
+    model_path: String,
+    model_id: Option<String>,
+    model_type: Option<String>,
+    task_type_primary: Option<String>,
+    backend_key: Option<String>,
+    platform_context: Option<serde_json::Value>,
+    selected_binding_ids: Option<Vec<String>>,
+) -> Result<node_engine::ModelDependencyInstallResult, String> {
+    let request = build_model_dependency_request(
+        node_type,
+        model_path,
+        model_id,
+        model_type,
+        task_type_primary,
+        backend_key,
+        platform_context,
+        selected_binding_ids,
+    );
+    resolver.install_request(request).await
+}
+
+/// Read the latest cached dependency status, or run a fresh check if absent.
+#[command]
+pub async fn get_model_dependency_status(
+    resolver: State<'_, SharedModelDependencyResolver>,
+    node_type: String,
+    model_path: String,
+    model_id: Option<String>,
+    model_type: Option<String>,
+    task_type_primary: Option<String>,
+    backend_key: Option<String>,
+    platform_context: Option<serde_json::Value>,
+    selected_binding_ids: Option<Vec<String>>,
+) -> Result<node_engine::ModelDependencyStatus, String> {
+    let request = build_model_dependency_request(
+        node_type,
+        model_path,
+        model_id,
+        model_type,
+        task_type_primary,
+        backend_key,
+        platform_context,
+        selected_binding_ids,
+    );
+    if let Some(cached) = resolver.cached_status(&request).await {
+        Ok(cached)
+    } else {
+        resolver.check_request(request).await
+    }
 }
 
 #[cfg(test)]
