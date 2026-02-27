@@ -334,4 +334,99 @@ mod tests {
         let err = ModelRefV2::validate_value(&value).unwrap_err();
         assert!(err.contains("duplicate"));
     }
+
+    #[test]
+    fn dependency_plan_deserializes_pin_fields_and_missing_pins() {
+        let value = serde_json::json!({
+            "state": "manual_intervention_required",
+            "code": "unpinned_dependency",
+            "missingPins": ["torch"],
+            "bindings": [
+                {
+                    "bindingId": "b1",
+                    "profileId": "profile.pytorch",
+                    "profileVersion": 2,
+                    "bindingKind": "required",
+                    "envId": "venv:profile.pytorch:2",
+                    "pinSummary": {
+                        "pinned": false,
+                        "requiredCount": 2,
+                        "pinnedCount": 1,
+                        "missingCount": 1
+                    },
+                    "requiredPins": [
+                        { "name": "torch", "reasons": ["backend_required"] },
+                        { "name": "torchvision", "reasons": ["modality_required"] }
+                    ],
+                    "missingPins": ["torch"]
+                }
+            ]
+        });
+
+        let parsed: ModelDependencyPlan = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.missing_pins, vec!["torch".to_string()]);
+        assert_eq!(parsed.bindings.len(), 1);
+        assert_eq!(parsed.bindings[0].required_pins.len(), 2);
+        assert_eq!(parsed.bindings[0].missing_pins, vec!["torch".to_string()]);
+        assert_eq!(
+            parsed.bindings[0].pin_summary.as_ref().map(|summary| summary.missing_count),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn dependency_status_deserializes_binding_code_and_pin_fields() {
+        let value = serde_json::json!({
+            "state": "manual_intervention_required",
+            "code": "unpinned_dependency",
+            "missingPins": ["torch"],
+            "bindings": [
+                {
+                    "bindingId": "b1",
+                    "envId": "venv:profile.pytorch:2",
+                    "state": "manual_intervention_required",
+                    "code": "unpinned_dependency",
+                    "missingComponents": ["profile.pytorch@2"],
+                    "pinSummary": {
+                        "pinned": false,
+                        "requiredCount": 1,
+                        "pinnedCount": 0,
+                        "missingCount": 1
+                    },
+                    "requiredPins": [{ "name": "torch", "reasons": ["backend_required"] }],
+                    "missingPins": ["torch"]
+                }
+            ]
+        });
+
+        let parsed: ModelDependencyStatus = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.missing_pins, vec!["torch".to_string()]);
+        assert_eq!(parsed.bindings.len(), 1);
+        assert_eq!(parsed.bindings[0].code.as_deref(), Some("unpinned_dependency"));
+        assert_eq!(parsed.bindings[0].required_pins.len(), 1);
+        assert_eq!(parsed.bindings[0].missing_pins, vec!["torch".to_string()]);
+    }
+
+    #[test]
+    fn dependency_plan_ignores_unknown_fields() {
+        let value = serde_json::json!({
+            "state": "ready",
+            "unknownTopLevel": { "future": true },
+            "bindings": [
+                {
+                    "bindingId": "b1",
+                    "profileId": "profile",
+                    "profileVersion": 1,
+                    "bindingKind": "required",
+                    "envId": "env",
+                    "unknownNested": ["future"]
+                }
+            ]
+        });
+
+        let parsed: ModelDependencyPlan = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.state, DependencyState::Ready);
+        assert_eq!(parsed.bindings.len(), 1);
+        assert_eq!(parsed.bindings[0].binding_id, "b1");
+    }
 }
