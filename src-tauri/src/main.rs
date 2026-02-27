@@ -179,21 +179,25 @@ fn main() {
                 log::info!("Detected sibling Pumas-Library at {:?}", p);
             }
 
+            // Register the dependency resolver synchronously to avoid startup races
+            // where model execution can happen before async extension setup finishes.
+            tauri::async_runtime::block_on(async {
+                let resolver_trait: Arc<dyn node_engine::ModelDependencyResolver> =
+                    model_dependency_resolver.clone();
+                let mut ext = shared_extensions.write().await;
+                ext.set(
+                    node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+                    resolver_trait,
+                );
+            });
+
             let ext_init = shared_extensions.clone();
-            let resolver_for_ext = model_dependency_resolver.clone();
             tauri::async_runtime::spawn(async move {
                 let mut ext = ext_init.write().await;
                 workflow_nodes::setup_extensions_with_path(
                     &mut ext,
                     pumas_library_path.as_deref(),
                 ).await;
-
-                let resolver_trait: Arc<dyn node_engine::ModelDependencyResolver> =
-                    resolver_for_ext.clone();
-                ext.set(
-                    node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-                    resolver_trait,
-                );
 
                 // Initialize KV cache store for cache save/load/truncate nodes
                 let kv_store = std::sync::Arc::new(inference::kv_cache::KvCacheStore::new(
@@ -318,6 +322,10 @@ fn main() {
             // Port options query commands
             workflow::commands::query_port_options,
             workflow::commands::get_queryable_ports,
+            workflow::commands::list_models_needing_review,
+            workflow::commands::submit_model_review,
+            workflow::commands::reset_model_review,
+            workflow::commands::get_effective_model_metadata,
             workflow::commands::resolve_model_dependency_plan,
             workflow::commands::check_model_dependencies,
             workflow::commands::install_model_dependencies,

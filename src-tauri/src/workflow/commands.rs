@@ -792,6 +792,68 @@ pub fn get_queryable_ports(registry: State<'_, SharedNodeRegistry>) -> Vec<(Stri
         .collect()
 }
 
+async fn require_pumas_api(
+    extensions: &State<'_, SharedExtensions>,
+) -> Result<Arc<pumas_library::PumasApi>, String> {
+    let ext = extensions.read().await;
+    ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+        .cloned()
+        .ok_or_else(|| "Pumas API not available in executor extensions".to_string())
+}
+
+/// List models that currently require metadata review.
+#[command]
+pub async fn list_models_needing_review(
+    extensions: State<'_, SharedExtensions>,
+    filter: Option<pumas_library::model_library::ModelReviewFilter>,
+) -> Result<Vec<pumas_library::model_library::ModelReviewItem>, String> {
+    let api = require_pumas_api(&extensions).await?;
+    api.list_models_needing_review(filter)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Submit a metadata review patch for one model.
+#[command]
+pub async fn submit_model_review(
+    extensions: State<'_, SharedExtensions>,
+    model_id: String,
+    patch: serde_json::Value,
+    reviewer: String,
+    reason: Option<String>,
+) -> Result<pumas_library::model_library::SubmitModelReviewResult, String> {
+    let api = require_pumas_api(&extensions).await?;
+    api.submit_model_review(&model_id, patch, &reviewer, reason.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Reset review edits and restore baseline metadata for a model.
+#[command]
+pub async fn reset_model_review(
+    extensions: State<'_, SharedExtensions>,
+    model_id: String,
+    reviewer: String,
+    reason: Option<String>,
+) -> Result<bool, String> {
+    let api = require_pumas_api(&extensions).await?;
+    api.reset_model_review(&model_id, &reviewer, reason.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Read effective metadata (`baseline + active overlay`) for a model.
+#[command]
+pub async fn get_effective_model_metadata(
+    extensions: State<'_, SharedExtensions>,
+    model_id: String,
+) -> Result<Option<pumas_library::models::ModelMetadata>, String> {
+    let api = require_pumas_api(&extensions).await?;
+    api.get_effective_model_metadata(&model_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 fn build_model_dependency_request(
     node_type: String,
     model_path: String,
@@ -801,17 +863,51 @@ fn build_model_dependency_request(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
-) -> node_engine::ModelDependencyRequest {
-    node_engine::ModelDependencyRequest {
+) -> Result<node_engine::ModelDependencyRequest, String> {
+    fn clean_optional(value: Option<String>) -> Option<String> {
+        value.and_then(|raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+    }
+
+    let node_type = node_type.trim().to_string();
+    if node_type.is_empty() {
+        return Err("node_type is required".to_string());
+    }
+
+    let model_path = model_path.trim().to_string();
+    if model_path.is_empty() {
+        return Err("model_path is required".to_string());
+    }
+
+    let mut selected_out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for binding_id in selected_binding_ids.unwrap_or_default() {
+        let trimmed = binding_id.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            selected_out.push(owned);
+        }
+    }
+
+    Ok(node_engine::ModelDependencyRequest {
         node_type,
         model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
+        model_id: clean_optional(model_id),
+        model_type: clean_optional(model_type),
+        task_type_primary: clean_optional(task_type_primary),
+        backend_key: clean_optional(backend_key),
         platform_context,
-        selected_binding_ids: selected_binding_ids.unwrap_or_default(),
-    }
+        selected_binding_ids: selected_out,
+    })
 }
 
 /// Resolve model dependency plan for a model-backed workflow node.
@@ -836,7 +932,7 @@ pub async fn resolve_model_dependency_plan(
         backend_key,
         platform_context,
         selected_binding_ids,
-    );
+    )?;
     resolver.resolve_plan_request(request).await
 }
 
@@ -862,7 +958,7 @@ pub async fn check_model_dependencies(
         backend_key,
         platform_context,
         selected_binding_ids,
-    );
+    )?;
     resolver.check_request(request).await
 }
 
@@ -888,7 +984,7 @@ pub async fn install_model_dependencies(
         backend_key,
         platform_context,
         selected_binding_ids,
-    );
+    )?;
     resolver.install_request(request).await
 }
 
@@ -914,7 +1010,7 @@ pub async fn get_model_dependency_status(
         backend_key,
         platform_context,
         selected_binding_ids,
-    );
+    )?;
     if let Some(cached) = resolver.cached_status(&request).await {
         Ok(cached)
     } else {
@@ -974,5 +1070,65 @@ mod tests {
 
         let missing = get_node_definition("nonexistent".to_string());
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_build_model_dependency_request_rejects_empty_required_fields() {
+        let err = build_model_dependency_request(
+            "  ".to_string(),
+            "/tmp/model".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("node_type"));
+
+        let err = build_model_dependency_request(
+            "pytorch-inference".to_string(),
+            " ".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("model_path"));
+    }
+
+    #[test]
+    fn test_build_model_dependency_request_normalizes_optional_and_bindings() {
+        let request = build_model_dependency_request(
+            " pytorch-inference ".to_string(),
+            " /tmp/model ".to_string(),
+            Some(" ".to_string()),
+            Some(" diffusion ".to_string()),
+            Some(" text-to-image ".to_string()),
+            Some(" pytorch ".to_string()),
+            None,
+            Some(vec![
+                " binding-a ".to_string(),
+                "".to_string(),
+                "binding-a".to_string(),
+                "binding-b".to_string(),
+            ]),
+        )
+        .unwrap();
+
+        assert_eq!(request.node_type, "pytorch-inference");
+        assert_eq!(request.model_path, "/tmp/model");
+        assert_eq!(request.model_id, None);
+        assert_eq!(request.model_type.as_deref(), Some("diffusion"));
+        assert_eq!(request.task_type_primary.as_deref(), Some("text-to-image"));
+        assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
+        assert_eq!(
+            request.selected_binding_ids,
+            vec!["binding-a".to_string(), "binding-b".to_string()]
+        );
     }
 }

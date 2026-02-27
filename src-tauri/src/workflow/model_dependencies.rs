@@ -947,6 +947,32 @@ impl ModelDependencyResolver for TauriModelDependencyResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    fn test_resolver() -> TauriModelDependencyResolver {
+        TauriModelDependencyResolver::new(
+            Arc::new(RwLock::new(node_engine::ExecutorExtensions::default())),
+            PathBuf::from("."),
+        )
+    }
+
+    fn sample_request() -> ModelDependencyRequest {
+        ModelDependencyRequest {
+            node_type: "pytorch-inference".to_string(),
+            model_path: "/tmp/model".to_string(),
+            model_id: Some("model-id".to_string()),
+            model_type: Some("diffusion".to_string()),
+            task_type_primary: Some("text-to-image".to_string()),
+            backend_key: Some("pytorch".to_string()),
+            platform_context: Some(serde_json::json!({
+                "os": "linux",
+                "arch": "x86_64"
+            })),
+            selected_binding_ids: vec!["binding-b".to_string(), "binding-a".to_string()],
+        }
+    }
 
     #[test]
     fn maps_required_binding_omitted_to_explicit_state() {
@@ -971,5 +997,123 @@ mod tests {
         assert!(!TauriModelDependencyResolver::is_required_binding_kind(
             "optional"
         ));
+    }
+
+    #[test]
+    fn maps_profile_conflict_and_unknown_profile_states() {
+        let profile_conflict = TauriModelDependencyResolver::map_state_from_pumas(
+            pumas_library::model_library::DependencyState::ProfileConflict,
+            None,
+        );
+        assert_eq!(profile_conflict, DependencyState::ProfileConflict);
+
+        let unknown = TauriModelDependencyResolver::map_state_from_pumas(
+            pumas_library::model_library::DependencyState::UnknownProfile,
+            None,
+        );
+        assert_eq!(unknown, DependencyState::UnknownProfile);
+    }
+
+    #[test]
+    fn cache_key_is_deterministic_for_binding_order() {
+        let mut left = sample_request();
+        left.selected_binding_ids = vec!["binding-b".to_string(), "binding-a".to_string()];
+        let mut right = sample_request();
+        right.selected_binding_ids = vec!["binding-a".to_string(), "binding-b".to_string()];
+
+        assert_eq!(
+            TauriModelDependencyResolver::cache_key(&left),
+            TauriModelDependencyResolver::cache_key(&right)
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_plan_without_api_returns_manual_intervention_required() {
+        let resolver = test_resolver();
+        let plan = resolver
+            .resolve_plan_request(sample_request())
+            .await
+            .unwrap();
+
+        assert_eq!(plan.state, DependencyState::ManualInterventionRequired);
+        assert_eq!(plan.code.as_deref(), Some("manual_intervention_required"));
+        assert!(plan.bindings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn check_without_api_returns_and_caches_manual_intervention_required() {
+        let resolver = test_resolver();
+        let request = sample_request();
+        let status = resolver.check_request(request.clone()).await.unwrap();
+
+        assert_eq!(status.state, DependencyState::ManualInterventionRequired);
+        assert_eq!(status.code.as_deref(), Some("manual_intervention_required"));
+        assert!(status.bindings.is_empty());
+
+        let cached = resolver.cached_status(&request).await;
+        assert!(cached.is_some());
+        assert_eq!(
+            cached.unwrap().state,
+            DependencyState::ManualInterventionRequired
+        );
+    }
+
+    #[tokio::test]
+    async fn install_without_api_returns_manual_intervention_required() {
+        let resolver = test_resolver();
+        let install = resolver.install_request(sample_request()).await.unwrap();
+
+        assert_eq!(install.state, DependencyState::ManualInterventionRequired);
+        assert_eq!(
+            install.code.as_deref(),
+            Some("manual_intervention_required")
+        );
+        assert!(install.bindings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_model_ref_filters_to_selected_bindings() {
+        let resolver = test_resolver();
+        let request = sample_request();
+        let plan = ModelDependencyPlan {
+            state: DependencyState::Ready,
+            code: None,
+            message: None,
+            review_reasons: Vec::new(),
+            plan_id: Some("plan-1".to_string()),
+            bindings: vec![
+                ModelDependencyBinding {
+                    binding_id: "binding-a".to_string(),
+                    profile_id: "profile-a".to_string(),
+                    profile_version: 1,
+                    profile_hash: None,
+                    binding_kind: "required".to_string(),
+                    backend_key: Some("pytorch".to_string()),
+                    platform_selector: Some("linux-x86_64".to_string()),
+                    env_id: "env-a".to_string(),
+                },
+                ModelDependencyBinding {
+                    binding_id: "binding-b".to_string(),
+                    profile_id: "profile-b".to_string(),
+                    profile_version: 1,
+                    profile_hash: None,
+                    binding_kind: "optional".to_string(),
+                    backend_key: Some("pytorch".to_string()),
+                    platform_selector: Some("linux-x86_64".to_string()),
+                    env_id: "env-b".to_string(),
+                },
+            ],
+            selected_binding_ids: vec!["binding-a".to_string()],
+            required_binding_ids: vec!["binding-a".to_string()],
+        };
+
+        let model_ref = resolver
+            .resolve_model_ref_request(request, Some(plan))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(model_ref.contract_version, 2);
+        assert_eq!(model_ref.dependency_bindings.len(), 1);
+        assert_eq!(model_ref.dependency_bindings[0].binding_id, "binding-a");
     }
 }
