@@ -1,0 +1,186 @@
+diff --git a/docs/plans/PUMAS_LIBRARY_METADATA_V2_CONSUMER_MIGRATION.md b/docs/plans/PUMAS_LIBRARY_METADATA_V2_CONSUMER_MIGRATION.md
+index 2222222..3333333 100644
+--- a/docs/plans/PUMAS_LIBRARY_METADATA_V2_CONSUMER_MIGRATION.md
++++ b/docs/plans/PUMAS_LIBRARY_METADATA_V2_CONSUMER_MIGRATION.md
+@@ -38,7 +38,7 @@
+ Key optional/extended fields:
+ 1. `task_type_secondary`
+ 2. `runtime_engine_hints`
+-3. `dependency_profile_id`
++3. `dependency_bindings` (`Vec<DependencyBindingRef>`)
+ 4. `requires_custom_code`
+ 5. `custom_code_sources`
+ 6. `metadata_needs_review`
+@@ -54,7 +54,7 @@
+ 3. Non-empty input/output modalities.
+ 4. `task_classification_confidence` and `model_type_resolution_confidence` must be bounded (`0.0..1.0`).
+ 5. Custom code sources required when `requires_custom_code=true`.
+-6. Referenced dependency profile must exist.
++6. Every referenced dependency binding target (`profile_id`, `profile_version`) must exist.
+ 7. If `task_type_primary=unknown`, then:
+    - `metadata_needs_review=true`
+    - `review_reasons` must be non-empty
+@@ -75,6 +75,7 @@
+    - `model-type-low-confidence`
+    - `missing-license`
+    - `unknown-profile`
++   - `dependency-binding-conflict`
+    - `manual-intervention-required`
+ 
+ ## Classification Policy (Task Signature Driven)
+@@ -384,32 +385,32 @@
+   ON model_type_config_rules(status, priority, config_model_type);
+ ```
+ 
+-Initial seed SQL (normalize all source values to lowercase before matching):
++Initial seed SQL (normalize all source values and architecture patterns to lowercase before matching):
+ 
+ ```sql
+ -- Architecture/class rules
+ INSERT OR IGNORE INTO model_type_arch_rules (pattern, match_style, model_type, priority, status, source) VALUES
+-  ('ForCausalLM', 'suffix', 'llm', 100, 'active', 'system'),
+-  ('ForMaskedLM', 'suffix', 'llm', 100, 'active', 'system'),
+-  ('ForConditionalGeneration', 'suffix', 'llm', 100, 'active', 'system'),
+-  ('ForSequenceClassification', 'suffix', 'llm', 100, 'active', 'system'),
+-  ('ForTokenClassification', 'suffix', 'llm', 100, 'active', 'system'),
+-  ('ForQuestionAnswering', 'suffix', 'llm', 100, 'active', 'system'),
+-  ('ForSpeechSeq2Seq', 'suffix', 'audio', 100, 'active', 'system'),
+-  ('ForAudioClassification', 'suffix', 'audio', 100, 'active', 'system'),
+-  ('Whisper', 'prefix', 'audio', 100, 'active', 'system'),
+-  ('Encodec', 'prefix', 'audio', 100, 'active', 'system'),
+-  ('ForImageClassification', 'suffix', 'vision', 100, 'active', 'system'),
+-  ('ForObjectDetection', 'suffix', 'vision', 100, 'active', 'system'),
+-  ('ForSemanticSegmentation', 'suffix', 'vision', 100, 'active', 'system'),
+-  ('ForImageSegmentation', 'suffix', 'vision', 100, 'active', 'system'),
+-  ('CLIPVisionModel', 'prefix', 'vision', 100, 'active', 'system'),
+-  ('UNet2DConditionModel', 'exact', 'diffusion', 100, 'active', 'system'),
+-  ('UNet2DModel', 'exact', 'diffusion', 100, 'active', 'system'),
+-  ('AutoencoderKL', 'exact', 'diffusion', 100, 'active', 'system'),
+-  ('VQModel', 'exact', 'diffusion', 100, 'active', 'system'),
+-  ('StableDiffusion*Pipeline', 'wildcard', 'diffusion', 100, 'active', 'system'),
+-  ('DiffusionPipeline', 'exact', 'diffusion', 100, 'active', 'system');
++  ('forcausallm', 'suffix', 'llm', 100, 'active', 'system'),
++  ('formaskedlm', 'suffix', 'llm', 100, 'active', 'system'),
++  ('forconditionalgeneration', 'suffix', 'llm', 100, 'active', 'system'),
++  ('forsequenceclassification', 'suffix', 'llm', 100, 'active', 'system'),
++  ('fortokenclassification', 'suffix', 'llm', 100, 'active', 'system'),
++  ('forquestionanswering', 'suffix', 'llm', 100, 'active', 'system'),
++  ('forspeechseq2seq', 'suffix', 'audio', 100, 'active', 'system'),
++  ('foraudioclassification', 'suffix', 'audio', 100, 'active', 'system'),
++  ('whisper', 'prefix', 'audio', 100, 'active', 'system'),
++  ('encodec', 'prefix', 'audio', 100, 'active', 'system'),
++  ('forimageclassification', 'suffix', 'vision', 100, 'active', 'system'),
++  ('forobjectdetection', 'suffix', 'vision', 100, 'active', 'system'),
++  ('forsemanticsegmentation', 'suffix', 'vision', 100, 'active', 'system'),
++  ('forimagesegmentation', 'suffix', 'vision', 100, 'active', 'system'),
++  ('clipvisionmodel', 'prefix', 'vision', 100, 'active', 'system'),
++  ('unet2dconditionmodel', 'exact', 'diffusion', 100, 'active', 'system'),
++  ('unet2dmodel', 'exact', 'diffusion', 100, 'active', 'system'),
++  ('autoencoderkl', 'exact', 'diffusion', 100, 'active', 'system'),
++  ('vqmodel', 'exact', 'diffusion', 100, 'active', 'system'),
++  ('stablediffusion*pipeline', 'wildcard', 'diffusion', 100, 'active', 'system'),
++  ('diffusionpipeline', 'exact', 'diffusion', 100, 'active', 'system');
+ 
+ -- config.model_type rules
+ INSERT OR IGNORE INTO model_type_config_rules (config_model_type, model_type, priority, status, source) VALUES
+@@ -502,6 +503,19 @@
+ Dependency profiles:
+ 1. Use reusable model-level profiles rather than duplicating per model.
+ 2. Profile fields include environment kind, requirement sources, platform constraints, install policy, validation probes, notes.
++3. Profiles are immutable after publish; updates create a new `profile_version`.
++4. Each profile version must carry `profile_hash` (content hash of normalized profile spec).
++
++Canonical dependency profile contract:
++1. `profile_id`
++2. `profile_version`
++3. `profile_hash`
++4. `environment_kind` (`python-venv`, `binary`, `mixed`)
++5. `requirements_sources` (file refs, inline requirements, wheel URLs, git refs)
++6. `platform_constraints` (os, arch, cuda/rocm)
++7. `install_policy` (`on-demand`, `eager`, `manual-approval-required`)
++8. `validation_probes` (import checks, executable checks)
++9. `notes`
+ 
+ Model dependency bindings (multi-row per model by design):
+ 1. A model may have multiple active dependency bindings simultaneously.
+@@ -518,18 +532,32 @@
+    - `attached_by`, `attached_at`
+ 4. Multiple rows for one `model_id` are expected and valid.
+ 
++Canonical dependency persistence (SQLite):
++1. `dependency_profiles(profile_id, profile_version, profile_hash, environment_kind, spec_json, created_at, PRIMARY KEY(profile_id, profile_version), UNIQUE(profile_hash))`
++2. `model_dependency_bindings(binding_id, model_id, profile_id, profile_version, binding_kind, backend_key, platform_selector, status, priority, attached_by, attached_at, FOREIGN KEY(profile_id, profile_version) REFERENCES dependency_profiles(profile_id, profile_version))`
++3. `dependency_binding_evidence(binding_id, source_type, source_ref, snippet_hash, confidence, extracted_at, notes)`
++4. `dependency_binding_history(event_id, binding_id, model_id, actor, action, old_value_json, new_value_json, reason, created_at)`
++
+ Resolution behavior:
+ 1. Resolver first applies explicit context (`backend_key`, `platform_context`) when provided.
+ 2. If context still matches multiple incompatible required bindings, do not guess; return manual-intervention-required state.
+ 3. If no profile can be resolved, return unknown-profile state.
+ 4. Best-effort discovery is allowed; unresolved dependency details do not block download/import.
++5. Resolver output must be deterministic and return a binding plan (ordered `binding_id` list + per-binding environment keys).
+ 
+ Model-level dependency APIs:
+ 1. `get_model_dependency_profiles(model_id, platform_context, backend_key?)`
+-2. `check_model_dependencies(model_id, env_id, platform_context, backend_key?)`
+-3. `install_model_dependencies(model_id, env_id, platform_context, backend_key?)`
+-4. `list_models_needing_review(filter)`
+-5. `submit_model_review(model_id, patch, reviewer)`
++2. `resolve_model_dependency_plan(model_id, platform_context, backend_key?)`
++3. `check_model_dependencies(model_id, platform_context, backend_key?, selected_binding_ids?)`
++4. `install_model_dependencies(model_id, platform_context, backend_key?, selected_binding_ids?)`
++5. `list_models_needing_review(filter)`
++6. `submit_model_review(model_id, patch, reviewer)`
++
++Dependency API response contract:
++1. Return per-binding results (not a single aggregate blob) with `binding_id`, `profile_id`, `profile_version`, `profile_hash`, and `env_id`.
++2. `env_id` must be deterministic per binding: `{environment_kind}:{profile_id}:{profile_version}:{profile_hash}:{platform_key}:{backend_key}`.
++3. If same `env_id` is requested with different `profile_hash`, return `profile_conflict` failure.
++4. Top-level status is derived from per-binding statuses; consumers must still receive every per-binding detail.
+ 
+ Dependency check/install states:
+ 1. `ready`
+@@ -537,6 +565,7 @@
+ 3. `failed`
+ 4. `unknown_profile`
+ 5. `manual_intervention_required`
++6. `profile_conflict`
+ 
+ Operational rules:
+ 1. Public internet sources are allowed (including GitHub and Hugging Face).
+@@ -548,8 +577,14 @@
+ Manual intervention workflow (no agent dependency):
+ 1. Run best-effort dependency extraction from source metadata/config and any available README/model-card hints.
+ 2. If extraction is incomplete/ambiguous, set review-required metadata and dependency state `manual_intervention_required`.
+-3. User resolves/edits dependency bindings through existing local UI metadata/edit workflow.
+-4. All manual dependency edits are audited in metadata history and remain resettable to baseline-derived values.
++3. User resolves/edits dependency bindings through local dependency-binding editing workflow.
++4. All manual dependency edits are audited in `dependency_binding_history` and linked to metadata review events when applicable.
++
++Deterministic-first extraction policy:
++1. Treat lock/spec files and structured manifests as authoritative (`requirements.txt`, `pyproject.toml`, `environment.yml`, package metadata blocks).
++2. Treat README/model-card natural language as advisory evidence only unless explicitly mapped to structured rules.
++3. When deterministic extraction cannot prove a complete binding set, emit `manual_intervention_required` and avoid speculative auto-install.
++4. Optional agent assistance may propose edits but must route through the same audited manual approval path.
+ 
+ ## License Governance Policy
+ 1. Fetch and retain license artifact locally for each model during import or migration.
+@@ -762,6 +797,7 @@
+ 4. Use model dependency APIs before inference where dependency profiles exist.
+ 5. Never call removed legacy endpoints or parse removed legacy fields.
+ 6. Never auto-route models when dependency state is `unknown_profile` or `manual_intervention_required` unless policy explicitly allows it.
++7. Never auto-route models with `model_type=unknown` or `task_type_primary=unknown` unless policy explicitly allows it.
+ 
+ ## Rollback Strategy
+ Because legacy methods are removed, rollback is snapshot/artifact based:
+@@ -783,7 +819,9 @@
+ 3. Directory reorganization report is generated and validated.
+ 4. Unknown signatures are captured in SQLite pending mappings without blocking operations.
+ 5. License artifacts are retained; unresolved license is represented as `license_unknown`.
+-6. Binding contract tests and core tests pass in cutover build.
++6. Dependency profile resolution enforces `profile_id/profile_version/profile_hash` consistency.
++7. Dependency binding edits and approvals are persisted in `dependency_binding_history`.
++8. Binding contract tests and core tests pass in cutover build.
+ 
+ ## Current Reference Docs
+ 1. `/media/jeremy/OrangeCream/Linux Software/Pantograph/PROPOSAL-pumas-library-metadata-dependency-v2.md`
