@@ -28,11 +28,17 @@ pub mod events;
 pub mod execution_manager;
 pub mod groups;
 pub mod model_dependencies;
+pub mod model_dependency_commands;
 pub mod orchestration;
 pub mod registry;
 pub mod task_executor;
 pub mod types;
 pub mod validation;
+pub mod workflow_definition_commands;
+pub mod workflow_execution_commands;
+pub mod workflow_model_review_commands;
+pub mod workflow_persistence_commands;
+pub mod workflow_port_query_commands;
 
 // Re-export types used by main.rs
 pub use execution_manager::{ExecutionManager, SharedExecutionManager};

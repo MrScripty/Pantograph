@@ -1,6 +1,6 @@
 # Compliance Remediation Tracker
 
-Last updated: 2026-02-27 (PR-5 implementation pass 1)
+Last updated: 2026-02-27 (PR-6 implementation pass 1)
 
 ## PR-1 Security Boundary Hardening
 
@@ -136,7 +136,32 @@ Status: Completed
 
 ## PR-6 Large File Decomposition
 
-Status: Not started
+Status: Completed
 
-- [ ] Split highest-risk >500 LOC files into smaller modules.
-- [ ] Preserve behavior with focused tests.
+- [x] Split highest-risk >500 LOC files into smaller modules.
+- [x] Preserve behavior with focused tests.
+
+### Verification run (2026-02-27)
+
+- `wc -l src-tauri/src/workflow/commands.rs src-tauri/src/workflow/workflow_execution_commands.rs src-tauri/src/agent/tools/write.rs` (verifies decomposed command and write modules are each < 500 LOC)
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::workflow_definition_commands::tests:: -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::workflow_persistence_commands::tests:: -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::model_dependency_commands::tests:: -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml write_validation::tests:: -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml test_write_gui_file_rejects_parent_traversal -- --nocapture`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+
+### Files touched in PR-6
+
+- `src-tauri/src/agent/tools/write.rs`
+- `src-tauri/src/agent/tools/write_validation.rs`
+- `src-tauri/src/agent/tools/write_versioning.rs`
+- `src-tauri/src/workflow/commands.rs`
+- `src-tauri/src/workflow/mod.rs`
+- `src-tauri/src/workflow/model_dependency_commands.rs`
+- `src-tauri/src/workflow/workflow_definition_commands.rs`
+- `src-tauri/src/workflow/workflow_execution_commands.rs`
+- `src-tauri/src/workflow/workflow_model_review_commands.rs`
+- `src-tauri/src/workflow/workflow_persistence_commands.rs`
+- `src-tauri/src/workflow/workflow_port_query_commands.rs`
+- `COMPLIANCE-PR-TRACKER.md`
