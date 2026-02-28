@@ -71,6 +71,49 @@ impl TauriTaskExecutor {
         outputs.insert("context".to_string(), serde_json::json!(context_str));
         Ok(outputs)
     }
+
+    fn collect_model_ref_env_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
+        let model_ref = inputs
+            .get("model_ref")
+            .or_else(|| inputs.get("_data").and_then(|v| v.get("model_ref")));
+        let Some(bindings) = model_ref
+            .and_then(|v| v.get("dependency_bindings"))
+            .and_then(|v| v.as_array())
+        else {
+            return Vec::new();
+        };
+
+        let mut out = Vec::new();
+        for binding in bindings {
+            if let Some(env_id) = binding.get("env_id").and_then(|v| v.as_str()) {
+                let trimmed = env_id.trim();
+                if !trimmed.is_empty() {
+                    out.push(trimmed.to_string());
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    fn python_runtime_separation_error(
+        node_type: &str,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> NodeEngineError {
+        let env_ids = Self::collect_model_ref_env_ids(inputs);
+        let env_hint = if env_ids.is_empty() {
+            "No dependency env_id was provided in model_ref.".to_string()
+        } else {
+            format!("Resolved dependency env_id(s): {}", env_ids.join(", "))
+        };
+
+        NodeEngineError::ExecutionFailed(format!(
+            "Node '{}' requires the external Python runtime adapter. \
+In-process Python execution is disabled in the default Pantograph build. {}",
+            node_type, env_hint
+        ))
+    }
 }
 
 #[async_trait]
@@ -86,6 +129,9 @@ impl TaskExecutor for TauriTaskExecutor {
 
         match node_type.as_str() {
             "rag-search" => self.execute_rag_search(&inputs).await,
+            "pytorch-inference" | "audio-generation" => {
+                Err(Self::python_runtime_separation_error(&node_type, &inputs))
+            }
             _ => {
                 // Signal to CompositeTaskExecutor that this node type
                 // requires host-specific executor (i.e., fall through to core)
