@@ -105,9 +105,17 @@ npm run typecheck
 # Tests
 npm test
 
+# Runtime separation guard (no compile-time Python linkage)
+npm run test:runtime-separation
+
 # All quality gates
 npm run check
 ```
+
+### Runtime Separation
+
+Python-backed model execution is intentionally out-of-process and externally provisioned.
+See `docs/python-runtime-separation.md` for configuration and migration details.
 
 ## Project Structure
 
