@@ -14,6 +14,9 @@ use node_engine::{
 use tokio::sync::RwLock;
 
 use crate::agent::rag::RagManager;
+use crate::workflow::python_runtime::{
+    PythonNodeExecutionRequest, PythonRuntimeAdapter, UnconfiguredPythonRuntimeAdapter,
+};
 
 /// Tauri-specific task executor that handles only host-dependent nodes.
 ///
@@ -26,12 +29,25 @@ use crate::agent::rag::RagManager;
 pub struct TauriTaskExecutor {
     /// RAG manager for document search
     rag_manager: Arc<RwLock<RagManager>>,
+    /// Host adapter for python-backed nodes (pytorch/audio).
+    python_runtime: Arc<dyn PythonRuntimeAdapter>,
 }
 
 impl TauriTaskExecutor {
     /// Create a new Tauri-specific task executor.
     pub fn new(rag_manager: Arc<RwLock<RagManager>>) -> Self {
-        Self { rag_manager }
+        Self::with_python_runtime(rag_manager, Arc::new(UnconfiguredPythonRuntimeAdapter))
+    }
+
+    /// Create a task executor with a custom python runtime adapter.
+    pub fn with_python_runtime(
+        rag_manager: Arc<RwLock<RagManager>>,
+        python_runtime: Arc<dyn PythonRuntimeAdapter>,
+    ) -> Self {
+        Self {
+            rag_manager,
+            python_runtime,
+        }
     }
 
     /// Execute a RAG search task
@@ -97,22 +113,20 @@ impl TauriTaskExecutor {
         out
     }
 
-    fn python_runtime_separation_error(
+    async fn execute_python_node(
+        &self,
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
-    ) -> NodeEngineError {
-        let env_ids = Self::collect_model_ref_env_ids(inputs);
-        let env_hint = if env_ids.is_empty() {
-            "No dependency env_id was provided in model_ref.".to_string()
-        } else {
-            format!("Resolved dependency env_id(s): {}", env_ids.join(", "))
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let request = PythonNodeExecutionRequest {
+            node_type: node_type.to_string(),
+            inputs: inputs.clone(),
+            env_ids: Self::collect_model_ref_env_ids(inputs),
         };
-
-        NodeEngineError::ExecutionFailed(format!(
-            "Node '{}' requires the external Python runtime adapter. \
-In-process Python execution is disabled in the default Pantograph build. {}",
-            node_type, env_hint
-        ))
+        self.python_runtime
+            .execute_node(request)
+            .await
+            .map_err(NodeEngineError::ExecutionFailed)
     }
 }
 
@@ -130,7 +144,7 @@ impl TaskExecutor for TauriTaskExecutor {
         match node_type.as_str() {
             "rag-search" => self.execute_rag_search(&inputs).await,
             "pytorch-inference" | "audio-generation" => {
-                Err(Self::python_runtime_separation_error(&node_type, &inputs))
+                self.execute_python_node(&node_type, &inputs).await
             }
             _ => {
                 // Signal to CompositeTaskExecutor that this node type

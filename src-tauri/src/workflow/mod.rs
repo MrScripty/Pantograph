@@ -30,6 +30,7 @@ pub mod groups;
 pub mod model_dependencies;
 pub mod model_dependency_commands;
 pub mod orchestration;
+pub mod python_runtime;
 pub mod registry;
 pub mod task_executor;
 pub mod types;
