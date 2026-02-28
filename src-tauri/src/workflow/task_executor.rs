@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 
 use crate::agent::rag::RagManager;
 use crate::workflow::python_runtime::{
-    PythonNodeExecutionRequest, PythonRuntimeAdapter, UnconfiguredPythonRuntimeAdapter,
+    ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
 };
 
 /// Tauri-specific task executor that handles only host-dependent nodes.
@@ -36,7 +36,7 @@ pub struct TauriTaskExecutor {
 impl TauriTaskExecutor {
     /// Create a new Tauri-specific task executor.
     pub fn new(rag_manager: Arc<RwLock<RagManager>>) -> Self {
-        Self::with_python_runtime(rag_manager, Arc::new(UnconfiguredPythonRuntimeAdapter))
+        Self::with_python_runtime(rag_manager, Arc::new(ProcessPythonRuntimeAdapter))
     }
 
     /// Create a task executor with a custom python runtime adapter.
