@@ -90,14 +90,9 @@ impl TauriTaskExecutor {
     }
 
     fn collect_model_ref_env_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
-        let model_ref = inputs
-            .get("model_ref")
-            .or_else(|| inputs.get("_data").and_then(|v| v.get("model_ref")));
+        let model_ref = inputs.get("model_ref");
         let Some(bindings) = model_ref
-            .and_then(|v| {
-                v.get("dependency_bindings")
-                    .or_else(|| v.get("dependencyBindings"))
-            })
+            .and_then(|v| v.get("dependencyBindings"))
             .and_then(|v| v.as_array())
         else {
             return Vec::new();
@@ -105,10 +100,7 @@ impl TauriTaskExecutor {
 
         let mut out = Vec::new();
         for binding in bindings {
-            let env_id = binding
-                .get("env_id")
-                .and_then(|v| v.as_str())
-                .or_else(|| binding.get("envId").and_then(|v| v.as_str()));
+            let env_id = binding.get("envId").and_then(|v| v.as_str());
             if let Some(env_id) = env_id {
                 let trimmed = env_id.trim();
                 if !trimmed.is_empty() {

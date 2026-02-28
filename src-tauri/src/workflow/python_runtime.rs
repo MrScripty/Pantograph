@@ -344,3 +344,96 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
         Err(details)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvGuard {
+        key: &'static str,
+        original: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: Option<String>) -> Self {
+            let original = std::env::var(key).ok();
+            match value {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+            Self { key, original }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.original.take() {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn parse_python_env_map_json_trims_and_filters_entries() {
+        let raw = r#"{
+            " env-one ": " /tmp/python one ",
+            "": "/tmp/skip-empty-key",
+            "env-two": ""
+        }"#;
+        let parsed = ProcessPythonRuntimeAdapter::parse_python_env_map_json(raw)
+            .expect("parse should succeed");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(
+            parsed.get("env-one"),
+            Some(&PathBuf::from("/tmp/python one"))
+        );
+    }
+
+    #[test]
+    fn resolve_python_executable_from_env_map_file_with_spaces_in_paths() {
+        let _lock = env_lock().lock().expect("env lock");
+        let unique = format!(
+            "pantograph python runtime {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        );
+        let base = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&base).expect("create base dir");
+
+        let python_path = base.join("python executable with spaces");
+        std::fs::write(&python_path, "").expect("write fake python executable");
+
+        let env_map_path = base.join("env map with spaces.json");
+        let env_map_json = serde_json::json!({
+            "venv:space": python_path.to_string_lossy().to_string()
+        });
+        std::fs::write(
+            &env_map_path,
+            serde_json::to_string(&env_map_json).expect("serialize env map"),
+        )
+        .expect("write env map");
+
+        let _map_file_guard = EnvGuard::set(
+            ENV_PYTHON_ENV_MAP_FILE,
+            Some(env_map_path.to_string_lossy().to_string()),
+        );
+        let _map_json_guard = EnvGuard::set(ENV_PYTHON_ENV_MAP_JSON, None);
+        let _default_guard = EnvGuard::set(ENV_DEFAULT_PYTHON_EXECUTABLE, None);
+
+        let resolved =
+            ProcessPythonRuntimeAdapter::resolve_python_executable(&["venv:space".to_string()])
+                .expect("resolver should use env-map file entry with spaces");
+        assert_eq!(resolved, python_path);
+
+        std::fs::remove_dir_all(base).expect("cleanup temp dir");
+    }
+}

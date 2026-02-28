@@ -65,11 +65,6 @@ def _input_model_ref(inputs: Dict[str, Any]) -> Dict[str, Any] | None:
     model_ref = inputs.get("model_ref")
     if isinstance(model_ref, dict):
         return model_ref
-    data = inputs.get("_data")
-    if isinstance(data, dict):
-        model_ref = data.get("model_ref")
-        if isinstance(model_ref, dict):
-            return model_ref
     return None
 
 
@@ -249,4 +244,3 @@ def _main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_main())
-
