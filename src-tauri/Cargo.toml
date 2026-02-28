@@ -7,7 +7,7 @@ edition = "2021"
 default-run = "pantograph"
 
 [features]
-default = ["backend-llamacpp", "backend-ollama", "backend-candle", "backend-pytorch", "backend-audio"]
+default = ["backend-llamacpp", "backend-ollama", "backend-candle"]
 
 # Inference backends - at least one must be enabled
 backend-llamacpp = ["inference/backend-llamacpp"]
