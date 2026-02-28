@@ -1,0 +1,23 @@
+name: Runtime Separation Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  no-python-linkage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify Pantograph has no Python linkage
+        run: ./scripts/check-no-python-linkage.sh

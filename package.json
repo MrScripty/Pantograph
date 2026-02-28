@@ -17,6 +17,7 @@
     "lint:critical": "node scripts/check-critical-antipatterns.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "test": "cargo test -p node-engine --lib && cargo test -p workflow-nodes --lib",
+    "test:runtime-separation": "./scripts/check-no-python-linkage.sh",
     "check": "npm run lint && npm run lint:critical && npm run typecheck && npm run test",
     "hooks:install": "npx lefthook install"
   },
