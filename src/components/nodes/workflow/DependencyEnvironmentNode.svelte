@@ -1158,7 +1158,7 @@
             </div>
             <div
               bind:this={activityLogContainer}
-              class="h-28 overflow-y-auto rounded border border-neutral-800 bg-black/40 px-2 py-1 font-mono text-[9px] leading-4 text-neutral-300"
+              class="copyable-activity-log nodrag nopan nowheel h-28 overflow-y-auto rounded border border-neutral-800 bg-black/40 px-2 py-1 font-mono text-[9px] leading-4 text-neutral-300"
             >
               {#if activityLog.length === 0}
                 <div class="text-neutral-500">No activity yet. Use Run/Resolve/Check/Install to capture logs.</div>
@@ -1183,5 +1183,11 @@
   .dependency-env-wrapper :global(.node-header) {
     background-color: rgba(8, 145, 178, 0.2);
     border-color: rgba(8, 145, 178, 0.3);
+  }
+
+  .copyable-activity-log {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 </style>
