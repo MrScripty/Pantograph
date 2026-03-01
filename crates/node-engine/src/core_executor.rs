@@ -234,12 +234,12 @@ fn execute_vector_output(
             outputs.insert("vector".to_string(), serde_json::Value::Null);
         }
         Some(value) => {
-            let vector = parse_embedding_vector_input(&value).ok_or_else(|| {
-                NodeEngineError::ExecutionFailed(
-                    "vector-output expects a JSON array of finite numbers".to_string(),
-                )
-            })?;
-            outputs.insert("vector".to_string(), serde_json::json!(vector));
+            if let Some(vector) = parse_embedding_vector_input(&value) {
+                outputs.insert("vector".to_string(), serde_json::json!(vector));
+            } else {
+                log::warn!("vector-output received malformed vector input; emitting null");
+                outputs.insert("vector".to_string(), serde_json::Value::Null);
+            }
         }
     }
     Ok(outputs)
