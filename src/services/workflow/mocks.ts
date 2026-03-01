@@ -18,6 +18,19 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'reactive',
   },
   {
+    node_type: 'vector-input',
+    category: 'input',
+    label: 'Vector Input',
+    description: 'User vector input field',
+    inputs: [
+      { id: 'vector', label: 'Vector', data_type: 'embedding', required: false, multiple: false },
+    ],
+    outputs: [
+      { id: 'vector', label: 'Vector', data_type: 'embedding', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
     node_type: 'puma-lib',
     category: 'input',
     label: 'Puma-Lib',
@@ -202,6 +215,19 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     ],
     outputs: [
       { id: 'rendered', label: 'Rendered', data_type: 'boolean', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
+    node_type: 'vector-output',
+    category: 'output',
+    label: 'Vector Output',
+    description: 'Display vector result',
+    inputs: [
+      { id: 'vector', label: 'Vector', data_type: 'embedding', required: true, multiple: false },
+    ],
+    outputs: [
+      { id: 'vector', label: 'Vector', data_type: 'embedding', required: false, multiple: false },
     ],
     execution_mode: 'reactive',
   },

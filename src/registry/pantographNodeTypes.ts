@@ -9,6 +9,7 @@ import { buildRegistry } from '@pantograph/svelte-graph';
 
 // Specialized workflow node components (Pantograph-only overrides)
 import TextInputNode from '../components/nodes/workflow/TextInputNode.svelte';
+import VectorInputNode from '../components/nodes/workflow/VectorInputNode.svelte';
 import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svelte';
 import OllamaInferenceNode from '../components/nodes/workflow/OllamaInferenceNode.svelte';
 import LlamaCppInferenceNode from '../components/nodes/workflow/LlamaCppInferenceNode.svelte';
@@ -17,6 +18,7 @@ import PyTorchInferenceNode from '../components/nodes/workflow/PyTorchInferenceN
 import DiffusionInferenceNode from '../components/nodes/workflow/DiffusionInferenceNode.svelte';
 import ModelProviderNode from '../components/nodes/workflow/ModelProviderNode.svelte';
 import TextOutputNode from '../components/nodes/workflow/TextOutputNode.svelte';
+import VectorOutputNode from '../components/nodes/workflow/VectorOutputNode.svelte';
 import ImageOutputNode from '../components/nodes/workflow/ImageOutputNode.svelte';
 import AudioInputNode from '../components/nodes/workflow/AudioInputNode.svelte';
 import AudioOutputNode from '../components/nodes/workflow/AudioOutputNode.svelte';
@@ -40,6 +42,7 @@ import ArchCommandNode from '../components/nodes/architecture/ArchCommandNode.sv
 /** Specialized component overrides for engine node types */
 const SPECIALIZED_NODES: Record<string, any> = {
   'text-input': TextInputNode,
+  'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
   'ollama-inference': OllamaInferenceNode,
   'llamacpp-inference': LlamaCppInferenceNode,
@@ -48,6 +51,7 @@ const SPECIALIZED_NODES: Record<string, any> = {
   'diffusion-inference': DiffusionInferenceNode,
   'model-provider': ModelProviderNode,
   'text-output': TextOutputNode,
+  'vector-output': VectorOutputNode,
   'image-output': ImageOutputNode,
   'audio-input': AudioInputNode,
   'audio-output': AudioOutputNode,

@@ -33,6 +33,7 @@
 
   // Import workflow node components
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
+  import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
@@ -41,6 +42,7 @@
   import DiffusionInferenceNode from './nodes/workflow/DiffusionInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
+  import VectorOutputNode from './nodes/workflow/VectorOutputNode.svelte';
   import ImageOutputNode from './nodes/workflow/ImageOutputNode.svelte';
   import AudioInputNode from './nodes/workflow/AudioInputNode.svelte';
   import AudioOutputNode from './nodes/workflow/AudioOutputNode.svelte';
@@ -74,6 +76,7 @@
   // Define custom node types for workflow
   const nodeTypes: NodeTypes = {
     'text-input': TextInputNode,
+    'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
@@ -82,6 +85,7 @@
     'diffusion-inference': DiffusionInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
+    'vector-output': VectorOutputNode,
     'image-output': ImageOutputNode,
     'audio-input': AudioInputNode,
     'audio-output': AudioOutputNode,
