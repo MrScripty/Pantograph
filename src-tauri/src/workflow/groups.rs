@@ -357,6 +357,7 @@ mod tests {
                 make_node("c", 200.0, 0.0),
             ],
             edges: vec![make_edge("e1", "a", "b"), make_edge("e2", "b", "c")],
+            derived_graph: None,
         };
 
         let result = create_node_group(
@@ -377,6 +378,7 @@ mod tests {
         let graph = WorkflowGraph {
             nodes: vec![],
             edges: vec![],
+            derived_graph: None,
         };
 
         let result = create_node_group("Empty".to_string(), vec![], graph);
@@ -388,6 +390,7 @@ mod tests {
         let graph = WorkflowGraph {
             nodes: vec![make_node("a", 0.0, 0.0)],
             edges: vec![],
+            derived_graph: None,
         };
 
         let result = create_node_group("Single".to_string(), vec!["a".to_string()], graph);

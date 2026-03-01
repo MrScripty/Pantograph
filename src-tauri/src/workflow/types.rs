@@ -2,6 +2,8 @@
 //!
 //! Defines port data types, node definitions, and graph structures.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Data types that can flow through ports
@@ -224,6 +226,20 @@ pub struct GraphEdge {
     pub target_handle: String,
 }
 
+/// Derived graph metadata persisted alongside the workflow graph.
+///
+/// This data is advisory and can be recomputed from the graph. It is trusted
+/// only when the fingerprint matches the current graph structure.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkflowDerivedGraph {
+    /// Version for derived graph schema evolution.
+    pub schema_version: u32,
+    /// Deterministic fingerprint of node/edge structure.
+    pub graph_fingerprint: String,
+    /// Outgoing consumer counts by "node_id:port_id".
+    pub consumer_count_map: HashMap<String, u32>,
+}
+
 /// Complete workflow graph
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkflowGraph {
@@ -231,9 +247,15 @@ pub struct WorkflowGraph {
     pub nodes: Vec<GraphNode>,
     /// All edges connecting nodes
     pub edges: Vec<GraphEdge>,
+    /// Optional persisted derived metadata for execution hints.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_graph: Option<WorkflowDerivedGraph>,
 }
 
 impl WorkflowGraph {
+    /// Current version for the derived graph metadata schema.
+    pub const DERIVED_GRAPH_SCHEMA_VERSION: u32 = 1;
+
     /// Create an empty graph
     pub fn new() -> Self {
         Self::default()
@@ -266,6 +288,100 @@ impl WorkflowGraph {
     ) -> impl Iterator<Item = &'a GraphEdge> + 'a {
         self.edges.iter().filter(move |e| e.source == node_id)
     }
+
+    /// Compute outgoing consumer counts by "node_id:port_id".
+    pub fn compute_consumer_count_map(&self) -> HashMap<String, u32> {
+        let mut out: HashMap<String, u32> = HashMap::new();
+        for edge in &self.edges {
+            let key = format!("{}:{}", edge.source, edge.source_handle);
+            out.entry(key).and_modify(|count| *count += 1).or_insert(1);
+        }
+        out
+    }
+
+    /// Compute a deterministic graph fingerprint from node/edge structure.
+    ///
+    /// This intentionally excludes mutable node data and focuses only on
+    /// structural shape relevant to port consumer analysis.
+    pub fn compute_fingerprint(&self) -> String {
+        let mut node_rows = self
+            .nodes
+            .iter()
+            .map(|n| format!("{}|{}", n.id, n.node_type))
+            .collect::<Vec<_>>();
+        node_rows.sort();
+
+        let mut edge_rows = self
+            .edges
+            .iter()
+            .map(|e| {
+                format!(
+                    "{}|{}|{}|{}",
+                    e.source, e.source_handle, e.target, e.target_handle
+                )
+            })
+            .collect::<Vec<_>>();
+        edge_rows.sort();
+
+        let mut digest = FNV64_OFFSET_BASIS;
+        digest = fnv1a64_update(digest, b"v1");
+        for row in node_rows {
+            digest = fnv1a64_update(digest, row.as_bytes());
+            digest = fnv1a64_update(digest, b"\n");
+        }
+        digest = fnv1a64_update(digest, b"--");
+        for row in edge_rows {
+            digest = fnv1a64_update(digest, row.as_bytes());
+            digest = fnv1a64_update(digest, b"\n");
+        }
+
+        format!("{:016x}", digest)
+    }
+
+    /// Build derived graph metadata from current graph structure.
+    pub fn build_derived_graph(&self) -> WorkflowDerivedGraph {
+        WorkflowDerivedGraph {
+            schema_version: Self::DERIVED_GRAPH_SCHEMA_VERSION,
+            graph_fingerprint: self.compute_fingerprint(),
+            consumer_count_map: self.compute_consumer_count_map(),
+        }
+    }
+
+    /// Refresh persisted derived metadata for this graph.
+    pub fn refresh_derived_graph(&mut self) {
+        self.derived_graph = Some(self.build_derived_graph());
+    }
+
+    /// Return true if persisted derived metadata is present and valid.
+    pub fn has_valid_derived_graph(&self) -> bool {
+        self.derived_graph.as_ref().is_some_and(|derived| {
+            derived.schema_version == Self::DERIVED_GRAPH_SCHEMA_VERSION
+                && derived.graph_fingerprint == self.compute_fingerprint()
+        })
+    }
+
+    /// Resolve effective consumer counts, using persisted data when valid.
+    pub fn effective_consumer_count_map(&self) -> HashMap<String, u32> {
+        if let Some(derived) = &self.derived_graph {
+            if derived.schema_version == Self::DERIVED_GRAPH_SCHEMA_VERSION
+                && derived.graph_fingerprint == self.compute_fingerprint()
+            {
+                return derived.consumer_count_map.clone();
+            }
+        }
+        self.compute_consumer_count_map()
+    }
+}
+
+const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+const FNV64_PRIME: u64 = 0x100000001b3;
+
+fn fnv1a64_update(mut hash: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(FNV64_PRIME);
+    }
+    hash
 }
 
 /// Viewport state for workflow editor
@@ -383,6 +499,7 @@ mod tests {
                 data: serde_json::Value::Null,
             }],
             edges: vec![],
+            derived_graph: None,
         };
 
         assert!(graph.find_node("node1").is_some());
@@ -400,10 +517,94 @@ mod tests {
                 target: "b".into(),
                 target_handle: "in".into(),
             }],
+            derived_graph: None,
         };
 
         assert!(graph.has_edge_to("b", "in"));
         assert!(!graph.has_edge_to("b", "other"));
         assert!(!graph.has_edge_to("a", "in"));
+    }
+
+    #[test]
+    fn test_compute_consumer_count_map_counts_by_source_port() {
+        let graph = WorkflowGraph {
+            nodes: vec![],
+            edges: vec![
+                GraphEdge {
+                    id: "e1".into(),
+                    source: "a".into(),
+                    source_handle: "metadata".into(),
+                    target: "b".into(),
+                    target_handle: "x".into(),
+                },
+                GraphEdge {
+                    id: "e2".into(),
+                    source: "a".into(),
+                    source_handle: "metadata".into(),
+                    target: "c".into(),
+                    target_handle: "x".into(),
+                },
+                GraphEdge {
+                    id: "e3".into(),
+                    source: "a".into(),
+                    source_handle: "embedding".into(),
+                    target: "d".into(),
+                    target_handle: "x".into(),
+                },
+            ],
+            derived_graph: None,
+        };
+
+        let counts = graph.compute_consumer_count_map();
+        assert_eq!(counts.get("a:metadata"), Some(&2));
+        assert_eq!(counts.get("a:embedding"), Some(&1));
+    }
+
+    #[test]
+    fn test_fingerprint_changes_when_graph_edges_change() {
+        let mut graph = WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "n1".into(),
+                node_type: "embedding".into(),
+                position: Position::default(),
+                data: serde_json::Value::Null,
+            }],
+            edges: vec![],
+            derived_graph: None,
+        };
+        let first = graph.compute_fingerprint();
+        graph.edges.push(GraphEdge {
+            id: "e1".into(),
+            source: "n1".into(),
+            source_handle: "embedding".into(),
+            target: "n2".into(),
+            target_handle: "vector".into(),
+        });
+        let second = graph.compute_fingerprint();
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn test_effective_consumer_count_map_uses_valid_derived_graph() {
+        let mut graph = WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "a".into(),
+                node_type: "embedding".into(),
+                position: Position::default(),
+                data: serde_json::Value::Null,
+            }],
+            edges: vec![GraphEdge {
+                id: "e1".into(),
+                source: "a".into(),
+                source_handle: "metadata".into(),
+                target: "b".into(),
+                target_handle: "x".into(),
+            }],
+            derived_graph: None,
+        };
+
+        graph.refresh_derived_graph();
+        let counts = graph.effective_consumer_count_map();
+        assert_eq!(counts.get("a:metadata"), Some(&1));
     }
 }

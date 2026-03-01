@@ -20,6 +20,8 @@ fn get_workflows_dir() -> Result<PathBuf, String> {
 
 pub fn save_workflow(name: String, graph: WorkflowGraph) -> Result<String, String> {
     let workflows_dir = get_workflows_dir()?;
+    let mut graph = graph;
+    graph.refresh_derived_graph();
 
     let safe_name: String = name
         .chars()
@@ -160,6 +162,7 @@ mod tests {
             WorkflowGraph {
                 nodes: vec![],
                 edges: vec![],
+                derived_graph: None,
             },
         );
         let json = serde_json::to_string_pretty(&workflow).expect("serialize workflow");

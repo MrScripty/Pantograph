@@ -271,6 +271,7 @@ mod tests {
                 target: "b".into(),
                 target_handle: "text".into(),
             }],
+            derived_graph: None,
         };
 
         assert!(validator.detect_cycles(&graph).is_ok());
@@ -313,6 +314,7 @@ mod tests {
                     target_handle: "text".into(),
                 },
             ],
+            derived_graph: None,
         };
 
         assert!(matches!(
