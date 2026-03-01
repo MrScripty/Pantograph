@@ -1710,9 +1710,36 @@ async fn execute_embedding(
         )));
     }
     if !gw.is_ready().await {
-        return Err(NodeEngineError::ExecutionFailed(
-            "LlamaCpp Embedding blocked execution: backend is not ready".to_string(),
-        ));
+        let mut startup_config = gw.last_inference_config().await.unwrap_or_default();
+        startup_config.embedding_mode = false;
+        if startup_config.model_path.is_none() {
+            return Err(NodeEngineError::ExecutionFailed(
+                "LlamaCpp Embedding blocked execution: backend is not ready and no startup config is available".to_string(),
+            ));
+        }
+        let startup_model = startup_config
+            .model_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "<unknown>".to_string());
+        log::info!(
+            "LlamaCpp Embedding: starting backend with model '{}'",
+            startup_model
+        );
+        gw.start(&startup_config).await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to start llama.cpp server: {}", e))
+        })?;
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while !gw.is_ready().await {
+            if std::time::Instant::now() > deadline {
+                return Err(NodeEngineError::ExecutionFailed(
+                    "Timeout waiting for llama.cpp server to start".to_string(),
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        log::info!("LlamaCpp Embedding: backend is ready");
     }
     let capabilities = gw.capabilities().await;
     if !capabilities.embeddings {
