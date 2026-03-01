@@ -42,7 +42,7 @@ impl Default for EmbeddingConfig {
 ///
 /// # Outputs (to context)
 /// - `{task_id}.output.embedding` - The embedding vector (Vec<f32>)
-/// - `{task_id}.output.dimensions` - Number of dimensions
+/// - `{task_id}.output.metadata` - Optional execution metadata
 #[derive(Clone)]
 pub struct EmbeddingTask {
     /// Unique identifier for this task instance
@@ -58,8 +58,8 @@ impl EmbeddingTask {
     pub const PORT_MODEL: &'static str = "model";
     /// Port ID for embedding output
     pub const PORT_EMBEDDING: &'static str = "embedding";
-    /// Port ID for dimensions output
-    pub const PORT_DIMENSIONS: &'static str = "dimensions";
+    /// Port ID for metadata output
+    pub const PORT_METADATA: &'static str = "metadata";
 
     /// Create a new embedding task
     pub fn new(task_id: impl Into<String>) -> Self {
@@ -88,15 +88,15 @@ impl TaskDescriptor for EmbeddingTask {
         TaskMetadata {
             node_type: "embedding".to_string(),
             category: NodeCategory::Processing,
-            label: "Embedding".to_string(),
-            description: "Generates vector embeddings from text".to_string(),
+            label: "LlamaCpp Embedding".to_string(),
+            description: "Generates vector embeddings via llama.cpp".to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_TEXT, "Text", PortDataType::String),
                 PortMetadata::optional(Self::PORT_MODEL, "Model", PortDataType::String),
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_EMBEDDING, "Embedding", PortDataType::Embedding),
-                PortMetadata::optional(Self::PORT_DIMENSIONS, "Dimensions", PortDataType::Number),
+                PortMetadata::optional(Self::PORT_METADATA, "Metadata", PortDataType::Json),
             ],
             execution_mode: ExecutionMode::Reactive,
         }
@@ -188,13 +188,26 @@ impl Task for EmbeddingTask {
             .collect();
 
         let dimensions = embedding.len();
+        let emit_metadata_key = ContextKeys::input(&self.task_id, "emit_metadata");
+        let emit_metadata = context.get::<bool>(&emit_metadata_key).await.unwrap_or(false);
 
         // Store outputs in context
         let embedding_key = ContextKeys::output(&self.task_id, Self::PORT_EMBEDDING);
         context.set(&embedding_key, embedding.clone()).await;
 
-        let dimensions_key = ContextKeys::output(&self.task_id, Self::PORT_DIMENSIONS);
-        context.set(&dimensions_key, dimensions as f64).await;
+        if emit_metadata {
+            let metadata_key = ContextKeys::output(&self.task_id, Self::PORT_METADATA);
+            context
+                .set(
+                    &metadata_key,
+                    serde_json::json!({
+                        "backend": "llamacpp",
+                        "model": model,
+                        "vector_length": dimensions,
+                    }),
+                )
+                .await;
+        }
 
         log::debug!(
             "EmbeddingTask {}: generated {}-dimensional embedding",
@@ -203,7 +216,7 @@ impl Task for EmbeddingTask {
         );
 
         Ok(TaskResult::new(
-            Some(format!("Embedding: {} dimensions", dimensions)),
+            Some(format!("LlamaCpp Embedding: {} dimensions", dimensions)),
             NextAction::Continue,
         ))
     }
@@ -246,6 +259,7 @@ mod tests {
         let meta = EmbeddingTask::descriptor();
         assert_eq!(meta.node_type, "embedding");
         assert_eq!(meta.category, NodeCategory::Processing);
+        assert_eq!(meta.label, "LlamaCpp Embedding");
         assert_eq!(meta.inputs.len(), 2);
         assert_eq!(meta.outputs.len(), 2);
     }

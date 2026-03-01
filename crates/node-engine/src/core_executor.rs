@@ -832,6 +832,32 @@ fn read_optional_input_value_aliases(
         .find_map(|key| read_optional_input_value(inputs, key))
 }
 
+fn read_optional_input_bool(
+    inputs: &HashMap<String, serde_json::Value>,
+    key: &str,
+) -> Option<bool> {
+    let value = read_optional_input_value(inputs, key)?;
+    if let Some(boolean) = value.as_bool() {
+        return Some(boolean);
+    }
+    value
+        .as_str()
+        .and_then(|s| match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Some(true),
+            "false" | "0" | "no" | "off" => Some(false),
+            _ => None,
+        })
+}
+
+fn read_optional_input_bool_aliases(
+    inputs: &HashMap<String, serde_json::Value>,
+    aliases: &[&str],
+) -> Option<bool> {
+    aliases
+        .iter()
+        .find_map(|key| read_optional_input_bool(inputs, key))
+}
+
 fn read_input_dependency_bindings(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Vec<ModelDependencyBinding> {
@@ -1257,6 +1283,8 @@ impl TaskExecutor for CoreTaskExecutor {
 
             // Gateway-backed inference nodes (require `inference-nodes` feature)
             #[cfg(feature = "inference-nodes")]
+            "embedding" => execute_embedding(self.gateway.as_ref(), &inputs).await,
+            #[cfg(feature = "inference-nodes")]
             "llamacpp-inference" => {
                 let resolved_model_ref =
                     enforce_dependency_preflight("llamacpp-inference", &inputs, extensions).await?;
@@ -1582,6 +1610,93 @@ async fn execute_llamacpp_inference(
             })
         }),
     );
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_embedding(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+
+    let text = inputs
+        .get("text")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing text input".to_string()))?;
+    if text.trim().is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Embedding input text cannot be empty".to_string(),
+        ));
+    }
+
+    let backend_name = gw.current_backend_name().await;
+    if backend_name != "llama.cpp" {
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "LlamaCpp Embedding blocked execution: active backend '{}' is not supported",
+            backend_name
+        )));
+    }
+    if !gw.is_ready().await {
+        return Err(NodeEngineError::ExecutionFailed(
+            "LlamaCpp Embedding blocked execution: backend is not ready".to_string(),
+        ));
+    }
+    let capabilities = gw.capabilities().await;
+    if !capabilities.embeddings {
+        return Err(NodeEngineError::ExecutionFailed(
+            "LlamaCpp Embedding blocked execution: active backend does not support embeddings"
+                .to_string(),
+        ));
+    }
+
+    let model = read_optional_input_string_aliases(
+        inputs,
+        &["model", "model_name", "modelName", "model_id", "modelId"],
+    )
+    .filter(|s| !s.trim().is_empty())
+    .unwrap_or_else(|| "default".to_string());
+    let emit_metadata =
+        read_optional_input_bool_aliases(inputs, &["emit_metadata", "emitMetadata"])
+            .unwrap_or(false);
+
+    let start = std::time::Instant::now();
+    let results = gw
+        .embeddings(vec![text.to_string()], &model)
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("LlamaCpp Embedding request failed: {}", e))
+        })?;
+    let embedding = results.first().ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "LlamaCpp Embedding returned no vectors for input text".to_string(),
+        )
+    })?;
+    if embedding.vector.is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "LlamaCpp Embedding returned an empty vector".to_string(),
+        ));
+    }
+    if embedding.vector.iter().any(|v| !v.is_finite()) {
+        return Err(NodeEngineError::ExecutionFailed(
+            "LlamaCpp Embedding returned invalid vector values".to_string(),
+        ));
+    }
+
+    let mut outputs = HashMap::new();
+    outputs.insert("embedding".to_string(), serde_json::json!(embedding.vector));
+    if emit_metadata {
+        outputs.insert(
+            "metadata".to_string(),
+            serde_json::json!({
+                "backend": "llamacpp",
+                "model": model,
+                "vector_length": embedding.vector.len(),
+                "duration_ms": start.elapsed().as_millis(),
+            }),
+        );
+    }
+
     Ok(outputs)
 }
 
