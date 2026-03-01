@@ -11,6 +11,7 @@ mod masked_text_input;
 mod model_provider;
 mod puma_lib;
 mod text_input;
+mod vector_input;
 
 pub use audio_input::AudioInputTask;
 pub use human_input::HumanInputTask;
@@ -21,3 +22,4 @@ pub use masked_text_input::{MaskedTextInputTask, TextSegment};
 pub use model_provider::{ModelInfo, ModelProviderTask};
 pub use puma_lib::PumaLibTask;
 pub use text_input::TextInputTask;
+pub use vector_input::VectorInputTask;

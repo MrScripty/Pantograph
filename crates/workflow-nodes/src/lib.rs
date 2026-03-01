@@ -42,21 +42,23 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            39,
-            "Expected 39 built-in nodes with desktop feature"
+            42,
+            "Expected 42 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            36,
-            "Expected 36 built-in nodes without desktop feature"
+            39,
+            "Expected 39 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
+        assert!(registry.has_node_type("vector-input"));
         assert!(registry.has_node_type("llm-inference"));
         assert!(registry.has_node_type("conditional"));
         assert!(registry.has_node_type("text-output"));
+        assert!(registry.has_node_type("vector-output"));
         assert!(registry.has_node_type("image-output"));
         assert!(registry.has_node_type("diffusion-inference"));
         assert!(registry.has_node_type("audio-input"));

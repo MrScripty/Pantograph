@@ -121,6 +121,48 @@ fn execute_text_input(
     Ok(outputs)
 }
 
+fn parse_embedding_vector_value(value: &serde_json::Value) -> Option<Vec<f64>> {
+    let array = value.as_array()?;
+    let mut out = Vec::with_capacity(array.len());
+    for item in array {
+        let number = item.as_f64()?;
+        if !number.is_finite() {
+            return None;
+        }
+        out.push(number);
+    }
+    Some(out)
+}
+
+fn parse_embedding_vector_input(value: &serde_json::Value) -> Option<Vec<f64>> {
+    if let Some(vector) = parse_embedding_vector_value(value) {
+        return Some(vector);
+    }
+    let raw = value.as_str()?;
+    let parsed: serde_json::Value = serde_json::from_str(raw).ok()?;
+    parse_embedding_vector_value(&parsed)
+}
+
+fn execute_vector_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let raw_vector = inputs
+        .get("_data")
+        .and_then(|d| d.get("vector"))
+        .cloned()
+        .or_else(|| inputs.get("vector").cloned())
+        .unwrap_or_else(|| serde_json::json!([]));
+    let vector = parse_embedding_vector_input(&raw_vector).ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "vector-input expects a JSON array of finite numbers".to_string(),
+        )
+    })?;
+
+    let mut outputs = HashMap::new();
+    outputs.insert("vector".to_string(), serde_json::json!(vector));
+    Ok(outputs)
+}
+
 fn execute_masked_text_input(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
@@ -172,6 +214,34 @@ fn execute_text_output(
 
     let mut outputs = HashMap::new();
     outputs.insert("text".to_string(), serde_json::json!(text));
+    Ok(outputs)
+}
+
+fn execute_vector_output(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let raw_vector = inputs
+        .get("vector")
+        .cloned()
+        .or_else(|| inputs.get("_data").and_then(|d| d.get("vector")).cloned());
+
+    let mut outputs = HashMap::new();
+    match raw_vector {
+        None => {
+            outputs.insert("vector".to_string(), serde_json::Value::Null);
+        }
+        Some(value) if value.is_null() => {
+            outputs.insert("vector".to_string(), serde_json::Value::Null);
+        }
+        Some(value) => {
+            let vector = parse_embedding_vector_input(&value).ok_or_else(|| {
+                NodeEngineError::ExecutionFailed(
+                    "vector-output expects a JSON array of finite numbers".to_string(),
+                )
+            })?;
+            outputs.insert("vector".to_string(), serde_json::json!(vector));
+        }
+    }
     Ok(outputs)
 }
 
@@ -1245,6 +1315,7 @@ impl TaskExecutor for CoreTaskExecutor {
         match node_type.as_str() {
             // Input nodes
             "text-input" => execute_text_input(&inputs),
+            "vector-input" => execute_vector_input(&inputs),
             "masked-text-input" => execute_masked_text_input(&inputs),
             "linked-input" => execute_linked_input(&inputs),
             "image-input" => execute_image_input(&inputs),
@@ -1252,6 +1323,7 @@ impl TaskExecutor for CoreTaskExecutor {
 
             // Output nodes
             "text-output" => execute_text_output(&inputs),
+            "vector-output" => execute_vector_output(&inputs),
             "image-output" => execute_image_output(&inputs),
             "audio-output" => execute_audio_output(&inputs),
             "point-cloud-output" => execute_point_cloud_output(&inputs),
@@ -2918,6 +2990,36 @@ mod tests {
         inputs.insert("text".to_string(), serde_json::json!("from port"));
         let result = execute_text_input(&inputs).unwrap();
         assert_eq!(result["text"], "from port");
+    }
+
+    #[test]
+    fn test_vector_input_from_array() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "_data".to_string(),
+            serde_json::json!({"vector": [0.1, 0.2, 0.3]}),
+        );
+        let result = execute_vector_input(&inputs).unwrap();
+        assert_eq!(result["vector"], serde_json::json!([0.1, 0.2, 0.3]));
+    }
+
+    #[test]
+    fn test_vector_input_from_json_string() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "_data".to_string(),
+            serde_json::json!({"vector": "[1.0,2.0,3.5]"}),
+        );
+        let result = execute_vector_input(&inputs).unwrap();
+        assert_eq!(result["vector"], serde_json::json!([1.0, 2.0, 3.5]));
+    }
+
+    #[test]
+    fn test_vector_output_passthrough() {
+        let mut inputs = HashMap::new();
+        inputs.insert("vector".to_string(), serde_json::json!([1.0, 2.0]));
+        let result = execute_vector_output(&inputs).unwrap();
+        assert_eq!(result["vector"], serde_json::json!([1.0, 2.0]));
     }
 
     #[test]
