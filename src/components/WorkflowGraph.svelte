@@ -36,6 +36,7 @@
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
+  import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
   import PyTorchInferenceNode from './nodes/workflow/PyTorchInferenceNode.svelte';
   import DiffusionInferenceNode from './nodes/workflow/DiffusionInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
@@ -76,6 +77,7 @@
     'llm-inference': LLMInferenceNode,
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
+    'embedding': EmbeddingNode,
     'pytorch-inference': PyTorchInferenceNode,
     'diffusion-inference': DiffusionInferenceNode,
     'model-provider': ModelProviderNode,

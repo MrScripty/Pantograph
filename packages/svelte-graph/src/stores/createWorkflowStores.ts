@@ -116,6 +116,7 @@ export function createWorkflowStores(
   const isDirty = writable<boolean>(false);
   const isExecuting = writable<boolean>(false);
   const isEditing = writable<boolean>(true);
+  const derivedGraph = writable<WorkflowGraph['derived_graph']>(undefined);
   const nodeExecutionStates = writable<Map<string, NodeExecutionInfo>>(new Map());
   const currentViewport = writable<ViewportState>({ x: 0, y: 0, zoom: 1 });
   const nodeGroups = writable<Map<string, NodeGroup>>(new Map());
@@ -123,8 +124,8 @@ export function createWorkflowStores(
 
   // --- Derived stores ---
   const workflowGraph = derived(
-    [nodes, edges],
-    ([$nodes, $edges]): WorkflowGraph => ({
+    [nodes, edges, derivedGraph],
+    ([$nodes, $edges, $derivedGraph]): WorkflowGraph => ({
       nodes: $nodes.map((n) => ({
         id: n.id,
         node_type: n.type || 'unknown',
@@ -138,6 +139,7 @@ export function createWorkflowStores(
         target: e.target,
         target_handle: e.targetHandle || 'input',
       })),
+      ...(typeof $derivedGraph === 'undefined' ? {} : { derived_graph: $derivedGraph }),
     })
   );
 
@@ -150,6 +152,11 @@ export function createWorkflowStores(
     }
     return grouped;
   });
+
+  function markGraphModified() {
+    isDirty.set(true);
+    derivedGraph.set(undefined);
+  }
 
   // --- Node actions ---
 
@@ -166,20 +173,20 @@ export function createWorkflowStores(
       },
     };
     nodes.update((n) => [...n, newNode]);
-    isDirty.set(true);
+    markGraphModified();
   }
 
   function removeNode(nodeId: string) {
     nodes.update((n) => n.filter((node) => node.id !== nodeId));
     edges.update((e) => e.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    isDirty.set(true);
+    markGraphModified();
   }
 
   function updateNodePosition(nodeId: string, position: { x: number; y: number }) {
     nodes.update((n) =>
       n.map((node) => (node.id === nodeId ? { ...node, position } : node))
     );
-    isDirty.set(true);
+    markGraphModified();
   }
 
   function updateNodeData(nodeId: string, data: Record<string, unknown>) {
@@ -188,7 +195,7 @@ export function createWorkflowStores(
         node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
       )
     );
-    isDirty.set(true);
+    markGraphModified();
   }
 
   function getNodeById(nodeId: string): Node | undefined {
@@ -246,7 +253,7 @@ export function createWorkflowStores(
       return [...e, edge];
     });
     if (!added) return;
-    isDirty.set(true);
+    markGraphModified();
 
     // Auto-sync when connecting an inference_settings edge
     if (edge.sourceHandle === 'inference_settings') {
@@ -261,7 +268,7 @@ export function createWorkflowStores(
 
   function removeEdgeFn(edgeId: string) {
     edges.update((e) => e.filter((edge) => edge.id !== edgeId));
-    isDirty.set(true);
+    markGraphModified();
   }
 
   function syncEdgesFromBackend(backendGraph: WorkflowGraph) {
@@ -273,7 +280,7 @@ export function createWorkflowStores(
       targetHandle: e.target_handle,
     }));
     edges.set(newEdges);
-    isDirty.set(true);
+    markGraphModified();
   }
 
   // --- Execution actions ---
@@ -374,6 +381,7 @@ export function createWorkflowStores(
     );
 
     workflowMetadata.set(metadata || null);
+    derivedGraph.set(graph.derived_graph);
     isDirty.set(false);
   }
 
@@ -381,6 +389,7 @@ export function createWorkflowStores(
     nodes.set([]);
     edges.set([]);
     workflowMetadata.set(null);
+    derivedGraph.set(undefined);
     isDirty.set(false);
     resetExecutionStates();
   }
@@ -399,6 +408,7 @@ export function createWorkflowStores(
       { id: 'input-to-llm', source: 'user-input', sourceHandle: 'text', target: 'llm', targetHandle: 'prompt' },
       { id: 'llm-to-output', source: 'llm', sourceHandle: 'response', target: 'output', targetHandle: 'text' },
     ]);
+    derivedGraph.set(undefined);
     isDirty.set(false);
   }
 
@@ -617,7 +627,7 @@ export function createWorkflowStores(
         return newGroups;
       });
 
-      isDirty.set(true);
+      markGraphModified();
       return result.group;
     } catch (error) {
       console.error('[workflowStores] Failed to create group:', error);
@@ -669,7 +679,7 @@ export function createWorkflowStores(
         return newGroups;
       });
 
-      isDirty.set(true);
+      markGraphModified();
       return true;
     } catch (error) {
       console.error('[workflowStores] Failed to ungroup:', error);
@@ -706,7 +716,7 @@ export function createWorkflowStores(
         )
       );
 
-      isDirty.set(true);
+      markGraphModified();
       return true;
     } catch (error) {
       console.error('[workflowStores] Failed to update group ports:', error);

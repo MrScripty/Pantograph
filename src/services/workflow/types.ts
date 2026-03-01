@@ -57,6 +57,13 @@ export interface GraphEdge {
 export interface WorkflowGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  derived_graph?: WorkflowDerivedGraph;
+}
+
+export interface WorkflowDerivedGraph {
+  schema_version: number;
+  graph_fingerprint: string;
+  consumer_count_map: Record<string, number>;
 }
 
 export interface WorkflowMetadata {
