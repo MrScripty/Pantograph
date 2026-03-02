@@ -93,13 +93,6 @@ export default defineConfig(() => {
         // Normal Svelte with HMR - excludes generated components
         svelte({
           exclude: GENERATED_PATTERN,
-          experimental: {
-            compileModule: {
-              // Exclude @xyflow/svelte from Svelte module compilation
-              // The package ships pre-compiled .svelte.js files that should not be recompiled
-              exclude: ['**/node_modules/@xyflow/**']
-            }
-          }
         }),
         // Generated components - compiled but NO HMR (we handle it ourselves via custom events)
         svelte({
@@ -107,8 +100,10 @@ export default defineConfig(() => {
           hot: false,
           configFile: false, // Don't read svelte.config.js twice
           experimental: {
+            // Avoid compiling `.svelte.js` modules twice across the two Svelte plugin instances.
+            // The primary Svelte instance handles module compilation for dependencies such as @xyflow/svelte.
             compileModule: {
-              exclude: ['**/node_modules/@xyflow/**']
+              exclude: ['**']
             }
           }
         })
@@ -134,8 +129,6 @@ export default defineConfig(() => {
           // Other commonly used deps
           '@tauri-apps/api/core',
           '@tauri-apps/plugin-dialog',
-          // @xyflow/svelte is excluded from module compilation via experimental.compileModule.exclude
-          // in the svelte() plugin config above (see plugins array)
         ],
       },
       build: {

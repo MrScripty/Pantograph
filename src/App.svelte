@@ -115,7 +115,7 @@
       }
 
       // Toggle between canvas and node-graph views with Ctrl+`
-      if (e.ctrlKey && e.key === '`') {
+      if (isCtrl && (e.key === '`' || e.code === 'Backquote')) {
         e.preventDefault();
         toggleViewMode();
         return;
