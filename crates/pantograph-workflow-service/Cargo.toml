@@ -14,3 +14,6 @@ uuid.workspace = true
 
 # Shared framework/domain crates
 node-engine = { path = "../node-engine" }
+
+[dev-dependencies]
+tokio.workspace = true
