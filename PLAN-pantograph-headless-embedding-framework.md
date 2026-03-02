@@ -1,7 +1,7 @@
 # Plan: Pantograph Refactor to Headless Embedding Framework API
 
 ## Status
-Implementation plan (refactor-first, atomic commit sequence)
+Partially implemented (headless embedding v1 contract + service + Tauri adapter)
 
 ## Objective
 Refactor Pantograph workflow execution boundaries so headless embedding can be consumed as a stable Rust-first framework API (`embed_objects_v1`) with optional transport adapters, while bringing architecture into compliance with project coding standards.
@@ -86,7 +86,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Documentation lint/check as used by repository tooling.
 - Review checklist confirms no implementation begins before contract freeze.
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 2: Extract Host-Agnostic Workflow Application Service
 
@@ -104,7 +104,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - `cargo check --workspace`
 - Existing workflow execution tests pass or are ported with parity assertions.
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 3: Thin Tauri Adapter Migration
 
@@ -119,7 +119,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - Command-level integration tests pass.
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 4: Implement Headless Embedding Service API
 
@@ -138,7 +138,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Unit tests for ordering, correlation, partial failure handling, and idempotency behavior.
 - `cargo test -p <service-crate>`
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 5: Model Signature Reliability
 
@@ -153,7 +153,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Tests asserting signature presence for all success cases.
 - Tests for explicit failure path when signature requirements are unmet.
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 6: Adapter Surfaces Beyond Tauri
 
@@ -168,7 +168,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Binding crate compile checks.
 - Contract parity tests across at least Rust + one adapter surface.
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 7: Contract Tests and Compatibility Guardrails
 
@@ -183,7 +183,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Contract test suite in CI.
 - Snapshot update process documented.
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 8: Official Rust Example and Migration Documentation
 
@@ -198,7 +198,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Example build and run smoke test.
 - Docs review checklist complete.
 
-**Status:** Not started
+**Status:** Complete
 
 ## Atomic Commit Sequence
 
@@ -260,13 +260,19 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 ## Completion Summary
 
 ### Completed
-- N/A
+- Milestone 1 contract freeze docs and architecture ADR.
+- Milestone 2 host-agnostic workflow service crate scaffolding and DTO/trait contracts.
+- Milestone 3 Tauri command adapter integration for headless embedding API.
+- Milestone 4 `embed_objects_v1` and capabilities service operations.
+- Milestone 5 model signature validation and non-empty success guarantees.
+- Milestone 7 contract tests for v1 request/response shapes.
+- Milestone 8 official Rust host example and migration guide.
 
 ### Deviations
-- N/A
+- Milestone 6 optional adapter parity (UniFFI/Rustler wrappers over the new service) is not fully complete.
 
 ### Follow-Ups
-- N/A
+- Add UniFFI and/or Rustler adapter methods that delegate to `pantograph-workflow-service` without duplicating business logic.
 
 ### Verification Summary
 - N/A
