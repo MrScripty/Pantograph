@@ -1187,9 +1187,9 @@ fn extensions_new() -> ResourceArc<ExtensionsResource> {
 ///
 /// Wraps `workflow_nodes::setup_extensions_with_path()` — the same function
 /// the Pantograph Tauri app calls. Uses the 3-step discovery chain:
-/// 1. Global registry (~/.config/pumas/registry.db)
-/// 2. Explicit `library_path` parameter (if provided)
-/// 3. `PUMAS_LIBRARY_PATH` environment variable
+/// 1. Explicit `library_path` parameter (if provided)
+/// 2. `PUMAS_LIBRARY_PATH` environment variable
+/// 3. Global registry (~/.config/pumas/registry.db)
 #[rustler::nif(schedule = "DirtyCpu")]
 fn extensions_setup(
     resource: ResourceArc<ExtensionsResource>,

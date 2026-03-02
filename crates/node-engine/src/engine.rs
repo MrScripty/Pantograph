@@ -278,7 +278,7 @@ impl DemandEngine {
                                 "selected_binding_ids",
                                 "platform_context",
                                 "dependency_bindings",
-                                "dependency_plan_id",
+                                "dependency_requirements_id",
                             ] {
                                 if inputs.contains_key(context_key) {
                                     continue;

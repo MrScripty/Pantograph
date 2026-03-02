@@ -5,12 +5,15 @@
 //! `CoreTaskExecutor` via `CompositeTaskExecutor`.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use node_engine::{
     core_executor::resolve_node_type, extension_keys, Context, DependencyState, ExecutorExtensions,
-    ModelDependencyRequest, ModelDependencyResolver, NodeEngineError, Result, TaskExecutor,
+    ModelDependencyRequest, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
+    Result, TaskExecutor,
 };
 use tokio::sync::RwLock;
 
@@ -100,7 +103,10 @@ impl TauriTaskExecutor {
 
         let mut out = Vec::new();
         for binding in bindings {
-            let env_id = binding.get("envId").and_then(|v| v.as_str());
+            let env_id = binding
+                .get("envId")
+                .and_then(|v| v.as_str())
+                .or_else(|| binding.get("env_id").and_then(|v| v.as_str()));
             if let Some(env_id) = env_id {
                 let trimmed = env_id.trim();
                 if !trimmed.is_empty() {
@@ -108,6 +114,52 @@ impl TauriTaskExecutor {
                 }
             }
         }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    fn collect_environment_ref_env_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
+        let environment_ref =
+            Self::read_optional_input_value_aliases(inputs, &["environment_ref", "environmentRef"]);
+        let Some(environment_ref) = environment_ref else {
+            return Vec::new();
+        };
+
+        let mut out = Vec::new();
+        if let Some(env_id) = environment_ref
+            .get("env_id")
+            .and_then(|v| v.as_str())
+            .or_else(|| environment_ref.get("envId").and_then(|v| v.as_str()))
+        {
+            let trimmed = env_id.trim();
+            if !trimmed.is_empty() {
+                out.push(trimmed.to_string());
+            }
+        }
+        if let Some(env_ids) = environment_ref
+            .get("env_ids")
+            .and_then(|v| v.as_array())
+            .or_else(|| environment_ref.get("envIds").and_then(|v| v.as_array()))
+        {
+            for value in env_ids {
+                if let Some(env_id) = value.as_str() {
+                    let trimmed = env_id.trim();
+                    if !trimmed.is_empty() {
+                        out.push(trimmed.to_string());
+                    }
+                }
+            }
+        }
+
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    fn collect_runtime_env_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
+        let mut out = Self::collect_model_ref_env_ids(inputs);
+        out.extend(Self::collect_environment_ref_env_ids(inputs));
         out.sort();
         out.dedup();
         out
@@ -158,6 +210,59 @@ impl TauriTaskExecutor {
             .find_map(|key| Self::read_optional_input_value(inputs, key))
     }
 
+    fn parse_requirements_fallback(
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Option<node_engine::ModelDependencyRequirements> {
+        let raw = Self::read_optional_input_value_aliases(
+            inputs,
+            &["dependency_requirements", "dependencyRequirements"],
+        )?;
+        serde_json::from_value(raw).ok()
+    }
+
+    fn read_input_dependency_override_patches(
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> Vec<node_engine::DependencyOverridePatchV1> {
+        let Some(raw) = Self::read_optional_input_value_aliases(
+            inputs,
+            &[
+                "dependency_override_patches",
+                "dependencyOverridePatches",
+                "manual_overrides",
+                "manualOverrides",
+            ],
+        ) else {
+            return Vec::new();
+        };
+
+        if raw.is_null() {
+            return Vec::new();
+        }
+        if raw.is_object() {
+            return serde_json::from_value::<node_engine::DependencyOverridePatchV1>(raw)
+                .map(|single| vec![single])
+                .unwrap_or_default();
+        }
+        serde_json::from_value::<Vec<node_engine::DependencyOverridePatchV1>>(raw)
+            .unwrap_or_default()
+    }
+
+    fn fallback_platform_context_from_key(platform_key: &str) -> Option<serde_json::Value> {
+        let normalized = platform_key.trim();
+        if normalized.is_empty() {
+            return None;
+        }
+
+        let mut parts = normalized.split('-');
+        let os = parts.next().unwrap_or_default().trim();
+        let arch = parts.next().unwrap_or_default().trim();
+        if os.is_empty() || arch.is_empty() {
+            return None;
+        }
+
+        Some(serde_json::json!({ "os": os, "arch": arch }))
+    }
+
     fn read_input_selected_binding_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
         let Some(raw) = Self::read_optional_input_value_aliases(
             inputs,
@@ -174,18 +279,23 @@ impl TauriTaskExecutor {
             .collect()
     }
 
-    fn infer_task_type_primary(node_type: &str, inputs: &HashMap<String, serde_json::Value>) -> String {
-        if let Some(task) =
-            Self::read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
-        {
+    fn infer_task_type_primary(
+        node_type: &str,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> String {
+        if let Some(task) = Self::read_optional_input_string_aliases(
+            inputs,
+            &["task_type_primary", "taskTypePrimary"],
+        ) {
             if !task.trim().is_empty() {
                 return task;
             }
         }
 
-        let model_type = Self::read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
-            .unwrap_or_default()
-            .to_lowercase();
+        let model_type =
+            Self::read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
+                .unwrap_or_default()
+                .to_lowercase();
 
         if node_type == "audio-generation" || model_type == "audio" {
             return "text-to-audio".to_string();
@@ -212,25 +322,341 @@ impl TauriTaskExecutor {
         model_path: &str,
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
-        let backend_key = Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| Self::infer_backend_key(node_type));
+        let requirements = Self::parse_requirements_fallback(inputs);
+        let backend_key =
+            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| requirements.as_ref().and_then(|r| r.backend_key.clone()))
+                .unwrap_or_else(|| Self::infer_backend_key(node_type));
 
         let task_type_primary = Self::infer_task_type_primary(node_type, inputs);
+        let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
+            .or_else(|| requirements.as_ref().map(|r| r.model_id.clone()));
+        let platform_context = Self::read_optional_input_value_aliases(
+            inputs,
+            &["platform_context", "platformContext"],
+        )
+        .or_else(|| {
+            requirements
+                .as_ref()
+                .and_then(|r| Self::fallback_platform_context_from_key(&r.platform_key))
+        });
+
+        let mut selected_binding_ids = Self::read_input_selected_binding_ids(inputs);
+        if selected_binding_ids.is_empty() {
+            if let Some(req) = &requirements {
+                selected_binding_ids = req.selected_binding_ids.clone();
+            }
+        }
 
         ModelDependencyRequest {
             node_type: node_type.to_string(),
             model_path: model_path.to_string(),
-            model_id: Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]),
-            model_type: Self::read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
+            model_id,
+            model_type: Self::read_optional_input_string_aliases(
+                inputs,
+                &["model_type", "modelType"],
+            ),
             task_type_primary: Some(task_type_primary),
             backend_key: Some(backend_key),
-            platform_context: Self::read_optional_input_value_aliases(
-                inputs,
-                &["platform_context", "platformContext"],
-            ),
-            selected_binding_ids: Self::read_input_selected_binding_ids(inputs),
+            platform_context,
+            selected_binding_ids,
+            dependency_override_patches: Self::read_input_dependency_override_patches(inputs),
         }
+    }
+
+    fn dependency_mode(inputs: &HashMap<String, serde_json::Value>) -> String {
+        Self::read_optional_input_string_aliases(inputs, &["mode"])
+            .map(|mode| mode.trim().to_lowercase())
+            .filter(|mode| mode == "auto" || mode == "manual")
+            .unwrap_or_else(|| "auto".to_string())
+    }
+
+    fn canonical_requirement_fingerprint(
+        requirements: &node_engine::ModelDependencyRequirements,
+    ) -> String {
+        let mut rows = Vec::new();
+        let selected = requirements
+            .selected_binding_ids
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+        for binding in &requirements.bindings {
+            if !selected.is_empty() && !selected.contains(&binding.binding_id) {
+                continue;
+            }
+            for req in &binding.requirements {
+                rows.push(format!(
+                    "{}|{}|{}|{}",
+                    binding.binding_id, req.kind, req.name, req.exact_pin
+                ));
+            }
+        }
+        rows.sort();
+        rows.join(";")
+    }
+
+    fn sanitize_key_component(raw: &str) -> String {
+        raw.chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || ch == '.' || ch == '-' || ch == '_' {
+                    ch
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>()
+    }
+
+    fn dependency_env_store_root() -> PathBuf {
+        let base = dirs::data_local_dir()
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(std::env::temp_dir);
+        base.join("pantograph").join("dependency_envs")
+    }
+
+    fn resolve_environment_ref(
+        status: &ModelDependencyStatus,
+    ) -> std::result::Result<serde_json::Value, String> {
+        let requirements = &status.requirements;
+        let selected = if requirements.selected_binding_ids.is_empty() {
+            requirements
+                .bindings
+                .iter()
+                .map(|b| b.binding_id.clone())
+                .collect::<Vec<_>>()
+        } else {
+            requirements.selected_binding_ids.clone()
+        };
+
+        let env_ids = status
+            .bindings
+            .iter()
+            .filter_map(|row| row.env_id.clone())
+            .map(|id| id.trim().to_string())
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>();
+        let primary_env_id = env_ids.first().cloned();
+
+        let mut selected_bindings = requirements
+            .bindings
+            .iter()
+            .filter(|binding| selected.contains(&binding.binding_id))
+            .collect::<Vec<_>>();
+        if selected_bindings.is_empty() {
+            selected_bindings = requirements.bindings.iter().collect::<Vec<_>>();
+        }
+
+        let environment_kind = selected_bindings
+            .iter()
+            .find_map(|binding| binding.environment_kind.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let python_override = selected_bindings
+            .iter()
+            .find_map(|binding| binding.python_executable_override.clone());
+
+        let state_value = serde_json::to_value(&status.state).map_err(|err| {
+            format!(
+                "Failed to serialize dependency status state for environment_ref: {}",
+                err
+            )
+        })?;
+        let state = state_value
+            .as_str()
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "unresolved".to_string());
+
+        let python_executable = if let Some(override_path) = python_override {
+            Some(override_path)
+        } else if !env_ids.is_empty()
+            && (environment_kind == "python" || environment_kind == "python-venv")
+        {
+            super::python_runtime::resolve_python_executable_for_env_ids(&env_ids)
+                .ok()
+                .map(|path| path.to_string_lossy().to_string())
+        } else {
+            None
+        };
+
+        let backend_key = requirements
+            .backend_key
+            .clone()
+            .unwrap_or_else(|| "any".to_string());
+        let requirements_fingerprint = Self::canonical_requirement_fingerprint(requirements);
+        let environment_key = Self::sanitize_key_component(&format!(
+            "v1:{}:{}:{}:{}",
+            primary_env_id.clone().unwrap_or_else(|| "none".to_string()),
+            requirements.platform_key,
+            backend_key,
+            requirements_fingerprint
+        ));
+
+        let manifest_dir = Self::dependency_env_store_root()
+            .join(environment_kind.replace(':', "_"))
+            .join(&environment_key);
+        std::fs::create_dir_all(&manifest_dir).map_err(|err| {
+            format!(
+                "Failed to create dependency environment manifest directory '{}': {}",
+                manifest_dir.display(),
+                err
+            )
+        })?;
+        let manifest_path = manifest_dir.join("manifest.json");
+        let manifest = serde_json::json!({
+            "contract_version": 1,
+            "generated_at": Utc::now().to_rfc3339(),
+            "environment_key": environment_key,
+            "environment_kind": environment_kind,
+            "env_id": primary_env_id,
+            "env_ids": env_ids,
+            "python_executable": python_executable,
+            "state": state,
+            "requirements_fingerprint": requirements_fingerprint,
+            "platform_key": requirements.platform_key,
+            "backend_key": requirements.backend_key,
+            "selected_binding_ids": requirements.selected_binding_ids,
+            "requirements": requirements,
+            "status": status,
+        });
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).map_err(|err| {
+                format!(
+                    "Failed to serialize dependency environment manifest '{}': {}",
+                    manifest_path.display(),
+                    err
+                )
+            })?,
+        )
+        .map_err(|err| {
+            format!(
+                "Failed to write dependency environment manifest '{}': {}",
+                manifest_path.display(),
+                err
+            )
+        })?;
+
+        Ok(serde_json::json!({
+            "contract_version": 1,
+            "environment_key": environment_key,
+            "environment_kind": environment_kind,
+            "env_id": manifest["env_id"],
+            "env_ids": manifest["env_ids"],
+            "python_executable": python_executable,
+            "state": state,
+            "requirements_fingerprint": requirements_fingerprint,
+            "platform_key": requirements.platform_key,
+            "backend_key": requirements.backend_key,
+            "manifest_path": manifest_path.to_string_lossy().to_string(),
+        }))
+    }
+
+    async fn execute_dependency_environment(
+        &self,
+        inputs: &HashMap<String, serde_json::Value>,
+        extensions: &ExecutorExtensions,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        let Some(resolver) = extensions
+            .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
+        else {
+            return Err(NodeEngineError::ExecutionFailed(
+                "Dependency environment node requires dependency resolver extension".to_string(),
+            ));
+        };
+
+        let model_path =
+            Self::read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
+                .ok_or_else(|| {
+                    NodeEngineError::ExecutionFailed(
+                        "Missing model_path input. Connect Puma-Lib model_path output.".to_string(),
+                    )
+                })?;
+        let mode = Self::dependency_mode(inputs);
+        let request =
+            Self::build_model_dependency_request("dependency-environment", &model_path, inputs);
+        let requirements = resolver
+            .resolve_model_dependency_requirements(request.clone())
+            .await
+            .map_err(|err| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Dependency environment resolve failed: {}",
+                    err
+                ))
+            })?;
+
+        let mut status = resolver
+            .check_dependencies(request.clone())
+            .await
+            .map_err(|err| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Dependency environment check failed: {}",
+                    err
+                ))
+            })?;
+        if mode == "auto" && matches!(status.state, DependencyState::Missing) {
+            let install = resolver
+                .install_dependencies(request)
+                .await
+                .map_err(|err| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "Dependency environment install failed: {}",
+                        err
+                    ))
+                })?;
+            status = ModelDependencyStatus {
+                state: install.state,
+                code: install.code,
+                message: install.message,
+                requirements: install.requirements,
+                bindings: install.bindings,
+                checked_at: install.installed_at,
+            };
+        }
+
+        let ui_state = if mode == "manual"
+            && matches!(
+                status.state,
+                DependencyState::Missing | DependencyState::Unresolved
+            ) {
+            "needs_user_input".to_string()
+        } else {
+            serde_json::to_value(&status.state)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "unresolved".to_string())
+        };
+        let environment_ref = Self::resolve_environment_ref(&status).map_err(|err| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Dependency environment failed to emit environment_ref: {}",
+                err
+            ))
+        })?;
+
+        let mut outputs = HashMap::new();
+        outputs.insert("environment_ref".to_string(), environment_ref);
+        outputs.insert(
+            "dependency_requirements".to_string(),
+            serde_json::to_value(&requirements).map_err(|err| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Failed to serialize dependency requirements output: {}",
+                    err
+                ))
+            })?,
+        );
+        outputs.insert(
+            "dependency_status".to_string(),
+            serde_json::json!({
+                "mode": mode,
+                "ui_state": ui_state,
+                "state": status.state,
+                "code": status.code,
+                "message": status.message,
+                "checked_at": status.checked_at,
+                "requirements": status.requirements,
+                "bindings": status.bindings,
+            }),
+        );
+        Ok(outputs)
     }
 
     async fn enforce_dependency_preflight(
@@ -243,9 +669,34 @@ impl TauriTaskExecutor {
             return Ok(None);
         }
 
-        let Some(resolver) =
-            extensions.get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
+        let environment_ref =
+            Self::read_optional_input_value_aliases(inputs, &["environment_ref", "environmentRef"]);
+        let environment_gate_enabled = environment_ref.is_some();
+        if let Some(environment_ref) = &environment_ref {
+            let state = environment_ref
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unresolved");
+            if state != "ready" {
+                let payload = serde_json::json!({
+                    "kind": "environment_ref_gate",
+                    "node_type": node_type,
+                    "state": state,
+                    "environment_ref": environment_ref,
+                });
+                return Err(NodeEngineError::ExecutionFailed(format!(
+                    "Dependency preflight blocked execution: {}",
+                    payload
+                )));
+            }
+        }
+
+        let Some(resolver) = extensions
+            .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
         else {
+            if environment_gate_enabled {
+                return Ok(None);
+            }
             return Err(NodeEngineError::ExecutionFailed(
                 "Dependency preflight blocked execution: dependency resolver is not configured"
                     .to_string(),
@@ -262,34 +713,52 @@ impl TauriTaskExecutor {
             })?;
 
         let request = Self::build_model_dependency_request(node_type, model_path, inputs);
-        let plan = resolver
-            .resolve_model_dependency_plan(request.clone())
+        if environment_gate_enabled {
+            let resolved = resolver
+                .resolve_model_ref(request, None)
+                .await
+                .map_err(|e| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "Dependency preflight failed to resolve model_ref from ready environment_ref: {}",
+                        e
+                    ))
+                })?;
+            if let Some(ref model_ref) = resolved {
+                model_ref
+                    .validate()
+                    .map_err(NodeEngineError::ExecutionFailed)?;
+            }
+            return Ok(resolved);
+        }
+
+        let requirements = resolver
+            .resolve_model_dependency_requirements(request.clone())
             .await
             .map_err(|e| {
                 NodeEngineError::ExecutionFailed(format!(
-                    "Dependency preflight plan resolution failed for '{}': {}",
+                    "Dependency preflight requirements resolution failed for '{}': {}",
                     node_type, e
                 ))
             })?;
 
-        let status = resolver.check_dependencies(request.clone()).await.map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!(
-                "Dependency preflight check failed for '{}': {}",
-                node_type, e
-            ))
-        })?;
+        let status = resolver
+            .check_dependencies(request.clone())
+            .await
+            .map_err(|e| {
+                NodeEngineError::ExecutionFailed(format!(
+                    "Dependency preflight check failed for '{}': {}",
+                    node_type, e
+                ))
+            })?;
 
         if status.state != DependencyState::Ready {
             let payload = serde_json::json!({
                 "kind": "dependency_preflight",
                 "node_type": node_type,
                 "model_path": model_path,
-                "plan_state": plan.state,
-                "plan_code": plan.code,
-                "plan_message": plan.message,
-                "review_reasons": plan.review_reasons,
-                "required_binding_ids": plan.required_binding_ids,
-                "selected_binding_ids": plan.selected_binding_ids,
+                "validation_state": requirements.validation_state,
+                "validation_errors": requirements.validation_errors,
+                "selected_binding_ids": requirements.selected_binding_ids,
                 "state": status.state,
                 "code": status.code,
                 "bindings": status.bindings,
@@ -302,7 +771,7 @@ impl TauriTaskExecutor {
         }
 
         let resolved = resolver
-            .resolve_model_ref(request, Some(plan))
+            .resolve_model_ref(request, Some(requirements))
             .await
             .map_err(|e| {
                 NodeEngineError::ExecutionFailed(format!(
@@ -342,7 +811,7 @@ impl TauriTaskExecutor {
         let request = PythonNodeExecutionRequest {
             node_type: node_type.to_string(),
             inputs: runtime_inputs.clone(),
-            env_ids: Self::collect_model_ref_env_ids(&runtime_inputs),
+            env_ids: Self::collect_runtime_env_ids(&runtime_inputs),
         };
         self.python_runtime
             .execute_node(request)
@@ -364,8 +833,13 @@ impl TaskExecutor for TauriTaskExecutor {
 
         match node_type.as_str() {
             "rag-search" => self.execute_rag_search(&inputs).await,
+            "dependency-environment" => {
+                self.execute_dependency_environment(&inputs, extensions)
+                    .await
+            }
             "pytorch-inference" | "audio-generation" => {
-                self.execute_python_node(&node_type, &inputs, extensions).await
+                self.execute_python_node(&node_type, &inputs, extensions)
+                    .await
             }
             _ => {
                 // Signal to CompositeTaskExecutor that this node type
@@ -386,25 +860,25 @@ mod tests {
     use std::sync::Mutex;
 
     use node_engine::{
-        extension_keys, DependencyState, ExecutorExtensions, ModelDependencyBinding,
-        ModelDependencyInstallResult, ModelDependencyPlan, ModelDependencyRequest,
-        ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+        extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
+        ModelDependencyBinding, ModelDependencyInstallResult, ModelDependencyRequest,
+        ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
     };
 
     #[derive(Clone)]
     struct StubDependencyResolver {
-        plan: ModelDependencyPlan,
+        requirements: ModelDependencyRequirements,
         status: ModelDependencyStatus,
         model_ref: Option<ModelRefV2>,
     }
 
     #[async_trait]
     impl ModelDependencyResolver for StubDependencyResolver {
-        async fn resolve_model_dependency_plan(
+        async fn resolve_model_dependency_requirements(
             &self,
             _request: ModelDependencyRequest,
-        ) -> std::result::Result<ModelDependencyPlan, String> {
-            Ok(self.plan.clone())
+        ) -> std::result::Result<ModelDependencyRequirements, String> {
+            Ok(self.requirements.clone())
         }
 
         async fn check_dependencies(
@@ -424,7 +898,7 @@ mod tests {
         async fn resolve_model_ref(
             &self,
             _request: ModelDependencyRequest,
-            _plan: Option<ModelDependencyPlan>,
+            _requirements: Option<ModelDependencyRequirements>,
         ) -> std::result::Result<Option<ModelRefV2>, String> {
             Ok(self.model_ref.clone())
         }
@@ -460,17 +934,16 @@ mod tests {
         (executor, extensions)
     }
 
-    fn make_plan(state: DependencyState, code: Option<&str>) -> ModelDependencyPlan {
-        ModelDependencyPlan {
-            state,
-            code: code.map(|s| s.to_string()),
-            message: code.map(|s| format!("state={}", s)),
-            review_reasons: Vec::new(),
-            plan_id: Some("plan-test".to_string()),
+    fn make_requirements(state: DependencyValidationState) -> ModelDependencyRequirements {
+        ModelDependencyRequirements {
+            model_id: "model-a".to_string(),
+            platform_key: "linux-x86_64".to_string(),
+            backend_key: Some("pytorch".to_string()),
+            dependency_contract_version: 1,
+            validation_state: state,
+            validation_errors: Vec::new(),
             bindings: Vec::new(),
             selected_binding_ids: Vec::new(),
-            required_binding_ids: Vec::new(),
-            missing_pins: Vec::new(),
         }
     }
 
@@ -479,11 +952,9 @@ mod tests {
             state,
             code: code.map(|s| s.to_string()),
             message: code.map(|s| format!("status={}", s)),
-            review_reasons: Vec::new(),
-            plan_id: Some("plan-test".to_string()),
+            requirements: make_requirements(DependencyValidationState::Resolved),
             bindings: Vec::new(),
             checked_at: None,
-            missing_pins: Vec::new(),
         }
     }
 
@@ -495,11 +966,8 @@ mod tests {
             response: HashMap::new(),
         });
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-            plan: make_plan(DependencyState::ManualInterventionRequired, Some("unpinned_dependency")),
-            status: make_status(
-                DependencyState::ManualInterventionRequired,
-                Some("unpinned_dependency"),
-            ),
+            requirements: make_requirements(DependencyValidationState::InvalidProfile),
+            status: make_status(DependencyState::Invalid, Some("invalid_profile")),
             model_ref: None,
         });
         let (executor, extensions) = test_executor(adapter, resolver);
@@ -512,19 +980,14 @@ mod tests {
         inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
         let err = executor
-            .execute_task(
-                "pytorch-inference-1",
-                inputs,
-                &Context::new(),
-                &extensions,
-            )
+            .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
             .await
             .expect_err("preflight should block non-ready dependency state");
 
         match err {
             NodeEngineError::ExecutionFailed(message) => {
                 assert!(message.contains("Dependency preflight blocked execution"));
-                assert!(message.contains("unpinned_dependency"));
+                assert!(message.contains("invalid_profile"));
             }
             other => panic!("unexpected error variant: {other:?}"),
         }
@@ -552,35 +1015,34 @@ mod tests {
                 profile_id: "profile-a".to_string(),
                 profile_version: 1,
                 profile_hash: Some("hash".to_string()),
-                binding_kind: "required".to_string(),
                 backend_key: Some("pytorch".to_string()),
                 platform_selector: Some("linux-x86_64".to_string()),
-                env_id: "venv:test".to_string(),
-                pin_summary: None,
-                required_pins: Vec::new(),
-                missing_pins: Vec::new(),
+                environment_kind: Some("python".to_string()),
+                env_id: Some("venv:test".to_string()),
+                python_executable_override: None,
+                validation_state: DependencyValidationState::Resolved,
+                validation_errors: Vec::new(),
+                requirements: Vec::new(),
             }],
-            dependency_plan_id: Some("plan-test".to_string()),
+            dependency_requirements_id: Some("requirements-test".to_string()),
         };
 
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
-            plan: make_plan(DependencyState::Ready, None),
+            requirements: make_requirements(DependencyValidationState::Resolved),
             status: make_status(DependencyState::Ready, None),
             model_ref: Some(resolved_model_ref),
         });
         let (executor, extensions) = test_executor(adapter, resolver);
 
         let mut inputs = HashMap::new();
-        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model-ready"));
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model-ready"),
+        );
         inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
         let outputs = executor
-            .execute_task(
-                "pytorch-inference-1",
-                inputs,
-                &Context::new(),
-                &extensions,
-            )
+            .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
             .await
             .expect("ready preflight should allow adapter execution");
         assert_eq!(outputs.get("response"), Some(&serde_json::json!("ok")));
@@ -591,5 +1053,80 @@ mod tests {
         assert_eq!(request.node_type, "pytorch-inference");
         assert_eq!(request.env_ids, vec!["venv:test".to_string()]);
         assert!(request.inputs.contains_key("model_ref"));
+    }
+
+    #[test]
+    fn collect_runtime_env_ids_includes_environment_ref() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "environment_ref".to_string(),
+            serde_json::json!({
+                "state": "ready",
+                "env_id": "env:primary",
+                "env_ids": ["env:extra"]
+            }),
+        );
+        inputs.insert(
+            "model_ref".to_string(),
+            serde_json::json!({
+                "dependencyBindings": [
+                    {"envId": "env:primary"},
+                    {"envId": "env:secondary"}
+                ]
+            }),
+        );
+
+        let env_ids = TauriTaskExecutor::collect_runtime_env_ids(&inputs);
+        assert_eq!(
+            env_ids,
+            vec![
+                "env:extra".to_string(),
+                "env:primary".to_string(),
+                "env:secondary".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn python_nodes_fail_fast_when_environment_ref_is_not_ready() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests: requests.clone(),
+            response: HashMap::new(),
+        });
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: make_requirements(DependencyValidationState::Resolved),
+            status: make_status(DependencyState::Ready, None),
+            model_ref: None,
+        });
+        let (executor, extensions) = test_executor(adapter, resolver);
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model-ready"),
+        );
+        inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+        inputs.insert(
+            "environment_ref".to_string(),
+            serde_json::json!({
+                "state": "missing",
+                "env_id": "env:test"
+            }),
+        );
+
+        let err = executor
+            .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
+            .await
+            .expect_err("preflight should block when environment_ref state is not ready");
+
+        match err {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("environment_ref_gate"));
+                assert!(message.contains("missing"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+        assert_eq!(requests.lock().expect("recording lock").len(), 0);
     }
 }

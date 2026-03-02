@@ -5,7 +5,7 @@ use tauri::{ipc::Channel, AppHandle, State};
 use uuid::Uuid;
 
 use crate::agent::rag::SharedRagManager;
-use crate::llm::gateway::SharedGateway;
+use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 
 use super::commands::SharedExtensions;
@@ -75,7 +75,10 @@ fn hydrate_embedding_emit_metadata_flags(mut graph: WorkflowGraph) -> WorkflowGr
 
         match node.data {
             serde_json::Value::Object(ref mut map) => {
-                map.insert("emit_metadata".to_string(), serde_json::json!(emit_metadata));
+                map.insert(
+                    "emit_metadata".to_string(),
+                    serde_json::json!(emit_metadata),
+                );
             }
             _ => {
                 node.data = serde_json::json!({ "emit_metadata": emit_metadata });
@@ -93,7 +96,10 @@ async fn sync_embedding_emit_metadata_flags_for_executor(
     let mut counts = std::collections::HashMap::<String, u32>::new();
     for edge in &snapshot.edges {
         let key = format!("{}:{}", edge.source, edge.source_handle);
-        counts.entry(key).and_modify(|count| *count += 1).or_insert(1);
+        counts
+            .entry(key)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
 
     for node in &snapshot.nodes {
@@ -105,7 +111,10 @@ async fn sync_embedding_emit_metadata_flags_for_executor(
         let mut data = node.data.clone();
         match data {
             serde_json::Value::Object(ref mut map) => {
-                map.insert("emit_metadata".to_string(), serde_json::json!(emit_metadata));
+                map.insert(
+                    "emit_metadata".to_string(),
+                    serde_json::json!(emit_metadata),
+                );
             }
             _ => {
                 data = serde_json::json!({ "emit_metadata": emit_metadata });
@@ -120,10 +129,107 @@ async fn sync_embedding_emit_metadata_flags_for_executor(
     Ok(())
 }
 
+fn graph_has_embedding_node(graph: &WorkflowGraph) -> bool {
+    graph.nodes.iter().any(|node| node.node_type == "embedding")
+}
+
+fn graph_has_llamacpp_inference_node(graph: &WorkflowGraph) -> bool {
+    graph
+        .nodes
+        .iter()
+        .any(|node| node.node_type == "llamacpp-inference")
+}
+
+fn node_engine_graph_has_embedding_node(graph: &node_engine::WorkflowGraph) -> bool {
+    graph.nodes.iter().any(|node| node.node_type == "embedding")
+}
+
+fn node_engine_graph_has_llamacpp_inference_node(graph: &node_engine::WorkflowGraph) -> bool {
+    graph
+        .nodes
+        .iter()
+        .any(|node| node.node_type == "llamacpp-inference")
+}
+
+async fn prepare_embedding_runtime(
+    gateway: &SharedGateway,
+    config: &SharedAppConfig,
+    needs_embedding_node: bool,
+    needs_llamacpp_inference_node: bool,
+) -> Result<Option<inference::BackendConfig>, String> {
+    if !needs_embedding_node {
+        return Ok(None);
+    }
+
+    if needs_llamacpp_inference_node {
+        return Err(
+            "Workflow includes both `embedding` and `llamacpp-inference` nodes. They currently require different llama.cpp runtime modes; run them in separate workflow executions."
+                .to_string(),
+        );
+    }
+
+    let backend_name = gateway.current_backend_name().await;
+    if backend_name != "llama.cpp" {
+        return Err(format!(
+            "Embedding nodes currently require the `llama.cpp` backend, but active backend is '{}'",
+            backend_name
+        ));
+    }
+
+    if gateway.is_ready().await && gateway.is_embedding_mode().await {
+        return Ok(None);
+    }
+
+    let restore_config = if gateway.is_ready().await && !gateway.is_embedding_mode().await {
+        gateway.last_inference_config().await
+    } else {
+        None
+    };
+
+    let guard = config.read().await;
+    let embedding_model_path = guard
+        .models
+        .embedding_model_path
+        .clone()
+        .ok_or_else(|| "Embedding model path not configured".to_string())?;
+    let device = guard.device.clone();
+    drop(guard);
+
+    let embedding_config = inference::BackendConfig {
+        model_path: Some(std::path::PathBuf::from(embedding_model_path)),
+        device: Some(device.device),
+        gpu_layers: Some(device.gpu_layers),
+        embedding_mode: true,
+        ..Default::default()
+    };
+
+    gateway
+        .start(&embedding_config)
+        .await
+        .map_err(|e| format!("Failed to start llama.cpp in embedding mode: {}", e))?;
+
+    Ok(restore_config)
+}
+
+async fn restore_runtime_if_needed(
+    gateway: &SharedGateway,
+    restore_config: Option<inference::BackendConfig>,
+) {
+    if let Some(config) = restore_config {
+        if let Err(err) = gateway.start(&config).await {
+            log::warn!(
+                "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
+                err
+            );
+        }
+    }
+}
+
 pub async fn execute_workflow_v2(
     _app: AppHandle,
     graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
@@ -141,6 +247,13 @@ pub async fn execute_workflow_v2(
 
     let graph = hydrate_embedding_emit_metadata_flags(graph);
     let ne_graph = convert_graph_to_node_engine(&graph);
+    let restore_config = prepare_embedding_runtime(
+        gateway.inner(),
+        config.inner(),
+        graph_has_embedding_node(&graph),
+        graph_has_llamacpp_inference_node(&graph),
+    )
+    .await?;
 
     execution_manager
         .create_execution(&execution_id, ne_graph, event_adapter.clone())
@@ -171,7 +284,7 @@ pub async fn execute_workflow_v2(
         snapshot_runtime_extensions(&shared)
     };
 
-    {
+    let workflow_result = {
         let mut executions = execution_manager.executions().await;
         let state = executions
             .get_mut(&execution_id)
@@ -186,6 +299,7 @@ pub async fn execute_workflow_v2(
             execution_id: execution_id.clone(),
         });
 
+        let mut workflow_result: Result<(), String> = Ok(());
         for node_id in &terminal_nodes {
             match state.executor.demand(node_id, &task_executor).await {
                 Ok(_outputs) => {
@@ -198,16 +312,24 @@ pub async fn execute_workflow_v2(
                         execution_id: execution_id.clone(),
                         error: e.to_string(),
                     });
-                    return Err(e.to_string());
+                    workflow_result = Err(e.to_string());
+                    break;
                 }
             }
         }
 
-        let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
-            workflow_id: execution_id.clone(),
-            execution_id: execution_id.clone(),
-        });
-    }
+        if workflow_result.is_ok() {
+            let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
+                workflow_id: execution_id.clone(),
+                execution_id: execution_id.clone(),
+            });
+        }
+
+        workflow_result
+    };
+
+    restore_runtime_if_needed(gateway.inner(), restore_config).await;
+    workflow_result?;
 
     Ok(execution_id)
 }
@@ -381,6 +503,7 @@ pub async fn run_workflow_session(
     _app: AppHandle,
     session_id: String,
     gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
@@ -412,6 +535,23 @@ pub async fn run_workflow_session(
         snapshot_runtime_extensions(&shared)
     };
 
+    let session_graph = {
+        let mut executions = execution_manager.executions().await;
+        let state = executions
+            .get_mut(&session_id)
+            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+        state.touch();
+        state.executor.get_graph_snapshot().await
+    };
+
+    let restore_config = prepare_embedding_runtime(
+        gateway.inner(),
+        config.inner(),
+        node_engine_graph_has_embedding_node(&session_graph),
+        node_engine_graph_has_llamacpp_inference_node(&session_graph),
+    )
+    .await?;
+
     let mut executions = execution_manager.executions().await;
     let state = executions
         .get_mut(&session_id)
@@ -434,6 +574,7 @@ pub async fn run_workflow_session(
         execution_id: session_id.clone(),
     });
 
+    let mut workflow_result: Result<(), String> = Ok(());
     for node_id in &terminal_nodes {
         match state.executor.demand(node_id, &task_executor).await {
             Ok(_outputs) => {
@@ -446,15 +587,22 @@ pub async fn run_workflow_session(
                     execution_id: session_id.clone(),
                     error: e.to_string(),
                 });
-                return Err(e.to_string());
+                workflow_result = Err(e.to_string());
+                break;
             }
         }
     }
 
-    let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
-        workflow_id: session_id.clone(),
-        execution_id: session_id.clone(),
-    });
+    if workflow_result.is_ok() {
+        let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
+            workflow_id: session_id.clone(),
+            execution_id: session_id.clone(),
+        });
+    }
+
+    drop(executions);
+    restore_runtime_if_needed(gateway.inner(), restore_config).await;
+    workflow_result?;
 
     Ok(())
 }

@@ -272,7 +272,10 @@ mod tests {
     #[tokio::test]
     async fn test_read_template_allows_template_inside_templates_root() {
         let project_root = make_temp_project_root();
-        let template_path = project_root.join("src").join("templates").join("Card.svelte");
+        let template_path = project_root
+            .join("src")
+            .join("templates")
+            .join("Card.svelte");
         fs::write(&template_path, "<div>Card</div>").expect("write template");
         let tool = ReadTemplateTool::new(project_root.clone());
 

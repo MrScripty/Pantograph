@@ -6,10 +6,13 @@ use std::time::{Duration, Instant};
 
 use node_engine::{
     extension_keys, DependencyState, ExecutorExtensions, ModelDependencyInstallResult,
-    ModelDependencyPlan, ModelDependencyRequest, ModelDependencyStatus,
+    ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyStatus,
 };
 use pumas_library::index::ModelRecord;
 use tokio::sync::RwLock;
+
+#[path = "../workflow/python_runtime.rs"]
+mod python_runtime;
 
 #[path = "../workflow/model_dependencies.rs"]
 mod model_dependencies;
@@ -130,9 +133,9 @@ async fn has_bindings_for_backend(
     platform: &str,
     backend_key: Option<&str>,
 ) -> bool {
-    api.resolve_model_dependency_plan(&model.id, platform, backend_key)
+    api.resolve_model_dependency_requirements(&model.id, platform, backend_key)
         .await
-        .map(|plan| !plan.bindings.is_empty())
+        .map(|requirements| !requirements.bindings.is_empty())
         .unwrap_or(false)
 }
 
@@ -323,14 +326,14 @@ async fn backend_binding_matrix(
     for backend in candidates {
         let key = backend.unwrap_or("unspecified");
         match api
-            .resolve_model_dependency_plan(model_id, platform_key, backend)
+            .resolve_model_dependency_requirements(model_id, platform_key, backend)
             .await
         {
-            Ok(plan) => out.push(serde_json::json!({
+            Ok(requirements) => out.push(serde_json::json!({
                 "backend_key": key,
-                "state": plan.state,
-                "code": plan.error_code,
-                "binding_count": plan.bindings.len(),
+                "validation_state": requirements.validation_state,
+                "validation_error_count": requirements.validation_errors.len(),
+                "binding_count": requirements.bindings.len(),
             })),
             Err(err) => out.push(serde_json::json!({
                 "backend_key": key,
@@ -398,7 +401,7 @@ async fn run_flow(
     run_install: bool,
 ) -> Result<
     (
-        ModelDependencyPlan,
+        ModelDependencyRequirements,
         ModelDependencyStatus,
         Option<ModelDependencyInstallResult>,
         ModelDependencyStatus,
@@ -406,12 +409,14 @@ async fn run_flow(
     String,
 > {
     let t0 = Instant::now();
-    let plan = resolver.resolve_plan_request(request.clone()).await?;
+    let requirements = resolver
+        .resolve_requirements_request(request.clone())
+        .await?;
     println!(
-        "  resolve: state={:?} code={:?} bindings={} elapsed_ms={}",
-        plan.state,
-        plan.code,
-        plan.bindings.len(),
+        "  resolve: validation_state={:?} validation_errors={} bindings={} elapsed_ms={}",
+        requirements.validation_state,
+        requirements.validation_errors.len(),
+        requirements.bindings.len(),
         t0.elapsed().as_millis()
     );
 
@@ -454,7 +459,7 @@ async fn run_flow(
         t3.elapsed().as_millis()
     );
 
-    Ok((plan, status_before, install_result, status_after))
+    Ok((requirements, status_before, install_result, status_after))
 }
 
 #[tokio::main]
@@ -529,6 +534,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             backend_key,
             platform_context: Some(platform_context()),
             selected_binding_ids: Vec::new(),
+            dependency_override_patches: Vec::new(),
         };
 
         println!("\n== scenario: {} ==", scenario.label);
@@ -570,22 +576,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         match run_flow(&resolver, request.clone(), run_install).await {
-            Ok((plan, before, install, after)) => {
+            Ok((requirements, before, install, after)) => {
                 let install_state = install.as_ref().map(|r| r.state.clone());
                 summary.push(serde_json::json!({
                     "label": scenario.label,
                     "model_id": scenario.record.id,
                     "node_type": request.node_type,
                     "backend_key": request.backend_key,
-                    "plan_state": plan.state,
-                    "plan_code": plan.code,
+                    "validation_state": requirements.validation_state,
+                    "validation_error_count": requirements.validation_errors.len(),
                     "status_before_state": before.state,
                     "status_before_code": before.code,
                     "install_state": install_state,
                     "status_after_state": after.state,
                     "status_after_code": after.code,
-                    "binding_count": plan.bindings.len(),
-                    "required_binding_count": plan.required_binding_ids.len(),
+                    "binding_count": requirements.bindings.len(),
+                    "selected_binding_count": requirements.selected_binding_ids.len(),
                     "dependency_hints": {
                         "model_dir_exists": hints.model_dir_exists,
                         "has_modeling_py": hints.has_modeling_py,

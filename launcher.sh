@@ -7,8 +7,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 APP_BIN="pantograph"
-RELEASE_BIN_PATH="./src-tauri/target/release/${APP_BIN}"
-RELEASE_BIN_PATH_EXE="./src-tauri/target/release/${APP_BIN}.exe"
+RELEASE_BIN_CANDIDATES=(
+  "./target/release/${APP_BIN}"
+  "./target/release/${APP_BIN}.exe"
+  "./src-tauri/target/release/${APP_BIN}"
+  "./src-tauri/target/release/${APP_BIN}.exe"
+)
 VENV_DIR="$ROOT_DIR/.venv"
 VENV_PYTHON="$VENV_DIR/bin/python3"
 
@@ -170,6 +174,9 @@ ensure_runtime_dependencies() {
 activate_python_env() {
   if check_venv; then
     export PYO3_PYTHON="$VENV_PYTHON"
+    if [[ -z "${PANTOGRAPH_PYTHON_EXECUTABLE:-}" ]]; then
+      export PANTOGRAPH_PYTHON_EXECUTABLE="$VENV_PYTHON"
+    fi
     export VIRTUAL_ENV="$VENV_DIR"
     export PATH="$VENV_DIR/bin:$PATH"
   fi
@@ -210,15 +217,20 @@ run_release_app() {
   activate_python_env
 
   local release_bin=""
-  if [[ -x "$RELEASE_BIN_PATH" ]]; then
-    release_bin="$RELEASE_BIN_PATH"
-  elif [[ -x "$RELEASE_BIN_PATH_EXE" ]]; then
-    release_bin="$RELEASE_BIN_PATH_EXE"
-  else
+  local candidate=""
+  for candidate in "${RELEASE_BIN_CANDIDATES[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      release_bin="$candidate"
+      break
+    fi
+  done
+
+  if [[ -z "$release_bin" ]]; then
     log "missing release artifact"
     log "expected one of:"
-    log "  $RELEASE_BIN_PATH"
-    log "  $RELEASE_BIN_PATH_EXE"
+    for candidate in "${RELEASE_BIN_CANDIDATES[@]}"; do
+      log "  $candidate"
+    done
     log "run ./${SCRIPT_NAME} --build-release first"
     exit "$EXIT_MISSING_RELEASE_ARTIFACT"
   fi

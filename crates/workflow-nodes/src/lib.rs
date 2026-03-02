@@ -76,6 +76,7 @@ mod tests {
         assert!(registry.has_node_type("kv-cache-truncate"));
         assert!(registry.has_node_type("masked-text-input"));
         assert!(registry.has_node_type("expand-settings"));
+        assert!(registry.has_node_type("dependency-environment"));
 
         #[cfg(feature = "desktop")]
         assert!(registry.has_node_type("point-cloud-output"));

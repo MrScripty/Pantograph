@@ -445,11 +445,23 @@ fn execute_puma_lib(
     {
         outputs.insert("dependency_bindings".to_string(), dependency_bindings);
     }
-    if let Some(dependency_plan_id) = data_string(inputs, "dependency_plan_id", "dependencyPlanId")
+    if let Some(dependency_requirements) =
+        data_value(inputs, "dependency_requirements", "dependencyRequirements")
+            .filter(|v| v.is_object())
     {
         outputs.insert(
-            "dependency_plan_id".to_string(),
-            serde_json::json!(dependency_plan_id),
+            "dependency_requirements".to_string(),
+            dependency_requirements,
+        );
+    }
+    if let Some(dependency_requirements_id) = data_string(
+        inputs,
+        "dependency_requirements_id",
+        "dependencyRequirementsId",
+    ) {
+        outputs.insert(
+            "dependency_requirements_id".to_string(),
+            serde_json::json!(dependency_requirements_id),
         );
     }
 
@@ -997,7 +1009,8 @@ fn build_model_ref_v2(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelRefV2 {
     let fallback_dependency_bindings = read_input_dependency_bindings(inputs);
-    let fallback_dependency_plan_id = read_optional_input_string(inputs, "dependency_plan_id");
+    let fallback_dependency_requirements_id =
+        read_optional_input_string(inputs, "dependency_requirements_id");
 
     let mut model_ref = resolved.unwrap_or(ModelRefV2 {
         contract_version: 2,
@@ -1006,7 +1019,7 @@ fn build_model_ref_v2(
         model_path: model_path.to_string(),
         task_type_primary: task_type_primary.to_string(),
         dependency_bindings: fallback_dependency_bindings.clone(),
-        dependency_plan_id: fallback_dependency_plan_id.clone(),
+        dependency_requirements_id: fallback_dependency_requirements_id.clone(),
     });
 
     if model_ref.contract_version != 2 {
@@ -1027,8 +1040,8 @@ fn build_model_ref_v2(
     if model_ref.dependency_bindings.is_empty() {
         model_ref.dependency_bindings = fallback_dependency_bindings;
     }
-    if model_ref.dependency_plan_id.is_none() {
-        model_ref.dependency_plan_id = fallback_dependency_plan_id;
+    if model_ref.dependency_requirements_id.is_none() {
+        model_ref.dependency_requirements_id = fallback_dependency_requirements_id;
     }
 
     model_ref
@@ -1072,6 +1085,7 @@ fn build_model_dependency_request(
             &["platform_context", "platformContext"],
         ),
         selected_binding_ids: read_input_selected_binding_ids(inputs),
+        dependency_override_patches: Vec::new(),
     }
 }
 
@@ -1081,10 +1095,7 @@ async fn enforce_dependency_preflight(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
 ) -> Result<Option<ModelRefV2>> {
-    if node_type != "pytorch-inference"
-        && node_type != "audio-generation"
-        && node_type != "llamacpp-inference"
-    {
+    if node_type != "pytorch-inference" && node_type != "audio-generation" {
         return Ok(None);
     }
 
@@ -1107,12 +1118,12 @@ async fn enforce_dependency_preflight(
         })?;
 
     let request = build_model_dependency_request(node_type, model_path, inputs);
-    let plan = resolver
-        .resolve_model_dependency_plan(request.clone())
+    let requirements = resolver
+        .resolve_model_dependency_requirements(request.clone())
         .await
         .map_err(|e| {
             NodeEngineError::ExecutionFailed(format!(
-                "Dependency preflight plan resolution failed for '{}': {}",
+                "Dependency preflight requirements resolution failed for '{}': {}",
                 node_type, e
             ))
         })?;
@@ -1132,12 +1143,9 @@ async fn enforce_dependency_preflight(
             "kind": "dependency_preflight",
             "node_type": node_type,
             "model_path": model_path,
-            "plan_state": plan.state,
-            "plan_code": plan.code,
-            "plan_message": plan.message,
-            "review_reasons": plan.review_reasons,
-            "required_binding_ids": plan.required_binding_ids,
-            "selected_binding_ids": plan.selected_binding_ids,
+            "validation_state": requirements.validation_state,
+            "validation_errors": requirements.validation_errors,
+            "selected_binding_ids": requirements.selected_binding_ids,
             "state": status.state,
             "code": status.code,
             "bindings": status.bindings,
@@ -1150,7 +1158,7 @@ async fn enforce_dependency_preflight(
     }
 
     let resolved = resolver
-        .resolve_model_ref(request, Some(plan))
+        .resolve_model_ref(request, Some(requirements))
         .await
         .map_err(|e| {
             NodeEngineError::ExecutionFailed(format!(
@@ -3204,7 +3212,16 @@ mod tests {
                 "selected_binding_ids": ["binding-a", "binding-b"],
                 "platform_context": {"os":"linux","arch":"x86_64"},
                 "dependency_bindings": [{"binding_id":"binding-a"}],
-                "dependency_plan_id": "plan-1",
+                "dependency_requirements": {
+                    "model_id": "llm/example/test",
+                    "platform_key": "linux-x86_64",
+                    "dependency_contract_version": 1,
+                    "validation_state": "resolved",
+                    "validation_errors": [],
+                    "bindings": [],
+                    "selected_binding_ids": []
+                },
+                "dependency_requirements_id": "requirements-1",
                 "inference_settings": [
                     {"key": "temperature", "default": 0.6},
                     {"key": "top_p", "default": 0.95}
@@ -3229,7 +3246,19 @@ mod tests {
             result["dependency_bindings"],
             serde_json::json!([{"binding_id":"binding-a"}])
         );
-        assert_eq!(result["dependency_plan_id"], "plan-1");
+        assert_eq!(
+            result["dependency_requirements"],
+            serde_json::json!({
+                "model_id": "llm/example/test",
+                "platform_key": "linux-x86_64",
+                "dependency_contract_version": 1,
+                "validation_state": "resolved",
+                "validation_errors": [],
+                "bindings": [],
+                "selected_binding_ids": []
+            })
+        );
+        assert_eq!(result["dependency_requirements_id"], "requirements-1");
         assert_eq!(
             result["inference_settings"],
             serde_json::json!([
@@ -3395,5 +3424,81 @@ mod tests {
 
         let result = execute_write_file(Some(&root_path), &inputs).await;
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_optional_input_bool_aliases_parses_data_field() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "_data".to_string(),
+            serde_json::json!({
+                "emit_metadata": "true"
+            }),
+        );
+        let parsed = read_optional_input_bool_aliases(&inputs, &["emit_metadata", "emitMetadata"]);
+        assert_eq!(parsed, Some(true));
+    }
+
+    #[test]
+    fn test_execute_vector_output_missing_vector_returns_null() {
+        let inputs = HashMap::new();
+        let result = execute_vector_output(&inputs).expect("vector output should not fail");
+        assert!(result.get("vector").is_some_and(|value| value.is_null()));
+    }
+
+    #[test]
+    fn test_execute_vector_output_invalid_vector_returns_null() {
+        let mut inputs = HashMap::new();
+        inputs.insert("vector".to_string(), serde_json::json!("not-a-vector"));
+
+        let result = execute_vector_output(&inputs).expect("vector output should not fail");
+        assert!(result.get("vector").is_some_and(|value| value.is_null()));
+    }
+
+    #[cfg(feature = "inference-nodes")]
+    #[tokio::test]
+    async fn test_execute_embedding_fails_when_gateway_missing() {
+        let mut inputs = HashMap::new();
+        inputs.insert("text".to_string(), serde_json::json!("hello"));
+        let err = execute_embedding(None, &inputs)
+            .await
+            .expect_err("embedding should fail fast without gateway");
+        match err {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("InferenceGateway not configured"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[tokio::test]
+    async fn test_dependency_preflight_skips_llamacpp() {
+        let inputs = HashMap::new();
+        let extensions = ExecutorExtensions::new();
+        let resolved = enforce_dependency_preflight("llamacpp-inference", &inputs, &extensions)
+            .await
+            .expect("llamacpp preflight should be skipped");
+        assert!(resolved.is_none());
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[tokio::test]
+    async fn test_dependency_preflight_blocks_pytorch_without_resolver() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model.gguf"),
+        );
+        let extensions = ExecutorExtensions::new();
+        let err = enforce_dependency_preflight("pytorch-inference", &inputs, &extensions)
+            .await
+            .expect_err("pytorch preflight should require resolver");
+        match err {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("dependency resolver is not configured"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
     }
 }

@@ -97,10 +97,11 @@ pub use groups::{
 // Re-export descriptor types
 pub use descriptor::{DescriptorFn, PortMetadata, TaskDescriptor, TaskMetadata};
 pub use model_dependencies::{
-    DependencyState, ModelDependencyBinding, ModelDependencyBindingStatus,
-    ModelDependencyInstallResult, ModelDependencyPinSummary, ModelDependencyPlan,
-    ModelDependencyRequest, ModelDependencyRequiredPin, ModelDependencyResolver,
-    ModelDependencyStatus, ModelRefV2,
+    DependencyOverrideFieldsV1, DependencyOverridePatchV1, DependencyOverrideScope,
+    DependencyState, DependencyValidationError, DependencyValidationErrorScope,
+    DependencyValidationState, ModelDependencyBinding, ModelDependencyBindingStatus,
+    ModelDependencyInstallResult, ModelDependencyRequest, ModelDependencyRequirement,
+    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
 };
 pub use path_validation::resolve_path_within_root;
 

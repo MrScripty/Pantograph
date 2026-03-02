@@ -23,17 +23,17 @@
     $edges.some((edge) => edge.target === id && edge.targetHandle === 'model_path')
   );
 
-  let upstreamModelNode = $derived.by(() => {
-    const edge = $edges.find((e) => e.target === id && e.targetHandle === 'model_path');
+  let upstreamDependencyNode = $derived.by(() => {
+    const edge = $edges.find((e) => e.target === id && e.targetHandle === 'environment_ref');
     if (!edge) return null;
     return $nodes.find((n) => n.id === edge.source) ?? null;
   });
 
   let dependencyState = $derived(
-    (upstreamModelNode?.data?.dependency_status as { state?: string } | undefined)?.state ?? null
+    (upstreamDependencyNode?.data?.dependency_status as { state?: string } | undefined)?.state ?? null
   );
   let dependencyCode = $derived(
-    (upstreamModelNode?.data?.dependency_status as { code?: string } | undefined)?.code ?? null
+    (upstreamDependencyNode?.data?.dependency_status as { code?: string } | undefined)?.code ?? null
   );
 
   // PyTorch orange

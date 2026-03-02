@@ -10,10 +10,9 @@ use node_engine::ExecutorExtensions;
 /// Initialize optional runtime dependencies in `ExecutorExtensions`.
 ///
 /// Currently handles:
-/// - **PumasApi** (`model-library` feature): Tries `PumasApi::discover()` first
-///   (uses the global registry at `~/.config/pumas/registry.db`). If that fails,
-///   falls back to `PUMAS_LIBRARY_PATH` environment variable and opens the library
-///   directly via `PumasApi::new()`.
+/// - **PumasApi** (`model-library` feature): Tries explicit/local paths first
+///   (`library_path`, then `PUMAS_LIBRARY_PATH`) and falls back to
+///   `PumasApi::discover()` (global registry at `~/.config/pumas/registry.db`).
 ///
 /// # Example
 ///
@@ -30,9 +29,9 @@ pub async fn setup_extensions(extensions: &mut ExecutorExtensions) {
 /// Initialize extensions with an explicit library path fallback.
 ///
 /// Tries in order:
-/// 1. `PumasApi::discover()` (global registry)
-/// 2. `library_path` parameter (if provided)
-/// 3. `PUMAS_LIBRARY_PATH` environment variable
+/// 1. `library_path` parameter (if provided)
+/// 2. `PUMAS_LIBRARY_PATH` environment variable
+/// 3. `PumasApi::discover()` (global registry)
 #[cfg(feature = "model-library")]
 pub async fn setup_extensions_with_path(
     extensions: &mut ExecutorExtensions,
@@ -40,58 +39,121 @@ pub async fn setup_extensions_with_path(
 ) {
     use std::sync::Arc;
 
-    // Try global registry discovery first
-    let api = match pumas_library::PumasApi::discover().await {
-        Ok(api) => {
-            log::info!("PumasApi connected via discover()");
-            Some(api)
+    fn is_launcher_root(path: &std::path::Path) -> bool {
+        path.join("shared-resources").exists() && path.join("launcher-data").exists()
+    }
+
+    fn push_unique(
+        out: &mut Vec<std::path::PathBuf>,
+        seen: &mut std::collections::HashSet<std::path::PathBuf>,
+        path: std::path::PathBuf,
+    ) {
+        if seen.insert(path.clone()) {
+            out.push(path);
         }
-        Err(e) => {
-            log::info!("PumasApi discover() unavailable: {}", e);
+    }
 
-            // Build candidate paths: explicit parameter first, then env var
-            let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-            if let Some(p) = library_path {
-                candidates.push(p.to_path_buf());
-            }
-            if let Ok(env_path) = std::env::var("PUMAS_LIBRARY_PATH") {
-                candidates.push(std::path::PathBuf::from(env_path));
-            }
+    // Accept either launcher root paths or build output dirs like:
+    // <repo>/rust/target/release (or debug) by deriving <repo>.
+    fn expand_candidate_path(path: &std::path::Path) -> Vec<std::path::PathBuf> {
+        let mut out = Vec::new();
+        let mut seen = std::collections::HashSet::new();
 
-            let mut result = None;
-            for path in &candidates {
-                if !path.exists() {
-                    log::info!("Skipping non-existent library path: {:?}", path);
-                    continue;
-                }
-                log::info!("Trying PumasApi at {:?}", path);
-                match pumas_library::PumasApi::builder(path)
-                    .with_hf_client(false)
-                    .with_process_manager(false)
-                    .build()
-                    .await
+        push_unique(&mut out, &mut seen, path.to_path_buf());
+
+        // If user points at the pumas release/debug binary dir, derive launcher root.
+        if let Some(build_kind) = path.file_name().and_then(|n| n.to_str()) {
+            if (build_kind == "release" || build_kind == "debug")
+                && path
+                    .parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    == Some("target")
+                && path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    == Some("rust")
+            {
+                if let Some(root) = path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent())
                 {
-                    Ok(api) => {
-                        log::info!("PumasApi initialized from {:?}", path);
-                        result = Some(api);
-                        break;
-                    }
-                    Err(e2) => {
-                        log::warn!("PumasApi::builder({:?}) failed: {}", path, e2);
-                    }
+                    push_unique(&mut out, &mut seen, root.to_path_buf());
                 }
             }
-
-            if result.is_none() && candidates.is_empty() {
-                log::info!(
-                    "No pumas-library path configured. \
-                     Set PUMAS_LIBRARY_PATH or pass a path to setup_extensions_with_path()."
-                );
-            }
-
-            result
         }
-    };
+
+        // Generic fallback: walk ancestors to find a valid launcher root.
+        for ancestor in path.ancestors() {
+            if is_launcher_root(ancestor) {
+                push_unique(&mut out, &mut seen, ancestor.to_path_buf());
+            }
+        }
+
+        out
+    }
+
+    // Build candidate paths: explicit parameter first, then env var
+    let mut raw_candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(p) = library_path {
+        raw_candidates.push(p.to_path_buf());
+    }
+    if let Ok(env_path) = std::env::var("PUMAS_LIBRARY_PATH") {
+        raw_candidates.push(std::path::PathBuf::from(env_path));
+    }
+
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for raw in &raw_candidates {
+        for expanded in expand_candidate_path(raw) {
+            push_unique(&mut candidates, &mut seen, expanded);
+        }
+    }
+
+    let mut api = None;
+    for path in &candidates {
+        if !path.exists() {
+            log::info!("Skipping non-existent library path: {:?}", path);
+            continue;
+        }
+        log::info!("Trying PumasApi at {:?}", path);
+        match pumas_library::PumasApi::builder(path)
+            .with_hf_client(false)
+            .with_process_manager(false)
+            .build()
+            .await
+        {
+            Ok(found) => {
+                log::info!("PumasApi initialized from {:?}", path);
+                api = Some(found);
+                break;
+            }
+            Err(e) => {
+                log::warn!("PumasApi::builder({:?}) failed: {}", path, e);
+            }
+        }
+    }
+
+    if api.is_none() {
+        if raw_candidates.is_empty() {
+            log::info!(
+                "No pumas-library path configured. \
+                 Set PUMAS_LIBRARY_PATH or pass a path to setup_extensions_with_path()."
+            );
+        }
+        match pumas_library::PumasApi::discover().await {
+            Ok(found) => {
+                log::info!("PumasApi connected via discover()");
+                api = Some(found);
+            }
+            Err(e) => {
+                log::info!("PumasApi discover() unavailable: {}", e);
+            }
+        }
+    }
 
     if let Some(api) = api {
         extensions.set(node_engine::extension_keys::PUMAS_API, Arc::new(api));

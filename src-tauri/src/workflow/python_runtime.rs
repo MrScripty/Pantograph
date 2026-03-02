@@ -16,6 +16,7 @@ use tokio::process::Command;
 const ENV_DEFAULT_PYTHON_EXECUTABLE: &str = "PANTOGRAPH_PYTHON_EXECUTABLE";
 const ENV_PYTHON_ENV_MAP_JSON: &str = "PANTOGRAPH_PYTHON_ENV_MAP_JSON";
 const ENV_PYTHON_ENV_MAP_FILE: &str = "PANTOGRAPH_PYTHON_ENV_MAP_FILE";
+const ENV_PYO3_PYTHON: &str = "PYO3_PYTHON";
 
 const BRIDGE_SCRIPT_FILENAME: &str = "pantograph_python_runtime_bridge.py";
 const BRIDGE_SCRIPT_SOURCE: &str = include_str!("python_runtime_bridge.py");
@@ -50,7 +51,10 @@ impl PythonRuntimeAdapter for UnconfiguredPythonRuntimeAdapter {
         let env_hint = if request.env_ids.is_empty() {
             "No dependency env_id was provided in model_ref.".to_string()
         } else {
-            format!("Resolved dependency env_id(s): {}", request.env_ids.join(", "))
+            format!(
+                "Resolved dependency env_id(s): {}",
+                request.env_ids.join(", ")
+            )
         };
 
         Err(format!(
@@ -93,6 +97,20 @@ struct BridgeResponse {
 static BRIDGE_SCRIPT_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 impl ProcessPythonRuntimeAdapter {
+    fn resolve_python_candidate(raw: &str) -> Option<PathBuf> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let candidate = PathBuf::from(trimmed);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+
+        which::which(trimmed).ok()
+    }
+
     fn load_python_env_map() -> Result<HashMap<String, PathBuf>, String> {
         let mut out = HashMap::new();
 
@@ -151,11 +169,11 @@ impl ProcessPythonRuntimeAdapter {
         let env_map = Self::load_python_env_map()?;
         for env_id in env_ids {
             if let Some(path) = env_map.get(env_id) {
-                if path.exists() {
-                    return Ok(path.clone());
+                if let Some(resolved) = Self::resolve_python_candidate(&path.to_string_lossy()) {
+                    return Ok(resolved);
                 }
                 return Err(format!(
-                    "Configured python executable for env_id '{}' does not exist: {}",
+                    "Configured python executable for env_id '{}' was not found as a path or PATH command: {}",
                     env_id,
                     path.display()
                 ));
@@ -163,32 +181,73 @@ impl ProcessPythonRuntimeAdapter {
         }
 
         if let Ok(default_python) = std::env::var(ENV_DEFAULT_PYTHON_EXECUTABLE) {
+            if let Some(candidate) = Self::resolve_python_candidate(&default_python) {
+                return Ok(candidate);
+            }
             let trimmed = default_python.trim();
             if !trimmed.is_empty() {
-                let candidate = PathBuf::from(trimmed);
-                if candidate.exists() {
-                    return Ok(candidate);
-                }
                 return Err(format!(
-                    "{} is set but target does not exist: {}",
-                    ENV_DEFAULT_PYTHON_EXECUTABLE,
-                    candidate.display()
+                    "{} is set but target was not found as a path or PATH command: {}",
+                    ENV_DEFAULT_PYTHON_EXECUTABLE, trimmed
                 ));
+            }
+        }
+
+        if let Ok(pyo3_python) = std::env::var(ENV_PYO3_PYTHON) {
+            if let Some(candidate) = Self::resolve_python_candidate(&pyo3_python) {
+                return Ok(candidate);
+            }
+            let trimmed = pyo3_python.trim();
+            if !trimmed.is_empty() {
+                return Err(format!(
+                    "{} is set but target was not found as a path or PATH command: {}",
+                    ENV_PYO3_PYTHON, trimmed
+                ));
+            }
+        }
+
+        if let Some(candidate) = Self::resolve_repo_local_venv_python() {
+            return Ok(candidate);
+        }
+
+        for command in ["python3", "python"] {
+            if let Some(candidate) = Self::resolve_python_candidate(command) {
+                return Ok(candidate);
             }
         }
 
         let env_hint = if env_ids.is_empty() {
             "No env_id was provided for this request.".to_string()
         } else {
-            format!("Missing python executable mapping for env_id(s): {}", env_ids.join(", "))
+            format!(
+                "Missing python executable mapping for env_id(s): {}",
+                env_ids.join(", ")
+            )
         };
         Err(format!(
-            "Python runtime is not configured. {} Set {} or {} (or {}).",
+            "Python runtime is not configured. {} Set {} or {} (or {}), or ensure {} or a PATH python command is available.",
             env_hint,
             ENV_DEFAULT_PYTHON_EXECUTABLE,
             ENV_PYTHON_ENV_MAP_JSON,
-            ENV_PYTHON_ENV_MAP_FILE
+            ENV_PYTHON_ENV_MAP_FILE,
+            ENV_PYO3_PYTHON
         ))
+    }
+
+    fn resolve_repo_local_venv_python() -> Option<PathBuf> {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent()?;
+
+        for candidate in [
+            repo_root.join(".venv").join("bin").join("python3"),
+            repo_root.join(".venv").join("bin").join("python"),
+            repo_root.join(".venv").join("Scripts").join("python.exe"),
+        ] {
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+        None
     }
 
     fn resolve_worker_paths() -> Result<BridgeWorkerPaths, String> {
@@ -200,8 +259,16 @@ impl ProcessPythonRuntimeAdapter {
             )
         })?;
 
-        let torch_worker = repo_root.join("crates").join("inference").join("torch").join("worker.py");
-        let audio_worker = repo_root.join("crates").join("inference").join("audio").join("worker.py");
+        let torch_worker = repo_root
+            .join("crates")
+            .join("inference")
+            .join("torch")
+            .join("worker.py");
+        let audio_worker = repo_root
+            .join("crates")
+            .join("inference")
+            .join("audio")
+            .join("worker.py");
 
         if !torch_worker.exists() {
             return Err(format!(
@@ -261,6 +328,11 @@ impl ProcessPythonRuntimeAdapter {
     }
 }
 
+/// Resolve the python executable used for dependency checks/installs for env_id scopes.
+pub(crate) fn resolve_python_executable_for_env_ids(env_ids: &[String]) -> Result<PathBuf, String> {
+    ProcessPythonRuntimeAdapter::resolve_python_executable(env_ids)
+}
+
 #[async_trait]
 impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
     async fn execute_node(
@@ -314,14 +386,32 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         if !output.status.success() {
+            if let Ok(response) = Self::parse_bridge_response(&stdout) {
+                let mut details = response
+                    .error
+                    .unwrap_or_else(|| "Unknown python runtime bridge error".to_string());
+                if let Some(traceback) = response.traceback {
+                    if !traceback.trim().is_empty() {
+                        details.push_str(&format!("\n{}", traceback.trim()));
+                    }
+                }
+                return Err(format!(
+                    "Python runtime adapter process exited with status {}. {}",
+                    output.status, details
+                ));
+            }
+
             let stderr_trimmed = stderr.trim();
+            let stdout_trimmed = stdout.trim();
             return Err(format!(
                 "Python runtime adapter process exited with status {}. {}",
                 output.status,
-                if stderr_trimmed.is_empty() {
-                    "No stderr output.".to_string()
-                } else {
+                if !stderr_trimmed.is_empty() {
                     format!("Stderr: {}", stderr_trimmed)
+                } else if !stdout_trimmed.is_empty() {
+                    format!("Stdout: {}", stdout_trimmed)
+                } else {
+                    "No stderr/stdout output.".to_string()
                 }
             ));
         }
@@ -435,5 +525,19 @@ mod tests {
         assert_eq!(resolved, python_path);
 
         std::fs::remove_dir_all(base).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn resolve_python_executable_accepts_default_command_name() {
+        let _lock = env_lock().lock().expect("env lock");
+        let _map_file_guard = EnvGuard::set(ENV_PYTHON_ENV_MAP_FILE, None);
+        let _map_json_guard = EnvGuard::set(ENV_PYTHON_ENV_MAP_JSON, None);
+        let _pyo3_guard = EnvGuard::set(ENV_PYO3_PYTHON, None);
+        let _default_guard =
+            EnvGuard::set(ENV_DEFAULT_PYTHON_EXECUTABLE, Some("python3".to_string()));
+
+        let resolved = ProcessPythonRuntimeAdapter::resolve_python_executable(&[])
+            .expect("resolver should locate python3 from PATH");
+        assert!(resolved.exists());
     }
 }

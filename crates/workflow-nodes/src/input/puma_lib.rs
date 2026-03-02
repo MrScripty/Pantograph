@@ -17,6 +17,7 @@ use node_engine::{
 
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
+const PORT_DEPENDENCY_REQUIREMENTS: &str = "dependency_requirements";
 
 /// Stub task for the puma-lib node.
 ///
@@ -49,6 +50,11 @@ impl TaskDescriptor for PumaLibTask {
                 PortMetadata::optional(
                     PORT_INFERENCE_SETTINGS,
                     "Inference Settings",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    PORT_DEPENDENCY_REQUIREMENTS,
+                    "Dependency Requirements",
                     PortDataType::Json,
                 ),
             ],
@@ -259,12 +265,18 @@ mod tests {
         let meta = PumaLibTask::descriptor();
 
         assert!(meta.inputs.is_empty());
-        assert_eq!(meta.outputs.len(), 2);
+        assert_eq!(meta.outputs.len(), 3);
 
         assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"
             && p.data_type == PortDataType::Json
             && !p.required));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == "dependency_requirements"
+                && p.data_type == PortDataType::Json
+                && !p.required));
     }
 
     #[tokio::test]

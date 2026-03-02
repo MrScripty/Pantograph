@@ -47,6 +47,7 @@
   import AudioInputNode from './nodes/workflow/AudioInputNode.svelte';
   import AudioOutputNode from './nodes/workflow/AudioOutputNode.svelte';
   import AudioGenerationNode from './nodes/workflow/AudioGenerationNode.svelte';
+  import DependencyEnvironmentNode from './nodes/workflow/DependencyEnvironmentNode.svelte';
   import DepthEstimationNode from './nodes/workflow/DepthEstimationNode.svelte';
   import PointCloudOutputNode from './nodes/workflow/PointCloudOutputNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
@@ -90,6 +91,7 @@
     'audio-input': AudioInputNode,
     'audio-output': AudioOutputNode,
     'audio-generation': AudioGenerationNode,
+    'dependency-environment': DependencyEnvironmentNode,
     'depth-estimation': DepthEstimationNode,
     'point-cloud-output': PointCloudOutputNode,
     'puma-lib': PumaLibNode,

@@ -178,6 +178,7 @@ mod tests {
         // New processing nodes
         assert!(registry.has_node_type("validator"));
         assert!(registry.has_node_type("json-filter"));
+        assert!(registry.has_node_type("dependency-environment"));
 
         // Tauri-only nodes
         assert!(registry.has_node_type("puma-lib"));

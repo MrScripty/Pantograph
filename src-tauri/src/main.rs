@@ -33,7 +33,7 @@ use llm::{
     update_svelte_docs, validate_component, InferenceGateway, SharedAppConfig, SharedGateway,
 };
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 use workflow::{ExecutionManager, SharedModelDependencyResolver};
 
@@ -124,6 +124,11 @@ fn main() {
             tauri::async_runtime::block_on(async { gateway.init().await });
             app.manage(gateway);
 
+            let dependency_event_app = app.handle().clone();
+            model_dependency_resolver.set_activity_emitter(Arc::new(move |event| {
+                let _ = dependency_event_app.emit("dependency-activity", &event);
+            }));
+
             // Get project data directory for docs and RAG storage
             // Use CARGO_MANIFEST_DIR (src-tauri/) and go up one level to get project root.
             // This ensures data is stored at project root regardless of the current working
@@ -169,15 +174,23 @@ fn main() {
                 app_handle.manage(shared_config);
             });
 
-            // Initialize executor extensions (PumasApi etc.) asynchronously
-            // Auto-detect sibling Pumas-Library directory for model library access
-            let pumas_library_path = project_root
+            // Initialize executor extensions (PumasApi etc.) asynchronously.
+            // Prefer the sibling Pumas release build dir when available, then fall back
+            // to the launcher root.
+            let pumas_launcher_root = project_root
                 .parent()
                 .map(|parent| parent.join("Pumas-Library"))
                 .filter(|p| p.exists());
-            if let Some(ref p) = pumas_library_path {
+            let pumas_release_dir = pumas_launcher_root
+                .as_ref()
+                .map(|root| root.join("rust").join("target").join("release"))
+                .filter(|p| p.exists());
+            if let Some(ref p) = pumas_release_dir {
+                log::info!("Detected sibling Pumas release dir at {:?}", p);
+            } else if let Some(ref p) = pumas_launcher_root {
                 log::info!("Detected sibling Pumas-Library at {:?}", p);
             }
+            let pumas_library_path = pumas_release_dir.or(pumas_launcher_root);
 
             // Register the dependency resolver synchronously to avoid startup races
             // where model execution can happen before async extension setup finishes.
@@ -197,7 +210,8 @@ fn main() {
                 workflow_nodes::setup_extensions_with_path(
                     &mut ext,
                     pumas_library_path.as_deref(),
-                ).await;
+                )
+                .await;
 
                 // Initialize KV cache store for cache save/load/truncate nodes
                 let kv_store = std::sync::Arc::new(inference::kv_cache::KvCacheStore::new(
@@ -326,7 +340,7 @@ fn main() {
             workflow::commands::submit_model_review,
             workflow::commands::reset_model_review,
             workflow::commands::get_effective_model_metadata,
-            workflow::commands::resolve_model_dependency_plan,
+            workflow::commands::resolve_model_dependency_requirements,
             workflow::commands::check_model_dependencies,
             workflow::commands::install_model_dependencies,
             workflow::commands::get_model_dependency_status,

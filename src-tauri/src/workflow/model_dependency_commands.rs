@@ -13,6 +13,7 @@ fn build_model_dependency_request(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyRequest, String> {
     fn clean_optional(value: Option<String>) -> Option<String> {
         value.and_then(|raw| {
@@ -57,11 +58,12 @@ fn build_model_dependency_request(
         backend_key: clean_optional(backend_key),
         platform_context,
         selected_binding_ids: selected_out,
+        dependency_override_patches: dependency_override_patches.unwrap_or_default(),
     })
 }
 
-/// Resolve model dependency plan for a model-backed workflow node.
-pub async fn resolve_model_dependency_plan(
+/// Resolve model dependency requirements for a model-backed workflow node.
+pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, SharedModelDependencyResolver>,
     node_type: String,
     model_path: String,
@@ -71,7 +73,8 @@ pub async fn resolve_model_dependency_plan(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
-) -> Result<node_engine::ModelDependencyPlan, String> {
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+) -> Result<node_engine::ModelDependencyRequirements, String> {
     let request = build_model_dependency_request(
         node_type,
         model_path,
@@ -81,8 +84,9 @@ pub async fn resolve_model_dependency_plan(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )?;
-    resolver.resolve_plan_request(request).await
+    resolver.resolve_requirements_request(request).await
 }
 
 /// Check model dependencies for a model-backed workflow node.
@@ -96,6 +100,7 @@ pub async fn check_model_dependencies(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
     let request = build_model_dependency_request(
         node_type,
@@ -106,6 +111,7 @@ pub async fn check_model_dependencies(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )?;
     resolver.check_request(request).await
 }
@@ -121,6 +127,7 @@ pub async fn install_model_dependencies(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyInstallResult, String> {
     let request = build_model_dependency_request(
         node_type,
@@ -131,6 +138,7 @@ pub async fn install_model_dependencies(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )?;
     resolver.install_request(request).await
 }
@@ -146,6 +154,7 @@ pub async fn get_model_dependency_status(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
     let request = build_model_dependency_request(
         node_type,
@@ -156,6 +165,7 @@ pub async fn get_model_dependency_status(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )?;
     if let Some(cached) = resolver.cached_status(&request).await {
         Ok(cached)
@@ -198,6 +208,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .unwrap_err();
         assert!(err.contains("node_type"));
@@ -205,6 +216,7 @@ mod tests {
         let err = build_model_dependency_request(
             "pytorch-inference".to_string(),
             " ".to_string(),
+            None,
             None,
             None,
             None,
@@ -232,6 +244,7 @@ mod tests {
                 "binding-a".to_string(),
                 "binding-b".to_string(),
             ]),
+            None,
         )
         .unwrap();
 
@@ -245,6 +258,7 @@ mod tests {
             request.selected_binding_ids,
             vec!["binding-a".to_string(), "binding-b".to_string()]
         );
+        assert!(request.dependency_override_patches.is_empty());
     }
 
     #[test]
@@ -254,21 +268,23 @@ mod tests {
             total_models_scanned: 1,
             total_bindings_scanned: 2,
             issue_count: 1,
-            binding_issues: vec![pumas_library::model_library::DependencyPinAuditBindingIssue {
-                model_id: "m1".to_string(),
-                binding_id: "b1".to_string(),
-                profile_id: "p1".to_string(),
-                profile_version: 2,
-                binding_kind: "required".to_string(),
-                backend_key: Some("pytorch".to_string()),
-                error_code: "unpinned_dependency".to_string(),
-                message: Some("missing torch".to_string()),
-                missing_pins: vec!["torch".to_string()],
-                required_pins: vec![pumas_library::model_library::ModelDependencyRequiredPin {
-                    name: "torch".to_string(),
-                    reasons: vec!["backend_required".to_string()],
-                }],
-            }],
+            binding_issues: vec![
+                pumas_library::model_library::DependencyPinAuditBindingIssue {
+                    model_id: "m1".to_string(),
+                    binding_id: "b1".to_string(),
+                    profile_id: "p1".to_string(),
+                    profile_version: 2,
+                    binding_kind: "required".to_string(),
+                    backend_key: Some("pytorch".to_string()),
+                    error_code: "unpinned_dependency".to_string(),
+                    message: Some("missing torch".to_string()),
+                    missing_pins: vec!["torch".to_string()],
+                    required_pins: vec![pumas_library::model_library::ModelDependencyRequiredPin {
+                        name: "torch".to_string(),
+                        reasons: vec!["backend_required".to_string()],
+                    }],
+                },
+            ],
             profile_issues: Vec::new(),
         };
 

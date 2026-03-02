@@ -2,24 +2,101 @@
 //!
 //! This module defines:
 //! - A host-provided dependency resolver trait
-//! - Dependency plan/check/install result contracts
+//! - Resolver/check/install result contracts
 //! - The `model_ref` v2 runtime contract used by inference/unload nodes
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-/// High-level dependency state for a model execution environment.
+/// Pantograph-owned runtime lifecycle state for dependency handling.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DependencyState {
-    Ready,
+    Unresolved,
+    Invalid,
+    Resolved,
+    Checking,
     Missing,
     Installing,
+    Ready,
     Failed,
+}
+
+/// Resolver validation state from the Pumas resolve-only dependency contract.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyValidationState {
+    Resolved,
     UnknownProfile,
-    ManualInterventionRequired,
+    InvalidProfile,
     ProfileConflict,
-    RequiredBindingOmitted,
+}
+
+/// Validation error scope for resolver contract payloads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyValidationErrorScope {
+    TopLevel,
+    Binding,
+}
+
+/// Override scope for Pantograph-managed dependency patches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyOverrideScope {
+    Binding,
+    Requirement,
+}
+
+/// Supported override fields for dependency patch contract v1.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyOverrideFieldsV1 {
+    #[serde(default)]
+    pub python_executable: Option<String>,
+    #[serde(default)]
+    pub index_url: Option<String>,
+    #[serde(default)]
+    pub extra_index_urls: Option<Vec<String>>,
+    #[serde(default)]
+    pub wheel_source_path: Option<String>,
+    #[serde(default)]
+    pub package_source_override: Option<String>,
+}
+
+/// Manual override patch contract v1.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyOverridePatchV1 {
+    #[serde(default = "default_dependency_override_contract_version")]
+    pub contract_version: u32,
+    pub binding_id: String,
+    pub scope: DependencyOverrideScope,
+    #[serde(default)]
+    pub requirement_name: Option<String>,
+    #[serde(default)]
+    pub fields: DependencyOverrideFieldsV1,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+fn default_dependency_override_contract_version() -> u32 {
+    1
+}
+
+/// Structured resolver validation error entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct DependencyValidationError {
+    pub code: String,
+    pub scope: DependencyValidationErrorScope,
+    #[serde(default)]
+    pub binding_id: Option<String>,
+    #[serde(default)]
+    pub field: Option<String>,
+    pub message: String,
 }
 
 /// Request payload passed to a host dependency resolver.
@@ -48,138 +125,128 @@ pub struct ModelDependencyRequest {
     /// Optional selected binding IDs. Empty means resolver default selection.
     #[serde(default)]
     pub selected_binding_ids: Vec<String>,
+    /// Optional manual override patches from dependency-environment node.
+    #[serde(default)]
+    pub dependency_override_patches: Vec<DependencyOverridePatchV1>,
 }
 
-/// A resolved dependency binding row used for dependency checks and model refs.
+/// Per-binding requirement entry from resolver contract.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
+pub struct ModelDependencyRequirement {
+    pub kind: String,
+    pub name: String,
+    pub exact_pin: String,
+    #[serde(default)]
+    pub index_url: Option<String>,
+    #[serde(default)]
+    pub extra_index_urls: Vec<String>,
+    #[serde(default)]
+    pub markers: Option<String>,
+    #[serde(default)]
+    pub python_requires: Option<String>,
+    #[serde(default)]
+    pub platform_constraints: Vec<String>,
+    #[serde(default)]
+    pub hashes: Vec<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+/// A resolved dependency binding row from resolver output.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct ModelDependencyBinding {
     pub binding_id: String,
     pub profile_id: String,
     pub profile_version: i64,
     #[serde(default)]
     pub profile_hash: Option<String>,
-    pub binding_kind: String,
     #[serde(default)]
     pub backend_key: Option<String>,
     #[serde(default)]
     pub platform_selector: Option<String>,
-    pub env_id: String,
     #[serde(default)]
-    pub pin_summary: Option<ModelDependencyPinSummary>,
+    pub environment_kind: Option<String>,
     #[serde(default)]
-    pub required_pins: Vec<ModelDependencyRequiredPin>,
+    pub env_id: Option<String>,
     #[serde(default)]
-    pub missing_pins: Vec<String>,
+    pub python_executable_override: Option<String>,
+    pub validation_state: DependencyValidationState,
+    #[serde(default)]
+    pub validation_errors: Vec<DependencyValidationError>,
+    #[serde(default)]
+    pub requirements: Vec<ModelDependencyRequirement>,
 }
 
-/// Per-binding dependency pin summary for UI and policy checks.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelDependencyPinSummary {
-    pub pinned: bool,
-    pub required_count: u32,
-    pub pinned_count: u32,
-    pub missing_count: u32,
-}
-
-/// Per-binding required pin entry with requirement provenance.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelDependencyRequiredPin {
-    pub name: String,
-    #[serde(default)]
-    pub reasons: Vec<String>,
-}
-
-/// Structured dependency plan result.
+/// Structured resolver output for dependency requirements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelDependencyPlan {
-    pub state: DependencyState,
+#[serde(rename_all = "snake_case")]
+pub struct ModelDependencyRequirements {
+    pub model_id: String,
+    pub platform_key: String,
     #[serde(default)]
-    pub code: Option<String>,
+    pub backend_key: Option<String>,
+    pub dependency_contract_version: u32,
+    pub validation_state: DependencyValidationState,
     #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub review_reasons: Vec<String>,
-    #[serde(default)]
-    pub plan_id: Option<String>,
+    pub validation_errors: Vec<DependencyValidationError>,
     #[serde(default)]
     pub bindings: Vec<ModelDependencyBinding>,
     #[serde(default)]
     pub selected_binding_ids: Vec<String>,
-    #[serde(default)]
-    pub required_binding_ids: Vec<String>,
-    #[serde(default)]
-    pub missing_pins: Vec<String>,
 }
 
-/// Per-binding status row returned by check/install APIs.
+/// Per-binding status row returned by Pantograph check/install operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct ModelDependencyBindingStatus {
     pub binding_id: String,
-    pub env_id: String,
+    #[serde(default)]
+    pub env_id: Option<String>,
     pub state: DependencyState,
     #[serde(default)]
     pub code: Option<String>,
     #[serde(default)]
-    pub missing_components: Vec<String>,
-    #[serde(default)]
-    pub installed_components: Vec<String>,
-    #[serde(default)]
-    pub failed_components: Vec<String>,
-    #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]
-    pub pin_summary: Option<ModelDependencyPinSummary>,
+    pub missing_requirements: Vec<String>,
     #[serde(default)]
-    pub required_pins: Vec<ModelDependencyRequiredPin>,
+    pub installed_requirements: Vec<String>,
     #[serde(default)]
-    pub missing_pins: Vec<String>,
+    pub failed_requirements: Vec<String>,
 }
 
 /// Structured result for dependency checks.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct ModelDependencyStatus {
     pub state: DependencyState,
     #[serde(default)]
     pub code: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
-    #[serde(default)]
-    pub review_reasons: Vec<String>,
-    #[serde(default)]
-    pub plan_id: Option<String>,
+    pub requirements: ModelDependencyRequirements,
     #[serde(default)]
     pub bindings: Vec<ModelDependencyBindingStatus>,
     #[serde(default)]
     pub checked_at: Option<String>,
-    #[serde(default)]
-    pub missing_pins: Vec<String>,
 }
 
 /// Structured result for dependency installation actions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct ModelDependencyInstallResult {
     pub state: DependencyState,
     #[serde(default)]
     pub code: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
-    #[serde(default)]
-    pub review_reasons: Vec<String>,
-    #[serde(default)]
-    pub plan_id: Option<String>,
+    pub requirements: ModelDependencyRequirements,
     #[serde(default)]
     pub bindings: Vec<ModelDependencyBindingStatus>,
     #[serde(default)]
     pub installed_at: Option<String>,
-    #[serde(default)]
-    pub missing_pins: Vec<String>,
 }
 
 /// Canonical model reference contract emitted by inference nodes.
@@ -194,7 +261,7 @@ pub struct ModelRefV2 {
     #[serde(default)]
     pub dependency_bindings: Vec<ModelDependencyBinding>,
     #[serde(default)]
-    pub dependency_plan_id: Option<String>,
+    pub dependency_requirements_id: Option<String>,
 }
 
 impl ModelRefV2 {
@@ -227,7 +294,6 @@ impl ModelRefV2 {
             return Err("model_ref missing 'task_type_primary' field".to_string());
         }
 
-        // Ensure deterministic uniqueness for bindings in runtime payloads.
         let mut ids = std::collections::HashSet::new();
         for binding in &self.dependency_bindings {
             if binding.binding_id.trim().is_empty() {
@@ -245,14 +311,14 @@ impl ModelRefV2 {
     }
 }
 
-/// Host extension trait for dependency checks/install and model-ref hydration.
+/// Host extension trait for resolve/check/install and model-ref hydration.
 #[async_trait]
 pub trait ModelDependencyResolver: Send + Sync {
-    /// Resolve dependency plan (bindings + selected set) for a model request.
-    async fn resolve_model_dependency_plan(
+    /// Resolve dependency requirements for a model request.
+    async fn resolve_model_dependency_requirements(
         &self,
         request: ModelDependencyRequest,
-    ) -> std::result::Result<ModelDependencyPlan, String>;
+    ) -> std::result::Result<ModelDependencyRequirements, String>;
 
     /// Check whether dependencies required for this model request are ready.
     async fn check_dependencies(
@@ -270,7 +336,7 @@ pub trait ModelDependencyResolver: Send + Sync {
     async fn resolve_model_ref(
         &self,
         request: ModelDependencyRequest,
-        plan: Option<ModelDependencyPlan>,
+        requirements: Option<ModelDependencyRequirements>,
     ) -> std::result::Result<Option<ModelRefV2>, String>;
 }
 
@@ -286,17 +352,20 @@ mod tests {
             "modelId": "stable-audio-open-1.0",
             "modelPath": "/models/stable-audio",
             "taskTypePrimary": "text-to-audio",
-            "dependencyPlanId": "stable-audio-open-1.0:linux-x86_64:pytorch",
+            "dependencyRequirementsId": "audio/stabilityai/stable-audio-open-1_0:linux-x86_64:stable_audio",
             "dependencyBindings": [
                 {
-                    "bindingId": "stable-audio-default",
-                    "profileId": "stable-audio",
-                    "profileVersion": 1,
-                    "profileHash": "abc123",
-                    "bindingKind": "required",
-                    "backendKey": "pytorch",
-                    "platformSelector": "linux-x86_64",
-                    "envId": "venv:stable-audio:1:abc123:linux-x86_64:pytorch"
+                    "binding_id": "binding.stable_audio.core.linux_x86_64",
+                    "profile_id": "profile.stable_audio.core",
+                    "profile_version": 2,
+                    "profile_hash": "abc123",
+                    "backend_key": "stable_audio",
+                    "platform_selector": "linux-x86_64",
+                    "environment_kind": "python",
+                    "env_id": "python:profile.stable_audio.core:2:abc123:linux-x86_64:stable_audio",
+                    "validation_state": "resolved",
+                    "validation_errors": [],
+                    "requirements": []
                 }
             ]
         });
@@ -316,18 +385,20 @@ mod tests {
             "taskTypePrimary": "text-to-audio",
             "dependencyBindings": [
                 {
-                    "bindingId": "dup",
-                    "profileId": "stable-audio",
-                    "profileVersion": 1,
-                    "bindingKind": "required",
-                    "envId": "one"
+                    "binding_id": "dup",
+                    "profile_id": "stable-audio",
+                    "profile_version": 1,
+                    "validation_state": "resolved",
+                    "validation_errors": [],
+                    "requirements": []
                 },
                 {
-                    "bindingId": "dup",
-                    "profileId": "stable-audio",
-                    "profileVersion": 1,
-                    "bindingKind": "required",
-                    "envId": "two"
+                    "binding_id": "dup",
+                    "profile_id": "stable-audio",
+                    "profile_version": 1,
+                    "validation_state": "resolved",
+                    "validation_errors": [],
+                    "requirements": []
                 }
             ]
         });
@@ -336,97 +407,47 @@ mod tests {
     }
 
     #[test]
-    fn dependency_plan_deserializes_pin_fields_and_missing_pins() {
+    fn requirements_payload_deserializes_and_accepts_unknown_fields() {
         let value = serde_json::json!({
-            "state": "manual_intervention_required",
-            "code": "unpinned_dependency",
-            "missingPins": ["torch"],
+            "model_id": "audio/stabilityai/stable-audio-open-1_0",
+            "platform_key": "linux-x86_64",
+            "backend_key": "stable_audio",
+            "dependency_contract_version": 1,
+            "validation_state": "resolved",
+            "validation_errors": [],
             "bindings": [
                 {
-                    "bindingId": "b1",
-                    "profileId": "profile.pytorch",
-                    "profileVersion": 2,
-                    "bindingKind": "required",
-                    "envId": "venv:profile.pytorch:2",
-                    "pinSummary": {
-                        "pinned": false,
-                        "requiredCount": 2,
-                        "pinnedCount": 1,
-                        "missingCount": 1
-                    },
-                    "requiredPins": [
-                        { "name": "torch", "reasons": ["backend_required"] },
-                        { "name": "torchvision", "reasons": ["modality_required"] }
+                    "binding_id": "binding.stable_audio.core.linux_x86_64",
+                    "profile_id": "profile.stable_audio.core",
+                    "profile_version": 2,
+                    "profile_hash": "abc123",
+                    "backend_key": "stable_audio",
+                    "platform_selector": "linux-x86_64",
+                    "environment_kind": "python",
+                    "env_id": "python:profile.stable_audio.core:2:abc123:linux-x86_64:stable_audio",
+                    "validation_state": "resolved",
+                    "validation_errors": [],
+                    "requirements": [
+                        {
+                            "kind": "python_package",
+                            "name": "stable-audio-tools",
+                            "exact_pin": "==0.0.19",
+                            "unknown_field": "ignored"
+                        }
                     ],
-                    "missingPins": ["torch"]
+                    "unknown_nested": true
                 }
-            ]
+            ],
+            "unknown_top_level": true
         });
 
-        let parsed: ModelDependencyPlan = serde_json::from_value(value).unwrap();
-        assert_eq!(parsed.missing_pins, vec!["torch".to_string()]);
+        let parsed: ModelDependencyRequirements = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.dependency_contract_version, 1);
         assert_eq!(parsed.bindings.len(), 1);
-        assert_eq!(parsed.bindings[0].required_pins.len(), 2);
-        assert_eq!(parsed.bindings[0].missing_pins, vec!["torch".to_string()]);
+        assert_eq!(parsed.bindings[0].requirements.len(), 1);
         assert_eq!(
-            parsed.bindings[0].pin_summary.as_ref().map(|summary| summary.missing_count),
-            Some(1)
+            parsed.bindings[0].requirements[0].name,
+            "stable-audio-tools"
         );
-    }
-
-    #[test]
-    fn dependency_status_deserializes_binding_code_and_pin_fields() {
-        let value = serde_json::json!({
-            "state": "manual_intervention_required",
-            "code": "unpinned_dependency",
-            "missingPins": ["torch"],
-            "bindings": [
-                {
-                    "bindingId": "b1",
-                    "envId": "venv:profile.pytorch:2",
-                    "state": "manual_intervention_required",
-                    "code": "unpinned_dependency",
-                    "missingComponents": ["profile.pytorch@2"],
-                    "pinSummary": {
-                        "pinned": false,
-                        "requiredCount": 1,
-                        "pinnedCount": 0,
-                        "missingCount": 1
-                    },
-                    "requiredPins": [{ "name": "torch", "reasons": ["backend_required"] }],
-                    "missingPins": ["torch"]
-                }
-            ]
-        });
-
-        let parsed: ModelDependencyStatus = serde_json::from_value(value).unwrap();
-        assert_eq!(parsed.missing_pins, vec!["torch".to_string()]);
-        assert_eq!(parsed.bindings.len(), 1);
-        assert_eq!(parsed.bindings[0].code.as_deref(), Some("unpinned_dependency"));
-        assert_eq!(parsed.bindings[0].required_pins.len(), 1);
-        assert_eq!(parsed.bindings[0].missing_pins, vec!["torch".to_string()]);
-    }
-
-    #[test]
-    fn dependency_plan_ignores_unknown_fields() {
-        let value = serde_json::json!({
-            "state": "ready",
-            "unknownTopLevel": { "future": true },
-            "bindings": [
-                {
-                    "bindingId": "b1",
-                    "profileId": "profile",
-                    "profileVersion": 1,
-                    "bindingKind": "required",
-                    "envId": "env",
-                    "unknownNested": ["future"]
-                }
-            ]
-        });
-
-        let parsed: ModelDependencyPlan = serde_json::from_value(value).unwrap();
-        assert_eq!(parsed.state, DependencyState::Ready);
-        assert_eq!(parsed.bindings.len(), 1);
-        assert_eq!(parsed.bindings[0].binding_id, "b1");
     }
 }

@@ -9,7 +9,7 @@ use tauri::{command, ipc::Channel, AppHandle, State};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;
-use crate::llm::gateway::SharedGateway;
+use crate::llm::{SharedAppConfig, SharedGateway};
 
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
@@ -65,6 +65,7 @@ pub async fn execute_workflow_v2(
     app: AppHandle,
     graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
@@ -74,6 +75,7 @@ pub async fn execute_workflow_v2(
         app,
         graph,
         gateway,
+        config,
         rag_manager,
         execution_manager,
         extensions,
@@ -177,6 +179,7 @@ pub async fn run_workflow_session(
     app: AppHandle,
     session_id: String,
     gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
@@ -186,6 +189,7 @@ pub async fn run_workflow_session(
         app,
         session_id,
         gateway,
+        config,
         rag_manager,
         execution_manager,
         extensions,
@@ -267,7 +271,7 @@ pub async fn get_effective_model_metadata(
 }
 
 #[command]
-pub async fn resolve_model_dependency_plan(
+pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     node_type: String,
     model_path: String,
@@ -277,8 +281,9 @@ pub async fn resolve_model_dependency_plan(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
-) -> Result<node_engine::ModelDependencyPlan, String> {
-    super::model_dependency_commands::resolve_model_dependency_plan(
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+) -> Result<node_engine::ModelDependencyRequirements, String> {
+    super::model_dependency_commands::resolve_model_dependency_requirements(
         resolver,
         node_type,
         model_path,
@@ -288,6 +293,7 @@ pub async fn resolve_model_dependency_plan(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )
     .await
 }
@@ -303,6 +309,7 @@ pub async fn check_model_dependencies(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
     super::model_dependency_commands::check_model_dependencies(
         resolver,
@@ -314,6 +321,7 @@ pub async fn check_model_dependencies(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )
     .await
 }
@@ -329,6 +337,7 @@ pub async fn install_model_dependencies(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyInstallResult, String> {
     super::model_dependency_commands::install_model_dependencies(
         resolver,
@@ -340,6 +349,7 @@ pub async fn install_model_dependencies(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )
     .await
 }
@@ -355,6 +365,7 @@ pub async fn get_model_dependency_status(
     backend_key: Option<String>,
     platform_context: Option<serde_json::Value>,
     selected_binding_ids: Option<Vec<String>>,
+    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
     super::model_dependency_commands::get_model_dependency_status(
         resolver,
@@ -366,6 +377,7 @@ pub async fn get_model_dependency_status(
         backend_key,
         platform_context,
         selected_binding_ids,
+        dependency_override_patches,
     )
     .await
 }

@@ -189,7 +189,10 @@ impl Task for EmbeddingTask {
 
         let dimensions = embedding.len();
         let emit_metadata_key = ContextKeys::input(&self.task_id, "emit_metadata");
-        let emit_metadata = context.get::<bool>(&emit_metadata_key).await.unwrap_or(false);
+        let emit_metadata = context
+            .get::<bool>(&emit_metadata_key)
+            .await
+            .unwrap_or(false);
 
         // Store outputs in context
         let embedding_key = ContextKeys::output(&self.task_id, Self::PORT_EMBEDDING);

@@ -32,6 +32,16 @@ Configure Python executables using one of:
 
 - `PANTOGRAPH_PYTHON_EXECUTABLE`
   - Fallback Python executable when an env-specific mapping is not provided.
+  - Supports either absolute/relative paths or executable names on `PATH` (for example `python3`).
+
+- `PYO3_PYTHON`
+  - Secondary fallback used when `PANTOGRAPH_PYTHON_EXECUTABLE` is unset.
+  - Also accepts paths or `PATH` executable names.
+
+- `PATH` discovery
+  - If no explicit variables are set, Pantograph attempts `python3` then `python` from `PATH`.
+- Local project fallback
+  - For direct binary runs, Pantograph also checks `./.venv/bin/python3`, `./.venv/bin/python`, then `./.venv/Scripts/python.exe` (repo root).
 
 ## Operational Notes
 
@@ -41,6 +51,7 @@ Configure Python executables using one of:
   - `crates/inference/audio/worker.py`
 - A bridge script is materialized at runtime in the system temp directory:
   - `pantograph_python_runtime_bridge.py`
+- `launcher.sh` exports `PANTOGRAPH_PYTHON_EXECUTABLE` to the project `.venv` Python by default.
 
 ## Migration Notes
 

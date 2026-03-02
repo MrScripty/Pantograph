@@ -19,80 +19,49 @@
     constraints?: { min?: number; max?: number; allowed_values?: unknown[] };
   }
 
-  type DependencyState = string;
+  type DependencyValidationState =
+    | 'resolved'
+    | 'unknown_profile'
+    | 'invalid_profile'
+    | 'profile_conflict';
 
-  interface ModelDependencyPinSummary {
-    pinned: boolean;
-    requiredCount: number;
-    pinnedCount: number;
-    missingCount: number;
+  interface DependencyValidationError {
+    code: string;
+    scope: 'top_level' | 'binding';
+    binding_id?: string;
+    field?: string;
+    message: string;
   }
 
-  interface ModelDependencyRequiredPin {
+  interface ModelDependencyRequirement {
+    kind: string;
     name: string;
-    reasons?: string[];
+    exact_pin: string;
   }
 
   interface ModelDependencyBinding {
-    bindingId: string;
-    profileId: string;
-    profileVersion: number;
-    profileHash?: string;
-    bindingKind: string;
-    backendKey?: string;
-    platformSelector?: string;
-    envId: string;
-    pinSummary?: ModelDependencyPinSummary;
-    requiredPins?: ModelDependencyRequiredPin[];
-    missingPins?: string[];
+    binding_id: string;
+    profile_id: string;
+    profile_version: number;
+    profile_hash?: string;
+    backend_key?: string;
+    platform_selector?: string;
+    environment_kind?: string;
+    env_id?: string;
+    validation_state: DependencyValidationState;
+    validation_errors: DependencyValidationError[];
+    requirements: ModelDependencyRequirement[];
   }
 
-  interface ModelDependencyPlan {
-    state: DependencyState;
-    code?: string;
-    message?: string;
-    reviewReasons?: string[];
-    planId?: string;
-    bindings?: ModelDependencyBinding[];
-    selectedBindingIds?: string[];
-    requiredBindingIds?: string[];
-    missingPins?: string[];
-  }
-
-  interface ModelDependencyBindingStatus {
-    bindingId: string;
-    envId: string;
-    state: DependencyState;
-    code?: string;
-    missingComponents?: string[];
-    installedComponents?: string[];
-    failedComponents?: string[];
-    message?: string;
-    pinSummary?: ModelDependencyPinSummary;
-    requiredPins?: ModelDependencyRequiredPin[];
-    missingPins?: string[];
-  }
-
-  interface ModelDependencyStatus {
-    state: DependencyState;
-    code?: string;
-    message?: string;
-    reviewReasons?: string[];
-    planId?: string;
-    bindings?: ModelDependencyBindingStatus[];
-    checkedAt?: string;
-    missingPins?: string[];
-  }
-
-  interface ModelDependencyInstallResult {
-    state: DependencyState;
-    code?: string;
-    message?: string;
-    reviewReasons?: string[];
-    planId?: string;
-    bindings?: ModelDependencyBindingStatus[];
-    installedAt?: string;
-    missingPins?: string[];
+  interface ModelDependencyRequirements {
+    model_id: string;
+    platform_key: string;
+    backend_key?: string;
+    dependency_contract_version: number;
+    validation_state: DependencyValidationState;
+    validation_errors: DependencyValidationError[];
+    bindings: ModelDependencyBinding[];
+    selected_binding_ids: string[];
   }
 
   interface Props {
@@ -107,12 +76,11 @@
       task_type_primary?: string;
       backend_key?: string;
       platform_context?: Record<string, string>;
-      dependency_plan_id?: string;
+      dependency_requirements_id?: string;
       dependency_bindings?: ModelDependencyBinding[];
       review_reasons?: string[];
       selected_binding_ids?: string[];
-      dependency_plan?: ModelDependencyPlan;
-      dependency_status?: ModelDependencyStatus;
+      dependency_requirements?: ModelDependencyRequirements;
       selectionMode?: 'library' | 'manual';
       inference_settings?: InferenceParamSchema[];
     };
@@ -128,16 +96,18 @@
   let libraryAvailable = $state(true);
   let searchQuery = $state('');
   let isDependencyActionRunning = $state(false);
-  let dependencyPlan = $state<ModelDependencyPlan | null>(null);
-  let dependencyStatus = $state<ModelDependencyStatus | null>(null);
+  let dependencyRequirements = $state<ModelDependencyRequirements | null>(null);
+  let requirementsMessage = $state<string | null>(null);
+  let requirementsCode = $state<string | null>(null);
   let selectedBindingIds = $state<string[]>([]);
   const manualModelPathInputId = $derived(`puma-lib-${id}-model-path`);
 
   $effect(() => {
     modelPath = data.modelPath || '';
     selectionMode = data.selectionMode || 'library';
-    dependencyPlan = data.dependency_plan ?? null;
-    dependencyStatus = data.dependency_status ?? null;
+    dependencyRequirements = (data.dependency_requirements as ModelDependencyRequirements | null) ?? null;
+    requirementsMessage = null;
+    requirementsCode = null;
     selectedBindingIds = Array.isArray(data.selected_binding_ids) ? data.selected_binding_ids : [];
   });
 
@@ -153,17 +123,9 @@
       : availableModels,
   );
 
-  const bindingStatusById = $derived.by(() => {
-    const map = new Map<string, ModelDependencyBindingStatus>();
-    for (const row of dependencyStatus?.bindings ?? []) {
-      map.set(row.bindingId, row);
-    }
-    return map;
-  });
-
   onMount(async () => {
     await loadModels();
-    // Re-sync inference settings when model already selected (e.g. workflow reload)
+
     if (data.modelPath && availableModels.length > 0) {
       const match = availableModels.find((m) => String(m.value) === data.modelPath);
       if (match) {
@@ -201,9 +163,9 @@
         }
       }
     }
+
     if (data.modelPath) {
-      await resolveDependencyPlan();
-      await refreshDependencyStatus();
+      await resolveDependencyRequirements();
     }
   });
 
@@ -290,92 +252,42 @@
     });
   }
 
-  function applyPlan(plan: ModelDependencyPlan) {
-    dependencyPlan = plan;
+  function applyRequirements(requirements: ModelDependencyRequirements) {
+    dependencyRequirements = requirements;
+    requirementsMessage = null;
+    requirementsCode = null;
 
-    const incoming = Array.isArray(plan.selectedBindingIds) ? plan.selectedBindingIds : [];
+    const incoming = Array.isArray(requirements.selected_binding_ids)
+      ? requirements.selected_binding_ids
+      : [];
     if (incoming.length > 0) {
       selectedBindingIds = incoming;
       persistBindingSelection();
     } else if (selectedBindingIds.length === 0) {
-      selectedBindingIds = (plan.bindings ?? []).map((b) => b.bindingId);
+      selectedBindingIds = requirements.bindings.map((b) => b.binding_id);
       persistBindingSelection();
     }
 
     updateNodeData(id, {
-      dependency_plan: plan,
-      dependency_plan_id: plan.planId,
+      dependency_requirements: requirements,
+      dependency_requirements_id: requirements.model_id,
       selected_binding_ids: selectedBindingIds,
     });
   }
 
-  async function resolveDependencyPlan() {
+  async function resolveDependencyRequirements() {
     if (!modelPath) return;
     isDependencyActionRunning = true;
     try {
-      const plan = await invoke<ModelDependencyPlan>('resolve_model_dependency_plan', dependencyRequestPayload());
-      applyPlan(plan);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      dependencyPlan = {
-        state: 'failed',
-        message,
-      };
-      updateNodeData(id, { dependency_plan: dependencyPlan });
-    } finally {
-      isDependencyActionRunning = false;
-    }
-  }
-
-  async function refreshDependencyStatus() {
-    if (!modelPath) return;
-    isDependencyActionRunning = true;
-    try {
-      const status = await invoke<ModelDependencyStatus>('get_model_dependency_status', dependencyRequestPayload());
-      dependencyStatus = status;
-      updateNodeData(id, { dependency_status: status });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      dependencyStatus = {
-        state: 'failed',
-        message,
-      };
-      updateNodeData(id, { dependency_status: dependencyStatus });
-    } finally {
-      isDependencyActionRunning = false;
-    }
-  }
-
-  async function checkDependencies() {
-    if (!modelPath) return;
-    isDependencyActionRunning = true;
-    try {
-      const status = await invoke<ModelDependencyStatus>('check_model_dependencies', dependencyRequestPayload());
-      dependencyStatus = status;
-      updateNodeData(id, { dependency_status: status });
-    } finally {
-      isDependencyActionRunning = false;
-    }
-  }
-
-  async function installDependencies() {
-    if (!modelPath) return;
-    isDependencyActionRunning = true;
-    try {
-      const result = await invoke<ModelDependencyInstallResult>(
-        'install_model_dependencies',
+      const requirements = await invoke<ModelDependencyRequirements>(
+        'resolve_model_dependency_requirements',
         dependencyRequestPayload(),
       );
-      dependencyStatus = {
-        state: result.state,
-        code: result.code,
-        message: result.message,
-        reviewReasons: result.reviewReasons,
-        planId: result.planId,
-        bindings: result.bindings,
-      };
-      updateNodeData(id, { dependency_status: dependencyStatus });
-      await refreshDependencyStatus();
+      applyRequirements(requirements);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      requirementsCode = 'requirements_resolution_failed';
+      requirementsMessage = message;
     } finally {
       isDependencyActionRunning = false;
     }
@@ -408,8 +320,7 @@
         dependency_bindings: dependencyBindings,
         review_reasons: reviewReasons,
         selected_binding_ids: selectedBindingIds,
-        dependency_plan: null,
-        dependency_status: null,
+        dependency_requirements: null,
         selectionMode: 'library',
         inference_settings: settings,
       });
@@ -419,7 +330,7 @@
         syncExpandPorts(id, settings);
       }
 
-      resolveDependencyPlan().then(refreshDependencyStatus).catch(console.error);
+      resolveDependencyRequirements().catch(console.error);
     }
   }
 
@@ -437,13 +348,13 @@
       platform_context: undefined,
       dependency_bindings: [],
       review_reasons: [],
-      dependency_plan_id: undefined,
-      dependency_plan: null,
-      dependency_status: null,
+      dependency_requirements_id: undefined,
+      dependency_requirements: null,
       selected_binding_ids: selectedBindingIds,
     });
-    dependencyPlan = null;
-    dependencyStatus = null;
+    dependencyRequirements = null;
+    requirementsMessage = null;
+    requirementsCode = null;
   }
 
   async function browseForModel() {
@@ -471,13 +382,13 @@
           platform_context: undefined,
           dependency_bindings: [],
           review_reasons: [],
-          dependency_plan_id: undefined,
-          dependency_plan: null,
-          dependency_status: null,
+          dependency_requirements_id: undefined,
+          dependency_requirements: null,
           selected_binding_ids: selectedBindingIds,
         });
-        dependencyPlan = null;
-        dependencyStatus = null;
+        dependencyRequirements = null;
+        requirementsMessage = null;
+        requirementsCode = null;
       }
     } catch (error) {
       console.error('File picker error:', error);
@@ -489,102 +400,74 @@
     updateNodeData(id, { selectionMode: mode });
   }
 
-  function toggleBinding(bindingId: string, required: boolean) {
-    if (required) return;
-    if (selectedBindingIds.includes(bindingId)) {
-      selectedBindingIds = selectedBindingIds.filter((id) => id !== bindingId);
-    } else {
-      selectedBindingIds = [...selectedBindingIds, bindingId];
-    }
-    persistBindingSelection();
-  }
-
   function dependencyTokenLabel(value: string): string {
     return value.replaceAll('_', ' ');
   }
 
-  function dependencyReasonLabel(reason: string): string {
-    switch (reason) {
-      case 'backend_required':
-        return 'backend';
-      case 'modality_required':
-        return 'modality';
-      case 'profile_policy_required':
-        return 'policy';
-      default:
-        return dependencyTokenLabel(reason);
-    }
-  }
-
-  function normalizePinList(values?: string[]): string[] {
-    return (values ?? []).filter((value) => value.trim().length > 0);
-  }
-
   function dependencyCodeLabel(code?: string): string | null {
     switch (code) {
-      case 'unpinned_dependency':
-        return 'pinning required';
-      case 'modality_resolution_unknown':
-        return 'modality unresolved';
-      case 'required_binding_omitted':
-        return 'binding omitted';
+      case 'requirements_missing':
+        return 'requirements missing';
+      case 'dependency_install_failed':
+      case 'dependency_check_failed':
+        return 'dependency check failed';
       case 'profile_conflict':
         return 'profile conflict';
       case 'unknown_profile':
         return 'unknown profile';
-      case 'manual_intervention_required':
-        return 'manual review';
+      case 'invalid_profile':
+        return 'invalid profile';
       default:
         return code ? dependencyTokenLabel(code) : null;
     }
   }
 
   function deriveDisplayState(): string | null {
-    if (dependencyStatus) return dependencyStatus.state;
-    if (dependencyPlan) return dependencyPlan.state;
-    return null;
+    if (requirementsCode) return 'requirements_error';
+    if (!dependencyRequirements) return null;
+    switch (dependencyRequirements.validation_state) {
+      case 'resolved':
+        return 'requirements_resolved';
+      case 'unknown_profile':
+        return 'requirements_unresolved';
+      default:
+        return 'requirements_invalid';
+    }
   }
 
   function deriveDisplayCode(): string | null {
-    if (dependencyStatus?.code) return dependencyStatus.code;
-    if (dependencyPlan?.code) return dependencyPlan.code;
-    return null;
+    if (requirementsCode) return requirementsCode;
+    return dependencyRequirements?.validation_errors?.[0]?.code ?? null;
+  }
+
+  function deriveDisplayMessage(): string | null {
+    if (requirementsMessage) return requirementsMessage;
+    return dependencyRequirements?.validation_errors?.[0]?.message ?? null;
   }
 
   const dependencyBadge = $derived.by(() => {
     const state = deriveDisplayState();
-    if (!state) return { label: 'deps unknown', className: 'text-neutral-400 border-neutral-700' };
+    if (!state) {
+      return { label: 'requirements unknown', className: 'text-neutral-400 border-neutral-700' };
+    }
     switch (state) {
-      case 'ready':
-        return { label: 'deps ready', className: 'text-emerald-400 border-emerald-500/40' };
-      case 'missing':
-        return { label: 'deps missing', className: 'text-amber-400 border-amber-500/40' };
-      case 'installing':
-        return { label: 'deps installing', className: 'text-sky-400 border-sky-500/40' };
-      case 'manual_intervention_required':
-        return { label: 'manual review', className: 'text-rose-400 border-rose-500/40' };
-      case 'unknown_profile':
-        return { label: 'unknown profile', className: 'text-violet-400 border-violet-500/40' };
-      case 'profile_conflict':
-        return { label: 'profile conflict', className: 'text-orange-400 border-orange-500/40' };
-      case 'required_binding_omitted':
-        return { label: 'binding omitted', className: 'text-fuchsia-400 border-fuchsia-500/40' };
-      case 'failed':
-        return { label: 'deps failed', className: 'text-red-400 border-red-500/40' };
+      case 'requirements_resolved':
+        return { label: 'requirements resolved', className: 'text-cyan-300 border-cyan-500/40' };
+      case 'requirements_unresolved':
+        return { label: 'requirements unresolved', className: 'text-violet-400 border-violet-500/40' };
+      case 'requirements_invalid':
+        return { label: 'requirements invalid', className: 'text-orange-400 border-orange-500/40' };
+      case 'requirements_error':
+        return { label: 'requirements error', className: 'text-red-400 border-red-500/40' };
       default:
         return {
-          label: `deps ${dependencyTokenLabel(state)}`,
+          label: `requirements ${dependencyTokenLabel(state)}`,
           className: 'text-neutral-300 border-neutral-600/50',
         };
     }
   });
 
   const dependencyCodeText = $derived.by(() => dependencyCodeLabel(deriveDisplayCode() ?? undefined));
-  const aggregateMissingPins = $derived.by(() => {
-    const statusPins = normalizePinList(dependencyStatus?.missingPins);
-    if (statusPins.length > 0) return statusPins;
-    return normalizePinList(dependencyPlan?.missingPins);
-  });
 </script>
 
 <div class="puma-lib-node-wrapper">
@@ -609,31 +492,15 @@
               <button
                 type="button"
                 class="ml-auto text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={resolveDependencyPlan}
+                onclick={resolveDependencyRequirements}
                 disabled={isDependencyActionRunning}
               >
-                Plan
-              </button>
-              <button
-                type="button"
-                class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={checkDependencies}
-                disabled={isDependencyActionRunning}
-              >
-                Check
-              </button>
-              <button
-                type="button"
-                class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={installDependencies}
-                disabled={isDependencyActionRunning}
-              >
-                Install
+                Resolve
               </button>
             </div>
-            {#if dependencyStatus?.message || dependencyPlan?.message}
-              <div class="mt-1 text-[9px] text-neutral-500 truncate" title={dependencyStatus?.message ?? dependencyPlan?.message}>
-                {dependencyStatus?.message ?? dependencyPlan?.message}
+            {#if deriveDisplayMessage()}
+              <div class="mt-1 text-[9px] text-neutral-500 truncate" title={deriveDisplayMessage() ?? undefined}>
+                {deriveDisplayMessage()}
               </div>
             {/if}
             {#if dependencyCodeText}
@@ -641,79 +508,29 @@
                 code: {dependencyCodeText}
               </div>
             {/if}
-            {#if (dependencyStatus?.reviewReasons?.length ?? 0) > 0 || (dependencyPlan?.reviewReasons?.length ?? 0) > 0}
-              <div class="mt-1 text-[9px] text-rose-300">
-                {(dependencyStatus?.reviewReasons ?? dependencyPlan?.reviewReasons ?? []).join(', ')}
-              </div>
-            {/if}
-            {#if aggregateMissingPins.length > 0}
-              <div class="mt-1 text-[9px] text-amber-300">
-                missing pins: {aggregateMissingPins.join(', ')}
-              </div>
-            {/if}
           </div>
         {/if}
 
-        {#if modelPath && (dependencyPlan?.bindings?.length ?? 0) > 0}
+        {#if modelPath && (dependencyRequirements?.bindings?.length ?? 0) > 0}
           <div class="rounded border border-neutral-700 px-2 py-1 text-[10px] space-y-1">
-            {#each dependencyPlan?.bindings ?? [] as binding}
-              {@const required = (dependencyPlan?.requiredBindingIds ?? []).includes(binding.bindingId)}
-              {@const row = bindingStatusById.get(binding.bindingId)}
-              {@const pinSummary = row?.pinSummary ?? binding.pinSummary}
-              {@const requiredPins = row?.requiredPins ?? binding.requiredPins ?? []}
-              {@const missingPins = normalizePinList(row?.missingPins ?? binding.missingPins)}
+            {#each dependencyRequirements?.bindings ?? [] as binding}
               <div class="rounded border border-neutral-800 px-2 py-1">
                 <div class="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedBindingIds.includes(binding.bindingId)}
-                    disabled={required || isDependencyActionRunning}
-                    onchange={() => toggleBinding(binding.bindingId, required)}
-                  />
-                  <span class="text-neutral-200 truncate" title={binding.bindingId}>{binding.bindingId}</span>
-                  {#if required}
-                    <span class="ml-auto text-[9px] text-amber-300">required</span>
-                  {/if}
+                  <span class="text-neutral-200 truncate" title={binding.binding_id}>{binding.binding_id}</span>
                 </div>
-                <div class="text-[9px] text-neutral-500 truncate" title={binding.profileId + ' v' + binding.profileVersion}>
-                  {binding.profileId} v{binding.profileVersion}
+                <div class="text-[9px] text-neutral-500 truncate" title={binding.profile_id + ' v' + binding.profile_version}>
+                  {binding.profile_id} v{binding.profile_version}
                 </div>
-                {#if row}
-                  <div class="text-[9px] text-neutral-400">{dependencyTokenLabel(row.state)}</div>
-                  {#if row.code}
-                    <div class="text-[9px] text-amber-300">{dependencyCodeLabel(row.code)}</div>
-                  {/if}
-                  {#if (row.missingComponents?.length ?? 0) > 0}
-                    <div class="text-[9px] text-amber-300 truncate" title={row.missingComponents?.join(', ')}>
-                      missing: {row.missingComponents?.join(', ')}
-                    </div>
-                  {/if}
-                  {#if (row.failedComponents?.length ?? 0) > 0}
-                    <div class="text-[9px] text-rose-300 truncate" title={row.failedComponents?.join(', ')}>
-                      failed: {row.failedComponents?.join(', ')}
-                    </div>
-                  {/if}
-                {/if}
-                {#if pinSummary}
-                  <div class="text-[9px] text-neutral-400">
-                    pins: {pinSummary.pinnedCount}/{pinSummary.requiredCount} pinned
+                <div class="text-[9px] text-neutral-400">validation: {dependencyTokenLabel(binding.validation_state)}</div>
+                {#if binding.validation_errors.length > 0}
+                  <div class="text-[9px] text-amber-300 truncate" title={binding.validation_errors[0].message}>
+                    {dependencyCodeLabel(binding.validation_errors[0].code) ?? binding.validation_errors[0].code}
                   </div>
                 {/if}
-                {#if requiredPins.length > 0}
-                  <div class="text-[9px] text-neutral-300">
-                    required pins:
-                    {#each requiredPins as pin, pinIndex (pin.name + ':' + pinIndex)}
-                      <span>
-                        {pin.name}
-                        {#if (pin.reasons?.length ?? 0) > 0}
-                          ({(pin.reasons ?? []).map(dependencyReasonLabel).join(', ')})
-                        {/if}
-                      </span>{pinIndex < requiredPins.length - 1 ? ', ' : ''}
-                    {/each}
+                {#if binding.requirements.length > 0}
+                  <div class="text-[9px] text-neutral-300 truncate" title={binding.requirements.map((r) => `${r.name}${r.exact_pin}`).join(', ')}>
+                    requirements: {binding.requirements.map((r) => `${r.name}${r.exact_pin}`).join(', ')}
                   </div>
-                {/if}
-                {#if missingPins.length > 0}
-                  <div class="text-[9px] text-amber-300">missing pins: {missingPins.join(', ')}</div>
                 {/if}
               </div>
             {/each}

@@ -9,12 +9,15 @@
 
   // Import workflow node components (reuse from main workflow)
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
+  import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
   import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
+  import VectorOutputNode from './nodes/workflow/VectorOutputNode.svelte';
+  import DependencyEnvironmentNode from './nodes/workflow/DependencyEnvironmentNode.svelte';
   import GenericNode from './nodes/workflow/GenericNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
@@ -39,12 +42,15 @@
   // Define custom node types
   const nodeTypes: NodeTypes = {
     'text-input': TextInputNode,
+    'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
     'embedding': EmbeddingNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
+    'vector-output': VectorOutputNode,
+    'dependency-environment': DependencyEnvironmentNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
     'vector-db': VectorDbNode,

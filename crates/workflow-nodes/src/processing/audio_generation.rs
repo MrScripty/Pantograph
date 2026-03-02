@@ -18,6 +18,7 @@ const PORT_NUM_INFERENCE_STEPS: &str = "num_inference_steps";
 const PORT_GUIDANCE_SCALE: &str = "guidance_scale";
 const PORT_SEED: &str = "seed";
 const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
+const PORT_ENVIRONMENT_REF: &str = "environment_ref";
 const PORT_AUDIO: &str = "audio";
 const PORT_DURATION_SECONDS: &str = "duration_seconds";
 const PORT_SAMPLE_RATE: &str = "sample_rate";
@@ -60,6 +61,7 @@ impl TaskDescriptor for AudioGenerationTask {
                     "Inference Settings",
                     PortDataType::Json,
                 ),
+                PortMetadata::optional(PORT_ENVIRONMENT_REF, "Environment Ref", PortDataType::Json),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_AUDIO, "Audio", PortDataType::Audio),
@@ -101,9 +103,9 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = AudioGenerationTask::descriptor();
 
-        // 7 inputs: model_path, prompt, duration, num_inference_steps,
-        //           guidance_scale, seed, inference_settings
-        assert_eq!(meta.inputs.len(), 7);
+        // 8 inputs: model_path, prompt, duration, num_inference_steps,
+        //           guidance_scale, seed, inference_settings, environment_ref
+        assert_eq!(meta.inputs.len(), 8);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "duration"));
@@ -111,6 +113,7 @@ mod tests {
         assert!(meta.inputs.iter().any(|p| p.id == "guidance_scale"));
         assert!(meta.inputs.iter().any(|p| p.id == "seed"));
         assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
+        assert!(meta.inputs.iter().any(|p| p.id == "environment_ref"));
 
         // 4 outputs: audio, duration_seconds, sample_rate, model_ref
         assert_eq!(meta.outputs.len(), 4);
