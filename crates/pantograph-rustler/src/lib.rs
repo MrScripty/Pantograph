@@ -42,6 +42,10 @@ use node_engine::{
     EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowExecutor,
     WorkflowGraph,
 };
+use pantograph_workflow_service::{
+    EmbedObjectsV1Request, EmbeddingHost, EmbeddingHostCapabilities, EmbeddingService,
+    EmbeddingServiceError, GetEmbeddingWorkflowCapabilitiesV1Request, ModelSignature,
+};
 
 // Force the linker to include workflow-nodes object files,
 // which contain `inventory::submit!()` statics for built-in node types.
@@ -204,6 +208,8 @@ static PENDING_CALLBACKS: std::sync::LazyLock<
 
 /// Counter for generating unique callback IDs.
 static CALLBACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+const DEFAULT_MAX_BATCH_SIZE: usize = 128;
+const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
 
 // ============================================================================
 // Elixir callback-based TaskExecutor
@@ -407,6 +413,210 @@ impl EventSink for BeamEventSink {
 
         Ok(())
     }
+}
+
+// ============================================================================
+// Headless embedding adapter for Rustler
+// ============================================================================
+
+struct RustlerEmbeddingHost {
+    base_url: String,
+    pumas_api: Option<Arc<pumas_library::PumasApi>>,
+    http_client: reqwest::Client,
+}
+
+impl RustlerEmbeddingHost {
+    fn new(base_url: String, pumas_api: Option<Arc<pumas_library::PumasApi>>) -> Self {
+        Self {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            pumas_api,
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    async fn supported_models(&self) -> Vec<String> {
+        let Some(api) = &self.pumas_api else {
+            return vec!["default".to_string()];
+        };
+        match api.list_models().await {
+            Ok(models) => {
+                let mut out = models
+                    .into_iter()
+                    .filter(|m| m.model_type.eq_ignore_ascii_case("embedding"))
+                    .map(|m| m.id)
+                    .collect::<Vec<_>>();
+                out.sort();
+                out.dedup();
+                if out.is_empty() {
+                    out.push("default".to_string());
+                }
+                out
+            }
+            Err(_) => vec!["default".to_string()],
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl EmbeddingHost for RustlerEmbeddingHost {
+    async fn validate_embedding_workflow(
+        &self,
+        workflow_id: &str,
+    ) -> Result<(), EmbeddingServiceError> {
+        if workflow_id.trim().is_empty() {
+            return Err(EmbeddingServiceError::WorkflowNotFound(
+                "workflow_id is empty".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn embedding_capabilities(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<EmbeddingHostCapabilities, EmbeddingServiceError> {
+        Ok(EmbeddingHostCapabilities {
+            supported_models: self.supported_models().await,
+            max_batch_size: DEFAULT_MAX_BATCH_SIZE,
+            max_text_length: DEFAULT_MAX_TEXT_LENGTH,
+        })
+    }
+
+    async fn embed_one(
+        &self,
+        _workflow_id: &str,
+        text: &str,
+        model_id: Option<&str>,
+    ) -> Result<(Vec<f32>, Option<usize>), EmbeddingServiceError> {
+        let model = model_id
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("default");
+
+        let url = format!("{}/v1/embeddings", self.base_url);
+        let body = serde_json::json!({
+            "input": [text],
+            "model": model,
+        });
+
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| EmbeddingServiceError::RuntimeNotReady(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(EmbeddingServiceError::Internal(format!(
+                "embedding api error {}",
+                response.status()
+            )));
+        }
+
+        let payload: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| EmbeddingServiceError::Internal(e.to_string()))?;
+
+        let embedding = payload
+            .get("data")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.get("embedding"))
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| EmbeddingServiceError::Internal("missing embedding vector".to_string()))?
+            .iter()
+            .filter_map(|v| v.as_f64().map(|n| n as f32))
+            .collect::<Vec<_>>();
+
+        let token_count = payload
+            .get("usage")
+            .and_then(|v| v.get("prompt_tokens"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+
+        Ok((embedding, token_count))
+    }
+
+    async fn resolve_model_signature(
+        &self,
+        _workflow_id: &str,
+        model_id: Option<&str>,
+        vector_dimensions: usize,
+    ) -> Result<ModelSignature, EmbeddingServiceError> {
+        Ok(ModelSignature {
+            model_id: model_id.unwrap_or("default").to_string(),
+            model_revision_or_hash: None,
+            backend: "openai-compatible".to_string(),
+            vector_dimensions,
+        })
+    }
+}
+
+fn map_embedding_service_error(err: EmbeddingServiceError) -> rustler::Error {
+    match err {
+        EmbeddingServiceError::UnsupportedApiVersion => {
+            rustler::Error::Term(Box::new("unsupported api version".to_string()))
+        }
+        EmbeddingServiceError::InvalidRequest(message)
+        | EmbeddingServiceError::CapabilityViolation(message)
+        | EmbeddingServiceError::WorkflowNotFound(message)
+        | EmbeddingServiceError::RuntimeNotReady(message)
+        | EmbeddingServiceError::ModelSignatureUnavailable(message)
+        | EmbeddingServiceError::Internal(message) => rustler::Error::Term(Box::new(message)),
+    }
+}
+
+/// Execute headless embedding contract (`embed_objects_v1`) and return response JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn embedding_embed_objects_v1(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    let request: EmbedObjectsV1Request = serde_json::from_str(&request_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let host = RustlerEmbeddingHost::new(
+        base_url,
+        pumas_resource.as_ref().map(|resource| resource.api.clone()),
+    );
+    let response = runtime
+        .block_on(async { EmbeddingService::new().embed_objects_v1(&host, request).await })
+        .map_err(map_embedding_service_error)?;
+
+    serde_json::to_string(&response)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+/// Execute embedding capabilities contract and return response JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn embedding_get_embedding_workflow_capabilities_v1(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    let request: GetEmbeddingWorkflowCapabilitiesV1Request = serde_json::from_str(&request_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let host = RustlerEmbeddingHost::new(
+        base_url,
+        pumas_resource.as_ref().map(|resource| resource.api.clone()),
+    );
+    let response = runtime
+        .block_on(async {
+            EmbeddingService::new()
+                .get_embedding_workflow_capabilities_v1(&host, request)
+                .await
+        })
+        .map_err(map_embedding_service_error)?;
+
+    serde_json::to_string(&response)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
 }
 
 // ============================================================================
