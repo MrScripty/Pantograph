@@ -1,6 +1,7 @@
 //! RAG (Retrieval Augmented Generation) commands.
 
 use super::shared::{get_project_data_dir, SharedAppConfig};
+use super::resolve_embedding_model_path;
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;
@@ -190,6 +191,7 @@ pub async fn index_docs_with_switch(
 
     // Save the last inference config for potential restoration
     let last_inference_config = gateway.last_inference_config().await;
+    let resolved_embedding_model_path = resolve_embedding_model_path(&embedding_model_path)?;
 
     let device = config_guard.device.clone();
     drop(config_guard);
@@ -244,7 +246,7 @@ pub async fn index_docs_with_switch(
         _ => {
             // llama.cpp and others use file paths (GGUF format)
             BackendConfig {
-                model_path: Some(std::path::PathBuf::from(&embedding_model_path)),
+                model_path: Some(resolved_embedding_model_path.clone()),
                 device: Some(device.device.clone()),
                 gpu_layers: Some(device.gpu_layers),
                 embedding_mode: true,

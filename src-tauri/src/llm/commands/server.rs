@@ -7,7 +7,148 @@ use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::gateway::SharedGateway;
 use crate::llm::types::LLMStatus;
 use crate::llm::BackendConfig;
+use std::path::{Path, PathBuf};
 use tauri::{command, AppHandle, State};
+
+fn derive_models_root(path: &Path) -> Option<PathBuf> {
+    let mut current = Some(path);
+    while let Some(candidate) = current {
+        if candidate
+            .to_string_lossy()
+            .ends_with("shared-resources/models")
+        {
+            return Some(candidate.to_path_buf());
+        }
+        current = candidate.parent();
+    }
+    None
+}
+
+fn find_gguf_files_in_dir(dir: &Path, limit: usize) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        format!(
+            "Cannot read embedding model directory '{}': {}",
+            dir.display(),
+            e
+        )
+    })?;
+
+    let mut matches = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
+        {
+            matches.push(path);
+            if matches.len() >= limit {
+                break;
+            }
+        }
+    }
+
+    Ok(matches)
+}
+
+fn find_model_files_by_name(models_root: &Path, file_name: &std::ffi::OsStr, limit: usize) -> Vec<PathBuf> {
+    let mut matches = Vec::new();
+    let mut stack = vec![models_root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.is_file() && path.file_name() == Some(file_name) {
+                matches.push(path);
+                if matches.len() >= limit {
+                    return matches;
+                }
+            }
+        }
+    }
+
+    matches
+}
+
+pub(crate) fn resolve_embedding_model_path(model_path: &str) -> Result<PathBuf, String> {
+    let candidate = PathBuf::from(model_path);
+    if candidate.is_file() {
+        return Ok(candidate);
+    }
+    if candidate.is_dir() {
+        let matches = find_gguf_files_in_dir(&candidate, 8)?;
+        return match matches.len() {
+            0 => Err(format!(
+                "Embedding model directory '{}' contains no .gguf files. Select a GGUF embedding model in Puma-Lib.",
+                model_path
+            )),
+            1 => Ok(matches[0].clone()),
+            _ => {
+                let list = matches
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(format!(
+                    "Embedding model directory '{}' contains multiple .gguf files: {}. Select a single GGUF file path.",
+                    model_path, list
+                ))
+            }
+        };
+    }
+
+    let file_name = candidate
+        .file_name()
+        .ok_or_else(|| format!("Embedding model path is invalid: {}", model_path))?;
+    let Some(models_root) = derive_models_root(&candidate) else {
+        return Err(format!(
+            "Embedding model file not found: {}. Update Model Configuration with a valid GGUF file path.",
+            model_path
+        ));
+    };
+
+    let matches = find_model_files_by_name(&models_root, file_name, 8);
+    match matches.len() {
+        0 => Err(format!(
+            "Embedding model file not found: {}. Could not find '{}' under '{}'. Update Model Configuration.",
+            model_path,
+            file_name.to_string_lossy(),
+            models_root.display()
+        )),
+        1 => {
+            log::warn!(
+                "Embedding model path '{}' was missing. Using discovered file '{}'",
+                model_path,
+                matches[0].display()
+            );
+            Ok(matches[0].clone())
+        }
+        _ => {
+            let list = matches
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(format!(
+                "Embedding model file not found at '{}', and multiple candidates matched '{}': {}. Update Model Configuration explicitly.",
+                model_path,
+                file_name.to_string_lossy(),
+                list
+            ))
+        }
+    }
+}
 
 #[command]
 pub async fn connect_to_server(
@@ -144,11 +285,27 @@ pub async fn start_sidecar_inference(
     // Start embedding server for parallel modes (if embedding model is configured)
     if let Some(ref emb_path) = embedding_model_path {
         if embedding_memory_mode != EmbeddingMemoryMode::Sequential {
+            let resolved_embedding_path = match resolve_embedding_model_path(emb_path) {
+                Ok(path) => path,
+                Err(e) => {
+                    log::warn!(
+                        "Failed to resolve configured embedding model path '{}': {}",
+                        emb_path,
+                        e
+                    );
+                    return Ok(gateway.mode_info().await);
+                }
+            };
+
             // Get device info for VRAM checking
             let devices = list_devices(app.clone()).await.unwrap_or_default();
 
             match gateway
-                .start_embedding_server(emb_path, embedding_memory_mode.clone(), &devices)
+                .start_embedding_server(
+                    &resolved_embedding_path.to_string_lossy(),
+                    embedding_memory_mode.clone(),
+                    &devices,
+                )
                 .await
             {
                 Ok(()) => {
@@ -188,9 +345,10 @@ pub async fn start_sidecar_embedding(
         .embedding_model_path
         .as_ref()
         .ok_or_else(|| "Embedding model path not configured".to_string())?;
+    let resolved_model_path = resolve_embedding_model_path(model_path)?;
 
     let backend_config = BackendConfig {
-        model_path: Some(std::path::PathBuf::from(model_path)),
+        model_path: Some(resolved_model_path),
         device: Some(config_guard.device.device.clone()),
         gpu_layers: Some(config_guard.device.gpu_layers),
         embedding_mode: true,

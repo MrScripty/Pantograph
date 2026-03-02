@@ -5,6 +5,7 @@ use tauri::{ipc::Channel, AppHandle, State};
 use uuid::Uuid;
 
 use crate::agent::rag::SharedRagManager;
+use crate::llm::commands::resolve_embedding_model_path;
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 
@@ -151,9 +152,164 @@ fn node_engine_graph_has_llamacpp_inference_node(graph: &node_engine::WorkflowGr
         .any(|node| node.node_type == "llamacpp-inference")
 }
 
+fn node_data_string(data: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    let obj = data.as_object()?;
+    keys.iter().find_map(|key| {
+        obj.get(*key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn resolve_embedding_model_id_from_graph(graph: &WorkflowGraph) -> Result<Option<String>, String> {
+    let node_by_id = graph
+        .nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let embedding_nodes = graph
+        .nodes
+        .iter()
+        .filter(|node| node.node_type == "embedding")
+        .collect::<Vec<_>>();
+    if embedding_nodes.is_empty() {
+        return Ok(None);
+    }
+
+    let mut selected_model_ids = std::collections::BTreeSet::new();
+    for embedding_node in embedding_nodes {
+        let mut model_ids_for_node = std::collections::BTreeSet::new();
+        for edge in graph.edges.iter().filter(|edge| {
+            edge.target == embedding_node.id && edge.target_handle == "model"
+        }) {
+            let source_node = node_by_id.get(edge.source.as_str()).ok_or_else(|| {
+                format!(
+                    "Embedding node '{}' references unknown source node '{}'",
+                    embedding_node.id, edge.source
+                )
+            })?;
+            if source_node.node_type != "puma-lib" {
+                return Err(format!(
+                    "Embedding node '{}' must receive `model` from a Puma-Lib node",
+                    embedding_node.id
+                ));
+            }
+            let model_id =
+                node_data_string(&source_node.data, &["model_id", "modelId"]).ok_or_else(
+                    || {
+                        format!(
+                            "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
+                            source_node.id
+                        )
+                    },
+                )?;
+            model_ids_for_node.insert(model_id);
+        }
+
+        if model_ids_for_node.is_empty() {
+            return Err(format!(
+                "Embedding node '{}' must connect Puma-Lib `model_path` output to `model` input",
+                embedding_node.id
+            ));
+        }
+        if model_ids_for_node.len() > 1 {
+            return Err(format!(
+                "Embedding node '{}' has multiple Puma-Lib model IDs connected to `model`; use exactly one",
+                embedding_node.id
+            ));
+        }
+        selected_model_ids.extend(model_ids_for_node);
+    }
+
+    if selected_model_ids.len() > 1 {
+        return Err(
+            "All embedding nodes in one workflow run must use the same Puma-Lib model".to_string(),
+        );
+    }
+
+    Ok(selected_model_ids.into_iter().next())
+}
+
+fn resolve_embedding_model_id_from_node_engine_graph(
+    graph: &node_engine::WorkflowGraph,
+) -> Result<Option<String>, String> {
+    let node_by_id = graph
+        .nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let embedding_nodes = graph
+        .nodes
+        .iter()
+        .filter(|node| node.node_type == "embedding")
+        .collect::<Vec<_>>();
+    if embedding_nodes.is_empty() {
+        return Ok(None);
+    }
+
+    let mut selected_model_ids = std::collections::BTreeSet::new();
+    for embedding_node in embedding_nodes {
+        let mut model_ids_for_node = std::collections::BTreeSet::new();
+        for edge in graph.edges.iter().filter(|edge| {
+            edge.target == embedding_node.id && edge.target_handle == "model"
+        }) {
+            let source_node = node_by_id.get(edge.source.as_str()).ok_or_else(|| {
+                format!(
+                    "Embedding node '{}' references unknown source node '{}'",
+                    embedding_node.id, edge.source
+                )
+            })?;
+            if source_node.node_type != "puma-lib" {
+                return Err(format!(
+                    "Embedding node '{}' must receive `model` from a Puma-Lib node",
+                    embedding_node.id
+                ));
+            }
+            let model_id =
+                node_data_string(&source_node.data, &["model_id", "modelId"]).ok_or_else(
+                    || {
+                        format!(
+                            "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
+                            source_node.id
+                        )
+                    },
+                )?;
+            model_ids_for_node.insert(model_id);
+        }
+
+        if model_ids_for_node.is_empty() {
+            return Err(format!(
+                "Embedding node '{}' must connect Puma-Lib `model_path` output to `model` input",
+                embedding_node.id
+            ));
+        }
+        if model_ids_for_node.len() > 1 {
+            return Err(format!(
+                "Embedding node '{}' has multiple Puma-Lib model IDs connected to `model`; use exactly one",
+                embedding_node.id
+            ));
+        }
+        selected_model_ids.extend(model_ids_for_node);
+    }
+
+    if selected_model_ids.len() > 1 {
+        return Err(
+            "All embedding nodes in one workflow run must use the same Puma-Lib model".to_string(),
+        );
+    }
+
+    Ok(selected_model_ids.into_iter().next())
+}
+
 async fn prepare_embedding_runtime(
     gateway: &SharedGateway,
     config: &SharedAppConfig,
+    pumas_api: Option<Arc<pumas_library::PumasApi>>,
+    embedding_model_id_from_graph: Option<String>,
     needs_embedding_node: bool,
     needs_llamacpp_inference_node: bool,
 ) -> Result<Option<inference::BackendConfig>, String> {
@@ -186,17 +342,39 @@ async fn prepare_embedding_runtime(
         None
     };
 
+    let model_id = embedding_model_id_from_graph.ok_or_else(|| {
+        "Embedding workflows must connect Puma-Lib `model_path` to embedding `model`".to_string()
+    })?;
+    let api = pumas_api.ok_or_else(|| {
+        "Puma-Lib runtime is not initialized; cannot resolve model path from model_id".to_string()
+    })?;
+
+    let model = api
+        .get_model(&model_id)
+        .await
+        .map_err(|e| format!("Failed to resolve model '{}' from Puma-Lib: {}", model_id, e))?
+        .ok_or_else(|| {
+            format!(
+                "Puma-Lib model '{}' was not found. Re-select the model in Puma-Lib node.",
+                model_id
+            )
+        })?;
+
+    if !model.model_type.eq_ignore_ascii_case("embedding") {
+        return Err(format!(
+            "Puma-Lib model '{}' is type '{}' but embedding node requires an embedding model",
+            model_id, model.model_type
+        ));
+    }
+
+    let resolved_embedding_model_path = resolve_embedding_model_path(&model.path)?;
+
     let guard = config.read().await;
-    let embedding_model_path = guard
-        .models
-        .embedding_model_path
-        .clone()
-        .ok_or_else(|| "Embedding model path not configured".to_string())?;
     let device = guard.device.clone();
     drop(guard);
 
     let embedding_config = inference::BackendConfig {
-        model_path: Some(std::path::PathBuf::from(embedding_model_path)),
+        model_path: Some(resolved_embedding_model_path),
         device: Some(device.device),
         gpu_layers: Some(device.gpu_layers),
         embedding_mode: true,
@@ -247,9 +425,16 @@ pub async fn execute_workflow_v2(
 
     let graph = hydrate_embedding_emit_metadata_flags(graph);
     let ne_graph = convert_graph_to_node_engine(&graph);
+    let runtime_ext = {
+        let shared = extensions.read().await;
+        snapshot_runtime_extensions(&shared)
+    };
+    let embedding_model_id_from_graph = resolve_embedding_model_id_from_graph(&graph)?;
     let restore_config = prepare_embedding_runtime(
         gateway.inner(),
         config.inner(),
+        runtime_ext.pumas_api.clone(),
+        embedding_model_id_from_graph,
         graph_has_embedding_node(&graph),
         graph_has_llamacpp_inference_node(&graph),
     )
@@ -278,11 +463,6 @@ pub async fn execute_workflow_v2(
         .filter(|node| !graph.edges.iter().any(|e| e.source == node.id))
         .map(|node| node.id.clone())
         .collect();
-
-    let runtime_ext = {
-        let shared = extensions.read().await;
-        snapshot_runtime_extensions(&shared)
-    };
 
     let workflow_result = {
         let mut executions = execution_manager.executions().await;
@@ -547,6 +727,8 @@ pub async fn run_workflow_session(
     let restore_config = prepare_embedding_runtime(
         gateway.inner(),
         config.inner(),
+        runtime_ext.pumas_api.clone(),
+        resolve_embedding_model_id_from_node_engine_graph(&session_graph)?,
         node_engine_graph_has_embedding_node(&session_graph),
         node_engine_graph_has_llamacpp_inference_node(&session_graph),
     )

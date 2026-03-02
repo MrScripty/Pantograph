@@ -50,3 +50,4 @@ pub use vision::*;
 
 // Re-export shared types that are part of the public API
 pub use shared::SharedAppConfig;
+pub(crate) use server::resolve_embedding_model_path;
