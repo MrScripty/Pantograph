@@ -41,6 +41,7 @@ agent_plan.md
 
 # Project data directory (downloaded docs, vector embeddings, etc.)
 /data/
+/shared-resources/cache/
 
 # Logs
 logs
