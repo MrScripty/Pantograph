@@ -59,8 +59,6 @@ pub async fn setup_extensions_with_path(
         let mut out = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        push_unique(&mut out, &mut seen, path.to_path_buf());
-
         // If user points at the pumas release/debug binary dir, derive launcher root.
         if let Some(build_kind) = path.file_name().and_then(|n| n.to_str()) {
             if (build_kind == "release" || build_kind == "debug")
@@ -81,9 +79,16 @@ pub async fn setup_extensions_with_path(
                     .and_then(|p| p.parent())
                     .and_then(|p| p.parent())
                 {
-                    push_unique(&mut out, &mut seen, root.to_path_buf());
+                    if is_launcher_root(root) {
+                        push_unique(&mut out, &mut seen, root.to_path_buf());
+                    }
                 }
             }
+        }
+
+        // Accept direct launcher roots.
+        if is_launcher_root(path) {
+            push_unique(&mut out, &mut seen, path.to_path_buf());
         }
 
         // Generic fallback: walk ancestors to find a valid launcher root.
