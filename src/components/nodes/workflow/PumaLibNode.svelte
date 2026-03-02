@@ -7,7 +7,6 @@
     syncInferencePorts,
     syncExpandPorts,
   } from '../../../stores/workflowStore';
-  import { open } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
 
   interface InferenceParamSchema {
@@ -81,7 +80,6 @@
       review_reasons?: string[];
       selected_binding_ids?: string[];
       dependency_requirements?: ModelDependencyRequirements;
-      selectionMode?: 'library' | 'manual';
       inference_settings?: InferenceParamSchema[];
     };
     selected?: boolean;
@@ -90,21 +88,28 @@
   let { id, data, selected = false }: Props = $props();
 
   let modelPath = $state('');
-  let selectionMode = $state<'library' | 'manual'>('library');
+  let modelId = $state<string | undefined>(undefined);
+  let modelType = $state<string | undefined>(undefined);
+  let taskTypePrimary = $state<string | undefined>(undefined);
+  let backendKey = $state<string | undefined>(undefined);
+  let platformContext = $state<Record<string, string> | undefined>(undefined);
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
-  let libraryAvailable = $state(true);
+  let loadError = $state<string | null>(null);
   let searchQuery = $state('');
   let isDependencyActionRunning = $state(false);
   let dependencyRequirements = $state<ModelDependencyRequirements | null>(null);
   let requirementsMessage = $state<string | null>(null);
   let requirementsCode = $state<string | null>(null);
   let selectedBindingIds = $state<string[]>([]);
-  const manualModelPathInputId = $derived(`puma-lib-${id}-model-path`);
 
   $effect(() => {
     modelPath = data.modelPath || '';
-    selectionMode = data.selectionMode || 'library';
+    modelId = data.model_id as string | undefined;
+    modelType = data.model_type as string | undefined;
+    taskTypePrimary = data.task_type_primary as string | undefined;
+    backendKey = data.backend_key as string | undefined;
+    platformContext = data.platform_context as Record<string, string> | undefined;
     dependencyRequirements = (data.dependency_requirements as ModelDependencyRequirements | null) ?? null;
     requirementsMessage = null;
     requirementsCode = null;
@@ -177,20 +182,16 @@
         portId: 'model_path',
       });
       availableModels = result.options;
-      libraryAvailable = result.options.length > 0;
-      if (!libraryAvailable) {
-        selectionMode = 'manual';
-      }
-    } catch {
-      libraryAvailable = false;
-      selectionMode = 'manual';
+      loadError = null;
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
     } finally {
       isLoading = false;
     }
   }
 
   function inferNodeType(): string {
-    return data.task_type_primary === 'text-to-audio' ? 'audio-generation' : 'pytorch-inference';
+    return taskTypePrimary === 'text-to-audio' ? 'audio-generation' : 'pytorch-inference';
   }
 
   function inferBackendKeyFromTask(taskTypePrimary?: string): string {
@@ -202,11 +203,11 @@
   }
 
   function inferBackendKey(): string {
-    const explicit = ((data.backend_key as string | undefined) ?? '').trim();
+    const explicit = (backendKey ?? '').trim();
     if (explicit.length > 0) {
       return explicit;
     }
-    return inferBackendKeyFromTask(data.task_type_primary as string | undefined);
+    return inferBackendKeyFromTask(taskTypePrimary);
   }
 
   function detectPlatformContext(): Record<string, string> {
@@ -232,16 +233,15 @@
   }
 
   function dependencyRequestPayload() {
-    const platformContext =
-      (data.platform_context as Record<string, string> | undefined) ?? detectPlatformContext();
+    const resolvedPlatformContext = platformContext ?? detectPlatformContext();
     return {
       nodeType: inferNodeType(),
       modelPath,
-      modelId: (data.model_id as string | undefined) ?? undefined,
-      modelType: (data.model_type as string | undefined) ?? undefined,
-      taskTypePrimary: (data.task_type_primary as string | undefined) ?? undefined,
+      modelId: modelId ?? undefined,
+      modelType: modelType ?? undefined,
+      taskTypePrimary: taskTypePrimary ?? undefined,
       backendKey: inferBackendKey(),
-      platformContext,
+      platformContext: resolvedPlatformContext,
       selectedBindingIds,
     };
   }
@@ -305,23 +305,28 @@
       const reviewReasons = Array.isArray(selected.metadata?.review_reasons)
         ? (selected.metadata?.review_reasons as string[])
         : [];
-      const taskTypePrimary = selected.metadata?.task_type_primary as string | undefined;
-      const backendKey = inferBackendKeyFromTask(taskTypePrimary);
+      const nextTaskTypePrimary = selected.metadata?.task_type_primary as string | undefined;
+      const nextBackendKey = inferBackendKeyFromTask(nextTaskTypePrimary);
+      const nextPlatformContext = detectPlatformContext();
 
+      modelId = selected.metadata?.id as string | undefined;
+      modelType = selected.metadata?.model_type as string | undefined;
+      taskTypePrimary = nextTaskTypePrimary;
+      backendKey = nextBackendKey;
+      platformContext = nextPlatformContext;
       selectedBindingIds = [];
       updateNodeData(id, {
         modelPath,
         modelName: selected.label,
-        model_id: selected.metadata?.id,
-        model_type: selected.metadata?.model_type,
+        model_id: modelId,
+        model_type: modelType,
         task_type_primary: taskTypePrimary,
         backend_key: backendKey,
-        platform_context: detectPlatformContext(),
+        platform_context: platformContext,
         dependency_bindings: dependencyBindings,
         review_reasons: reviewReasons,
         selected_binding_ids: selectedBindingIds,
         dependency_requirements: null,
-        selectionMode: 'library',
         inference_settings: settings,
       });
 
@@ -332,72 +337,6 @@
 
       resolveDependencyRequirements().catch(console.error);
     }
-  }
-
-  function handleManualInput(e: Event) {
-    const target = e.target as HTMLInputElement;
-    modelPath = target.value;
-    selectedBindingIds = [];
-    updateNodeData(id, {
-      modelPath,
-      selectionMode: 'manual',
-      model_id: undefined,
-      model_type: undefined,
-      task_type_primary: undefined,
-      backend_key: undefined,
-      platform_context: undefined,
-      dependency_bindings: [],
-      review_reasons: [],
-      dependency_requirements_id: undefined,
-      dependency_requirements: null,
-      selected_binding_ids: selectedBindingIds,
-    });
-    dependencyRequirements = null;
-    requirementsMessage = null;
-    requirementsCode = null;
-  }
-
-  async function browseForModel() {
-    try {
-      const result = await open({
-        title: 'Select AI Model File',
-        filters: [
-          { name: 'GGUF Models', extensions: ['gguf'] },
-          { name: 'All Files', extensions: ['*'] },
-        ],
-        multiple: false,
-        directory: false,
-      });
-
-      if (result && typeof result === 'string') {
-        modelPath = result;
-        selectedBindingIds = [];
-        updateNodeData(id, {
-          modelPath,
-          selectionMode: 'manual',
-          model_id: undefined,
-          model_type: undefined,
-          task_type_primary: undefined,
-          backend_key: undefined,
-          platform_context: undefined,
-          dependency_bindings: [],
-          review_reasons: [],
-          dependency_requirements_id: undefined,
-          dependency_requirements: null,
-          selected_binding_ids: selectedBindingIds,
-        });
-        dependencyRequirements = null;
-        requirementsMessage = null;
-        requirementsCode = null;
-      }
-    } catch (error) {
-      console.error('File picker error:', error);
-    }
-  }
-
-  function switchMode(mode: 'library' | 'manual') {
-    selectionMode = mode;
-    updateNodeData(id, { selectionMode: mode });
   }
 
   function dependencyTokenLabel(value: string): string {
@@ -483,8 +422,7 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
-      <div class="space-y-2">
+    <div class="space-y-2">
         {#if modelPath}
           <div class="rounded border px-2 py-1 text-[10px] {dependencyBadge.className}">
             <div class="flex items-center gap-2">
@@ -513,7 +451,7 @@
 
         {#if modelPath && (dependencyRequirements?.bindings?.length ?? 0) > 0}
           <div class="rounded border border-neutral-700 px-2 py-1 text-[10px] space-y-1">
-            {#each dependencyRequirements?.bindings ?? [] as binding}
+            {#each dependencyRequirements?.bindings ?? [] as binding (binding.binding_id)}
               <div class="rounded border border-neutral-800 px-2 py-1">
                 <div class="flex items-center gap-2">
                   <span class="text-neutral-200 truncate" title={binding.binding_id}>{binding.binding_id}</span>
@@ -537,101 +475,59 @@
           </div>
         {/if}
 
-        {#if libraryAvailable}
-          <div class="flex gap-1 text-[10px]">
-            <button
-              type="button"
-              class="px-2 py-0.5 rounded transition-colors {selectionMode === 'library'
-                ? 'bg-amber-600/30 text-amber-400'
-                : 'text-neutral-500 hover:text-neutral-400'}"
-              onclick={() => switchMode('library')}
-            >
-              Library
-            </button>
-            <button
-              type="button"
-              class="px-2 py-0.5 rounded transition-colors {selectionMode === 'manual'
-                ? 'bg-amber-600/30 text-amber-400'
-                : 'text-neutral-500 hover:text-neutral-400'}"
-              onclick={() => switchMode('manual')}
-            >
-              Manual
-            </button>
-            {#if selectionMode === 'library'}
-              <button
-                type="button"
-                class="ml-auto text-neutral-500 hover:text-neutral-400"
-                onclick={loadModels}
-                disabled={isLoading}
-              >
-                {isLoading ? '...' : 'Refresh'}
-              </button>
-            {/if}
-          </div>
-        {/if}
+        <div class="flex justify-end text-[10px]">
+          <button
+            type="button"
+            class="text-neutral-500 hover:text-neutral-400"
+            onclick={loadModels}
+            disabled={isLoading}
+          >
+            {isLoading ? '...' : 'Refresh'}
+          </button>
+        </div>
 
-        {#if selectionMode === 'library'}
-          <div class="space-y-1">
-            {#if availableModels.length > 6}
-              <input
-                type="text"
-                class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-300 focus:outline-none focus:border-amber-500"
-                placeholder="Filter models..."
-                bind:value={searchQuery}
-              />
-            {/if}
-            <select
-              class="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-amber-500"
-              style="color-scheme: dark;"
-              onchange={handleModelSelect}
-              value={modelPath}
-              disabled={isLoading}
-            >
-              <option value="" class="bg-neutral-900 text-neutral-500">
-                {isLoading ? 'Loading...' : 'Select a model'}
+        <div class="space-y-1">
+          {#if availableModels.length > 6}
+            <input
+              type="text"
+              class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-300 focus:outline-none focus:border-amber-500"
+              placeholder="Filter models..."
+              bind:value={searchQuery}
+            />
+          {/if}
+          <select
+            class="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-amber-500"
+            style="color-scheme: dark;"
+            onchange={handleModelSelect}
+            value={modelPath}
+            disabled={isLoading}
+          >
+            <option value="" class="bg-neutral-900 text-neutral-500">
+              {isLoading ? 'Loading...' : 'Select a model'}
+            </option>
+            {#each filteredModels as model (String(model.value))}
+              <option value={String(model.value)} class="bg-neutral-900 text-neutral-200">
+                {model.label}
               </option>
-              {#each filteredModels as model}
-                <option value={String(model.value)} class="bg-neutral-900 text-neutral-200">
-                  {model.label}
-                </option>
-              {/each}
-            </select>
-          </div>
-
-          {#if modelPath}
-            <div class="text-[10px] text-neutral-500 truncate" title={modelPath}>
-              {modelPath.split('/').pop()}
+            {/each}
+          </select>
+          {#if loadError}
+            <div class="text-[10px] text-red-400 truncate" title={loadError}>
+              Failed to load models from pumas library
+            </div>
+          {:else if !isLoading && availableModels.length === 0}
+            <div class="text-[10px] text-neutral-500">
+              No models found in pumas library
             </div>
           {/if}
-        {:else}
-          <div class="space-y-1">
-            <label class="text-xs text-neutral-400" for={manualModelPathInputId}>Model Path</label>
-            <div class="flex gap-1">
-              <input
-                id={manualModelPathInputId}
-                type="text"
-                class="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-amber-500 font-mono truncate"
-                placeholder="/path/to/model.gguf"
-                value={modelPath}
-                oninput={handleManualInput}
-              />
-              <button
-                type="button"
-                class="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded flex-shrink-0"
-                onclick={browseForModel}
-              >
-                Browse
-              </button>
-            </div>
-            {#if modelPath}
-              <div class="text-[10px] text-neutral-500 truncate" title={modelPath}>
-                {modelPath.split('/').pop()}
-              </div>
-            {/if}
+        </div>
+
+        {#if modelPath}
+          <div class="text-[10px] text-neutral-500 truncate" title={modelPath}>
+            {modelPath.split('/').pop()}
           </div>
         {/if}
-      </div>
-    {/snippet}
+    </div>
   </BaseNode>
 </div>
 
