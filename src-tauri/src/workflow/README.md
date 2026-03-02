@@ -11,6 +11,7 @@ Workflow command handlers, execution plumbing, and validation utilities for grap
 | events.rs | Source file used by modules in this directory. |
 | execution_manager.rs | Source file used by modules in this directory. |
 | groups.rs | Source file used by modules in this directory. |
+| headless_embedding_commands.rs | Source file used by modules in this directory. |
 | mod.rs | Source file used by modules in this directory. |
 | model_dependencies.rs | Source file used by modules in this directory. |
 | orchestration.rs | Source file used by modules in this directory. |
