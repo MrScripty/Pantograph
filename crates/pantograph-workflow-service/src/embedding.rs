@@ -298,9 +298,17 @@ impl EmbeddingService {
             .await?;
         validate_model_signature(&model_signature)?;
 
+        let run_id = request
+            .batch_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+
         Ok(EmbedObjectsV1Response {
             api_version: "v1".to_string(),
-            run_id: Uuid::new_v4().to_string(),
+            run_id,
             model_signature,
             results,
             timing_ms: started.elapsed().as_millis(),
@@ -618,5 +626,30 @@ mod tests {
         assert_eq!(response.max_batch_size, 8);
         assert_eq!(response.max_text_length, 4096);
         assert_eq!(response.supported_models.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn embed_objects_v1_uses_batch_id_as_run_id_when_present() {
+        let host = MockEmbeddingHost::new(8, 1024);
+        let service = EmbeddingService::new();
+        let response = service
+            .embed_objects_v1(
+                &host,
+                EmbedObjectsV1Request {
+                    api_version: "v1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    objects: vec![EmbedInputObject {
+                        object_id: "a".to_string(),
+                        text: "ok".to_string(),
+                        metadata: None,
+                    }],
+                    model_id: None,
+                    batch_id: Some("batch-xyz".to_string()),
+                },
+            )
+            .await
+            .expect("embed with batch id");
+
+        assert_eq!(response.run_id, "batch-xyz");
     }
 }
