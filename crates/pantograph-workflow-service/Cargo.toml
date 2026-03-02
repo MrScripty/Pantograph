@@ -1,0 +1,16 @@
+[package]
+name = "pantograph-workflow-service"
+version = "0.1.0"
+edition = "2021"
+description = "Host-agnostic workflow application services for Pantograph"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+# Shared framework/domain crates
+node-engine = { path = "../node-engine" }

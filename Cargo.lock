@@ -7288,6 +7288,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-workflow-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "node-engine",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "pantograph_rustler"
 version = "0.1.0"
 dependencies = [
