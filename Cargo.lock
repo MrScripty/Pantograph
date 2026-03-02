@@ -7250,6 +7250,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-workflow-service",
  "pumas-library",
  "regex",
  "reqwest",

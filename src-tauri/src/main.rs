@@ -320,6 +320,9 @@ fn main() {
             workflow::commands::save_workflow,
             workflow::commands::load_workflow,
             workflow::commands::list_workflows,
+            // Headless embedding API commands
+            workflow::commands::embed_objects_v1,
+            workflow::commands::get_embedding_workflow_capabilities_v1,
             // Node-engine workflow commands (Phase 5)
             workflow::commands::execute_workflow_v2,
             workflow::commands::create_workflow_session,

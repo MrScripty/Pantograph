@@ -61,6 +61,27 @@ pub fn list_workflows() -> Result<Vec<WorkflowMetadata>, String> {
 }
 
 #[command]
+pub async fn embed_objects_v1(
+    request: pantograph_workflow_service::EmbedObjectsV1Request,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+) -> Result<pantograph_workflow_service::EmbedObjectsV1Response, String> {
+    super::headless_embedding_commands::embed_objects_v1(request, gateway, extensions).await
+}
+
+#[command]
+pub async fn get_embedding_workflow_capabilities_v1(
+    request: pantograph_workflow_service::GetEmbeddingWorkflowCapabilitiesV1Request,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+) -> Result<pantograph_workflow_service::GetEmbeddingWorkflowCapabilitiesV1Response, String> {
+    super::headless_embedding_commands::get_embedding_workflow_capabilities_v1(
+        request, gateway, extensions,
+    )
+    .await
+}
+
+#[command]
 pub async fn execute_workflow_v2(
     app: AppHandle,
     graph: WorkflowGraph,

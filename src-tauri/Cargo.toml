@@ -32,6 +32,7 @@ tauri-build = { version = "2", features = [] }
 inference = { path = "../crates/inference", default-features = false }
 node-engine = { path = "../crates/node-engine", features = ["inference-nodes"] }
 workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library"] }
+pantograph-workflow-service = { path = "../crates/pantograph-workflow-service" }
 
 # Workspace dependencies
 serde.workspace = true
