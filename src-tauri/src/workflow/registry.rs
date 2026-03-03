@@ -156,14 +156,12 @@ mod tests {
         assert!(registry.has_node_type("text-input"));
         assert!(registry.has_node_type("image-input"));
         assert!(registry.has_node_type("human-input"));
-        assert!(registry.has_node_type("vector-db"));
         assert!(registry.has_node_type("linked-input"));
         assert!(registry.has_node_type("model-provider"));
         assert!(registry.has_node_type("llm-inference"));
         assert!(registry.has_node_type("ollama-inference"));
         assert!(registry.has_node_type("vision-analysis"));
         assert!(registry.has_node_type("embedding"));
-        assert!(registry.has_node_type("lancedb"));
         assert!(registry.has_node_type("text-output"));
         assert!(registry.has_node_type("component-preview"));
         assert!(registry.has_node_type("read-file"));

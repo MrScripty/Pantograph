@@ -7,7 +7,6 @@ Submodule source for this crate, grouped by responsibility.
 | File/Folder | Description |
 | ----------- | ----------- |
 | mod.rs | Source file used by modules in this directory. |
-| vector_db.rs | Source file used by modules in this directory. |
 
 ## Design Decisions
 - Keep files in this directory scoped to a single responsibility boundary.

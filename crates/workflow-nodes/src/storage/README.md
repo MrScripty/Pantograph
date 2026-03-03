@@ -9,10 +9,8 @@ Submodule source for this crate, grouped by responsibility.
 | kv_cache_load.rs | Source file used by modules in this directory. |
 | kv_cache_save.rs | Source file used by modules in this directory. |
 | kv_cache_truncate.rs | Source file used by modules in this directory. |
-| lancedb.rs | Source file used by modules in this directory. |
 | mod.rs | Source file used by modules in this directory. |
 | read_file.rs | Source file used by modules in this directory. |
-| vector_db.rs | Source file used by modules in this directory. |
 | write_file.rs | Source file used by modules in this directory. |
 
 ## Design Decisions
