@@ -8,10 +8,10 @@ Rustler NIF adapter surface for Pantograph workflow APIs.
 | ----------- | ----------- |
 | `lib.rs` | NIF implementations, resources, and adapter logic delegating to shared service contracts. |
 
-## Headless Embedding NIFs
+## Headless Workflow NIFs
 
-- `embedding_embed_objects_v1/3`
-- `embedding_get_embedding_workflow_capabilities_v1/3`
+- `workflow_run/3`
+- `workflow_get_capabilities/3`
 
 These NIFs delegate business rules to `pantograph-workflow-service`.
 

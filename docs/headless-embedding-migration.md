@@ -1,11 +1,11 @@
-# Headless Embedding API Migration Guide
+# Headless Workflow API Migration Guide
 
 ## Audience
 Consumers currently relying on workflow execution commands/events who need deterministic object-in/object-out embedding integration.
 
 ## New API Surface
-- `embed_objects_v1`
-- `get_embedding_workflow_capabilities_v1`
+- `workflow_run`
+- `workflow_get_capabilities`
 
 ## Legacy to New Mapping
 
@@ -15,7 +15,7 @@ Consumers currently relying on workflow execution commands/events who need deter
 - reconstruct object correlation in client code
 
 ### New Pattern
-- call `embed_objects_v1` with explicit object list
+- call `workflow_run` with explicit object list
 - receive ordered `results[]` with per-object status and errors
 - consume `model_signature` directly from response
 
@@ -45,6 +45,5 @@ Consumers currently relying on workflow execution commands/events who need deter
   - new: explicit `model_signature`
 
 ## Compatibility Notes
-- New API is versioned (`api_version = "v1"`).
-- v1 changes are additive-only; breaking changes require a new version.
-- Existing workflow commands remain available during migration.
+- This is a breaking API replacement (no backward compatibility layer).
+- Existing consumers should migrate from embed-specific calls to workflow-level calls.

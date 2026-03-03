@@ -797,7 +797,7 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
     }
 }
 
-/// Execute headless embedding contract (`workflow_run`) and return response JSON.
+/// Execute headless workflow contract (`workflow_run`) and return response JSON.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn workflow_run(
     base_url: String,
@@ -821,7 +821,7 @@ fn workflow_run(
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
 }
 
-/// Execute embedding capabilities contract and return response JSON.
+/// Execute workflow capabilities contract and return response JSON.
 #[rustler::nif(schedule = "DirtyCpu")]
 fn workflow_get_capabilities(
     base_url: String,

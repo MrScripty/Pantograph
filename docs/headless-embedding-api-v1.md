@@ -1,131 +1,78 @@
-# Headless Embedding API v1 Contract
+# Headless Workflow API Contract
 
 ## Status
-Frozen for implementation
+Implemented (breaking replacement for prior embed-specific API).
 
 ## Objective
-Define a stable, Rust-first headless embedding API for external consumers embedding Pantograph as a framework.
+Define a stable, Rust-first headless workflow API for external consumers embedding Pantograph as a framework.
 
 ## Design Principles
 - Rust-first application API, transport-agnostic.
 - Explicit request/response metadata; no event-stream parsing required.
 - Deterministic correlation and ordering.
-- Versioned contracts with additive evolution.
+- No embed-specific top-level method names.
 
 ## Operations
 
-### 1) `embed_objects_v1`
-Primary embedding operation for object-in/object-out workflow execution.
+### 1) `workflow_run`
+Primary workflow operation for object-in/object-out execution.
 
-### 2) `get_embedding_workflow_capabilities_v1`
-Capability discovery for consumers before calling `embed_objects_v1`.
+### 2) `workflow_get_capabilities`
+Capability discovery for consumers before calling `workflow_run`.
 
-## Request Contract: `EmbedObjectsV1Request`
+## Request Contract: `WorkflowRunRequest`
 
 ### Required
-- `api_version`: string literal `"v1"`
 - `workflow_id`: string
-  - identifies embedding workflow or named embedding preset
-- `objects`: array of 1..N embedding objects
+- `objects`: array of 1..N workflow input objects
 
 ### Optional
 - `model_id`: string
-  - explicit override if supported by workflow
 - `batch_id`: string
-  - caller correlation/idempotency key
 
-### Object Schema: `EmbedInputObject`
+### Object Schema: `WorkflowInputObject`
 - `object_id`: string (required)
 - `text`: string (required, non-empty)
-- `metadata`: object (optional, passthrough caller metadata)
+- `metadata`: object (optional passthrough metadata)
 
-## Response Contract: `EmbedObjectsV1Response`
+## Response Contract: `WorkflowRunResponse`
 
 ### Required
-- `api_version`: string literal `"v1"`
 - `run_id`: string
 - `model_signature`: object
 - `results`: array of per-object results
 - `timing_ms`: integer
 
-### `model_signature`
-Always present on successful responses.
-
-Required fields:
+### `model_signature`: `RuntimeSignature`
 - `model_id`: string
 - `backend`: string
 - `vector_dimensions`: integer
+- `model_revision_or_hash`: string (optional)
 
-Optional fields:
-- `model_revision_or_hash`: string
-
-### `results[]`: `EmbedObjectResult`
+### `results[]`: `WorkflowObjectResult`
 - `object_id`: string
 - `embedding`: array<number> or null
 - `token_count`: integer (optional)
-- `status`: enum
-  - `"success"`
-  - `"failed"`
-- `error`: object (optional when `status=failed`)
+- `status`: `"success"` or `"failed"`
+- `error`: object (optional when failed)
   - `code`: string
   - `message`: string
 
-## Behavior Requirements
-
-### Deterministic Correlation
-- Response `results` preserves input object order.
-- Every input object yields exactly one result with same `object_id`.
-
-### Partial Failures
-- Individual object failures must not fail whole batch by default.
-- Batch-level transport/service failure is reserved for fatal preconditions:
-  - invalid request schema
-  - unknown workflow
-  - missing runtime dependencies that prevent all execution
-
-### Model Signature Guarantee
-- Successful batch response requires non-empty `model_signature`.
-- If signature cannot be resolved deterministically, request fails with explicit error.
-
-### `batch_id` Semantics
-- Treated as correlation key by default.
-- Idempotency behavior is best-effort unless host config enables strict idempotency storage.
-
-## Capabilities Contract: `GetEmbeddingWorkflowCapabilitiesV1Response`
-
-Required fields:
-- `api_version`: string literal `"v1"`
+## Capabilities Contract: `WorkflowCapabilitiesResponse`
 - `supported_models`: array<string>
 - `max_batch_size`: integer
 - `max_text_length`: integer
 
-Optional fields:
-- `notes`: array<string>
+## Behavior Requirements
+- Preserve input ordering and `object_id` correlation.
+- Support per-object partial failure.
+- Return non-empty `model_signature` on success responses.
+- Use `batch_id` as correlation/run identifier when provided.
 
 ## Error Model
-
-### API/Request Errors
 - `invalid_request`
-- `unsupported_api_version`
 - `workflow_not_found`
 - `capability_violation`
-
-### Runtime Errors
 - `runtime_not_ready`
 - `model_signature_unavailable`
 - `internal_error`
-
-### Object-Level Errors
-- `object_validation_failed`
-- `embedding_failed`
-
-## Versioning Rules
-- v1 is append-only for non-breaking evolution.
-- Additive fields must be optional for consumers.
-- Removing/renaming required fields requires new version.
-- Semantic behavior changes require new version or explicit feature flag.
-
-## Compatibility Guarantees
-- v1 request/response shapes are stable once released.
-- Adapters (Tauri/UniFFI/Rustler) must delegate to the same service contract.
-- Transport-specific wrappers must not alter business semantics.

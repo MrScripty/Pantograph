@@ -28,5 +28,5 @@ Primary contract types:
 
 ## Verification
 
-- Contract tests: `crates/pantograph-workflow-service/tests/contract_v1.rs`
+- Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
 - CI gate: `.github/workflows/headless-embedding-contract.yml`

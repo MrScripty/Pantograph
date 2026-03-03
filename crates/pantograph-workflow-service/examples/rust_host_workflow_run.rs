@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 objects: vec![
                     WorkflowInputObject {
                         object_id: "doc-1".to_string(),
-                        text: "Pantograph headless embedding example".to_string(),
+                        text: "Pantograph headless workflow example".to_string(),
                         metadata: None,
                     },
                     WorkflowInputObject {

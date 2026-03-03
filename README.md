@@ -117,12 +117,12 @@ npm run check
 Python-backed model execution is intentionally out-of-process and externally provisioned.
 See `docs/python-runtime-separation.md` for configuration and migration details.
 
-### Headless Embedding API
+### Headless Workflow API
 
-Pantograph also exposes a versioned, Rust-first headless embedding API for host integrations:
+Pantograph also exposes a Rust-first headless workflow API for host integrations:
 
-- `embed_objects_v1`
-- `get_embedding_workflow_capabilities_v1`
+- `workflow_run`
+- `workflow_get_capabilities`
 
 Reference docs:
 

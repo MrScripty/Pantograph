@@ -1,4 +1,4 @@
-# ADR-001: Headless Embedding Service Boundary
+# ADR-001: Headless Workflow Service Boundary
 
 ## Status
 Accepted
@@ -12,14 +12,14 @@ Current issues:
 - External consumers need object-in/object-out embedding semantics with deterministic metadata.
 
 ## Decision
-Adopt a three-layer boundary for headless embedding features:
+Adopt a three-layer boundary for headless workflow features:
 
 1. Domain/Framework Layer
 - `node-engine` and `workflow-nodes`
 - No dependency on Tauri, UniFFI, Rustler, or transport details.
 
 2. Application Service Layer
-- New host-agnostic service module/crate for workflow embedding use-cases.
+- New host-agnostic service module/crate for workflow run use-cases.
 - Owns request/response DTOs and business orchestration semantics.
 - Depends on domain/framework and trait-based host resources.
 
@@ -42,7 +42,7 @@ Adopt a three-layer boundary for headless embedding features:
 - More explicit trait interfaces to inject host resources.
 
 ## Implementation Notes
-- Freeze `embed_objects_v1` and `get_embedding_workflow_capabilities_v1` contracts before implementation.
+- Freeze `workflow_run` and `workflow_get_capabilities` contracts before implementation.
 - Migrate Tauri workflow commands to thin delegation wrappers.
 - Add contract tests in service layer and parity checks in adapters.
 
@@ -58,8 +58,8 @@ Implemented.
 Delivered artifacts:
 
 - Service layer contracts and orchestration: `crates/pantograph-workflow-service`
-- Tauri thin adapter commands: `src-tauri/src/workflow/headless_embedding_commands.rs`
+- Tauri thin adapter commands: `src-tauri/src/workflow/headless_workflow_commands.rs`
 - UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
 - Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
-- Contract tests: `crates/pantograph-workflow-service/tests/contract_v1.rs`
+- Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
 - CI guardrail: `.github/workflows/headless-embedding-contract.yml`

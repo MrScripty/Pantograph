@@ -636,7 +636,7 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
     }
 }
 
-/// Execute headless embedding contract (`workflow_run`) and return response JSON.
+/// Execute headless workflow contract (`workflow_run`) and return response JSON.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn workflow_run(
     base_url: String,
@@ -662,7 +662,7 @@ pub async fn workflow_run(
     })
 }
 
-/// Execute headless embedding capabilities contract and return response JSON.
+/// Execute headless workflow capabilities contract and return response JSON.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn workflow_get_capabilities(
     base_url: String,

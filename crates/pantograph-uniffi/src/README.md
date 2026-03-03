@@ -9,10 +9,10 @@ UniFFI adapter surface for Pantograph workflow APIs.
 | `lib.rs` | UniFFI exports and adapter implementation delegating to shared service contracts. |
 | `bin/` | Binding generation helper utilities. |
 
-## Headless Embedding Exports
+## Headless Workflow Exports
 
-- `embed_objects_v1(base_url, request_json, pumas_api?) -> response_json`
-- `get_embedding_workflow_capabilities_v1(base_url, request_json, pumas_api?) -> response_json`
+- `workflow_run(base_url, request_json, pumas_api?) -> response_json`
+- `workflow_get_capabilities(base_url, request_json, pumas_api?) -> response_json`
 
 These exports delegate business rules to `pantograph-workflow-service`.
 
