@@ -1,7 +1,7 @@
 # Plan: Pantograph Refactor to Headless Embedding Framework API
 
 ## Status
-Partially implemented (headless embedding v1 contract + service + Tauri adapter)
+Implemented (headless embedding v1 contract + service + Tauri/UniFFI/Rustler adapters)
 
 ## Objective
 Refactor Pantograph workflow execution boundaries so headless embedding can be consumed as a stable Rust-first framework API (`embed_objects_v1`) with optional transport adapters, while bringing architecture into compliance with project coding standards.
@@ -168,7 +168,7 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Binding crate compile checks.
 - Contract parity tests across at least Rust + one adapter surface.
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 7: Contract Tests and Compatibility Guardrails
 
@@ -265,19 +265,28 @@ Pantograph currently has core workflow capabilities but key execution use-cases 
 - Milestone 3 Tauri command adapter integration for headless embedding API.
 - Milestone 4 `embed_objects_v1` and capabilities service operations.
 - Milestone 5 model signature validation and non-empty success guarantees.
+- Milestone 6 adapter parity across UniFFI and Rustler wrappers delegating to shared service contracts.
 - Milestone 7 contract tests for v1 request/response shapes.
+- Milestone 7 CI gate for contract checks and binding parity compile checks.
 - Milestone 8 official Rust host example and migration guide.
 
 ### Deviations
-- Milestone 6 optional adapter parity (UniFFI/Rustler wrappers over the new service) is not fully complete.
+- None.
 
 ### Follow-Ups
-- Add UniFFI and/or Rustler adapter methods that delegate to `pantograph-workflow-service` without duplicating business logic.
+- None for the v1 scope in this plan.
 
 ### Verification Summary
-- N/A
+- `cargo test -p pantograph-workflow-service --test contract_v1`
+- `cargo check -p pantograph-uniffi`
+- `cargo check -p pantograph_rustler`
+- `cargo test -p pantograph-uniffi --no-run`
+- `cargo test -p pantograph-uniffi test_get_embedding_workflow_capabilities_v1_contract_success -- --nocapture`
+- `cargo test -p pantograph-uniffi test_parse_embedding_payload_rejects_non_numeric -- --nocapture`
 
 ### Traceability Links
-- Module README updates: pending
-- ADR updates: pending
-- PR notes: pending
+- API contract: `docs/headless-embedding-api-v1.md`
+- Service boundary ADR: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- Migration guide: `docs/headless-embedding-migration.md`
+- Service contract tests: `crates/pantograph-workflow-service/tests/contract_v1.rs`
+- CI gate: `.github/workflows/headless-embedding-contract.yml`
