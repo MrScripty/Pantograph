@@ -27,7 +27,6 @@ import DepthEstimationNode from '../components/nodes/workflow/DepthEstimationNod
 import PointCloudOutputNode from '../components/nodes/workflow/PointCloudOutputNode.svelte';
 import PumaLibNode from '../components/nodes/workflow/PumaLibNode.svelte';
 import AgentToolsNode from '../components/nodes/workflow/AgentToolsNode.svelte';
-import VectorDbNode from '../components/nodes/workflow/VectorDbNode.svelte';
 import NodeGroupNode from '../components/nodes/workflow/NodeGroupNode.svelte';
 import LinkedInputNode from '../components/nodes/workflow/LinkedInputNode.svelte';
 import ExpandSettingsNode from '../components/nodes/workflow/ExpandSettingsNode.svelte';
@@ -60,7 +59,6 @@ const SPECIALIZED_NODES: Record<string, any> = {
   'point-cloud-output': PointCloudOutputNode,
   'puma-lib': PumaLibNode,
   'agent-tools': AgentToolsNode,
-  'vector-db': VectorDbNode,
   'linked-input': LinkedInputNode,
   'expand-settings': ExpandSettingsNode,
 };

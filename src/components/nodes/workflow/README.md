@@ -27,7 +27,6 @@ Svelte UI components for the frontend experience, organized by feature and compo
 | PyTorchInferenceNode.svelte | Source file used by modules in this directory. |
 | TextInputNode.svelte | Source file used by modules in this directory. |
 | TextOutputNode.svelte | Source file used by modules in this directory. |
-| VectorDbNode.svelte | Source file used by modules in this directory. |
 
 ## Design Decisions
 - Keep files in this directory scoped to a single responsibility boundary.

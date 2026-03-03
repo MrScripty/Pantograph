@@ -53,7 +53,6 @@
   import GenericNode from './nodes/workflow/GenericNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
-  import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
   import NodeGroupNode from './nodes/workflow/NodeGroupNode.svelte';
   import LinkedInputNode from './nodes/workflow/LinkedInputNode.svelte';
   import MaskedTextInputNode from './nodes/workflow/MaskedTextInputNode.svelte';
@@ -96,7 +95,6 @@
     'point-cloud-output': PointCloudOutputNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
-    'vector-db': VectorDbNode,
     'node-group': NodeGroupNode,
     'linked-input': LinkedInputNode,
     'masked-text-input': MaskedTextInputNode,

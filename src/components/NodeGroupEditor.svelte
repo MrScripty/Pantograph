@@ -21,7 +21,6 @@
   import GenericNode from './nodes/workflow/GenericNode.svelte';
   import PumaLibNode from './nodes/workflow/PumaLibNode.svelte';
   import AgentToolsNode from './nodes/workflow/AgentToolsNode.svelte';
-  import VectorDbNode from './nodes/workflow/VectorDbNode.svelte';
 
   // Import custom edge components
   import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
@@ -53,7 +52,6 @@
     'dependency-environment': DependencyEnvironmentNode,
     'puma-lib': PumaLibNode,
     'agent-tools': AgentToolsNode,
-    'vector-db': VectorDbNode,
     // Generic fallback
     'image-input': GenericNode,
     'vision-analysis': GenericNode,
