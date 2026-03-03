@@ -59,9 +59,17 @@ Capability discovery for consumers before calling `workflow_run`.
   - `message`: string
 
 ## Capabilities Contract: `WorkflowCapabilitiesResponse`
-- `supported_models`: array<string>
 - `max_batch_size`: integer
 - `max_text_length`: integer
+- `runtime_requirements`: object
+  - `estimated_peak_vram_mb`: integer or null
+  - `estimated_peak_ram_mb`: integer or null
+  - `estimated_min_vram_mb`: integer or null
+  - `estimated_min_ram_mb`: integer or null
+  - `estimation_confidence`: string
+  - `required_models`: array<string>
+  - `required_backends`: array<string>
+  - `required_extensions`: array<string>
 
 ## Behavior Requirements
 - Preserve input ordering and `object_id` correlation.
