@@ -1,4 +1,4 @@
-//! Headless embedding API adapter for Tauri transport.
+//! Headless workflow API adapter for Tauri transport.
 //!
 //! This module maps Tauri command invocations to host-agnostic service logic in
 //! `pantograph-workflow-service`.
@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    EmbedObjectsV1Request, EmbedObjectsV1Response, EmbeddingHost, EmbeddingHostCapabilities,
-    EmbeddingService, EmbeddingServiceError, GetEmbeddingWorkflowCapabilitiesV1Request,
-    GetEmbeddingWorkflowCapabilitiesV1Response, ModelSignature,
+    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
+    WorkflowHostCapabilities, WorkflowRunRequest, WorkflowRunResponse, WorkflowService,
+    WorkflowServiceError,
 };
 use tauri::State;
 
@@ -20,36 +20,36 @@ use super::commands::SharedExtensions;
 const DEFAULT_MAX_BATCH_SIZE: usize = 128;
 const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
 
-pub async fn embed_objects_v1(
-    request: EmbedObjectsV1Request,
+pub async fn workflow_run(
+    request: WorkflowRunRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
-) -> Result<EmbedObjectsV1Response, String> {
-    let host = TauriEmbeddingHost::new(gateway.inner().clone(), extensions.inner().clone());
-    EmbeddingService::new()
-        .embed_objects_v1(&host, request)
+) -> Result<WorkflowRunResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    WorkflowService::new()
+        .workflow_run(&host, request)
         .await
         .map_err(|e| e.to_string())
 }
 
-pub async fn get_embedding_workflow_capabilities_v1(
-    request: GetEmbeddingWorkflowCapabilitiesV1Request,
+pub async fn workflow_get_capabilities(
+    request: WorkflowCapabilitiesRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
-) -> Result<GetEmbeddingWorkflowCapabilitiesV1Response, String> {
-    let host = TauriEmbeddingHost::new(gateway.inner().clone(), extensions.inner().clone());
-    EmbeddingService::new()
-        .get_embedding_workflow_capabilities_v1(&host, request)
+) -> Result<WorkflowCapabilitiesResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    WorkflowService::new()
+        .workflow_get_capabilities(&host, request)
         .await
         .map_err(|e| e.to_string())
 }
 
-struct TauriEmbeddingHost {
+struct TauriWorkflowHost {
     gateway: SharedGateway,
     extensions: SharedExtensions,
 }
 
-impl TauriEmbeddingHost {
+impl TauriWorkflowHost {
     fn new(gateway: SharedGateway, extensions: SharedExtensions) -> Self {
         Self {
             gateway,
@@ -91,47 +91,47 @@ impl TauriEmbeddingHost {
 }
 
 #[async_trait]
-impl EmbeddingHost for TauriEmbeddingHost {
-    async fn validate_embedding_workflow(
+impl WorkflowHost for TauriWorkflowHost {
+    async fn validate_workflow(
         &self,
         workflow_id: &str,
-    ) -> Result<(), EmbeddingServiceError> {
+    ) -> Result<(), WorkflowServiceError> {
         if workflow_id.trim().is_empty() {
-            return Err(EmbeddingServiceError::WorkflowNotFound(
+            return Err(WorkflowServiceError::WorkflowNotFound(
                 "workflow_id is empty".to_string(),
             ));
         }
         Ok(())
     }
 
-    async fn embedding_capabilities(
+    async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
-    ) -> Result<EmbeddingHostCapabilities, EmbeddingServiceError> {
-        Ok(EmbeddingHostCapabilities {
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        Ok(WorkflowHostCapabilities {
             supported_models: self.list_supported_embedding_models().await,
             max_batch_size: DEFAULT_MAX_BATCH_SIZE,
             max_text_length: DEFAULT_MAX_TEXT_LENGTH,
         })
     }
 
-    async fn embed_one(
+    async fn run_object(
         &self,
         _workflow_id: &str,
         text: &str,
         model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), EmbeddingServiceError> {
+    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
         let inner = self.gateway.inner_arc();
 
         if !inner.is_ready().await {
-            return Err(EmbeddingServiceError::RuntimeNotReady(
+            return Err(WorkflowServiceError::RuntimeNotReady(
                 "inference gateway is not ready".to_string(),
             ));
         }
 
         let capabilities = inner.capabilities().await;
         if !capabilities.embeddings {
-            return Err(EmbeddingServiceError::CapabilityViolation(
+            return Err(WorkflowServiceError::CapabilityViolation(
                 "active backend does not support embeddings".to_string(),
             ));
         }
@@ -146,25 +146,25 @@ impl EmbeddingHost for TauriEmbeddingHost {
             .await
             .map_err(|err| match err {
                 inference::GatewayError::Backend(inference::backend::BackendError::NotReady) => {
-                    EmbeddingServiceError::RuntimeNotReady("backend is not ready".to_string())
+                    WorkflowServiceError::RuntimeNotReady("backend is not ready".to_string())
                 }
-                other => EmbeddingServiceError::Internal(other.to_string()),
+                other => WorkflowServiceError::Internal(other.to_string()),
             })?;
 
         let first = results
             .into_iter()
             .next()
-            .ok_or_else(|| EmbeddingServiceError::Internal("no embedding vector returned".to_string()))?;
+            .ok_or_else(|| WorkflowServiceError::Internal("no embedding vector returned".to_string()))?;
 
         Ok((first.vector, Some(first.token_count)))
     }
 
-    async fn resolve_model_signature(
+    async fn resolve_runtime_signature(
         &self,
         _workflow_id: &str,
         model_id: Option<&str>,
         vector_dimensions: usize,
-    ) -> Result<ModelSignature, EmbeddingServiceError> {
+    ) -> Result<RuntimeSignature, WorkflowServiceError> {
         let backend = self.gateway.current_backend_name().await;
         let model_id = model_id
             .map(str::trim)
@@ -172,7 +172,7 @@ impl EmbeddingHost for TauriEmbeddingHost {
             .unwrap_or("default")
             .to_string();
 
-        Ok(ModelSignature {
+        Ok(RuntimeSignature {
             model_id,
             model_revision_or_hash: None,
             backend,
