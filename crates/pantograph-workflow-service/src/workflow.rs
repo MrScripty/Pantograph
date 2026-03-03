@@ -478,6 +478,8 @@ fn map_object_error(err: WorkflowServiceError) -> WorkflowObjectError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
     use std::collections::HashMap;
     use std::sync::Mutex;
 
@@ -525,6 +527,57 @@ mod tests {
                 },
                 signatures: Mutex::new(signatures),
             }
+        }
+    }
+
+    struct DefaultCapabilitiesHost {
+        workflow_root: PathBuf,
+    }
+
+    #[async_trait]
+    impl WorkflowHost for DefaultCapabilitiesHost {
+        fn workflow_roots(&self) -> Vec<PathBuf> {
+            vec![self.workflow_root.clone()]
+        }
+
+        async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
+            Ok("fallback-backend".to_string())
+        }
+
+        async fn model_metadata(
+            &self,
+            model_id: &str,
+        ) -> Result<Option<serde_json::Value>, WorkflowServiceError> {
+            if model_id == "model-a" {
+                Ok(Some(serde_json::json!({
+                    "size_bytes": 2_u64 * 1024_u64 * 1024_u64
+                })))
+            } else {
+                Ok(None)
+            }
+        }
+
+        async fn run_object(
+            &self,
+            _workflow_id: &str,
+            _text: &str,
+            _model_id: Option<&str>,
+        ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
+            Ok((vec![0.1, 0.2], Some(2)))
+        }
+
+        async fn resolve_runtime_signature(
+            &self,
+            _workflow_id: &str,
+            _model_id: Option<&str>,
+            vector_dimensions: usize,
+        ) -> Result<RuntimeSignature, WorkflowServiceError> {
+            Ok(RuntimeSignature {
+                model_id: "model-a".to_string(),
+                model_revision_or_hash: Some("sha256:abc123".to_string()),
+                backend: "llamacpp".to_string(),
+                vector_dimensions,
+            })
         }
     }
 
@@ -737,5 +790,67 @@ mod tests {
             .expect("embed with batch id");
 
         assert_eq!(response.run_id, "batch-xyz");
+    }
+
+    #[tokio::test]
+    async fn default_capabilities_derive_runtime_requirements_from_workflow() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-service-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-default.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": {
+                    "name": "Default Capability Test"
+                },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "node-1",
+                            "node_type": "text-input",
+                            "data": {
+                                "model_id": "model-a",
+                                "backend_key": "llamacpp"
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let response = WorkflowService::new()
+            .workflow_get_capabilities(
+                &host,
+                WorkflowCapabilitiesRequest {
+                    workflow_id: "wf-default".to_string(),
+                },
+            )
+            .await
+            .expect("capabilities response");
+
+        assert_eq!(response.max_batch_size, capabilities::DEFAULT_MAX_BATCH_SIZE);
+        assert_eq!(response.max_text_length, capabilities::DEFAULT_MAX_TEXT_LENGTH);
+        assert_eq!(response.runtime_requirements.required_models, vec!["model-a"]);
+        assert_eq!(response.runtime_requirements.required_backends, vec!["llamacpp"]);
+        assert_eq!(
+            response.runtime_requirements.required_extensions,
+            vec!["inference_gateway".to_string(), "pumas_api".to_string()]
+        );
+        assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2));
+        assert_eq!(response.runtime_requirements.estimated_min_ram_mb, Some(2));
+        assert_eq!(
+            response.runtime_requirements.estimation_confidence,
+            "estimated_from_model_sizes"
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 }
