@@ -11,6 +11,8 @@ Define a stable, Rust-first headless workflow API for external consumers embeddi
 - Explicit request/response metadata; no event-stream parsing required.
 - Deterministic correlation and ordering.
 - No embed-specific top-level method names.
+- Capability computation is backend-owned in workflow service, with adapters as
+  transport/wiring only.
 
 ## Operations
 

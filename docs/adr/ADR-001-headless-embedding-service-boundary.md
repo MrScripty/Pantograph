@@ -58,6 +58,8 @@ Implemented.
 Delivered artifacts:
 
 - Service layer contracts and orchestration: `crates/pantograph-workflow-service`
+- Shared capability core (workflow validation + runtime requirement computation):
+  `crates/pantograph-workflow-service/src/capabilities.rs`
 - Tauri thin adapter commands: `src-tauri/src/workflow/headless_workflow_commands.rs`
 - UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
 - Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
