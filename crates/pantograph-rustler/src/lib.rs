@@ -45,6 +45,7 @@ use node_engine::{
 use pantograph_workflow_service::{
     WorkflowRunRequest, WorkflowHost, WorkflowHostCapabilities, WorkflowService,
     WorkflowServiceError, WorkflowCapabilitiesRequest, RuntimeSignature,
+    WorkflowRuntimeRequirements,
 };
 
 // Force the linker to include workflow-nodes object files,
@@ -436,28 +437,6 @@ impl RustlerWorkflowHost {
         }
     }
 
-    async fn supported_models(&self) -> Vec<String> {
-        let Some(api) = &self.pumas_api else {
-            return vec!["default".to_string()];
-        };
-        match api.list_models().await {
-            Ok(models) => {
-                let mut out = models
-                    .into_iter()
-                    .filter(|m| m.model_type.eq_ignore_ascii_case("embedding"))
-                    .map(|m| m.id)
-                    .collect::<Vec<_>>();
-                out.sort();
-                out.dedup();
-                if out.is_empty() {
-                    out.push("default".to_string());
-                }
-                out
-            }
-            Err(_) => vec!["default".to_string()],
-        }
-    }
-
     async fn resolve_model_revision_or_hash(
         &self,
         model_id: &str,
@@ -486,6 +465,45 @@ impl RustlerWorkflowHost {
                 ))
             })
     }
+
+    async fn compute_runtime_requirements(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowRuntimeRequirements, WorkflowServiceError> {
+        let stored = load_and_validate_workflow(workflow_id)?;
+        let mut required_models = extract_required_models(&stored.graph.nodes);
+        let mut required_backends = extract_required_backends(&stored.graph.nodes);
+        let required_extensions =
+            extract_required_extensions(&stored.graph.nodes, !required_models.is_empty());
+
+        if required_backends.is_empty() {
+            required_backends.push("openai-compatible".to_string());
+        }
+
+        let (
+            estimated_peak_vram_mb,
+            estimated_peak_ram_mb,
+            estimated_min_vram_mb,
+            estimated_min_ram_mb,
+            estimation_confidence,
+        ) = estimate_memory_requirements(self.pumas_api.as_ref(), &required_models).await;
+
+        required_models.sort();
+        required_models.dedup();
+        required_backends.sort();
+        required_backends.dedup();
+
+        Ok(WorkflowRuntimeRequirements {
+            estimated_peak_vram_mb,
+            estimated_peak_ram_mb,
+            estimated_min_vram_mb,
+            estimated_min_ram_mb,
+            estimation_confidence,
+            required_models,
+            required_backends,
+            required_extensions,
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -494,17 +512,17 @@ impl WorkflowHost for RustlerWorkflowHost {
         &self,
         workflow_id: &str,
     ) -> Result<(), WorkflowServiceError> {
-        load_and_validate_workflow(workflow_id)
+        load_and_validate_workflow(workflow_id).map(|_| ())
     }
 
     async fn workflow_capabilities(
         &self,
-        _workflow_id: &str,
+        workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
         Ok(WorkflowHostCapabilities {
-            supported_models: self.supported_models().await,
             max_batch_size: DEFAULT_MAX_BATCH_SIZE,
             max_text_length: DEFAULT_MAX_TEXT_LENGTH,
+            runtime_requirements: self.compute_runtime_requirements(workflow_id).await?,
         })
     }
 
@@ -681,7 +699,7 @@ struct StoredGraphEdge {
     target_handle: String,
 }
 
-fn load_and_validate_workflow(workflow_id: &str) -> Result<(), WorkflowServiceError> {
+fn load_and_validate_workflow(workflow_id: &str) -> Result<StoredWorkflowFile, WorkflowServiceError> {
     let workflow_path = find_workflow_file(workflow_id).ok_or_else(|| {
         WorkflowServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
     })?;
@@ -697,28 +715,28 @@ fn load_and_validate_workflow(workflow_id: &str) -> Result<(), WorkflowServiceEr
 
     let graph = node_engine::WorkflowGraph {
         id: workflow_id.to_string(),
-        name: stored.metadata.name,
+        name: stored.metadata.name.clone(),
         nodes: stored
             .graph
             .nodes
-            .into_iter()
+            .iter()
             .map(|n| node_engine::GraphNode {
-                id: n.id,
-                node_type: n.node_type,
-                data: n.data,
+                id: n.id.clone(),
+                node_type: n.node_type.clone(),
+                data: n.data.clone(),
                 position: (n.position.x, n.position.y),
             })
             .collect(),
         edges: stored
             .graph
             .edges
-            .into_iter()
+            .iter()
             .map(|e| node_engine::GraphEdge {
-                id: e.id,
-                source: e.source,
-                source_handle: e.source_handle,
-                target: e.target,
-                target_handle: e.target_handle,
+                id: e.id.clone(),
+                source: e.source.clone(),
+                source_handle: e.source_handle.clone(),
+                target: e.target.clone(),
+                target_handle: e.target_handle.clone(),
             })
             .collect(),
         groups: Vec::new(),
@@ -726,7 +744,7 @@ fn load_and_validate_workflow(workflow_id: &str) -> Result<(), WorkflowServiceEr
 
     let validation_errors = node_engine::validation::validate_workflow(&graph, None);
     if validation_errors.is_empty() {
-        return Ok(());
+        return Ok(stored);
     }
 
     let error_text = validation_errors
@@ -738,6 +756,153 @@ fn load_and_validate_workflow(workflow_id: &str) -> Result<(), WorkflowServiceEr
         "workflow '{}' failed graph validation: {}",
         workflow_id, error_text
     )))
+}
+
+fn extract_required_models(nodes: &[StoredGraphNode]) -> Vec<String> {
+    let mut out = std::collections::HashSet::new();
+    for node in nodes {
+        extract_model_ids_from_value(&node.data, &mut out);
+    }
+    let mut models = out.into_iter().collect::<Vec<_>>();
+    models.sort();
+    models
+}
+
+fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
+    let mut out = std::collections::HashSet::new();
+    for node in nodes {
+        extract_backend_keys_from_value(&node.data, &mut out);
+    }
+    let mut backends = out.into_iter().collect::<Vec<_>>();
+    backends.sort();
+    backends
+}
+
+fn extract_required_extensions(nodes: &[StoredGraphNode], has_models: bool) -> Vec<String> {
+    let mut out = vec!["http_client".to_string()];
+    if has_models {
+        out.push("pumas_api".to_string());
+    }
+    if nodes.iter().any(|n| n.node_type == "dependency-environment") {
+        out.push("model_dependency_resolver".to_string());
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn extract_model_ids_from_value(
+    value: &serde_json::Value,
+    out: &mut std::collections::HashSet<String>,
+) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map {
+                if key.eq_ignore_ascii_case("model_id")
+                    || key.eq_ignore_ascii_case("modelId")
+                    || key.eq_ignore_ascii_case("dependency_requirements_id")
+                    || key.eq_ignore_ascii_case("dependencyRequirementsId")
+                {
+                    if let Some(raw) = child.as_str() {
+                        let trimmed = raw.trim();
+                        if !trimmed.is_empty() && trimmed != "default" {
+                            out.insert(trimmed.to_string());
+                        }
+                    }
+                }
+                extract_model_ids_from_value(child, out);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for child in values {
+                extract_model_ids_from_value(child, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn extract_backend_keys_from_value(
+    value: &serde_json::Value,
+    out: &mut std::collections::HashSet<String>,
+) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map {
+                if key.eq_ignore_ascii_case("backend_key") || key.eq_ignore_ascii_case("backendKey")
+                {
+                    if let Some(raw) = child.as_str() {
+                        let trimmed = raw.trim();
+                        if !trimmed.is_empty() {
+                            out.insert(trimmed.to_string());
+                        }
+                    }
+                }
+                extract_backend_keys_from_value(child, out);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for child in values {
+                extract_backend_keys_from_value(child, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn estimate_memory_requirements(
+    pumas_api: Option<&Arc<pumas_library::PumasApi>>,
+    required_models: &[String],
+) -> (Option<u64>, Option<u64>, Option<u64>, Option<u64>, String) {
+    if required_models.is_empty() {
+        return (Some(0), Some(0), Some(0), Some(0), "exact_no_models".to_string());
+    }
+
+    let Some(api) = pumas_api else {
+        return (None, None, None, None, "unknown".to_string());
+    };
+
+    const MB: u64 = 1024 * 1024;
+    let mut sizes_mb = Vec::new();
+    let mut found_count = 0_usize;
+    for model_id in required_models {
+        let Ok(Some(model)) = api.get_model(model_id).await else {
+            continue;
+        };
+        if let Some(size_bytes) = extract_model_size_bytes(&model.metadata) {
+            let size_mb = (size_bytes.saturating_add(MB - 1)) / MB;
+            sizes_mb.push(size_mb.max(1));
+            found_count += 1;
+        }
+    }
+
+    if sizes_mb.is_empty() {
+        return (None, None, None, None, "unknown".to_string());
+    }
+
+    let peak = sizes_mb.iter().sum::<u64>();
+    let min = sizes_mb.into_iter().max().unwrap_or(0);
+    let confidence = if found_count == required_models.len() {
+        "estimated_from_model_sizes"
+    } else {
+        "partial_model_sizes"
+    };
+
+    (
+        Some(peak),
+        Some(peak),
+        Some(min),
+        Some(min),
+        confidence.to_string(),
+    )
+}
+
+fn extract_model_size_bytes(metadata: &serde_json::Value) -> Option<u64> {
+    metadata
+        .get("size_bytes")
+        .and_then(|v| v.as_u64())
+        .or_else(|| metadata.get("sizeBytes").and_then(|v| v.as_u64()))
+        .or_else(|| metadata.get("size").and_then(|v| v.as_u64()))
 }
 
 fn find_workflow_file(workflow_id: &str) -> Option<PathBuf> {
