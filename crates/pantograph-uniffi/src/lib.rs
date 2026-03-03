@@ -29,8 +29,8 @@ use node_engine::{
     WorkflowExecutor, WorkflowGraph,
 };
 use pantograph_workflow_service::{
-    EmbedObjectsV1Request, EmbeddingHost, EmbeddingHostCapabilities, EmbeddingService,
-    EmbeddingServiceError, GetEmbeddingWorkflowCapabilitiesV1Request, ModelSignature,
+    WorkflowRunRequest, WorkflowHost, WorkflowHostCapabilities, WorkflowService,
+    WorkflowServiceError, WorkflowCapabilitiesRequest, RuntimeSignature,
 };
 use tokio::sync::RwLock;
 
@@ -258,14 +258,14 @@ pub fn validate_orchestration_json(graph_json: String) -> Result<Vec<String>, Ff
 const DEFAULT_MAX_BATCH_SIZE: usize = 128;
 const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
 
-struct UniffiEmbeddingHost {
+struct UniffiWorkflowHost {
     base_url: String,
     pumas_api: Option<Arc<pumas_library::PumasApi>>,
     http_client: reqwest::Client,
     resolved_model_id: std::sync::Mutex<Option<String>>,
 }
 
-impl UniffiEmbeddingHost {
+impl UniffiWorkflowHost {
     fn new(base_url: String, pumas_api: Option<Arc<pumas_library::PumasApi>>) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
@@ -300,7 +300,7 @@ impl UniffiEmbeddingHost {
     async fn resolve_model_revision_or_hash(
         &self,
         model_id: &str,
-    ) -> Result<Option<String>, EmbeddingServiceError> {
+    ) -> Result<Option<String>, WorkflowServiceError> {
         let Some(api) = &self.pumas_api else {
             return Ok(None);
         };
@@ -308,9 +308,9 @@ impl UniffiEmbeddingHost {
         let model = api
             .get_model(model_id)
             .await
-            .map_err(|e| EmbeddingServiceError::RuntimeNotReady(e.to_string()))?
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
             .ok_or_else(|| {
-                EmbeddingServiceError::ModelSignatureUnavailable(format!(
+                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
                     "model '{}' not found in model library",
                     model_id
                 ))
@@ -319,7 +319,7 @@ impl UniffiEmbeddingHost {
         select_model_hash(&model.hashes)
             .map(Some)
             .ok_or_else(|| {
-                EmbeddingServiceError::ModelSignatureUnavailable(format!(
+                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
                     "model '{}' is missing sha256/blake3 hash metadata",
                     model_id
                 ))
@@ -328,31 +328,31 @@ impl UniffiEmbeddingHost {
 }
 
 #[async_trait::async_trait]
-impl EmbeddingHost for UniffiEmbeddingHost {
-    async fn validate_embedding_workflow(
+impl WorkflowHost for UniffiWorkflowHost {
+    async fn validate_workflow(
         &self,
         workflow_id: &str,
-    ) -> Result<(), EmbeddingServiceError> {
+    ) -> Result<(), WorkflowServiceError> {
         load_and_validate_workflow(workflow_id)
     }
 
-    async fn embedding_capabilities(
+    async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
-    ) -> Result<EmbeddingHostCapabilities, EmbeddingServiceError> {
-        Ok(EmbeddingHostCapabilities {
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        Ok(WorkflowHostCapabilities {
             supported_models: self.supported_models().await,
             max_batch_size: DEFAULT_MAX_BATCH_SIZE,
             max_text_length: DEFAULT_MAX_TEXT_LENGTH,
         })
     }
 
-    async fn embed_one(
+    async fn run_object(
         &self,
         _workflow_id: &str,
         text: &str,
         model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), EmbeddingServiceError> {
+    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
         let model = model_id
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -370,9 +370,9 @@ impl EmbeddingHost for UniffiEmbeddingHost {
             .json(&body)
             .send()
             .await
-            .map_err(|e| EmbeddingServiceError::RuntimeNotReady(e.to_string()))?;
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         if !response.status().is_success() {
-            return Err(EmbeddingServiceError::Internal(format!(
+            return Err(WorkflowServiceError::Internal(format!(
                 "embedding api error {}",
                 response.status()
             )));
@@ -381,7 +381,7 @@ impl EmbeddingHost for UniffiEmbeddingHost {
         let payload: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| EmbeddingServiceError::Internal(e.to_string()))?;
+            .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
 
         let (embedding, token_count, response_model_id) = parse_embedding_payload(&payload)?;
         if let Some(model_id) = response_model_id {
@@ -393,12 +393,12 @@ impl EmbeddingHost for UniffiEmbeddingHost {
         Ok((embedding, token_count))
     }
 
-    async fn resolve_model_signature(
+    async fn resolve_runtime_signature(
         &self,
         _workflow_id: &str,
         model_id: Option<&str>,
         vector_dimensions: usize,
-    ) -> Result<ModelSignature, EmbeddingServiceError> {
+    ) -> Result<RuntimeSignature, WorkflowServiceError> {
         let resolved_model_id = model_id
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -412,7 +412,7 @@ impl EmbeddingHost for UniffiEmbeddingHost {
             .unwrap_or_else(|| "default".to_string());
         let model_revision_or_hash = self.resolve_model_revision_or_hash(&resolved_model_id).await?;
 
-        Ok(ModelSignature {
+        Ok(RuntimeSignature {
             model_id: resolved_model_id,
             model_revision_or_hash,
             backend: "openai-compatible".to_string(),
@@ -423,19 +423,19 @@ impl EmbeddingHost for UniffiEmbeddingHost {
 
 fn parse_embedding_payload(
     payload: &serde_json::Value,
-) -> Result<(Vec<f32>, Option<usize>, Option<String>), EmbeddingServiceError> {
+) -> Result<(Vec<f32>, Option<usize>, Option<String>), WorkflowServiceError> {
     let embedding_values = payload
         .get("data")
         .and_then(|v| v.as_array())
         .and_then(|arr| arr.first())
         .and_then(|v| v.get("embedding"))
         .and_then(|v| v.as_array())
-        .ok_or_else(|| EmbeddingServiceError::Internal("missing embedding vector".to_string()))?;
+        .ok_or_else(|| WorkflowServiceError::Internal("missing embedding vector".to_string()))?;
 
     let mut embedding = Vec::with_capacity(embedding_values.len());
     for (index, value) in embedding_values.iter().enumerate() {
         let number = value.as_f64().ok_or_else(|| {
-            EmbeddingServiceError::Internal(format!(
+            WorkflowServiceError::Internal(format!(
                 "invalid embedding value at index {}",
                 index
             ))
@@ -520,15 +520,15 @@ struct StoredGraphEdge {
     target_handle: String,
 }
 
-fn load_and_validate_workflow(workflow_id: &str) -> Result<(), EmbeddingServiceError> {
+fn load_and_validate_workflow(workflow_id: &str) -> Result<(), WorkflowServiceError> {
     let workflow_path = find_workflow_file(workflow_id).ok_or_else(|| {
-        EmbeddingServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
+        WorkflowServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
     })?;
 
     let raw = std::fs::read_to_string(&workflow_path)
-        .map_err(|e| EmbeddingServiceError::WorkflowNotFound(e.to_string()))?;
+        .map_err(|e| WorkflowServiceError::WorkflowNotFound(e.to_string()))?;
     let stored: StoredWorkflowFile = serde_json::from_str(&raw).map_err(|e| {
-        EmbeddingServiceError::CapabilityViolation(format!(
+        WorkflowServiceError::CapabilityViolation(format!(
             "workflow '{}' has invalid file structure: {}",
             workflow_id, e
         ))
@@ -573,7 +573,7 @@ fn load_and_validate_workflow(workflow_id: &str) -> Result<(), EmbeddingServiceE
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("; ");
-    Err(EmbeddingServiceError::CapabilityViolation(format!(
+    Err(WorkflowServiceError::CapabilityViolation(format!(
         "workflow '{}' failed graph validation: {}",
         workflow_id, error_text
     )))
@@ -625,40 +625,37 @@ fn sanitize_workflow_stem(workflow_id: &str) -> Option<String> {
     }
 }
 
-fn map_embedding_service_error(err: EmbeddingServiceError) -> FfiError {
+fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
     match err {
-        EmbeddingServiceError::InvalidRequest(message)
-        | EmbeddingServiceError::CapabilityViolation(message)
-        | EmbeddingServiceError::WorkflowNotFound(message)
-        | EmbeddingServiceError::RuntimeNotReady(message)
-        | EmbeddingServiceError::ModelSignatureUnavailable(message)
-        | EmbeddingServiceError::Internal(message) => FfiError::Other { message },
-        EmbeddingServiceError::UnsupportedApiVersion => FfiError::Other {
-            message: "unsupported api version".to_string(),
-        },
+        WorkflowServiceError::InvalidRequest(message)
+        | WorkflowServiceError::CapabilityViolation(message)
+        | WorkflowServiceError::WorkflowNotFound(message)
+        | WorkflowServiceError::RuntimeNotReady(message)
+        | WorkflowServiceError::RuntimeSignatureUnavailable(message)
+        | WorkflowServiceError::Internal(message) => FfiError::Other { message },
     }
 }
 
-/// Execute headless embedding contract (`embed_objects_v1`) and return response JSON.
+/// Execute headless embedding contract (`workflow_run`) and return response JSON.
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn embed_objects_v1(
+pub async fn workflow_run(
     base_url: String,
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
-    let request: EmbedObjectsV1Request =
+    let request: WorkflowRunRequest =
         serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
             message: e.to_string(),
         })?;
 
-    let host = UniffiEmbeddingHost::new(
+    let host = UniffiWorkflowHost::new(
         base_url,
         pumas_api.as_ref().map(|api| api.api_arc()),
     );
-    let response = EmbeddingService::new()
-        .embed_objects_v1(&host, request)
+    let response = WorkflowService::new()
+        .workflow_run(&host, request)
         .await
-        .map_err(map_embedding_service_error)?;
+        .map_err(map_workflow_service_error)?;
 
     serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
         message: e.to_string(),
@@ -667,24 +664,24 @@ pub async fn embed_objects_v1(
 
 /// Execute headless embedding capabilities contract and return response JSON.
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn get_embedding_workflow_capabilities_v1(
+pub async fn workflow_get_capabilities(
     base_url: String,
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
-    let request: GetEmbeddingWorkflowCapabilitiesV1Request =
+    let request: WorkflowCapabilitiesRequest =
         serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
             message: e.to_string(),
         })?;
 
-    let host = UniffiEmbeddingHost::new(
+    let host = UniffiWorkflowHost::new(
         base_url,
         pumas_api.as_ref().map(|api| api.api_arc()),
     );
-    let response = EmbeddingService::new()
-        .get_embedding_workflow_capabilities_v1(&host, request)
+    let response = WorkflowService::new()
+        .workflow_get_capabilities(&host, request)
         .await
-        .map_err(map_embedding_service_error)?;
+        .map_err(map_workflow_service_error)?;
 
     serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
         message: e.to_string(),
@@ -1360,7 +1357,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires local TCP bind permissions in test environment"]
-    fn test_embed_objects_v1_contract_success() {
+    fn test_workflow_run_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
         let workflow_id = "wf_contract_success";
         let root = create_temp_workflow_root(workflow_id);
@@ -1375,7 +1372,6 @@ mod tests {
         let (base_url, server_thread) = spawn_single_embedding_server(200, payload);
 
         let request_json = serde_json::json!({
-            "api_version": "v1",
             "workflow_id": workflow_id,
             "objects": [{ "object_id": "obj-1", "text": "hello world" }]
         })
@@ -1383,23 +1379,22 @@ mod tests {
 
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let response_json = runtime
-            .block_on(embed_objects_v1(base_url, request_json, None))
-            .expect("embed_objects_v1");
-        let response: pantograph_workflow_service::EmbedObjectsV1Response =
+            .block_on(workflow_run(base_url, request_json, None))
+            .expect("workflow_run");
+        let response: pantograph_workflow_service::WorkflowRunResponse =
             serde_json::from_str(&response_json).expect("parse response");
 
         server_thread.join().expect("join server");
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = std::fs::remove_dir_all(root);
 
-        assert_eq!(response.api_version, "v1");
         assert_eq!(response.results.len(), 1);
         assert_eq!(response.results[0].object_id, "obj-1");
         assert_eq!(response.model_signature.model_id, "model-from-server");
     }
 
     #[test]
-    fn test_get_embedding_workflow_capabilities_v1_contract_success() {
+    fn test_workflow_get_capabilities_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
         let workflow_id = "wf_contract_caps";
         let root = create_temp_workflow_root(workflow_id);
@@ -1407,26 +1402,24 @@ mod tests {
         std::env::set_current_dir(&root).expect("set cwd");
 
         let request_json = serde_json::json!({
-            "api_version": "v1",
             "workflow_id": workflow_id
         })
         .to_string();
 
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let response_json = runtime
-            .block_on(get_embedding_workflow_capabilities_v1(
+            .block_on(workflow_get_capabilities(
                 "http://127.0.0.1:9".to_string(),
                 request_json,
                 None,
             ))
             .expect("capabilities");
-        let response: pantograph_workflow_service::GetEmbeddingWorkflowCapabilitiesV1Response =
+        let response: pantograph_workflow_service::WorkflowCapabilitiesResponse =
             serde_json::from_str(&response_json).expect("parse capabilities");
 
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = std::fs::remove_dir_all(root);
 
-        assert_eq!(response.api_version, "v1");
         assert_eq!(response.max_batch_size, DEFAULT_MAX_BATCH_SIZE);
         assert_eq!(response.max_text_length, DEFAULT_MAX_TEXT_LENGTH);
         assert_eq!(response.supported_models, vec!["default".to_string()]);

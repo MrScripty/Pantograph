@@ -43,8 +43,8 @@ use node_engine::{
     WorkflowGraph,
 };
 use pantograph_workflow_service::{
-    EmbedObjectsV1Request, EmbeddingHost, EmbeddingHostCapabilities, EmbeddingService,
-    EmbeddingServiceError, GetEmbeddingWorkflowCapabilitiesV1Request, ModelSignature,
+    WorkflowRunRequest, WorkflowHost, WorkflowHostCapabilities, WorkflowService,
+    WorkflowServiceError, WorkflowCapabilitiesRequest, RuntimeSignature,
 };
 
 // Force the linker to include workflow-nodes object files,
@@ -419,14 +419,14 @@ impl EventSink for BeamEventSink {
 // Headless embedding adapter for Rustler
 // ============================================================================
 
-struct RustlerEmbeddingHost {
+struct RustlerWorkflowHost {
     base_url: String,
     pumas_api: Option<Arc<pumas_library::PumasApi>>,
     http_client: reqwest::Client,
     resolved_model_id: std::sync::Mutex<Option<String>>,
 }
 
-impl RustlerEmbeddingHost {
+impl RustlerWorkflowHost {
     fn new(base_url: String, pumas_api: Option<Arc<pumas_library::PumasApi>>) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
@@ -461,7 +461,7 @@ impl RustlerEmbeddingHost {
     async fn resolve_model_revision_or_hash(
         &self,
         model_id: &str,
-    ) -> Result<Option<String>, EmbeddingServiceError> {
+    ) -> Result<Option<String>, WorkflowServiceError> {
         let Some(api) = &self.pumas_api else {
             return Ok(None);
         };
@@ -469,9 +469,9 @@ impl RustlerEmbeddingHost {
         let model = api
             .get_model(model_id)
             .await
-            .map_err(|e| EmbeddingServiceError::RuntimeNotReady(e.to_string()))?
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
             .ok_or_else(|| {
-                EmbeddingServiceError::ModelSignatureUnavailable(format!(
+                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
                     "model '{}' not found in model library",
                     model_id
                 ))
@@ -480,7 +480,7 @@ impl RustlerEmbeddingHost {
         select_model_hash(&model.hashes)
             .map(Some)
             .ok_or_else(|| {
-                EmbeddingServiceError::ModelSignatureUnavailable(format!(
+                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
                     "model '{}' is missing sha256/blake3 hash metadata",
                     model_id
                 ))
@@ -489,31 +489,31 @@ impl RustlerEmbeddingHost {
 }
 
 #[async_trait::async_trait]
-impl EmbeddingHost for RustlerEmbeddingHost {
-    async fn validate_embedding_workflow(
+impl WorkflowHost for RustlerWorkflowHost {
+    async fn validate_workflow(
         &self,
         workflow_id: &str,
-    ) -> Result<(), EmbeddingServiceError> {
+    ) -> Result<(), WorkflowServiceError> {
         load_and_validate_workflow(workflow_id)
     }
 
-    async fn embedding_capabilities(
+    async fn workflow_capabilities(
         &self,
         _workflow_id: &str,
-    ) -> Result<EmbeddingHostCapabilities, EmbeddingServiceError> {
-        Ok(EmbeddingHostCapabilities {
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        Ok(WorkflowHostCapabilities {
             supported_models: self.supported_models().await,
             max_batch_size: DEFAULT_MAX_BATCH_SIZE,
             max_text_length: DEFAULT_MAX_TEXT_LENGTH,
         })
     }
 
-    async fn embed_one(
+    async fn run_object(
         &self,
         _workflow_id: &str,
         text: &str,
         model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), EmbeddingServiceError> {
+    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
         let model = model_id
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -531,9 +531,9 @@ impl EmbeddingHost for RustlerEmbeddingHost {
             .json(&body)
             .send()
             .await
-            .map_err(|e| EmbeddingServiceError::RuntimeNotReady(e.to_string()))?;
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         if !response.status().is_success() {
-            return Err(EmbeddingServiceError::Internal(format!(
+            return Err(WorkflowServiceError::Internal(format!(
                 "embedding api error {}",
                 response.status()
             )));
@@ -542,7 +542,7 @@ impl EmbeddingHost for RustlerEmbeddingHost {
         let payload: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| EmbeddingServiceError::Internal(e.to_string()))?;
+            .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
 
         let (embedding, token_count, response_model_id) = parse_embedding_payload(&payload)?;
         if let Some(model_id) = response_model_id {
@@ -554,12 +554,12 @@ impl EmbeddingHost for RustlerEmbeddingHost {
         Ok((embedding, token_count))
     }
 
-    async fn resolve_model_signature(
+    async fn resolve_runtime_signature(
         &self,
         _workflow_id: &str,
         model_id: Option<&str>,
         vector_dimensions: usize,
-    ) -> Result<ModelSignature, EmbeddingServiceError> {
+    ) -> Result<RuntimeSignature, WorkflowServiceError> {
         let resolved_model_id = model_id
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -573,7 +573,7 @@ impl EmbeddingHost for RustlerEmbeddingHost {
             .unwrap_or_else(|| "default".to_string());
         let model_revision_or_hash = self.resolve_model_revision_or_hash(&resolved_model_id).await?;
 
-        Ok(ModelSignature {
+        Ok(RuntimeSignature {
             model_id: resolved_model_id,
             model_revision_or_hash,
             backend: "openai-compatible".to_string(),
@@ -584,19 +584,19 @@ impl EmbeddingHost for RustlerEmbeddingHost {
 
 fn parse_embedding_payload(
     payload: &serde_json::Value,
-) -> Result<(Vec<f32>, Option<usize>, Option<String>), EmbeddingServiceError> {
+) -> Result<(Vec<f32>, Option<usize>, Option<String>), WorkflowServiceError> {
     let embedding_values = payload
         .get("data")
         .and_then(|v| v.as_array())
         .and_then(|arr| arr.first())
         .and_then(|v| v.get("embedding"))
         .and_then(|v| v.as_array())
-        .ok_or_else(|| EmbeddingServiceError::Internal("missing embedding vector".to_string()))?;
+        .ok_or_else(|| WorkflowServiceError::Internal("missing embedding vector".to_string()))?;
 
     let mut embedding = Vec::with_capacity(embedding_values.len());
     for (index, value) in embedding_values.iter().enumerate() {
         let number = value.as_f64().ok_or_else(|| {
-            EmbeddingServiceError::Internal(format!(
+            WorkflowServiceError::Internal(format!(
                 "invalid embedding value at index {}",
                 index
             ))
@@ -681,15 +681,15 @@ struct StoredGraphEdge {
     target_handle: String,
 }
 
-fn load_and_validate_workflow(workflow_id: &str) -> Result<(), EmbeddingServiceError> {
+fn load_and_validate_workflow(workflow_id: &str) -> Result<(), WorkflowServiceError> {
     let workflow_path = find_workflow_file(workflow_id).ok_or_else(|| {
-        EmbeddingServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
+        WorkflowServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
     })?;
 
     let raw = std::fs::read_to_string(&workflow_path)
-        .map_err(|e| EmbeddingServiceError::WorkflowNotFound(e.to_string()))?;
+        .map_err(|e| WorkflowServiceError::WorkflowNotFound(e.to_string()))?;
     let stored: StoredWorkflowFile = serde_json::from_str(&raw).map_err(|e| {
-        EmbeddingServiceError::CapabilityViolation(format!(
+        WorkflowServiceError::CapabilityViolation(format!(
             "workflow '{}' has invalid file structure: {}",
             workflow_id, e
         ))
@@ -734,7 +734,7 @@ fn load_and_validate_workflow(workflow_id: &str) -> Result<(), EmbeddingServiceE
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("; ");
-    Err(EmbeddingServiceError::CapabilityViolation(format!(
+    Err(WorkflowServiceError::CapabilityViolation(format!(
         "workflow '{}' failed graph validation: {}",
         workflow_id, error_text
     )))
@@ -786,39 +786,36 @@ fn sanitize_workflow_stem(workflow_id: &str) -> Option<String> {
     }
 }
 
-fn map_embedding_service_error(err: EmbeddingServiceError) -> rustler::Error {
+fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
     match err {
-        EmbeddingServiceError::UnsupportedApiVersion => {
-            rustler::Error::Term(Box::new("unsupported api version".to_string()))
-        }
-        EmbeddingServiceError::InvalidRequest(message)
-        | EmbeddingServiceError::CapabilityViolation(message)
-        | EmbeddingServiceError::WorkflowNotFound(message)
-        | EmbeddingServiceError::RuntimeNotReady(message)
-        | EmbeddingServiceError::ModelSignatureUnavailable(message)
-        | EmbeddingServiceError::Internal(message) => rustler::Error::Term(Box::new(message)),
+        WorkflowServiceError::InvalidRequest(message)
+        | WorkflowServiceError::CapabilityViolation(message)
+        | WorkflowServiceError::WorkflowNotFound(message)
+        | WorkflowServiceError::RuntimeNotReady(message)
+        | WorkflowServiceError::RuntimeSignatureUnavailable(message)
+        | WorkflowServiceError::Internal(message) => rustler::Error::Term(Box::new(message)),
     }
 }
 
-/// Execute headless embedding contract (`embed_objects_v1`) and return response JSON.
+/// Execute headless embedding contract (`workflow_run`) and return response JSON.
 #[rustler::nif(schedule = "DirtyCpu")]
-fn embedding_embed_objects_v1(
+fn workflow_run(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: EmbedObjectsV1Request = serde_json::from_str(&request_json)
+    let request: WorkflowRunRequest = serde_json::from_str(&request_json)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let host = RustlerEmbeddingHost::new(
+    let host = RustlerWorkflowHost::new(
         base_url,
         pumas_resource.as_ref().map(|resource| resource.api.clone()),
     );
     let response = runtime
-        .block_on(async { EmbeddingService::new().embed_objects_v1(&host, request).await })
-        .map_err(map_embedding_service_error)?;
+        .block_on(async { WorkflowService::new().workflow_run(&host, request).await })
+        .map_err(map_workflow_service_error)?;
 
     serde_json::to_string(&response)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
@@ -826,27 +823,27 @@ fn embedding_embed_objects_v1(
 
 /// Execute embedding capabilities contract and return response JSON.
 #[rustler::nif(schedule = "DirtyCpu")]
-fn embedding_get_embedding_workflow_capabilities_v1(
+fn workflow_get_capabilities(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: GetEmbeddingWorkflowCapabilitiesV1Request = serde_json::from_str(&request_json)
+    let request: WorkflowCapabilitiesRequest = serde_json::from_str(&request_json)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let host = RustlerEmbeddingHost::new(
+    let host = RustlerWorkflowHost::new(
         base_url,
         pumas_resource.as_ref().map(|resource| resource.api.clone()),
     );
     let response = runtime
         .block_on(async {
-            EmbeddingService::new()
-                .get_embedding_workflow_capabilities_v1(&host, request)
+            WorkflowService::new()
+                .workflow_get_capabilities(&host, request)
                 .await
         })
-        .map_err(map_embedding_service_error)?;
+        .map_err(map_workflow_service_error)?;
 
     serde_json::to_string(&response)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
@@ -2468,11 +2465,10 @@ mod tests {
         });
         let (base_url, server_thread) = spawn_single_embedding_server(200, payload);
 
-        let host = RustlerEmbeddingHost::new(base_url, None);
-        let request = pantograph_workflow_service::EmbedObjectsV1Request {
-            api_version: "v1".to_string(),
+        let host = RustlerWorkflowHost::new(base_url, None);
+        let request = pantograph_workflow_service::WorkflowRunRequest {
             workflow_id: workflow_id.to_string(),
-            objects: vec![pantograph_workflow_service::EmbedInputObject {
+            objects: vec![pantograph_workflow_service::WorkflowInputObject {
                 object_id: "obj-1".to_string(),
                 text: "hello world".to_string(),
                 metadata: None,
@@ -2480,8 +2476,8 @@ mod tests {
             model_id: None,
             batch_id: None,
         };
-        let response = EmbeddingService::new()
-            .embed_objects_v1(&host, request)
+        let response = WorkflowService::new()
+            .workflow_run(&host, request)
             .await
             .expect("embed");
 
@@ -2489,9 +2485,8 @@ mod tests {
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = std::fs::remove_dir_all(root);
 
-        assert_eq!(response.api_version, "v1");
         assert_eq!(response.results.len(), 1);
-        assert_eq!(response.results[0].status, pantograph_workflow_service::EmbeddingStatus::Success);
+        assert_eq!(response.results[0].status, pantograph_workflow_service::WorkflowStatus::Success);
         assert_eq!(response.model_signature.model_id, "model-from-server");
     }
 
@@ -2505,12 +2500,12 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_embedding_workflow_requires_existing_workflow_file() {
-        let host = RustlerEmbeddingHost::new("http://127.0.0.1:9".to_string(), None);
+    fn test_validate_workflow_requires_existing_workflow_file() {
+        let host = RustlerWorkflowHost::new("http://127.0.0.1:9".to_string(), None);
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let err = runtime
-            .block_on(async { host.validate_embedding_workflow("missing-workflow").await })
+            .block_on(async { host.validate_workflow("missing-workflow").await })
             .expect_err("must fail");
-        assert!(matches!(err, EmbeddingServiceError::WorkflowNotFound(_)));
+        assert!(matches!(err, WorkflowServiceError::WorkflowNotFound(_)));
     }
 }
