@@ -85,19 +85,52 @@ pub struct WorkflowCapabilitiesRequest {
 /// Host capability payload consumed by the service.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+pub struct WorkflowRuntimeRequirements {
+    #[serde(default)]
+    pub estimated_peak_vram_mb: Option<u64>,
+    #[serde(default)]
+    pub estimated_peak_ram_mb: Option<u64>,
+    #[serde(default)]
+    pub estimated_min_vram_mb: Option<u64>,
+    #[serde(default)]
+    pub estimated_min_ram_mb: Option<u64>,
+    pub estimation_confidence: String,
+    pub required_models: Vec<String>,
+    pub required_backends: Vec<String>,
+    pub required_extensions: Vec<String>,
+}
+
+impl Default for WorkflowRuntimeRequirements {
+    fn default() -> Self {
+        Self {
+            estimated_peak_vram_mb: None,
+            estimated_peak_ram_mb: None,
+            estimated_min_vram_mb: None,
+            estimated_min_ram_mb: None,
+            estimation_confidence: "unknown".to_string(),
+            required_models: Vec::new(),
+            required_backends: Vec::new(),
+            required_extensions: Vec::new(),
+        }
+    }
+}
+
+/// Host capability payload consumed by the service.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub struct WorkflowHostCapabilities {
-    pub supported_models: Vec<String>,
     pub max_batch_size: usize,
     pub max_text_length: usize,
+    pub runtime_requirements: WorkflowRuntimeRequirements,
 }
 
 /// Workflow capabilities response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowCapabilitiesResponse {
-    pub supported_models: Vec<String>,
     pub max_batch_size: usize,
     pub max_text_length: usize,
+    pub runtime_requirements: WorkflowRuntimeRequirements,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -315,9 +348,9 @@ impl WorkflowService {
         host.validate_workflow(&request.workflow_id).await?;
         let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
         Ok(WorkflowCapabilitiesResponse {
-            supported_models: capabilities.supported_models,
             max_batch_size: capabilities.max_batch_size,
             max_text_length: capabilities.max_text_length,
+            runtime_requirements: capabilities.runtime_requirements,
         })
     }
 }
@@ -401,9 +434,18 @@ mod tests {
 
             Self {
                 capabilities: WorkflowHostCapabilities {
-                    supported_models: vec!["default".to_string(), "model-a".to_string()],
                     max_batch_size,
                     max_text_length,
+                    runtime_requirements: WorkflowRuntimeRequirements {
+                        estimated_peak_vram_mb: Some(1024),
+                        estimated_peak_ram_mb: Some(2048),
+                        estimated_min_vram_mb: Some(512),
+                        estimated_min_ram_mb: Some(1024),
+                        estimation_confidence: "estimated".to_string(),
+                        required_models: vec!["model-a".to_string()],
+                        required_backends: vec!["llamacpp".to_string()],
+                        required_extensions: vec!["inference_gateway".to_string()],
+                    },
                 },
                 signatures: Mutex::new(signatures),
             }
@@ -593,7 +635,8 @@ mod tests {
 
         assert_eq!(response.max_batch_size, 8);
         assert_eq!(response.max_text_length, 4096);
-        assert_eq!(response.supported_models.len(), 2);
+        assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2048));
+        assert_eq!(response.runtime_requirements.required_models.len(), 1);
     }
 
     #[tokio::test]

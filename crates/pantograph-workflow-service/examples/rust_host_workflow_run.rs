@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     RuntimeSignature, WorkflowHost, WorkflowHostCapabilities, WorkflowInputObject,
-    WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService, WorkflowServiceError,
 };
 
 struct ExampleHost;
@@ -25,9 +25,18 @@ impl WorkflowHost for ExampleHost {
         _workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
         Ok(WorkflowHostCapabilities {
-            supported_models: vec!["example-embed-model".to_string()],
             max_batch_size: 16,
             max_text_length: 2048,
+            runtime_requirements: WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(512),
+                estimated_peak_ram_mb: Some(1024),
+                estimated_min_vram_mb: Some(256),
+                estimated_min_ram_mb: Some(512),
+                estimation_confidence: "estimated".to_string(),
+                required_models: vec!["example-embed-model".to_string()],
+                required_backends: vec!["example-backend".to_string()],
+                required_extensions: vec!["inference_gateway".to_string()],
+            },
         })
     }
 

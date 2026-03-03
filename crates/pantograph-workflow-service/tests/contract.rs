@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowInputObject, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowInputObject, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowServiceError,
 };
 
 struct ContractHost;
@@ -20,9 +21,18 @@ impl WorkflowHost for ContractHost {
         _workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
         Ok(WorkflowHostCapabilities {
-            supported_models: vec!["model-a".to_string()],
             max_batch_size: 32,
             max_text_length: 4096,
+            runtime_requirements: WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(1536),
+                estimated_peak_ram_mb: Some(3072),
+                estimated_min_vram_mb: Some(1024),
+                estimated_min_ram_mb: Some(2048),
+                estimation_confidence: "estimated".to_string(),
+                required_models: vec!["model-a".to_string()],
+                required_backends: vec!["llamacpp".to_string()],
+                required_extensions: vec!["inference_gateway".to_string()],
+            },
         })
     }
 
@@ -122,9 +132,18 @@ async fn workflow_capabilities_contract_snapshot() {
 
     let value = serde_json::to_value(response).expect("serialize capabilities");
     let expected = serde_json::json!({
-        "supported_models": ["model-a"],
         "max_batch_size": 32,
-        "max_text_length": 4096
+        "max_text_length": 4096,
+        "runtime_requirements": {
+            "estimated_peak_vram_mb": 1536,
+            "estimated_peak_ram_mb": 3072,
+            "estimated_min_vram_mb": 1024,
+            "estimated_min_ram_mb": 2048,
+            "estimation_confidence": "estimated",
+            "required_models": ["model-a"],
+            "required_backends": ["llamacpp"],
+            "required_extensions": ["inference_gateway"]
+        }
     });
 
     assert_eq!(value, expected);
