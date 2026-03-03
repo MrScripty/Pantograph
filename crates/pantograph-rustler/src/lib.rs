@@ -32,7 +32,7 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use rustler::{Atom, Encoder, Env, NifResult, NifStruct, NifUnitEnum, OwnedEnv, ResourceArc, Term};
@@ -423,6 +423,7 @@ struct RustlerEmbeddingHost {
     base_url: String,
     pumas_api: Option<Arc<pumas_library::PumasApi>>,
     http_client: reqwest::Client,
+    resolved_model_id: std::sync::Mutex<Option<String>>,
 }
 
 impl RustlerEmbeddingHost {
@@ -431,6 +432,7 @@ impl RustlerEmbeddingHost {
             base_url: base_url.trim_end_matches('/').to_string(),
             pumas_api,
             http_client: reqwest::Client::new(),
+            resolved_model_id: std::sync::Mutex::new(None),
         }
     }
 
@@ -455,6 +457,35 @@ impl RustlerEmbeddingHost {
             Err(_) => vec!["default".to_string()],
         }
     }
+
+    async fn resolve_model_revision_or_hash(
+        &self,
+        model_id: &str,
+    ) -> Result<Option<String>, EmbeddingServiceError> {
+        let Some(api) = &self.pumas_api else {
+            return Ok(None);
+        };
+
+        let model = api
+            .get_model(model_id)
+            .await
+            .map_err(|e| EmbeddingServiceError::RuntimeNotReady(e.to_string()))?
+            .ok_or_else(|| {
+                EmbeddingServiceError::ModelSignatureUnavailable(format!(
+                    "model '{}' not found in model library",
+                    model_id
+                ))
+            })?;
+
+        select_model_hash(&model.hashes)
+            .map(Some)
+            .ok_or_else(|| {
+                EmbeddingServiceError::ModelSignatureUnavailable(format!(
+                    "model '{}' is missing sha256/blake3 hash metadata",
+                    model_id
+                ))
+            })
+    }
 }
 
 #[async_trait::async_trait]
@@ -463,12 +494,7 @@ impl EmbeddingHost for RustlerEmbeddingHost {
         &self,
         workflow_id: &str,
     ) -> Result<(), EmbeddingServiceError> {
-        if workflow_id.trim().is_empty() {
-            return Err(EmbeddingServiceError::WorkflowNotFound(
-                "workflow_id is empty".to_string(),
-            ));
-        }
-        Ok(())
+        load_and_validate_workflow(workflow_id)
     }
 
     async fn embedding_capabilities(
@@ -518,22 +544,12 @@ impl EmbeddingHost for RustlerEmbeddingHost {
             .await
             .map_err(|e| EmbeddingServiceError::Internal(e.to_string()))?;
 
-        let embedding = payload
-            .get("data")
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|v| v.get("embedding"))
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| EmbeddingServiceError::Internal("missing embedding vector".to_string()))?
-            .iter()
-            .filter_map(|v| v.as_f64().map(|n| n as f32))
-            .collect::<Vec<_>>();
-
-        let token_count = payload
-            .get("usage")
-            .and_then(|v| v.get("prompt_tokens"))
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
+        let (embedding, token_count, response_model_id) = parse_embedding_payload(&payload)?;
+        if let Some(model_id) = response_model_id {
+            if let Ok(mut guard) = self.resolved_model_id.lock() {
+                *guard = Some(model_id);
+            }
+        }
 
         Ok((embedding, token_count))
     }
@@ -544,12 +560,229 @@ impl EmbeddingHost for RustlerEmbeddingHost {
         model_id: Option<&str>,
         vector_dimensions: usize,
     ) -> Result<ModelSignature, EmbeddingServiceError> {
+        let resolved_model_id = model_id
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                self.resolved_model_id
+                    .lock()
+                    .ok()
+                    .and_then(|guard| guard.clone())
+            })
+            .unwrap_or_else(|| "default".to_string());
+        let model_revision_or_hash = self.resolve_model_revision_or_hash(&resolved_model_id).await?;
+
         Ok(ModelSignature {
-            model_id: model_id.unwrap_or("default").to_string(),
-            model_revision_or_hash: None,
+            model_id: resolved_model_id,
+            model_revision_or_hash,
             backend: "openai-compatible".to_string(),
             vector_dimensions,
         })
+    }
+}
+
+fn parse_embedding_payload(
+    payload: &serde_json::Value,
+) -> Result<(Vec<f32>, Option<usize>, Option<String>), EmbeddingServiceError> {
+    let embedding_values = payload
+        .get("data")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.get("embedding"))
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| EmbeddingServiceError::Internal("missing embedding vector".to_string()))?;
+
+    let mut embedding = Vec::with_capacity(embedding_values.len());
+    for (index, value) in embedding_values.iter().enumerate() {
+        let number = value.as_f64().ok_or_else(|| {
+            EmbeddingServiceError::Internal(format!(
+                "invalid embedding value at index {}",
+                index
+            ))
+        })?;
+        embedding.push(number as f32);
+    }
+
+    let token_count = payload
+        .get("usage")
+        .and_then(|v| v.get("prompt_tokens"))
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize);
+    let response_model_id = payload
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(ToOwned::to_owned);
+
+    Ok((embedding, token_count, response_model_id))
+}
+
+fn select_model_hash(hashes: &std::collections::HashMap<String, String>) -> Option<String> {
+    for preferred in ["sha256", "blake3"] {
+        if let Some((_, value)) = hashes
+            .iter()
+            .find(|(key, value)| key.eq_ignore_ascii_case(preferred) && !value.trim().is_empty())
+        {
+            let trimmed = value.trim();
+            if trimmed.contains(':') {
+                return Some(trimmed.to_string());
+            }
+            return Some(format!("{preferred}:{trimmed}"));
+        }
+    }
+    None
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredWorkflowFile {
+    metadata: StoredWorkflowMetadata,
+    graph: StoredWorkflowGraph,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredWorkflowMetadata {
+    name: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredWorkflowGraph {
+    #[serde(default)]
+    nodes: Vec<StoredGraphNode>,
+    #[serde(default)]
+    edges: Vec<StoredGraphEdge>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredGraphNode {
+    id: String,
+    node_type: String,
+    #[serde(default)]
+    data: serde_json::Value,
+    #[serde(default)]
+    position: StoredPosition,
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+struct StoredPosition {
+    #[serde(default)]
+    x: f64,
+    #[serde(default)]
+    y: f64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StoredGraphEdge {
+    id: String,
+    source: String,
+    source_handle: String,
+    target: String,
+    target_handle: String,
+}
+
+fn load_and_validate_workflow(workflow_id: &str) -> Result<(), EmbeddingServiceError> {
+    let workflow_path = find_workflow_file(workflow_id).ok_or_else(|| {
+        EmbeddingServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
+    })?;
+
+    let raw = std::fs::read_to_string(&workflow_path)
+        .map_err(|e| EmbeddingServiceError::WorkflowNotFound(e.to_string()))?;
+    let stored: StoredWorkflowFile = serde_json::from_str(&raw).map_err(|e| {
+        EmbeddingServiceError::CapabilityViolation(format!(
+            "workflow '{}' has invalid file structure: {}",
+            workflow_id, e
+        ))
+    })?;
+
+    let graph = node_engine::WorkflowGraph {
+        id: workflow_id.to_string(),
+        name: stored.metadata.name,
+        nodes: stored
+            .graph
+            .nodes
+            .into_iter()
+            .map(|n| node_engine::GraphNode {
+                id: n.id,
+                node_type: n.node_type,
+                data: n.data,
+                position: (n.position.x, n.position.y),
+            })
+            .collect(),
+        edges: stored
+            .graph
+            .edges
+            .into_iter()
+            .map(|e| node_engine::GraphEdge {
+                id: e.id,
+                source: e.source,
+                source_handle: e.source_handle,
+                target: e.target,
+                target_handle: e.target_handle,
+            })
+            .collect(),
+        groups: Vec::new(),
+    };
+
+    let validation_errors = node_engine::validation::validate_workflow(&graph, None);
+    if validation_errors.is_empty() {
+        return Ok(());
+    }
+
+    let error_text = validation_errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ");
+    Err(EmbeddingServiceError::CapabilityViolation(format!(
+        "workflow '{}' failed graph validation: {}",
+        workflow_id, error_text
+    )))
+}
+
+fn find_workflow_file(workflow_id: &str) -> Option<PathBuf> {
+    let stem = sanitize_workflow_stem(workflow_id)?;
+    let filename = format!("{stem}.json");
+
+    workflow_roots()
+        .into_iter()
+        .map(|root| root.join(&filename))
+        .find(|path| path.is_file())
+}
+
+fn workflow_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+
+    if let Ok(current) = std::env::current_dir() {
+        extend_ancestor_workflow_roots(&current, &mut roots);
+    }
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    extend_ancestor_workflow_roots(&manifest_dir, &mut roots);
+
+    roots
+}
+
+fn extend_ancestor_workflow_roots(start: &Path, out: &mut Vec<PathBuf>) {
+    for ancestor in start.ancestors() {
+        let candidate = ancestor.join(".pantograph").join("workflows");
+        if !out.iter().any(|existing| existing == &candidate) {
+            out.push(candidate);
+        }
+    }
+}
+
+fn sanitize_workflow_stem(workflow_id: &str) -> Option<String> {
+    let trimmed = workflow_id.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ' ')
+    {
+        Some(trimmed.to_string())
+    } else {
+        None
     }
 }
 
@@ -2044,6 +2277,9 @@ rustler::init!("Elixir.Pantograph.Native", load = load);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_workflow_graph_json_roundtrip() {
@@ -2149,5 +2385,132 @@ mod tests {
         let metadata: node_engine::TaskMetadata = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.node_type, "my-node");
         assert_eq!(metadata.label, "My Node");
+    }
+
+    static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
+        std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
+
+    fn create_temp_workflow_root(workflow_id: &str) -> std::path::PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("pantograph-rustler-tests-{suffix}"));
+        let workflows_dir = root.join(".pantograph").join("workflows");
+        std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+
+        let workflow_json = serde_json::json!({
+            "version": "1.0",
+            "metadata": {
+                "name": "Test Workflow",
+                "created": "2026-01-01T00:00:00Z",
+                "modified": "2026-01-01T00:00:00Z"
+            },
+            "graph": {
+                "nodes": [],
+                "edges": []
+            }
+        });
+        let file_path = workflows_dir.join(format!("{}.json", workflow_id));
+        std::fs::write(
+            file_path,
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+        root
+    }
+
+    fn spawn_single_embedding_server(
+        status_code: u16,
+        body: serde_json::Value,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("local addr");
+        let body_text = body.to_string();
+        let reason = if status_code == 200 { "OK" } else { "ERROR" };
+
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("set timeout");
+            let mut request_buf = [0_u8; 8192];
+            let _ = stream.read(&mut request_buf);
+
+            let response = format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                status_code,
+                reason,
+                body_text.len(),
+                body_text
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write response");
+        });
+
+        (format!("http://{}", addr), handle)
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[ignore = "requires local TCP bind permissions in test environment"]
+    async fn test_rustler_embedding_host_contract_success() {
+        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let workflow_id = "wf_rustler_contract";
+        let root = create_temp_workflow_root(workflow_id);
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&root).expect("set cwd");
+
+        let payload = serde_json::json!({
+            "data": [{ "embedding": [1.0, 2.0, 3.0] }],
+            "usage": { "prompt_tokens": 2 },
+            "model": "model-from-server"
+        });
+        let (base_url, server_thread) = spawn_single_embedding_server(200, payload);
+
+        let host = RustlerEmbeddingHost::new(base_url, None);
+        let request = pantograph_workflow_service::EmbedObjectsV1Request {
+            api_version: "v1".to_string(),
+            workflow_id: workflow_id.to_string(),
+            objects: vec![pantograph_workflow_service::EmbedInputObject {
+                object_id: "obj-1".to_string(),
+                text: "hello world".to_string(),
+                metadata: None,
+            }],
+            model_id: None,
+            batch_id: None,
+        };
+        let response = EmbeddingService::new()
+            .embed_objects_v1(&host, request)
+            .await
+            .expect("embed");
+
+        server_thread.join().expect("join server");
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(root);
+
+        assert_eq!(response.api_version, "v1");
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].status, pantograph_workflow_service::EmbeddingStatus::Success);
+        assert_eq!(response.model_signature.model_id, "model-from-server");
+    }
+
+    #[test]
+    fn test_parse_embedding_payload_rejects_non_numeric() {
+        let payload = serde_json::json!({
+            "data": [{ "embedding": [0.1, "oops", 0.3] }]
+        });
+        let err = parse_embedding_payload(&payload).expect_err("must reject malformed vector");
+        assert!(err.to_string().contains("invalid embedding value"));
+    }
+
+    #[test]
+    fn test_validate_embedding_workflow_requires_existing_workflow_file() {
+        let host = RustlerEmbeddingHost::new("http://127.0.0.1:9".to_string(), None);
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let err = runtime
+            .block_on(async { host.validate_embedding_workflow("missing-workflow").await })
+            .expect_err("must fail");
+        assert!(matches!(err, EmbeddingServiceError::WorkflowNotFound(_)));
     }
 }
