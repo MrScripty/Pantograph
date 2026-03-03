@@ -21,7 +21,6 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use node_engine::{
@@ -29,9 +28,8 @@ use node_engine::{
     WorkflowExecutor, WorkflowGraph,
 };
 use pantograph_workflow_service::{
-    WorkflowRunRequest, WorkflowHost, WorkflowHostCapabilities, WorkflowService,
-    WorkflowServiceError, WorkflowCapabilitiesRequest, RuntimeSignature,
-    WorkflowRuntimeRequirements,
+    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost, WorkflowRunRequest,
+    WorkflowService, WorkflowServiceError,
 };
 use tokio::sync::RwLock;
 
@@ -256,8 +254,8 @@ pub fn validate_orchestration_json(graph_json: String) -> Result<Vec<String>, Ff
     Ok(errors.iter().map(|e| e.to_string()).collect())
 }
 
-const DEFAULT_MAX_BATCH_SIZE: usize = 128;
-const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
+const DEFAULT_MAX_BATCH_SIZE: usize = capabilities::DEFAULT_MAX_BATCH_SIZE;
+const DEFAULT_MAX_TEXT_LENGTH: usize = capabilities::DEFAULT_MAX_TEXT_LENGTH;
 
 struct UniffiWorkflowHost {
     base_url: String,
@@ -305,64 +303,41 @@ impl UniffiWorkflowHost {
             })
     }
 
-    async fn compute_runtime_requirements(
-        &self,
-        workflow_id: &str,
-    ) -> Result<WorkflowRuntimeRequirements, WorkflowServiceError> {
-        let stored = load_and_validate_workflow(workflow_id)?;
-        let mut required_models = extract_required_models(&stored.graph.nodes);
-        let mut required_backends = extract_required_backends(&stored.graph.nodes);
-        let required_extensions =
-            extract_required_extensions(&stored.graph.nodes, !required_models.is_empty());
-
-        if required_backends.is_empty() {
-            required_backends.push("openai-compatible".to_string());
-        }
-
-        let (
-            estimated_peak_vram_mb,
-            estimated_peak_ram_mb,
-            estimated_min_vram_mb,
-            estimated_min_ram_mb,
-            estimation_confidence,
-        ) = estimate_memory_requirements(self.pumas_api.as_ref(), &required_models).await;
-
-        required_models.sort();
-        required_models.dedup();
-        required_backends.sort();
-        required_backends.dedup();
-
-        Ok(WorkflowRuntimeRequirements {
-            estimated_peak_vram_mb,
-            estimated_peak_ram_mb,
-            estimated_min_vram_mb,
-            estimated_min_ram_mb,
-            estimation_confidence,
-            required_models,
-            required_backends,
-            required_extensions,
-        })
-    }
 }
 
 #[async_trait::async_trait]
 impl WorkflowHost for UniffiWorkflowHost {
-    async fn validate_workflow(
-        &self,
-        workflow_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
-        load_and_validate_workflow(workflow_id).map(|_| ())
+    fn workflow_roots(&self) -> Vec<std::path::PathBuf> {
+        capabilities::default_workflow_roots(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
     }
 
-    async fn workflow_capabilities(
+    fn max_batch_size(&self) -> usize {
+        DEFAULT_MAX_BATCH_SIZE
+    }
+
+    fn max_text_length(&self) -> usize {
+        DEFAULT_MAX_TEXT_LENGTH
+    }
+
+    async fn default_backend_name(
         &self,
-        workflow_id: &str,
-    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
-        Ok(WorkflowHostCapabilities {
-            max_batch_size: DEFAULT_MAX_BATCH_SIZE,
-            max_text_length: DEFAULT_MAX_TEXT_LENGTH,
-            runtime_requirements: self.compute_runtime_requirements(workflow_id).await?,
-        })
+    ) -> Result<String, WorkflowServiceError> {
+        Ok("openai-compatible".to_string())
+    }
+
+    async fn model_metadata(
+        &self,
+        model_id: &str,
+    ) -> Result<Option<serde_json::Value>, WorkflowServiceError> {
+        let Some(api) = &self.pumas_api else {
+            return Ok(None);
+        };
+
+        let model = api
+            .get_model(model_id)
+            .await
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
+        Ok(model.map(|m| m.metadata))
     }
 
     async fn run_object(
@@ -490,304 +465,6 @@ fn select_model_hash(hashes: &std::collections::HashMap<String, String>) -> Opti
         }
     }
     None
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct StoredWorkflowFile {
-    metadata: StoredWorkflowMetadata,
-    graph: StoredWorkflowGraph,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct StoredWorkflowMetadata {
-    name: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct StoredWorkflowGraph {
-    #[serde(default)]
-    nodes: Vec<StoredGraphNode>,
-    #[serde(default)]
-    edges: Vec<StoredGraphEdge>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct StoredGraphNode {
-    id: String,
-    node_type: String,
-    #[serde(default)]
-    data: serde_json::Value,
-    #[serde(default)]
-    position: StoredPosition,
-}
-
-#[derive(Debug, serde::Deserialize, Default)]
-struct StoredPosition {
-    #[serde(default)]
-    x: f64,
-    #[serde(default)]
-    y: f64,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct StoredGraphEdge {
-    id: String,
-    source: String,
-    source_handle: String,
-    target: String,
-    target_handle: String,
-}
-
-fn load_and_validate_workflow(workflow_id: &str) -> Result<StoredWorkflowFile, WorkflowServiceError> {
-    let workflow_path = find_workflow_file(workflow_id).ok_or_else(|| {
-        WorkflowServiceError::WorkflowNotFound(format!("workflow '{}' not found", workflow_id))
-    })?;
-
-    let raw = std::fs::read_to_string(&workflow_path)
-        .map_err(|e| WorkflowServiceError::WorkflowNotFound(e.to_string()))?;
-    let stored: StoredWorkflowFile = serde_json::from_str(&raw).map_err(|e| {
-        WorkflowServiceError::CapabilityViolation(format!(
-            "workflow '{}' has invalid file structure: {}",
-            workflow_id, e
-        ))
-    })?;
-
-    let graph = node_engine::WorkflowGraph {
-        id: workflow_id.to_string(),
-        name: stored.metadata.name.clone(),
-        nodes: stored
-            .graph
-            .nodes
-            .iter()
-            .map(|n| node_engine::GraphNode {
-                id: n.id.clone(),
-                node_type: n.node_type.clone(),
-                data: n.data.clone(),
-                position: (n.position.x, n.position.y),
-            })
-            .collect(),
-        edges: stored
-            .graph
-            .edges
-            .iter()
-            .map(|e| node_engine::GraphEdge {
-                id: e.id.clone(),
-                source: e.source.clone(),
-                source_handle: e.source_handle.clone(),
-                target: e.target.clone(),
-                target_handle: e.target_handle.clone(),
-            })
-            .collect(),
-        groups: Vec::new(),
-    };
-
-    let validation_errors = node_engine::validation::validate_workflow(&graph, None);
-    if validation_errors.is_empty() {
-        return Ok(stored);
-    }
-
-    let error_text = validation_errors
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("; ");
-    Err(WorkflowServiceError::CapabilityViolation(format!(
-        "workflow '{}' failed graph validation: {}",
-        workflow_id, error_text
-    )))
-}
-
-fn extract_required_models(nodes: &[StoredGraphNode]) -> Vec<String> {
-    let mut out = std::collections::HashSet::new();
-    for node in nodes {
-        extract_model_ids_from_value(&node.data, &mut out);
-    }
-    let mut models = out.into_iter().collect::<Vec<_>>();
-    models.sort();
-    models
-}
-
-fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
-    let mut out = std::collections::HashSet::new();
-    for node in nodes {
-        extract_backend_keys_from_value(&node.data, &mut out);
-    }
-    let mut backends = out.into_iter().collect::<Vec<_>>();
-    backends.sort();
-    backends
-}
-
-fn extract_required_extensions(nodes: &[StoredGraphNode], has_models: bool) -> Vec<String> {
-    let mut out = vec!["http_client".to_string()];
-    if has_models {
-        out.push("pumas_api".to_string());
-    }
-    if nodes.iter().any(|n| n.node_type == "dependency-environment") {
-        out.push("model_dependency_resolver".to_string());
-    }
-    out.sort();
-    out.dedup();
-    out
-}
-
-fn extract_model_ids_from_value(
-    value: &serde_json::Value,
-    out: &mut std::collections::HashSet<String>,
-) {
-    match value {
-        serde_json::Value::Object(map) => {
-            for (key, child) in map {
-                if key.eq_ignore_ascii_case("model_id")
-                    || key.eq_ignore_ascii_case("modelId")
-                    || key.eq_ignore_ascii_case("dependency_requirements_id")
-                    || key.eq_ignore_ascii_case("dependencyRequirementsId")
-                {
-                    if let Some(raw) = child.as_str() {
-                        let trimmed = raw.trim();
-                        if !trimmed.is_empty() && trimmed != "default" {
-                            out.insert(trimmed.to_string());
-                        }
-                    }
-                }
-                extract_model_ids_from_value(child, out);
-            }
-        }
-        serde_json::Value::Array(values) => {
-            for child in values {
-                extract_model_ids_from_value(child, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn extract_backend_keys_from_value(
-    value: &serde_json::Value,
-    out: &mut std::collections::HashSet<String>,
-) {
-    match value {
-        serde_json::Value::Object(map) => {
-            for (key, child) in map {
-                if key.eq_ignore_ascii_case("backend_key") || key.eq_ignore_ascii_case("backendKey")
-                {
-                    if let Some(raw) = child.as_str() {
-                        let trimmed = raw.trim();
-                        if !trimmed.is_empty() {
-                            out.insert(trimmed.to_string());
-                        }
-                    }
-                }
-                extract_backend_keys_from_value(child, out);
-            }
-        }
-        serde_json::Value::Array(values) => {
-            for child in values {
-                extract_backend_keys_from_value(child, out);
-            }
-        }
-        _ => {}
-    }
-}
-
-async fn estimate_memory_requirements(
-    pumas_api: Option<&Arc<pumas_library::PumasApi>>,
-    required_models: &[String],
-) -> (Option<u64>, Option<u64>, Option<u64>, Option<u64>, String) {
-    if required_models.is_empty() {
-        return (Some(0), Some(0), Some(0), Some(0), "exact_no_models".to_string());
-    }
-
-    let Some(api) = pumas_api else {
-        return (None, None, None, None, "unknown".to_string());
-    };
-
-    const MB: u64 = 1024 * 1024;
-    let mut sizes_mb = Vec::new();
-    let mut found_count = 0_usize;
-    for model_id in required_models {
-        let Ok(Some(model)) = api.get_model(model_id).await else {
-            continue;
-        };
-        if let Some(size_bytes) = extract_model_size_bytes(&model.metadata) {
-            let size_mb = (size_bytes.saturating_add(MB - 1)) / MB;
-            sizes_mb.push(size_mb.max(1));
-            found_count += 1;
-        }
-    }
-
-    if sizes_mb.is_empty() {
-        return (None, None, None, None, "unknown".to_string());
-    }
-
-    let peak = sizes_mb.iter().sum::<u64>();
-    let min = sizes_mb.into_iter().max().unwrap_or(0);
-    let confidence = if found_count == required_models.len() {
-        "estimated_from_model_sizes"
-    } else {
-        "partial_model_sizes"
-    };
-
-    (
-        Some(peak),
-        Some(peak),
-        Some(min),
-        Some(min),
-        confidence.to_string(),
-    )
-}
-
-fn extract_model_size_bytes(metadata: &serde_json::Value) -> Option<u64> {
-    metadata
-        .get("size_bytes")
-        .and_then(|v| v.as_u64())
-        .or_else(|| metadata.get("sizeBytes").and_then(|v| v.as_u64()))
-        .or_else(|| metadata.get("size").and_then(|v| v.as_u64()))
-}
-
-fn find_workflow_file(workflow_id: &str) -> Option<PathBuf> {
-    let stem = sanitize_workflow_stem(workflow_id)?;
-    let filename = format!("{stem}.json");
-
-    workflow_roots()
-        .into_iter()
-        .map(|root| root.join(&filename))
-        .find(|path| path.is_file())
-}
-
-fn workflow_roots() -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-
-    if let Ok(current) = std::env::current_dir() {
-        extend_ancestor_workflow_roots(&current, &mut roots);
-    }
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    extend_ancestor_workflow_roots(&manifest_dir, &mut roots);
-
-    roots
-}
-
-fn extend_ancestor_workflow_roots(start: &Path, out: &mut Vec<PathBuf>) {
-    for ancestor in start.ancestors() {
-        let candidate = ancestor.join(".pantograph").join("workflows");
-        if !out.iter().any(|existing| existing == &candidate) {
-            out.push(candidate);
-        }
-    }
-}
-
-fn sanitize_workflow_stem(workflow_id: &str) -> Option<String> {
-    let trimmed = workflow_id.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ' ')
-    {
-        Some(trimmed.to_string())
-    } else {
-        None
-    }
 }
 
 fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
