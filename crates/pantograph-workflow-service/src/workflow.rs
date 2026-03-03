@@ -1,7 +1,11 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Instant;
 use uuid::Uuid;
+
+use crate::capabilities;
 
 /// Single object input for workflow processing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -157,14 +161,86 @@ pub enum WorkflowServiceError {
 /// Trait boundary for host/runtime concerns needed by workflow service.
 #[async_trait]
 pub trait WorkflowHost: Send + Sync {
+    /// Candidate roots that may contain `.pantograph/workflows/<workflow_id>.json`.
+    fn workflow_roots(&self) -> Vec<PathBuf> {
+        Vec::new()
+    }
+
+    /// Upper bound for request object count.
+    fn max_batch_size(&self) -> usize {
+        capabilities::DEFAULT_MAX_BATCH_SIZE
+    }
+
+    /// Upper bound for input text length.
+    fn max_text_length(&self) -> usize {
+        capabilities::DEFAULT_MAX_TEXT_LENGTH
+    }
+
+    /// Backend identifier used when workflow data does not declare one.
+    async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
+        Ok("unknown".to_string())
+    }
+
+    /// Optional model metadata for runtime requirement estimation.
+    async fn model_metadata(
+        &self,
+        _model_id: &str,
+    ) -> Result<Option<serde_json::Value>, WorkflowServiceError> {
+        Ok(None)
+    }
+
     /// Resolve workflow identity and fail if it is unknown to the host.
-    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError>;
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots()).map(|_| ())
+    }
 
     /// Return capability limits and model support metadata.
     async fn workflow_capabilities(
         &self,
         workflow_id: &str,
-    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError>;
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        let stored =
+            capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
+        let required_models = capabilities::extract_required_models(stored.nodes());
+        let mut required_backends = capabilities::extract_required_backends(stored.nodes());
+        if required_backends.is_empty() {
+            required_backends.push(self.default_backend_name().await?);
+        }
+        required_backends.sort();
+        required_backends.dedup();
+
+        let required_extensions =
+            capabilities::extract_required_extensions(stored.nodes(), !required_models.is_empty());
+        let mut model_metadata = HashMap::new();
+        for model_id in &required_models {
+            if let Some(metadata) = self.model_metadata(model_id).await? {
+                model_metadata.insert(model_id.clone(), metadata);
+            }
+        }
+
+        let (
+            estimated_peak_vram_mb,
+            estimated_peak_ram_mb,
+            estimated_min_vram_mb,
+            estimated_min_ram_mb,
+            estimation_confidence,
+        ) = capabilities::estimate_memory_requirements(&required_models, &model_metadata);
+
+        Ok(WorkflowHostCapabilities {
+            max_batch_size: self.max_batch_size(),
+            max_text_length: self.max_text_length(),
+            runtime_requirements: WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb,
+                estimated_peak_ram_mb,
+                estimated_min_vram_mb,
+                estimated_min_ram_mb,
+                estimation_confidence,
+                required_models,
+                required_backends,
+                required_extensions,
+            },
+        })
+    }
 
     /// Run one input object for the given workflow and optional model.
     async fn run_object(

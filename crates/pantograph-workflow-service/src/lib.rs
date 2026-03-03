@@ -4,6 +4,7 @@
 //! interfaces. Transport adapters (Tauri/UniFFI/Rustler) should delegate into
 //! this crate rather than duplicate business logic.
 
+pub mod capabilities;
 pub mod workflow;
 
 pub use workflow::{
