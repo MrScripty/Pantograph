@@ -1,4 +1,4 @@
-name: Headless Embedding Contract
+name: Headless Workflow Contract
 
 on:
   pull_request:
@@ -19,8 +19,8 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Run v1 contract tests
-        run: cargo test -p pantograph-workflow-service --test contract_v1
+      - name: Run contract tests
+        run: cargo test -p pantograph-workflow-service --test contract
 
       - name: Check UniFFI adapter parity build
         run: cargo check -p pantograph-uniffi
