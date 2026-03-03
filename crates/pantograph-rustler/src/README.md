@@ -1,24 +1,26 @@
 # crates/pantograph-rustler/src
 
 ## Purpose
-Core library source files for this crate's runtime and domain behavior.
+Rustler NIF adapter surface for Pantograph workflow APIs.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| lib.rs | Source file used by modules in this directory. |
+| `lib.rs` | NIF implementations, resources, and adapter logic delegating to shared service contracts. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Headless Embedding NIFs
+
+- `embedding_embed_objects_v1/3`
+- `embedding_get_embedding_workflow_capabilities_v1/3`
+
+These NIFs delegate business rules to `pantograph-workflow-service`.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+- Internal: `pantograph-workflow-service`, `node-engine`.
+- Host/runtime: `reqwest`, optional `pumas-library`.
 
-## Usage Examples
-```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
-```
+## Notes
+
+- Adapter validates workflow existence + logical graph validity.
+- Embedding payload parsing is strict (no silent vector truncation).
+- Model signature uses deterministic model hash selection (`sha256` then `blake3`) when Pumas metadata is available.

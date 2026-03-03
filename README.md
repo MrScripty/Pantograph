@@ -117,6 +117,20 @@ npm run check
 Python-backed model execution is intentionally out-of-process and externally provisioned.
 See `docs/python-runtime-separation.md` for configuration and migration details.
 
+### Headless Embedding API
+
+Pantograph also exposes a versioned, Rust-first headless embedding API for host integrations:
+
+- `embed_objects_v1`
+- `get_embedding_workflow_capabilities_v1`
+
+Reference docs:
+
+- Contract: `docs/headless-embedding-api-v1.md`
+- Migration guide: `docs/headless-embedding-migration.md`
+- Service boundary ADR: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- Implementation notes: `docs/headless-embedding-implementation-notes.md`
+
 ## Project Structure
 
 | Path | Description |

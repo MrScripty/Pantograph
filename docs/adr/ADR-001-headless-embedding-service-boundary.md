@@ -50,3 +50,16 @@ Adopt a three-layer boundary for headless embedding features:
 - Layered separation of concerns: Coding Standards and Architecture Patterns.
 - Service independence: framework-agnostic orchestration.
 - Immutable contracts: freeze API contract before implementation.
+
+## Implementation Status
+
+Implemented.
+
+Delivered artifacts:
+
+- Service layer contracts and orchestration: `crates/pantograph-workflow-service`
+- Tauri thin adapter commands: `src-tauri/src/workflow/headless_embedding_commands.rs`
+- UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
+- Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
+- Contract tests: `crates/pantograph-workflow-service/tests/contract_v1.rs`
+- CI guardrail: `.github/workflows/headless-embedding-contract.yml`
