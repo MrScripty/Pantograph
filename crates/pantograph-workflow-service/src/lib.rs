@@ -4,11 +4,10 @@
 //! interfaces. Transport adapters (Tauri/UniFFI/Rustler) should delegate into
 //! this crate rather than duplicate business logic.
 
-pub mod embedding;
+pub mod workflow;
 
-pub use embedding::{
-    EmbedInputObject, EmbedObjectError, EmbedObjectResult, EmbedObjectsV1Request,
-    EmbedObjectsV1Response, EmbeddingHost, EmbeddingHostCapabilities, EmbeddingService,
-    EmbeddingServiceError, EmbeddingStatus, GetEmbeddingWorkflowCapabilitiesV1Request,
-    GetEmbeddingWorkflowCapabilitiesV1Response, ModelSignature,
+pub use workflow::{
+    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
+    WorkflowHostCapabilities, WorkflowInputObject, WorkflowObjectError, WorkflowObjectResult,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowService, WorkflowServiceError, WorkflowStatus,
 };

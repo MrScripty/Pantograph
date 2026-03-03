@@ -9,22 +9,22 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
 - Host/runtime dependencies exposed via traits.
 
 ## Contents
-- `embedding.rs`: v1 headless embedding contracts, host traits, and orchestration logic.
+- `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
 
-## Headless Embedding v1
+## Headless Workflow API
 
 Primary operations:
 
-- `embed_objects_v1`
-- `get_embedding_workflow_capabilities_v1`
+- `workflow_run`
+- `workflow_get_capabilities`
 
 Primary contract types:
 
-- `EmbedObjectsV1Request`
-- `EmbedObjectsV1Response`
-- `GetEmbeddingWorkflowCapabilitiesV1Request`
-- `GetEmbeddingWorkflowCapabilitiesV1Response`
-- `ModelSignature`
+- `WorkflowRunRequest`
+- `WorkflowRunResponse`
+- `WorkflowCapabilitiesRequest`
+- `WorkflowCapabilitiesResponse`
+- `RuntimeSignature`
 
 ## Verification
 

@@ -3,23 +3,22 @@ use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use uuid::Uuid;
 
-/// Single object input for embedding.
+/// Single object input for workflow processing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct EmbedInputObject {
+pub struct WorkflowInputObject {
     pub object_id: String,
     pub text: String,
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
 }
 
-/// v1 request contract for object-in/object-out embeddings.
+/// Request contract for object-in/object-out workflow execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct EmbedObjectsV1Request {
-    pub api_version: String,
+pub struct WorkflowRunRequest {
     pub workflow_id: String,
-    pub objects: Vec<EmbedInputObject>,
+    pub objects: Vec<WorkflowInputObject>,
     #[serde(default)]
     pub model_id: Option<String>,
     #[serde(default)]
@@ -29,7 +28,7 @@ pub struct EmbedObjectsV1Request {
 /// Canonical model signature used by consumers for compatibility checks.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct ModelSignature {
+pub struct RuntimeSignature {
     pub model_id: String,
     #[serde(default)]
     pub model_revision_or_hash: Option<String>,
@@ -40,7 +39,7 @@ pub struct ModelSignature {
 /// Per-object execution status.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum EmbeddingStatus {
+pub enum WorkflowStatus {
     Success,
     Failed,
 }
@@ -48,67 +47,61 @@ pub enum EmbeddingStatus {
 /// Structured per-object error payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct EmbedObjectError {
+pub struct WorkflowObjectError {
     pub code: String,
     pub message: String,
 }
 
-/// Per-object embedding result.
+/// Per-object workflow result.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct EmbedObjectResult {
+pub struct WorkflowObjectResult {
     pub object_id: String,
     pub embedding: Option<Vec<f32>>,
     #[serde(default)]
     pub token_count: Option<usize>,
-    pub status: EmbeddingStatus,
+    pub status: WorkflowStatus,
     #[serde(default)]
-    pub error: Option<EmbedObjectError>,
+    pub error: Option<WorkflowObjectError>,
 }
 
-/// v1 embedding response.
+/// Workflow run response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct EmbedObjectsV1Response {
-    pub api_version: String,
+pub struct WorkflowRunResponse {
     pub run_id: String,
-    pub model_signature: ModelSignature,
-    pub results: Vec<EmbedObjectResult>,
+    pub model_signature: RuntimeSignature,
+    pub results: Vec<WorkflowObjectResult>,
     pub timing_ms: u128,
 }
 
-/// v1 capabilities request.
+/// Workflow capabilities request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct GetEmbeddingWorkflowCapabilitiesV1Request {
-    pub api_version: String,
+pub struct WorkflowCapabilitiesRequest {
     pub workflow_id: String,
 }
 
 /// Host capability payload consumed by the service.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct EmbeddingHostCapabilities {
+pub struct WorkflowHostCapabilities {
     pub supported_models: Vec<String>,
     pub max_batch_size: usize,
     pub max_text_length: usize,
 }
 
-/// v1 capabilities response.
+/// Workflow capabilities response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct GetEmbeddingWorkflowCapabilitiesV1Response {
-    pub api_version: String,
+pub struct WorkflowCapabilitiesResponse {
     pub supported_models: Vec<String>,
     pub max_batch_size: usize,
     pub max_text_length: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum EmbeddingServiceError {
-    #[error("unsupported_api_version")]
-    UnsupportedApiVersion,
-
+pub enum WorkflowServiceError {
     #[error("invalid_request: {0}")]
     InvalidRequest(String),
 
@@ -122,67 +115,66 @@ pub enum EmbeddingServiceError {
     RuntimeNotReady(String),
 
     #[error("model_signature_unavailable: {0}")]
-    ModelSignatureUnavailable(String),
+    RuntimeSignatureUnavailable(String),
 
     #[error("internal_error: {0}")]
     Internal(String),
 }
 
-/// Trait boundary for host/runtime concerns needed by embedding service.
+/// Trait boundary for host/runtime concerns needed by workflow service.
 #[async_trait]
-pub trait EmbeddingHost: Send + Sync {
+pub trait WorkflowHost: Send + Sync {
     /// Resolve workflow identity and fail if it is unknown to the host.
-    async fn validate_embedding_workflow(&self, workflow_id: &str) -> Result<(), EmbeddingServiceError>;
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError>;
 
     /// Return capability limits and model support metadata.
-    async fn embedding_capabilities(
+    async fn workflow_capabilities(
         &self,
         workflow_id: &str,
-    ) -> Result<EmbeddingHostCapabilities, EmbeddingServiceError>;
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError>;
 
-    /// Generate one embedding for the given text/model.
-    async fn embed_one(
+    /// Run one input object for the given workflow and optional model.
+    async fn run_object(
         &self,
         workflow_id: &str,
         text: &str,
         model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), EmbeddingServiceError>;
+    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError>;
 
     /// Resolve model signature fields after successful generation.
-    async fn resolve_model_signature(
+    async fn resolve_runtime_signature(
         &self,
         workflow_id: &str,
         model_id: Option<&str>,
         vector_dimensions: usize,
-    ) -> Result<ModelSignature, EmbeddingServiceError>;
+    ) -> Result<RuntimeSignature, WorkflowServiceError>;
 }
 
-/// Service entrypoint for embedding API operations.
+/// Service entrypoint for workflow API operations.
 #[derive(Default)]
-pub struct EmbeddingService;
+pub struct WorkflowService;
 
-impl EmbeddingService {
+impl WorkflowService {
     pub fn new() -> Self {
         Self
     }
 
-    pub async fn embed_objects_v1<H: EmbeddingHost>(
+    pub async fn workflow_run<H: WorkflowHost>(
         &self,
         host: &H,
-        request: EmbedObjectsV1Request,
-    ) -> Result<EmbedObjectsV1Response, EmbeddingServiceError> {
-        validate_version(&request.api_version)?;
+        request: WorkflowRunRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         if request.objects.is_empty() {
-            return Err(EmbeddingServiceError::InvalidRequest(
+            return Err(WorkflowServiceError::InvalidRequest(
                 "objects must contain at least one item".to_string(),
             ));
         }
 
-        host.validate_embedding_workflow(&request.workflow_id).await?;
-        let capabilities = host.embedding_capabilities(&request.workflow_id).await?;
+        host.validate_workflow(&request.workflow_id).await?;
+        let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
         if request.objects.len() > capabilities.max_batch_size {
-            return Err(EmbeddingServiceError::CapabilityViolation(format!(
+            return Err(WorkflowServiceError::CapabilityViolation(format!(
                 "batch size {} exceeds max_batch_size {}",
                 request.objects.len(),
                 capabilities.max_batch_size
@@ -202,12 +194,12 @@ impl EmbeddingService {
         for object in request.objects {
             let object_id = object.object_id.trim().to_string();
             if object_id.is_empty() {
-                results.push(EmbedObjectResult {
+                results.push(WorkflowObjectResult {
                     object_id: object.object_id,
                     embedding: None,
                     token_count: None,
-                    status: EmbeddingStatus::Failed,
-                    error: Some(EmbedObjectError {
+                    status: WorkflowStatus::Failed,
+                    error: Some(WorkflowObjectError {
                         code: "object_validation_failed".to_string(),
                         message: "object_id must be non-empty".to_string(),
                     }),
@@ -217,12 +209,12 @@ impl EmbeddingService {
 
             let text = object.text.trim().to_string();
             if text.is_empty() {
-                results.push(EmbedObjectResult {
+                results.push(WorkflowObjectResult {
                     object_id,
                     embedding: None,
                     token_count: None,
-                    status: EmbeddingStatus::Failed,
-                    error: Some(EmbedObjectError {
+                    status: WorkflowStatus::Failed,
+                    error: Some(WorkflowObjectError {
                         code: "object_validation_failed".to_string(),
                         message: "text must be non-empty".to_string(),
                     }),
@@ -230,12 +222,12 @@ impl EmbeddingService {
                 continue;
             }
             if text.len() > capabilities.max_text_length {
-                results.push(EmbedObjectResult {
+                results.push(WorkflowObjectResult {
                     object_id,
                     embedding: None,
                     token_count: None,
-                    status: EmbeddingStatus::Failed,
-                    error: Some(EmbedObjectError {
+                    status: WorkflowStatus::Failed,
+                    error: Some(WorkflowObjectError {
                         code: "object_validation_failed".to_string(),
                         message: format!(
                             "text length {} exceeds max_text_length {}",
@@ -248,17 +240,17 @@ impl EmbeddingService {
             }
 
             match host
-                .embed_one(&request.workflow_id, &text, model_id)
+                .run_object(&request.workflow_id, &text, model_id)
                 .await
             {
                 Ok((embedding, token_count)) => {
                     if embedding.is_empty() {
-                        results.push(EmbedObjectResult {
+                        results.push(WorkflowObjectResult {
                             object_id,
                             embedding: None,
                             token_count: None,
-                            status: EmbeddingStatus::Failed,
-                            error: Some(EmbedObjectError {
+                            status: WorkflowStatus::Failed,
+                            error: Some(WorkflowObjectError {
                                 code: "embedding_failed".to_string(),
                                 message: "embedding vector is empty".to_string(),
                             }),
@@ -267,21 +259,21 @@ impl EmbeddingService {
                     }
 
                     first_success_dims.get_or_insert(embedding.len());
-                    results.push(EmbedObjectResult {
+                    results.push(WorkflowObjectResult {
                         object_id,
                         embedding: Some(embedding),
                         token_count,
-                        status: EmbeddingStatus::Success,
+                        status: WorkflowStatus::Success,
                         error: None,
                     });
                 }
                 Err(err) => {
                     let mapped = map_object_error(err);
-                    results.push(EmbedObjectResult {
+                    results.push(WorkflowObjectResult {
                         object_id,
                         embedding: None,
                         token_count: None,
-                        status: EmbeddingStatus::Failed,
+                        status: WorkflowStatus::Failed,
                         error: Some(mapped),
                     });
                 }
@@ -289,12 +281,12 @@ impl EmbeddingService {
         }
 
         let vector_dimensions = first_success_dims.ok_or_else(|| {
-            EmbeddingServiceError::ModelSignatureUnavailable(
+            WorkflowServiceError::RuntimeSignatureUnavailable(
                 "no successful object results; model signature cannot be resolved".to_string(),
             )
         })?;
         let model_signature = host
-            .resolve_model_signature(&request.workflow_id, model_id, vector_dimensions)
+            .resolve_runtime_signature(&request.workflow_id, model_id, vector_dimensions)
             .await?;
         validate_model_signature(&model_signature)?;
 
@@ -306,8 +298,7 @@ impl EmbeddingService {
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-        Ok(EmbedObjectsV1Response {
-            api_version: "v1".to_string(),
+        Ok(WorkflowRunResponse {
             run_id,
             model_signature,
             results,
@@ -315,17 +306,15 @@ impl EmbeddingService {
         })
     }
 
-    pub async fn get_embedding_workflow_capabilities_v1<H: EmbeddingHost>(
+    pub async fn workflow_get_capabilities<H: WorkflowHost>(
         &self,
         host: &H,
-        request: GetEmbeddingWorkflowCapabilitiesV1Request,
-    ) -> Result<GetEmbeddingWorkflowCapabilitiesV1Response, EmbeddingServiceError> {
-        validate_version(&request.api_version)?;
+        request: WorkflowCapabilitiesRequest,
+    ) -> Result<WorkflowCapabilitiesResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
-        host.validate_embedding_workflow(&request.workflow_id).await?;
-        let capabilities = host.embedding_capabilities(&request.workflow_id).await?;
-        Ok(GetEmbeddingWorkflowCapabilitiesV1Response {
-            api_version: "v1".to_string(),
+        host.validate_workflow(&request.workflow_id).await?;
+        let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
+        Ok(WorkflowCapabilitiesResponse {
             supported_models: capabilities.supported_models,
             max_batch_size: capabilities.max_batch_size,
             max_text_length: capabilities.max_text_length,
@@ -333,59 +322,48 @@ impl EmbeddingService {
     }
 }
 
-fn validate_version(version: &str) -> Result<(), EmbeddingServiceError> {
-    if version == "v1" {
-        return Ok(());
-    }
-    Err(EmbeddingServiceError::UnsupportedApiVersion)
-}
-
-fn validate_workflow_id(workflow_id: &str) -> Result<(), EmbeddingServiceError> {
+fn validate_workflow_id(workflow_id: &str) -> Result<(), WorkflowServiceError> {
     if workflow_id.trim().is_empty() {
-        return Err(EmbeddingServiceError::InvalidRequest(
+        return Err(WorkflowServiceError::InvalidRequest(
             "workflow_id must be non-empty".to_string(),
         ));
     }
     Ok(())
 }
 
-fn validate_model_signature(signature: &ModelSignature) -> Result<(), EmbeddingServiceError> {
+fn validate_model_signature(signature: &RuntimeSignature) -> Result<(), WorkflowServiceError> {
     if signature.model_id.trim().is_empty() {
-        return Err(EmbeddingServiceError::ModelSignatureUnavailable(
+        return Err(WorkflowServiceError::RuntimeSignatureUnavailable(
             "model_signature.model_id is empty".to_string(),
         ));
     }
     if signature.backend.trim().is_empty() {
-        return Err(EmbeddingServiceError::ModelSignatureUnavailable(
+        return Err(WorkflowServiceError::RuntimeSignatureUnavailable(
             "model_signature.backend is empty".to_string(),
         ));
     }
     if signature.vector_dimensions == 0 {
-        return Err(EmbeddingServiceError::ModelSignatureUnavailable(
+        return Err(WorkflowServiceError::RuntimeSignatureUnavailable(
             "model_signature.vector_dimensions is zero".to_string(),
         ));
     }
     Ok(())
 }
 
-fn map_object_error(err: EmbeddingServiceError) -> EmbedObjectError {
+fn map_object_error(err: WorkflowServiceError) -> WorkflowObjectError {
     let (code, message) = match err {
-        EmbeddingServiceError::RuntimeNotReady(msg) => ("runtime_not_ready".to_string(), msg),
-        EmbeddingServiceError::CapabilityViolation(msg) => {
+        WorkflowServiceError::RuntimeNotReady(msg) => ("runtime_not_ready".to_string(), msg),
+        WorkflowServiceError::CapabilityViolation(msg) => {
             ("capability_violation".to_string(), msg)
         }
-        EmbeddingServiceError::WorkflowNotFound(msg) => ("workflow_not_found".to_string(), msg),
-        EmbeddingServiceError::InvalidRequest(msg) => ("invalid_request".to_string(), msg),
-        EmbeddingServiceError::UnsupportedApiVersion => (
-            "unsupported_api_version".to_string(),
-            "unsupported api version".to_string(),
-        ),
-        EmbeddingServiceError::ModelSignatureUnavailable(msg) => {
+        WorkflowServiceError::WorkflowNotFound(msg) => ("workflow_not_found".to_string(), msg),
+        WorkflowServiceError::InvalidRequest(msg) => ("invalid_request".to_string(), msg),
+        WorkflowServiceError::RuntimeSignatureUnavailable(msg) => {
             ("model_signature_unavailable".to_string(), msg)
         }
-        EmbeddingServiceError::Internal(msg) => ("embedding_failed".to_string(), msg),
+        WorkflowServiceError::Internal(msg) => ("embedding_failed".to_string(), msg),
     };
-    EmbedObjectError { code, message }
+    WorkflowObjectError { code, message }
 }
 
 #[cfg(test)]
@@ -394,17 +372,17 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
 
-    struct MockEmbeddingHost {
-        capabilities: EmbeddingHostCapabilities,
-        signatures: Mutex<HashMap<String, ModelSignature>>,
+    struct MockWorkflowHost {
+        capabilities: WorkflowHostCapabilities,
+        signatures: Mutex<HashMap<String, RuntimeSignature>>,
     }
 
-    impl MockEmbeddingHost {
+    impl MockWorkflowHost {
         fn new(max_batch_size: usize, max_text_length: usize) -> Self {
             let mut signatures = HashMap::new();
             signatures.insert(
                 "default".to_string(),
-                ModelSignature {
+                RuntimeSignature {
                     model_id: "default".to_string(),
                     model_revision_or_hash: Some("abc123".to_string()),
                     backend: "llamacpp".to_string(),
@@ -413,7 +391,7 @@ mod tests {
             );
             signatures.insert(
                 "model-a".to_string(),
-                ModelSignature {
+                RuntimeSignature {
                     model_id: "model-a".to_string(),
                     model_revision_or_hash: Some("hash-model-a".to_string()),
                     backend: "llamacpp".to_string(),
@@ -422,7 +400,7 @@ mod tests {
             );
 
             Self {
-                capabilities: EmbeddingHostCapabilities {
+                capabilities: WorkflowHostCapabilities {
                     supported_models: vec!["default".to_string(), "model-a".to_string()],
                     max_batch_size,
                     max_text_length,
@@ -433,37 +411,37 @@ mod tests {
     }
 
     #[async_trait]
-    impl EmbeddingHost for MockEmbeddingHost {
-        async fn validate_embedding_workflow(
+    impl WorkflowHost for MockWorkflowHost {
+        async fn validate_workflow(
             &self,
             workflow_id: &str,
-        ) -> Result<(), EmbeddingServiceError> {
+        ) -> Result<(), WorkflowServiceError> {
             if workflow_id == "wf-missing" {
-                return Err(EmbeddingServiceError::WorkflowNotFound(workflow_id.to_string()));
+                return Err(WorkflowServiceError::WorkflowNotFound(workflow_id.to_string()));
             }
             Ok(())
         }
 
-        async fn embedding_capabilities(
+        async fn workflow_capabilities(
             &self,
             _workflow_id: &str,
-        ) -> Result<EmbeddingHostCapabilities, EmbeddingServiceError> {
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
             Ok(self.capabilities.clone())
         }
 
-        async fn embed_one(
+        async fn run_object(
             &self,
             _workflow_id: &str,
             text: &str,
             _model_id: Option<&str>,
-        ) -> Result<(Vec<f32>, Option<usize>), EmbeddingServiceError> {
+        ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
             if text.contains("runtime-error") {
-                return Err(EmbeddingServiceError::RuntimeNotReady(
+                return Err(WorkflowServiceError::RuntimeNotReady(
                     "backend not ready".to_string(),
                 ));
             }
             if text.contains("internal-error") {
-                return Err(EmbeddingServiceError::Internal(
+                return Err(WorkflowServiceError::Internal(
                     "embedding failed".to_string(),
                 ));
             }
@@ -471,18 +449,18 @@ mod tests {
             Ok((vec![0.1, 0.2, 0.3], Some(token_count)))
         }
 
-        async fn resolve_model_signature(
+        async fn resolve_runtime_signature(
             &self,
             _workflow_id: &str,
             model_id: Option<&str>,
             vector_dimensions: usize,
-        ) -> Result<ModelSignature, EmbeddingServiceError> {
+        ) -> Result<RuntimeSignature, WorkflowServiceError> {
             let key = model_id.unwrap_or("default").to_string();
             let signatures = self.signatures.lock().expect("lock signatures");
             let mut signature = signatures
                 .get(&key)
                 .cloned()
-                .ok_or_else(|| EmbeddingServiceError::ModelSignatureUnavailable(key.clone()))?;
+                .ok_or_else(|| WorkflowServiceError::RuntimeSignatureUnavailable(key.clone()))?;
             signature.vector_dimensions = vector_dimensions;
             Ok(signature)
         }
@@ -490,10 +468,9 @@ mod tests {
 
     #[test]
     fn request_roundtrip_uses_snake_case() {
-        let req = EmbedObjectsV1Request {
-            api_version: "v1".to_string(),
+        let req = WorkflowRunRequest {
             workflow_id: "wf-1".to_string(),
-            objects: vec![EmbedInputObject {
+            objects: vec![WorkflowInputObject {
                 object_id: "obj-1".to_string(),
                 text: "hello".to_string(),
                 metadata: None,
@@ -503,17 +480,15 @@ mod tests {
         };
 
         let json = serde_json::to_value(&req).expect("serialize request");
-        assert_eq!(json["api_version"], "v1");
         assert_eq!(json["workflow_id"], "wf-1");
         assert_eq!(json["objects"][0]["object_id"], "obj-1");
     }
 
     #[test]
     fn response_roundtrip_preserves_signature_fields() {
-        let res = EmbedObjectsV1Response {
-            api_version: "v1".to_string(),
+        let res = WorkflowRunResponse {
             run_id: "run-1".to_string(),
-            model_signature: ModelSignature {
+            model_signature: RuntimeSignature {
                 model_id: "model-1".to_string(),
                 model_revision_or_hash: Some("abc123".to_string()),
                 backend: "llamacpp".to_string(),
@@ -524,33 +499,32 @@ mod tests {
         };
 
         let json = serde_json::to_string(&res).expect("serialize response");
-        let parsed: EmbedObjectsV1Response = serde_json::from_str(&json).expect("parse response");
+        let parsed: WorkflowRunResponse = serde_json::from_str(&json).expect("parse response");
         assert_eq!(parsed.model_signature.model_id, "model-1");
         assert_eq!(parsed.model_signature.vector_dimensions, 1024);
     }
 
     #[tokio::test]
-    async fn embed_objects_v1_preserves_order_and_partial_failures() {
-        let host = MockEmbeddingHost::new(10, 64);
-        let service = EmbeddingService::new();
+    async fn workflow_run_preserves_order_and_partial_failures() {
+        let host = MockWorkflowHost::new(10, 64);
+        let service = WorkflowService::new();
         let response = service
-            .embed_objects_v1(
+            .workflow_run(
                 &host,
-                EmbedObjectsV1Request {
-                    api_version: "v1".to_string(),
+                WorkflowRunRequest {
                     workflow_id: "wf-1".to_string(),
                     objects: vec![
-                        EmbedInputObject {
+                        WorkflowInputObject {
                             object_id: "1".to_string(),
                             text: "hello world".to_string(),
                             metadata: None,
                         },
-                        EmbedInputObject {
+                        WorkflowInputObject {
                             object_id: "2".to_string(),
                             text: "runtime-error object".to_string(),
                             metadata: None,
                         },
-                        EmbedInputObject {
+                        WorkflowInputObject {
                             object_id: "3".to_string(),
                             text: "third object".to_string(),
                             metadata: None,
@@ -561,16 +535,15 @@ mod tests {
                 },
             )
             .await
-            .expect("embed_objects_v1");
+            .expect("workflow_run");
 
-        assert_eq!(response.api_version, "v1");
         assert_eq!(response.results.len(), 3);
         assert_eq!(response.results[0].object_id, "1");
         assert_eq!(response.results[1].object_id, "2");
         assert_eq!(response.results[2].object_id, "3");
-        assert_eq!(response.results[0].status, EmbeddingStatus::Success);
-        assert_eq!(response.results[1].status, EmbeddingStatus::Failed);
-        assert_eq!(response.results[2].status, EmbeddingStatus::Success);
+        assert_eq!(response.results[0].status, WorkflowStatus::Success);
+        assert_eq!(response.results[1].status, WorkflowStatus::Failed);
+        assert_eq!(response.results[2].status, WorkflowStatus::Success);
         assert_eq!(
             response.results[1].error.as_ref().map(|e| e.code.as_str()),
             Some("runtime_not_ready")
@@ -580,16 +553,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn embed_objects_v1_fails_when_all_objects_fail() {
-        let host = MockEmbeddingHost::new(10, 32);
-        let service = EmbeddingService::new();
+    async fn workflow_run_fails_when_all_objects_fail() {
+        let host = MockWorkflowHost::new(10, 32);
+        let service = WorkflowService::new();
         let err = service
-            .embed_objects_v1(
+            .workflow_run(
                 &host,
-                EmbedObjectsV1Request {
-                    api_version: "v1".to_string(),
+                WorkflowRunRequest {
                     workflow_id: "wf-1".to_string(),
-                    objects: vec![EmbedInputObject {
+                    objects: vec![WorkflowInputObject {
                         object_id: "1".to_string(),
                         text: "".to_string(),
                         metadata: None,
@@ -602,43 +574,38 @@ mod tests {
             .expect_err("expected no successful objects error");
 
         match err {
-            EmbeddingServiceError::ModelSignatureUnavailable(_) => {}
+            WorkflowServiceError::RuntimeSignatureUnavailable(_) => {}
             other => panic!("unexpected error: {other}"),
         }
     }
 
     #[tokio::test]
-    async fn capabilities_v1_returns_host_capabilities() {
-        let host = MockEmbeddingHost::new(8, 4096);
-        let service = EmbeddingService::new();
+    async fn capabilities_returns_host_capabilities() {
+        let host = MockWorkflowHost::new(8, 4096);
+        let service = WorkflowService::new();
         let response = service
-            .get_embedding_workflow_capabilities_v1(
+            .workflow_get_capabilities(
                 &host,
-                GetEmbeddingWorkflowCapabilitiesV1Request {
-                    api_version: "v1".to_string(),
-                    workflow_id: "wf-1".to_string(),
-                },
+                WorkflowCapabilitiesRequest { workflow_id: "wf-1".to_string() },
             )
             .await
             .expect("capabilities");
 
-        assert_eq!(response.api_version, "v1");
         assert_eq!(response.max_batch_size, 8);
         assert_eq!(response.max_text_length, 4096);
         assert_eq!(response.supported_models.len(), 2);
     }
 
     #[tokio::test]
-    async fn embed_objects_v1_uses_batch_id_as_run_id_when_present() {
-        let host = MockEmbeddingHost::new(8, 1024);
-        let service = EmbeddingService::new();
+    async fn workflow_run_uses_batch_id_as_run_id_when_present() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
         let response = service
-            .embed_objects_v1(
+            .workflow_run(
                 &host,
-                EmbedObjectsV1Request {
-                    api_version: "v1".to_string(),
+                WorkflowRunRequest {
                     workflow_id: "wf-1".to_string(),
-                    objects: vec![EmbedInputObject {
+                    objects: vec![WorkflowInputObject {
                         object_id: "a".to_string(),
                         text: "ok".to_string(),
                         metadata: None,
