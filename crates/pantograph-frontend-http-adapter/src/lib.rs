@@ -9,8 +9,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    capabilities, WorkflowHost, WorkflowHostModelDescriptor, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions, WorkflowServiceError,
+    capabilities, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost,
+    WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
+    WorkflowRunOptions, WorkflowServiceError,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -21,15 +22,9 @@ pub const DEFAULT_MAX_VALUE_BYTES: usize = capabilities::DEFAULT_MAX_VALUE_BYTES
 #[derive(Debug, thiserror::Error)]
 pub enum FrontendHttpWorkflowHostError {
     #[error("invalid base_url '{base_url}': {reason}")]
-    InvalidUrl {
-        base_url: String,
-        reason: String,
-    },
+    InvalidUrl { base_url: String, reason: String },
     #[error("unsupported URL scheme '{scheme}' in base_url '{base_url}'")]
-    UnsupportedScheme {
-        base_url: String,
-        scheme: String,
-    },
+    UnsupportedScheme { base_url: String, scheme: String },
     #[error("base_url '{base_url}' is missing a host")]
     MissingHost { base_url: String },
 }
@@ -172,7 +167,9 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
 
         let response = request.send().await.map_err(|e| {
             if e.is_timeout() {
-                WorkflowServiceError::RuntimeTimeout("frontend HTTP workflow request timed out".to_string())
+                WorkflowServiceError::RuntimeTimeout(
+                    "frontend HTTP workflow request timed out".to_string(),
+                )
             } else if run_handle.is_cancelled() {
                 WorkflowServiceError::RuntimeTimeout("workflow run cancelled".to_string())
             } else {
@@ -180,10 +177,20 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             }
         })?;
         if !response.status().is_success() {
-            return Err(WorkflowServiceError::Internal(format!(
-                "workflow api error {}",
-                response.status()
-            )));
+            let status = response.status();
+            let body = response.text().await.map_err(|e| {
+                WorkflowServiceError::Internal(format!(
+                    "workflow api error {} (failed to read error payload: {})",
+                    status, e
+                ))
+            })?;
+            let envelope: WorkflowErrorEnvelope = serde_json::from_str(&body).map_err(|e| {
+                WorkflowServiceError::Internal(format!(
+                    "workflow api error {} (expected workflow error envelope JSON: {}; body: {})",
+                    status, e, body
+                ))
+            })?;
+            return Err(map_workflow_error_envelope(envelope));
         }
 
         let payload: serde_json::Value = response
@@ -192,6 +199,31 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
 
         parse_workflow_outputs_payload(&payload)
+    }
+}
+
+fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServiceError {
+    match envelope.code {
+        WorkflowErrorCode::InvalidRequest => WorkflowServiceError::InvalidRequest(envelope.message),
+        WorkflowErrorCode::WorkflowNotFound => {
+            WorkflowServiceError::WorkflowNotFound(envelope.message)
+        }
+        WorkflowErrorCode::CapabilityViolation => {
+            WorkflowServiceError::CapabilityViolation(envelope.message)
+        }
+        WorkflowErrorCode::RuntimeNotReady => {
+            WorkflowServiceError::RuntimeNotReady(envelope.message)
+        }
+        WorkflowErrorCode::SessionNotFound => {
+            WorkflowServiceError::SessionNotFound(envelope.message)
+        }
+        WorkflowErrorCode::SessionEvicted => WorkflowServiceError::SessionEvicted(envelope.message),
+        WorkflowErrorCode::SchedulerBusy => WorkflowServiceError::SchedulerBusy(envelope.message),
+        WorkflowErrorCode::OutputNotProduced => {
+            WorkflowServiceError::OutputNotProduced(envelope.message)
+        }
+        WorkflowErrorCode::RuntimeTimeout => WorkflowServiceError::RuntimeTimeout(envelope.message),
+        WorkflowErrorCode::InternalError => WorkflowServiceError::Internal(envelope.message),
     }
 }
 
@@ -211,10 +243,7 @@ pub fn parse_workflow_outputs_payload(
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .ok_or_else(|| {
-                WorkflowServiceError::Internal(format!(
-                    "invalid outputs[{}].node_id",
-                    index
-                ))
+                WorkflowServiceError::Internal(format!("invalid outputs[{}].node_id", index))
             })?
             .to_string();
         let port_id = output
@@ -223,17 +252,13 @@ pub fn parse_workflow_outputs_payload(
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .ok_or_else(|| {
-                WorkflowServiceError::Internal(format!(
-                    "invalid outputs[{}].port_id",
-                    index
-                ))
+                WorkflowServiceError::Internal(format!("invalid outputs[{}].port_id", index))
             })?
             .to_string();
 
-        let value = output
-            .get("value")
-            .cloned()
-            .ok_or_else(|| WorkflowServiceError::Internal(format!("missing outputs[{}].value", index)))?;
+        let value = output.get("value").cloned().ok_or_else(|| {
+            WorkflowServiceError::Internal(format!("missing outputs[{}].value", index))
+        })?;
 
         bindings.push(WorkflowPortBinding {
             node_id,
@@ -247,12 +272,11 @@ pub fn parse_workflow_outputs_payload(
 
 fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkflowHostError> {
     let trimmed = raw_base_url.trim().to_string();
-    let parsed = reqwest::Url::parse(&trimmed).map_err(|e| {
-        FrontendHttpWorkflowHostError::InvalidUrl {
+    let parsed =
+        reqwest::Url::parse(&trimmed).map_err(|e| FrontendHttpWorkflowHostError::InvalidUrl {
             base_url: trimmed.clone(),
             reason: e.to_string(),
-        }
-    })?;
+        })?;
 
     match parsed.scheme() {
         "http" | "https" => {}
@@ -275,7 +299,8 @@ fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkfl
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        WorkflowOutputTarget, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+        WorkflowErrorCode, WorkflowOutputTarget, WorkflowRunRequest, WorkflowService,
+        WorkflowServiceError,
     };
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -286,7 +311,8 @@ mod tests {
         let payload = serde_json::json!({
             "outputs": [{ "node_id": "node-1", "value": "oops" }]
         });
-        let err = parse_workflow_outputs_payload(&payload).expect_err("must reject malformed outputs");
+        let err =
+            parse_workflow_outputs_payload(&payload).expect_err("must reject malformed outputs");
         assert!(err.to_string().contains("port_id"));
     }
 
@@ -302,8 +328,8 @@ mod tests {
 
     #[test]
     fn normalize_base_url_trims_trailing_slash() {
-        let normalized = normalize_base_url("http://127.0.0.1:8080/".to_string())
-            .expect("normalize");
+        let normalized =
+            normalize_base_url("http://127.0.0.1:8080/".to_string()).expect("normalize");
         assert_eq!(normalized, "http://127.0.0.1:8080");
     }
 
@@ -431,5 +457,148 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_maps_non_2xx_error_envelope_to_service_error() {
+        let workflow_id = "wf-runtime-not-ready";
+        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
+            .join(".pantograph")
+            .join("workflows");
+        let payload = serde_json::json!({
+            "code": "runtime_not_ready",
+            "message": "backend unavailable"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(503, payload);
+
+        let host = FrontendHttpWorkflowHost::new(
+            base_url,
+            None,
+            vec![workflow_root],
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
+            DEFAULT_BACKEND_NAME.to_string(),
+        )
+        .expect("build frontend host");
+
+        let err = WorkflowService::new()
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: workflow_id.to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("503 envelope should map to runtime_not_ready");
+
+        server_thread.join().expect("join server");
+        match err {
+            WorkflowServiceError::RuntimeNotReady(message) => {
+                assert_eq!(message, "backend unavailable");
+            }
+            other => panic!("expected runtime_not_ready, got {}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn workflow_run_rejects_non_envelope_non_2xx_error_payload() {
+        let workflow_id = "wf-malformed-error";
+        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
+            .join(".pantograph")
+            .join("workflows");
+        let payload = serde_json::json!({
+            "error": "backend unavailable"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(502, payload);
+
+        let host = FrontendHttpWorkflowHost::new(
+            base_url,
+            None,
+            vec![workflow_root],
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
+            DEFAULT_BACKEND_NAME.to_string(),
+        )
+        .expect("build frontend host");
+
+        let err = WorkflowService::new()
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: workflow_id.to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("non-envelope errors must not be silently remapped");
+
+        server_thread.join().expect("join server");
+        assert!(matches!(err, WorkflowServiceError::Internal(_)));
+        assert!(err
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
+    }
+
+    #[test]
+    fn map_workflow_error_envelope_maps_all_codes() {
+        let cases = [
+            (
+                WorkflowErrorCode::InvalidRequest,
+                WorkflowServiceError::InvalidRequest("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::WorkflowNotFound,
+                WorkflowServiceError::WorkflowNotFound("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::CapabilityViolation,
+                WorkflowServiceError::CapabilityViolation("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::RuntimeNotReady,
+                WorkflowServiceError::RuntimeNotReady("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::SessionNotFound,
+                WorkflowServiceError::SessionNotFound("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::SessionEvicted,
+                WorkflowServiceError::SessionEvicted("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::SchedulerBusy,
+                WorkflowServiceError::SchedulerBusy("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::OutputNotProduced,
+                WorkflowServiceError::OutputNotProduced("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::RuntimeTimeout,
+                WorkflowServiceError::RuntimeTimeout("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::InternalError,
+                WorkflowServiceError::Internal("x".to_string()),
+            ),
+        ];
+
+        for (code, expected) in cases {
+            let mapped = map_workflow_error_envelope(WorkflowErrorEnvelope {
+                code,
+                message: "x".to_string(),
+            });
+            assert_eq!(mapped.to_envelope(), expected.to_envelope());
+        }
     }
 }
