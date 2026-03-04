@@ -125,6 +125,7 @@ through `crates/pantograph-workflow-service`:
 - `workflow_run`
 - `workflow_get_capabilities`
 - `workflow_get_io`
+- `workflow_preflight`
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`
@@ -135,6 +136,7 @@ Integration boundary:
 - `src-tauri` commands are desktop app transport adapters, not the headless API.
 - HTTP binding exports are opt-in frontend adapters for modular standalone GUI
   hosting (`frontend-http` in UniFFI and Rustler).
+- Recommended headless flow: `workflow_get_io` -> `workflow_preflight` -> `workflow_run`.
 
 Reference docs:
 
