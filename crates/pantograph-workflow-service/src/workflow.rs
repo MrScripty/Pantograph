@@ -384,7 +384,7 @@ pub trait WorkflowHost: Send + Sync {
         workflow_id: &str,
     ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
         let stored = capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
-        Ok(derive_workflow_io(stored.nodes()))
+        derive_workflow_io(stored.nodes())
     }
 
     /// Execute one workflow run and return output port bindings.
@@ -632,6 +632,11 @@ impl WorkflowService {
         }
 
         host.validate_workflow(&request.workflow_id).await?;
+        if let Some(targets) = request.output_targets.as_ref() {
+            let io = host.workflow_io(&request.workflow_id).await?;
+            validate_workflow_io(&io)?;
+            validate_output_targets_against_io(targets, &io)?;
+        }
         let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
 
         if request.inputs.len() > capabilities.max_input_bindings {
@@ -769,6 +774,33 @@ fn validate_output_targets(targets: &[WorkflowOutputTarget]) -> Result<(), Workf
     Ok(())
 }
 
+fn validate_output_targets_against_io(
+    targets: &[WorkflowOutputTarget],
+    io: &WorkflowIoResponse,
+) -> Result<(), WorkflowServiceError> {
+    let discovered_outputs = io
+        .outputs
+        .iter()
+        .flat_map(|node| {
+            node.ports
+                .iter()
+                .map(|port| (node.node_id.clone(), port.port_id.clone()))
+        })
+        .collect::<HashSet<_>>();
+
+    for (index, target) in targets.iter().enumerate() {
+        let key = (target.node_id.clone(), target.port_id.clone());
+        if !discovered_outputs.contains(&key) {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "output_targets.{} references non-discoverable output '{}.{}'",
+                index, target.node_id, target.port_id
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 fn validate_payload_size(
     binding: &WorkflowPortBinding,
     max_value_bytes: usize,
@@ -810,6 +842,13 @@ fn validate_workflow_io_nodes(
                 field_name, node_index
             )));
         }
+        if node.ports.is_empty() {
+            return Err(WorkflowServiceError::Internal(format!(
+                "{}.{}.ports must contain at least one entry for node '{}'",
+                field_name, node_index, node.node_id
+            )));
+        }
+        let mut seen_port_ids = HashSet::new();
         for (port_index, port) in node.ports.iter().enumerate() {
             if port.port_id.trim().is_empty() {
                 return Err(WorkflowServiceError::Internal(format!(
@@ -817,12 +856,20 @@ fn validate_workflow_io_nodes(
                     field_name, node_index, port_index
                 )));
             }
+            if !seen_port_ids.insert(port.port_id.as_str()) {
+                return Err(WorkflowServiceError::Internal(format!(
+                    "{}.{}.ports has duplicate port_id '{}' for node '{}'",
+                    field_name, node_index, port.port_id, node.node_id
+                )));
+            }
         }
     }
     Ok(())
 }
 
-fn derive_workflow_io(nodes: &[capabilities::StoredGraphNode]) -> WorkflowIoResponse {
+fn derive_workflow_io(
+    nodes: &[capabilities::StoredGraphNode],
+) -> Result<WorkflowIoResponse, WorkflowServiceError> {
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
 
@@ -830,7 +877,7 @@ fn derive_workflow_io(nodes: &[capabilities::StoredGraphNode]) -> WorkflowIoResp
         let Some(direction) = classify_workflow_io_direction(node) else {
             continue;
         };
-        let entry = build_workflow_io_node(node, direction);
+        let entry = build_workflow_io_node(node, direction)?;
         match direction {
             WorkflowIoDirection::Input => inputs.push(entry),
             WorkflowIoDirection::Output => outputs.push(entry),
@@ -840,7 +887,7 @@ fn derive_workflow_io(nodes: &[capabilities::StoredGraphNode]) -> WorkflowIoResp
     inputs.sort_by(|a, b| a.node_id.cmp(&b.node_id));
     outputs.sort_by(|a, b| a.node_id.cmp(&b.node_id));
 
-    WorkflowIoResponse { inputs, outputs }
+    Ok(WorkflowIoResponse { inputs, outputs })
 }
 
 fn classify_workflow_io_direction(
@@ -868,103 +915,127 @@ fn classify_workflow_io_direction(
 fn build_workflow_io_node(
     node: &capabilities::StoredGraphNode,
     direction: WorkflowIoDirection,
-) -> WorkflowIoNode {
+) -> Result<WorkflowIoNode, WorkflowServiceError> {
     let name = extract_nested_trimmed_str(node.data(), &["name"])
         .or_else(|| extract_nested_trimmed_str(node.data(), &["label"]))
         .or_else(|| extract_nested_trimmed_str(node.data(), &["definition", "label"]));
     let description = extract_nested_trimmed_str(node.data(), &["description"])
         .or_else(|| extract_nested_trimmed_str(node.data(), &["definition", "description"]));
-    let ports = derive_workflow_io_ports(node, direction);
+    let ports = derive_workflow_io_ports(node, direction)?;
 
-    WorkflowIoNode {
+    Ok(WorkflowIoNode {
         node_id: node.id().to_string(),
         node_type: node.node_type().to_string(),
         name,
         description,
         ports,
-    }
+    })
 }
 
 fn derive_workflow_io_ports(
     node: &capabilities::StoredGraphNode,
     direction: WorkflowIoDirection,
-) -> Vec<WorkflowIoPort> {
-    let mut merged = HashMap::new();
-
-    let ordered_keys = match direction {
-        WorkflowIoDirection::Input => ["inputs", "outputs"],
-        WorkflowIoDirection::Output => ["outputs", "inputs"],
+) -> Result<Vec<WorkflowIoPort>, WorkflowServiceError> {
+    let key = match direction {
+        WorkflowIoDirection::Input => "inputs",
+        WorkflowIoDirection::Output => "outputs",
     };
 
-    for key in ordered_keys {
-        for port in ports_from_definition(node.data(), key) {
-            merged.entry(port.port_id.clone()).or_insert(port);
-        }
-    }
-
-    let mut ports = merged.into_values().collect::<Vec<_>>();
+    let mut ports = ports_from_definition(node, key)?;
     ports.sort_by(|a, b| a.port_id.cmp(&b.port_id));
-    ports
+    Ok(ports)
 }
 
-fn ports_from_definition(data: &serde_json::Value, key: &str) -> Vec<WorkflowIoPort> {
-    let Some(entries) = data
+fn ports_from_definition(
+    node: &capabilities::StoredGraphNode,
+    key: &str,
+) -> Result<Vec<WorkflowIoPort>, WorkflowServiceError> {
+    let entries = node
+        .data()
         .get("definition")
         .and_then(|value| value.get(key))
         .and_then(serde_json::Value::as_array)
-    else {
-        return Vec::new();
-    };
+        .ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "workflow I/O schema error: node '{}' missing definition.{}",
+                node.id(),
+                key
+            ))
+        })?;
+    if entries.is_empty() {
+        return Err(WorkflowServiceError::InvalidRequest(format!(
+            "workflow I/O schema error: node '{}' has empty definition.{}",
+            node.id(),
+            key
+        )));
+    }
 
-    entries
-        .iter()
-        .filter_map(|entry| {
-            let port_id = entry
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())?
-                .to_string();
+    let mut seen_port_ids = HashSet::new();
+    let mut ports = Vec::with_capacity(entries.len());
+    for (index, entry) in entries.iter().enumerate() {
+        let port_id = entry
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "workflow I/O schema error: node '{}' {}.{} has invalid id",
+                    node.id(),
+                    key,
+                    index
+                ))
+            })?
+            .to_string();
+        if !seen_port_ids.insert(port_id.clone()) {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "workflow I/O schema error: node '{}' {} has duplicate port id '{}'",
+                node.id(),
+                key,
+                port_id
+            )));
+        }
 
-            let name = entry
-                .get("name")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-                .or_else(|| {
-                    entry
-                        .get("label")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(ToOwned::to_owned)
-                });
+        let name = entry
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                entry
+                    .get("label")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+            });
 
-            let description = entry
-                .get("description")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned);
+        let description = entry
+            .get("description")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
 
-            let data_type = entry
-                .get("data_type")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned);
+        let data_type = entry
+            .get("data_type")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
 
-            Some(WorkflowIoPort {
-                port_id,
-                name,
-                description,
-                data_type,
-                required: entry.get("required").and_then(serde_json::Value::as_bool),
-                multiple: entry.get("multiple").and_then(serde_json::Value::as_bool),
-            })
+        ports.push(WorkflowIoPort {
+            port_id,
+            name,
+            description,
+            data_type,
+            required: entry.get("required").and_then(serde_json::Value::as_bool),
+            multiple: entry.get("multiple").and_then(serde_json::Value::as_bool),
         })
-        .collect()
+    }
+
+    Ok(ports)
 }
 
 fn extract_nested_trimmed_str(data: &serde_json::Value, path: &[&str]) -> Option<String> {
@@ -1104,6 +1175,42 @@ mod tests {
             _workflow_id: &str,
         ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
             Ok(self.capabilities.clone())
+        }
+
+        async fn workflow_io(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+            Ok(WorkflowIoResponse {
+                inputs: vec![WorkflowIoNode {
+                    node_id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    name: Some("Input".to_string()),
+                    description: None,
+                    ports: vec![WorkflowIoPort {
+                        port_id: "text".to_string(),
+                        name: Some("Text".to_string()),
+                        description: None,
+                        data_type: Some("string".to_string()),
+                        required: Some(false),
+                        multiple: Some(false),
+                    }],
+                }],
+                outputs: vec![WorkflowIoNode {
+                    node_id: "text-output-1".to_string(),
+                    node_type: "text-output".to_string(),
+                    name: Some("Output".to_string()),
+                    description: None,
+                    ports: vec![WorkflowIoPort {
+                        port_id: "text".to_string(),
+                        name: Some("Text".to_string()),
+                        description: None,
+                        data_type: Some("string".to_string()),
+                        required: Some(false),
+                        multiple: Some(false),
+                    }],
+                }],
+            })
         }
 
         async fn run_workflow(
@@ -1403,8 +1510,8 @@ mod tests {
                                     ],
                                     "outputs": [
                                         {
-                                            "id": "text",
-                                            "label": "Text",
+                                            "id": "legacy-out",
+                                            "label": "Legacy Out",
                                             "data_type": "string",
                                             "required": false,
                                             "multiple": false
@@ -1427,6 +1534,13 @@ mod tests {
                                             "id": "text",
                                             "label": "Text",
                                             "data_type": "string",
+                                            "required": false,
+                                            "multiple": false
+                                        },
+                                        {
+                                            "id": "stream",
+                                            "label": "Stream",
+                                            "data_type": "stream",
                                             "required": false,
                                             "multiple": false
                                         }
@@ -1476,13 +1590,241 @@ mod tests {
             response.inputs[0].ports[0].data_type.as_deref(),
             Some("string")
         );
+        assert!(response.inputs[0]
+            .ports
+            .iter()
+            .all(|port| port.port_id != "legacy-out"));
 
         assert_eq!(response.outputs.len(), 1);
         assert_eq!(response.outputs[0].node_id, "text-output-1");
         assert_eq!(response.outputs[0].ports.len(), 1);
         assert_eq!(response.outputs[0].ports[0].port_id, "text");
+        assert!(response.outputs[0]
+            .ports
+            .iter()
+            .all(|port| port.port_id != "stream"));
 
         let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[tokio::test]
+    async fn workflow_get_io_rejects_missing_directional_ports() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-io-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-io-invalid.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": { "name": "Workflow I/O Invalid" },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "text-input-1",
+                            "node_type": "text-input",
+                            "data": {
+                                "definition": {
+                                    "category": "input",
+                                    "outputs": [
+                                        { "id": "text", "label": "Text", "data_type": "string" }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let err = WorkflowService::new()
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-io-invalid".to_string(),
+                },
+            )
+            .await
+            .expect_err("workflow io should reject missing directional ports");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err.to_string().contains("text-input-1"));
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[tokio::test]
+    async fn workflow_get_io_rejects_invalid_or_duplicate_port_ids() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-io-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-io-dup.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": { "name": "Workflow I/O Duplicates" },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "text-output-1",
+                            "node_type": "text-output",
+                            "data": {
+                                "definition": {
+                                    "category": "output",
+                                    "outputs": [
+                                        { "id": "text", "label": "Text", "data_type": "string" },
+                                        { "id": "text", "label": "Text 2", "data_type": "string" }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let err = WorkflowService::new()
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-io-dup".to_string(),
+                },
+            )
+            .await
+            .expect_err("workflow io should reject duplicate port ids");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err.to_string().contains("duplicate port id 'text'"));
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[tokio::test]
+    async fn workflow_get_io_rejects_whitespace_port_ids() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-io-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-io-whitespace.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": { "name": "Workflow I/O Whitespace" },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "text-input-1",
+                            "node_type": "text-input",
+                            "data": {
+                                "definition": {
+                                    "category": "input",
+                                    "inputs": [
+                                        { "id": "   ", "label": "Text", "data_type": "string" }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let err = WorkflowService::new()
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-io-whitespace".to_string(),
+                },
+            )
+            .await
+            .expect_err("workflow io should reject whitespace port ids");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err.to_string().contains("text-input-1"));
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[tokio::test]
+    async fn workflow_run_accepts_discovered_output_targets() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+
+        let io = service
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-1".to_string(),
+                },
+            )
+            .await
+            .expect("workflow io");
+        let target_node = &io.outputs[0];
+        let target_port = &target_node.ports[0];
+
+        let response = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: target_node.node_id.clone(),
+                        port_id: target_port.port_id.clone(),
+                        value: serde_json::json!("ok"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: target_node.node_id.clone(),
+                        port_id: target_port.port_id.clone(),
+                    }]),
+                    run_id: None,
+                },
+            )
+            .await
+            .expect("workflow run with discovered target");
+
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].node_id, target_node.node_id);
+        assert_eq!(response.outputs[0].port_id, target_port.port_id);
+    }
+
+    #[tokio::test]
+    async fn workflow_run_rejects_non_discovered_output_targets() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "stream".to_string(),
+                    }]),
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("non-discovered target should fail early");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
     }
 
     #[tokio::test]

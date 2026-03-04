@@ -235,3 +235,27 @@ async fn workflow_io_contract_snapshot() {
 
     assert_eq!(value, expected);
 }
+
+#[tokio::test]
+async fn workflow_run_rejects_non_discovered_output_target_contract() {
+    let service = WorkflowService::new();
+    let host = ContractHost;
+
+    let err = service
+        .workflow_run(
+            &host,
+            WorkflowRunRequest {
+                workflow_id: "wf-1".to_string(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "vector-output-1".to_string(),
+                    port_id: "stream".to_string(),
+                }]),
+                run_id: None,
+            },
+        )
+        .await
+        .expect_err("expected invalid request for non-discovered target");
+
+    assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+}
