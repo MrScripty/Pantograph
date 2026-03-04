@@ -7,6 +7,7 @@ Consumers migrating from embedding-shaped request/response usage to generic work
 - `workflow_run`
 - `workflow_get_capabilities`
 - `workflow_get_io`
+- `workflow_preflight`
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`
