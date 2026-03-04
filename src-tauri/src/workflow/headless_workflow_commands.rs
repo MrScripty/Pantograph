@@ -382,8 +382,14 @@ impl WorkflowHost for TauriWorkflowHost {
         inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
         _run_options: pantograph_workflow_service::WorkflowRunOptions,
-        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
+        run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        if run_handle.is_cancelled() {
+            return Err(WorkflowServiceError::RuntimeTimeout(
+                "workflow run cancelled before execution started".to_string(),
+            ));
+        }
+
         let rag_manager = self.rag_manager.clone().ok_or_else(|| {
             WorkflowServiceError::Internal(
                 "workflow execution host requires rag manager state".to_string(),
@@ -425,6 +431,11 @@ impl WorkflowHost for TauriWorkflowHost {
 
         let mut node_outputs = HashMap::new();
         for node_id in &output_node_ids {
+            if run_handle.is_cancelled() {
+                return Err(WorkflowServiceError::RuntimeTimeout(
+                    "workflow run cancelled during execution".to_string(),
+                ));
+            }
             let outputs = executor
                 .demand(node_id, &task_executor)
                 .await

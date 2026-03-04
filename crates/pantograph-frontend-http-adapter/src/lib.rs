@@ -5,11 +5,12 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     capabilities, WorkflowHost, WorkflowHostModelDescriptor, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowServiceError,
+    WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions, WorkflowServiceError,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -148,9 +149,15 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
         workflow_id: &str,
         inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
-        _run_options: pantograph_workflow_service::WorkflowRunOptions,
-        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
+        run_options: WorkflowRunOptions,
+        run_handle: WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        if run_handle.is_cancelled() {
+            return Err(WorkflowServiceError::RuntimeTimeout(
+                "workflow run cancelled before dispatch".to_string(),
+            ));
+        }
+
         let url = format!("{}/v1/workflow/run", self.base_url);
         let body = serde_json::json!({
             "workflow_id": workflow_id,
@@ -158,13 +165,20 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             "output_targets": output_targets,
         });
 
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
+        let mut request = self.http_client.post(&url).json(&body);
+        if let Some(timeout_ms) = run_options.timeout_ms {
+            request = request.timeout(Duration::from_millis(timeout_ms));
+        }
+
+        let response = request.send().await.map_err(|e| {
+            if e.is_timeout() {
+                WorkflowServiceError::RuntimeTimeout("frontend HTTP workflow request timed out".to_string())
+            } else if run_handle.is_cancelled() {
+                WorkflowServiceError::RuntimeTimeout("workflow run cancelled".to_string())
+            } else {
+                WorkflowServiceError::RuntimeNotReady(e.to_string())
+            }
+        })?;
         if !response.status().is_success() {
             return Err(WorkflowServiceError::Internal(format!(
                 "workflow api error {}",

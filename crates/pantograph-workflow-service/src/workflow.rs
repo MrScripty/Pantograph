@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::capabilities;
@@ -506,6 +506,7 @@ pub trait WorkflowHost: Send + Sync {
 }
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
+const WORKFLOW_CANCEL_GRACE_WINDOW_MS: u64 = 250;
 
 #[derive(Debug, Clone)]
 struct WorkflowSessionState {
@@ -736,6 +737,7 @@ impl WorkflowService {
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
+        validate_timeout_ms(request.timeout_ms)?;
         validate_bindings(&request.inputs, "inputs")?;
         if let Some(targets) = request.output_targets.as_ref() {
             validate_output_targets(targets)?;
@@ -772,17 +774,39 @@ impl WorkflowService {
         }
 
         let started = Instant::now();
-        let outputs = host
-            .run_workflow(
-                &request.workflow_id,
-                &request.inputs,
-                request.output_targets.as_deref(),
-                WorkflowRunOptions {
-                    timeout_ms: request.timeout_ms,
-                },
-                WorkflowRunHandle::new(),
-            )
-            .await?;
+        let run_options = WorkflowRunOptions {
+            timeout_ms: request.timeout_ms,
+        };
+        let run_handle = WorkflowRunHandle::new();
+        let mut run_future = Box::pin(host.run_workflow(
+            &request.workflow_id,
+            &request.inputs,
+            request.output_targets.as_deref(),
+            run_options,
+            run_handle.clone(),
+        ));
+        let outputs = if let Some(timeout_ms) = request.timeout_ms {
+            let timeout = tokio::time::sleep(Duration::from_millis(timeout_ms));
+            tokio::pin!(timeout);
+            tokio::select! {
+                result = &mut run_future => result?,
+                _ = &mut timeout => {
+                    run_handle.cancel();
+                    let cancel_grace = tokio::time::sleep(Duration::from_millis(WORKFLOW_CANCEL_GRACE_WINDOW_MS));
+                    tokio::pin!(cancel_grace);
+                    tokio::select! {
+                        _ = &mut run_future => {}
+                        _ = &mut cancel_grace => {}
+                    }
+                    return Err(WorkflowServiceError::RuntimeTimeout(format!(
+                        "workflow run exceeded timeout_ms {}",
+                        timeout_ms
+                    )));
+                }
+            }
+        } else {
+            run_future.await?
+        };
 
         if let Some(targets) = request.output_targets.as_ref() {
             validate_requested_outputs_produced(targets, &outputs)?;
@@ -840,6 +864,15 @@ impl WorkflowService {
         validate_workflow_io(&io)?;
         Ok(io)
     }
+}
+
+fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), WorkflowServiceError> {
+    if matches!(timeout_ms, Some(0)) {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "timeout_ms must be greater than zero when provided".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_workflow_id(workflow_id: &str) -> Result<(), WorkflowServiceError> {
@@ -1194,6 +1227,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
@@ -1233,6 +1267,26 @@ mod tests {
             Self {
                 omit_requested_target_output: true,
                 ..Self::new(max_input_bindings, max_value_bytes)
+            }
+        }
+    }
+
+    struct TimeoutAwareHost {
+        cancelled: Arc<AtomicBool>,
+        capabilities: WorkflowHostCapabilities,
+    }
+
+    impl TimeoutAwareHost {
+        fn new(cancelled: Arc<AtomicBool>) -> Self {
+            Self {
+                cancelled,
+                capabilities: WorkflowHostCapabilities {
+                    max_input_bindings: 16,
+                    max_output_targets: 16,
+                    max_value_bytes: 4096,
+                    runtime_requirements: WorkflowRuntimeRequirements::default(),
+                    models: Vec::new(),
+                },
             }
         }
     }
@@ -1305,6 +1359,39 @@ mod tests {
                 port_id: "text".to_string(),
                 value: serde_json::json!("ok"),
             }])
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for TimeoutAwareHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            loop {
+                if run_handle.is_cancelled() {
+                    self.cancelled.store(true, Ordering::SeqCst);
+                    return Err(WorkflowServiceError::RuntimeTimeout(
+                        "workflow run cancelled".to_string(),
+                    ));
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
         }
     }
 
@@ -1554,6 +1641,53 @@ mod tests {
             .expect_err("expected runtime error");
 
         assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_rejects_zero_timeout_ms() {
+        let host = MockWorkflowHost::new(10, 256);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: Some(0),
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("expected invalid timeout");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err.to_string().contains("timeout_ms"));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_timeout_cancels_host_within_grace_window() {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let host = TimeoutAwareHost::new(cancelled.clone());
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-timeout".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: Some(25),
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("expected timeout");
+
+        assert!(matches!(err, WorkflowServiceError::RuntimeTimeout(_)));
+        assert!(cancelled.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
