@@ -9,22 +9,27 @@ UniFFI adapter surface for Pantograph workflow APIs.
 | `lib.rs` | UniFFI exports and adapter implementation delegating to shared service contracts. |
 | `bin/` | Binding generation helper utilities. |
 
-## Headless Workflow Exports
+## Workflow Export Modes
 
-- `workflow_run(base_url, request_json, pumas_api?) -> response_json`
-- `workflow_get_capabilities(base_url, request_json, pumas_api?) -> response_json`
-- `workflow_create_session(base_url, request_json, pumas_api?) -> response_json`
-- `workflow_run_session(base_url, request_json, pumas_api?) -> response_json`
-- `workflow_close_session(request_json) -> response_json`
+Default (`no features`):
+- No URL/HTTP workflow exports.
+- Headless Rust hosts should call `pantograph-workflow-service` directly.
 
-These exports delegate business rules to `pantograph-workflow-service`.
+`frontend-http` feature:
+- `frontend_http_workflow_run(base_url, request_json, pumas_api?) -> response_json`
+- `frontend_http_workflow_get_capabilities(base_url, request_json, pumas_api?) -> response_json`
+- `frontend_http_workflow_create_session(base_url, request_json, pumas_api?) -> response_json`
+- `frontend_http_workflow_run_session(base_url, request_json, pumas_api?) -> response_json`
+- `frontend_http_workflow_close_session(request_json) -> response_json`
+
+`frontend-http-legacy` feature:
+- Adds legacy aliases (`workflow_run`, `workflow_get_capabilities`, etc.) for migration.
 
 ## Dependencies
 - Internal: `pantograph-workflow-service`, `node-engine`.
-- Host/runtime: `reqwest`, optional `pumas-library`.
+- Frontend HTTP (optional): `pantograph-frontend-http-adapter`.
+- Host/runtime: optional `pumas-library`.
 
 ## Notes
 
-- Adapter validates workflow existence + logical graph validity.
-- Embedding payload parsing is strict (no silent vector truncation).
-- Model signature uses deterministic model hash selection (`sha256` then `blake3`) when Pumas metadata is available.
+- Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.

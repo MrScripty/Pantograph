@@ -21,18 +21,23 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
+#[cfg(feature = "frontend-http")]
+use std::sync::LazyLock;
 
 use node_engine::{
     Context, EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowEvent,
     WorkflowExecutor, WorkflowGraph,
 };
+use tokio::sync::RwLock;
+
+#[cfg(feature = "frontend-http")]
+use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
+#[cfg(feature = "frontend-http")]
 use pantograph_workflow_service::{
-    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost,
-    WorkflowHostModelDescriptor, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowCapabilitiesRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
     WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
 };
-use tokio::sync::RwLock;
 
 // UniFFI scaffolding
 uniffi::setup_scaffolding!();
@@ -255,232 +260,10 @@ pub fn validate_orchestration_json(graph_json: String) -> Result<Vec<String>, Ff
     Ok(errors.iter().map(|e| e.to_string()).collect())
 }
 
-const DEFAULT_MAX_BATCH_SIZE: usize = capabilities::DEFAULT_MAX_BATCH_SIZE;
-const DEFAULT_MAX_TEXT_LENGTH: usize = capabilities::DEFAULT_MAX_TEXT_LENGTH;
+#[cfg(feature = "frontend-http")]
 static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
 
-struct UniffiWorkflowHost {
-    base_url: String,
-    pumas_api: Option<Arc<pumas_library::PumasApi>>,
-    http_client: reqwest::Client,
-    resolved_model_id: std::sync::Mutex<Option<String>>,
-}
-
-impl UniffiWorkflowHost {
-    fn new(base_url: String, pumas_api: Option<Arc<pumas_library::PumasApi>>) -> Self {
-        Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
-            pumas_api,
-            http_client: reqwest::Client::new(),
-            resolved_model_id: std::sync::Mutex::new(None),
-        }
-    }
-
-    async fn resolve_model_revision_or_hash(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<String>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
-            .ok_or_else(|| {
-                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                    "model '{}' not found in model library",
-                    model_id
-                ))
-            })?;
-
-        select_model_hash(&model.hashes).map(Some).ok_or_else(|| {
-            WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                "model '{}' is missing sha256/blake3 hash metadata",
-                model_id
-            ))
-        })
-    }
-}
-
-#[async_trait::async_trait]
-impl WorkflowHost for UniffiWorkflowHost {
-    fn workflow_roots(&self) -> Vec<std::path::PathBuf> {
-        capabilities::default_workflow_roots(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
-    }
-
-    fn max_batch_size(&self) -> usize {
-        DEFAULT_MAX_BATCH_SIZE
-    }
-
-    fn max_text_length(&self) -> usize {
-        DEFAULT_MAX_TEXT_LENGTH
-    }
-
-    async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
-        Ok("openai-compatible".to_string())
-    }
-
-    async fn model_metadata(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<serde_json::Value>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        Ok(model.map(|m| m.metadata))
-    }
-
-    async fn model_descriptor(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        Ok(model.map(|m| WorkflowHostModelDescriptor {
-            model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
-            hashes: m.hashes,
-        }))
-    }
-
-    async fn run_object(
-        &self,
-        _workflow_id: &str,
-        text: &str,
-        model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
-        let model = model_id
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .unwrap_or("default");
-
-        let url = format!("{}/v1/embeddings", self.base_url);
-        let body = serde_json::json!({
-            "input": [text],
-            "model": model,
-        });
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        if !response.status().is_success() {
-            return Err(WorkflowServiceError::Internal(format!(
-                "embedding api error {}",
-                response.status()
-            )));
-        }
-
-        let payload: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
-
-        let (embedding, token_count, response_model_id) = parse_embedding_payload(&payload)?;
-        if let Some(model_id) = response_model_id {
-            if let Ok(mut guard) = self.resolved_model_id.lock() {
-                *guard = Some(model_id);
-            }
-        }
-
-        Ok((embedding, token_count))
-    }
-
-    async fn resolve_runtime_signature(
-        &self,
-        _workflow_id: &str,
-        model_id: Option<&str>,
-        vector_dimensions: usize,
-    ) -> Result<RuntimeSignature, WorkflowServiceError> {
-        let resolved_model_id = model_id
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                self.resolved_model_id
-                    .lock()
-                    .ok()
-                    .and_then(|guard| guard.clone())
-            })
-            .unwrap_or_else(|| "default".to_string());
-        let model_revision_or_hash = self
-            .resolve_model_revision_or_hash(&resolved_model_id)
-            .await?;
-
-        Ok(RuntimeSignature {
-            model_id: resolved_model_id,
-            model_revision_or_hash,
-            backend: "openai-compatible".to_string(),
-            vector_dimensions,
-        })
-    }
-}
-
-fn parse_embedding_payload(
-    payload: &serde_json::Value,
-) -> Result<(Vec<f32>, Option<usize>, Option<String>), WorkflowServiceError> {
-    let embedding_values = payload
-        .get("data")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|v| v.get("embedding"))
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| WorkflowServiceError::Internal("missing embedding vector".to_string()))?;
-
-    let mut embedding = Vec::with_capacity(embedding_values.len());
-    for (index, value) in embedding_values.iter().enumerate() {
-        let number = value.as_f64().ok_or_else(|| {
-            WorkflowServiceError::Internal(format!("invalid embedding value at index {}", index))
-        })?;
-        embedding.push(number as f32);
-    }
-
-    let token_count = payload
-        .get("usage")
-        .and_then(|v| v.get("prompt_tokens"))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as usize);
-    let response_model_id = payload
-        .get("model")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(ToOwned::to_owned);
-
-    Ok((embedding, token_count, response_model_id))
-}
-
-fn select_model_hash(hashes: &std::collections::HashMap<String, String>) -> Option<String> {
-    for preferred in ["sha256", "blake3"] {
-        if let Some((_, value)) = hashes
-            .iter()
-            .find(|(key, value)| key.eq_ignore_ascii_case(preferred) && !value.trim().is_empty())
-        {
-            let trimmed = value.trim();
-            if trimmed.contains(':') {
-                return Some(trimmed.to_string());
-            }
-            return Some(format!("{preferred}:{trimmed}"));
-        }
-    }
-    None
-}
-
+#[cfg(feature = "frontend-http")]
 fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
     match err {
         WorkflowServiceError::InvalidRequest(message)
@@ -495,9 +278,25 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
     }
 }
 
-/// Execute headless workflow contract (`workflow_run`) and return response JSON.
+#[cfg(feature = "frontend-http")]
+fn build_frontend_http_host(
+    base_url: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<FrontendHttpWorkflowHost, FfiError> {
+    FrontendHttpWorkflowHost::with_defaults(
+        base_url,
+        pumas_api.as_ref().map(|api| api.api_arc()),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
+    )
+    .map_err(|e| FfiError::Other {
+        message: format!("frontend HTTP host config error: {}", e),
+    })
+}
+
+/// Execute frontend HTTP workflow contract (`workflow_run`) and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_run(
+pub async fn frontend_http_workflow_run(
     base_url: String,
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
@@ -507,7 +306,7 @@ pub async fn workflow_run(
             message: e.to_string(),
         })?;
 
-    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
         .workflow_run(&host, request)
         .await
@@ -518,9 +317,10 @@ pub async fn workflow_run(
     })
 }
 
-/// Execute headless workflow capabilities contract and return response JSON.
+/// Execute frontend HTTP workflow capabilities contract and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_get_capabilities(
+pub async fn frontend_http_workflow_get_capabilities(
     base_url: String,
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
@@ -530,7 +330,7 @@ pub async fn workflow_get_capabilities(
             message: e.to_string(),
         })?;
 
-    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
         .workflow_get_capabilities(&host, request)
         .await
@@ -541,9 +341,10 @@ pub async fn workflow_get_capabilities(
     })
 }
 
-/// Create scheduler-managed workflow session and return response JSON.
+/// Create scheduler-managed frontend HTTP workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_create_session(
+pub async fn frontend_http_workflow_create_session(
     base_url: String,
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
@@ -553,7 +354,7 @@ pub async fn workflow_create_session(
             message: e.to_string(),
         })?;
 
-    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
         .create_workflow_session(&host, request)
         .await
@@ -564,9 +365,10 @@ pub async fn workflow_create_session(
     })
 }
 
-/// Run scheduler-managed workflow session and return workflow response JSON.
+/// Run scheduler-managed frontend HTTP workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_run_session(
+pub async fn frontend_http_workflow_run_session(
     base_url: String,
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
@@ -576,7 +378,7 @@ pub async fn workflow_run_session(
             message: e.to_string(),
         })?;
 
-    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
         .run_workflow_session(&host, request)
         .await
@@ -588,8 +390,9 @@ pub async fn workflow_run_session(
 }
 
 /// Close scheduler-managed workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_close_session(request_json: String) -> Result<String, FfiError> {
+pub async fn frontend_http_workflow_close_session(request_json: String) -> Result<String, FfiError> {
     let request: WorkflowSessionCloseRequest =
         serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
             message: e.to_string(),
@@ -603,6 +406,57 @@ pub async fn workflow_close_session(request_json: String) -> Result<String, FfiE
     serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
         message: e.to_string(),
     })
+}
+
+/// Legacy alias for frontend HTTP workflow run.
+#[cfg(feature = "frontend-http-legacy")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_run(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    frontend_http_workflow_run(base_url, request_json, pumas_api).await
+}
+
+/// Legacy alias for frontend HTTP workflow capabilities.
+#[cfg(feature = "frontend-http-legacy")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_get_capabilities(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    frontend_http_workflow_get_capabilities(base_url, request_json, pumas_api).await
+}
+
+/// Legacy alias for frontend HTTP workflow session creation.
+#[cfg(feature = "frontend-http-legacy")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_create_session(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    frontend_http_workflow_create_session(base_url, request_json, pumas_api).await
+}
+
+/// Legacy alias for frontend HTTP workflow session runs.
+#[cfg(feature = "frontend-http-legacy")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_run_session(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    frontend_http_workflow_run_session(base_url, request_json, pumas_api).await
+}
+
+/// Legacy alias for frontend HTTP workflow session close.
+#[cfg(feature = "frontend-http-legacy")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_close_session(request_json: String) -> Result<String, FfiError> {
+    frontend_http_workflow_close_session(request_json).await
 }
 
 // ============================================================================
@@ -1118,10 +972,18 @@ impl FfiWorkflowEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "frontend-http")]
+    use pantograph_frontend_http_adapter::{
+        parse_embedding_payload, DEFAULT_MAX_BATCH_SIZE, DEFAULT_MAX_TEXT_LENGTH,
+    };
+    #[cfg(feature = "frontend-http")]
     use std::io::{Read, Write};
+    #[cfg(feature = "frontend-http")]
     use std::net::TcpListener;
+    #[cfg(feature = "frontend-http")]
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+    #[cfg(feature = "frontend-http")]
     static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
 
@@ -1210,6 +1072,7 @@ mod tests {
         assert!(events.is_empty());
     }
 
+    #[cfg(feature = "frontend-http")]
     fn create_temp_workflow_root(workflow_id: &str) -> std::path::PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1240,6 +1103,7 @@ mod tests {
         root
     }
 
+    #[cfg(feature = "frontend-http")]
     fn spawn_single_embedding_server(
         status_code: u16,
         body: serde_json::Value,
@@ -1273,6 +1137,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "frontend-http")]
     #[ignore = "requires local TCP bind permissions in test environment"]
     fn test_workflow_run_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
@@ -1296,7 +1161,7 @@ mod tests {
 
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let response_json = runtime
-            .block_on(workflow_run(base_url, request_json, None))
+            .block_on(frontend_http_workflow_run(base_url, request_json, None))
             .expect("workflow_run");
         let response: pantograph_workflow_service::WorkflowRunResponse =
             serde_json::from_str(&response_json).expect("parse response");
@@ -1311,6 +1176,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "frontend-http")]
     fn test_workflow_get_capabilities_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
         let workflow_id = "wf_contract_caps";
@@ -1325,7 +1191,7 @@ mod tests {
 
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let response_json = runtime
-            .block_on(workflow_get_capabilities(
+            .block_on(frontend_http_workflow_get_capabilities(
                 "http://127.0.0.1:9".to_string(),
                 request_json,
                 None,
@@ -1344,6 +1210,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "frontend-http")]
     fn test_parse_embedding_payload_rejects_non_numeric() {
         let payload = serde_json::json!({
             "data": [{ "embedding": [0.1, "oops", 0.3] }]

@@ -13,6 +13,7 @@ name = "pantograph_uniffi"
 # Core workflow engine
 node-engine = { path = "../node-engine" }
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+pantograph-frontend-http-adapter = { path = "../pantograph-frontend-http-adapter", optional = true }
 
 # UniFFI runtime (tokio feature for async method export)
 uniffi = { version = "0.28", features = ["tokio"] }
@@ -27,7 +28,6 @@ graph-flow = "0.2"
 # Serialization (JSON marshaling at FFI boundary)
 serde.workspace = true
 serde_json = "1"
-reqwest.workspace = true
 
 # Error handling
 thiserror = "1"
@@ -49,3 +49,5 @@ uniffi = { version = "0.28", features = ["bindgen-tests"] }
 [features]
 default = []
 cli = ["uniffi/cli"]
+frontend-http = ["dep:pantograph-frontend-http-adapter"]
+frontend-http-legacy = ["frontend-http"]
