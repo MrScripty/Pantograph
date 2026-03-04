@@ -12,5 +12,7 @@ pub use workflow::{
     WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
     WorkflowHostModelDescriptor, WorkflowInputObject, WorkflowObjectError, WorkflowObjectResult,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError, WorkflowStatus,
+    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
+    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionRunRequest,
+    WorkflowStatus,
 };

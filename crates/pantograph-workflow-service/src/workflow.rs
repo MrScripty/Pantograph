@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -164,6 +165,48 @@ pub struct WorkflowCapabilitiesResponse {
     pub models: Vec<WorkflowCapabilityModel>,
 }
 
+/// Session creation request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionCreateRequest {
+    pub workflow_id: String,
+    #[serde(default)]
+    pub usage_profile: Option<String>,
+}
+
+/// Session creation response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionCreateResponse {
+    pub session_id: String,
+}
+
+/// Session run request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionRunRequest {
+    pub session_id: String,
+    pub objects: Vec<WorkflowInputObject>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub batch_id: Option<String>,
+}
+
+/// Session close request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionCloseRequest {
+    pub session_id: String,
+}
+
+/// Session close response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionCloseResponse {
+    pub ok: bool,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WorkflowServiceError {
     #[error("invalid_request: {0}")]
@@ -180,6 +223,15 @@ pub enum WorkflowServiceError {
 
     #[error("model_signature_unavailable: {0}")]
     RuntimeSignatureUnavailable(String),
+
+    #[error("session_not_found: {0}")]
+    SessionNotFound(String),
+
+    #[error("session_evicted: {0}")]
+    SessionEvicted(String),
+
+    #[error("scheduler_busy: {0}")]
+    SchedulerBusy(String),
 
     #[error("internal_error: {0}")]
     Internal(String),
@@ -317,13 +369,233 @@ pub trait WorkflowHost: Send + Sync {
     ) -> Result<RuntimeSignature, WorkflowServiceError>;
 }
 
+const DEFAULT_MAX_SESSIONS: usize = 8;
+
+#[derive(Debug, Clone)]
+struct WorkflowSessionState {
+    workflow_id: String,
+    usage_profile: Option<String>,
+    in_use: bool,
+    access_tick: u64,
+    run_count: u64,
+}
+
+#[derive(Debug)]
+struct WorkflowSessionStore {
+    max_sessions: usize,
+    tick: u64,
+    active: HashMap<String, WorkflowSessionState>,
+    evicted: HashSet<String>,
+}
+
+impl WorkflowSessionStore {
+    fn new(max_sessions: usize) -> Self {
+        Self {
+            max_sessions: max_sessions.max(1),
+            tick: 0,
+            active: HashMap::new(),
+            evicted: HashSet::new(),
+        }
+    }
+
+    fn next_tick(&mut self) -> u64 {
+        self.tick = self.tick.saturating_add(1);
+        self.tick
+    }
+
+    fn create_session(
+        &mut self,
+        workflow_id: String,
+        usage_profile: Option<String>,
+    ) -> Result<String, WorkflowServiceError> {
+        if self.active.len() >= self.max_sessions {
+            let evict_id = self
+                .active
+                .iter()
+                .filter(|(_, state)| !state.in_use)
+                .min_by_key(|(_, state)| (state.access_tick, state.run_count))
+                .map(|(session_id, _)| session_id.clone());
+            if let Some(session_id) = evict_id {
+                self.active.remove(&session_id);
+                self.evicted.insert(session_id);
+            } else {
+                return Err(WorkflowServiceError::SchedulerBusy(
+                    "no schedulable capacity; all sessions are currently in use".to_string(),
+                ));
+            }
+        }
+
+        let session_id = Uuid::new_v4().to_string();
+        let state = WorkflowSessionState {
+            workflow_id,
+            usage_profile,
+            in_use: false,
+            access_tick: self.next_tick(),
+            run_count: 0,
+        };
+        self.active.insert(session_id.clone(), state);
+        self.evicted.remove(&session_id);
+        Ok(session_id)
+    }
+
+    fn begin_run(&mut self, session_id: &str) -> Result<String, WorkflowServiceError> {
+        if self.evicted.contains(session_id) {
+            return Err(WorkflowServiceError::SessionEvicted(format!(
+                "session '{}' was evicted by scheduler",
+                session_id
+            )));
+        }
+
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+
+        if state.in_use {
+            return Err(WorkflowServiceError::SchedulerBusy(format!(
+                "session '{}' is already running",
+                session_id
+            )));
+        }
+
+        state.in_use = true;
+        state.access_tick = tick;
+        let _usage_profile = state.usage_profile.as_deref();
+        Ok(state.workflow_id.clone())
+    }
+
+    fn end_run(&mut self, session_id: &str) {
+        let tick = self.next_tick();
+        if let Some(state) = self.active.get_mut(session_id) {
+            state.in_use = false;
+            state.access_tick = tick;
+            state.run_count = state.run_count.saturating_add(1);
+        }
+    }
+
+    fn close_session(&mut self, session_id: &str) -> Result<(), WorkflowServiceError> {
+        if self.active.remove(session_id).is_some() {
+            self.evicted.remove(session_id);
+            return Ok(());
+        }
+
+        if self.evicted.remove(session_id) {
+            return Err(WorkflowServiceError::SessionEvicted(format!(
+                "session '{}' was evicted by scheduler",
+                session_id
+            )));
+        }
+
+        Err(WorkflowServiceError::SessionNotFound(format!(
+            "session '{}' not found",
+            session_id
+        )))
+    }
+}
+
 /// Service entrypoint for workflow API operations.
-#[derive(Default)]
-pub struct WorkflowService;
+#[derive(Clone)]
+pub struct WorkflowService {
+    session_store: Arc<Mutex<WorkflowSessionStore>>,
+}
+
+impl Default for WorkflowService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl WorkflowService {
     pub fn new() -> Self {
-        Self
+        Self::with_max_sessions(DEFAULT_MAX_SESSIONS)
+    }
+
+    pub fn with_max_sessions(max_sessions: usize) -> Self {
+        Self {
+            session_store: Arc::new(Mutex::new(WorkflowSessionStore::new(max_sessions))),
+        }
+    }
+
+    pub async fn create_workflow_session<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowSessionCreateRequest,
+    ) -> Result<WorkflowSessionCreateResponse, WorkflowServiceError> {
+        validate_workflow_id(&request.workflow_id)?;
+        host.validate_workflow(&request.workflow_id).await?;
+
+        let mut store = self
+            .session_store
+            .lock()
+            .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))?;
+        let session_id = store.create_session(
+            request.workflow_id,
+            request
+                .usage_profile
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty()),
+        )?;
+        Ok(WorkflowSessionCreateResponse { session_id })
+    }
+
+    pub async fn run_workflow_session<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowSessionRunRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim().to_string();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+
+        let workflow_id = {
+            let mut store = self
+                .session_store
+                .lock()
+                .map_err(|_| {
+                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
+                })?;
+            store.begin_run(&session_id)?
+        };
+
+        let run_result = self
+            .workflow_run(
+                host,
+                WorkflowRunRequest {
+                    workflow_id,
+                    objects: request.objects,
+                    model_id: request.model_id,
+                    batch_id: request.batch_id,
+                },
+            )
+            .await;
+
+        if let Ok(mut store) = self.session_store.lock() {
+            store.end_run(&session_id);
+        }
+
+        run_result
+    }
+
+    pub async fn close_workflow_session(
+        &self,
+        request: WorkflowSessionCloseRequest,
+    ) -> Result<WorkflowSessionCloseResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+
+        let mut store = self
+            .session_store
+            .lock()
+            .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))?;
+        store.close_session(session_id)?;
+        Ok(WorkflowSessionCloseResponse { ok: true })
     }
 
     pub async fn workflow_run<H: WorkflowHost>(
@@ -529,6 +801,9 @@ fn map_object_error(err: WorkflowServiceError) -> WorkflowObjectError {
         WorkflowServiceError::RuntimeSignatureUnavailable(msg) => {
             ("model_signature_unavailable".to_string(), msg)
         }
+        WorkflowServiceError::SessionNotFound(msg) => ("session_not_found".to_string(), msg),
+        WorkflowServiceError::SessionEvicted(msg) => ("session_evicted".to_string(), msg),
+        WorkflowServiceError::SchedulerBusy(msg) => ("scheduler_busy".to_string(), msg),
         WorkflowServiceError::Internal(msg) => ("embedding_failed".to_string(), msg),
     };
     WorkflowObjectError { code, message }
@@ -875,6 +1150,151 @@ mod tests {
             .expect("embed with batch id");
 
         assert_eq!(response.run_id, "batch-xyz");
+    }
+
+    #[tokio::test]
+    async fn workflow_session_lifecycle_create_run_close() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_max_sessions(2);
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("embedding-batch".to_string()),
+                },
+            )
+            .await
+            .expect("create session");
+
+        let response = service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id.clone(),
+                    objects: vec![WorkflowInputObject {
+                        object_id: "obj-1".to_string(),
+                        text: "hello session".to_string(),
+                        metadata: None,
+                    }],
+                    model_id: Some("model-a".to_string()),
+                    batch_id: Some("batch-session-1".to_string()),
+                },
+            )
+            .await
+            .expect("run session");
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].status, WorkflowStatus::Success);
+
+        let closed = service
+            .close_workflow_session(WorkflowSessionCloseRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("close session");
+        assert!(closed.ok);
+
+        let err = service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id,
+                    objects: vec![WorkflowInputObject {
+                        object_id: "obj-2".to_string(),
+                        text: "hello again".to_string(),
+                        metadata: None,
+                    }],
+                    model_id: None,
+                    batch_id: None,
+                },
+            )
+            .await
+            .expect_err("closed session should not run");
+        assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_returns_evicted_when_displaced() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_max_sessions(1);
+
+        let first = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                },
+            )
+            .await
+            .expect("create first");
+
+        let _second = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                },
+            )
+            .await
+            .expect("create second");
+
+        let err = service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: first.session_id,
+                    objects: vec![WorkflowInputObject {
+                        object_id: "obj-1".to_string(),
+                        text: "hello".to_string(),
+                        metadata: None,
+                    }],
+                    model_id: None,
+                    batch_id: None,
+                },
+            )
+            .await
+            .expect_err("evicted session should fail");
+        assert!(matches!(err, WorkflowServiceError::SessionEvicted(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_create_returns_scheduler_busy_when_capacity_locked() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_max_sessions(1);
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                },
+            )
+            .await
+            .expect("create session");
+
+        {
+            let mut store = service.session_store.lock().expect("lock session store");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("existing active session");
+            state.in_use = true;
+        }
+
+        let err = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                },
+            )
+            .await
+            .expect_err("scheduler should be busy");
+        assert!(matches!(err, WorkflowServiceError::SchedulerBusy(_)));
     }
 
     #[tokio::test]
