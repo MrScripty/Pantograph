@@ -19,8 +19,8 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Run contract tests
-        run: cargo test -p pantograph-workflow-service --test contract
+      - name: Run workflow service tests
+        run: cargo test -p pantograph-workflow-service
 
       - name: Check frontend HTTP adapter crate
         run: |
