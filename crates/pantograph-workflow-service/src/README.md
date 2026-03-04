@@ -18,6 +18,7 @@ Primary operations:
 
 - `workflow_run`
 - `workflow_get_capabilities`
+- `workflow_get_io`
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`
@@ -30,6 +31,8 @@ Primary contract types:
 - `WorkflowOutputTarget`
 - `WorkflowCapabilitiesRequest`
 - `WorkflowCapabilitiesResponse`
+- `WorkflowIoRequest`
+- `WorkflowIoResponse`
 - `WorkflowSessionCreateRequest`
 - `WorkflowSessionRunRequest`
 - `WorkflowSessionCloseRequest`

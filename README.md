@@ -124,6 +124,7 @@ through `crates/pantograph-workflow-service`:
 
 - `workflow_run`
 - `workflow_get_capabilities`
+- `workflow_get_io`
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`

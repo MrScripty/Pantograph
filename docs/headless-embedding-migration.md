@@ -6,6 +6,7 @@ Consumers migrating from embedding-shaped request/response usage to generic work
 ## New API Surface
 - `workflow_run`
 - `workflow_get_capabilities`
+- `workflow_get_io`
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`
@@ -17,6 +18,7 @@ Consumers migrating from embedding-shaped request/response usage to generic work
 - embedding-specific response metadata at top level
 
 ### New Pattern
+- call `workflow_get_io` to discover bindable input/output nodes and ports
 - call `workflow_run` with `inputs[]` node/port bindings
 - optionally request explicit `output_targets[]`
 - consume `outputs[]` bindings from output nodes
