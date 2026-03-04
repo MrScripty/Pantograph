@@ -34,5 +34,5 @@ jobs:
 
       - name: Check Rustler adapter modes
         run: |
-          cargo check -p pantograph_rustler --no-default-features
-          cargo check -p pantograph_rustler --features frontend-http
+          cargo check -p pantograph_rustler --tests --no-default-features
+          cargo check -p pantograph_rustler --tests --features frontend-http
