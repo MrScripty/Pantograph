@@ -31,10 +31,8 @@ jobs:
         run: |
           cargo check -p pantograph-uniffi --no-default-features
           cargo check -p pantograph-uniffi --features frontend-http
-          cargo check -p pantograph-uniffi --features frontend-http-legacy
 
       - name: Check Rustler adapter modes
         run: |
           cargo check -p pantograph_rustler --no-default-features
           cargo check -p pantograph_rustler --features frontend-http
-          cargo check -p pantograph_rustler --features frontend-http-legacy
