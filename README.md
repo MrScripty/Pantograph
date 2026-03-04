@@ -119,10 +119,21 @@ See `docs/python-runtime-separation.md` for configuration and migration details.
 
 ### Headless Workflow API
 
-Pantograph also exposes a Rust-first headless workflow API for host integrations:
+Pantograph exposes a Rust-first headless workflow API for host integrations
+through `crates/pantograph-workflow-service`:
 
 - `workflow_run`
 - `workflow_get_capabilities`
+- `create_workflow_session`
+- `run_workflow_session`
+- `close_workflow_session`
+
+Integration boundary:
+
+- Headless hosts should integrate with the core API/service crate directly.
+- `src-tauri` commands are desktop app transport adapters, not the headless API.
+- HTTP binding exports are opt-in frontend adapters for modular standalone GUI
+  hosting (`frontend-http` / `frontend-http-legacy` in UniFFI and Rustler).
 
 Reference docs:
 

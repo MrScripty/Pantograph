@@ -40,12 +40,16 @@ Adopt a three-layer boundary for headless workflow features:
 - Initial refactor cost to extract orchestration.
 - Temporary compatibility wrappers required during migration.
 - More explicit trait interfaces to inject host resources.
+- Frontend HTTP workflow exports in bindings now require explicit opt-in
+  features to avoid accidental misuse as the primary headless API.
 
 ## Implementation Notes
 - Freeze `workflow_run` and `workflow_get_capabilities` contracts before implementation.
 - Extend capabilities with model inventory (`models[]`) derived from graph usage.
 - Keep workflow sessions scheduler-managed in service layer (`create/run/close`).
 - Migrate Tauri workflow commands to thin delegation wrappers.
+- Isolate frontend HTTP host behavior in a dedicated adapter crate and keep it
+  out of default binding surfaces.
 - Add contract tests in service layer and parity checks in adapters.
 
 ## Compliance Mapping
@@ -60,6 +64,8 @@ Implemented.
 Delivered artifacts:
 
 - Service layer contracts and orchestration: `crates/pantograph-workflow-service`
+- Frontend HTTP host adapter crate:
+  `crates/pantograph-frontend-http-adapter`
 - Shared capability core (workflow validation + runtime requirement computation):
   `crates/pantograph-workflow-service/src/capabilities.rs`
 - Session lifecycle and scheduler admission in service layer:
@@ -67,5 +73,8 @@ Delivered artifacts:
 - Tauri thin adapter commands: `src-tauri/src/workflow/headless_workflow_commands.rs`
 - UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
 - Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
+- UniFFI/Rustler default mode excludes frontend HTTP workflow exports; optional
+  feature flags gate frontend HTTP (`frontend-http`) and legacy alias
+  compatibility (`frontend-http-legacy`).
 - Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
 - CI guardrail: `.github/workflows/headless-embedding-contract.yml`

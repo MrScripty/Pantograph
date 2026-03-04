@@ -6,6 +6,14 @@ Implemented (breaking replacement for prior embed-specific API).
 ## Objective
 Define a stable, Rust-first headless workflow API for external consumers embedding Pantograph as a framework.
 
+## Integration Boundary (Required)
+- Headless consumers integrate via `pantograph-workflow-service` (core API).
+- Tauri commands are transport adapters for the desktop app runtime only.
+- Frontend HTTP transport is optional and isolated in
+  `pantograph-frontend-http-adapter` for modular standalone GUI hosting.
+- UniFFI/Rustler HTTP workflow exports are feature-gated (`frontend-http`) and
+  are not part of the default headless API surface.
+
 ## Design Principles
 - Rust-first application API, transport-agnostic.
 - Explicit request/response metadata; no event-stream parsing required.

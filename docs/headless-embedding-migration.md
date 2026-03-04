@@ -57,5 +57,17 @@ Consumers currently relying on workflow execution commands/events who need deter
 - handle explicit scheduler errors (`session_evicted`, `scheduler_busy`)
 
 ## Compatibility Notes
-- This is a breaking API replacement (no backward compatibility layer).
-- Existing consumers should migrate from embed-specific calls to workflow-level calls.
+- Core headless API remains a breaking replacement for older embed/event-driven
+  patterns.
+- Existing consumers should migrate from embed-specific calls to
+  workflow-level service calls.
+- Tauri commands should not be used as a headless API integration path.
+- UniFFI/Rustler provide temporary legacy alias exports only behind
+  `frontend-http-legacy` for frontend HTTP migration.
+
+## Binding Migration Guidance (UniFFI/Rustler)
+- Recommended: consume `pantograph-workflow-service` directly in Rust hosts.
+- For modular GUI HTTP hosting only:
+  - enable `frontend-http` and call `frontend_http_workflow_*` exports.
+  - optionally enable `frontend-http-legacy` for temporary
+    `workflow_*` alias compatibility.
