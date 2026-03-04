@@ -19,6 +19,9 @@ Consumers migrating from embedding-shaped request/response usage to generic work
 
 ### New Pattern
 - call `workflow_get_io` to discover bindable input/output nodes and ports
+- treat discovery as authoritative:
+  - bind only `workflow_get_io.inputs[].ports[]` in `inputs[]`
+  - target only `workflow_get_io.outputs[].ports[]` in `output_targets[]`
 - call `workflow_run` with `inputs[]` node/port bindings
 - optionally request explicit `output_targets[]`
 - consume `outputs[]` bindings from output nodes
