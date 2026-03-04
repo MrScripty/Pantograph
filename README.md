@@ -133,7 +133,7 @@ Integration boundary:
 - Headless hosts should integrate with the core API/service crate directly.
 - `src-tauri` commands are desktop app transport adapters, not the headless API.
 - HTTP binding exports are opt-in frontend adapters for modular standalone GUI
-  hosting (`frontend-http` / `frontend-http-legacy` in UniFFI and Rustler).
+  hosting (`frontend-http` in UniFFI and Rustler).
 
 Reference docs:
 

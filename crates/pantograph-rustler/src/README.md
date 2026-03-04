@@ -21,9 +21,6 @@ Default (`no features`):
 - `frontend_http_workflow_run_session/3`
 - `frontend_http_workflow_close_session/1`
 
-`frontend-http-legacy` feature:
-- Adds legacy aliases (`workflow_run/3`, `workflow_get_capabilities/3`, etc.) for migration.
-
 ## Dependencies
 - Internal: `pantograph-workflow-service`, `node-engine`.
 - Frontend HTTP (optional): `pantograph-frontend-http-adapter`.

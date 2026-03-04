@@ -9,7 +9,7 @@ Pantograph currently executes workflow use-cases primarily in Tauri command modu
 Current issues:
 - Tauri command layer mixes transport, host state wiring, and use-case orchestration.
 - Event adapter completion payloads are not a reliable API contract.
-- External consumers need object-in/object-out embedding semantics with deterministic metadata.
+- External consumers need generic workflow input/output semantics with deterministic run contracts.
 
 ## Decision
 Adopt a three-layer boundary for headless workflow features:
@@ -38,7 +38,6 @@ Adopt a three-layer boundary for headless workflow features:
 
 ### Negative
 - Initial refactor cost to extract orchestration.
-- Temporary compatibility wrappers required during migration.
 - More explicit trait interfaces to inject host resources.
 - Frontend HTTP workflow exports in bindings now require explicit opt-in
   features to avoid accidental misuse as the primary headless API.
@@ -74,7 +73,6 @@ Delivered artifacts:
 - UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
 - Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
 - UniFFI/Rustler default mode excludes frontend HTTP workflow exports; optional
-  feature flags gate frontend HTTP (`frontend-http`) and legacy alias
-  compatibility (`frontend-http-legacy`).
+  feature flag gates frontend HTTP (`frontend-http`).
 - Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
 - CI guardrail: `.github/workflows/headless-embedding-contract.yml`

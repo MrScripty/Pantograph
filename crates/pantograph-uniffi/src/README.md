@@ -22,9 +22,6 @@ Default (`no features`):
 - `frontend_http_workflow_run_session(base_url, request_json, pumas_api?) -> response_json`
 - `frontend_http_workflow_close_session(request_json) -> response_json`
 
-`frontend-http-legacy` feature:
-- Adds legacy aliases (`workflow_run`, `workflow_get_capabilities`, etc.) for migration.
-
 ## Dependencies
 - Internal: `pantograph-workflow-service`, `node-engine`.
 - Frontend HTTP (optional): `pantograph-frontend-http-adapter`.
