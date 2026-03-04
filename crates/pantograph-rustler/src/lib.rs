@@ -431,7 +431,6 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
         | WorkflowServiceError::CapabilityViolation(message)
         | WorkflowServiceError::WorkflowNotFound(message)
         | WorkflowServiceError::RuntimeNotReady(message)
-        | WorkflowServiceError::RuntimeSignatureUnavailable(message)
         | WorkflowServiceError::SessionNotFound(message)
         | WorkflowServiceError::SessionEvicted(message)
         | WorkflowServiceError::SchedulerBusy(message)
@@ -608,57 +607,6 @@ fn frontend_http_workflow_run_session(
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
 fn frontend_http_workflow_close_session(request_json: String) -> NifResult<String> {
-    frontend_http_workflow_close_session_impl(request_json)
-}
-
-/// Legacy alias for frontend HTTP workflow run.
-#[cfg(feature = "frontend-http-legacy")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_run(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_workflow_run_impl(base_url, request_json, pumas_resource)
-}
-
-/// Legacy alias for frontend HTTP workflow capabilities.
-#[cfg(feature = "frontend-http-legacy")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_get_capabilities(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_workflow_get_capabilities_impl(base_url, request_json, pumas_resource)
-}
-
-/// Legacy alias for frontend HTTP workflow session creation.
-#[cfg(feature = "frontend-http-legacy")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_create_session(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_workflow_create_session_impl(base_url, request_json, pumas_resource)
-}
-
-/// Legacy alias for frontend HTTP workflow session runs.
-#[cfg(feature = "frontend-http-legacy")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_run_session(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_workflow_run_session_impl(base_url, request_json, pumas_resource)
-}
-
-/// Legacy alias for frontend HTTP workflow session close.
-#[cfg(feature = "frontend-http-legacy")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_close_session(request_json: String) -> NifResult<String> {
     frontend_http_workflow_close_session_impl(request_json)
 }
 
@@ -2088,7 +2036,7 @@ rustler::init!("Elixir.Pantograph.Native", load = load);
 mod tests {
     use super::*;
     #[cfg(feature = "frontend-http")]
-    use pantograph_frontend_http_adapter::parse_embedding_payload;
+    use pantograph_frontend_http_adapter::parse_workflow_outputs_payload;
     #[cfg(feature = "frontend-http")]
     use pantograph_workflow_service::WorkflowService;
     #[cfg(feature = "frontend-http")]
@@ -2240,7 +2188,7 @@ mod tests {
     }
 
     #[cfg(feature = "frontend-http")]
-    fn spawn_single_embedding_server(
+    fn spawn_single_workflow_server(
         status_code: u16,
         body: serde_json::Value,
     ) -> (String, std::thread::JoinHandle<()>) {
@@ -2275,7 +2223,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     #[cfg(feature = "frontend-http")]
     #[ignore = "requires local TCP bind permissions in test environment"]
-    async fn test_rustler_embedding_host_contract_success() {
+    async fn test_rustler_workflow_host_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
         let workflow_id = "wf_rustler_contract";
         let root = create_temp_workflow_root(workflow_id);
@@ -2283,48 +2231,48 @@ mod tests {
         std::env::set_current_dir(&root).expect("set cwd");
 
         let payload = serde_json::json!({
-            "data": [{ "embedding": [1.0, 2.0, 3.0] }],
-            "usage": { "prompt_tokens": 2 },
-            "model": "model-from-server"
+            "run_id": "server-run-1",
+            "outputs": [{ "node_id": "vector-output-1", "port_id": "vector", "value": [1.0, 2.0, 3.0] }],
+            "timing_ms": 2
         });
-        let (base_url, server_thread) = spawn_single_embedding_server(200, payload);
+        let (base_url, server_thread) = spawn_single_workflow_server(200, payload);
 
         let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
         let request = pantograph_workflow_service::WorkflowRunRequest {
             workflow_id: workflow_id.to_string(),
-            objects: vec![pantograph_workflow_service::WorkflowInputObject {
-                object_id: "obj-1".to_string(),
-                text: "hello world".to_string(),
-                metadata: None,
+            inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
+                node_id: "text-input-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("hello world"),
             }],
-            model_id: None,
-            batch_id: None,
+            output_targets: Some(vec![pantograph_workflow_service::WorkflowOutputTarget {
+                node_id: "vector-output-1".to_string(),
+                port_id: "vector".to_string(),
+            }]),
+            run_id: None,
         };
         let response = WorkflowService::new()
             .workflow_run(&host, request)
             .await
-            .expect("embed");
+            .expect("run workflow");
 
         server_thread.join().expect("join server");
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = std::fs::remove_dir_all(root);
 
-        assert_eq!(response.results.len(), 1);
-        assert_eq!(
-            response.results[0].status,
-            pantograph_workflow_service::WorkflowStatus::Success
-        );
-        assert_eq!(response.model_signature.model_id, "model-from-server");
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].node_id, "vector-output-1");
     }
 
     #[test]
     #[cfg(feature = "frontend-http")]
-    fn test_parse_embedding_payload_rejects_non_numeric() {
+    fn test_parse_workflow_outputs_payload_rejects_missing_port() {
         let payload = serde_json::json!({
-            "data": [{ "embedding": [0.1, "oops", 0.3] }]
+            "outputs": [{ "node_id": "node-1", "value": [0.1, 0.2, 0.3] }]
         });
-        let err = parse_embedding_payload(&payload).expect_err("must reject malformed vector");
-        assert!(err.to_string().contains("invalid embedding value"));
+        let err =
+            parse_workflow_outputs_payload(&payload).expect_err("must reject malformed output");
+        assert!(err.to_string().contains("port_id"));
     }
 
     #[test]

@@ -44,4 +44,3 @@ log = "0.4"
 [features]
 default = []
 frontend-http = ["dep:pantograph-frontend-http-adapter"]
-frontend-http-legacy = ["frontend-http"]

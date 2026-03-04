@@ -4,16 +4,18 @@
 //! HTTP integration remains an explicit opt-in for modular GUI embedding.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    capabilities, RuntimeSignature, WorkflowHost, WorkflowHostModelDescriptor, WorkflowServiceError,
+    capabilities, WorkflowHost, WorkflowHostModelDescriptor, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowServiceError,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
-pub const DEFAULT_MAX_BATCH_SIZE: usize = capabilities::DEFAULT_MAX_BATCH_SIZE;
-pub const DEFAULT_MAX_TEXT_LENGTH: usize = capabilities::DEFAULT_MAX_TEXT_LENGTH;
+pub const DEFAULT_MAX_INPUT_BINDINGS: usize = capabilities::DEFAULT_MAX_INPUT_BINDINGS;
+pub const DEFAULT_MAX_OUTPUT_TARGETS: usize = capabilities::DEFAULT_MAX_OUTPUT_TARGETS;
+pub const DEFAULT_MAX_VALUE_BYTES: usize = capabilities::DEFAULT_MAX_VALUE_BYTES;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FrontendHttpWorkflowHostError {
@@ -31,19 +33,19 @@ pub enum FrontendHttpWorkflowHostError {
     MissingHost { base_url: String },
 }
 
-/// Workflow host that executes embeddings through an OpenAI-compatible HTTP API.
+/// Workflow host that proxies workflow_run through HTTP.
 ///
 /// This adapter is for frontend/modular GUI transport integration, not for
-/// framework headless embedding consumers.
+/// framework headless workflow consumers.
 pub struct FrontendHttpWorkflowHost {
     base_url: String,
     workflow_roots: Vec<PathBuf>,
-    max_batch_size: usize,
-    max_text_length: usize,
+    max_input_bindings: usize,
+    max_output_targets: usize,
+    max_value_bytes: usize,
     backend_name: String,
     pumas_api: Option<Arc<pumas_library::PumasApi>>,
     http_client: reqwest::Client,
-    resolved_model_id: Mutex<Option<String>>,
 }
 
 impl FrontendHttpWorkflowHost {
@@ -56,8 +58,9 @@ impl FrontendHttpWorkflowHost {
             base_url,
             pumas_api,
             capabilities::default_workflow_roots(manifest_dir),
-            DEFAULT_MAX_BATCH_SIZE,
-            DEFAULT_MAX_TEXT_LENGTH,
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
             DEFAULT_BACKEND_NAME.to_string(),
         )
     }
@@ -66,50 +69,22 @@ impl FrontendHttpWorkflowHost {
         base_url: String,
         pumas_api: Option<Arc<pumas_library::PumasApi>>,
         workflow_roots: Vec<PathBuf>,
-        max_batch_size: usize,
-        max_text_length: usize,
+        max_input_bindings: usize,
+        max_output_targets: usize,
+        max_value_bytes: usize,
         backend_name: String,
     ) -> Result<Self, FrontendHttpWorkflowHostError> {
         let base_url = normalize_base_url(base_url)?;
         Ok(Self {
             base_url,
             workflow_roots,
-            max_batch_size,
-            max_text_length,
+            max_input_bindings,
+            max_output_targets,
+            max_value_bytes,
             backend_name: backend_name.trim().to_string(),
             pumas_api,
             http_client: reqwest::Client::new(),
-            resolved_model_id: Mutex::new(None),
         })
-    }
-
-    async fn resolve_model_revision_or_hash(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<String>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
-            .ok_or_else(|| {
-                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                    "model '{}' not found in model library",
-                    model_id
-                ))
-            })?;
-
-        capabilities::select_preferred_hash(&model.hashes)
-            .map(Some)
-            .ok_or_else(|| {
-                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                    "model '{}' is missing sha256/blake3 hash metadata",
-                    model_id
-                ))
-            })
     }
 }
 
@@ -119,12 +94,16 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
         self.workflow_roots.clone()
     }
 
-    fn max_batch_size(&self) -> usize {
-        self.max_batch_size
+    fn max_input_bindings(&self) -> usize {
+        self.max_input_bindings
     }
 
-    fn max_text_length(&self) -> usize {
-        self.max_text_length
+    fn max_output_targets(&self) -> usize {
+        self.max_output_targets
+    }
+
+    fn max_value_bytes(&self) -> usize {
+        self.max_value_bytes
     }
 
     async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
@@ -164,21 +143,17 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
         }))
     }
 
-    async fn run_object(
+    async fn run_workflow(
         &self,
-        _workflow_id: &str,
-        text: &str,
-        model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
-        let model = model_id
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .unwrap_or("default");
-
-        let url = format!("{}/v1/embeddings", self.base_url);
+        workflow_id: &str,
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        let url = format!("{}/v1/workflow/run", self.base_url);
         let body = serde_json::json!({
-            "input": [text],
-            "model": model,
+            "workflow_id": workflow_id,
+            "inputs": inputs,
+            "output_targets": output_targets,
         });
 
         let response = self
@@ -190,7 +165,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         if !response.status().is_success() {
             return Err(WorkflowServiceError::Internal(format!(
-                "embedding api error {}",
+                "workflow api error {}",
                 response.status()
             )));
         }
@@ -200,76 +175,58 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             .await
             .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
 
-        let (embedding, token_count, response_model_id) = parse_embedding_payload(&payload)?;
-        if let Some(model_id) = response_model_id {
-            if let Ok(mut guard) = self.resolved_model_id.lock() {
-                *guard = Some(model_id);
-            }
-        }
-
-        Ok((embedding, token_count))
-    }
-
-    async fn resolve_runtime_signature(
-        &self,
-        _workflow_id: &str,
-        model_id: Option<&str>,
-        vector_dimensions: usize,
-    ) -> Result<RuntimeSignature, WorkflowServiceError> {
-        let resolved_model_id = model_id
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                self.resolved_model_id
-                    .lock()
-                    .ok()
-                    .and_then(|guard| guard.clone())
-            })
-            .unwrap_or_else(|| "default".to_string());
-        let model_revision_or_hash = self.resolve_model_revision_or_hash(&resolved_model_id).await?;
-
-        Ok(RuntimeSignature {
-            model_id: resolved_model_id,
-            model_revision_or_hash,
-            backend: self.backend_name.clone(),
-            vector_dimensions,
-        })
+        parse_workflow_outputs_payload(&payload)
     }
 }
 
-pub fn parse_embedding_payload(
+pub fn parse_workflow_outputs_payload(
     payload: &serde_json::Value,
-) -> Result<(Vec<f32>, Option<usize>, Option<String>), WorkflowServiceError> {
-    let embedding_values = payload
-        .get("data")
+) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+    let outputs = payload
+        .get("outputs")
         .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|v| v.get("embedding"))
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| WorkflowServiceError::Internal("missing embedding vector".to_string()))?;
+        .ok_or_else(|| WorkflowServiceError::Internal("missing outputs array".to_string()))?;
 
-    let mut embedding = Vec::with_capacity(embedding_values.len());
-    for (index, value) in embedding_values.iter().enumerate() {
-        let number = value.as_f64().ok_or_else(|| {
-            WorkflowServiceError::Internal(format!("invalid embedding value at index {}", index))
-        })?;
-        embedding.push(number as f32);
+    let mut bindings = Vec::with_capacity(outputs.len());
+    for (index, output) in outputs.iter().enumerate() {
+        let node_id = output
+            .get("node_id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| {
+                WorkflowServiceError::Internal(format!(
+                    "invalid outputs[{}].node_id",
+                    index
+                ))
+            })?
+            .to_string();
+        let port_id = output
+            .get("port_id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| {
+                WorkflowServiceError::Internal(format!(
+                    "invalid outputs[{}].port_id",
+                    index
+                ))
+            })?
+            .to_string();
+
+        let value = output
+            .get("value")
+            .cloned()
+            .ok_or_else(|| WorkflowServiceError::Internal(format!("missing outputs[{}].value", index)))?;
+
+        bindings.push(WorkflowPortBinding {
+            node_id,
+            port_id,
+            value,
+        });
     }
 
-    let token_count = payload
-        .get("usage")
-        .and_then(|v| v.get("prompt_tokens"))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as usize);
-    let response_model_id = payload
-        .get("model")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(ToOwned::to_owned);
-
-    Ok((embedding, token_count, response_model_id))
+    Ok(bindings)
 }
 
 fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkflowHostError> {
@@ -303,12 +260,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_embedding_payload_rejects_non_numeric() {
+    fn parse_workflow_outputs_payload_rejects_missing_fields() {
         let payload = serde_json::json!({
-            "data": [{ "embedding": [0.1, "oops", 0.3] }]
+            "outputs": [{ "node_id": "node-1", "value": "oops" }]
         });
-        let err = parse_embedding_payload(&payload).expect_err("must reject malformed vector");
-        assert!(err.to_string().contains("invalid embedding value"));
+        let err = parse_workflow_outputs_payload(&payload).expect_err("must reject malformed outputs");
+        assert!(err.to_string().contains("port_id"));
     }
 
     #[test]

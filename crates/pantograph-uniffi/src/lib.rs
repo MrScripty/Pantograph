@@ -270,7 +270,6 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
         | WorkflowServiceError::CapabilityViolation(message)
         | WorkflowServiceError::WorkflowNotFound(message)
         | WorkflowServiceError::RuntimeNotReady(message)
-        | WorkflowServiceError::RuntimeSignatureUnavailable(message)
         | WorkflowServiceError::SessionNotFound(message)
         | WorkflowServiceError::SessionEvicted(message)
         | WorkflowServiceError::SchedulerBusy(message)
@@ -406,57 +405,6 @@ pub async fn frontend_http_workflow_close_session(request_json: String) -> Resul
     serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
         message: e.to_string(),
     })
-}
-
-/// Legacy alias for frontend HTTP workflow run.
-#[cfg(feature = "frontend-http-legacy")]
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_run(
-    base_url: String,
-    request_json: String,
-    pumas_api: Option<Arc<FfiPumasApi>>,
-) -> Result<String, FfiError> {
-    frontend_http_workflow_run(base_url, request_json, pumas_api).await
-}
-
-/// Legacy alias for frontend HTTP workflow capabilities.
-#[cfg(feature = "frontend-http-legacy")]
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_get_capabilities(
-    base_url: String,
-    request_json: String,
-    pumas_api: Option<Arc<FfiPumasApi>>,
-) -> Result<String, FfiError> {
-    frontend_http_workflow_get_capabilities(base_url, request_json, pumas_api).await
-}
-
-/// Legacy alias for frontend HTTP workflow session creation.
-#[cfg(feature = "frontend-http-legacy")]
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_create_session(
-    base_url: String,
-    request_json: String,
-    pumas_api: Option<Arc<FfiPumasApi>>,
-) -> Result<String, FfiError> {
-    frontend_http_workflow_create_session(base_url, request_json, pumas_api).await
-}
-
-/// Legacy alias for frontend HTTP workflow session runs.
-#[cfg(feature = "frontend-http-legacy")]
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_run_session(
-    base_url: String,
-    request_json: String,
-    pumas_api: Option<Arc<FfiPumasApi>>,
-) -> Result<String, FfiError> {
-    frontend_http_workflow_run_session(base_url, request_json, pumas_api).await
-}
-
-/// Legacy alias for frontend HTTP workflow session close.
-#[cfg(feature = "frontend-http-legacy")]
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn workflow_close_session(request_json: String) -> Result<String, FfiError> {
-    frontend_http_workflow_close_session(request_json).await
 }
 
 // ============================================================================
@@ -974,7 +922,7 @@ mod tests {
     use super::*;
     #[cfg(feature = "frontend-http")]
     use pantograph_frontend_http_adapter::{
-        parse_embedding_payload, DEFAULT_MAX_BATCH_SIZE, DEFAULT_MAX_TEXT_LENGTH,
+        parse_workflow_outputs_payload, DEFAULT_MAX_INPUT_BINDINGS, DEFAULT_MAX_VALUE_BYTES,
     };
     #[cfg(feature = "frontend-http")]
     use std::io::{Read, Write};
@@ -1104,7 +1052,7 @@ mod tests {
     }
 
     #[cfg(feature = "frontend-http")]
-    fn spawn_single_embedding_server(
+    fn spawn_single_workflow_server(
         status_code: u16,
         body: serde_json::Value,
     ) -> (String, std::thread::JoinHandle<()>) {
@@ -1147,15 +1095,16 @@ mod tests {
         std::env::set_current_dir(&root).expect("set cwd");
 
         let payload = serde_json::json!({
-            "data": [{ "embedding": [0.1, 0.2, 0.3] }],
-            "usage": { "prompt_tokens": 4 },
-            "model": "model-from-server"
+            "run_id": "server-run-1",
+            "outputs": [{ "node_id": "vector-output-1", "port_id": "vector", "value": [0.1, 0.2, 0.3] }],
+            "timing_ms": 4
         });
-        let (base_url, server_thread) = spawn_single_embedding_server(200, payload);
+        let (base_url, server_thread) = spawn_single_workflow_server(200, payload);
 
         let request_json = serde_json::json!({
             "workflow_id": workflow_id,
-            "objects": [{ "object_id": "obj-1", "text": "hello world" }]
+            "inputs": [{ "node_id": "text-input-1", "port_id": "text", "value": "hello world" }],
+            "output_targets": [{ "node_id": "vector-output-1", "port_id": "vector" }]
         })
         .to_string();
 
@@ -1170,9 +1119,8 @@ mod tests {
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = std::fs::remove_dir_all(root);
 
-        assert_eq!(response.results.len(), 1);
-        assert_eq!(response.results[0].object_id, "obj-1");
-        assert_eq!(response.model_signature.model_id, "model-from-server");
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].node_id, "vector-output-1");
     }
 
     #[test]
@@ -1203,19 +1151,20 @@ mod tests {
         std::env::set_current_dir(original_cwd).expect("restore cwd");
         let _ = std::fs::remove_dir_all(root);
 
-        assert_eq!(response.max_batch_size, DEFAULT_MAX_BATCH_SIZE);
-        assert_eq!(response.max_text_length, DEFAULT_MAX_TEXT_LENGTH);
+        assert_eq!(response.max_input_bindings, DEFAULT_MAX_INPUT_BINDINGS);
+        assert_eq!(response.max_value_bytes, DEFAULT_MAX_VALUE_BYTES);
         assert_eq!(response.runtime_requirements.required_models.len(), 0);
         assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(0));
     }
 
     #[test]
     #[cfg(feature = "frontend-http")]
-    fn test_parse_embedding_payload_rejects_non_numeric() {
+    fn test_parse_workflow_outputs_payload_rejects_missing_port() {
         let payload = serde_json::json!({
-            "data": [{ "embedding": [0.1, "oops", 0.3] }]
+            "outputs": [{ "node_id": "node-1", "value": [0.1, 0.2, 0.3] }]
         });
-        let err = parse_embedding_payload(&payload).expect_err("must reject malformed vector");
-        assert!(err.to_string().contains("invalid embedding value"));
+        let err =
+            parse_workflow_outputs_payload(&payload).expect_err("must reject malformed output");
+        assert!(err.to_string().contains("port_id"));
     }
 }

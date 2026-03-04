@@ -50,4 +50,3 @@ uniffi = { version = "0.28", features = ["bindgen-tests"] }
 default = []
 cli = ["uniffi/cli"]
 frontend-http = ["dep:pantograph-frontend-http-adapter"]
-frontend-http-legacy = ["frontend-http"]
