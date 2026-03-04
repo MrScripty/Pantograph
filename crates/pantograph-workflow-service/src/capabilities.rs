@@ -26,6 +26,37 @@ impl StoredWorkflowFile {
     pub fn nodes(&self) -> &[StoredGraphNode] {
         &self.graph.nodes
     }
+
+    pub fn to_workflow_graph(&self, workflow_id: &str) -> node_engine::WorkflowGraph {
+        node_engine::WorkflowGraph {
+            id: workflow_id.to_string(),
+            name: self.metadata.name.clone(),
+            nodes: self
+                .graph
+                .nodes
+                .iter()
+                .map(|n| node_engine::GraphNode {
+                    id: n.id.clone(),
+                    node_type: n.node_type.clone(),
+                    data: n.data.clone(),
+                    position: (n.position.x, n.position.y),
+                })
+                .collect(),
+            edges: self
+                .graph
+                .edges
+                .iter()
+                .map(|e| node_engine::GraphEdge {
+                    id: e.id.clone(),
+                    source: e.source.clone(),
+                    source_handle: e.source_handle.clone(),
+                    target: e.target.clone(),
+                    target_handle: e.target_handle.clone(),
+                })
+                .collect(),
+            groups: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,34 +141,7 @@ pub fn load_and_validate_workflow(
         ))
     })?;
 
-    let graph = node_engine::WorkflowGraph {
-        id: workflow_id.to_string(),
-        name: stored.metadata.name.clone(),
-        nodes: stored
-            .graph
-            .nodes
-            .iter()
-            .map(|n| node_engine::GraphNode {
-                id: n.id.clone(),
-                node_type: n.node_type.clone(),
-                data: n.data.clone(),
-                position: (n.position.x, n.position.y),
-            })
-            .collect(),
-        edges: stored
-            .graph
-            .edges
-            .iter()
-            .map(|e| node_engine::GraphEdge {
-                id: e.id.clone(),
-                source: e.source.clone(),
-                source_handle: e.source_handle.clone(),
-                target: e.target.clone(),
-                target_handle: e.target_handle.clone(),
-            })
-            .collect(),
-        groups: Vec::new(),
-    };
+    let graph = stored.to_workflow_graph(workflow_id);
 
     let validation_errors = node_engine::validation::validate_workflow(&graph, None);
     if validation_errors.is_empty() {

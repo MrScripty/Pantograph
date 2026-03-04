@@ -67,10 +67,17 @@ pub async fn workflow_run(
     request: pantograph_workflow_service::WorkflowRunRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
+    rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
-    super::headless_workflow_commands::workflow_run(request, gateway, extensions, workflow_service)
-        .await
+    super::headless_workflow_commands::workflow_run(
+        request,
+        gateway,
+        extensions,
+        rag_manager,
+        workflow_service,
+    )
+    .await
 }
 
 #[command]
@@ -110,12 +117,14 @@ pub async fn workflow_run_session(
     request: pantograph_workflow_service::WorkflowSessionRunRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
+    rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
     super::headless_workflow_commands::workflow_run_session(
         request,
         gateway,
         extensions,
+        rag_manager,
         workflow_service,
     )
     .await
