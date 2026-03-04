@@ -11,9 +11,10 @@ use async_trait::async_trait;
 use pantograph_workflow_service::{
     capabilities, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowService,
-    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
-    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionRunRequest,
+    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
+    WorkflowRunResponse, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionRunRequest,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -28,6 +29,10 @@ pub type SharedWorkflowService = Arc<WorkflowService>;
 const DEFAULT_MAX_INPUT_BINDINGS: usize = 128;
 const DEFAULT_MAX_OUTPUT_TARGETS: usize = 128;
 const DEFAULT_MAX_VALUE_BYTES: usize = 32_768;
+
+fn workflow_error_json(error: WorkflowServiceError) -> String {
+    error.to_envelope_json()
+}
 
 #[derive(Clone, Default)]
 struct RuntimeExtensionsSnapshot {
@@ -92,7 +97,7 @@ pub async fn workflow_run(
     workflow_service
         .workflow_run(&host, request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_get_capabilities(
@@ -105,7 +110,7 @@ pub async fn workflow_get_capabilities(
     workflow_service
         .workflow_get_capabilities(&host, request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_get_io(
@@ -118,7 +123,20 @@ pub async fn workflow_get_io(
     workflow_service
         .workflow_get_io(&host, request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_preflight(
+    request: WorkflowPreflightRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowPreflightResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    workflow_service
+        .workflow_preflight(&host, request)
+        .await
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_create_session(
@@ -131,7 +149,7 @@ pub async fn workflow_create_session(
     workflow_service
         .create_workflow_session(&host, request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_run_session(
@@ -149,7 +167,7 @@ pub async fn workflow_run_session(
     workflow_service
         .run_workflow_session(&host, request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_close_session(
@@ -159,7 +177,7 @@ pub async fn workflow_close_session(
     workflow_service
         .close_workflow_session(request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(workflow_error_json)
 }
 
 struct TauriWorkflowHost {

@@ -48,8 +48,9 @@ use node_engine::{
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 #[cfg(feature = "frontend-http")]
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
-    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
+    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowPreflightRequest,
+    WorkflowRunRequest, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
 };
 
 // Force the linker to include workflow-nodes object files,
@@ -426,18 +427,54 @@ impl EventSink for BeamEventSink {
 
 #[cfg(feature = "frontend-http")]
 fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
-    match err {
-        WorkflowServiceError::InvalidRequest(message)
-        | WorkflowServiceError::CapabilityViolation(message)
-        | WorkflowServiceError::WorkflowNotFound(message)
-        | WorkflowServiceError::RuntimeNotReady(message)
-        | WorkflowServiceError::SessionNotFound(message)
-        | WorkflowServiceError::SessionEvicted(message)
-        | WorkflowServiceError::SchedulerBusy(message)
-        | WorkflowServiceError::OutputNotProduced(message)
-        | WorkflowServiceError::RuntimeTimeout(message)
-        | WorkflowServiceError::Internal(message) => rustler::Error::Term(Box::new(message)),
-    }
+    rustler::Error::Term(Box::new(err.to_envelope_json()))
+}
+
+#[cfg(feature = "frontend-http")]
+fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> String {
+    let envelope = WorkflowErrorEnvelope {
+        code,
+        message: message.into(),
+    };
+    serde_json::to_string(&envelope).unwrap_or_else(|_| {
+        r#"{"code":"internal_error","message":"failed to serialize workflow error envelope"}"#
+            .to_string()
+    })
+}
+
+#[cfg(feature = "frontend-http")]
+fn workflow_error_term(code: WorkflowErrorCode, message: impl Into<String>) -> rustler::Error {
+    rustler::Error::Term(Box::new(workflow_error_json(code, message)))
+}
+
+#[cfg(feature = "frontend-http")]
+fn workflow_runtime() -> NifResult<tokio::runtime::Runtime> {
+    tokio::runtime::Runtime::new().map_err(|e| {
+        workflow_error_term(
+            WorkflowErrorCode::InternalError,
+            format!("runtime initialization error: {}", e),
+        )
+    })
+}
+
+#[cfg(feature = "frontend-http")]
+fn workflow_serialize_response<T: serde::Serialize>(value: &T) -> NifResult<String> {
+    serde_json::to_string(value).map_err(|e| {
+        workflow_error_term(
+            WorkflowErrorCode::InternalError,
+            format!("response serialization error: {}", e),
+        )
+    })
+}
+
+#[cfg(feature = "frontend-http")]
+fn workflow_parse_request<T: serde::de::DeserializeOwned>(request_json: &str) -> NifResult<T> {
+    serde_json::from_str(request_json).map_err(|e| {
+        workflow_error_term(
+            WorkflowErrorCode::InvalidRequest,
+            format!("invalid request: {}", e),
+        )
+    })
 }
 
 #[cfg(feature = "frontend-http")]
@@ -451,32 +488,28 @@ fn build_frontend_http_host(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
     )
     .map_err(|e| {
-        rustler::Error::Term(Box::new(format!(
-            "frontend HTTP host config error: {}",
-            e
-        )))
+        workflow_error_term(
+            WorkflowErrorCode::InvalidRequest,
+            format!("frontend HTTP host config error: {}", e),
+        )
     })
 }
 
-/// Execute frontend HTTP workflow contract (`workflow_run`) and return response JSON.
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_run_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowRunRequest = serde_json::from_str(&request_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+    let request: WorkflowRunRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
 
     let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
         .block_on(async { WORKFLOW_SERVICE.workflow_run(&host, request).await })
         .map_err(map_workflow_service_error)?;
 
-    serde_json::to_string(&response)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_serialize_response(&response)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -489,17 +522,14 @@ fn frontend_http_workflow_run(
     frontend_http_workflow_run_impl(base_url, request_json, pumas_resource)
 }
 
-/// Execute frontend HTTP workflow capabilities contract and return response JSON.
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_get_capabilities_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowCapabilitiesRequest = serde_json::from_str(&request_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+    let request: WorkflowCapabilitiesRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
 
     let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
@@ -510,8 +540,7 @@ fn frontend_http_workflow_get_capabilities_impl(
         })
         .map_err(map_workflow_service_error)?;
 
-    serde_json::to_string(&response)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_serialize_response(&response)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -524,17 +553,41 @@ fn frontend_http_workflow_get_capabilities(
     frontend_http_workflow_get_capabilities_impl(base_url, request_json, pumas_resource)
 }
 
-/// Create scheduler-managed frontend HTTP workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_preflight_impl(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    let request: WorkflowPreflightRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
+    let response = runtime
+        .block_on(async { WORKFLOW_SERVICE.workflow_preflight(&host, request).await })
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_preflight(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_preflight_impl(base_url, request_json, pumas_resource)
+}
+
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_create_session_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowSessionCreateRequest = serde_json::from_str(&request_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+    let request: WorkflowSessionCreateRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
 
     let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
@@ -545,8 +598,7 @@ fn frontend_http_workflow_create_session_impl(
         })
         .map_err(map_workflow_service_error)?;
 
-    serde_json::to_string(&response)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_serialize_response(&response)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -559,41 +611,33 @@ fn frontend_http_workflow_create_session(
     frontend_http_workflow_create_session_impl(base_url, request_json, pumas_resource)
 }
 
-/// Run scheduler-managed frontend HTTP workflow session and return response JSON.
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_run_session_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowSessionRunRequest = serde_json::from_str(&request_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+    let request: WorkflowSessionRunRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
 
     let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
         .block_on(async { WORKFLOW_SERVICE.run_workflow_session(&host, request).await })
         .map_err(map_workflow_service_error)?;
 
-    serde_json::to_string(&response)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_serialize_response(&response)
 }
 
-/// Close scheduler-managed workflow session and return response JSON.
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_close_session_impl(request_json: String) -> NifResult<String> {
-    let request: WorkflowSessionCloseRequest = serde_json::from_str(&request_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+    let request: WorkflowSessionCloseRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
 
     let response = runtime
         .block_on(async { WORKFLOW_SERVICE.close_workflow_session(request).await })
         .map_err(map_workflow_service_error)?;
 
-    serde_json::to_string(&response)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_serialize_response(&response)
 }
 
 #[cfg(feature = "frontend-http")]

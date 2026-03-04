@@ -113,6 +113,22 @@ pub async fn workflow_get_io(
 }
 
 #[command]
+pub async fn workflow_preflight(
+    request: pantograph_workflow_service::WorkflowPreflightRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowPreflightResponse, String> {
+    super::headless_workflow_commands::workflow_preflight(
+        request,
+        gateway,
+        extensions,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
 pub async fn workflow_create_session(
     request: pantograph_workflow_service::WorkflowSessionCreateRequest,
     gateway: State<'_, SharedGateway>,
