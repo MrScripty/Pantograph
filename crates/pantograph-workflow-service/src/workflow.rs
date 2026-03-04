@@ -134,6 +134,54 @@ pub struct WorkflowCapabilitiesResponse {
     pub models: Vec<WorkflowCapabilityModel>,
 }
 
+/// Workflow I/O discovery request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowIoRequest {
+    pub workflow_id: String,
+}
+
+/// Workflow I/O discovery response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowIoResponse {
+    #[serde(default)]
+    pub inputs: Vec<WorkflowIoNode>,
+    #[serde(default)]
+    pub outputs: Vec<WorkflowIoNode>,
+}
+
+/// One workflow node available as an external input or output surface.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowIoNode {
+    pub node_id: String,
+    pub node_type: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub ports: Vec<WorkflowIoPort>,
+}
+
+/// I/O port metadata exposed to workflow API consumers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowIoPort {
+    pub port_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub data_type: Option<String>,
+    #[serde(default)]
+    pub required: Option<bool>,
+    #[serde(default)]
+    pub multiple: Option<bool>,
+}
+
 /// Session creation request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -204,6 +252,12 @@ pub enum WorkflowServiceError {
     Internal(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorkflowIoDirection {
+    Input,
+    Output,
+}
+
 /// Trait boundary for host/runtime concerns needed by workflow service.
 #[async_trait]
 pub trait WorkflowHost: Send + Sync {
@@ -258,8 +312,7 @@ pub trait WorkflowHost: Send + Sync {
         &self,
         workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
-        let stored =
-            capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
+        let stored = capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
         let required_models = capabilities::extract_required_models(stored.nodes());
         let mut required_backends = capabilities::extract_required_backends(stored.nodes());
         if required_backends.is_empty() {
@@ -323,6 +376,15 @@ pub trait WorkflowHost: Send + Sync {
             },
             models,
         })
+    }
+
+    /// Discover externally bindable input and output nodes for a workflow.
+    async fn workflow_io(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        let stored = capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
+        Ok(derive_workflow_io(stored.nodes()))
     }
 
     /// Execute one workflow run and return output port bindings.
@@ -489,10 +551,9 @@ impl WorkflowService {
         validate_workflow_id(&request.workflow_id)?;
         host.validate_workflow(&request.workflow_id).await?;
 
-        let mut store = self
-            .session_store
-            .lock()
-            .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))?;
+        let mut store = self.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session store lock poisoned".to_string())
+        })?;
         let session_id = store.create_session(
             request.workflow_id,
             request
@@ -516,12 +577,9 @@ impl WorkflowService {
         }
 
         let workflow_id = {
-            let mut store = self
-                .session_store
-                .lock()
-                .map_err(|_| {
-                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
-                })?;
+            let mut store = self.session_store.lock().map_err(|_| {
+                WorkflowServiceError::Internal("session store lock poisoned".to_string())
+            })?;
             store.begin_run(&session_id)?
         };
 
@@ -555,10 +613,9 @@ impl WorkflowService {
             ));
         }
 
-        let mut store = self
-            .session_store
-            .lock()
-            .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))?;
+        let mut store = self.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session store lock poisoned".to_string())
+        })?;
         store.close_session(session_id)?;
         Ok(WorkflowSessionCloseResponse { ok: true })
     }
@@ -650,6 +707,18 @@ impl WorkflowService {
             models: capabilities.models,
         })
     }
+
+    pub async fn workflow_get_io<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowIoRequest,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        validate_workflow_id(&request.workflow_id)?;
+        host.validate_workflow(&request.workflow_id).await?;
+        let io = host.workflow_io(&request.workflow_id).await?;
+        validate_workflow_io(&io)?;
+        Ok(io)
+    }
 }
 
 fn validate_workflow_id(workflow_id: &str) -> Result<(), WorkflowServiceError> {
@@ -716,6 +785,198 @@ fn validate_payload_size(
     }
 
     Ok(())
+}
+
+fn validate_workflow_io(io: &WorkflowIoResponse) -> Result<(), WorkflowServiceError> {
+    validate_workflow_io_nodes(&io.inputs, "inputs")?;
+    validate_workflow_io_nodes(&io.outputs, "outputs")?;
+    Ok(())
+}
+
+fn validate_workflow_io_nodes(
+    nodes: &[WorkflowIoNode],
+    field_name: &str,
+) -> Result<(), WorkflowServiceError> {
+    for (node_index, node) in nodes.iter().enumerate() {
+        if node.node_id.trim().is_empty() {
+            return Err(WorkflowServiceError::Internal(format!(
+                "{}.{}.node_id must be non-empty",
+                field_name, node_index
+            )));
+        }
+        if node.node_type.trim().is_empty() {
+            return Err(WorkflowServiceError::Internal(format!(
+                "{}.{}.node_type must be non-empty",
+                field_name, node_index
+            )));
+        }
+        for (port_index, port) in node.ports.iter().enumerate() {
+            if port.port_id.trim().is_empty() {
+                return Err(WorkflowServiceError::Internal(format!(
+                    "{}.{}.ports.{}.port_id must be non-empty",
+                    field_name, node_index, port_index
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn derive_workflow_io(nodes: &[capabilities::StoredGraphNode]) -> WorkflowIoResponse {
+    let mut inputs = Vec::new();
+    let mut outputs = Vec::new();
+
+    for node in nodes {
+        let Some(direction) = classify_workflow_io_direction(node) else {
+            continue;
+        };
+        let entry = build_workflow_io_node(node, direction);
+        match direction {
+            WorkflowIoDirection::Input => inputs.push(entry),
+            WorkflowIoDirection::Output => outputs.push(entry),
+        }
+    }
+
+    inputs.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+    outputs.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+
+    WorkflowIoResponse { inputs, outputs }
+}
+
+fn classify_workflow_io_direction(
+    node: &capabilities::StoredGraphNode,
+) -> Option<WorkflowIoDirection> {
+    let category = extract_nested_trimmed_str(node.data(), &["definition", "category"])
+        .map(|v| v.to_ascii_lowercase());
+    match category.as_deref() {
+        Some("input") => return Some(WorkflowIoDirection::Input),
+        Some("output") => return Some(WorkflowIoDirection::Output),
+        _ => {}
+    }
+
+    let node_type = node.node_type().to_ascii_lowercase();
+    if node_type.ends_with("-input") {
+        return Some(WorkflowIoDirection::Input);
+    }
+    if node_type.ends_with("-output") {
+        return Some(WorkflowIoDirection::Output);
+    }
+
+    None
+}
+
+fn build_workflow_io_node(
+    node: &capabilities::StoredGraphNode,
+    direction: WorkflowIoDirection,
+) -> WorkflowIoNode {
+    let name = extract_nested_trimmed_str(node.data(), &["name"])
+        .or_else(|| extract_nested_trimmed_str(node.data(), &["label"]))
+        .or_else(|| extract_nested_trimmed_str(node.data(), &["definition", "label"]));
+    let description = extract_nested_trimmed_str(node.data(), &["description"])
+        .or_else(|| extract_nested_trimmed_str(node.data(), &["definition", "description"]));
+    let ports = derive_workflow_io_ports(node, direction);
+
+    WorkflowIoNode {
+        node_id: node.id().to_string(),
+        node_type: node.node_type().to_string(),
+        name,
+        description,
+        ports,
+    }
+}
+
+fn derive_workflow_io_ports(
+    node: &capabilities::StoredGraphNode,
+    direction: WorkflowIoDirection,
+) -> Vec<WorkflowIoPort> {
+    let mut merged = HashMap::new();
+
+    let ordered_keys = match direction {
+        WorkflowIoDirection::Input => ["inputs", "outputs"],
+        WorkflowIoDirection::Output => ["outputs", "inputs"],
+    };
+
+    for key in ordered_keys {
+        for port in ports_from_definition(node.data(), key) {
+            merged.entry(port.port_id.clone()).or_insert(port);
+        }
+    }
+
+    let mut ports = merged.into_values().collect::<Vec<_>>();
+    ports.sort_by(|a, b| a.port_id.cmp(&b.port_id));
+    ports
+}
+
+fn ports_from_definition(data: &serde_json::Value, key: &str) -> Vec<WorkflowIoPort> {
+    let Some(entries) = data
+        .get("definition")
+        .and_then(|value| value.get(key))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Vec::new();
+    };
+
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let port_id = entry
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())?
+                .to_string();
+
+            let name = entry
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .or_else(|| {
+                    entry
+                        .get("label")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned)
+                });
+
+            let description = entry
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+
+            let data_type = entry
+                .get("data_type")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+
+            Some(WorkflowIoPort {
+                port_id,
+                name,
+                description,
+                data_type,
+                required: entry.get("required").and_then(serde_json::Value::as_bool),
+                multiple: entry.get("multiple").and_then(serde_json::Value::as_bool),
+            })
+        })
+        .collect()
+}
+
+fn extract_nested_trimmed_str(data: &serde_json::Value, path: &[&str]) -> Option<String> {
+    let mut cursor = data;
+    for segment in path {
+        cursor = cursor.get(*segment)?;
+    }
+    cursor
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 #[cfg(test)]
@@ -829,12 +1090,11 @@ mod tests {
 
     #[async_trait]
     impl WorkflowHost for MockWorkflowHost {
-        async fn validate_workflow(
-            &self,
-            workflow_id: &str,
-        ) -> Result<(), WorkflowServiceError> {
+        async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
             if workflow_id == "wf-missing" {
-                return Err(WorkflowServiceError::WorkflowNotFound(workflow_id.to_string()));
+                return Err(WorkflowServiceError::WorkflowNotFound(
+                    workflow_id.to_string(),
+                ));
             }
             Ok(())
         }
@@ -930,6 +1190,52 @@ mod tests {
         let parsed: WorkflowRunResponse = serde_json::from_str(&json).expect("parse response");
         assert_eq!(parsed.run_id, "run-1");
         assert_eq!(parsed.outputs[0].node_id, "vector-output-1");
+    }
+
+    #[test]
+    fn workflow_io_roundtrip_uses_snake_case() {
+        let response = WorkflowIoResponse {
+            inputs: vec![WorkflowIoNode {
+                node_id: "text-input-1".to_string(),
+                node_type: "text-input".to_string(),
+                name: Some("Prompt".to_string()),
+                description: Some("Prompt input".to_string()),
+                ports: vec![WorkflowIoPort {
+                    port_id: "text".to_string(),
+                    name: Some("Text".to_string()),
+                    description: None,
+                    data_type: Some("string".to_string()),
+                    required: Some(false),
+                    multiple: Some(false),
+                }],
+            }],
+            outputs: vec![WorkflowIoNode {
+                node_id: "text-output-1".to_string(),
+                node_type: "text-output".to_string(),
+                name: Some("Answer".to_string()),
+                description: None,
+                ports: vec![WorkflowIoPort {
+                    port_id: "text".to_string(),
+                    name: Some("Text".to_string()),
+                    description: None,
+                    data_type: Some("string".to_string()),
+                    required: Some(false),
+                    multiple: Some(false),
+                }],
+            }],
+        };
+
+        let json = serde_json::to_value(&response).expect("serialize workflow io");
+        assert_eq!(json["inputs"][0]["node_id"], "text-input-1");
+        assert_eq!(json["outputs"][0]["ports"][0]["port_id"], "text");
+
+        let parsed: WorkflowIoResponse =
+            serde_json::from_value(json).expect("parse workflow io response");
+        assert_eq!(parsed.inputs[0].name.as_deref(), Some("Prompt"));
+        assert_eq!(
+            parsed.outputs[0].ports[0].data_type.as_deref(),
+            Some("string")
+        );
     }
 
     #[tokio::test]
@@ -1053,10 +1359,130 @@ mod tests {
         assert_eq!(response.max_input_bindings, 8);
         assert_eq!(response.max_output_targets, 16);
         assert_eq!(response.max_value_bytes, 4096);
-        assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2048));
+        assert_eq!(
+            response.runtime_requirements.estimated_peak_ram_mb,
+            Some(2048)
+        );
         assert_eq!(response.runtime_requirements.required_models.len(), 1);
         assert_eq!(response.models.len(), 1);
         assert_eq!(response.models[0].model_id, "model-a");
+    }
+
+    #[tokio::test]
+    async fn workflow_get_io_derives_inputs_and_outputs_from_workflow() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-io-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-io.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": { "name": "Workflow I/O" },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "text-input-1",
+                            "node_type": "text-input",
+                            "data": {
+                                "name": "Prompt",
+                                "description": "Prompt supplied by the caller",
+                                "definition": {
+                                    "category": "input",
+                                    "label": "Text Input",
+                                    "description": "Provides text input",
+                                    "inputs": [
+                                        {
+                                            "id": "text",
+                                            "label": "Text",
+                                            "data_type": "string",
+                                            "required": false,
+                                            "multiple": false
+                                        }
+                                    ],
+                                    "outputs": [
+                                        {
+                                            "id": "text",
+                                            "label": "Text",
+                                            "data_type": "string",
+                                            "required": false,
+                                            "multiple": false
+                                        }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        },
+                        {
+                            "id": "text-output-1",
+                            "node_type": "text-output",
+                            "data": {
+                                "definition": {
+                                    "category": "output",
+                                    "label": "Text Output",
+                                    "description": "Displays text output",
+                                    "inputs": [
+                                        {
+                                            "id": "text",
+                                            "label": "Text",
+                                            "data_type": "string",
+                                            "required": false,
+                                            "multiple": false
+                                        }
+                                    ],
+                                    "outputs": [
+                                        {
+                                            "id": "text",
+                                            "label": "Text",
+                                            "data_type": "string",
+                                            "required": false,
+                                            "multiple": false
+                                        }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 120.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let response = WorkflowService::new()
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-io".to_string(),
+                },
+            )
+            .await
+            .expect("workflow io response");
+
+        assert_eq!(response.inputs.len(), 1);
+        assert_eq!(response.inputs[0].node_id, "text-input-1");
+        assert_eq!(response.inputs[0].name.as_deref(), Some("Prompt"));
+        assert_eq!(
+            response.inputs[0].description.as_deref(),
+            Some("Prompt supplied by the caller")
+        );
+        assert_eq!(response.inputs[0].ports.len(), 1);
+        assert_eq!(response.inputs[0].ports[0].port_id, "text");
+        assert_eq!(
+            response.inputs[0].ports[0].data_type.as_deref(),
+            Some("string")
+        );
+
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].node_id, "text-output-1");
+        assert_eq!(response.outputs[0].ports.len(), 1);
+        assert_eq!(response.outputs[0].ports[0].port_id, "text");
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 
     #[tokio::test]
@@ -1095,7 +1521,10 @@ mod tests {
             .await
             .expect("run session");
         assert_eq!(response.outputs.len(), 1);
-        assert_eq!(response.outputs[0].value, serde_json::json!("hello session"));
+        assert_eq!(
+            response.outputs[0].value,
+            serde_json::json!("hello session")
+        );
 
         let closed = service
             .close_workflow_session(WorkflowSessionCloseRequest {
@@ -1252,9 +1681,18 @@ mod tests {
             response.max_output_targets,
             capabilities::DEFAULT_MAX_OUTPUT_TARGETS
         );
-        assert_eq!(response.max_value_bytes, capabilities::DEFAULT_MAX_VALUE_BYTES);
-        assert_eq!(response.runtime_requirements.required_models, vec!["model-a"]);
-        assert_eq!(response.runtime_requirements.required_backends, vec!["llamacpp"]);
+        assert_eq!(
+            response.max_value_bytes,
+            capabilities::DEFAULT_MAX_VALUE_BYTES
+        );
+        assert_eq!(
+            response.runtime_requirements.required_models,
+            vec!["model-a"]
+        );
+        assert_eq!(
+            response.runtime_requirements.required_backends,
+            vec!["llamacpp"]
+        );
         assert_eq!(
             response.runtime_requirements.required_extensions,
             vec!["inference_gateway".to_string(), "pumas_api".to_string()]

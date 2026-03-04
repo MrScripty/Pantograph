@@ -1,18 +1,16 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeRequirements,
-    WorkflowService, WorkflowServiceError,
+    WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowServiceError,
 };
 
 struct ContractHost;
 
 #[async_trait]
 impl WorkflowHost for ContractHost {
-    async fn validate_workflow(
-        &self,
-        _workflow_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
+    async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
 
@@ -66,6 +64,42 @@ impl WorkflowHost for ContractHost {
             port_id: "vector".to_string(),
             value: serde_json::json!([0.1, 0.2, 0.3]),
         }])
+    }
+
+    async fn workflow_io(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+        Ok(WorkflowIoResponse {
+            inputs: vec![WorkflowIoNode {
+                node_id: "text-input-1".to_string(),
+                node_type: "text-input".to_string(),
+                name: Some("Prompt".to_string()),
+                description: Some("Prompt text input".to_string()),
+                ports: vec![WorkflowIoPort {
+                    port_id: "text".to_string(),
+                    name: Some("Text".to_string()),
+                    description: None,
+                    data_type: Some("string".to_string()),
+                    required: Some(false),
+                    multiple: Some(false),
+                }],
+            }],
+            outputs: vec![WorkflowIoNode {
+                node_id: "vector-output-1".to_string(),
+                node_type: "vector-output".to_string(),
+                name: Some("Embedding Vector".to_string()),
+                description: Some("Vector result".to_string()),
+                ports: vec![WorkflowIoPort {
+                    port_id: "vector".to_string(),
+                    name: Some("Vector".to_string()),
+                    description: None,
+                    data_type: Some("embedding".to_string()),
+                    required: Some(false),
+                    multiple: Some(false),
+                }],
+            }],
+        })
     }
 }
 
@@ -146,6 +180,56 @@ async fn workflow_capabilities_contract_snapshot() {
             "model_type": "embedding",
             "node_ids": ["node-embed"],
             "roles": ["embedding", "inference"]
+        }]
+    });
+
+    assert_eq!(value, expected);
+}
+
+#[tokio::test]
+async fn workflow_io_contract_snapshot() {
+    let service = WorkflowService::new();
+    let host = ContractHost;
+
+    let response = service
+        .workflow_get_io(
+            &host,
+            WorkflowIoRequest {
+                workflow_id: "wf-1".to_string(),
+            },
+        )
+        .await
+        .expect("workflow io response");
+
+    let value = serde_json::to_value(response).expect("serialize workflow io");
+    let expected = serde_json::json!({
+        "inputs": [{
+            "node_id": "text-input-1",
+            "node_type": "text-input",
+            "name": "Prompt",
+            "description": "Prompt text input",
+            "ports": [{
+                "port_id": "text",
+                "name": "Text",
+                "description": null,
+                "data_type": "string",
+                "required": false,
+                "multiple": false
+            }]
+        }],
+        "outputs": [{
+            "node_id": "vector-output-1",
+            "node_type": "vector-output",
+            "name": "Embedding Vector",
+            "description": "Vector result",
+            "ports": [{
+                "port_id": "vector",
+                "name": "Vector",
+                "description": null,
+                "data_type": "embedding",
+                "required": false,
+                "multiple": false
+            }]
         }]
     });
 

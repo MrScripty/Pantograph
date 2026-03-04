@@ -9,7 +9,8 @@ pub mod workflow;
 
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,
-    WorkflowHost, WorkflowHostCapabilities, WorkflowHostModelDescriptor, WorkflowOutputTarget,
+    WorkflowHost, WorkflowHostCapabilities, WorkflowHostModelDescriptor, WorkflowIoNode,
+    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements,
     WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
     WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
