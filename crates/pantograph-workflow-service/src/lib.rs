@@ -8,8 +8,9 @@ pub mod capabilities;
 pub mod workflow;
 
 pub use workflow::{
-    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
-    WorkflowHostCapabilities, WorkflowInputObject, WorkflowObjectError, WorkflowObjectResult,
+    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowHostModelDescriptor, WorkflowInputObject, WorkflowObjectError, WorkflowObjectResult,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements, WorkflowService,
     WorkflowServiceError, WorkflowStatus,
 };

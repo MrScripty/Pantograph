@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowInputObject, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError,
+    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost,
+    WorkflowHostCapabilities, WorkflowInputObject, WorkflowRunRequest,
+    WorkflowRuntimeRequirements, WorkflowService, WorkflowServiceError,
 };
 
 struct ContractHost;
@@ -33,6 +33,13 @@ impl WorkflowHost for ContractHost {
                 required_backends: vec!["llamacpp".to_string()],
                 required_extensions: vec!["inference_gateway".to_string()],
             },
+            models: vec![WorkflowCapabilityModel {
+                model_id: "model-a".to_string(),
+                model_revision_or_hash: Some("sha256:model-a-hash".to_string()),
+                model_type: Some("embedding".to_string()),
+                node_ids: vec!["node-embed".to_string()],
+                roles: vec!["embedding".to_string(), "inference".to_string()],
+            }],
         })
     }
 
@@ -143,7 +150,14 @@ async fn workflow_capabilities_contract_snapshot() {
             "required_models": ["model-a"],
             "required_backends": ["llamacpp"],
             "required_extensions": ["inference_gateway"]
-        }
+        },
+        "models": [{
+            "model_id": "model-a",
+            "model_revision_or_hash": "sha256:model-a-hash",
+            "model_type": "embedding",
+            "node_ids": ["node-embed"],
+            "roles": ["embedding", "inference"]
+        }]
     });
 
     assert_eq!(value, expected);

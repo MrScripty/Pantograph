@@ -86,6 +86,29 @@ pub struct WorkflowCapabilitiesRequest {
     pub workflow_id: String,
 }
 
+/// Host model descriptor used to build capability model inventory.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowHostModelDescriptor {
+    #[serde(default)]
+    pub model_type: Option<String>,
+    #[serde(default)]
+    pub hashes: HashMap<String, String>,
+}
+
+/// Model inventory item included in workflow capabilities.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowCapabilityModel {
+    pub model_id: String,
+    #[serde(default)]
+    pub model_revision_or_hash: Option<String>,
+    #[serde(default)]
+    pub model_type: Option<String>,
+    pub node_ids: Vec<String>,
+    pub roles: Vec<String>,
+}
+
 /// Host capability payload consumed by the service.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -126,6 +149,8 @@ pub struct WorkflowHostCapabilities {
     pub max_batch_size: usize,
     pub max_text_length: usize,
     pub runtime_requirements: WorkflowRuntimeRequirements,
+    #[serde(default)]
+    pub models: Vec<WorkflowCapabilityModel>,
 }
 
 /// Workflow capabilities response.
@@ -135,6 +160,8 @@ pub struct WorkflowCapabilitiesResponse {
     pub max_batch_size: usize,
     pub max_text_length: usize,
     pub runtime_requirements: WorkflowRuntimeRequirements,
+    #[serde(default)]
+    pub models: Vec<WorkflowCapabilityModel>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -189,6 +216,14 @@ pub trait WorkflowHost: Send + Sync {
         Ok(None)
     }
 
+    /// Optional model descriptor for capability inventory.
+    async fn model_descriptor(
+        &self,
+        _model_id: &str,
+    ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
+        Ok(None)
+    }
+
     /// Resolve workflow identity and fail if it is unknown to the host.
     async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
         capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots()).map(|_| ())
@@ -225,6 +260,28 @@ pub trait WorkflowHost: Send + Sync {
             estimated_min_ram_mb,
             estimation_confidence,
         ) = capabilities::estimate_memory_requirements(&required_models, &model_metadata);
+        let model_usages = capabilities::extract_model_usages(stored.nodes());
+        let mut models = Vec::with_capacity(model_usages.len());
+        for usage in model_usages {
+            let descriptor = self.model_descriptor(&usage.model_id).await?;
+            let model_revision_or_hash = descriptor
+                .as_ref()
+                .and_then(|record| capabilities::select_preferred_hash(&record.hashes));
+            let model_type = descriptor.and_then(|record| {
+                record
+                    .model_type
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+            });
+
+            models.push(WorkflowCapabilityModel {
+                model_id: usage.model_id,
+                model_revision_or_hash,
+                model_type,
+                node_ids: usage.node_ids,
+                roles: usage.roles,
+            });
+        }
 
         Ok(WorkflowHostCapabilities {
             max_batch_size: self.max_batch_size(),
@@ -239,6 +296,7 @@ pub trait WorkflowHost: Send + Sync {
                 required_backends,
                 required_extensions,
             },
+            models,
         })
     }
 
@@ -427,6 +485,7 @@ impl WorkflowService {
             max_batch_size: capabilities.max_batch_size,
             max_text_length: capabilities.max_text_length,
             runtime_requirements: capabilities.runtime_requirements,
+            models: capabilities.models,
         })
     }
 }
@@ -478,9 +537,9 @@ fn map_object_error(err: WorkflowServiceError) -> WorkflowObjectError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
-    use std::collections::HashMap;
     use std::sync::Mutex;
 
     struct MockWorkflowHost {
@@ -524,6 +583,13 @@ mod tests {
                         required_backends: vec!["llamacpp".to_string()],
                         required_extensions: vec!["inference_gateway".to_string()],
                     },
+                    models: vec![WorkflowCapabilityModel {
+                        model_id: "model-a".to_string(),
+                        model_revision_or_hash: Some("sha256:hash-model-a".to_string()),
+                        model_type: Some("embedding".to_string()),
+                        node_ids: vec!["node-1".to_string()],
+                        roles: vec!["embedding".to_string(), "inference".to_string()],
+                    }],
                 },
                 signatures: Mutex::new(signatures),
             }
@@ -552,6 +618,23 @@ mod tests {
                 Ok(Some(serde_json::json!({
                     "size_bytes": 2_u64 * 1024_u64 * 1024_u64
                 })))
+            } else {
+                Ok(None)
+            }
+        }
+
+        async fn model_descriptor(
+            &self,
+            model_id: &str,
+        ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
+            if model_id == "model-a" {
+                Ok(Some(WorkflowHostModelDescriptor {
+                    model_type: Some("embedding".to_string()),
+                    hashes: HashMap::from([
+                        ("blake3".to_string(), "bbb".to_string()),
+                        ("sha256".to_string(), "abc123".to_string()),
+                    ]),
+                }))
             } else {
                 Ok(None)
             }
@@ -766,6 +849,8 @@ mod tests {
         assert_eq!(response.max_text_length, 4096);
         assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2048));
         assert_eq!(response.runtime_requirements.required_models.len(), 1);
+        assert_eq!(response.models.len(), 1);
+        assert_eq!(response.models[0].model_id, "model-a");
     }
 
     #[tokio::test]
@@ -813,7 +898,8 @@ mod tests {
                             "node_type": "text-input",
                             "data": {
                                 "model_id": "model-a",
-                                "backend_key": "llamacpp"
+                                "backend_key": "llamacpp",
+                                "embedding": true
                             },
                             "position": { "x": 0.0, "y": 0.0 }
                         }
@@ -844,6 +930,15 @@ mod tests {
             response.runtime_requirements.required_extensions,
             vec!["inference_gateway".to_string(), "pumas_api".to_string()]
         );
+        assert_eq!(response.models.len(), 1);
+        assert_eq!(response.models[0].model_id, "model-a");
+        assert_eq!(response.models[0].model_type.as_deref(), Some("embedding"));
+        assert_eq!(
+            response.models[0].model_revision_or_hash.as_deref(),
+            Some("sha256:abc123")
+        );
+        assert_eq!(response.models[0].node_ids, vec!["node-1".to_string()]);
+        assert_eq!(response.models[0].roles, vec!["embedding".to_string()]);
         assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2));
         assert_eq!(response.runtime_requirements.estimated_min_ram_mb, Some(2));
         assert_eq!(

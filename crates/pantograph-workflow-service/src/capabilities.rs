@@ -8,6 +8,13 @@ use crate::workflow::WorkflowServiceError;
 pub const DEFAULT_MAX_BATCH_SIZE: usize = 128;
 pub const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelUsage {
+    pub model_id: String,
+    pub node_ids: Vec<String>,
+    pub roles: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct StoredWorkflowFile {
     metadata: StoredWorkflowMetadata,
@@ -41,6 +48,20 @@ pub struct StoredGraphNode {
     data: serde_json::Value,
     #[serde(default)]
     position: StoredPosition,
+}
+
+impl StoredGraphNode {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn node_type(&self) -> &str {
+        &self.node_type
+    }
+
+    pub fn data(&self) -> &serde_json::Value {
+        &self.data
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -143,6 +164,44 @@ pub fn extract_required_models(nodes: &[StoredGraphNode]) -> Vec<String> {
     models
 }
 
+pub fn extract_model_usages(nodes: &[StoredGraphNode]) -> Vec<ModelUsage> {
+    let mut usage_by_model: HashMap<String, (HashSet<String>, HashSet<String>)> = HashMap::new();
+
+    for node in nodes {
+        let mut model_ids = HashSet::new();
+        extract_model_ids_from_value(node.data(), &mut model_ids);
+        if model_ids.is_empty() {
+            continue;
+        }
+
+        let roles = derive_roles(node.node_type(), node.data());
+        for model_id in model_ids {
+            let entry = usage_by_model
+                .entry(model_id)
+                .or_insert_with(|| (HashSet::new(), HashSet::new()));
+            entry.0.insert(node.id().to_string());
+            entry.1.extend(roles.iter().cloned());
+        }
+    }
+
+    let mut models = usage_by_model
+        .into_iter()
+        .map(|(model_id, (node_ids, roles))| {
+            let mut node_ids = node_ids.into_iter().collect::<Vec<_>>();
+            let mut roles = roles.into_iter().collect::<Vec<_>>();
+            node_ids.sort();
+            roles.sort();
+            ModelUsage {
+                model_id,
+                node_ids,
+                roles,
+            }
+        })
+        .collect::<Vec<_>>();
+    models.sort_by(|a, b| a.model_id.cmp(&b.model_id));
+    models
+}
+
 pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     let mut out = HashSet::new();
     for node in nodes {
@@ -216,6 +275,22 @@ pub fn extract_model_size_bytes(metadata: &serde_json::Value) -> Option<u64> {
         .and_then(|v| v.as_u64())
         .or_else(|| metadata.get("sizeBytes").and_then(|v| v.as_u64()))
         .or_else(|| metadata.get("size").and_then(|v| v.as_u64()))
+}
+
+pub fn select_preferred_hash(hashes: &HashMap<String, String>) -> Option<String> {
+    for preferred in ["sha256", "blake3"] {
+        if let Some((_, value)) = hashes
+            .iter()
+            .find(|(key, value)| key.eq_ignore_ascii_case(preferred) && !value.trim().is_empty())
+        {
+            let trimmed = value.trim();
+            if trimmed.contains(':') {
+                return Some(trimmed.to_string());
+            }
+            return Some(format!("{preferred}:{trimmed}"));
+        }
+    }
+    None
 }
 
 fn find_workflow_file(workflow_id: &str, roots: &[PathBuf]) -> Option<PathBuf> {
@@ -305,6 +380,36 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
     }
 }
 
+fn derive_roles(node_type: &str, data: &serde_json::Value) -> HashSet<String> {
+    let mut roles = HashSet::new();
+    let node_type = node_type.to_ascii_lowercase();
+    if node_type.contains("embedding") {
+        roles.insert("embedding".to_string());
+    }
+    if node_type.contains("inference") {
+        roles.insert("inference".to_string());
+    }
+    if node_type.contains("puma-lib") || node_type.contains("model-provider") {
+        roles.insert("model_source".to_string());
+    }
+    if value_contains_embedding_hint(data) {
+        roles.insert("embedding".to_string());
+    }
+    roles
+}
+
+fn value_contains_embedding_hint(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(key, child)| {
+            key.eq_ignore_ascii_case("embedding")
+                || key.eq_ignore_ascii_case("embeddings")
+                || value_contains_embedding_hint(child)
+        }),
+        serde_json::Value::Array(values) => values.iter().any(value_contains_embedding_hint),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,5 +442,41 @@ mod tests {
         assert_eq!(min_vram, Some(2));
         assert_eq!(min_ram, Some(2));
         assert_eq!(confidence, "estimated_from_model_sizes");
+    }
+
+    #[test]
+    fn extract_model_usages_tracks_nodes_and_roles() {
+        let nodes = vec![
+            StoredGraphNode {
+                id: "n1".to_string(),
+                node_type: "embedding-inference".to_string(),
+                data: serde_json::json!({"model_id": "m1"}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "n2".to_string(),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"settings": {"model_id": "m1"}}),
+                position: StoredPosition::default(),
+            },
+        ];
+
+        let usages = extract_model_usages(&nodes);
+        assert_eq!(usages.len(), 1);
+        assert_eq!(usages[0].model_id, "m1");
+        assert_eq!(usages[0].node_ids, vec!["n1".to_string(), "n2".to_string()]);
+        assert_eq!(
+            usages[0].roles,
+            vec!["embedding".to_string(), "inference".to_string()]
+        );
+    }
+
+    #[test]
+    fn select_preferred_hash_prefers_sha256() {
+        let hashes = HashMap::from([
+            ("blake3".to_string(), "bbb".to_string()),
+            ("sha256".to_string(), "aaa".to_string()),
+        ]);
+        assert_eq!(select_preferred_hash(&hashes).as_deref(), Some("sha256:aaa"));
     }
 }
