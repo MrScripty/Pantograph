@@ -22,8 +22,19 @@ jobs:
       - name: Run contract tests
         run: cargo test -p pantograph-workflow-service --test contract
 
-      - name: Check UniFFI adapter parity build
-        run: cargo check -p pantograph-uniffi
+      - name: Check frontend HTTP adapter crate
+        run: |
+          cargo check -p pantograph-frontend-http-adapter
+          cargo test -p pantograph-frontend-http-adapter
 
-      - name: Check Rustler adapter parity build
-        run: cargo check -p pantograph_rustler
+      - name: Check UniFFI adapter modes
+        run: |
+          cargo check -p pantograph-uniffi --no-default-features
+          cargo check -p pantograph-uniffi --features frontend-http
+          cargo check -p pantograph-uniffi --features frontend-http-legacy
+
+      - name: Check Rustler adapter modes
+        run: |
+          cargo check -p pantograph_rustler --no-default-features
+          cargo check -p pantograph_rustler --features frontend-http
+          cargo check -p pantograph_rustler --features frontend-http-legacy
