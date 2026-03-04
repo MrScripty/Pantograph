@@ -12,3 +12,6 @@ serde_json.workspace = true
 reqwest.workspace = true
 thiserror.workspace = true
 pumas-library = { workspace = true }
+
+[dev-dependencies]
+tokio.workspace = true

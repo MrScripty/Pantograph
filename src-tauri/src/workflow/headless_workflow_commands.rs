@@ -296,16 +296,13 @@ impl TauriWorkflowHost {
         if let Some(targets) = output_targets {
             let mut outputs = Vec::with_capacity(targets.len());
             for target in targets {
-                let value = node_outputs
+                let Some(value) = node_outputs
                     .get(&target.node_id)
                     .and_then(|ports| ports.get(&target.port_id))
                     .cloned()
-                    .ok_or_else(|| {
-                        WorkflowServiceError::Internal(format!(
-                            "workflow output '{}.{}' was not produced",
-                            target.node_id, target.port_id
-                        ))
-                    })?;
+                else {
+                    continue;
+                };
 
                 outputs.push(WorkflowPortBinding {
                     node_id: target.node_id.clone(),

@@ -274,6 +274,12 @@ fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkfl
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pantograph_workflow_service::{
+        WorkflowOutputTarget, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    };
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
     fn parse_workflow_outputs_payload_rejects_missing_fields() {
@@ -299,5 +305,131 @@ mod tests {
         let normalized = normalize_base_url("http://127.0.0.1:8080/".to_string())
             .expect("normalize");
         assert_eq!(normalized, "http://127.0.0.1:8080");
+    }
+
+    fn create_temp_workflow_root_with_output(workflow_id: &str) -> std::path::PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("pantograph-frontend-http-tests-{suffix}"));
+        let workflows_dir = root.join(".pantograph").join("workflows");
+        std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+
+        let workflow_json = serde_json::json!({
+            "version": "1.0",
+            "metadata": {
+                "name": "Output Workflow"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "vector-output-1",
+                        "node_type": "vector-output",
+                        "data": {
+                            "definition": {
+                                "category": "output",
+                                "outputs": [
+                                    {
+                                        "id": "vector",
+                                        "data_type": "embedding",
+                                        "required": false,
+                                        "multiple": false
+                                    }
+                                ]
+                            }
+                        },
+                        "position": { "x": 0.0, "y": 0.0 }
+                    }
+                ],
+                "edges": []
+            }
+        });
+
+        let file_path = workflows_dir.join(format!("{}.json", workflow_id));
+        std::fs::write(
+            file_path,
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+        root
+    }
+
+    fn spawn_single_workflow_server(
+        status_code: u16,
+        body: serde_json::Value,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("local addr");
+        let body_text = body.to_string();
+        let reason = if status_code == 200 { "OK" } else { "ERROR" };
+
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("set timeout");
+            let mut request_buf = [0_u8; 8192];
+            let _ = stream.read(&mut request_buf);
+
+            let response = format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                status_code,
+                reason,
+                body_text.len(),
+                body_text
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write response");
+        });
+
+        (format!("http://{}", addr), handle)
+    }
+
+    #[tokio::test]
+    async fn workflow_run_returns_output_not_produced_for_missing_target_output() {
+        let workflow_id = "wf-output-not-produced";
+        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
+            .join(".pantograph")
+            .join("workflows");
+
+        let payload = serde_json::json!({
+            "run_id": "adapter-run-1",
+            "outputs": [],
+            "timing_ms": 2
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(200, payload);
+
+        let host = FrontendHttpWorkflowHost::new(
+            base_url,
+            None,
+            vec![workflow_root],
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
+            DEFAULT_BACKEND_NAME.to_string(),
+        )
+        .expect("build frontend host");
+
+        let err = WorkflowService::new()
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: workflow_id.to_string(),
+                    inputs: Vec::new(),
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "vector-output-1".to_string(),
+                        port_id: "vector".to_string(),
+                    }]),
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("missing output should return output_not_produced");
+
+        server_thread.join().expect("join server");
+        assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
     }
 }
