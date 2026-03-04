@@ -7275,6 +7275,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-frontend-http-adapter"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "pantograph-workflow-service",
+ "pumas-library",
+ "reqwest",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pantograph-uniffi"
 version = "0.1.0"
 dependencies = [

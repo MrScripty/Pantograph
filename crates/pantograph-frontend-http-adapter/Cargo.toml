@@ -1,0 +1,14 @@
+[package]
+name = "pantograph-frontend-http-adapter"
+version = "0.1.0"
+edition = "2021"
+description = "Explicit frontend HTTP workflow host adapter for Pantograph modular GUI surfaces"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+async-trait.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+thiserror.workspace = true
+pumas-library = { workspace = true }
