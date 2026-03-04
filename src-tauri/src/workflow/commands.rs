@@ -23,6 +23,8 @@ pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
 
 /// Shared executor extensions (holds PumasApi etc.).
 pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
+/// Shared headless workflow service state (session-aware).
+pub type SharedWorkflowService = Arc<pantograph_workflow_service::WorkflowService>;
 
 #[command]
 pub fn validate_workflow_connection(source_type: PortDataType, target_type: PortDataType) -> bool {
@@ -65,8 +67,10 @@ pub async fn workflow_run(
     request: pantograph_workflow_service::WorkflowRunRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
-    super::headless_workflow_commands::workflow_run(request, gateway, extensions).await
+    super::headless_workflow_commands::workflow_run(request, gateway, extensions, workflow_service)
+        .await
 }
 
 #[command]
@@ -74,11 +78,55 @@ pub async fn workflow_get_capabilities(
     request: pantograph_workflow_service::WorkflowCapabilitiesRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowCapabilitiesResponse, String> {
     super::headless_workflow_commands::workflow_get_capabilities(
-        request, gateway, extensions,
+        request,
+        gateway,
+        extensions,
+        workflow_service,
     )
     .await
+}
+
+#[command]
+pub async fn workflow_create_session(
+    request: pantograph_workflow_service::WorkflowSessionCreateRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowSessionCreateResponse, String> {
+    super::headless_workflow_commands::workflow_create_session(
+        request,
+        gateway,
+        extensions,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn workflow_run_session(
+    request: pantograph_workflow_service::WorkflowSessionRunRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
+    super::headless_workflow_commands::workflow_run_session(
+        request,
+        gateway,
+        extensions,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn workflow_close_session(
+    request: pantograph_workflow_service::WorkflowSessionCloseRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowSessionCloseResponse, String> {
+    super::headless_workflow_commands::workflow_close_session(request, workflow_service).await
 }
 
 #[command]

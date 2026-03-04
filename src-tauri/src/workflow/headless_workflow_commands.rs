@@ -9,13 +9,17 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowHost, WorkflowRunRequest, WorkflowRunResponse, WorkflowService, WorkflowServiceError,
+    WorkflowHost, WorkflowHostModelDescriptor, WorkflowRunRequest, WorkflowRunResponse,
+    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionRunRequest,
 };
 use tauri::State;
 
 use crate::llm::SharedGateway;
 
 use super::commands::SharedExtensions;
+pub type SharedWorkflowService = Arc<WorkflowService>;
 
 const DEFAULT_MAX_BATCH_SIZE: usize = 128;
 const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
@@ -24,9 +28,10 @@ pub async fn workflow_run(
     request: WorkflowRunRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowRunResponse, String> {
     let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
-    WorkflowService::new()
+    workflow_service
         .workflow_run(&host, request)
         .await
         .map_err(|e| e.to_string())
@@ -36,10 +41,47 @@ pub async fn workflow_get_capabilities(
     request: WorkflowCapabilitiesRequest,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowCapabilitiesResponse, String> {
     let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
-    WorkflowService::new()
+    workflow_service
         .workflow_get_capabilities(&host, request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn workflow_create_session(
+    request: WorkflowSessionCreateRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionCreateResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    workflow_service
+        .create_workflow_session(&host, request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn workflow_run_session(
+    request: WorkflowSessionRunRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowRunResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    workflow_service
+        .run_workflow_session(&host, request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn workflow_close_session(
+    request: WorkflowSessionCloseRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionCloseResponse, String> {
+    workflow_service
+        .close_workflow_session(request)
         .await
         .map_err(|e| e.to_string())
 }
@@ -95,6 +137,24 @@ impl WorkflowHost for TauriWorkflowHost {
             .await
             .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         Ok(model.map(|m| m.metadata))
+    }
+
+    async fn model_descriptor(
+        &self,
+        model_id: &str,
+    ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
+        let Some(api) = self.pumas_api().await else {
+            return Ok(None);
+        };
+
+        let model = api
+            .get_model(model_id)
+            .await
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
+        Ok(model.map(|m| WorkflowHostModelDescriptor {
+            model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
+            hashes: m.hashes,
+        }))
     }
 
     async fn run_object(

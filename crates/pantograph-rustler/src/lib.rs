@@ -33,7 +33,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use rustler::{Atom, Encoder, Env, NifResult, NifStruct, NifUnitEnum, OwnedEnv, ResourceArc, Term};
 use tokio::sync::oneshot;
@@ -43,8 +43,9 @@ use node_engine::{
     WorkflowGraph,
 };
 use pantograph_workflow_service::{
-    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost, WorkflowRunRequest,
-    WorkflowService, WorkflowServiceError,
+    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost,
+    WorkflowHostModelDescriptor, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
 };
 
 // Force the linker to include workflow-nodes object files,
@@ -210,6 +211,7 @@ static PENDING_CALLBACKS: std::sync::LazyLock<
 static CALLBACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 const DEFAULT_MAX_BATCH_SIZE: usize = capabilities::DEFAULT_MAX_BATCH_SIZE;
 const DEFAULT_MAX_TEXT_LENGTH: usize = capabilities::DEFAULT_MAX_TEXT_LENGTH;
+static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
 
 // ============================================================================
 // Elixir callback-based TaskExecutor
@@ -455,16 +457,13 @@ impl RustlerWorkflowHost {
                 ))
             })?;
 
-        select_model_hash(&model.hashes)
-            .map(Some)
-            .ok_or_else(|| {
-                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                    "model '{}' is missing sha256/blake3 hash metadata",
-                    model_id
-                ))
-            })
+        select_model_hash(&model.hashes).map(Some).ok_or_else(|| {
+            WorkflowServiceError::RuntimeSignatureUnavailable(format!(
+                "model '{}' is missing sha256/blake3 hash metadata",
+                model_id
+            ))
+        })
     }
-
 }
 
 #[async_trait::async_trait]
@@ -481,9 +480,7 @@ impl WorkflowHost for RustlerWorkflowHost {
         DEFAULT_MAX_TEXT_LENGTH
     }
 
-    async fn default_backend_name(
-        &self,
-    ) -> Result<String, WorkflowServiceError> {
+    async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
         Ok("openai-compatible".to_string())
     }
 
@@ -500,6 +497,24 @@ impl WorkflowHost for RustlerWorkflowHost {
             .await
             .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         Ok(model.map(|m| m.metadata))
+    }
+
+    async fn model_descriptor(
+        &self,
+        model_id: &str,
+    ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
+        let Some(api) = &self.pumas_api else {
+            return Ok(None);
+        };
+
+        let model = api
+            .get_model(model_id)
+            .await
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
+        Ok(model.map(|m| WorkflowHostModelDescriptor {
+            model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
+            hashes: m.hashes,
+        }))
     }
 
     async fn run_object(
@@ -565,7 +580,9 @@ impl WorkflowHost for RustlerWorkflowHost {
                     .and_then(|guard| guard.clone())
             })
             .unwrap_or_else(|| "default".to_string());
-        let model_revision_or_hash = self.resolve_model_revision_or_hash(&resolved_model_id).await?;
+        let model_revision_or_hash = self
+            .resolve_model_revision_or_hash(&resolved_model_id)
+            .await?;
 
         Ok(RuntimeSignature {
             model_id: resolved_model_id,
@@ -590,10 +607,7 @@ fn parse_embedding_payload(
     let mut embedding = Vec::with_capacity(embedding_values.len());
     for (index, value) in embedding_values.iter().enumerate() {
         let number = value.as_f64().ok_or_else(|| {
-            WorkflowServiceError::Internal(format!(
-                "invalid embedding value at index {}",
-                index
-            ))
+            WorkflowServiceError::Internal(format!("invalid embedding value at index {}", index))
         })?;
         embedding.push(number as f32);
     }
@@ -636,6 +650,9 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
         | WorkflowServiceError::WorkflowNotFound(message)
         | WorkflowServiceError::RuntimeNotReady(message)
         | WorkflowServiceError::RuntimeSignatureUnavailable(message)
+        | WorkflowServiceError::SessionNotFound(message)
+        | WorkflowServiceError::SessionEvicted(message)
+        | WorkflowServiceError::SchedulerBusy(message)
         | WorkflowServiceError::Internal(message) => rustler::Error::Term(Box::new(message)),
     }
 }
@@ -657,7 +674,7 @@ fn workflow_run(
         pumas_resource.as_ref().map(|resource| resource.api.clone()),
     );
     let response = runtime
-        .block_on(async { WorkflowService::new().workflow_run(&host, request).await })
+        .block_on(async { WORKFLOW_SERVICE.workflow_run(&host, request).await })
         .map_err(map_workflow_service_error)?;
 
     serde_json::to_string(&response)
@@ -682,10 +699,78 @@ fn workflow_get_capabilities(
     );
     let response = runtime
         .block_on(async {
-            WorkflowService::new()
+            WORKFLOW_SERVICE
                 .workflow_get_capabilities(&host, request)
                 .await
         })
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+/// Create scheduler-managed workflow session and return response JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_create_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    let request: WorkflowSessionCreateRequest = serde_json::from_str(&request_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let host = RustlerWorkflowHost::new(
+        base_url,
+        pumas_resource.as_ref().map(|resource| resource.api.clone()),
+    );
+    let response = runtime
+        .block_on(async {
+            WORKFLOW_SERVICE
+                .create_workflow_session(&host, request)
+                .await
+        })
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+/// Run scheduler-managed workflow session and return response JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_run_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    let request: WorkflowSessionRunRequest = serde_json::from_str(&request_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let host = RustlerWorkflowHost::new(
+        base_url,
+        pumas_resource.as_ref().map(|resource| resource.api.clone()),
+    );
+    let response = runtime
+        .block_on(async { WORKFLOW_SERVICE.run_workflow_session(&host, request).await })
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+/// Close scheduler-managed workflow session and return response JSON.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_close_session(request_json: String) -> NifResult<String> {
+    let request: WorkflowSessionCloseRequest = serde_json::from_str(&request_json)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
+
+    let response = runtime
+        .block_on(async { WORKFLOW_SERVICE.close_workflow_session(request).await })
         .map_err(map_workflow_service_error)?;
 
     serde_json::to_string(&response)
@@ -2329,7 +2414,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
 
         assert_eq!(response.results.len(), 1);
-        assert_eq!(response.results[0].status, pantograph_workflow_service::WorkflowStatus::Success);
+        assert_eq!(
+            response.results[0].status,
+            pantograph_workflow_service::WorkflowStatus::Success
+        );
         assert_eq!(response.model_signature.model_id, "model-from-server");
     }
 

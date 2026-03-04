@@ -21,15 +21,16 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use node_engine::{
     Context, EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowEvent,
     WorkflowExecutor, WorkflowGraph,
 };
 use pantograph_workflow_service::{
-    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost, WorkflowRunRequest,
-    WorkflowService, WorkflowServiceError,
+    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost,
+    WorkflowHostModelDescriptor, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
 };
 use tokio::sync::RwLock;
 
@@ -256,6 +257,7 @@ pub fn validate_orchestration_json(graph_json: String) -> Result<Vec<String>, Ff
 
 const DEFAULT_MAX_BATCH_SIZE: usize = capabilities::DEFAULT_MAX_BATCH_SIZE;
 const DEFAULT_MAX_TEXT_LENGTH: usize = capabilities::DEFAULT_MAX_TEXT_LENGTH;
+static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
 
 struct UniffiWorkflowHost {
     base_url: String,
@@ -293,16 +295,13 @@ impl UniffiWorkflowHost {
                 ))
             })?;
 
-        select_model_hash(&model.hashes)
-            .map(Some)
-            .ok_or_else(|| {
-                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                    "model '{}' is missing sha256/blake3 hash metadata",
-                    model_id
-                ))
-            })
+        select_model_hash(&model.hashes).map(Some).ok_or_else(|| {
+            WorkflowServiceError::RuntimeSignatureUnavailable(format!(
+                "model '{}' is missing sha256/blake3 hash metadata",
+                model_id
+            ))
+        })
     }
-
 }
 
 #[async_trait::async_trait]
@@ -319,9 +318,7 @@ impl WorkflowHost for UniffiWorkflowHost {
         DEFAULT_MAX_TEXT_LENGTH
     }
 
-    async fn default_backend_name(
-        &self,
-    ) -> Result<String, WorkflowServiceError> {
+    async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
         Ok("openai-compatible".to_string())
     }
 
@@ -338,6 +335,24 @@ impl WorkflowHost for UniffiWorkflowHost {
             .await
             .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         Ok(model.map(|m| m.metadata))
+    }
+
+    async fn model_descriptor(
+        &self,
+        model_id: &str,
+    ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
+        let Some(api) = &self.pumas_api else {
+            return Ok(None);
+        };
+
+        let model = api
+            .get_model(model_id)
+            .await
+            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
+        Ok(model.map(|m| WorkflowHostModelDescriptor {
+            model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
+            hashes: m.hashes,
+        }))
     }
 
     async fn run_object(
@@ -403,7 +418,9 @@ impl WorkflowHost for UniffiWorkflowHost {
                     .and_then(|guard| guard.clone())
             })
             .unwrap_or_else(|| "default".to_string());
-        let model_revision_or_hash = self.resolve_model_revision_or_hash(&resolved_model_id).await?;
+        let model_revision_or_hash = self
+            .resolve_model_revision_or_hash(&resolved_model_id)
+            .await?;
 
         Ok(RuntimeSignature {
             model_id: resolved_model_id,
@@ -428,10 +445,7 @@ fn parse_embedding_payload(
     let mut embedding = Vec::with_capacity(embedding_values.len());
     for (index, value) in embedding_values.iter().enumerate() {
         let number = value.as_f64().ok_or_else(|| {
-            WorkflowServiceError::Internal(format!(
-                "invalid embedding value at index {}",
-                index
-            ))
+            WorkflowServiceError::Internal(format!("invalid embedding value at index {}", index))
         })?;
         embedding.push(number as f32);
     }
@@ -474,6 +488,9 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
         | WorkflowServiceError::WorkflowNotFound(message)
         | WorkflowServiceError::RuntimeNotReady(message)
         | WorkflowServiceError::RuntimeSignatureUnavailable(message)
+        | WorkflowServiceError::SessionNotFound(message)
+        | WorkflowServiceError::SessionEvicted(message)
+        | WorkflowServiceError::SchedulerBusy(message)
         | WorkflowServiceError::Internal(message) => FfiError::Other { message },
     }
 }
@@ -490,11 +507,8 @@ pub async fn workflow_run(
             message: e.to_string(),
         })?;
 
-    let host = UniffiWorkflowHost::new(
-        base_url,
-        pumas_api.as_ref().map(|api| api.api_arc()),
-    );
-    let response = WorkflowService::new()
+    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let response = WORKFLOW_SERVICE
         .workflow_run(&host, request)
         .await
         .map_err(map_workflow_service_error)?;
@@ -516,12 +530,73 @@ pub async fn workflow_get_capabilities(
             message: e.to_string(),
         })?;
 
-    let host = UniffiWorkflowHost::new(
-        base_url,
-        pumas_api.as_ref().map(|api| api.api_arc()),
-    );
-    let response = WorkflowService::new()
+    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let response = WORKFLOW_SERVICE
         .workflow_get_capabilities(&host, request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
+        message: e.to_string(),
+    })
+}
+
+/// Create scheduler-managed workflow session and return response JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_create_session(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionCreateRequest =
+        serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })?;
+
+    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let response = WORKFLOW_SERVICE
+        .create_workflow_session(&host, request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
+        message: e.to_string(),
+    })
+}
+
+/// Run scheduler-managed workflow session and return workflow response JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_run_session(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionRunRequest =
+        serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })?;
+
+    let host = UniffiWorkflowHost::new(base_url, pumas_api.as_ref().map(|api| api.api_arc()));
+    let response = WORKFLOW_SERVICE
+        .run_workflow_session(&host, request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| FfiError::Serialization {
+        message: e.to_string(),
+    })
+}
+
+/// Close scheduler-managed workflow session and return response JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn workflow_close_session(request_json: String) -> Result<String, FfiError> {
+    let request: WorkflowSessionCloseRequest =
+        serde_json::from_str(&request_json).map_err(|e| FfiError::Serialization {
+            message: e.to_string(),
+        })?;
+
+    let response = WORKFLOW_SERVICE
+        .close_workflow_session(request)
         .await
         .map_err(map_workflow_service_error)?;
 

@@ -49,6 +49,8 @@ fn main() {
 
     // Create the execution manager for node-engine based workflows
     let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
+    let workflow_service: workflow::commands::SharedWorkflowService =
+        Arc::new(pantograph_workflow_service::WorkflowService::new());
 
     // Create the orchestration store with file persistence
     // Use CARGO_MANIFEST_DIR to get project root (same pattern as project_data_dir below)
@@ -100,6 +102,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(execution_manager)
+        .manage(workflow_service)
         .manage(orchestration_store)
         .manage(node_registry)
         .manage(shared_extensions.clone())
@@ -323,6 +326,9 @@ fn main() {
             // Headless workflow API commands
             workflow::commands::workflow_run,
             workflow::commands::workflow_get_capabilities,
+            workflow::commands::workflow_create_session,
+            workflow::commands::workflow_run_session,
+            workflow::commands::workflow_close_session,
             // Node-engine workflow commands (Phase 5)
             workflow::commands::execute_workflow_v2,
             workflow::commands::create_workflow_session,
