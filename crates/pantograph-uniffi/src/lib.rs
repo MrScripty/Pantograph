@@ -1090,7 +1090,44 @@ mod tests {
                 "modified": "2026-01-01T00:00:00Z"
             },
             "graph": {
-                "nodes": [],
+                "nodes": [
+                    {
+                        "id": "text-input-1",
+                        "node_type": "text-input",
+                        "data": {
+                            "definition": {
+                                "category": "input",
+                                "inputs": [
+                                    {
+                                        "id": "text",
+                                        "data_type": "string",
+                                        "required": true,
+                                        "multiple": false
+                                    }
+                                ]
+                            }
+                        },
+                        "position": { "x": 0.0, "y": 0.0 }
+                    },
+                    {
+                        "id": "vector-output-1",
+                        "node_type": "vector-output",
+                        "data": {
+                            "definition": {
+                                "category": "output",
+                                "outputs": [
+                                    {
+                                        "id": "vector",
+                                        "data_type": "embedding",
+                                        "required": false,
+                                        "multiple": false
+                                    }
+                                ]
+                            }
+                        },
+                        "position": { "x": 200.0, "y": 0.0 }
+                    }
+                ],
                 "edges": []
             }
         });
@@ -1138,7 +1175,6 @@ mod tests {
 
     #[test]
     #[cfg(feature = "frontend-http")]
-    #[ignore = "requires local TCP bind permissions in test environment"]
     fn test_workflow_run_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
         let workflow_id = "wf_contract_success";
