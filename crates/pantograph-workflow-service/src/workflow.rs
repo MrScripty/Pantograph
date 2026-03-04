@@ -848,7 +848,7 @@ impl WorkflowService {
             ));
         }
 
-        validate_bindings(&outputs, "outputs")?;
+        validate_host_output_bindings(&outputs, "outputs")?;
         for binding in &outputs {
             validate_payload_size(binding, capabilities.max_value_bytes)?;
         }
@@ -1016,6 +1016,34 @@ fn validate_bindings(
     Ok(())
 }
 
+fn validate_host_output_bindings(
+    bindings: &[WorkflowPortBinding],
+    field_name: &str,
+) -> Result<(), WorkflowServiceError> {
+    let mut seen = HashSet::new();
+    for (index, binding) in bindings.iter().enumerate() {
+        if binding.node_id.trim().is_empty() {
+            return Err(WorkflowServiceError::Internal(format!(
+                "{}.{}.node_id must be non-empty",
+                field_name, index
+            )));
+        }
+        if binding.port_id.trim().is_empty() {
+            return Err(WorkflowServiceError::Internal(format!(
+                "{}.{}.port_id must be non-empty",
+                field_name, index
+            )));
+        }
+        if !seen.insert((binding.node_id.as_str(), binding.port_id.as_str())) {
+            return Err(WorkflowServiceError::Internal(format!(
+                "{} has duplicate binding '{}.{}'",
+                field_name, binding.node_id, binding.port_id
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn validate_output_targets(targets: &[WorkflowOutputTarget]) -> Result<(), WorkflowServiceError> {
     let mut seen = HashSet::new();
     for (index, target) in targets.iter().enumerate() {
@@ -1078,10 +1106,16 @@ fn collect_invalid_output_targets(
     let discovered_outputs = discovered_output_target_set(io);
     let mut invalid_targets = targets
         .iter()
-        .filter(|target| !discovered_outputs.contains(&(target.node_id.clone(), target.port_id.clone())))
+        .filter(|target| {
+            !discovered_outputs.contains(&(target.node_id.clone(), target.port_id.clone()))
+        })
         .cloned()
         .collect::<Vec<_>>();
-    invalid_targets.sort_by(|a, b| a.node_id.cmp(&b.node_id).then_with(|| a.port_id.cmp(&b.port_id)));
+    invalid_targets.sort_by(|a, b| {
+        a.node_id
+            .cmp(&b.node_id)
+            .then_with(|| a.port_id.cmp(&b.port_id))
+    });
     invalid_targets
 }
 
@@ -1102,7 +1136,11 @@ fn derive_required_external_inputs(io: &WorkflowIoResponse) -> Vec<WorkflowInput
             })
         })
         .collect::<Vec<_>>();
-    required_inputs.sort_by(|a, b| a.node_id.cmp(&b.node_id).then_with(|| a.port_id.cmp(&b.port_id)));
+    required_inputs.sort_by(|a, b| {
+        a.node_id
+            .cmp(&b.node_id)
+            .then_with(|| a.port_id.cmp(&b.port_id))
+    });
     required_inputs
 }
 
@@ -1413,6 +1451,7 @@ mod tests {
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
         omit_requested_target_output: bool,
+        emit_invalid_output_binding: bool,
     }
 
     impl MockWorkflowHost {
@@ -1441,12 +1480,23 @@ mod tests {
                     }],
                 },
                 omit_requested_target_output: false,
+                emit_invalid_output_binding: false,
             }
         }
 
-        fn with_missing_requested_output(max_input_bindings: usize, max_value_bytes: usize) -> Self {
+        fn with_missing_requested_output(
+            max_input_bindings: usize,
+            max_value_bytes: usize,
+        ) -> Self {
             Self {
                 omit_requested_target_output: true,
+                ..Self::new(max_input_bindings, max_value_bytes)
+            }
+        }
+
+        fn with_invalid_output_binding(max_input_bindings: usize, max_value_bytes: usize) -> Self {
+            Self {
+                emit_invalid_output_binding: true,
                 ..Self::new(max_input_bindings, max_value_bytes)
             }
         }
@@ -1691,6 +1741,14 @@ mod tests {
                 return Ok(outputs);
             }
 
+            if self.emit_invalid_output_binding {
+                return Ok(vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: String::new(),
+                    value: serde_json::json!("invalid"),
+                }]);
+            }
+
             Ok(vec![WorkflowPortBinding {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
@@ -1915,6 +1973,31 @@ mod tests {
             .expect_err("expected runtime error");
 
         assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_returns_internal_when_host_emits_invalid_output_shape() {
+        let host = MockWorkflowHost::with_invalid_output_binding(10, 256);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("invalid host output should be internal");
+
+        assert!(matches!(err, WorkflowServiceError::Internal(_)));
+        assert!(err
+            .to_string()
+            .contains("outputs.0.port_id must be non-empty"));
     }
 
     #[tokio::test]
