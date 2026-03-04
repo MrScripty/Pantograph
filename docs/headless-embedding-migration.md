@@ -6,6 +6,9 @@ Consumers currently relying on workflow execution commands/events who need deter
 ## New API Surface
 - `workflow_run`
 - `workflow_get_capabilities`
+- `create_workflow_session`
+- `run_workflow_session`
+- `close_workflow_session`
 
 ## Legacy to New Mapping
 
@@ -43,6 +46,15 @@ Consumers currently relying on workflow execution commands/events who need deter
 - model metadata:
   - legacy: inferred from node metadata and runtime state
   - new: explicit `model_signature`
+- workflow model inventory:
+  - legacy: ad-hoc model traversal
+  - new: `workflow_get_capabilities.models[]`
+
+## Session Migration Pattern
+- create once with `create_workflow_session` for repeated runs
+- call `run_workflow_session` for each batch
+- close with `close_workflow_session` when finished
+- handle explicit scheduler errors (`session_evicted`, `scheduler_busy`)
 
 ## Compatibility Notes
 - This is a breaking API replacement (no backward compatibility layer).

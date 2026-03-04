@@ -13,6 +13,9 @@ UniFFI adapter surface for Pantograph workflow APIs.
 
 - `workflow_run(base_url, request_json, pumas_api?) -> response_json`
 - `workflow_get_capabilities(base_url, request_json, pumas_api?) -> response_json`
+- `workflow_create_session(base_url, request_json, pumas_api?) -> response_json`
+- `workflow_run_session(base_url, request_json, pumas_api?) -> response_json`
+- `workflow_close_session(request_json) -> response_json`
 
 These exports delegate business rules to `pantograph-workflow-service`.
 

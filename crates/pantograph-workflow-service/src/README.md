@@ -18,6 +18,9 @@ Primary operations:
 
 - `workflow_run`
 - `workflow_get_capabilities`
+- `create_workflow_session`
+- `run_workflow_session`
+- `close_workflow_session`
 
 Primary contract types:
 
@@ -26,12 +29,18 @@ Primary contract types:
 - `WorkflowCapabilitiesRequest`
 - `WorkflowCapabilitiesResponse`
 - `RuntimeSignature`
+- `WorkflowSessionCreateRequest`
+- `WorkflowSessionRunRequest`
+- `WorkflowSessionCloseRequest`
 
 ## Capability Ownership
 
 - Runtime requirement extraction/estimation is backend-owned in this crate.
 - Adapters should provide host dependencies (workflow roots, backend identity,
   optional model metadata), not duplicate capability business logic.
+- `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
+  optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
+  `roles`.
 
 ## Verification
 

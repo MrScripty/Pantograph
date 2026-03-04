@@ -12,6 +12,9 @@ Rustler NIF adapter surface for Pantograph workflow APIs.
 
 - `workflow_run/3`
 - `workflow_get_capabilities/3`
+- `workflow_create_session/3`
+- `workflow_run_session/3`
+- `workflow_close_session/1`
 
 These NIFs delegate business rules to `pantograph-workflow-service`.
 

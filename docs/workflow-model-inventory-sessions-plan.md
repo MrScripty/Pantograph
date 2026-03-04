@@ -75,41 +75,41 @@ sessions with Pantograph-owned resource control.
 **Goal:** Extend core DTOs and capability computation.
 
 **Tasks:**
-- [ ] Add `models[]` capability types to service contracts.
-- [ ] Derive `node_ids` and `roles` from workflow graph usage.
-- [ ] Add deterministic hash selection (`sha256` then `blake3`).
-- [ ] Update capability contract tests.
+- [x] Add `models[]` capability types to service contracts.
+- [x] Derive `node_ids` and `roles` from workflow graph usage.
+- [x] Add deterministic hash selection (`sha256` then `blake3`).
+- [x] Update capability contract tests.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service --test contract`
 - `cargo test -p pantograph-workflow-service`
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 2: Core Session and Scheduler APIs
 
 **Goal:** Implement service-owned session lifecycle.
 
 **Tasks:**
-- [ ] Add session request/response DTOs and methods.
-- [ ] Add scheduler admission/eviction and busy signaling.
-- [ ] Add new service errors (`session_not_found`, `session_evicted`, `scheduler_busy`).
-- [ ] Add unit tests for lifecycle and error paths.
+- [x] Add session request/response DTOs and methods.
+- [x] Add scheduler admission/eviction and busy signaling.
+- [x] Add new service errors (`session_not_found`, `session_evicted`, `scheduler_busy`).
+- [x] Add unit tests for lifecycle and error paths.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service`
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 3: Adapter Parity
 
 **Goal:** Expose new contract and sessions consistently across adapters.
 
 **Tasks:**
-- [ ] Tauri adapter parity for new capabilities and session methods.
-- [ ] UniFFI parity for new capabilities and session methods.
-- [ ] Rustler parity for new capabilities and session methods.
-- [ ] Update adapter error mapping for new service errors.
+- [x] Tauri adapter parity for new capabilities and session methods.
+- [x] UniFFI parity for new capabilities and session methods.
+- [x] Rustler parity for new capabilities and session methods.
+- [x] Update adapter error mapping for new service errors.
 
 **Verification:**
 - `cargo check --manifest-path src-tauri/Cargo.toml`
@@ -117,21 +117,21 @@ sessions with Pantograph-owned resource control.
 - `cargo check -p pantograph_rustler`
 - `cargo test -p pantograph-uniffi test_workflow_get_capabilities_contract_success -- --nocapture`
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 4: Documentation and Migration Notes
 
 **Goal:** Publish contract changes and scheduler semantics.
 
 **Tasks:**
-- [ ] Update headless API contract docs.
-- [ ] Update migration notes for session API direction.
-- [ ] Update ADR status notes for this extension.
+- [x] Update headless API contract docs.
+- [x] Update migration notes for session API direction.
+- [x] Update ADR status notes for this extension.
 
 **Verification:**
 - Manual doc consistency check against contract tests.
 
-**Status:** Not started
+**Status:** Completed
 
 ## Commit Cadence Notes
 

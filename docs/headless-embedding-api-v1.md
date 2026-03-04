@@ -22,6 +22,15 @@ Primary workflow operation for object-in/object-out execution.
 ### 2) `workflow_get_capabilities`
 Capability discovery for consumers before calling `workflow_run`.
 
+### 3) `create_workflow_session`
+Create scheduler-managed repeat-run session for a workflow.
+
+### 4) `run_workflow_session`
+Run one batch through an existing scheduler-managed session.
+
+### 5) `close_workflow_session`
+Close a scheduler-managed session.
+
 ## Request Contract: `WorkflowRunRequest`
 
 ### Required
@@ -72,6 +81,33 @@ Capability discovery for consumers before calling `workflow_run`.
   - `required_models`: array<string>
   - `required_backends`: array<string>
   - `required_extensions`: array<string>
+- `models`: array<object>
+  - `model_id`: string
+  - `model_revision_or_hash`: string or null
+  - `model_type`: string or null
+  - `node_ids`: array<string>
+  - `roles`: array<string>
+
+## Session Contracts
+
+### `WorkflowSessionCreateRequest`
+- `workflow_id`: string
+- `usage_profile`: string (optional)
+
+### `WorkflowSessionCreateResponse`
+- `session_id`: string
+
+### `WorkflowSessionRunRequest`
+- `session_id`: string
+- `objects`: array of `WorkflowInputObject`
+- `model_id`: string (optional)
+- `batch_id`: string (optional)
+
+### `WorkflowSessionCloseRequest`
+- `session_id`: string
+
+### `WorkflowSessionCloseResponse`
+- `ok`: boolean
 
 ## Behavior Requirements
 - Preserve input ordering and `object_id` correlation.
@@ -85,4 +121,7 @@ Capability discovery for consumers before calling `workflow_run`.
 - `capability_violation`
 - `runtime_not_ready`
 - `model_signature_unavailable`
+- `session_not_found`
+- `session_evicted`
+- `scheduler_busy`
 - `internal_error`

@@ -43,6 +43,8 @@ Adopt a three-layer boundary for headless workflow features:
 
 ## Implementation Notes
 - Freeze `workflow_run` and `workflow_get_capabilities` contracts before implementation.
+- Extend capabilities with model inventory (`models[]`) derived from graph usage.
+- Keep workflow sessions scheduler-managed in service layer (`create/run/close`).
 - Migrate Tauri workflow commands to thin delegation wrappers.
 - Add contract tests in service layer and parity checks in adapters.
 
@@ -60,6 +62,8 @@ Delivered artifacts:
 - Service layer contracts and orchestration: `crates/pantograph-workflow-service`
 - Shared capability core (workflow validation + runtime requirement computation):
   `crates/pantograph-workflow-service/src/capabilities.rs`
+- Session lifecycle and scheduler admission in service layer:
+  `crates/pantograph-workflow-service/src/workflow.rs`
 - Tauri thin adapter commands: `src-tauri/src/workflow/headless_workflow_commands.rs`
 - UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
 - Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
