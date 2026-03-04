@@ -9,10 +9,10 @@ pub mod workflow;
 
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,
-    WorkflowHost, WorkflowHostCapabilities, WorkflowHostModelDescriptor, WorkflowIoNode,
-    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements,
-    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionRunRequest,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowHostModelDescriptor, WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest,
+    WorkflowIoResponse, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
+    WorkflowRunOptions, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements,
+    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
+    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionRunRequest,
 };

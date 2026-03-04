@@ -148,6 +148,8 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
         workflow_id: &str,
         inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: pantograph_workflow_service::WorkflowRunOptions,
+        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         let url = format!("{}/v1/workflow/run", self.base_url);
         let body = serde_json::json!({

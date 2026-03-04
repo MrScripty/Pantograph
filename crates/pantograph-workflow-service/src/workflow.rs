@@ -35,6 +35,8 @@ pub struct WorkflowRunRequest {
     #[serde(default)]
     pub output_targets: Option<Vec<WorkflowOutputTarget>>,
     #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default)]
     pub run_id: Option<String>,
 }
 
@@ -208,6 +210,8 @@ pub struct WorkflowSessionRunRequest {
     #[serde(default)]
     pub output_targets: Option<Vec<WorkflowOutputTarget>>,
     #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default)]
     pub run_id: Option<String>,
 }
 
@@ -223,6 +227,28 @@ pub struct WorkflowSessionCloseRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowSessionCloseResponse {
     pub ok: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowErrorCode {
+    InvalidRequest,
+    WorkflowNotFound,
+    CapabilityViolation,
+    RuntimeNotReady,
+    SessionNotFound,
+    SessionEvicted,
+    SchedulerBusy,
+    OutputNotProduced,
+    RuntimeTimeout,
+    InternalError,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowErrorEnvelope {
+    pub code: WorkflowErrorCode,
+    pub message: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -248,8 +274,89 @@ pub enum WorkflowServiceError {
     #[error("scheduler_busy: {0}")]
     SchedulerBusy(String),
 
+    #[error("output_not_produced: {0}")]
+    OutputNotProduced(String),
+
+    #[error("runtime_timeout: {0}")]
+    RuntimeTimeout(String),
+
     #[error("internal_error: {0}")]
     Internal(String),
+}
+
+impl WorkflowServiceError {
+    pub fn code(&self) -> WorkflowErrorCode {
+        match self {
+            WorkflowServiceError::InvalidRequest(_) => WorkflowErrorCode::InvalidRequest,
+            WorkflowServiceError::WorkflowNotFound(_) => WorkflowErrorCode::WorkflowNotFound,
+            WorkflowServiceError::CapabilityViolation(_) => WorkflowErrorCode::CapabilityViolation,
+            WorkflowServiceError::RuntimeNotReady(_) => WorkflowErrorCode::RuntimeNotReady,
+            WorkflowServiceError::SessionNotFound(_) => WorkflowErrorCode::SessionNotFound,
+            WorkflowServiceError::SessionEvicted(_) => WorkflowErrorCode::SessionEvicted,
+            WorkflowServiceError::SchedulerBusy(_) => WorkflowErrorCode::SchedulerBusy,
+            WorkflowServiceError::OutputNotProduced(_) => WorkflowErrorCode::OutputNotProduced,
+            WorkflowServiceError::RuntimeTimeout(_) => WorkflowErrorCode::RuntimeTimeout,
+            WorkflowServiceError::Internal(_) => WorkflowErrorCode::InternalError,
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        match self {
+            WorkflowServiceError::InvalidRequest(message)
+            | WorkflowServiceError::WorkflowNotFound(message)
+            | WorkflowServiceError::CapabilityViolation(message)
+            | WorkflowServiceError::RuntimeNotReady(message)
+            | WorkflowServiceError::SessionNotFound(message)
+            | WorkflowServiceError::SessionEvicted(message)
+            | WorkflowServiceError::SchedulerBusy(message)
+            | WorkflowServiceError::OutputNotProduced(message)
+            | WorkflowServiceError::RuntimeTimeout(message)
+            | WorkflowServiceError::Internal(message) => message,
+        }
+    }
+
+    pub fn to_envelope(&self) -> WorkflowErrorEnvelope {
+        WorkflowErrorEnvelope {
+            code: self.code(),
+            message: self.message().to_string(),
+        }
+    }
+
+    pub fn to_envelope_json(&self) -> String {
+        serde_json::to_string(&self.to_envelope()).unwrap_or_else(|_| {
+            r#"{"code":"internal_error","message":"failed to serialize workflow error envelope"}"#
+                .to_string()
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunOptions {
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowRunHandle {
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl WorkflowRunHandle {
+    pub fn new() -> Self {
+        Self {
+            cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -393,6 +500,8 @@ pub trait WorkflowHost: Send + Sync {
         workflow_id: &str,
         inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
+        run_options: WorkflowRunOptions,
+        run_handle: WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError>;
 }
 
@@ -590,6 +699,7 @@ impl WorkflowService {
                     workflow_id,
                     inputs: request.inputs,
                     output_targets: request.output_targets,
+                    timeout_ms: request.timeout_ms,
                     run_id: request.run_id,
                 },
             )
@@ -667,10 +777,16 @@ impl WorkflowService {
                 &request.workflow_id,
                 &request.inputs,
                 request.output_targets.as_deref(),
+                WorkflowRunOptions {
+                    timeout_ms: request.timeout_ms,
+                },
+                WorkflowRunHandle::new(),
             )
             .await?;
 
-        if outputs.is_empty() {
+        if let Some(targets) = request.output_targets.as_ref() {
+            validate_requested_outputs_produced(targets, &outputs)?;
+        } else if outputs.is_empty() {
             return Err(WorkflowServiceError::Internal(
                 "workflow execution returned zero outputs".to_string(),
             ));
@@ -794,6 +910,28 @@ fn validate_output_targets_against_io(
             return Err(WorkflowServiceError::InvalidRequest(format!(
                 "output_targets.{} references non-discoverable output '{}.{}'",
                 index, target.node_id, target.port_id
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_requested_outputs_produced(
+    targets: &[WorkflowOutputTarget],
+    outputs: &[WorkflowPortBinding],
+) -> Result<(), WorkflowServiceError> {
+    let produced = outputs
+        .iter()
+        .map(|binding| (binding.node_id.as_str(), binding.port_id.as_str()))
+        .collect::<HashSet<_>>();
+
+    for target in targets {
+        let key = (target.node_id.as_str(), target.port_id.as_str());
+        if !produced.contains(&key) {
+            return Err(WorkflowServiceError::OutputNotProduced(format!(
+                "requested output target '{}.{}' was not produced",
+                target.node_id, target.port_id
             )));
         }
     }
@@ -1059,6 +1197,7 @@ mod tests {
 
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
+        omit_requested_target_output: bool,
     }
 
     impl MockWorkflowHost {
@@ -1086,6 +1225,14 @@ mod tests {
                         roles: vec!["embedding".to_string(), "inference".to_string()],
                     }],
                 },
+                omit_requested_target_output: false,
+            }
+        }
+
+        fn with_missing_requested_output(max_input_bindings: usize, max_value_bytes: usize) -> Self {
+            Self {
+                omit_requested_target_output: true,
+                ..Self::new(max_input_bindings, max_value_bytes)
             }
         }
     }
@@ -1139,6 +1286,8 @@ mod tests {
             _workflow_id: &str,
             _inputs: &[WorkflowPortBinding],
             output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
         ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
             if let Some(targets) = output_targets {
                 return Ok(targets
@@ -1218,6 +1367,8 @@ mod tests {
             _workflow_id: &str,
             inputs: &[WorkflowPortBinding],
             output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
         ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
             if inputs.iter().any(|binding| {
                 binding
@@ -1232,6 +1383,9 @@ mod tests {
             }
 
             if let Some(targets) = output_targets {
+                if self.omit_requested_target_output && !targets.is_empty() {
+                    return Ok(Vec::new());
+                }
                 let mut outputs = Vec::with_capacity(targets.len());
                 for target in targets {
                     let value = inputs
@@ -1272,6 +1426,7 @@ mod tests {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
             }]),
+            timeout_ms: None,
             run_id: Some("run-1".to_string()),
         };
 
@@ -1363,6 +1518,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    timeout_ms: None,
                     run_id: Some("run-xyz".to_string()),
                 },
             )
@@ -1390,6 +1546,7 @@ mod tests {
                         value: serde_json::json!("runtime-error object"),
                     }],
                     output_targets: None,
+                    timeout_ms: None,
                     run_id: None,
                 },
             )
@@ -1415,6 +1572,7 @@ mod tests {
                         value: serde_json::json!("bad"),
                     }],
                     output_targets: None,
+                    timeout_ms: None,
                     run_id: None,
                 },
             )
@@ -1440,6 +1598,7 @@ mod tests {
                         value: serde_json::json!("this is too large"),
                     }],
                     output_targets: None,
+                    timeout_ms: None,
                     run_id: None,
                 },
             )
@@ -1792,6 +1951,7 @@ mod tests {
                         node_id: target_node.node_id.clone(),
                         port_id: target_port.port_id.clone(),
                     }]),
+                    timeout_ms: None,
                     run_id: None,
                 },
             )
@@ -1818,6 +1978,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "stream".to_string(),
                     }]),
+                    timeout_ms: None,
                     run_id: None,
                 },
             )
@@ -1825,6 +1986,51 @@ mod tests {
             .expect_err("non-discovered target should fail early");
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_returns_output_not_produced_when_target_missing() {
+        let host = MockWorkflowHost::with_missing_requested_output(8, 1024);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("expected output_not_produced");
+
+        assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
+        assert!(err
+            .to_string()
+            .contains("requested output target 'text-output-1.text' was not produced"));
+    }
+
+    #[test]
+    fn workflow_service_error_envelope_roundtrip() {
+        let err = WorkflowServiceError::OutputNotProduced(
+            "requested output target 'vector-output-1.vector' was not produced".to_string(),
+        );
+
+        let envelope = err.to_envelope();
+        assert_eq!(envelope.code, WorkflowErrorCode::OutputNotProduced);
+        assert!(envelope.message.contains("vector-output-1.vector"));
+
+        let json = err.to_envelope_json();
+        let parsed: WorkflowErrorEnvelope =
+            serde_json::from_str(&json).expect("parse workflow error envelope");
+        assert_eq!(parsed.code, WorkflowErrorCode::OutputNotProduced);
+        assert!(parsed.message.contains("vector-output-1.vector"));
     }
 
     #[tokio::test]
@@ -1857,6 +2063,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    timeout_ms: None,
                     run_id: Some("session-run-1".to_string()),
                 },
             )
@@ -1883,6 +2090,7 @@ mod tests {
                     session_id: created.session_id,
                     inputs: Vec::new(),
                     output_targets: None,
+                    timeout_ms: None,
                     run_id: None,
                 },
             )
@@ -1925,6 +2133,7 @@ mod tests {
                     session_id: first.session_id,
                     inputs: Vec::new(),
                     output_targets: None,
+                    timeout_ms: None,
                     run_id: None,
                 },
             )

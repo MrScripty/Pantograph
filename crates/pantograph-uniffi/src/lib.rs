@@ -273,6 +273,8 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
         | WorkflowServiceError::SessionNotFound(message)
         | WorkflowServiceError::SessionEvicted(message)
         | WorkflowServiceError::SchedulerBusy(message)
+        | WorkflowServiceError::OutputNotProduced(message)
+        | WorkflowServiceError::RuntimeTimeout(message)
         | WorkflowServiceError::Internal(message) => FfiError::Other { message },
     }
 }

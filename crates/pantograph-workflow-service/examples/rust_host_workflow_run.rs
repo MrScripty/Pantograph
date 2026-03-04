@@ -54,6 +54,8 @@ impl WorkflowHost for ExampleHost {
         _workflow_id: &str,
         _inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: pantograph_workflow_service::WorkflowRunOptions,
+        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         if let Some(targets) = output_targets {
             return Ok(targets
@@ -93,6 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     node_id: "vector-output-1".to_string(),
                     port_id: "vector".to_string(),
                 }]),
+                timeout_ms: None,
                 run_id: Some("example-run-1".to_string()),
             },
         )

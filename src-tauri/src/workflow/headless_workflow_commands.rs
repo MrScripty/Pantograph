@@ -381,6 +381,8 @@ impl WorkflowHost for TauriWorkflowHost {
         workflow_id: &str,
         inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: pantograph_workflow_service::WorkflowRunOptions,
+        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         let rag_manager = self.rag_manager.clone().ok_or_else(|| {
             WorkflowServiceError::Internal(

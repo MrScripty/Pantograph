@@ -47,6 +47,8 @@ impl WorkflowHost for ContractHost {
         _workflow_id: &str,
         _inputs: &[WorkflowPortBinding],
         output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: pantograph_workflow_service::WorkflowRunOptions,
+        _run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         if let Some(targets) = output_targets {
             return Ok(targets
@@ -122,6 +124,7 @@ async fn workflow_run_contract_snapshot() {
                     node_id: "vector-output-1".to_string(),
                     port_id: "vector".to_string(),
                 }]),
+                timeout_ms: None,
                 run_id: Some("run-123".to_string()),
             },
         )
@@ -251,6 +254,7 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
                     node_id: "vector-output-1".to_string(),
                     port_id: "stream".to_string(),
                 }]),
+                timeout_ms: None,
                 run_id: None,
             },
         )

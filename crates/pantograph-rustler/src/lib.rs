@@ -434,6 +434,8 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
         | WorkflowServiceError::SessionNotFound(message)
         | WorkflowServiceError::SessionEvicted(message)
         | WorkflowServiceError::SchedulerBusy(message)
+        | WorkflowServiceError::OutputNotProduced(message)
+        | WorkflowServiceError::RuntimeTimeout(message)
         | WorkflowServiceError::Internal(message) => rustler::Error::Term(Box::new(message)),
     }
 }
@@ -2249,6 +2251,7 @@ mod tests {
                 node_id: "vector-output-1".to_string(),
                 port_id: "vector".to_string(),
             }]),
+            timeout_ms: None,
             run_id: None,
         };
         let response = WorkflowService::new()
