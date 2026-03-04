@@ -11,8 +11,9 @@ pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,
     WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost, WorkflowHostCapabilities,
     WorkflowHostModelDescriptor, WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest,
-    WorkflowIoResponse, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
-    WorkflowRunOptions, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements,
-    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
+    WorkflowIoResponse, WorkflowInputTarget, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunHandle, WorkflowRunOptions,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
     WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionRunRequest,
 };

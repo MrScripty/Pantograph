@@ -153,6 +153,38 @@ pub struct WorkflowIoResponse {
     pub outputs: Vec<WorkflowIoNode>,
 }
 
+/// Workflow preflight request for static, non-runtime validation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowPreflightRequest {
+    pub workflow_id: String,
+    #[serde(default)]
+    pub inputs: Vec<WorkflowPortBinding>,
+    #[serde(default)]
+    pub output_targets: Option<Vec<WorkflowOutputTarget>>,
+}
+
+/// Input surface reference used by preflight diagnostics.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowInputTarget {
+    pub node_id: String,
+    pub port_id: String,
+}
+
+/// Workflow preflight response for static request validation diagnostics.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowPreflightResponse {
+    #[serde(default)]
+    pub missing_required_inputs: Vec<WorkflowInputTarget>,
+    #[serde(default)]
+    pub invalid_targets: Vec<WorkflowOutputTarget>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    pub can_run: bool,
+}
+
 /// One workflow node available as an external input or output surface.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -864,6 +896,78 @@ impl WorkflowService {
         validate_workflow_io(&io)?;
         Ok(io)
     }
+
+    pub async fn workflow_preflight<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowPreflightRequest,
+    ) -> Result<WorkflowPreflightResponse, WorkflowServiceError> {
+        validate_workflow_id(&request.workflow_id)?;
+        validate_bindings(&request.inputs, "inputs")?;
+        if let Some(targets) = request.output_targets.as_ref() {
+            validate_output_targets(targets)?;
+        }
+
+        host.validate_workflow(&request.workflow_id).await?;
+        let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
+        if request.inputs.len() > capabilities.max_input_bindings {
+            return Err(WorkflowServiceError::CapabilityViolation(format!(
+                "input binding count {} exceeds max_input_bindings {}",
+                request.inputs.len(),
+                capabilities.max_input_bindings
+            )));
+        }
+        if let Some(targets) = request.output_targets.as_ref() {
+            if targets.len() > capabilities.max_output_targets {
+                return Err(WorkflowServiceError::CapabilityViolation(format!(
+                    "output target count {} exceeds max_output_targets {}",
+                    targets.len(),
+                    capabilities.max_output_targets
+                )));
+            }
+        }
+        for binding in &request.inputs {
+            validate_payload_size(binding, capabilities.max_value_bytes)?;
+        }
+
+        let io = host.workflow_io(&request.workflow_id).await?;
+        validate_workflow_io(&io)?;
+
+        let supplied_inputs = request
+            .inputs
+            .iter()
+            .map(|binding| (binding.node_id.as_str(), binding.port_id.as_str()))
+            .collect::<HashSet<_>>();
+        let required_inputs = derive_required_external_inputs(&io);
+        let mut missing_required_inputs = required_inputs
+            .iter()
+            .filter(|required| {
+                !supplied_inputs.contains(&(required.node_id.as_str(), required.port_id.as_str()))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        missing_required_inputs.sort_by(|a, b| {
+            a.node_id
+                .cmp(&b.node_id)
+                .then_with(|| a.port_id.cmp(&b.port_id))
+        });
+
+        let invalid_targets = request
+            .output_targets
+            .as_deref()
+            .map(|targets| collect_invalid_output_targets(targets, &io))
+            .unwrap_or_default();
+
+        let warnings = collect_preflight_warnings(&io);
+        let can_run = missing_required_inputs.is_empty() && invalid_targets.is_empty();
+
+        Ok(WorkflowPreflightResponse {
+            missing_required_inputs,
+            invalid_targets,
+            warnings,
+            can_run,
+        })
+    }
 }
 
 fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), WorkflowServiceError> {
@@ -888,6 +992,7 @@ fn validate_bindings(
     bindings: &[WorkflowPortBinding],
     field_name: &str,
 ) -> Result<(), WorkflowServiceError> {
+    let mut seen = HashSet::new();
     for (index, binding) in bindings.iter().enumerate() {
         if binding.node_id.trim().is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
@@ -901,11 +1006,18 @@ fn validate_bindings(
                 field_name, index
             )));
         }
+        if !seen.insert((binding.node_id.as_str(), binding.port_id.as_str())) {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "{} has duplicate binding '{}.{}'",
+                field_name, binding.node_id, binding.port_id
+            )));
+        }
     }
     Ok(())
 }
 
 fn validate_output_targets(targets: &[WorkflowOutputTarget]) -> Result<(), WorkflowServiceError> {
+    let mut seen = HashSet::new();
     for (index, target) in targets.iter().enumerate() {
         if target.node_id.trim().is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
@@ -919,6 +1031,12 @@ fn validate_output_targets(targets: &[WorkflowOutputTarget]) -> Result<(), Workf
                 index
             )));
         }
+        if !seen.insert((target.node_id.as_str(), target.port_id.as_str())) {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "output_targets has duplicate target '{}.{}'",
+                target.node_id, target.port_id
+            )));
+        }
     }
     Ok(())
 }
@@ -927,15 +1045,7 @@ fn validate_output_targets_against_io(
     targets: &[WorkflowOutputTarget],
     io: &WorkflowIoResponse,
 ) -> Result<(), WorkflowServiceError> {
-    let discovered_outputs = io
-        .outputs
-        .iter()
-        .flat_map(|node| {
-            node.ports
-                .iter()
-                .map(|port| (node.node_id.clone(), port.port_id.clone()))
-        })
-        .collect::<HashSet<_>>();
+    let discovered_outputs = discovered_output_target_set(io);
 
     for (index, target) in targets.iter().enumerate() {
         let key = (target.node_id.clone(), target.port_id.clone());
@@ -948,6 +1058,77 @@ fn validate_output_targets_against_io(
     }
 
     Ok(())
+}
+
+fn discovered_output_target_set(io: &WorkflowIoResponse) -> HashSet<(String, String)> {
+    io.outputs
+        .iter()
+        .flat_map(|node| {
+            node.ports
+                .iter()
+                .map(|port| (node.node_id.clone(), port.port_id.clone()))
+        })
+        .collect()
+}
+
+fn collect_invalid_output_targets(
+    targets: &[WorkflowOutputTarget],
+    io: &WorkflowIoResponse,
+) -> Vec<WorkflowOutputTarget> {
+    let discovered_outputs = discovered_output_target_set(io);
+    let mut invalid_targets = targets
+        .iter()
+        .filter(|target| !discovered_outputs.contains(&(target.node_id.clone(), target.port_id.clone())))
+        .cloned()
+        .collect::<Vec<_>>();
+    invalid_targets.sort_by(|a, b| a.node_id.cmp(&b.node_id).then_with(|| a.port_id.cmp(&b.port_id)));
+    invalid_targets
+}
+
+fn derive_required_external_inputs(io: &WorkflowIoResponse) -> Vec<WorkflowInputTarget> {
+    let mut required_inputs = io
+        .inputs
+        .iter()
+        .flat_map(|node| {
+            node.ports.iter().filter_map(move |port| {
+                if port.required == Some(true) {
+                    Some(WorkflowInputTarget {
+                        node_id: node.node_id.clone(),
+                        port_id: port.port_id.clone(),
+                    })
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    required_inputs.sort_by(|a, b| a.node_id.cmp(&b.node_id).then_with(|| a.port_id.cmp(&b.port_id)));
+    required_inputs
+}
+
+fn collect_preflight_warnings(io: &WorkflowIoResponse) -> Vec<String> {
+    let mut warnings = io
+        .inputs
+        .iter()
+        .flat_map(|node| {
+            node.ports.iter().filter_map(move |port| {
+                if port.required.is_none() {
+                    Some(format!(
+                        "input surface '{}.{}' does not declare required metadata; preflight treats it as optional",
+                        node.node_id, port.port_id
+                    ))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    warnings.sort();
+    warnings.push(
+        "preflight performs static validation only; runtime availability is evaluated by workflow_run"
+            .to_string(),
+    );
+    warnings
 }
 
 fn validate_requested_outputs_produced(
@@ -1291,6 +1472,24 @@ mod tests {
         }
     }
 
+    struct PreflightHost {
+        capabilities: WorkflowHostCapabilities,
+    }
+
+    impl PreflightHost {
+        fn new() -> Self {
+            Self {
+                capabilities: WorkflowHostCapabilities {
+                    max_input_bindings: 16,
+                    max_output_targets: 16,
+                    max_value_bytes: 4096,
+                    runtime_requirements: WorkflowRuntimeRequirements::default(),
+                    models: Vec::new(),
+                },
+            }
+        }
+    }
+
     struct DefaultCapabilitiesHost {
         workflow_root: PathBuf,
     }
@@ -1496,6 +1695,81 @@ mod tests {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
                 value: serde_json::json!("default output"),
+            }])
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for PreflightHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn workflow_io(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+            Ok(WorkflowIoResponse {
+                inputs: vec![WorkflowIoNode {
+                    node_id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    name: Some("Prompt".to_string()),
+                    description: None,
+                    ports: vec![
+                        WorkflowIoPort {
+                            port_id: "text".to_string(),
+                            name: Some("Text".to_string()),
+                            description: None,
+                            data_type: Some("string".to_string()),
+                            required: Some(true),
+                            multiple: Some(false),
+                        },
+                        WorkflowIoPort {
+                            port_id: "tone".to_string(),
+                            name: Some("Tone".to_string()),
+                            description: None,
+                            data_type: Some("string".to_string()),
+                            required: None,
+                            multiple: Some(false),
+                        },
+                    ],
+                }],
+                outputs: vec![WorkflowIoNode {
+                    node_id: "text-output-1".to_string(),
+                    node_type: "text-output".to_string(),
+                    name: Some("Answer".to_string()),
+                    description: None,
+                    ports: vec![WorkflowIoPort {
+                        port_id: "text".to_string(),
+                        name: Some("Text".to_string()),
+                        description: None,
+                        data_type: Some("string".to_string()),
+                        required: Some(false),
+                        multiple: Some(false),
+                    }],
+                }],
+            })
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
             }])
         }
     }
@@ -2148,6 +2422,140 @@ mod tests {
         assert!(err
             .to_string()
             .contains("requested output target 'text-output-1.text' was not produced"));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_rejects_duplicate_input_bindings() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![
+                        WorkflowPortBinding {
+                            node_id: "text-input-1".to_string(),
+                            port_id: "text".to_string(),
+                            value: serde_json::json!("first"),
+                        },
+                        WorkflowPortBinding {
+                            node_id: "text-input-1".to_string(),
+                            port_id: "text".to_string(),
+                            value: serde_json::json!("second"),
+                        },
+                    ],
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("duplicate bindings should fail");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err.to_string().contains("duplicate binding"));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_reports_missing_required_inputs_and_invalid_targets() {
+        let host = PreflightHost::new();
+        let service = WorkflowService::new();
+
+        let response = service
+            .workflow_preflight(
+                &host,
+                WorkflowPreflightRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "stream".to_string(),
+                    }]),
+                },
+            )
+            .await
+            .expect("preflight response");
+
+        assert!(!response.can_run);
+        assert_eq!(response.missing_required_inputs.len(), 1);
+        assert_eq!(response.missing_required_inputs[0].node_id, "text-input-1");
+        assert_eq!(response.missing_required_inputs[0].port_id, "text");
+        assert_eq!(response.invalid_targets.len(), 1);
+        assert_eq!(response.invalid_targets[0].node_id, "text-output-1");
+        assert_eq!(response.invalid_targets[0].port_id, "stream");
+        assert!(response
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("does not declare required metadata")));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_can_run_when_inputs_and_targets_are_valid() {
+        let host = PreflightHost::new();
+        let service = WorkflowService::new();
+
+        let response = service
+            .workflow_preflight(
+                &host,
+                WorkflowPreflightRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                },
+            )
+            .await
+            .expect("preflight response");
+
+        assert!(response.can_run);
+        assert!(response.missing_required_inputs.is_empty());
+        assert!(response.invalid_targets.is_empty());
+        assert!(response
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("static validation only")));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_rejects_duplicate_output_targets() {
+        let host = PreflightHost::new();
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_preflight(
+                &host,
+                WorkflowPreflightRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello"),
+                    }],
+                    output_targets: Some(vec![
+                        WorkflowOutputTarget {
+                            node_id: "text-output-1".to_string(),
+                            port_id: "text".to_string(),
+                        },
+                        WorkflowOutputTarget {
+                            node_id: "text-output-1".to_string(),
+                            port_id: "text".to_string(),
+                        },
+                    ]),
+                },
+            )
+            .await
+            .expect_err("duplicate targets should fail");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err.to_string().contains("duplicate target"));
     }
 
     #[test]

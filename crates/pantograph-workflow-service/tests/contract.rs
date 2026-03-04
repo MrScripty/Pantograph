@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError,
+    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeRequirements,
+    WorkflowService, WorkflowServiceError,
 };
 
 struct ContractHost;
@@ -262,4 +262,40 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
         .expect_err("expected invalid request for non-discovered target");
 
     assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+}
+
+#[tokio::test]
+async fn workflow_preflight_contract_snapshot() {
+    let service = WorkflowService::new();
+    let host = ContractHost;
+
+    let response = service
+        .workflow_preflight(
+            &host,
+            WorkflowPreflightRequest {
+                workflow_id: "wf-1".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello world"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "vector-output-1".to_string(),
+                    port_id: "vector".to_string(),
+                }]),
+            },
+        )
+        .await
+        .expect("preflight response");
+
+    let value = serde_json::to_value(response).expect("serialize preflight");
+    let expected = serde_json::json!({
+        "missing_required_inputs": [],
+        "invalid_targets": [],
+        "warnings": [
+            "preflight performs static validation only; runtime availability is evaluated by workflow_run"
+        ],
+        "can_run": true
+    });
+    assert_eq!(value, expected);
 }
