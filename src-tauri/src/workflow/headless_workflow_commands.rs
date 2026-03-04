@@ -10,10 +10,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     capabilities, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
-    WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionRunRequest,
+    WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowService,
+    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
+    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionRunRequest,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -104,6 +104,19 @@ pub async fn workflow_get_capabilities(
     let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
     workflow_service
         .workflow_get_capabilities(&host, request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn workflow_get_io(
+    request: WorkflowIoRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowIoResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    workflow_service
+        .workflow_get_io(&host, request)
         .await
         .map_err(|e| e.to_string())
 }

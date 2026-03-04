@@ -326,6 +326,7 @@ fn main() {
             // Headless workflow API commands
             workflow::commands::workflow_run,
             workflow::commands::workflow_get_capabilities,
+            workflow::commands::workflow_get_io,
             workflow::commands::workflow_create_session,
             workflow::commands::workflow_run_session,
             workflow::commands::workflow_close_session,

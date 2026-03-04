@@ -97,6 +97,22 @@ pub async fn workflow_get_capabilities(
 }
 
 #[command]
+pub async fn workflow_get_io(
+    request: pantograph_workflow_service::WorkflowIoRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowIoResponse, String> {
+    super::headless_workflow_commands::workflow_get_io(
+        request,
+        gateway,
+        extensions,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
 pub async fn workflow_create_session(
     request: pantograph_workflow_service::WorkflowSessionCreateRequest,
     gateway: State<'_, SharedGateway>,
