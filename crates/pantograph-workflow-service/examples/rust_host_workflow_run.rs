@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    RuntimeSignature, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowInputObject, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
     WorkflowServiceError,
 };
 
@@ -26,8 +26,9 @@ impl WorkflowHost for ExampleHost {
         _workflow_id: &str,
     ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
         Ok(WorkflowHostCapabilities {
-            max_batch_size: 16,
-            max_text_length: 2048,
+            max_input_bindings: 16,
+            max_output_targets: 16,
+            max_value_bytes: 4096,
             runtime_requirements: WorkflowRuntimeRequirements {
                 estimated_peak_vram_mb: Some(512),
                 estimated_peak_ram_mb: Some(1024),
@@ -48,28 +49,28 @@ impl WorkflowHost for ExampleHost {
         })
     }
 
-    async fn run_object(
+    async fn run_workflow(
         &self,
         _workflow_id: &str,
-        text: &str,
-        _model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
-        let token_count = text.split_whitespace().count();
-        Ok((vec![0.01, 0.02, 0.03, 0.04], Some(token_count)))
-    }
+        _inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        if let Some(targets) = output_targets {
+            return Ok(targets
+                .iter()
+                .map(|target| WorkflowPortBinding {
+                    node_id: target.node_id.clone(),
+                    port_id: target.port_id.clone(),
+                    value: serde_json::json!([0.01, 0.02, 0.03, 0.04]),
+                })
+                .collect());
+        }
 
-    async fn resolve_runtime_signature(
-        &self,
-        _workflow_id: &str,
-        model_id: Option<&str>,
-        vector_dimensions: usize,
-    ) -> Result<RuntimeSignature, WorkflowServiceError> {
-        Ok(RuntimeSignature {
-            model_id: model_id.unwrap_or("example-embed-model").to_string(),
-            model_revision_or_hash: Some("example-revision-1".to_string()),
-            backend: "example-backend".to_string(),
-            vector_dimensions,
-        })
+        Ok(vec![WorkflowPortBinding {
+            node_id: "vector-output-1".to_string(),
+            port_id: "vector".to_string(),
+            value: serde_json::json!([0.01, 0.02, 0.03, 0.04]),
+        }])
     }
 }
 
@@ -83,20 +84,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &host,
             WorkflowRunRequest {
                 workflow_id: "embedding-default".to_string(),
-                objects: vec![
-                    WorkflowInputObject {
-                        object_id: "doc-1".to_string(),
-                        text: "Pantograph headless workflow example".to_string(),
-                        metadata: None,
-                    },
-                    WorkflowInputObject {
-                        object_id: "doc-2".to_string(),
-                        text: "Second object".to_string(),
-                        metadata: None,
-                    },
-                ],
-                model_id: Some("example-embed-model".to_string()),
-                batch_id: Some("example-batch-1".to_string()),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("Pantograph headless workflow example"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "vector-output-1".to_string(),
+                    port_id: "vector".to_string(),
+                }]),
+                run_id: Some("example-run-1".to_string()),
             },
         )
         .await?;

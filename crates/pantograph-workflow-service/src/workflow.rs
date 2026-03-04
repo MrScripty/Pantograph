@@ -8,66 +8,34 @@ use uuid::Uuid;
 
 use crate::capabilities;
 
-/// Single object input for workflow processing.
+/// Node/port value binding used for workflow inputs and outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowInputObject {
-    pub object_id: String,
-    pub text: String,
-    #[serde(default)]
-    pub metadata: Option<serde_json::Value>,
+pub struct WorkflowPortBinding {
+    pub node_id: String,
+    pub port_id: String,
+    pub value: serde_json::Value,
 }
 
-/// Request contract for object-in/object-out workflow execution.
+/// Explicit output node+port target to demand in a run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowOutputTarget {
+    pub node_id: String,
+    pub port_id: String,
+}
+
+/// Request contract for generic workflow execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRunRequest {
     pub workflow_id: String,
-    pub objects: Vec<WorkflowInputObject>,
     #[serde(default)]
-    pub model_id: Option<String>,
+    pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]
-    pub batch_id: Option<String>,
-}
-
-/// Canonical model signature used by consumers for compatibility checks.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub struct RuntimeSignature {
-    pub model_id: String,
+    pub output_targets: Option<Vec<WorkflowOutputTarget>>,
     #[serde(default)]
-    pub model_revision_or_hash: Option<String>,
-    pub backend: String,
-    pub vector_dimensions: usize,
-}
-
-/// Per-object execution status.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkflowStatus {
-    Success,
-    Failed,
-}
-
-/// Structured per-object error payload.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub struct WorkflowObjectError {
-    pub code: String,
-    pub message: String,
-}
-
-/// Per-object workflow result.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub struct WorkflowObjectResult {
-    pub object_id: String,
-    pub embedding: Option<Vec<f32>>,
-    #[serde(default)]
-    pub token_count: Option<usize>,
-    pub status: WorkflowStatus,
-    #[serde(default)]
-    pub error: Option<WorkflowObjectError>,
+    pub run_id: Option<String>,
 }
 
 /// Workflow run response.
@@ -75,8 +43,7 @@ pub struct WorkflowObjectResult {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRunResponse {
     pub run_id: String,
-    pub model_signature: RuntimeSignature,
-    pub results: Vec<WorkflowObjectResult>,
+    pub outputs: Vec<WorkflowPortBinding>,
     pub timing_ms: u128,
 }
 
@@ -147,8 +114,9 @@ impl Default for WorkflowRuntimeRequirements {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowHostCapabilities {
-    pub max_batch_size: usize,
-    pub max_text_length: usize,
+    pub max_input_bindings: usize,
+    pub max_output_targets: usize,
+    pub max_value_bytes: usize,
     pub runtime_requirements: WorkflowRuntimeRequirements,
     #[serde(default)]
     pub models: Vec<WorkflowCapabilityModel>,
@@ -158,8 +126,9 @@ pub struct WorkflowHostCapabilities {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowCapabilitiesResponse {
-    pub max_batch_size: usize,
-    pub max_text_length: usize,
+    pub max_input_bindings: usize,
+    pub max_output_targets: usize,
+    pub max_value_bytes: usize,
     pub runtime_requirements: WorkflowRuntimeRequirements,
     #[serde(default)]
     pub models: Vec<WorkflowCapabilityModel>,
@@ -186,11 +155,12 @@ pub struct WorkflowSessionCreateResponse {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowSessionRunRequest {
     pub session_id: String,
-    pub objects: Vec<WorkflowInputObject>,
     #[serde(default)]
-    pub model_id: Option<String>,
+    pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]
-    pub batch_id: Option<String>,
+    pub output_targets: Option<Vec<WorkflowOutputTarget>>,
+    #[serde(default)]
+    pub run_id: Option<String>,
 }
 
 /// Session close request.
@@ -221,9 +191,6 @@ pub enum WorkflowServiceError {
     #[error("runtime_not_ready: {0}")]
     RuntimeNotReady(String),
 
-    #[error("model_signature_unavailable: {0}")]
-    RuntimeSignatureUnavailable(String),
-
     #[error("session_not_found: {0}")]
     SessionNotFound(String),
 
@@ -245,14 +212,19 @@ pub trait WorkflowHost: Send + Sync {
         Vec::new()
     }
 
-    /// Upper bound for request object count.
-    fn max_batch_size(&self) -> usize {
-        capabilities::DEFAULT_MAX_BATCH_SIZE
+    /// Upper bound for request input bindings.
+    fn max_input_bindings(&self) -> usize {
+        capabilities::DEFAULT_MAX_INPUT_BINDINGS
     }
 
-    /// Upper bound for input text length.
-    fn max_text_length(&self) -> usize {
-        capabilities::DEFAULT_MAX_TEXT_LENGTH
+    /// Upper bound for explicit output target count.
+    fn max_output_targets(&self) -> usize {
+        capabilities::DEFAULT_MAX_OUTPUT_TARGETS
+    }
+
+    /// Upper bound for each bound value payload, in bytes.
+    fn max_value_bytes(&self) -> usize {
+        capabilities::DEFAULT_MAX_VALUE_BYTES
     }
 
     /// Backend identifier used when workflow data does not declare one.
@@ -336,8 +308,9 @@ pub trait WorkflowHost: Send + Sync {
         }
 
         Ok(WorkflowHostCapabilities {
-            max_batch_size: self.max_batch_size(),
-            max_text_length: self.max_text_length(),
+            max_input_bindings: self.max_input_bindings(),
+            max_output_targets: self.max_output_targets(),
+            max_value_bytes: self.max_value_bytes(),
             runtime_requirements: WorkflowRuntimeRequirements {
                 estimated_peak_vram_mb,
                 estimated_peak_ram_mb,
@@ -352,21 +325,13 @@ pub trait WorkflowHost: Send + Sync {
         })
     }
 
-    /// Run one input object for the given workflow and optional model.
-    async fn run_object(
+    /// Execute one workflow run and return output port bindings.
+    async fn run_workflow(
         &self,
         workflow_id: &str,
-        text: &str,
-        model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError>;
-
-    /// Resolve model signature fields after successful generation.
-    async fn resolve_runtime_signature(
-        &self,
-        workflow_id: &str,
-        model_id: Option<&str>,
-        vector_dimensions: usize,
-    ) -> Result<RuntimeSignature, WorkflowServiceError>;
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError>;
 }
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
@@ -565,9 +530,9 @@ impl WorkflowService {
                 host,
                 WorkflowRunRequest {
                     workflow_id,
-                    objects: request.objects,
-                    model_id: request.model_id,
-                    batch_id: request.batch_id,
+                    inputs: request.inputs,
+                    output_targets: request.output_targets,
+                    run_id: request.run_id,
                 },
             )
             .await;
@@ -604,133 +569,58 @@ impl WorkflowService {
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
-        if request.objects.is_empty() {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "objects must contain at least one item".to_string(),
-            ));
+        validate_bindings(&request.inputs, "inputs")?;
+        if let Some(targets) = request.output_targets.as_ref() {
+            validate_output_targets(targets)?;
         }
 
         host.validate_workflow(&request.workflow_id).await?;
         let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
-        if request.objects.len() > capabilities.max_batch_size {
+
+        if request.inputs.len() > capabilities.max_input_bindings {
             return Err(WorkflowServiceError::CapabilityViolation(format!(
-                "batch size {} exceeds max_batch_size {}",
-                request.objects.len(),
-                capabilities.max_batch_size
+                "input binding count {} exceeds max_input_bindings {}",
+                request.inputs.len(),
+                capabilities.max_input_bindings
             )));
         }
 
-        let started = Instant::now();
-        let model_id = request
-            .model_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-
-        let mut results = Vec::with_capacity(request.objects.len());
-        let mut first_success_dims: Option<usize> = None;
-
-        for object in request.objects {
-            let object_id = object.object_id.trim().to_string();
-            if object_id.is_empty() {
-                results.push(WorkflowObjectResult {
-                    object_id: object.object_id,
-                    embedding: None,
-                    token_count: None,
-                    status: WorkflowStatus::Failed,
-                    error: Some(WorkflowObjectError {
-                        code: "object_validation_failed".to_string(),
-                        message: "object_id must be non-empty".to_string(),
-                    }),
-                });
-                continue;
-            }
-
-            let text = object.text.trim().to_string();
-            if text.is_empty() {
-                results.push(WorkflowObjectResult {
-                    object_id,
-                    embedding: None,
-                    token_count: None,
-                    status: WorkflowStatus::Failed,
-                    error: Some(WorkflowObjectError {
-                        code: "object_validation_failed".to_string(),
-                        message: "text must be non-empty".to_string(),
-                    }),
-                });
-                continue;
-            }
-            if text.len() > capabilities.max_text_length {
-                results.push(WorkflowObjectResult {
-                    object_id,
-                    embedding: None,
-                    token_count: None,
-                    status: WorkflowStatus::Failed,
-                    error: Some(WorkflowObjectError {
-                        code: "object_validation_failed".to_string(),
-                        message: format!(
-                            "text length {} exceeds max_text_length {}",
-                            text.len(),
-                            capabilities.max_text_length
-                        ),
-                    }),
-                });
-                continue;
-            }
-
-            match host
-                .run_object(&request.workflow_id, &text, model_id)
-                .await
-            {
-                Ok((embedding, token_count)) => {
-                    if embedding.is_empty() {
-                        results.push(WorkflowObjectResult {
-                            object_id,
-                            embedding: None,
-                            token_count: None,
-                            status: WorkflowStatus::Failed,
-                            error: Some(WorkflowObjectError {
-                                code: "embedding_failed".to_string(),
-                                message: "embedding vector is empty".to_string(),
-                            }),
-                        });
-                        continue;
-                    }
-
-                    first_success_dims.get_or_insert(embedding.len());
-                    results.push(WorkflowObjectResult {
-                        object_id,
-                        embedding: Some(embedding),
-                        token_count,
-                        status: WorkflowStatus::Success,
-                        error: None,
-                    });
-                }
-                Err(err) => {
-                    let mapped = map_object_error(err);
-                    results.push(WorkflowObjectResult {
-                        object_id,
-                        embedding: None,
-                        token_count: None,
-                        status: WorkflowStatus::Failed,
-                        error: Some(mapped),
-                    });
-                }
+        if let Some(targets) = request.output_targets.as_ref() {
+            if targets.len() > capabilities.max_output_targets {
+                return Err(WorkflowServiceError::CapabilityViolation(format!(
+                    "output target count {} exceeds max_output_targets {}",
+                    targets.len(),
+                    capabilities.max_output_targets
+                )));
             }
         }
 
-        let vector_dimensions = first_success_dims.ok_or_else(|| {
-            WorkflowServiceError::RuntimeSignatureUnavailable(
-                "no successful object results; model signature cannot be resolved".to_string(),
+        for binding in &request.inputs {
+            validate_payload_size(binding, capabilities.max_value_bytes)?;
+        }
+
+        let started = Instant::now();
+        let outputs = host
+            .run_workflow(
+                &request.workflow_id,
+                &request.inputs,
+                request.output_targets.as_deref(),
             )
-        })?;
-        let model_signature = host
-            .resolve_runtime_signature(&request.workflow_id, model_id, vector_dimensions)
             .await?;
-        validate_model_signature(&model_signature)?;
+
+        if outputs.is_empty() {
+            return Err(WorkflowServiceError::Internal(
+                "workflow execution returned zero outputs".to_string(),
+            ));
+        }
+
+        validate_bindings(&outputs, "outputs")?;
+        for binding in &outputs {
+            validate_payload_size(binding, capabilities.max_value_bytes)?;
+        }
 
         let run_id = request
-            .batch_id
+            .run_id
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
@@ -739,8 +629,7 @@ impl WorkflowService {
 
         Ok(WorkflowRunResponse {
             run_id,
-            model_signature,
-            results,
+            outputs,
             timing_ms: started.elapsed().as_millis(),
         })
     }
@@ -754,8 +643,9 @@ impl WorkflowService {
         host.validate_workflow(&request.workflow_id).await?;
         let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
         Ok(WorkflowCapabilitiesResponse {
-            max_batch_size: capabilities.max_batch_size,
-            max_text_length: capabilities.max_text_length,
+            max_input_bindings: capabilities.max_input_bindings,
+            max_output_targets: capabilities.max_output_targets,
+            max_value_bytes: capabilities.max_value_bytes,
             runtime_requirements: capabilities.runtime_requirements,
             models: capabilities.models,
         })
@@ -771,42 +661,61 @@ fn validate_workflow_id(workflow_id: &str) -> Result<(), WorkflowServiceError> {
     Ok(())
 }
 
-fn validate_model_signature(signature: &RuntimeSignature) -> Result<(), WorkflowServiceError> {
-    if signature.model_id.trim().is_empty() {
-        return Err(WorkflowServiceError::RuntimeSignatureUnavailable(
-            "model_signature.model_id is empty".to_string(),
-        ));
-    }
-    if signature.backend.trim().is_empty() {
-        return Err(WorkflowServiceError::RuntimeSignatureUnavailable(
-            "model_signature.backend is empty".to_string(),
-        ));
-    }
-    if signature.vector_dimensions == 0 {
-        return Err(WorkflowServiceError::RuntimeSignatureUnavailable(
-            "model_signature.vector_dimensions is zero".to_string(),
-        ));
+fn validate_bindings(
+    bindings: &[WorkflowPortBinding],
+    field_name: &str,
+) -> Result<(), WorkflowServiceError> {
+    for (index, binding) in bindings.iter().enumerate() {
+        if binding.node_id.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "{}.{}.node_id must be non-empty",
+                field_name, index
+            )));
+        }
+        if binding.port_id.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "{}.{}.port_id must be non-empty",
+                field_name, index
+            )));
+        }
     }
     Ok(())
 }
 
-fn map_object_error(err: WorkflowServiceError) -> WorkflowObjectError {
-    let (code, message) = match err {
-        WorkflowServiceError::RuntimeNotReady(msg) => ("runtime_not_ready".to_string(), msg),
-        WorkflowServiceError::CapabilityViolation(msg) => {
-            ("capability_violation".to_string(), msg)
+fn validate_output_targets(targets: &[WorkflowOutputTarget]) -> Result<(), WorkflowServiceError> {
+    for (index, target) in targets.iter().enumerate() {
+        if target.node_id.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "output_targets.{}.node_id must be non-empty",
+                index
+            )));
         }
-        WorkflowServiceError::WorkflowNotFound(msg) => ("workflow_not_found".to_string(), msg),
-        WorkflowServiceError::InvalidRequest(msg) => ("invalid_request".to_string(), msg),
-        WorkflowServiceError::RuntimeSignatureUnavailable(msg) => {
-            ("model_signature_unavailable".to_string(), msg)
+        if target.port_id.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "output_targets.{}.port_id must be non-empty",
+                index
+            )));
         }
-        WorkflowServiceError::SessionNotFound(msg) => ("session_not_found".to_string(), msg),
-        WorkflowServiceError::SessionEvicted(msg) => ("session_evicted".to_string(), msg),
-        WorkflowServiceError::SchedulerBusy(msg) => ("scheduler_busy".to_string(), msg),
-        WorkflowServiceError::Internal(msg) => ("embedding_failed".to_string(), msg),
-    };
-    WorkflowObjectError { code, message }
+    }
+    Ok(())
+}
+
+fn validate_payload_size(
+    binding: &WorkflowPortBinding,
+    max_value_bytes: usize,
+) -> Result<(), WorkflowServiceError> {
+    let payload_bytes = serde_json::to_vec(&binding.value)
+        .map_err(|e| WorkflowServiceError::InvalidRequest(format!("invalid binding value: {}", e)))?
+        .len();
+
+    if payload_bytes > max_value_bytes {
+        return Err(WorkflowServiceError::CapabilityViolation(format!(
+            "binding '{}.{}' payload size {} exceeds max_value_bytes {}",
+            binding.node_id, binding.port_id, payload_bytes, max_value_bytes
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -815,39 +724,18 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Mutex;
 
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
-        signatures: Mutex<HashMap<String, RuntimeSignature>>,
     }
 
     impl MockWorkflowHost {
-        fn new(max_batch_size: usize, max_text_length: usize) -> Self {
-            let mut signatures = HashMap::new();
-            signatures.insert(
-                "default".to_string(),
-                RuntimeSignature {
-                    model_id: "default".to_string(),
-                    model_revision_or_hash: Some("abc123".to_string()),
-                    backend: "llamacpp".to_string(),
-                    vector_dimensions: 3,
-                },
-            );
-            signatures.insert(
-                "model-a".to_string(),
-                RuntimeSignature {
-                    model_id: "model-a".to_string(),
-                    model_revision_or_hash: Some("hash-model-a".to_string()),
-                    backend: "llamacpp".to_string(),
-                    vector_dimensions: 3,
-                },
-            );
-
+        fn new(max_input_bindings: usize, max_value_bytes: usize) -> Self {
             Self {
                 capabilities: WorkflowHostCapabilities {
-                    max_batch_size,
-                    max_text_length,
+                    max_input_bindings,
+                    max_output_targets: 16,
+                    max_value_bytes,
                     runtime_requirements: WorkflowRuntimeRequirements {
                         estimated_peak_vram_mb: Some(1024),
                         estimated_peak_ram_mb: Some(2048),
@@ -866,7 +754,6 @@ mod tests {
                         roles: vec!["embedding".to_string(), "inference".to_string()],
                     }],
                 },
-                signatures: Mutex::new(signatures),
             }
         }
     }
@@ -915,27 +802,28 @@ mod tests {
             }
         }
 
-        async fn run_object(
+        async fn run_workflow(
             &self,
             _workflow_id: &str,
-            _text: &str,
-            _model_id: Option<&str>,
-        ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
-            Ok((vec![0.1, 0.2], Some(2)))
-        }
+            _inputs: &[WorkflowPortBinding],
+            output_targets: Option<&[WorkflowOutputTarget]>,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            if let Some(targets) = output_targets {
+                return Ok(targets
+                    .iter()
+                    .map(|target| WorkflowPortBinding {
+                        node_id: target.node_id.clone(),
+                        port_id: target.port_id.clone(),
+                        value: serde_json::json!("ok"),
+                    })
+                    .collect());
+            }
 
-        async fn resolve_runtime_signature(
-            &self,
-            _workflow_id: &str,
-            _model_id: Option<&str>,
-            vector_dimensions: usize,
-        ) -> Result<RuntimeSignature, WorkflowServiceError> {
-            Ok(RuntimeSignature {
-                model_id: "model-a".to_string(),
-                model_revision_or_hash: Some("sha256:abc123".to_string()),
-                backend: "llamacpp".to_string(),
-                vector_dimensions,
-            })
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
         }
     }
 
@@ -958,40 +846,49 @@ mod tests {
             Ok(self.capabilities.clone())
         }
 
-        async fn run_object(
+        async fn run_workflow(
             &self,
             _workflow_id: &str,
-            text: &str,
-            _model_id: Option<&str>,
-        ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
-            if text.contains("runtime-error") {
+            inputs: &[WorkflowPortBinding],
+            output_targets: Option<&[WorkflowOutputTarget]>,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            if inputs.iter().any(|binding| {
+                binding
+                    .value
+                    .as_str()
+                    .map(|value| value.contains("runtime-error"))
+                    .unwrap_or(false)
+            }) {
                 return Err(WorkflowServiceError::RuntimeNotReady(
                     "backend not ready".to_string(),
                 ));
             }
-            if text.contains("internal-error") {
-                return Err(WorkflowServiceError::Internal(
-                    "embedding failed".to_string(),
-                ));
-            }
-            let token_count = text.split_whitespace().count();
-            Ok((vec![0.1, 0.2, 0.3], Some(token_count)))
-        }
 
-        async fn resolve_runtime_signature(
-            &self,
-            _workflow_id: &str,
-            model_id: Option<&str>,
-            vector_dimensions: usize,
-        ) -> Result<RuntimeSignature, WorkflowServiceError> {
-            let key = model_id.unwrap_or("default").to_string();
-            let signatures = self.signatures.lock().expect("lock signatures");
-            let mut signature = signatures
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| WorkflowServiceError::RuntimeSignatureUnavailable(key.clone()))?;
-            signature.vector_dimensions = vector_dimensions;
-            Ok(signature)
+            if let Some(targets) = output_targets {
+                let mut outputs = Vec::with_capacity(targets.len());
+                for target in targets {
+                    let value = inputs
+                        .iter()
+                        .find(|binding| {
+                            binding.node_id == target.node_id && binding.port_id == target.port_id
+                        })
+                        .map(|binding| binding.value.clone())
+                        .unwrap_or(serde_json::Value::Null);
+
+                    outputs.push(WorkflowPortBinding {
+                        node_id: target.node_id.clone(),
+                        port_id: target.port_id.clone(),
+                        value,
+                    });
+                }
+                return Ok(outputs);
+            }
+
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("default output"),
+            }])
         }
     }
 
@@ -999,113 +896,144 @@ mod tests {
     fn request_roundtrip_uses_snake_case() {
         let req = WorkflowRunRequest {
             workflow_id: "wf-1".to_string(),
-            objects: vec![WorkflowInputObject {
-                object_id: "obj-1".to_string(),
-                text: "hello".to_string(),
-                metadata: None,
+            inputs: vec![WorkflowPortBinding {
+                node_id: "input-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("hello"),
             }],
-            model_id: Some("model-1".to_string()),
-            batch_id: Some("batch-1".to_string()),
+            output_targets: Some(vec![WorkflowOutputTarget {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+            }]),
+            run_id: Some("run-1".to_string()),
         };
 
         let json = serde_json::to_value(&req).expect("serialize request");
         assert_eq!(json["workflow_id"], "wf-1");
-        assert_eq!(json["objects"][0]["object_id"], "obj-1");
+        assert_eq!(json["inputs"][0]["node_id"], "input-1");
+        assert_eq!(json["output_targets"][0]["port_id"], "text");
     }
 
     #[test]
-    fn response_roundtrip_preserves_signature_fields() {
+    fn response_roundtrip_preserves_outputs() {
         let res = WorkflowRunResponse {
             run_id: "run-1".to_string(),
-            model_signature: RuntimeSignature {
-                model_id: "model-1".to_string(),
-                model_revision_or_hash: Some("abc123".to_string()),
-                backend: "llamacpp".to_string(),
-                vector_dimensions: 1024,
-            },
-            results: vec![],
+            outputs: vec![WorkflowPortBinding {
+                node_id: "vector-output-1".to_string(),
+                port_id: "vector".to_string(),
+                value: serde_json::json!([0.1, 0.2, 0.3]),
+            }],
             timing_ms: 5,
         };
 
         let json = serde_json::to_string(&res).expect("serialize response");
         let parsed: WorkflowRunResponse = serde_json::from_str(&json).expect("parse response");
-        assert_eq!(parsed.model_signature.model_id, "model-1");
-        assert_eq!(parsed.model_signature.vector_dimensions, 1024);
+        assert_eq!(parsed.run_id, "run-1");
+        assert_eq!(parsed.outputs[0].node_id, "vector-output-1");
     }
 
     #[tokio::test]
-    async fn workflow_run_preserves_order_and_partial_failures() {
-        let host = MockWorkflowHost::new(10, 64);
+    async fn workflow_run_returns_host_outputs() {
+        let host = MockWorkflowHost::new(10, 256);
         let service = WorkflowService::new();
         let response = service
             .workflow_run(
                 &host,
                 WorkflowRunRequest {
                     workflow_id: "wf-1".to_string(),
-                    objects: vec![
-                        WorkflowInputObject {
-                            object_id: "1".to_string(),
-                            text: "hello world".to_string(),
-                            metadata: None,
-                        },
-                        WorkflowInputObject {
-                            object_id: "2".to_string(),
-                            text: "runtime-error object".to_string(),
-                            metadata: None,
-                        },
-                        WorkflowInputObject {
-                            object_id: "3".to_string(),
-                            text: "third object".to_string(),
-                            metadata: None,
-                        },
-                    ],
-                    model_id: Some("model-a".to_string()),
-                    batch_id: Some("batch-1".to_string()),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello world"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                    run_id: Some("run-xyz".to_string()),
                 },
             )
             .await
             .expect("workflow_run");
 
-        assert_eq!(response.results.len(), 3);
-        assert_eq!(response.results[0].object_id, "1");
-        assert_eq!(response.results[1].object_id, "2");
-        assert_eq!(response.results[2].object_id, "3");
-        assert_eq!(response.results[0].status, WorkflowStatus::Success);
-        assert_eq!(response.results[1].status, WorkflowStatus::Failed);
-        assert_eq!(response.results[2].status, WorkflowStatus::Success);
-        assert_eq!(
-            response.results[1].error.as_ref().map(|e| e.code.as_str()),
-            Some("runtime_not_ready")
-        );
-        assert_eq!(response.model_signature.model_id, "model-a");
-        assert_eq!(response.model_signature.vector_dimensions, 3);
+        assert_eq!(response.run_id, "run-xyz");
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].value, serde_json::json!("hello world"));
     }
 
     #[tokio::test]
-    async fn workflow_run_fails_when_all_objects_fail() {
-        let host = MockWorkflowHost::new(10, 32);
+    async fn workflow_run_fails_when_host_returns_runtime_error() {
+        let host = MockWorkflowHost::new(10, 256);
         let service = WorkflowService::new();
+
         let err = service
             .workflow_run(
                 &host,
                 WorkflowRunRequest {
                     workflow_id: "wf-1".to_string(),
-                    objects: vec![WorkflowInputObject {
-                        object_id: "1".to_string(),
-                        text: "".to_string(),
-                        metadata: None,
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("runtime-error object"),
                     }],
-                    model_id: None,
-                    batch_id: None,
+                    output_targets: None,
+                    run_id: None,
                 },
             )
             .await
-            .expect_err("expected no successful objects error");
+            .expect_err("expected runtime error");
 
-        match err {
-            WorkflowServiceError::RuntimeSignatureUnavailable(_) => {}
-            other => panic!("unexpected error: {other}"),
-        }
+        assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_rejects_empty_node_id() {
+        let host = MockWorkflowHost::new(10, 256);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("bad"),
+                    }],
+                    output_targets: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("expected invalid request");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_rejects_oversized_payload() {
+        let host = MockWorkflowHost::new(10, 8);
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("this is too large"),
+                    }],
+                    output_targets: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("expected capability violation");
+
+        assert!(matches!(err, WorkflowServiceError::CapabilityViolation(_)));
     }
 
     #[tokio::test]
@@ -1115,41 +1043,20 @@ mod tests {
         let response = service
             .workflow_get_capabilities(
                 &host,
-                WorkflowCapabilitiesRequest { workflow_id: "wf-1".to_string() },
+                WorkflowCapabilitiesRequest {
+                    workflow_id: "wf-1".to_string(),
+                },
             )
             .await
             .expect("capabilities");
 
-        assert_eq!(response.max_batch_size, 8);
-        assert_eq!(response.max_text_length, 4096);
+        assert_eq!(response.max_input_bindings, 8);
+        assert_eq!(response.max_output_targets, 16);
+        assert_eq!(response.max_value_bytes, 4096);
         assert_eq!(response.runtime_requirements.estimated_peak_ram_mb, Some(2048));
         assert_eq!(response.runtime_requirements.required_models.len(), 1);
         assert_eq!(response.models.len(), 1);
         assert_eq!(response.models[0].model_id, "model-a");
-    }
-
-    #[tokio::test]
-    async fn workflow_run_uses_batch_id_as_run_id_when_present() {
-        let host = MockWorkflowHost::new(8, 1024);
-        let service = WorkflowService::new();
-        let response = service
-            .workflow_run(
-                &host,
-                WorkflowRunRequest {
-                    workflow_id: "wf-1".to_string(),
-                    objects: vec![WorkflowInputObject {
-                        object_id: "a".to_string(),
-                        text: "ok".to_string(),
-                        metadata: None,
-                    }],
-                    model_id: None,
-                    batch_id: Some("batch-xyz".to_string()),
-                },
-            )
-            .await
-            .expect("embed with batch id");
-
-        assert_eq!(response.run_id, "batch-xyz");
     }
 
     #[tokio::test]
@@ -1162,7 +1069,7 @@ mod tests {
                 &host,
                 WorkflowSessionCreateRequest {
                     workflow_id: "wf-1".to_string(),
-                    usage_profile: Some("embedding-batch".to_string()),
+                    usage_profile: Some("generic-run".to_string()),
                 },
             )
             .await
@@ -1173,19 +1080,22 @@ mod tests {
                 &host,
                 WorkflowSessionRunRequest {
                     session_id: created.session_id.clone(),
-                    objects: vec![WorkflowInputObject {
-                        object_id: "obj-1".to_string(),
-                        text: "hello session".to_string(),
-                        metadata: None,
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello session"),
                     }],
-                    model_id: Some("model-a".to_string()),
-                    batch_id: Some("batch-session-1".to_string()),
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                    run_id: Some("session-run-1".to_string()),
                 },
             )
             .await
             .expect("run session");
-        assert_eq!(response.results.len(), 1);
-        assert_eq!(response.results[0].status, WorkflowStatus::Success);
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].value, serde_json::json!("hello session"));
 
         let closed = service
             .close_workflow_session(WorkflowSessionCloseRequest {
@@ -1200,13 +1110,9 @@ mod tests {
                 &host,
                 WorkflowSessionRunRequest {
                     session_id: created.session_id,
-                    objects: vec![WorkflowInputObject {
-                        object_id: "obj-2".to_string(),
-                        text: "hello again".to_string(),
-                        metadata: None,
-                    }],
-                    model_id: None,
-                    batch_id: None,
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    run_id: None,
                 },
             )
             .await
@@ -1246,13 +1152,9 @@ mod tests {
                 &host,
                 WorkflowSessionRunRequest {
                     session_id: first.session_id,
-                    objects: vec![WorkflowInputObject {
-                        object_id: "obj-1".to_string(),
-                        text: "hello".to_string(),
-                        metadata: None,
-                    }],
-                    model_id: None,
-                    batch_id: None,
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    run_id: None,
                 },
             )
             .await
@@ -1342,8 +1244,15 @@ mod tests {
             .await
             .expect("capabilities response");
 
-        assert_eq!(response.max_batch_size, capabilities::DEFAULT_MAX_BATCH_SIZE);
-        assert_eq!(response.max_text_length, capabilities::DEFAULT_MAX_TEXT_LENGTH);
+        assert_eq!(
+            response.max_input_bindings,
+            capabilities::DEFAULT_MAX_INPUT_BINDINGS
+        );
+        assert_eq!(
+            response.max_output_targets,
+            capabilities::DEFAULT_MAX_OUTPUT_TARGETS
+        );
+        assert_eq!(response.max_value_bytes, capabilities::DEFAULT_MAX_VALUE_BYTES);
         assert_eq!(response.runtime_requirements.required_models, vec!["model-a"]);
         assert_eq!(response.runtime_requirements.required_backends, vec!["llamacpp"]);
         assert_eq!(

@@ -26,9 +26,10 @@ Primary contract types:
 
 - `WorkflowRunRequest`
 - `WorkflowRunResponse`
+- `WorkflowPortBinding`
+- `WorkflowOutputTarget`
 - `WorkflowCapabilitiesRequest`
 - `WorkflowCapabilitiesResponse`
-- `RuntimeSignature`
 - `WorkflowSessionCreateRequest`
 - `WorkflowSessionRunRequest`
 - `WorkflowSessionCloseRequest`

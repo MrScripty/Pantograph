@@ -5,8 +5,9 @@ use serde::Deserialize;
 
 use crate::workflow::WorkflowServiceError;
 
-pub const DEFAULT_MAX_BATCH_SIZE: usize = 128;
-pub const DEFAULT_MAX_TEXT_LENGTH: usize = 32_768;
+pub const DEFAULT_MAX_INPUT_BINDINGS: usize = 128;
+pub const DEFAULT_MAX_OUTPUT_TARGETS: usize = 128;
+pub const DEFAULT_MAX_VALUE_BYTES: usize = 32_768;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelUsage {

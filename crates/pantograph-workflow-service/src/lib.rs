@@ -8,11 +8,10 @@ pub mod capabilities;
 pub mod workflow;
 
 pub use workflow::{
-    RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowHostModelDescriptor, WorkflowInputObject, WorkflowObjectError, WorkflowObjectResult,
-    WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
-    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionRunRequest,
-    WorkflowStatus,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,
+    WorkflowHost, WorkflowHostCapabilities, WorkflowHostModelDescriptor, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeRequirements,
+    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionRunRequest,
 };
