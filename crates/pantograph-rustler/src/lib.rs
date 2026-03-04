@@ -33,7 +33,9 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
+#[cfg(feature = "frontend-http")]
+use std::sync::LazyLock;
 
 use rustler::{Atom, Encoder, Env, NifResult, NifStruct, NifUnitEnum, OwnedEnv, ResourceArc, Term};
 use tokio::sync::oneshot;
@@ -42,9 +44,11 @@ use node_engine::{
     EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowExecutor,
     WorkflowGraph,
 };
+#[cfg(feature = "frontend-http")]
+use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
+#[cfg(feature = "frontend-http")]
 use pantograph_workflow_service::{
-    capabilities, RuntimeSignature, WorkflowCapabilitiesRequest, WorkflowHost,
-    WorkflowHostModelDescriptor, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowCapabilitiesRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
     WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
 };
 
@@ -209,8 +213,7 @@ static PENDING_CALLBACKS: std::sync::LazyLock<
 
 /// Counter for generating unique callback IDs.
 static CALLBACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-const DEFAULT_MAX_BATCH_SIZE: usize = capabilities::DEFAULT_MAX_BATCH_SIZE;
-const DEFAULT_MAX_TEXT_LENGTH: usize = capabilities::DEFAULT_MAX_TEXT_LENGTH;
+#[cfg(feature = "frontend-http")]
 static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
 
 // ============================================================================
@@ -421,228 +424,7 @@ impl EventSink for BeamEventSink {
 // Headless embedding adapter for Rustler
 // ============================================================================
 
-struct RustlerWorkflowHost {
-    base_url: String,
-    pumas_api: Option<Arc<pumas_library::PumasApi>>,
-    http_client: reqwest::Client,
-    resolved_model_id: std::sync::Mutex<Option<String>>,
-}
-
-impl RustlerWorkflowHost {
-    fn new(base_url: String, pumas_api: Option<Arc<pumas_library::PumasApi>>) -> Self {
-        Self {
-            base_url: base_url.trim_end_matches('/').to_string(),
-            pumas_api,
-            http_client: reqwest::Client::new(),
-            resolved_model_id: std::sync::Mutex::new(None),
-        }
-    }
-
-    async fn resolve_model_revision_or_hash(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<String>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
-            .ok_or_else(|| {
-                WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                    "model '{}' not found in model library",
-                    model_id
-                ))
-            })?;
-
-        select_model_hash(&model.hashes).map(Some).ok_or_else(|| {
-            WorkflowServiceError::RuntimeSignatureUnavailable(format!(
-                "model '{}' is missing sha256/blake3 hash metadata",
-                model_id
-            ))
-        })
-    }
-}
-
-#[async_trait::async_trait]
-impl WorkflowHost for RustlerWorkflowHost {
-    fn workflow_roots(&self) -> Vec<std::path::PathBuf> {
-        capabilities::default_workflow_roots(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
-    }
-
-    fn max_batch_size(&self) -> usize {
-        DEFAULT_MAX_BATCH_SIZE
-    }
-
-    fn max_text_length(&self) -> usize {
-        DEFAULT_MAX_TEXT_LENGTH
-    }
-
-    async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
-        Ok("openai-compatible".to_string())
-    }
-
-    async fn model_metadata(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<serde_json::Value>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        Ok(model.map(|m| m.metadata))
-    }
-
-    async fn model_descriptor(
-        &self,
-        model_id: &str,
-    ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
-        let Some(api) = &self.pumas_api else {
-            return Ok(None);
-        };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        Ok(model.map(|m| WorkflowHostModelDescriptor {
-            model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
-            hashes: m.hashes,
-        }))
-    }
-
-    async fn run_object(
-        &self,
-        _workflow_id: &str,
-        text: &str,
-        model_id: Option<&str>,
-    ) -> Result<(Vec<f32>, Option<usize>), WorkflowServiceError> {
-        let model = model_id
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .unwrap_or("default");
-
-        let url = format!("{}/v1/embeddings", self.base_url);
-        let body = serde_json::json!({
-            "input": [text],
-            "model": model,
-        });
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        if !response.status().is_success() {
-            return Err(WorkflowServiceError::Internal(format!(
-                "embedding api error {}",
-                response.status()
-            )));
-        }
-
-        let payload: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
-
-        let (embedding, token_count, response_model_id) = parse_embedding_payload(&payload)?;
-        if let Some(model_id) = response_model_id {
-            if let Ok(mut guard) = self.resolved_model_id.lock() {
-                *guard = Some(model_id);
-            }
-        }
-
-        Ok((embedding, token_count))
-    }
-
-    async fn resolve_runtime_signature(
-        &self,
-        _workflow_id: &str,
-        model_id: Option<&str>,
-        vector_dimensions: usize,
-    ) -> Result<RuntimeSignature, WorkflowServiceError> {
-        let resolved_model_id = model_id
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                self.resolved_model_id
-                    .lock()
-                    .ok()
-                    .and_then(|guard| guard.clone())
-            })
-            .unwrap_or_else(|| "default".to_string());
-        let model_revision_or_hash = self
-            .resolve_model_revision_or_hash(&resolved_model_id)
-            .await?;
-
-        Ok(RuntimeSignature {
-            model_id: resolved_model_id,
-            model_revision_or_hash,
-            backend: "openai-compatible".to_string(),
-            vector_dimensions,
-        })
-    }
-}
-
-fn parse_embedding_payload(
-    payload: &serde_json::Value,
-) -> Result<(Vec<f32>, Option<usize>, Option<String>), WorkflowServiceError> {
-    let embedding_values = payload
-        .get("data")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|v| v.get("embedding"))
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| WorkflowServiceError::Internal("missing embedding vector".to_string()))?;
-
-    let mut embedding = Vec::with_capacity(embedding_values.len());
-    for (index, value) in embedding_values.iter().enumerate() {
-        let number = value.as_f64().ok_or_else(|| {
-            WorkflowServiceError::Internal(format!("invalid embedding value at index {}", index))
-        })?;
-        embedding.push(number as f32);
-    }
-
-    let token_count = payload
-        .get("usage")
-        .and_then(|v| v.get("prompt_tokens"))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as usize);
-    let response_model_id = payload
-        .get("model")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(ToOwned::to_owned);
-
-    Ok((embedding, token_count, response_model_id))
-}
-
-fn select_model_hash(hashes: &std::collections::HashMap<String, String>) -> Option<String> {
-    for preferred in ["sha256", "blake3"] {
-        if let Some((_, value)) = hashes
-            .iter()
-            .find(|(key, value)| key.eq_ignore_ascii_case(preferred) && !value.trim().is_empty())
-        {
-            let trimmed = value.trim();
-            if trimmed.contains(':') {
-                return Some(trimmed.to_string());
-            }
-            return Some(format!("{preferred}:{trimmed}"));
-        }
-    }
-    None
-}
-
+#[cfg(feature = "frontend-http")]
 fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
     match err {
         WorkflowServiceError::InvalidRequest(message)
@@ -657,9 +439,27 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
     }
 }
 
-/// Execute headless workflow contract (`workflow_run`) and return response JSON.
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_run(
+#[cfg(feature = "frontend-http")]
+fn build_frontend_http_host(
+    base_url: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<FrontendHttpWorkflowHost> {
+    FrontendHttpWorkflowHost::with_defaults(
+        base_url,
+        pumas_resource.as_ref().map(|resource| resource.api.clone()),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
+    )
+    .map_err(|e| {
+        rustler::Error::Term(Box::new(format!(
+            "frontend HTTP host config error: {}",
+            e
+        )))
+    })
+}
+
+/// Execute frontend HTTP workflow contract (`workflow_run`) and return response JSON.
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_run_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
@@ -669,10 +469,7 @@ fn workflow_run(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let host = RustlerWorkflowHost::new(
-        base_url,
-        pumas_resource.as_ref().map(|resource| resource.api.clone()),
-    );
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
         .block_on(async { WORKFLOW_SERVICE.workflow_run(&host, request).await })
         .map_err(map_workflow_service_error)?;
@@ -681,9 +478,19 @@ fn workflow_run(
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
 }
 
-/// Execute workflow capabilities contract and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_get_capabilities(
+fn frontend_http_workflow_run(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_run_impl(base_url, request_json, pumas_resource)
+}
+
+/// Execute frontend HTTP workflow capabilities contract and return response JSON.
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_get_capabilities_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
@@ -693,10 +500,7 @@ fn workflow_get_capabilities(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let host = RustlerWorkflowHost::new(
-        base_url,
-        pumas_resource.as_ref().map(|resource| resource.api.clone()),
-    );
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
         .block_on(async {
             WORKFLOW_SERVICE
@@ -709,9 +513,19 @@ fn workflow_get_capabilities(
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
 }
 
-/// Create scheduler-managed workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_create_session(
+fn frontend_http_workflow_get_capabilities(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_get_capabilities_impl(base_url, request_json, pumas_resource)
+}
+
+/// Create scheduler-managed frontend HTTP workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_create_session_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
@@ -721,10 +535,7 @@ fn workflow_create_session(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let host = RustlerWorkflowHost::new(
-        base_url,
-        pumas_resource.as_ref().map(|resource| resource.api.clone()),
-    );
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
         .block_on(async {
             WORKFLOW_SERVICE
@@ -737,9 +548,19 @@ fn workflow_create_session(
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
 }
 
-/// Run scheduler-managed workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_run_session(
+fn frontend_http_workflow_create_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_create_session_impl(base_url, request_json, pumas_resource)
+}
+
+/// Run scheduler-managed frontend HTTP workflow session and return response JSON.
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_run_session_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
@@ -749,10 +570,7 @@ fn workflow_run_session(
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
 
-    let host = RustlerWorkflowHost::new(
-        base_url,
-        pumas_resource.as_ref().map(|resource| resource.api.clone()),
-    );
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
         .block_on(async { WORKFLOW_SERVICE.run_workflow_session(&host, request).await })
         .map_err(map_workflow_service_error)?;
@@ -762,8 +580,8 @@ fn workflow_run_session(
 }
 
 /// Close scheduler-managed workflow session and return response JSON.
-#[rustler::nif(schedule = "DirtyCpu")]
-fn workflow_close_session(request_json: String) -> NifResult<String> {
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_close_session_impl(request_json: String) -> NifResult<String> {
     let request: WorkflowSessionCloseRequest = serde_json::from_str(&request_json)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
     let runtime = tokio::runtime::Runtime::new()
@@ -775,6 +593,73 @@ fn workflow_close_session(request_json: String) -> NifResult<String> {
 
     serde_json::to_string(&response)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_run_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_run_session_impl(base_url, request_json, pumas_resource)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_close_session(request_json: String) -> NifResult<String> {
+    frontend_http_workflow_close_session_impl(request_json)
+}
+
+/// Legacy alias for frontend HTTP workflow run.
+#[cfg(feature = "frontend-http-legacy")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_run(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_run_impl(base_url, request_json, pumas_resource)
+}
+
+/// Legacy alias for frontend HTTP workflow capabilities.
+#[cfg(feature = "frontend-http-legacy")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_get_capabilities(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_get_capabilities_impl(base_url, request_json, pumas_resource)
+}
+
+/// Legacy alias for frontend HTTP workflow session creation.
+#[cfg(feature = "frontend-http-legacy")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_create_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_create_session_impl(base_url, request_json, pumas_resource)
+}
+
+/// Legacy alias for frontend HTTP workflow session runs.
+#[cfg(feature = "frontend-http-legacy")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_run_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_run_session_impl(base_url, request_json, pumas_resource)
+}
+
+/// Legacy alias for frontend HTTP workflow session close.
+#[cfg(feature = "frontend-http-legacy")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn workflow_close_session(request_json: String) -> NifResult<String> {
+    frontend_http_workflow_close_session_impl(request_json)
 }
 
 // ============================================================================
@@ -2202,8 +2087,15 @@ rustler::init!("Elixir.Pantograph.Native", load = load);
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "frontend-http")]
+    use pantograph_frontend_http_adapter::parse_embedding_payload;
+    #[cfg(feature = "frontend-http")]
+    use pantograph_workflow_service::WorkflowService;
+    #[cfg(feature = "frontend-http")]
     use std::io::{Read, Write};
+    #[cfg(feature = "frontend-http")]
     use std::net::TcpListener;
+    #[cfg(feature = "frontend-http")]
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -2312,9 +2204,11 @@ mod tests {
         assert_eq!(metadata.label, "My Node");
     }
 
+    #[cfg(feature = "frontend-http")]
     static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
 
+    #[cfg(feature = "frontend-http")]
     fn create_temp_workflow_root(workflow_id: &str) -> std::path::PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -2345,6 +2239,7 @@ mod tests {
         root
     }
 
+    #[cfg(feature = "frontend-http")]
     fn spawn_single_embedding_server(
         status_code: u16,
         body: serde_json::Value,
@@ -2378,6 +2273,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    #[cfg(feature = "frontend-http")]
     #[ignore = "requires local TCP bind permissions in test environment"]
     async fn test_rustler_embedding_host_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
@@ -2393,7 +2289,7 @@ mod tests {
         });
         let (base_url, server_thread) = spawn_single_embedding_server(200, payload);
 
-        let host = RustlerWorkflowHost::new(base_url, None);
+        let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
         let request = pantograph_workflow_service::WorkflowRunRequest {
             workflow_id: workflow_id.to_string(),
             objects: vec![pantograph_workflow_service::WorkflowInputObject {
@@ -2422,6 +2318,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "frontend-http")]
     fn test_parse_embedding_payload_rejects_non_numeric() {
         let payload = serde_json::json!({
             "data": [{ "embedding": [0.1, "oops", 0.3] }]
@@ -2431,12 +2328,23 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "frontend-http")]
     fn test_validate_workflow_requires_existing_workflow_file() {
-        let host = RustlerWorkflowHost::new("http://127.0.0.1:9".to_string(), None);
+        let host = build_frontend_http_host("http://127.0.0.1:9".to_string(), None)
+            .expect("frontend HTTP host");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let err = runtime
-            .block_on(async { host.validate_workflow("missing-workflow").await })
+            .block_on(async {
+                pantograph_workflow_service::WorkflowHost::validate_workflow(
+                    &host,
+                    "missing-workflow",
+                )
+                .await
+            })
             .expect_err("must fail");
-        assert!(matches!(err, WorkflowServiceError::WorkflowNotFound(_)));
+        assert!(matches!(
+            err,
+            pantograph_workflow_service::WorkflowServiceError::WorkflowNotFound(_)
+        ));
     }
 }

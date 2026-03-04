@@ -8,22 +8,27 @@ Rustler NIF adapter surface for Pantograph workflow APIs.
 | ----------- | ----------- |
 | `lib.rs` | NIF implementations, resources, and adapter logic delegating to shared service contracts. |
 
-## Headless Workflow NIFs
+## Workflow NIF Modes
 
-- `workflow_run/3`
-- `workflow_get_capabilities/3`
-- `workflow_create_session/3`
-- `workflow_run_session/3`
-- `workflow_close_session/1`
+Default (`no features`):
+- No URL/HTTP workflow NIF surface.
+- Headless Rust hosts should use `pantograph-workflow-service` directly.
 
-These NIFs delegate business rules to `pantograph-workflow-service`.
+`frontend-http` feature:
+- `frontend_http_workflow_run/3`
+- `frontend_http_workflow_get_capabilities/3`
+- `frontend_http_workflow_create_session/3`
+- `frontend_http_workflow_run_session/3`
+- `frontend_http_workflow_close_session/1`
+
+`frontend-http-legacy` feature:
+- Adds legacy aliases (`workflow_run/3`, `workflow_get_capabilities/3`, etc.) for migration.
 
 ## Dependencies
 - Internal: `pantograph-workflow-service`, `node-engine`.
-- Host/runtime: `reqwest`, optional `pumas-library`.
+- Frontend HTTP (optional): `pantograph-frontend-http-adapter`.
+- Host/runtime: optional `pumas-library`.
 
 ## Notes
 
-- Adapter validates workflow existence + logical graph validity.
-- Embedding payload parsing is strict (no silent vector truncation).
-- Model signature uses deterministic model hash selection (`sha256` then `blake3`) when Pumas metadata is available.
+- Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.
