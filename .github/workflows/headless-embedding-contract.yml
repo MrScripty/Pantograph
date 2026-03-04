@@ -27,10 +27,10 @@ jobs:
           cargo check -p pantograph-frontend-http-adapter
           cargo test -p pantograph-frontend-http-adapter
 
-      - name: Check UniFFI adapter modes
+      - name: Run UniFFI adapter mode tests
         run: |
-          cargo check -p pantograph-uniffi --no-default-features
-          cargo check -p pantograph-uniffi --features frontend-http
+          cargo test -p pantograph-uniffi --no-default-features
+          cargo test -p pantograph-uniffi --features frontend-http
 
       - name: Check Rustler adapter modes
         run: |
