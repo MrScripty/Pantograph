@@ -331,6 +331,11 @@ fn main() {
             workflow::commands::workflow_create_session,
             workflow::commands::workflow_run_session,
             workflow::commands::workflow_close_session,
+            workflow::commands::workflow_get_session_status,
+            workflow::commands::workflow_list_session_queue,
+            workflow::commands::workflow_cancel_session_queue_item,
+            workflow::commands::workflow_reprioritize_session_queue_item,
+            workflow::commands::workflow_set_session_keep_alive,
             // Node-engine workflow commands (Phase 5)
             workflow::commands::execute_workflow_v2,
             workflow::commands::create_workflow_session,

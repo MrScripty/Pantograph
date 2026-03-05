@@ -14,7 +14,11 @@ use pantograph_workflow_service::{
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
     WorkflowRunResponse, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
     WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionRunRequest,
+    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRunRequest, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -172,10 +176,66 @@ pub async fn workflow_run_session(
 
 pub async fn workflow_close_session(
     request: WorkflowSessionCloseRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionCloseResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
     workflow_service
-        .close_workflow_session(request)
+        .close_workflow_session(&host, request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_get_session_status(
+    request: WorkflowSessionStatusRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionStatusResponse, String> {
+    workflow_service
+        .workflow_get_session_status(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_list_session_queue(
+    request: WorkflowSessionQueueListRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionQueueListResponse, String> {
+    workflow_service
+        .workflow_list_session_queue(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_cancel_session_queue_item(
+    request: WorkflowSessionQueueCancelRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionQueueCancelResponse, String> {
+    workflow_service
+        .workflow_cancel_session_queue_item(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_reprioritize_session_queue_item(
+    request: WorkflowSessionQueueReprioritizeRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionQueueReprioritizeResponse, String> {
+    workflow_service
+        .workflow_reprioritize_session_queue_item(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_set_session_keep_alive(
+    request: WorkflowSessionKeepAliveRequest,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionKeepAliveResponse, String> {
+    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    workflow_service
+        .workflow_set_session_keep_alive(&host, request)
         .await
         .map_err(workflow_error_json)
 }

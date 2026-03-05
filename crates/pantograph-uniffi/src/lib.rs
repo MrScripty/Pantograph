@@ -35,9 +35,12 @@ use tokio::sync::RwLock;
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 #[cfg(feature = "frontend-http")]
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowPreflightRequest,
-    WorkflowRunRequest, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
+    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
+    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
+    WorkflowSessionStatusRequest,
 };
 
 // UniFFI scaffolding
@@ -317,7 +320,10 @@ pub async fn frontend_http_workflow_run(
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
     let request: WorkflowRunRequest = serde_json::from_str(&request_json).map_err(|e| {
-        workflow_adapter_error(WorkflowErrorCode::InvalidRequest, format!("invalid request: {}", e))
+        workflow_adapter_error(
+            WorkflowErrorCode::InvalidRequest,
+            format!("invalid request: {}", e),
+        )
     })?;
 
     let host = build_frontend_http_host(base_url, pumas_api)?;
@@ -342,9 +348,13 @@ pub async fn frontend_http_workflow_get_capabilities(
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
-    let request: WorkflowCapabilitiesRequest = serde_json::from_str(&request_json).map_err(|e| {
-        workflow_adapter_error(WorkflowErrorCode::InvalidRequest, format!("invalid request: {}", e))
-    })?;
+    let request: WorkflowCapabilitiesRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
 
     let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
@@ -369,7 +379,10 @@ pub async fn frontend_http_workflow_preflight(
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
     let request: WorkflowPreflightRequest = serde_json::from_str(&request_json).map_err(|e| {
-        workflow_adapter_error(WorkflowErrorCode::InvalidRequest, format!("invalid request: {}", e))
+        workflow_adapter_error(
+            WorkflowErrorCode::InvalidRequest,
+            format!("invalid request: {}", e),
+        )
     })?;
 
     let host = build_frontend_http_host(base_url, pumas_api)?;
@@ -394,9 +407,13 @@ pub async fn frontend_http_workflow_create_session(
     request_json: String,
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
-    let request: WorkflowSessionCreateRequest = serde_json::from_str(&request_json).map_err(|e| {
-        workflow_adapter_error(WorkflowErrorCode::InvalidRequest, format!("invalid request: {}", e))
-    })?;
+    let request: WorkflowSessionCreateRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
 
     let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
@@ -421,7 +438,10 @@ pub async fn frontend_http_workflow_run_session(
     pumas_api: Option<Arc<FfiPumasApi>>,
 ) -> Result<String, FfiError> {
     let request: WorkflowSessionRunRequest = serde_json::from_str(&request_json).map_err(|e| {
-        workflow_adapter_error(WorkflowErrorCode::InvalidRequest, format!("invalid request: {}", e))
+        workflow_adapter_error(
+            WorkflowErrorCode::InvalidRequest,
+            format!("invalid request: {}", e),
+        )
     })?;
 
     let host = build_frontend_http_host(base_url, pumas_api)?;
@@ -441,13 +461,160 @@ pub async fn frontend_http_workflow_run_session(
 /// Close scheduler-managed workflow session and return response JSON.
 #[cfg(feature = "frontend-http")]
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn frontend_http_workflow_close_session(request_json: String) -> Result<String, FfiError> {
-    let request: WorkflowSessionCloseRequest = serde_json::from_str(&request_json).map_err(|e| {
-        workflow_adapter_error(WorkflowErrorCode::InvalidRequest, format!("invalid request: {}", e))
-    })?;
+pub async fn frontend_http_workflow_close_session(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionCloseRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
+
+    let host = build_frontend_http_host(base_url, pumas_api)?;
+    let response = WORKFLOW_SERVICE
+        .close_workflow_session(&host, request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| {
+        workflow_adapter_error(
+            WorkflowErrorCode::InternalError,
+            format!("response serialization error: {}", e),
+        )
+    })
+}
+
+/// Get scheduler-managed workflow session status and return response JSON.
+#[cfg(feature = "frontend-http")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_get_session_status(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionStatusRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
 
     let response = WORKFLOW_SERVICE
-        .close_workflow_session(request)
+        .workflow_get_session_status(request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| {
+        workflow_adapter_error(
+            WorkflowErrorCode::InternalError,
+            format!("response serialization error: {}", e),
+        )
+    })
+}
+
+/// List scheduler-managed workflow session queue and return response JSON.
+#[cfg(feature = "frontend-http")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_list_session_queue(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionQueueListRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
+
+    let response = WORKFLOW_SERVICE
+        .workflow_list_session_queue(request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| {
+        workflow_adapter_error(
+            WorkflowErrorCode::InternalError,
+            format!("response serialization error: {}", e),
+        )
+    })
+}
+
+/// Cancel a queued workflow session run and return response JSON.
+#[cfg(feature = "frontend-http")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_cancel_session_queue_item(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionQueueCancelRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
+
+    let response = WORKFLOW_SERVICE
+        .workflow_cancel_session_queue_item(request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| {
+        workflow_adapter_error(
+            WorkflowErrorCode::InternalError,
+            format!("response serialization error: {}", e),
+        )
+    })
+}
+
+/// Reprioritize a queued workflow session run and return response JSON.
+#[cfg(feature = "frontend-http")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_reprioritize_session_queue_item(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionQueueReprioritizeRequest = serde_json::from_str(&request_json)
+        .map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
+
+    let response = WORKFLOW_SERVICE
+        .workflow_reprioritize_session_queue_item(request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    serde_json::to_string(&response).map_err(|e| {
+        workflow_adapter_error(
+            WorkflowErrorCode::InternalError,
+            format!("response serialization error: {}", e),
+        )
+    })
+}
+
+/// Set scheduler-managed workflow session keep-alive state and return response JSON.
+#[cfg(feature = "frontend-http")]
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_set_session_keep_alive(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    let request: WorkflowSessionKeepAliveRequest =
+        serde_json::from_str(&request_json).map_err(|e| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("invalid request: {}", e),
+            )
+        })?;
+
+    let host = build_frontend_http_host(base_url, pumas_api)?;
+    let response = WORKFLOW_SERVICE
+        .workflow_set_session_keep_alive(&host, request)
         .await
         .map_err(map_workflow_service_error)?;
 

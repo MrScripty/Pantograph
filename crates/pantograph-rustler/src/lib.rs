@@ -33,9 +33,9 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 #[cfg(feature = "frontend-http")]
 use std::sync::LazyLock;
+use std::sync::{Arc, Mutex};
 
 use rustler::{Atom, Encoder, Env, NifResult, NifStruct, NifUnitEnum, OwnedEnv, ResourceArc, Term};
 use tokio::sync::oneshot;
@@ -48,9 +48,12 @@ use node_engine::{
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 #[cfg(feature = "frontend-http")]
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowPreflightRequest,
-    WorkflowRunRequest, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCreateRequest, WorkflowSessionRunRequest,
+    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
+    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
+    WorkflowSessionStatusRequest,
 };
 
 // Force the linker to include workflow-nodes object files,
@@ -629,12 +632,21 @@ fn frontend_http_workflow_run_session_impl(
 }
 
 #[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_close_session_impl(request_json: String) -> NifResult<String> {
+fn frontend_http_workflow_close_session_impl(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
     let request: WorkflowSessionCloseRequest = workflow_parse_request(&request_json)?;
     let runtime = workflow_runtime()?;
 
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
     let response = runtime
-        .block_on(async { WORKFLOW_SERVICE.close_workflow_session(request).await })
+        .block_on(async {
+            WORKFLOW_SERVICE
+                .close_workflow_session(&host, request)
+                .await
+        })
         .map_err(map_workflow_service_error)?;
 
     workflow_serialize_response(&response)
@@ -652,8 +664,129 @@ fn frontend_http_workflow_run_session(
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_close_session(request_json: String) -> NifResult<String> {
-    frontend_http_workflow_close_session_impl(request_json)
+fn frontend_http_workflow_close_session(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_close_session_impl(base_url, request_json, pumas_resource)
+}
+
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_get_session_status_impl(request_json: String) -> NifResult<String> {
+    let request: WorkflowSessionStatusRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+
+    let response = runtime
+        .block_on(async { WORKFLOW_SERVICE.workflow_get_session_status(request).await })
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_get_session_status(request_json: String) -> NifResult<String> {
+    frontend_http_workflow_get_session_status_impl(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_list_session_queue_impl(request_json: String) -> NifResult<String> {
+    let request: WorkflowSessionQueueListRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+
+    let response = runtime
+        .block_on(async { WORKFLOW_SERVICE.workflow_list_session_queue(request).await })
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_list_session_queue(request_json: String) -> NifResult<String> {
+    frontend_http_workflow_list_session_queue_impl(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_cancel_session_queue_item_impl(
+    request_json: String,
+) -> NifResult<String> {
+    let request: WorkflowSessionQueueCancelRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+
+    let response = runtime
+        .block_on(async {
+            WORKFLOW_SERVICE
+                .workflow_cancel_session_queue_item(request)
+                .await
+        })
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_cancel_session_queue_item(request_json: String) -> NifResult<String> {
+    frontend_http_workflow_cancel_session_queue_item_impl(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_reprioritize_session_queue_item_impl(
+    request_json: String,
+) -> NifResult<String> {
+    let request: WorkflowSessionQueueReprioritizeRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+
+    let response = runtime
+        .block_on(async {
+            WORKFLOW_SERVICE
+                .workflow_reprioritize_session_queue_item(request)
+                .await
+        })
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_reprioritize_session_queue_item(
+    request_json: String,
+) -> NifResult<String> {
+    frontend_http_workflow_reprioritize_session_queue_item_impl(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+fn frontend_http_workflow_set_session_keep_alive_impl(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    let request: WorkflowSessionKeepAliveRequest = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
+    let response = runtime
+        .block_on(async {
+            WORKFLOW_SERVICE
+                .workflow_set_session_keep_alive(&host, request)
+                .await
+        })
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_set_session_keep_alive(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+) -> NifResult<String> {
+    frontend_http_workflow_set_session_keep_alive_impl(base_url, request_json, pumas_resource)
 }
 
 // ============================================================================
