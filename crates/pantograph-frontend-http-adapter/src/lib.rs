@@ -218,6 +218,9 @@ fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServi
             WorkflowServiceError::SessionNotFound(envelope.message)
         }
         WorkflowErrorCode::SessionEvicted => WorkflowServiceError::SessionEvicted(envelope.message),
+        WorkflowErrorCode::QueueItemNotFound => {
+            WorkflowServiceError::QueueItemNotFound(envelope.message)
+        }
         WorkflowErrorCode::SchedulerBusy => WorkflowServiceError::SchedulerBusy(envelope.message),
         WorkflowErrorCode::OutputNotProduced => {
             WorkflowServiceError::OutputNotProduced(envelope.message)
@@ -574,6 +577,10 @@ mod tests {
             (
                 WorkflowErrorCode::SessionEvicted,
                 WorkflowServiceError::SessionEvicted("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::QueueItemNotFound,
+                WorkflowServiceError::QueueItemNotFound("x".to_string()),
             ),
             (
                 WorkflowErrorCode::SchedulerBusy,
