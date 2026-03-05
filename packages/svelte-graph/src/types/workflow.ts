@@ -26,6 +26,7 @@ export interface PortDefinition {
 }
 
 export type NodeCategory = 'input' | 'processing' | 'tool' | 'output' | 'control';
+export type IoBindingOrigin = 'client_session' | 'integrated';
 export type ExecutionMode = 'reactive' | 'manual' | 'stream';
 
 export interface NodeDefinition {
@@ -33,6 +34,7 @@ export interface NodeDefinition {
   category: NodeCategory;
   label: string;
   description: string;
+  io_binding_origin: IoBindingOrigin;
   inputs: PortDefinition[];
   outputs: PortDefinition[];
   execution_mode: ExecutionMode;

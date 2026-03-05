@@ -152,6 +152,16 @@ pub enum NodeCategory {
     Control,
 }
 
+/// Declares whether an input/output node is externally bindable by clients/sessions.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IoBindingOrigin {
+    /// Bindable through headless/client session APIs.
+    ClientSession,
+    /// Provided/consumed internally by integrated systems.
+    Integrated,
+}
+
 /// How a node executes
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -181,6 +191,8 @@ pub struct NodeDefinition {
     pub label: String,
     /// Description for tooltips
     pub description: String,
+    /// Whether this node is bindable by client/session APIs or integrated only.
+    pub io_binding_origin: IoBindingOrigin,
     /// Input port definitions
     pub inputs: Vec<PortDefinition>,
     /// Output port definitions

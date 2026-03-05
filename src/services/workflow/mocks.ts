@@ -9,6 +9,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Text Input',
     description: 'User text input field',
+    io_binding_origin: 'client_session',
     inputs: [
       { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false },
     ],
@@ -22,6 +23,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Vector Input',
     description: 'User vector input field',
+    io_binding_origin: 'client_session',
     inputs: [
       { id: 'vector', label: 'Vector', data_type: 'embedding', required: false, multiple: false },
     ],
@@ -35,6 +37,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Puma-Lib',
     description: 'AI model file path provider',
+    io_binding_origin: 'integrated',
     inputs: [],
     outputs: [
       { id: 'model_path', label: 'Model Path', data_type: 'string', required: true, multiple: false },
@@ -46,6 +49,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Image Input',
     description: 'Canvas image capture',
+    io_binding_origin: 'client_session',
     inputs: [],
     outputs: [
       { id: 'image', label: 'Image', data_type: 'image', required: true, multiple: false },
@@ -58,6 +62,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Model Provider',
     description: 'Provides model selection for inference nodes',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'model_name', label: 'Model Name', data_type: 'string', required: false, multiple: false },
     ],
@@ -74,6 +79,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'processing',
     label: 'LLM Inference',
     description: 'Text completion via local LLM',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
@@ -92,6 +98,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'processing',
     label: 'Ollama Inference',
     description: 'Run inference using local Ollama server',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
       { id: 'model', label: 'Model', data_type: 'string', required: true, multiple: false },
@@ -111,6 +118,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'processing',
     label: 'LlamaCpp Inference',
     description: 'Run inference via llama.cpp server (no model duplication)',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'model_path', label: 'Model Path', data_type: 'string', required: true, multiple: false },
       { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
@@ -129,6 +137,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'processing',
     label: 'Vision Analysis',
     description: 'Analyze images with vision model',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'image', label: 'Image', data_type: 'image', required: true, multiple: false },
       { id: 'prompt', label: 'Prompt', data_type: 'string', required: false, multiple: false },
@@ -143,6 +152,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'processing',
     label: 'RAG Search',
     description: 'Search documentation with embeddings',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'query', label: 'Query', data_type: 'string', required: true, multiple: false },
     ],
@@ -159,6 +169,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'tool',
     label: 'Agent Tools',
     description: 'Configure available tools for agent',
+    io_binding_origin: 'integrated',
     inputs: [],
     outputs: [
       { id: 'tools', label: 'Tools', data_type: 'tools', required: true, multiple: false },
@@ -170,6 +181,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'tool',
     label: 'Read File',
     description: 'Read file contents from project',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'path', label: 'Path', data_type: 'string', required: true, multiple: false },
     ],
@@ -183,6 +195,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'tool',
     label: 'Write File',
     description: 'Write content to file in project',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'path', label: 'Path', data_type: 'string', required: true, multiple: false },
       { id: 'content', label: 'Content', data_type: 'string', required: true, multiple: false },
@@ -199,6 +212,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'output',
     label: 'Text Output',
     description: 'Display text result',
+    io_binding_origin: 'client_session',
     inputs: [
       { id: 'text', label: 'Text', data_type: 'string', required: true, multiple: false },
     ],
@@ -210,6 +224,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'output',
     label: 'Component Preview',
     description: 'Render component on canvas',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'component', label: 'Component', data_type: 'component', required: true, multiple: false },
     ],
@@ -223,6 +238,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'output',
     label: 'Vector Output',
     description: 'Display vector result',
+    io_binding_origin: 'client_session',
     inputs: [
       { id: 'vector', label: 'Vector', data_type: 'embedding', required: true, multiple: false },
     ],
@@ -238,6 +254,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'control',
     label: 'Tool Loop',
     description: 'Multi-turn agent with tool execution',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },

@@ -25,6 +25,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'input',
     label: 'Text Input',
     description: 'User text input field',
+    io_binding_origin: 'client_session',
     inputs: [{ id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false }],
     outputs: [{ id: 'text', label: 'Text', data_type: 'string', required: true, multiple: false }],
     execution_mode: 'reactive',
@@ -34,6 +35,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'processing',
     label: 'LLM Inference',
     description: 'Text completion via LLM',
+    io_binding_origin: 'integrated',
     inputs: [
       { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
@@ -49,6 +51,7 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'output',
     label: 'Text Output',
     description: 'Display text result',
+    io_binding_origin: 'client_session',
     inputs: [{ id: 'text', label: 'Text', data_type: 'string', required: true, multiple: false }],
     outputs: [],
     execution_mode: 'reactive',

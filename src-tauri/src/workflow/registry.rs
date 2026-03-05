@@ -6,18 +6,44 @@
 
 use std::collections::HashMap;
 
-use super::types::{ExecutionMode, NodeCategory, NodeDefinition, PortDataType, PortDefinition};
+use super::types::{
+    ExecutionMode, IoBindingOrigin, NodeCategory, NodeDefinition, PortDataType, PortDefinition,
+};
 
 /// Convert node-engine's TaskMetadata to src-tauri's NodeDefinition
 fn convert_metadata(meta: node_engine::TaskMetadata) -> NodeDefinition {
+    let category = convert_category(meta.category);
     NodeDefinition {
-        node_type: meta.node_type,
-        category: convert_category(meta.category),
+        node_type: meta.node_type.clone(),
+        category: category.clone(),
         label: meta.label,
         description: meta.description,
+        io_binding_origin: determine_io_binding_origin(&meta.node_type, &category),
         inputs: meta.inputs.into_iter().map(convert_port).collect(),
         outputs: meta.outputs.into_iter().map(convert_port).collect(),
         execution_mode: convert_execution_mode(meta.execution_mode),
+    }
+}
+
+fn determine_io_binding_origin(node_type: &str, category: &NodeCategory) -> IoBindingOrigin {
+    if !matches!(category, NodeCategory::Input | NodeCategory::Output) {
+        return IoBindingOrigin::Integrated;
+    }
+
+    match node_type {
+        // Integrated providers/sinks: these are not client/session bindable.
+        "puma-lib" | "linked-input" | "model-provider" | "component-preview"
+        | "point-cloud-output" => IoBindingOrigin::Integrated,
+
+        // Client/session bindable surfaces.
+        "audio-input" | "human-input" | "image-input" | "masked-text-input" | "text-input"
+        | "vector-input" | "audio-output" | "image-output" | "text-output"
+        | "vector-output" => IoBindingOrigin::ClientSession,
+
+        _ => panic!(
+            "input/output node type '{}' is missing explicit io_binding_origin mapping",
+            node_type
+        ),
     }
 }
 
@@ -191,6 +217,7 @@ mod tests {
         let def = registry.get_definition("text-input").unwrap();
         assert_eq!(def.node_type, "text-input");
         assert_eq!(def.category, NodeCategory::Input);
+        assert_eq!(def.io_binding_origin, IoBindingOrigin::ClientSession);
     }
 
     #[test]
@@ -223,9 +250,17 @@ mod tests {
 
         assert_eq!(def.node_type, "text-input");
         assert_eq!(def.category, NodeCategory::Input);
+        assert_eq!(def.io_binding_origin, IoBindingOrigin::ClientSession);
         assert_eq!(def.inputs.len(), 1);
         assert_eq!(def.inputs[0].id, "text");
         assert_eq!(def.outputs.len(), 1);
         assert_eq!(def.outputs[0].id, "text");
+    }
+
+    #[test]
+    fn test_registry_assigns_integrated_origin_to_puma_lib() {
+        let registry = NodeRegistry::new();
+        let def = registry.get_definition("puma-lib").unwrap();
+        assert_eq!(def.io_binding_origin, IoBindingOrigin::Integrated);
     }
 }
