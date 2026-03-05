@@ -2025,7 +2025,7 @@ fn derive_workflow_io(
     let mut outputs = Vec::new();
 
     for node in nodes {
-        let Some(direction) = classify_workflow_io_direction(node) else {
+        let Some(direction) = classify_workflow_io_direction(node)? else {
             continue;
         };
         let entry = build_workflow_io_node(node, direction)?;
@@ -2043,24 +2043,36 @@ fn derive_workflow_io(
 
 fn classify_workflow_io_direction(
     node: &capabilities::StoredGraphNode,
-) -> Option<WorkflowIoDirection> {
+) -> Result<Option<WorkflowIoDirection>, WorkflowServiceError> {
     let category = extract_nested_trimmed_str(node.data(), &["definition", "category"])
         .map(|v| v.to_ascii_lowercase());
-    match category.as_deref() {
-        Some("input") => return Some(WorkflowIoDirection::Input),
-        Some("output") => return Some(WorkflowIoDirection::Output),
-        _ => {}
-    }
+    let Some(direction) = (match category.as_deref() {
+        Some("input") => Some(WorkflowIoDirection::Input),
+        Some("output") => Some(WorkflowIoDirection::Output),
+        _ => None,
+    }) else {
+        return Ok(None);
+    };
 
-    let node_type = node.node_type().to_ascii_lowercase();
-    if node_type.ends_with("-input") {
-        return Some(WorkflowIoDirection::Input);
-    }
-    if node_type.ends_with("-output") {
-        return Some(WorkflowIoDirection::Output);
-    }
+    let origin =
+        extract_nested_trimmed_str(node.data(), &["definition", "io_binding_origin"])
+            .map(|v| v.to_ascii_lowercase())
+            .ok_or_else(|| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "workflow I/O schema error: node '{}' missing definition.io_binding_origin",
+                    node.id()
+                ))
+            })?;
 
-    None
+    match origin.as_str() {
+        "client_session" => Ok(Some(direction)),
+        "integrated" => Ok(None),
+        _ => Err(WorkflowServiceError::InvalidRequest(format!(
+            "workflow I/O schema error: node '{}' has invalid definition.io_binding_origin '{}'",
+            node.id(),
+            origin
+        ))),
+    }
 }
 
 fn build_workflow_io_node(
@@ -2908,6 +2920,7 @@ mod tests {
                                 "description": "Prompt supplied by the caller",
                                 "definition": {
                                     "category": "input",
+                                    "io_binding_origin": "client_session",
                                     "label": "Text Input",
                                     "description": "Provides text input",
                                     "inputs": [
@@ -2938,6 +2951,7 @@ mod tests {
                             "data": {
                                 "definition": {
                                     "category": "output",
+                                    "io_binding_origin": "client_session",
                                     "label": "Text Output",
                                     "description": "Displays text output",
                                     "inputs": [
@@ -3038,6 +3052,7 @@ mod tests {
                             "data": {
                                 "definition": {
                                     "category": "input",
+                                    "io_binding_origin": "client_session",
                                     "outputs": [
                                         { "id": "text", "label": "Text", "data_type": "string" }
                                     ]
@@ -3070,6 +3085,112 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_get_io_skips_integrated_io_nodes() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-io-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-io-integrated.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": { "name": "Workflow I/O Integrated" },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "puma-lib-1",
+                            "node_type": "puma-lib",
+                            "data": {
+                                "definition": {
+                                    "category": "input",
+                                    "io_binding_origin": "integrated",
+                                    "inputs": [],
+                                    "outputs": [
+                                        { "id": "model_path", "label": "Model Path", "data_type": "string" }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let response = WorkflowService::new()
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-io-integrated".to_string(),
+                },
+            )
+            .await
+            .expect("workflow io should skip integrated io nodes");
+
+        assert!(response.inputs.is_empty());
+        assert!(response.outputs.is_empty());
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[tokio::test]
+    async fn workflow_get_io_rejects_missing_io_binding_origin() {
+        let temp_root = std::env::temp_dir()
+            .join("pantograph-workflow-io-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let workflow_root = temp_root.join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflow_root).expect("create workflow root");
+        let workflow_path = workflow_root.join("wf-io-missing-origin.json");
+        fs::write(
+            &workflow_path,
+            serde_json::json!({
+                "metadata": { "name": "Workflow I/O Missing Origin" },
+                "graph": {
+                    "nodes": [
+                        {
+                            "id": "text-input-1",
+                            "node_type": "text-input",
+                            "data": {
+                                "definition": {
+                                    "category": "input",
+                                    "inputs": [
+                                        { "id": "text", "label": "Text", "data_type": "string" }
+                                    ]
+                                }
+                            },
+                            "position": { "x": 0.0, "y": 0.0 }
+                        }
+                    ],
+                    "edges": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("write workflow");
+
+        let host = DefaultCapabilitiesHost { workflow_root };
+        let err = WorkflowService::new()
+            .workflow_get_io(
+                &host,
+                WorkflowIoRequest {
+                    workflow_id: "wf-io-missing-origin".to_string(),
+                },
+            )
+            .await
+            .expect_err("workflow io should reject missing io_binding_origin");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+        assert!(err
+            .to_string()
+            .contains("missing definition.io_binding_origin"));
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[tokio::test]
     async fn workflow_get_io_rejects_invalid_or_duplicate_port_ids() {
         let temp_root = std::env::temp_dir()
             .join("pantograph-workflow-io-tests")
@@ -3089,6 +3210,7 @@ mod tests {
                             "data": {
                                 "definition": {
                                     "category": "output",
+                                    "io_binding_origin": "client_session",
                                     "outputs": [
                                         { "id": "text", "label": "Text", "data_type": "string" },
                                         { "id": "text", "label": "Text 2", "data_type": "string" }
@@ -3141,6 +3263,7 @@ mod tests {
                             "data": {
                                 "definition": {
                                     "category": "input",
+                                    "io_binding_origin": "client_session",
                                     "inputs": [
                                         { "id": "   ", "label": "Text", "data_type": "string" }
                                     ]
