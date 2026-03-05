@@ -11,6 +11,11 @@ Consumers migrating from embedding-shaped request/response usage to generic work
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`
+- `workflow_get_session_status`
+- `workflow_list_session_queue`
+- `workflow_cancel_session_queue_item`
+- `workflow_reprioritize_session_queue_item`
+- `workflow_set_session_keep_alive`
 
 ## Legacy to New Mapping
 
@@ -50,10 +55,12 @@ Consumers migrating from embedding-shaped request/response usage to generic work
   - new: text/vector/audio/image/etc via generic `value`
 
 ## Session Migration Pattern
-- create once with `create_workflow_session` for repeated runs
-- call `run_workflow_session` with `inputs[]`/`output_targets[]`
+- create once with `create_workflow_session` for repeated runs (`keep_alive` optional)
+- call `run_workflow_session` with `inputs[]`/`output_targets[]` (`priority` optional)
+- inspect runtime queue/state via `workflow_get_session_status` and `workflow_list_session_queue`
+- optionally cancel or reprioritize pending queue items
 - close with `close_workflow_session` when finished
-- handle scheduler errors (`session_evicted`, `scheduler_busy`)
+- handle scheduler errors (`scheduler_busy`, `queue_item_not_found`)
 
 ## Compatibility Notes
 - This is a breaking contract change.

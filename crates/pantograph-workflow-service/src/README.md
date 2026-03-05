@@ -19,9 +19,15 @@ Primary operations:
 - `workflow_run`
 - `workflow_get_capabilities`
 - `workflow_get_io`
+- `workflow_preflight`
 - `create_workflow_session`
 - `run_workflow_session`
 - `close_workflow_session`
+- `workflow_get_session_status`
+- `workflow_list_session_queue`
+- `workflow_cancel_session_queue_item`
+- `workflow_reprioritize_session_queue_item`
+- `workflow_set_session_keep_alive`
 
 Primary contract types:
 
@@ -36,6 +42,11 @@ Primary contract types:
 - `WorkflowSessionCreateRequest`
 - `WorkflowSessionRunRequest`
 - `WorkflowSessionCloseRequest`
+- `WorkflowSessionStatusRequest`
+- `WorkflowSessionQueueListRequest`
+- `WorkflowSessionQueueCancelRequest`
+- `WorkflowSessionQueueReprioritizeRequest`
+- `WorkflowSessionKeepAliveRequest`
 
 ## Capability Ownership
 
