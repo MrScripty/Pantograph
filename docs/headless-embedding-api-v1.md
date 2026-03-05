@@ -116,8 +116,14 @@ Update whether a session runtime should stay warm between runs.
 ### `WorkflowIoResponse`
 - `inputs`: array<WorkflowIoNode>
 - `outputs`: array<WorkflowIoNode>
-- `inputs[]` includes only input nodes.
-- `outputs[]` includes only output nodes.
+- `inputs[]` includes only nodes where `definition.category == "input"` and
+  `definition.io_binding_origin == "client_session"`.
+- `outputs[]` includes only nodes where `definition.category == "output"` and
+  `definition.io_binding_origin == "client_session"`.
+- Nodes marked `definition.io_binding_origin == "integrated"` are never exposed
+  by `workflow_get_io`.
+- Missing/invalid `definition.io_binding_origin` on input/output nodes is a
+  schema error.
 
 ### `WorkflowIoNode`
 - `node_id`: string (required)
@@ -127,7 +133,7 @@ Update whether a session runtime should stay warm between runs.
 - `ports`: array<WorkflowIoPort>
 - For input nodes, `ports[]` are bindable input surfaces only (`definition.inputs`).
 - For output nodes, `ports[]` are readable output surfaces only (`definition.outputs`).
-- No cross-direction fallback or merge behavior is applied.
+- No cross-direction fallback or node-type suffix inference is applied.
 
 ### `WorkflowIoPort`
 - `port_id`: string (required)

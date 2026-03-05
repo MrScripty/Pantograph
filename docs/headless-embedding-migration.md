@@ -28,6 +28,8 @@ Consumers migrating from embedding-shaped request/response usage to generic work
 - treat discovery as authoritative:
   - bind only `workflow_get_io.inputs[].ports[]` in `inputs[]`
   - target only `workflow_get_io.outputs[].ports[]` in `output_targets[]`
+- only nodes with `definition.io_binding_origin: "client_session"` are exposed;
+  `integrated` nodes are intentionally omitted
 - call `workflow_run` with `inputs[]` node/port bindings
 - optionally request explicit `output_targets[]`
 - consume `outputs[]` bindings from output nodes

@@ -29,6 +29,10 @@ Primary operations:
 - `workflow_reprioritize_session_queue_item`
 - `workflow_set_session_keep_alive`
 
+`workflow_get_io` strict discovery rule:
+- only nodes marked `definition.category` in `{input, output}` with
+  `definition.io_binding_origin == "client_session"` are externally bindable.
+
 Primary contract types:
 
 - `WorkflowRunRequest`
