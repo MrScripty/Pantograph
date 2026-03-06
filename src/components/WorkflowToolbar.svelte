@@ -63,16 +63,38 @@
     return null;
   }
 
-  function parseAudioStreamChunk(chunk: unknown): { mode: 'append' | 'replace'; audioBase64: string } | null {
+  function parseAudioStreamChunk(chunk: unknown): {
+    mode: 'append' | 'replace';
+    audioBase64: string;
+    mimeType: string;
+    sequence: number | null;
+    isFinal: boolean;
+  } | null {
     if (!chunk || typeof chunk !== 'object') return null;
     if (!('audio_base64' in chunk)) return null;
-    const structured = chunk as { mode?: string; audio_base64: unknown };
+    const structured = chunk as {
+      mode?: string;
+      audio_base64: unknown;
+      mime_type?: unknown;
+      sequence?: unknown;
+      is_final?: unknown;
+    };
     if (typeof structured.audio_base64 !== 'string' || structured.audio_base64.length === 0) {
       return null;
     }
+    const sequence =
+      typeof structured.sequence === 'number' && Number.isFinite(structured.sequence)
+        ? structured.sequence
+        : null;
     return {
       mode: structured.mode === 'replace' ? 'replace' : 'append',
       audioBase64: structured.audio_base64,
+      mimeType:
+        typeof structured.mime_type === 'string' && structured.mime_type.length > 0
+          ? structured.mime_type
+          : 'audio/wav',
+      sequence,
+      isFinal: structured.is_final === true,
     };
   }
 
@@ -164,6 +186,9 @@
             updateNodeRuntimeData(edge.target, {
               [targetHandle]: streamData.chunk,
               audio: audioChunk.audioBase64,
+              audio_mime: audioChunk.mimeType,
+              stream_sequence: audioChunk.sequence,
+              stream_is_final: audioChunk.isFinal,
             });
             continue;
           }

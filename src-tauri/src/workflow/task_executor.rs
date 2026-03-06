@@ -1228,8 +1228,22 @@ mod tests {
         adapter_response.insert(
             "stream".to_string(),
             serde_json::json!([
-                {"type": "audio_chunk", "mode": "append", "audio_base64": "chunk-1"},
-                {"type": "audio_chunk", "mode": "append", "audio_base64": "chunk-2"}
+                {
+                    "type": "audio_chunk",
+                    "mode": "append",
+                    "audio_base64": "chunk-1",
+                    "mime_type": "audio/wav",
+                    "sequence": 0,
+                    "is_final": false
+                },
+                {
+                    "type": "audio_chunk",
+                    "mode": "append",
+                    "audio_base64": "chunk-2",
+                    "mime_type": "audio/wav",
+                    "sequence": 1,
+                    "is_final": true
+                }
             ]),
         );
         let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
@@ -1284,7 +1298,11 @@ mod tests {
         assert_eq!(stream_events[0].1, "exec-stream-test");
         assert_eq!(stream_events[0].2, "stream");
         assert_eq!(stream_events[0].3["audio_base64"], "chunk-1");
+        assert_eq!(stream_events[0].3["sequence"], 0);
+        assert_eq!(stream_events[0].3["is_final"], false);
         assert_eq!(stream_events[1].3["audio_base64"], "chunk-2");
+        assert_eq!(stream_events[1].3["sequence"], 1);
+        assert_eq!(stream_events[1].3["is_final"], true);
     }
 
     #[test]

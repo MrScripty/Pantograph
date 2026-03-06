@@ -670,10 +670,12 @@ mod tests {
 
     #[test]
     fn parse_stream_chunk_line_extracts_chunk_payload() {
-        let line = r#"{"event":"stream","port":"stream","chunk":{"type":"audio_chunk","audio_base64":"abc"}}"#;
+        let line = r#"{"event":"stream","port":"stream","chunk":{"type":"audio_chunk","audio_base64":"abc","sequence":0,"is_final":true}}"#;
         let parsed = ProcessPythonRuntimeAdapter::parse_stream_chunk_line(line)
             .expect("stream event should parse");
         assert_eq!(parsed["type"], "audio_chunk");
         assert_eq!(parsed["audio_base64"], "abc");
+        assert_eq!(parsed["sequence"], 0);
+        assert_eq!(parsed["is_final"], true);
     }
 }

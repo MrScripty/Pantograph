@@ -150,28 +150,42 @@ def generate_audio(
     # Generate per-text-chunk so callers can surface progress if desired.
     chunk_audio: List[np.ndarray] = []
     chunk_payloads: List[Dict[str, Any]] = []
-    for chunk_arr in _iter_chunks(tts, prompt, voice, speed, clean_text):
+    pending_stream_chunk: Dict[str, Any] | None = None
+    for sequence, chunk_arr in enumerate(_iter_chunks(tts, prompt, voice, speed, clean_text)):
         arr = np.asarray(chunk_arr, dtype=np.float32)
         chunk_audio.append(arr)
         chunk_b64, chunk_duration = _to_wav_base64(arr, sample_rate)
-        chunk_payloads.append(
-            {
-                "type": "audio_chunk",
-                "mode": "append",
-                "audio_base64": chunk_b64,
-                "duration_seconds": chunk_duration,
-                "sample_rate": sample_rate,
-            }
-        )
+        chunk_payload = {
+            "type": "audio_chunk",
+            "mode": "append",
+            "audio_base64": chunk_b64,
+            "duration_seconds": chunk_duration,
+            "sample_rate": sample_rate,
+            "mime_type": "audio/wav",
+            "sequence": sequence,
+            "is_final": False,
+        }
+        chunk_payloads.append(chunk_payload)
         if callable(emit_stream):
             try:
-                emit_stream(chunk_payloads[-1])
+                # Delay emission by one chunk so we can mark terminal chunk deterministically.
+                if pending_stream_chunk is not None:
+                    emit_stream(pending_stream_chunk)
+                pending_stream_chunk = chunk_payload
             except Exception:
                 # Streaming callbacks are best-effort and must not break inference.
                 pass
 
     if not chunk_audio:
         raise RuntimeError("ONNX worker generated no audio chunks")
+
+    chunk_payloads[-1]["is_final"] = True
+    if callable(emit_stream):
+        try:
+            emit_stream(chunk_payloads[-1])
+        except Exception:
+            # Streaming callbacks are best-effort and must not break inference.
+            pass
 
     if len(chunk_audio) == 1:
         full_audio = chunk_audio[0]
