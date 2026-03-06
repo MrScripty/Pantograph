@@ -3,8 +3,8 @@
 """Process bridge for python-backed Pantograph workflow nodes.
 
 Reads a JSON request from stdin, executes the requested node by loading
-Pantograph worker modules from explicit file paths, and writes a JSON response
-to stdout.
+Pantograph worker modules (torch/audio/onnx) from explicit file paths, and
+writes a JSON response to stdout.
 """
 
 from __future__ import annotations
@@ -189,6 +189,35 @@ def _run_audio(inputs: Dict[str, Any], audio_worker_path: str) -> Dict[str, Any]
     return outputs
 
 
+def _run_onnx(inputs: Dict[str, Any], onnx_worker_path: str) -> Dict[str, Any]:
+    worker = _load_module("pantograph_onnx_worker_process", onnx_worker_path)
+
+    model_path = inputs.get("model_path")
+    if not isinstance(model_path, str) or not model_path.strip():
+        raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
+    model_path = model_path.strip()
+
+    if not isinstance(inputs.get("prompt"), str) or not str(inputs.get("prompt")).strip():
+        raise RuntimeError("Missing prompt input")
+
+    result = worker.generate_audio(inputs)
+    if not isinstance(result, dict):
+        raise RuntimeError("ONNX worker returned unexpected payload shape")
+
+    outputs: Dict[str, Any] = {
+        "audio": result.get("audio", ""),
+        "duration_seconds": result.get("duration_seconds", 0.0),
+        "sample_rate": result.get("sample_rate", 24000),
+        "stream": result.get("stream", []),
+        "voice_used": result.get("voice_used"),
+        "speed_used": result.get("speed_used"),
+    }
+    outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
+        "onnxruntime", model_path, "text-to-audio"
+    )
+    return outputs
+
+
 def _ensure_worker_path(path: Any, label: str) -> str:
     if not isinstance(path, str) or not path.strip():
         raise RuntimeError(f"Missing worker path for {label}")
@@ -221,11 +250,14 @@ def _main() -> int:
 
         torch_worker = _ensure_worker_path(worker_paths.get("torch_worker"), "torch")
         audio_worker = _ensure_worker_path(worker_paths.get("audio_worker"), "audio")
+        onnx_worker = _ensure_worker_path(worker_paths.get("onnx_worker"), "onnx")
 
         if node_type == "pytorch-inference":
             outputs = _run_pytorch(inputs, torch_worker)
         elif node_type == "audio-generation":
             outputs = _run_audio(inputs, audio_worker)
+        elif node_type == "onnx-inference":
+            outputs = _run_onnx(inputs, onnx_worker)
         else:
             raise RuntimeError(f"Unsupported python runtime node_type '{node_type}'")
 

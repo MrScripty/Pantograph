@@ -84,6 +84,7 @@ struct BridgePayload {
 struct BridgeWorkerPaths {
     torch_worker: String,
     audio_worker: String,
+    onnx_worker: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,6 +270,11 @@ impl ProcessPythonRuntimeAdapter {
             .join("inference")
             .join("audio")
             .join("worker.py");
+        let onnx_worker = repo_root
+            .join("crates")
+            .join("inference")
+            .join("onnx")
+            .join("worker.py");
 
         if !torch_worker.exists() {
             return Err(format!(
@@ -282,10 +288,17 @@ impl ProcessPythonRuntimeAdapter {
                 audio_worker.display()
             ));
         }
+        if !onnx_worker.exists() {
+            return Err(format!(
+                "ONNX worker script not found at {}",
+                onnx_worker.display()
+            ));
+        }
 
         Ok(BridgeWorkerPaths {
             torch_worker: torch_worker.to_string_lossy().to_string(),
             audio_worker: audio_worker.to_string_lossy().to_string(),
+            onnx_worker: onnx_worker.to_string_lossy().to_string(),
         })
     }
 
@@ -539,5 +552,14 @@ mod tests {
         let resolved = ProcessPythonRuntimeAdapter::resolve_python_executable(&[])
             .expect("resolver should locate python3 from PATH");
         assert!(resolved.exists());
+    }
+
+    #[test]
+    fn resolve_worker_paths_includes_onnx_worker() {
+        let workers = ProcessPythonRuntimeAdapter::resolve_worker_paths()
+            .expect("worker paths should resolve from repository layout");
+        assert!(PathBuf::from(workers.torch_worker).exists());
+        assert!(PathBuf::from(workers.audio_worker).exists());
+        assert!(PathBuf::from(workers.onnx_worker).exists());
     }
 }

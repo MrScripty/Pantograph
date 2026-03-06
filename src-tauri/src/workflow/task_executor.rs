@@ -26,6 +26,9 @@ use crate::workflow::python_runtime::{
 ///
 /// Currently handles:
 /// - `rag-search`: requires `RagManager` (Tauri-managed state)
+/// - `pytorch-inference`: python sidecar execution
+/// - `audio-generation`: python sidecar execution
+/// - `onnx-inference`: python sidecar execution
 ///
 /// All other node types should be handled by `CoreTaskExecutor` via
 /// `CompositeTaskExecutor`. Unknown types return the sentinel error
@@ -33,7 +36,7 @@ use crate::workflow::python_runtime::{
 pub struct TauriTaskExecutor {
     /// RAG manager for document search
     rag_manager: Arc<RwLock<RagManager>>,
-    /// Host adapter for python-backed nodes (pytorch/audio).
+    /// Host adapter for python-backed nodes (pytorch/audio/onnx sidecar).
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
 }
 
@@ -684,7 +687,10 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
         extensions: &ExecutorExtensions,
     ) -> Result<Option<node_engine::ModelRefV2>> {
-        if node_type != "pytorch-inference" && node_type != "audio-generation" {
+        if node_type != "pytorch-inference"
+            && node_type != "audio-generation"
+            && node_type != "onnx-inference"
+        {
             return Ok(None);
         }
 
@@ -856,7 +862,7 @@ impl TaskExecutor for TauriTaskExecutor {
                 self.execute_dependency_environment(&inputs, extensions)
                     .await
             }
-            "pytorch-inference" | "audio-generation" => {
+            "pytorch-inference" | "audio-generation" | "onnx-inference" => {
                 self.execute_python_node(&node_type, &inputs, extensions)
                     .await
             }
@@ -1071,6 +1077,67 @@ mod tests {
         let request = &recorded[0];
         assert_eq!(request.node_type, "pytorch-inference");
         assert_eq!(request.env_ids, vec!["venv:test".to_string()]);
+        assert!(request.inputs.contains_key("model_ref"));
+    }
+
+    #[tokio::test]
+    async fn onnx_nodes_route_through_python_adapter_with_preflight() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests: requests.clone(),
+            response: adapter_response,
+        });
+
+        let resolved_model_ref = ModelRefV2 {
+            contract_version: 2,
+            engine: "onnxruntime".to_string(),
+            model_id: "kitten-tts".to_string(),
+            model_path: "/tmp/model.onnx".to_string(),
+            task_type_primary: "text-to-audio".to_string(),
+            dependency_bindings: vec![ModelDependencyBinding {
+                binding_id: "binding-onnx".to_string(),
+                profile_id: "profile-onnx".to_string(),
+                profile_version: 1,
+                profile_hash: Some("hash".to_string()),
+                backend_key: Some("onnxruntime".to_string()),
+                platform_selector: Some("linux-x86_64".to_string()),
+                environment_kind: Some("python".to_string()),
+                env_id: Some("venv:onnx".to_string()),
+                python_executable_override: None,
+                validation_state: DependencyValidationState::Resolved,
+                validation_errors: Vec::new(),
+                requirements: Vec::new(),
+            }],
+            dependency_requirements_id: Some("requirements-onnx".to_string()),
+        };
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: ModelDependencyRequirements {
+                backend_key: Some("onnxruntime".to_string()),
+                ..make_requirements(DependencyValidationState::Resolved)
+            },
+            status: make_status(DependencyState::Ready, None),
+            model_ref: Some(resolved_model_ref),
+        });
+        let (executor, extensions) = test_executor(adapter, resolver);
+
+        let mut inputs = HashMap::new();
+        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model.onnx"));
+        inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+        let outputs = executor
+            .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
+            .await
+            .expect("onnx preflight should allow adapter execution");
+        assert_eq!(outputs.get("audio"), Some(&serde_json::json!("base64-audio")));
+
+        let recorded = requests.lock().expect("recording lock");
+        assert_eq!(recorded.len(), 1);
+        let request = &recorded[0];
+        assert_eq!(request.node_type, "onnx-inference");
+        assert_eq!(request.env_ids, vec!["venv:onnx".to_string()]);
         assert!(request.inputs.contains_key("model_ref"));
     }
 
