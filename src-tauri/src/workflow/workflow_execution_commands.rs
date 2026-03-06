@@ -46,6 +46,8 @@ fn snapshot_runtime_extensions(
 fn apply_runtime_extensions(
     executor: &mut node_engine::WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,
+    event_sink: Arc<dyn EventSink>,
+    execution_id: &str,
 ) {
     if let Some(api) = &snapshot.pumas_api {
         executor
@@ -63,6 +65,14 @@ fn apply_runtime_extensions(
             resolver.clone(),
         );
     }
+    executor.extensions_mut().set(
+        super::task_executor::runtime_extension_keys::EVENT_SINK,
+        event_sink,
+    );
+    executor.extensions_mut().set(
+        super::task_executor::runtime_extension_keys::EXECUTION_ID,
+        execution_id.to_string(),
+    );
 }
 
 fn hydrate_embedding_emit_metadata_flags(mut graph: WorkflowGraph) -> WorkflowGraph {
@@ -470,7 +480,12 @@ pub async fn execute_workflow_v2(
             .get_mut(&execution_id)
             .ok_or_else(|| "Execution not found".to_string())?;
         state.touch();
-        apply_runtime_extensions(&mut state.executor, &runtime_ext);
+        apply_runtime_extensions(
+            &mut state.executor,
+            &runtime_ext,
+            event_adapter.clone() as Arc<dyn EventSink>,
+            &execution_id,
+        );
 
         let _ = state.push_undo_snapshot().await;
 
@@ -739,7 +754,12 @@ pub async fn run_workflow_session(
         .get_mut(&session_id)
         .ok_or_else(|| format!("Session '{}' not found", session_id))?;
     state.touch();
-    apply_runtime_extensions(&mut state.executor, &runtime_ext);
+    apply_runtime_extensions(
+        &mut state.executor,
+        &runtime_ext,
+        event_adapter.clone() as Arc<dyn EventSink>,
+        &session_id,
+    );
 
     state.executor.set_event_sink(event_adapter.clone());
 

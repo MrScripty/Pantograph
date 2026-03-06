@@ -12,8 +12,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
     core_executor::resolve_node_type, extension_keys, Context, DependencyState, ExecutorExtensions,
-    ModelDependencyRequest, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
-    Result, TaskExecutor,
+    EventSink, ModelDependencyRequest, ModelDependencyResolver, ModelDependencyStatus,
+    NodeEngineError, Result, TaskExecutor, WorkflowEvent,
 };
 use tokio::sync::RwLock;
 
@@ -38,6 +38,14 @@ pub struct TauriTaskExecutor {
     rag_manager: Arc<RwLock<RagManager>>,
     /// Host adapter for python-backed nodes (pytorch/audio/onnx sidecar).
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
+}
+
+/// Pantograph-specific extension keys used by host executors.
+pub mod runtime_extension_keys {
+    /// `Arc<dyn node_engine::EventSink>` for streaming host-side events.
+    pub const EVENT_SINK: &str = "pantograph_event_sink";
+    /// Execution identifier for host-side stream/progress events.
+    pub const EXECUTION_ID: &str = "pantograph_execution_id";
 }
 
 impl TauriTaskExecutor {
@@ -815,6 +823,7 @@ impl TauriTaskExecutor {
 
     async fn execute_python_node(
         &self,
+        task_id: &str,
         node_type: &str,
         inputs: &HashMap<String, serde_json::Value>,
         extensions: &ExecutorExtensions,
@@ -838,10 +847,58 @@ impl TauriTaskExecutor {
             inputs: runtime_inputs.clone(),
             env_ids: Self::collect_runtime_env_ids(&runtime_inputs),
         };
-        self.python_runtime
+        let outputs = self
+            .python_runtime
             .execute_node(request)
             .await
-            .map_err(NodeEngineError::ExecutionFailed)
+            .map_err(NodeEngineError::ExecutionFailed)?;
+        Self::emit_python_stream_events(task_id, &outputs, extensions);
+        Ok(outputs)
+    }
+
+    fn resolve_stream_target(
+        extensions: &ExecutorExtensions,
+    ) -> Option<(Arc<dyn EventSink>, String)> {
+        let sink = extensions
+            .get::<Arc<dyn EventSink>>(runtime_extension_keys::EVENT_SINK)?
+            .clone();
+        let execution_id = extensions
+            .get::<String>(runtime_extension_keys::EXECUTION_ID)
+            .cloned()
+            .unwrap_or_default();
+        Some((sink, execution_id))
+    }
+
+    fn emit_python_stream_events(
+        task_id: &str,
+        outputs: &HashMap<String, serde_json::Value>,
+        extensions: &ExecutorExtensions,
+    ) {
+        let Some(stream_payload) = outputs.get("stream") else {
+            return;
+        };
+        let Some((sink, execution_id)) = Self::resolve_stream_target(extensions) else {
+            return;
+        };
+
+        let send_stream = |chunk: serde_json::Value| {
+            let _ = sink.send(WorkflowEvent::task_stream(
+                task_id,
+                &execution_id,
+                "stream",
+                chunk,
+            ));
+        };
+
+        match stream_payload {
+            serde_json::Value::Null => {}
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    send_stream(item.clone());
+                }
+            }
+            other => send_stream(other.clone()),
+        }
     }
 }
 
@@ -863,7 +920,7 @@ impl TaskExecutor for TauriTaskExecutor {
                     .await
             }
             "pytorch-inference" | "audio-generation" | "onnx-inference" => {
-                self.execute_python_node(&node_type, &inputs, extensions)
+                self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await
             }
             _ => {
@@ -888,6 +945,7 @@ mod tests {
         extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
         ModelDependencyBinding, ModelDependencyInstallResult, ModelDependencyRequest,
         ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+        VecEventSink, WorkflowEvent,
     };
 
     #[derive(Clone)]
@@ -1139,6 +1197,73 @@ mod tests {
         assert_eq!(request.node_type, "onnx-inference");
         assert_eq!(request.env_ids, vec!["venv:onnx".to_string()]);
         assert!(request.inputs.contains_key("model_ref"));
+    }
+
+    #[tokio::test]
+    async fn python_nodes_emit_stream_events_when_event_sink_extension_exists() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("audio".to_string(), serde_json::json!("final-audio"));
+        adapter_response.insert(
+            "stream".to_string(),
+            serde_json::json!([
+                {"type": "audio_chunk", "mode": "append", "audio_base64": "chunk-1"},
+                {"type": "audio_chunk", "mode": "append", "audio_base64": "chunk-2"}
+            ]),
+        );
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests: requests.clone(),
+            response: adapter_response,
+        });
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: ModelDependencyRequirements {
+                backend_key: Some("onnxruntime".to_string()),
+                ..make_requirements(DependencyValidationState::Resolved)
+            },
+            status: make_status(DependencyState::Ready, None),
+            model_ref: None,
+        });
+        let (executor, mut extensions) = test_executor(adapter, resolver);
+        let sink = Arc::new(VecEventSink::new());
+        extensions.set(
+            runtime_extension_keys::EVENT_SINK,
+            sink.clone() as Arc<dyn node_engine::EventSink>,
+        );
+        extensions.set(
+            runtime_extension_keys::EXECUTION_ID,
+            "exec-stream-test".to_string(),
+        );
+
+        let mut inputs = HashMap::new();
+        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model.onnx"));
+        inputs.insert("prompt".to_string(), serde_json::json!("stream this"));
+
+        let _ = executor
+            .execute_task("onnx-inference-stream", inputs, &Context::new(), &extensions)
+            .await
+            .expect("onnx stream execution should succeed");
+
+        let events = sink.events();
+        let stream_events: Vec<_> = events
+            .into_iter()
+            .filter_map(|event| match event {
+                WorkflowEvent::TaskStream {
+                    task_id,
+                    execution_id,
+                    port,
+                    data,
+                } => Some((task_id, execution_id, port, data)),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(stream_events.len(), 2);
+        assert_eq!(stream_events[0].0, "onnx-inference-stream");
+        assert_eq!(stream_events[0].1, "exec-stream-test");
+        assert_eq!(stream_events[0].2, "stream");
+        assert_eq!(stream_events[0].3["audio_base64"], "chunk-1");
+        assert_eq!(stream_events[1].3["audio_base64"], "chunk-2");
     }
 
     #[test]
