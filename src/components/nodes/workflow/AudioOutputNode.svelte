@@ -398,7 +398,13 @@
   });
 
   $effect(() => {
-    if (finalAudioSrc || hasStreamAudio) return;
+    const chunk = streamPayload;
+    if (executionState !== 'idle' || finalAudioSrc || chunk) return;
+    if (streamContext || hasStreamAudio) {
+      void stopStreamPlayback(true);
+      return;
+    }
+
     lastAudioSignature = '';
     isPlaying = false;
     currentTime = 0;
