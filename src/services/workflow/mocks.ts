@@ -19,6 +19,20 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'reactive',
   },
   {
+    node_type: 'selection-input',
+    category: 'input',
+    label: 'Selection Input',
+    description: 'Metadata-driven dropdown input',
+    io_binding_origin: 'client_session',
+    inputs: [
+      { id: 'value', label: 'Value', data_type: 'any', required: false, multiple: false },
+    ],
+    outputs: [
+      { id: 'value', label: 'Value', data_type: 'any', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
     node_type: 'vector-input',
     category: 'input',
     label: 'Vector Input',

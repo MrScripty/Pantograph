@@ -55,6 +55,7 @@ mod tests {
         // Spot-check known types
         assert!(registry.has_node_type("text-input"));
         assert!(registry.has_node_type("vector-input"));
+        assert!(registry.has_node_type("selection-input"));
         assert!(registry.has_node_type("llm-inference"));
         assert!(registry.has_node_type("conditional"));
         assert!(registry.has_node_type("text-output"));

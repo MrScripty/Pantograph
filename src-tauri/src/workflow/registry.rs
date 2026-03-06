@@ -36,9 +36,9 @@ fn determine_io_binding_origin(node_type: &str, category: &NodeCategory) -> IoBi
         | "point-cloud-output" => IoBindingOrigin::Integrated,
 
         // Client/session bindable surfaces.
-        "audio-input" | "human-input" | "image-input" | "masked-text-input" | "text-input"
-        | "vector-input" | "audio-output" | "image-output" | "text-output"
-        | "vector-output" => IoBindingOrigin::ClientSession,
+        "audio-input" | "human-input" | "image-input" | "masked-text-input"
+        | "selection-input" | "text-input" | "vector-input" | "audio-output"
+        | "image-output" | "text-output" | "vector-output" => IoBindingOrigin::ClientSession,
 
         _ => panic!(
             "input/output node type '{}' is missing explicit io_binding_origin mapping",
@@ -181,6 +181,7 @@ mod tests {
 
         // Nodes from TaskDescriptor (workflow-nodes crate)
         assert!(registry.has_node_type("text-input"));
+        assert!(registry.has_node_type("selection-input"));
         assert!(registry.has_node_type("image-input"));
         assert!(registry.has_node_type("human-input"));
         assert!(registry.has_node_type("linked-input"));

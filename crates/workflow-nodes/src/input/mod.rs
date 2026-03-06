@@ -10,6 +10,7 @@ mod linked_input;
 mod masked_text_input;
 mod model_provider;
 mod puma_lib;
+mod selection_input;
 mod text_input;
 mod vector_input;
 
@@ -21,5 +22,6 @@ pub use linked_input::LinkedInputTask;
 pub use masked_text_input::{MaskedTextInputTask, TextSegment};
 pub use model_provider::{ModelInfo, ModelProviderTask};
 pub use puma_lib::PumaLibTask;
+pub use selection_input::SelectionInputTask;
 pub use text_input::TextInputTask;
 pub use vector_input::VectorInputTask;

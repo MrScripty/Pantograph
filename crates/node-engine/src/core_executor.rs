@@ -121,6 +121,21 @@ fn execute_text_input(
     Ok(outputs)
 }
 
+fn execute_selection_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let value = inputs
+        .get("_data")
+        .and_then(|d| d.get("value"))
+        .cloned()
+        .or_else(|| inputs.get("value").cloned())
+        .unwrap_or(serde_json::Value::Null);
+
+    let mut outputs = HashMap::new();
+    outputs.insert("value".to_string(), value);
+    Ok(outputs)
+}
+
 fn parse_embedding_vector_value(value: &serde_json::Value) -> Option<Vec<f64>> {
     let array = value.as_array()?;
     let mut out = Vec::with_capacity(array.len());
@@ -1394,6 +1409,7 @@ impl TaskExecutor for CoreTaskExecutor {
         match node_type.as_str() {
             // Input nodes
             "text-input" => execute_text_input(&inputs),
+            "selection-input" => execute_selection_input(&inputs),
             "vector-input" => execute_vector_input(&inputs),
             "masked-text-input" => execute_masked_text_input(&inputs),
             "linked-input" => execute_linked_input(&inputs),
@@ -3082,6 +3098,25 @@ mod tests {
         inputs.insert("text".to_string(), serde_json::json!("from port"));
         let result = execute_text_input(&inputs).unwrap();
         assert_eq!(result["text"], "from port");
+    }
+
+    #[test]
+    fn test_selection_input() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "_data".to_string(),
+            serde_json::json!({"value": "expr-voice-5-m"}),
+        );
+        let result = execute_selection_input(&inputs).unwrap();
+        assert_eq!(result["value"], "expr-voice-5-m");
+    }
+
+    #[test]
+    fn test_selection_input_from_port() {
+        let mut inputs = HashMap::new();
+        inputs.insert("value".to_string(), serde_json::json!(3));
+        let result = execute_selection_input(&inputs).unwrap();
+        assert_eq!(result["value"], 3);
     }
 
     #[test]

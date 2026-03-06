@@ -33,6 +33,7 @@
 
   // Import workflow node components
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
+  import SelectionInputNode from './nodes/workflow/SelectionInputNode.svelte';
   import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
@@ -77,6 +78,7 @@
   // Define custom node types for workflow
   const nodeTypes: NodeTypes = {
     'text-input': TextInputNode,
+    'selection-input': SelectionInputNode,
     'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,
     'ollama-inference': OllamaInferenceNode,
