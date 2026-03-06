@@ -185,7 +185,6 @@
           if (audioChunk && targetHandle === 'stream') {
             updateNodeRuntimeData(edge.target, {
               [targetHandle]: streamData.chunk,
-              audio: audioChunk.audioBase64,
               audio_mime: audioChunk.mimeType,
               stream_sequence: audioChunk.sequence,
               stream_is_final: audioChunk.isFinal,

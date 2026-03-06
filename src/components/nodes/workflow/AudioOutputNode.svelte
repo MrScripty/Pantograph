@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
@@ -16,6 +17,14 @@
     selected?: boolean;
   }
 
+  interface StreamAudioChunk {
+    audioBase64: string;
+    mimeType: string;
+    sequence: number | null;
+    isFinal: boolean;
+    mode: 'append' | 'replace';
+  }
+
   let { id, data, selected = false }: Props = $props();
 
   let audioElement = $state<HTMLAudioElement | null>(null);
@@ -24,45 +33,74 @@
   let duration = $state(0);
   let volume = $state(1);
   let lastAudioSignature = $state('');
+  let hasStreamAudio = $state(false);
+  let streamBufferedDuration = $state(0);
+  let streamQueueEndTime = $state(0);
+  let streamPlaybackStartedAt = $state<number | null>(null);
+  let lastProcessedSequence = $state<number | null>(null);
+  let lastProcessedChunkSignature = $state('');
+  let streamProgressTimer = $state<number | null>(null);
+  let streamContext = $state<AudioContext | null>(null);
+  let streamGainNode = $state<GainNode | null>(null);
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
 
-  let streamPayload = $derived.by(() => {
+  let finalAudioData = $derived(data.audio || '');
+  let finalAudioMime = $derived(data.audio_mime || 'audio/wav');
+  let finalAudioSrc = $derived(finalAudioData ? `data:${finalAudioMime};base64,${finalAudioData}` : '');
+
+  let streamPayload = $derived.by((): StreamAudioChunk | null => {
     const payload = data.stream;
-    if (payload && typeof payload === 'object') {
-      const maybeChunk = payload as {
-        audio_base64?: unknown;
-        content?: unknown;
-        mime_type?: unknown;
-      };
-      if (typeof maybeChunk.audio_base64 === 'string' && maybeChunk.audio_base64.length > 0) {
-        return {
-          audioBase64: maybeChunk.audio_base64,
-          mimeType:
-            typeof maybeChunk.mime_type === 'string' && maybeChunk.mime_type.length > 0
-              ? maybeChunk.mime_type
-              : 'audio/wav',
-        };
-      }
-      if (typeof maybeChunk.content === 'string' && maybeChunk.content.length > 0) {
-        return {
-          audioBase64: maybeChunk.content,
-          mimeType:
-            typeof maybeChunk.mime_type === 'string' && maybeChunk.mime_type.length > 0
-              ? maybeChunk.mime_type
-              : 'audio/wav',
-        };
-      }
-    }
     if (typeof payload === 'string' && payload.length > 0) {
-      return { audioBase64: payload, mimeType: 'audio/wav' };
+      return {
+        audioBase64: payload,
+        mimeType: 'audio/wav',
+        sequence: null,
+        isFinal: false,
+        mode: 'append',
+      };
     }
-    return null;
+    if (!payload || typeof payload !== 'object') return null;
+
+    const maybeChunk = payload as {
+      audio_base64?: unknown;
+      content?: unknown;
+      mime_type?: unknown;
+      sequence?: unknown;
+      is_final?: unknown;
+      mode?: unknown;
+    };
+
+    const audioValue =
+      typeof maybeChunk.audio_base64 === 'string' && maybeChunk.audio_base64.length > 0
+        ? maybeChunk.audio_base64
+        : typeof maybeChunk.content === 'string' && maybeChunk.content.length > 0
+          ? maybeChunk.content
+          : null;
+    if (!audioValue) return null;
+
+    const sequence =
+      typeof maybeChunk.sequence === 'number' && Number.isFinite(maybeChunk.sequence)
+        ? maybeChunk.sequence
+        : null;
+    const mimeType =
+      typeof maybeChunk.mime_type === 'string' && maybeChunk.mime_type.length > 0
+        ? maybeChunk.mime_type
+        : 'audio/wav';
+
+    return {
+      audioBase64: audioValue,
+      mimeType,
+      sequence,
+      isFinal: maybeChunk.is_final === true,
+      mode: maybeChunk.mode === 'replace' ? 'replace' : 'append',
+    };
   });
-  let audioData = $derived(streamPayload?.audioBase64 || data.audio || '');
-  let audioMime = $derived(streamPayload?.mimeType || data.audio_mime || 'audio/wav');
-  let audioSrc = $derived(audioData ? `data:${audioMime};base64,${audioData}` : '');
+
+  let displayedDuration = $derived(finalAudioSrc ? duration : streamBufferedDuration);
+  let canSeek = $derived(Boolean(finalAudioSrc));
+  let hasAnyAudio = $derived(Boolean(finalAudioSrc) || hasStreamAudio);
 
   let statusColor = $derived(
     {
@@ -90,6 +128,139 @@
     return 'wav';
   }
 
+  function base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  function updateStreamingProgress() {
+    if (!streamContext || streamPlaybackStartedAt === null) return;
+    const elapsed = Math.max(0, streamContext.currentTime - streamPlaybackStartedAt);
+    currentTime = Math.min(elapsed, streamBufferedDuration);
+  }
+
+  function startStreamingProgressTimer() {
+    if (streamProgressTimer !== null) return;
+    streamProgressTimer = window.setInterval(() => {
+      updateStreamingProgress();
+    }, 100);
+  }
+
+  function stopStreamingProgressTimer() {
+    if (streamProgressTimer === null) return;
+    window.clearInterval(streamProgressTimer);
+    streamProgressTimer = null;
+  }
+
+  async function ensureStreamContext(): Promise<AudioContext | null> {
+    if (streamContext) return streamContext;
+    if (typeof window === 'undefined') return null;
+
+    const audioWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
+    const ContextCtor = audioWindow.AudioContext || audioWindow.webkitAudioContext;
+    if (!ContextCtor) return null;
+
+    const context = new ContextCtor();
+    const gain = context.createGain();
+    gain.gain.value = volume;
+    gain.connect(context.destination);
+
+    streamContext = context;
+    streamGainNode = gain;
+    return context;
+  }
+
+  async function stopStreamPlayback(resetTimeline: boolean) {
+    const context = streamContext;
+    streamContext = null;
+    streamGainNode = null;
+    stopStreamingProgressTimer();
+
+    if (context) {
+      try {
+        await context.close();
+      } catch {
+        // Best-effort teardown.
+      }
+    }
+
+    if (resetTimeline) {
+      hasStreamAudio = false;
+      streamBufferedDuration = 0;
+      streamQueueEndTime = 0;
+      streamPlaybackStartedAt = null;
+      lastProcessedSequence = null;
+      lastProcessedChunkSignature = '';
+      if (!finalAudioSrc) {
+        currentTime = 0;
+      }
+    }
+    if (!finalAudioSrc) {
+      isPlaying = false;
+    }
+  }
+
+  async function queueStreamChunk(chunk: StreamAudioChunk) {
+    if (chunk.mode === 'replace') {
+      await stopStreamPlayback(true);
+    }
+
+    if (chunk.sequence !== null) {
+      if (lastProcessedSequence !== null && chunk.sequence <= lastProcessedSequence) {
+        return;
+      }
+      lastProcessedSequence = chunk.sequence;
+    } else {
+      const signature = `${chunk.audioBase64.length}:${chunk.audioBase64.slice(0, 64)}`;
+      if (signature === lastProcessedChunkSignature) return;
+      lastProcessedChunkSignature = signature;
+    }
+
+    const context = await ensureStreamContext();
+    if (!context || !streamGainNode) return;
+
+    try {
+      const encoded = base64ToArrayBuffer(chunk.audioBase64);
+      const decoded = await context.decodeAudioData(encoded.slice(0));
+
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+
+      const startAt = Math.max(streamQueueEndTime, context.currentTime + 0.01);
+      const source = context.createBufferSource();
+      source.buffer = decoded;
+      source.connect(streamGainNode);
+      source.start(startAt);
+
+      if (streamPlaybackStartedAt === null) {
+        streamPlaybackStartedAt = startAt;
+      }
+      streamQueueEndTime = startAt + decoded.duration;
+      streamBufferedDuration = Math.max(
+        streamBufferedDuration,
+        streamQueueEndTime - streamPlaybackStartedAt
+      );
+      hasStreamAudio = true;
+      isPlaying = true;
+      startStreamingProgressTimer();
+
+      if (chunk.isFinal) {
+        source.onended = () => {
+          if (!finalAudioSrc && streamContext?.state !== 'running') {
+            isPlaying = false;
+          }
+        };
+      }
+    } catch {
+      // Ignore malformed/undecodable stream chunks.
+    }
+  }
+
   function handleLoadedMetadata() {
     if (!audioElement) return;
     const nextDuration = Number.isFinite(audioElement.duration) ? audioElement.duration : 0;
@@ -103,6 +274,7 @@
   }
 
   function handleSeek(event: Event) {
+    if (!finalAudioSrc) return;
     const target = event.currentTarget as HTMLInputElement | null;
     const nextTime = Number(target?.value ?? '0');
     if (!Number.isFinite(nextTime)) return;
@@ -120,15 +292,31 @@
     if (audioElement) {
       audioElement.volume = volume;
     }
+    if (streamGainNode) {
+      streamGainNode.gain.value = volume;
+    }
   }
 
-  function togglePlayback() {
-    if (!audioElement) return;
-    if (audioElement.paused) {
-      void audioElement.play().catch(() => {});
+  async function togglePlayback() {
+    if (finalAudioSrc) {
+      if (!audioElement) return;
+      if (audioElement.paused) {
+        await audioElement.play().catch(() => {});
+      } else {
+        audioElement.pause();
+      }
       return;
     }
-    audioElement.pause();
+
+    if (!streamContext) return;
+    if (streamContext.state === 'running') {
+      await streamContext.suspend().catch(() => {});
+      isPlaying = false;
+      return;
+    }
+    await streamContext.resume().catch(() => {});
+    isPlaying = true;
+    startStreamingProgressTimer();
   }
 
   function handlePlay() {
@@ -144,44 +332,62 @@
     currentTime = duration;
   }
 
-  $effect(() => {
-    if (audioElement) {
-      audioElement.volume = volume;
-    }
-  });
-
-  $effect(() => {
-    if (!audioSrc) {
-      lastAudioSignature = '';
-      isPlaying = false;
-      currentTime = 0;
-      duration = 0;
-      return;
-    }
-
-    if (!audioElement || audioData === lastAudioSignature) {
-      return;
-    }
-
-    lastAudioSignature = audioData;
-    void audioElement.play().catch(() => {});
-  });
-
   function downloadAudio() {
-    if (!audioData) return;
-    const byteChars = atob(audioData);
+    if (!finalAudioData) return;
+    const byteChars = atob(finalAudioData);
     const bytes = new Uint8Array(byteChars.length);
     for (let i = 0; i < byteChars.length; i++) {
       bytes[i] = byteChars.charCodeAt(i);
     }
-    const blob = new Blob([bytes], { type: audioMime });
+    const blob = new Blob([bytes], { type: finalAudioMime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `output.${extensionForMimeType(audioMime)}`;
+    a.download = `output.${extensionForMimeType(finalAudioMime)}`;
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  $effect(() => {
+    if (audioElement) {
+      audioElement.volume = volume;
+    }
+    if (streamGainNode) {
+      streamGainNode.gain.value = volume;
+    }
+  });
+
+  $effect(() => {
+    const chunk = streamPayload;
+    if (!chunk || finalAudioSrc) return;
+    void queueStreamChunk(chunk);
+  });
+
+  $effect(() => {
+    if (!finalAudioSrc) return;
+    if (streamContext || hasStreamAudio) {
+      void stopStreamPlayback(true);
+    }
+
+    if (!audioElement || finalAudioData === lastAudioSignature) {
+      return;
+    }
+    lastAudioSignature = finalAudioData;
+    void audioElement.play().catch(() => {});
+  });
+
+  $effect(() => {
+    if (finalAudioSrc || hasStreamAudio) return;
+    lastAudioSignature = '';
+    isPlaying = false;
+    currentTime = 0;
+    duration = 0;
+  });
+
+  onDestroy(() => {
+    stopStreamingProgressTimer();
+    void stopStreamPlayback(true);
+  });
 </script>
 
 <div class="audio-output-wrapper" style="--node-color: #f472b6">
@@ -199,18 +405,20 @@
     {/snippet}
 
     {#snippet children()}
-      {#if audioSrc}
+      {#if hasAnyAudio}
         <div class="space-y-1">
-          <audio
-            bind:this={audioElement}
-            src={audioSrc}
-            preload="metadata"
-            onloadedmetadata={handleLoadedMetadata}
-            ontimeupdate={handleTimeUpdate}
-            onplay={handlePlay}
-            onpause={handlePause}
-            onended={handleEnded}
-          ></audio>
+          {#if finalAudioSrc}
+            <audio
+              bind:this={audioElement}
+              src={finalAudioSrc}
+              preload="metadata"
+              onloadedmetadata={handleLoadedMetadata}
+              ontimeupdate={handleTimeUpdate}
+              onplay={handlePlay}
+              onpause={handlePause}
+              onended={handleEnded}
+            ></audio>
+          {/if}
           <div class="space-y-1">
             <div class="flex items-center gap-2">
               <button
@@ -221,16 +429,20 @@
                 {isPlaying ? 'Pause' : 'Play'}
               </button>
               <span class="text-[10px] text-neutral-400 tabular-nums">
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {formatTime(currentTime)} / {formatTime(displayedDuration)}
               </span>
+              {#if !finalAudioSrc}
+                <span class="text-[10px] text-pink-300">Streaming</span>
+              {/if}
             </div>
             <input
               type="range"
               min="0"
-              max={duration > 0 ? duration : 1}
+              max={displayedDuration > 0 ? displayedDuration : 1}
               step="0.01"
               value={currentTime}
               class="w-full h-1.5 accent-pink-500 cursor-pointer"
+              disabled={!canSeek}
               oninput={handleSeek}
             />
             <div class="flex items-center gap-2">
@@ -246,14 +458,16 @@
               />
             </div>
           </div>
-          <div class="flex justify-end">
-            <button type="button"
-              class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-              onclick={downloadAudio}
-            >
-              Download
-            </button>
-          </div>
+          {#if finalAudioSrc}
+            <div class="flex justify-end">
+              <button type="button"
+                class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+                onclick={downloadAudio}
+              >
+                Download
+              </button>
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
