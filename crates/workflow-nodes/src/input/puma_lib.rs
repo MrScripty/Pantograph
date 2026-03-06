@@ -192,6 +192,23 @@ mod options_provider {
                         .get("dependency_bindings")
                         .cloned()
                         .unwrap_or(serde_json::Value::Array(Vec::new()));
+                    let recommended_backend =
+                        metadata_string(m, &["recommended_backend", "recommendedBackend"]);
+                    let runtime_engine_hints = m
+                        .metadata
+                        .get("runtime_engine_hints")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Array(Vec::new()));
+                    let requires_custom_code = m
+                        .metadata
+                        .get("requires_custom_code")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Bool(false));
+                    let custom_code_sources = m
+                        .metadata
+                        .get("custom_code_sources")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Array(Vec::new()));
                     let review_reasons =
                         m.metadata
                             .get("review_reasons")
@@ -212,6 +229,10 @@ mod options_provider {
                             "cleaned_name": m.cleaned_name,
                             "pipeline_tag": pipeline_tag,
                             "task_type_primary": task_type_primary,
+                            "recommended_backend": recommended_backend,
+                            "runtime_engine_hints": runtime_engine_hints,
+                            "requires_custom_code": requires_custom_code,
+                            "custom_code_sources": custom_code_sources,
                             "dependency_bindings": dependency_bindings,
                             "review_reasons": review_reasons,
                             "inference_settings": resolve_inference_settings(m),

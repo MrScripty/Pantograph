@@ -74,6 +74,10 @@
       model_type?: string;
       task_type_primary?: string;
       backend_key?: string;
+      recommended_backend?: string;
+      runtime_engine_hints?: string[];
+      requires_custom_code?: boolean;
+      custom_code_sources?: string[];
       platform_context?: Record<string, string>;
       dependency_requirements_id?: string;
       dependency_bindings?: ModelDependencyBinding[];
@@ -92,6 +96,8 @@
   let modelType = $state<string | undefined>(undefined);
   let taskTypePrimary = $state<string | undefined>(undefined);
   let backendKey = $state<string | undefined>(undefined);
+  let recommendedBackend = $state<string | undefined>(undefined);
+  let dependencyBindings = $state<ModelDependencyBinding[]>([]);
   let platformContext = $state<Record<string, string> | undefined>(undefined);
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
@@ -109,6 +115,10 @@
     modelType = data.model_type as string | undefined;
     taskTypePrimary = data.task_type_primary as string | undefined;
     backendKey = data.backend_key as string | undefined;
+    recommendedBackend = data.recommended_backend as string | undefined;
+    dependencyBindings = Array.isArray(data.dependency_bindings)
+      ? (data.dependency_bindings as ModelDependencyBinding[])
+      : [];
     platformContext = data.platform_context as Record<string, string> | undefined;
     dependencyRequirements = (data.dependency_requirements as ModelDependencyRequirements | null) ?? null;
     requirementsMessage = null;
@@ -127,6 +137,56 @@
         })
       : availableModels,
   );
+
+  function normalizeBackendKey(value?: string): string | undefined {
+    const token = (value ?? '').trim().toLowerCase();
+    if (!token) {
+      return undefined;
+    }
+
+    switch (token) {
+      case 'llama.cpp':
+      case 'llama-cpp':
+      case 'llamacpp':
+        return 'llamacpp';
+      case 'onnx-runtime':
+      case 'onnxruntime':
+      case 'onnx_runtime':
+        return 'onnxruntime';
+      case 'torch':
+      case 'pytorch':
+        return 'pytorch';
+      case 'stable-audio':
+      case 'stable_audio':
+        return 'stable_audio';
+      default:
+        return token;
+    }
+  }
+
+  function uniqueBindingBackend(bindings: ModelDependencyBinding[]): string | undefined {
+    const unique = new Set(
+      bindings
+        .map((binding) => normalizeBackendKey(binding.backend_key))
+        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    );
+    if (unique.size === 1) {
+      return [...unique][0];
+    }
+    return undefined;
+  }
+
+  function selectedBindingBackend(): string | undefined {
+    const sourceBindings = dependencyRequirements?.bindings ?? [];
+    if (sourceBindings.length === 0) {
+      return undefined;
+    }
+
+    const selected = selectedBindingIds.length > 0
+      ? sourceBindings.filter((binding) => selectedBindingIds.includes(binding.binding_id))
+      : sourceBindings;
+    return uniqueBindingBackend(selected);
+  }
 
   onMount(async () => {
     await loadModels();
@@ -152,17 +212,27 @@
           const reviewReasons = Array.isArray(match.metadata?.review_reasons)
             ? (match.metadata?.review_reasons as string[])
             : [];
-          const dependencyBindings = Array.isArray(match.metadata?.dependency_bindings)
+          const nextDependencyBindings = Array.isArray(match.metadata?.dependency_bindings)
             ? (match.metadata?.dependency_bindings as ModelDependencyBinding[])
             : [];
           const taskTypePrimary = match.metadata?.task_type_primary as string | undefined;
+          const recommendedBackend = normalizeBackendKey(
+            match.metadata?.recommended_backend as string | undefined,
+          );
           updateNodeData(id, {
             model_id: match.metadata.id,
             model_type: match.metadata?.model_type,
             task_type_primary: taskTypePrimary,
-            backend_key: inferBackendKeyFromTask(taskTypePrimary),
+            backend_key:
+              uniqueBindingBackend(nextDependencyBindings) ??
+              recommendedBackend ??
+              inferBackendKeyFromTask(taskTypePrimary),
+            recommended_backend: recommendedBackend,
+            runtime_engine_hints: match.metadata?.runtime_engine_hints,
+            requires_custom_code: match.metadata?.requires_custom_code,
+            custom_code_sources: match.metadata?.custom_code_sources,
             platform_context: detectPlatformContext(),
-            dependency_bindings: dependencyBindings,
+            dependency_bindings: nextDependencyBindings,
             review_reasons: reviewReasons,
           });
         }
@@ -203,9 +273,21 @@
   }
 
   function inferBackendKey(): string {
-    const explicit = (backendKey ?? '').trim();
-    if (explicit.length > 0) {
+    const explicit = normalizeBackendKey(backendKey);
+    if (explicit) {
       return explicit;
+    }
+    const selectedBinding = selectedBindingBackend();
+    if (selectedBinding) {
+      return selectedBinding;
+    }
+    const recommended = normalizeBackendKey(recommendedBackend);
+    if (recommended) {
+      return recommended;
+    }
+    const bindingDefault = uniqueBindingBackend(dependencyBindings);
+    if (bindingDefault) {
+      return bindingDefault;
     }
     return inferBackendKeyFromTask(taskTypePrimary);
   }
@@ -299,20 +381,28 @@
     if (selected) {
       modelPath = String(selected.value);
       const settings = (selected.metadata?.inference_settings ?? []) as InferenceParamSchema[];
-      const dependencyBindings = Array.isArray(selected.metadata?.dependency_bindings)
+      const nextDependencyBindings = Array.isArray(selected.metadata?.dependency_bindings)
         ? (selected.metadata?.dependency_bindings as ModelDependencyBinding[])
         : [];
       const reviewReasons = Array.isArray(selected.metadata?.review_reasons)
         ? (selected.metadata?.review_reasons as string[])
         : [];
       const nextTaskTypePrimary = selected.metadata?.task_type_primary as string | undefined;
-      const nextBackendKey = inferBackendKeyFromTask(nextTaskTypePrimary);
+      const nextRecommendedBackend = normalizeBackendKey(
+        selected.metadata?.recommended_backend as string | undefined,
+      );
+      const nextBackendKey =
+        uniqueBindingBackend(nextDependencyBindings) ??
+        nextRecommendedBackend ??
+        inferBackendKeyFromTask(nextTaskTypePrimary);
       const nextPlatformContext = detectPlatformContext();
 
       modelId = selected.metadata?.id as string | undefined;
       modelType = selected.metadata?.model_type as string | undefined;
       taskTypePrimary = nextTaskTypePrimary;
       backendKey = nextBackendKey;
+      recommendedBackend = nextRecommendedBackend;
+      dependencyBindings = nextDependencyBindings;
       platformContext = nextPlatformContext;
       selectedBindingIds = [];
       updateNodeData(id, {
@@ -322,8 +412,12 @@
         model_type: modelType,
         task_type_primary: taskTypePrimary,
         backend_key: backendKey,
+        recommended_backend: recommendedBackend,
+        runtime_engine_hints: selected.metadata?.runtime_engine_hints,
+        requires_custom_code: selected.metadata?.requires_custom_code,
+        custom_code_sources: selected.metadata?.custom_code_sources,
         platform_context: platformContext,
-        dependency_bindings: dependencyBindings,
+        dependency_bindings: nextDependencyBindings,
         review_reasons: reviewReasons,
         selected_binding_ids: selectedBindingIds,
         dependency_requirements: null,
