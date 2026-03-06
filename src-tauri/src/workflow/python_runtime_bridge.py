@@ -40,9 +40,24 @@ def _as_int(value: Any, default: int) -> int:
         return default
 
 
-def _resolve_setting_runtime_value(value: Any) -> Any:
+def _resolve_setting_runtime_value(item: Dict[str, Any], value: Any) -> Any:
     if isinstance(value, dict) and "label" in value and "value" in value:
         return value.get("value")
+    if isinstance(value, str):
+        constraints = item.get("constraints")
+        if isinstance(constraints, dict):
+            allowed_values = constraints.get("allowed_values")
+            if isinstance(allowed_values, list):
+                for option in allowed_values:
+                    if not isinstance(option, dict):
+                        continue
+                    option_label = (
+                        option.get("label")
+                        or option.get("name")
+                        or option.get("key")
+                    )
+                    if option_label == value and "value" in option:
+                        return option.get("value")
     return value
 
 
@@ -62,7 +77,7 @@ def _build_extra_settings(inputs: Dict[str, Any]) -> Dict[str, Any]:
         if not key:
             continue
         value = inputs.get(key, item.get("default"))
-        value = _resolve_setting_runtime_value(value)
+        value = _resolve_setting_runtime_value(item, value)
         if value is not None:
             out[key] = value
     return out

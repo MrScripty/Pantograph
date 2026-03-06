@@ -221,7 +221,7 @@ impl TauriTaskExecutor {
             let Some(raw_value) = candidate_value else {
                 continue;
             };
-            let resolved_value = Self::resolve_inference_setting_runtime_value(raw_value);
+            let resolved_value = Self::resolve_inference_setting_runtime_value(parameter, raw_value);
             if resolved_value.is_null() {
                 continue;
             }
@@ -230,16 +230,51 @@ impl TauriTaskExecutor {
     }
 
     fn resolve_inference_setting_runtime_value(
+        parameter: &serde_json::Value,
         value: serde_json::Value,
     ) -> serde_json::Value {
-        if let serde_json::Value::Object(map) = &value {
+        let normalized = if let serde_json::Value::Object(map) = &value {
             if map.contains_key("label") {
                 if let Some(option_value) = map.get("value") {
-                    return option_value.clone();
+                    option_value.clone()
+                } else {
+                    value
+                }
+            } else {
+                value
+            }
+        } else {
+            value
+        };
+
+        let Some(candidate_label) = normalized.as_str() else {
+            return normalized;
+        };
+
+        let allowed_values = parameter
+            .get("constraints")
+            .and_then(|constraints| constraints.get("allowed_values"))
+            .and_then(|values| values.as_array());
+        let Some(allowed_values) = allowed_values else {
+            return normalized;
+        };
+
+        for option in allowed_values {
+            if let serde_json::Value::Object(option_map) = option {
+                let option_label = option_map
+                    .get("label")
+                    .or_else(|| option_map.get("name"))
+                    .or_else(|| option_map.get("key"))
+                    .and_then(|v| v.as_str());
+                if option_label == Some(candidate_label) {
+                    if let Some(option_value) = option_map.get("value") {
+                        return option_value.clone();
+                    }
                 }
             }
         }
-        value
+
+        normalized
     }
 
     fn read_optional_input_string(
@@ -1450,6 +1485,32 @@ mod tests {
             "speed".to_string(),
             serde_json::json!({"label": "Fast", "value": 1.2}),
         );
+
+        TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
+
+        assert_eq!(inputs.get("voice"), Some(&serde_json::json!("expr-voice-5-m")));
+        assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.2)));
+    }
+
+    #[test]
+    fn apply_inference_setting_defaults_resolves_allowed_value_labels() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {
+                    "key": "voice",
+                    "default": "Leo",
+                    "constraints": {
+                        "allowed_values": [
+                            {"label": "Leo", "value": "expr-voice-5-m"}
+                        ]
+                    }
+                },
+                {"key": "speed", "default": 1.0}
+            ]),
+        );
+        inputs.insert("speed".to_string(), serde_json::json!(1.2));
 
         TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
 
