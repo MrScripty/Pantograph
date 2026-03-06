@@ -42,6 +42,7 @@ export interface WorkflowStores {
   removeNode: (nodeId: string) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
+  updateNodeRuntimeData: (nodeId: string, data: Record<string, unknown>) => void;
   getNodeById: (nodeId: string) => Node | undefined;
   isNodeGroup: (nodeId: string) => boolean;
   getConnectedNodes: (nodeId: string) => { inputs: Node[]; outputs: Node[] };
@@ -196,6 +197,14 @@ export function createWorkflowStores(
       )
     );
     markGraphModified();
+  }
+
+  function updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
+    nodes.update((n) =>
+      n.map((node) =>
+        node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
+      )
+    );
   }
 
   function getNodeById(nodeId: string): Node | undefined {
@@ -738,7 +747,7 @@ export function createWorkflowStores(
     isEditing, nodeExecutionStates, currentViewport, nodeGroups, selectedNodeIds,
     workflowGraph, nodeDefinitionsByCategory,
     // Node actions
-    addNode, removeNode, updateNodePosition, updateNodeData,
+    addNode, removeNode, updateNodePosition, updateNodeData, updateNodeRuntimeData,
     getNodeById, isNodeGroup: isNodeGroupFn, getConnectedNodes, getNodesBounds,
     // Edge actions
     addEdge: addEdgeFn, removeEdge: removeEdgeFn, syncEdgesFromBackend,

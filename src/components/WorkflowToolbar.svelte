@@ -10,7 +10,7 @@
     loadDefaultWorkflow,
     nodeDefinitions,
     edges,
-    updateNodeData,
+    updateNodeRuntimeData,
     appendStreamContent,
     setStreamContent,
     clearStreamContent,
@@ -42,6 +42,38 @@
       return error;
     }
     return String(error);
+  }
+
+  function parseTextStreamChunk(chunk: unknown): { mode: 'append' | 'replace'; text: string } | null {
+    if (chunk && typeof chunk === 'object' && 'text' in chunk) {
+      const structured = chunk as { mode?: string; text: unknown };
+      if (typeof structured.text === 'string') {
+        return {
+          mode: structured.mode === 'replace' ? 'replace' : 'append',
+          text: structured.text,
+        };
+      }
+      return null;
+    }
+
+    if (typeof chunk === 'string') {
+      return { mode: 'append', text: chunk };
+    }
+
+    return null;
+  }
+
+  function parseAudioStreamChunk(chunk: unknown): { mode: 'append' | 'replace'; audioBase64: string } | null {
+    if (!chunk || typeof chunk !== 'object') return null;
+    if (!('audio_base64' in chunk)) return null;
+    const structured = chunk as { mode?: string; audio_base64: unknown };
+    if (typeof structured.audio_base64 !== 'string' || structured.audio_base64.length === 0) {
+      return null;
+    }
+    return {
+      mode: structured.mode === 'replace' ? 'replace' : 'append',
+      audioBase64: structured.audio_base64,
+    };
   }
 
   async function handleRun() {
@@ -100,7 +132,7 @@
             if (outputValue !== undefined) {
               // Update the target node's data with the incoming value
               const targetHandle = edge.targetHandle || '';
-              updateNodeData(edge.target, {
+              updateNodeRuntimeData(edge.target, {
                 [targetHandle]: outputValue
               });
             }
@@ -110,27 +142,35 @@
       }
       case 'NodeStream': {
         const streamData = event.data as { node_id: string; port: string; chunk: unknown };
-        // Parse structured chunk: { mode: "append"|"replace", text: string }
-        let mode = 'append';
-        let text: string;
-        if (streamData.chunk && typeof streamData.chunk === 'object' && 'text' in streamData.chunk) {
-          const structured = streamData.chunk as { mode?: string; text: string };
-          mode = structured.mode || 'append';
-          text = structured.text;
-        } else {
-          text = typeof streamData.chunk === 'string' ? streamData.chunk : String(streamData.chunk);
-        }
+        const textChunk = parseTextStreamChunk(streamData.chunk);
+        const audioChunk = parseAudioStreamChunk(streamData.chunk);
         // Follow edges from (node_id, port) to update connected target nodes
         const currentEdges = get(edges);
         const outgoing = currentEdges.filter(
           e => e.source === streamData.node_id && e.sourceHandle === streamData.port
         );
         for (const edge of outgoing) {
-          if (mode === 'replace') {
-            setStreamContent(edge.target, text);
-          } else {
-            appendStreamContent(edge.target, text);
+          if (textChunk) {
+            if (textChunk.mode === 'replace') {
+              setStreamContent(edge.target, textChunk.text);
+            } else {
+              appendStreamContent(edge.target, textChunk.text);
+            }
+            continue;
           }
+
+          const targetHandle = edge.targetHandle || 'stream';
+          if (audioChunk && targetHandle === 'stream') {
+            updateNodeRuntimeData(edge.target, {
+              [targetHandle]: streamData.chunk,
+              audio: audioChunk.audioBase64,
+            });
+            continue;
+          }
+
+          updateNodeRuntimeData(edge.target, {
+            [targetHandle]: streamData.chunk,
+          });
         }
         break;
       }

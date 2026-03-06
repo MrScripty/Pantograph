@@ -9,6 +9,7 @@
       definition?: NodeDefinition;
       label?: string;
       audio?: string;
+      stream?: unknown;
       streamContent?: string;
     };
     selected?: boolean;
@@ -18,7 +19,23 @@
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
-  let audioData = $derived(data.audio || '');
+  let streamAudioData = $derived.by(() => {
+    const payload = data.stream;
+    if (payload && typeof payload === 'object') {
+      const maybeChunk = payload as { audio_base64?: unknown; content?: unknown };
+      if (typeof maybeChunk.audio_base64 === 'string' && maybeChunk.audio_base64.length > 0) {
+        return maybeChunk.audio_base64;
+      }
+      if (typeof maybeChunk.content === 'string' && maybeChunk.content.length > 0) {
+        return maybeChunk.content;
+      }
+    }
+    if (typeof payload === 'string' && payload.length > 0) {
+      return payload;
+    }
+    return '';
+  });
+  let audioData = $derived(streamAudioData || data.audio || '');
   let audioSrc = $derived(audioData ? `data:audio/wav;base64,${audioData}` : '');
 
   let statusColor = $derived(
@@ -64,7 +81,7 @@
     {#snippet children()}
       {#if audioSrc}
         <div class="space-y-1">
-          <audio controls src={audioSrc} class="w-full h-8"></audio>
+          <audio controls autoplay src={audioSrc} class="w-full h-8"></audio>
           <div class="flex justify-end">
             <button type="button"
               class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
