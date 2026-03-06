@@ -40,6 +40,12 @@ def _as_int(value: Any, default: int) -> int:
         return default
 
 
+def _resolve_setting_runtime_value(value: Any) -> Any:
+    if isinstance(value, dict) and "label" in value and "value" in value:
+        return value.get("value")
+    return value
+
+
 def _build_extra_settings(inputs: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     schema = inputs.get("inference_settings")
@@ -56,6 +62,7 @@ def _build_extra_settings(inputs: Dict[str, Any]) -> Dict[str, Any]:
         if not key:
             continue
         value = inputs.get(key, item.get("default"))
+        value = _resolve_setting_runtime_value(value)
         if value is not None:
             out[key] = value
     return out

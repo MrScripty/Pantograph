@@ -213,18 +213,33 @@ impl TauriTaskExecutor {
             }
 
             let has_non_null_value = inputs.get(key).is_some_and(|value| !value.is_null());
-            if has_non_null_value {
-                continue;
-            }
-
-            let Some(default_value) = parameter.get("default") else {
+            let candidate_value = if has_non_null_value {
+                inputs.get(key).cloned()
+            } else {
+                parameter.get("default").cloned()
+            };
+            let Some(raw_value) = candidate_value else {
                 continue;
             };
-            if default_value.is_null() {
+            let resolved_value = Self::resolve_inference_setting_runtime_value(raw_value);
+            if resolved_value.is_null() {
                 continue;
             }
-            inputs.insert(key.to_string(), default_value.clone());
+            inputs.insert(key.to_string(), resolved_value);
         }
+    }
+
+    fn resolve_inference_setting_runtime_value(
+        value: serde_json::Value,
+    ) -> serde_json::Value {
+        if let serde_json::Value::Object(map) = &value {
+            if map.contains_key("label") {
+                if let Some(option_value) = map.get("value") {
+                    return option_value.clone();
+                }
+            }
+        }
+        value
     }
 
     fn read_optional_input_string(
@@ -1419,6 +1434,27 @@ mod tests {
 
         assert_eq!(inputs.get("voice"), Some(&serde_json::json!("custom-voice")));
         assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.0)));
+    }
+
+    #[test]
+    fn apply_inference_setting_defaults_resolves_option_object_values() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "voice", "default": {"label": "Leo", "value": "expr-voice-5-m"}},
+                {"key": "speed", "default": 1.0}
+            ]),
+        );
+        inputs.insert(
+            "speed".to_string(),
+            serde_json::json!({"label": "Fast", "value": 1.2}),
+        );
+
+        TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
+
+        assert_eq!(inputs.get("voice"), Some(&serde_json::json!("expr-voice-5-m")));
+        assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.2)));
     }
 
     #[test]

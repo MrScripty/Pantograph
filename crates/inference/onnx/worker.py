@@ -20,29 +20,6 @@ import soundfile as sf
 _loaded = None
 _loaded_key = None
 
-_LEGACY_VOICE_ALIASES = {
-    "bella": "expr-voice-5-f",
-    "bruno": "expr-voice-5-m",
-    "hugo": "expr-voice-4-m",
-    "jasper": "expr-voice-3-m",
-    "kiki": "expr-voice-4-f",
-    "leo": "expr-voice-5-m",
-    "luna": "expr-voice-3-f",
-    "rosie": "expr-voice-2-f",
-}
-
-_PREFERRED_EXPR_VOICES = [
-    "expr-voice-5-m",
-    "expr-voice-5-f",
-    "expr-voice-4-m",
-    "expr-voice-4-f",
-    "expr-voice-3-m",
-    "expr-voice-3-f",
-    "expr-voice-2-m",
-    "expr-voice-2-f",
-]
-
-
 def _as_float(value: Any, default: float) -> float:
     try:
         return float(value)
@@ -217,15 +194,7 @@ def _resolve_voice(requested_voice: str, available_voices: List[str]) -> str:
     if requested in available_voices:
         return requested
 
-    alias = _LEGACY_VOICE_ALIASES.get(requested.lower())
-    if alias and alias in available_voices:
-        return alias
-
-    for candidate in _PREFERRED_EXPR_VOICES:
-        if candidate in available_voices:
-            return candidate
-
-    return available_voices[0]
+    return requested
 
 
 def generate_audio(

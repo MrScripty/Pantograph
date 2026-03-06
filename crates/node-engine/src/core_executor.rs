@@ -823,7 +823,10 @@ fn execute_expand_settings(
         for param in schema {
             if let Some(key) = param.get("key").and_then(|k| k.as_str()) {
                 if let Some(default) = param.get("default") {
-                    outputs.insert(key.to_string(), default.clone());
+                    let default_value = resolve_inference_setting_runtime_value(default.clone());
+                    if !default_value.is_null() {
+                        outputs.insert(key.to_string(), default_value);
+                    }
                 }
             }
         }
@@ -841,6 +844,20 @@ fn execute_expand_settings(
 /// The `inference_settings` input carries a JSON array of parameter schemas
 /// (from pumas-library). For each param in the schema, uses the connected
 /// port value if present, otherwise falls back to the schema's default.
+///
+/// Supports both legacy primitive defaults and option objects shaped like
+/// `{ "label": "...", "value": ... }` by resolving to the runtime value.
+fn resolve_inference_setting_runtime_value(value: serde_json::Value) -> serde_json::Value {
+    if let serde_json::Value::Object(map) = &value {
+        if map.contains_key("label") {
+            if let Some(option_value) = map.get("value") {
+                return option_value.clone();
+            }
+        }
+    }
+    value
+}
+
 fn build_extra_settings(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> HashMap<String, serde_json::Value> {
@@ -860,8 +877,9 @@ fn build_extra_settings(
                     .cloned()
                     .unwrap_or(serde_json::Value::Null)
             });
-            if !value.is_null() {
-                settings.insert(key.to_string(), value);
+            let runtime_value = resolve_inference_setting_runtime_value(value);
+            if !runtime_value.is_null() {
+                settings.insert(key.to_string(), runtime_value);
             }
         }
     }
@@ -3378,6 +3396,36 @@ mod tests {
     }
 
     #[test]
+    fn test_build_extra_settings_resolves_option_object_defaults() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "voice", "default": {"label": "Leo", "value": "expr-voice-5-m"}},
+            ]),
+        );
+        let settings = build_extra_settings(&inputs);
+        assert_eq!(settings["voice"], "expr-voice-5-m");
+    }
+
+    #[test]
+    fn test_build_extra_settings_resolves_option_object_port_values() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "voice", "default": "expr-voice-3-f"},
+            ]),
+        );
+        inputs.insert(
+            "voice".to_string(),
+            serde_json::json!({"label": "Leo", "value": "expr-voice-5-m"}),
+        );
+        let settings = build_extra_settings(&inputs);
+        assert_eq!(settings["voice"], "expr-voice-5-m");
+    }
+
+    #[test]
     fn test_execute_expand_settings_empty_schema_passes_through() {
         let mut inputs = HashMap::new();
         inputs.insert("inference_settings".to_string(), serde_json::json!([]));
@@ -3403,6 +3451,20 @@ mod tests {
         assert_eq!(result["denoising_steps"], 8);
         assert_eq!(result["block_length"], 16);
         // Schema is passed through unchanged
+        assert!(result["inference_settings"].is_array());
+    }
+
+    #[test]
+    fn test_execute_expand_settings_resolves_option_object_defaults() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "voice", "label": "Voice", "param_type": "String", "default": {"label": "Leo", "value": "expr-voice-5-m"}},
+            ]),
+        );
+        let result = execute_expand_settings(&inputs).unwrap();
+        assert_eq!(result["voice"], "expr-voice-5-m");
         assert!(result["inference_settings"].is_array());
     }
 
