@@ -20,6 +20,28 @@ import soundfile as sf
 _loaded = None
 _loaded_key = None
 
+_LEGACY_VOICE_ALIASES = {
+    "bella": "expr-voice-5-f",
+    "bruno": "expr-voice-5-m",
+    "hugo": "expr-voice-4-m",
+    "jasper": "expr-voice-3-m",
+    "kiki": "expr-voice-4-f",
+    "leo": "expr-voice-5-m",
+    "luna": "expr-voice-3-f",
+    "rosie": "expr-voice-2-f",
+}
+
+_PREFERRED_EXPR_VOICES = [
+    "expr-voice-5-m",
+    "expr-voice-5-f",
+    "expr-voice-4-m",
+    "expr-voice-4-f",
+    "expr-voice-3-m",
+    "expr-voice-3-f",
+    "expr-voice-2-m",
+    "expr-voice-2-f",
+]
+
 
 def _as_float(value: Any, default: float) -> float:
     try:
@@ -171,6 +193,41 @@ def _iter_chunks(
     yield tts_model.generate(text, voice=voice, speed=speed, clean_text=clean_text)
 
 
+def _available_voice_names(tts_model: Any) -> List[str]:
+    available = getattr(tts_model, "available_voices", None)
+    if isinstance(available, (list, tuple)):
+        names = [str(name) for name in available if str(name).strip()]
+        if names:
+            return names
+
+    voices = getattr(tts_model, "voices", None)
+    if isinstance(voices, dict):
+        names = [str(name) for name in voices.keys() if str(name).strip()]
+        if names:
+            return names
+
+    return []
+
+
+def _resolve_voice(requested_voice: str, available_voices: List[str]) -> str:
+    if not available_voices:
+        return requested_voice
+
+    requested = requested_voice.strip()
+    if requested in available_voices:
+        return requested
+
+    alias = _LEGACY_VOICE_ALIASES.get(requested.lower())
+    if alias and alias in available_voices:
+        return alias
+
+    for candidate in _PREFERRED_EXPR_VOICES:
+        if candidate in available_voices:
+            return candidate
+
+    return available_voices[0]
+
+
 def generate_audio(
     inputs: Dict[str, Any],
     emit_stream: Callable[[Dict[str, Any]], None] | None = None,
@@ -187,11 +244,8 @@ def generate_audio(
     clean_text = _as_bool(inputs.get("clean_text", True), True)
 
     tts = _load_model(model_path)
-    voices = getattr(tts, "voices", None)
-    if isinstance(voices, dict) and voice not in voices:
-        sample = ", ".join(list(sorted(voices.keys()))[:8])
-        suffix = f" Available voices include: {sample}" if sample else ""
-        raise RuntimeError(f"Unknown KittenTTS voice '{voice}'.{suffix}")
+    available_voices = _available_voice_names(tts)
+    voice = _resolve_voice(voice, available_voices)
 
     # Generate per-text-chunk so callers can surface progress if desired.
     chunk_audio: List[np.ndarray] = []
@@ -252,5 +306,6 @@ def generate_audio(
         "sample_rate": sample_rate,
         "stream": chunk_payloads,
         "voice_used": voice,
+        "available_voices": available_voices,
         "speed_used": speed,
     }
