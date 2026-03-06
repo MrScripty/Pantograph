@@ -1048,12 +1048,27 @@ fn build_model_ref_v2(
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn canonical_backend_key(value: Option<&str>) -> Option<String> {
+    let normalized = value
+        .map(|v| v.trim().to_lowercase())
+        .filter(|v| !v.is_empty())?;
+    match normalized.as_str() {
+        "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+        "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnxruntime".to_string()),
+        "torch" | "pytorch" => Some("pytorch".to_string()),
+        "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
+        other => Some(other.to_string()),
+    }
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn infer_backend_key(node_type: &str) -> String {
     match node_type {
         "audio-generation" => "stable_audio".to_string(),
         "pytorch-inference" => "pytorch".to_string(),
         "llamacpp-inference" => "llamacpp".to_string(),
         "ollama-inference" => "ollama".to_string(),
+        "onnx-inference" => "onnxruntime".to_string(),
         _ => "pytorch".to_string(),
     }
 }
@@ -1065,7 +1080,7 @@ fn build_model_dependency_request(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
     let backend_key = read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-        .filter(|s| !s.trim().is_empty())
+        .and_then(|value| canonical_backend_key(Some(value.as_str())))
         .unwrap_or_else(|| infer_backend_key(node_type));
 
     let task_type_primary =
@@ -2132,9 +2147,15 @@ async fn execute_unload_model(
             })?;
             log::info!("UnloadModel: audio model '{}' unloaded", model_id);
         }
+        "onnxruntime" => {
+            log::info!(
+                "UnloadModel: onnxruntime model '{}' does not keep a shared runtime session",
+                model_id
+            );
+        }
         other => {
             return Err(NodeEngineError::ExecutionFailed(format!(
-                "Unknown inference engine '{}'. Supported: llamacpp, ollama, pytorch, stable_audio",
+                "Unknown inference engine '{}'. Supported: llamacpp, ollama, pytorch, stable_audio, onnxruntime",
                 other
             )));
         }
@@ -3500,5 +3521,36 @@ mod tests {
             }
             other => panic!("unexpected error variant: {other:?}"),
         }
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[test]
+    fn test_canonical_backend_key_normalizes_common_aliases() {
+        assert_eq!(
+            canonical_backend_key(Some("  onnx-runtime  ")),
+            Some("onnxruntime".to_string())
+        );
+        assert_eq!(
+            canonical_backend_key(Some("llama.cpp")),
+            Some("llamacpp".to_string())
+        );
+        assert_eq!(
+            canonical_backend_key(Some("torch")),
+            Some("pytorch".to_string())
+        );
+        assert_eq!(
+            canonical_backend_key(Some("stable-audio")),
+            Some("stable_audio".to_string())
+        );
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[test]
+    fn test_build_model_dependency_request_uses_canonical_backend_key() {
+        let mut inputs = HashMap::new();
+        inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
+
+        let request = build_model_dependency_request("pytorch-inference", "/tmp/model", &inputs);
+        assert_eq!(request.backend_key.as_deref(), Some("onnxruntime"));
     }
 }

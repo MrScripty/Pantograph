@@ -257,7 +257,27 @@ impl TauriModelDependencyResolver {
         )
     }
 
-    fn infer_engine(node_type: &str, model_type: Option<&str>) -> String {
+    fn canonical_backend_key(value: Option<&str>) -> Option<String> {
+        let normalized = value
+            .map(|v| v.trim().to_lowercase())
+            .filter(|v| !v.is_empty())?;
+        match normalized.as_str() {
+            "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnxruntime".to_string()),
+            "torch" | "pytorch" => Some("pytorch".to_string()),
+            "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
+            other => Some(other.to_string()),
+        }
+    }
+
+    fn infer_engine(
+        backend_key: Option<&str>,
+        node_type: &str,
+        model_type: Option<&str>,
+    ) -> String {
+        if let Some(backend) = Self::canonical_backend_key(backend_key) {
+            return backend;
+        }
         match node_type {
             "audio-generation" => "stable_audio".to_string(),
             "pytorch-inference" => "pytorch".to_string(),
@@ -299,11 +319,7 @@ impl TauriModelDependencyResolver {
     }
 
     fn normalized_backend_key(value: &Option<String>) -> Option<String> {
-        value
-            .as_ref()
-            .map(|v| v.trim())
-            .filter(|v| !v.is_empty())
-            .map(|v| v.to_string())
+        Self::canonical_backend_key(value.as_deref())
     }
 
     fn normalized_selected_binding_ids(value: &[String]) -> Option<Vec<String>> {
@@ -1803,7 +1819,11 @@ impl TauriModelDependencyResolver {
             &descriptor.platform_key,
             &resolved_requirements.selected_binding_ids,
         );
-        let engine = Self::infer_engine(&request.node_type, descriptor.model_type.as_deref());
+        let engine = Self::infer_engine(
+            descriptor.backend_key.as_deref(),
+            &request.node_type,
+            descriptor.model_type.as_deref(),
+        );
         let model_ref = ModelRefV2 {
             contract_version: 2,
             engine,
@@ -1900,6 +1920,18 @@ mod tests {
         assert_eq!(
             TauriModelDependencyResolver::aggregate_binding_runtime_state(&rows),
             DependencyState::Unresolved
+        );
+    }
+
+    #[test]
+    fn normalized_backend_key_canonicalizes_aliases() {
+        assert_eq!(
+            TauriModelDependencyResolver::normalized_backend_key(&Some("onnx-runtime".to_string())),
+            Some("onnxruntime".to_string())
+        );
+        assert_eq!(
+            TauriModelDependencyResolver::normalized_backend_key(&Some("torch".to_string())),
+            Some("pytorch".to_string())
         );
     }
 

@@ -38,6 +38,19 @@ pub struct TauriTaskExecutor {
 }
 
 impl TauriTaskExecutor {
+    fn canonical_backend_key(value: Option<&str>) -> Option<String> {
+        let normalized = value
+            .map(|v| v.trim().to_lowercase())
+            .filter(|v| !v.is_empty())?;
+        match normalized.as_str() {
+            "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnxruntime".to_string()),
+            "torch" | "pytorch" => Some("pytorch".to_string()),
+            "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
+            other => Some(other.to_string()),
+        }
+    }
+
     /// Create a new Tauri-specific task executor.
     pub fn new(rag_manager: Arc<RwLock<RagManager>>) -> Self {
         Self::with_python_runtime(rag_manager, Arc::new(ProcessPythonRuntimeAdapter))
@@ -313,6 +326,7 @@ impl TauriTaskExecutor {
         match node_type {
             "audio-generation" => "stable_audio".to_string(),
             "pytorch-inference" => "pytorch".to_string(),
+            "onnx-inference" => "onnxruntime".to_string(),
             _ => "pytorch".to_string(),
         }
     }
@@ -323,11 +337,16 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
         let requirements = Self::parse_requirements_fallback(inputs);
-        let backend_key =
+        let backend_key = Self::canonical_backend_key(
             Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-                .filter(|s| !s.trim().is_empty())
-                .or_else(|| requirements.as_ref().and_then(|r| r.backend_key.clone()))
-                .unwrap_or_else(|| Self::infer_backend_key(node_type));
+                .as_deref(),
+        )
+        .or_else(|| {
+            Self::canonical_backend_key(
+                requirements.as_ref().and_then(|r| r.backend_key.as_deref()),
+            )
+        })
+        .unwrap_or_else(|| Self::infer_backend_key(node_type));
 
         let task_type_primary = Self::infer_task_type_primary(node_type, inputs);
         let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
@@ -1085,6 +1104,44 @@ mod tests {
                 "env:secondary".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn build_model_dependency_request_normalizes_backend_aliases() {
+        let mut inputs = HashMap::new();
+        inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
+
+        let request = TauriTaskExecutor::build_model_dependency_request(
+            "pytorch-inference",
+            "/tmp/model",
+            &inputs,
+        );
+        assert_eq!(request.backend_key.as_deref(), Some("onnxruntime"));
+    }
+
+    #[test]
+    fn build_model_dependency_request_prefers_requirements_backend_when_input_missing() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "dependency_requirements".to_string(),
+            serde_json::json!({
+                "model_id": "model-a",
+                "platform_key": "linux-x86_64",
+                "backend_key": "torch",
+                "dependency_contract_version": 1,
+                "validation_state": "resolved",
+                "validation_errors": [],
+                "bindings": [],
+                "selected_binding_ids": []
+            }),
+        );
+
+        let request = TauriTaskExecutor::build_model_dependency_request(
+            "pytorch-inference",
+            "/tmp/model",
+            &inputs,
+        );
+        assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     }
 
     #[tokio::test]
