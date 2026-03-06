@@ -3,6 +3,7 @@
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
+  import { shouldResetAudioPlaybackState } from './audioOutputState';
 
   interface Props {
     id: string;
@@ -399,11 +400,19 @@
 
   $effect(() => {
     const chunk = streamPayload;
-    if (executionState !== 'idle' || finalAudioSrc || chunk) return;
-    if (streamContext || hasStreamAudio) {
+    if (
+      shouldResetAudioPlaybackState({
+        executionState,
+        hasFinalAudio: Boolean(finalAudioSrc),
+        hasStreamPayload: Boolean(chunk),
+        hasStreamContext: streamContext !== null,
+        hasStreamAudio,
+      })
+    ) {
       void stopStreamPlayback(true);
       return;
     }
+    if (finalAudioSrc || hasStreamAudio || chunk) return;
 
     lastAudioSignature = '';
     isPlaying = false;

@@ -15,9 +15,10 @@ import type {
   PortDefinition,
   PortDataType,
 } from '../types/workflow.js';
-import type { NodeGroup, PortMapping, CreateGroupResult } from '../types/groups.js';
+import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
+import { removeNodeDataKeys } from './runtimeData.js';
 
 export interface WorkflowStores {
   // Writable stores
@@ -214,16 +215,8 @@ export function createWorkflowStores(
     const runtimeKeys = new Set(keys);
     nodes.update((n) =>
       n.map((node) => {
-        let changed = false;
-        const nextData = { ...node.data };
-
-        for (const key of runtimeKeys) {
-          if (!(key in nextData)) continue;
-          delete nextData[key];
-          changed = true;
-        }
-
-        return changed ? { ...node, data: nextData } : node;
+        const { changed, data } = removeNodeDataKeys(node.data, runtimeKeys);
+        return changed ? { ...node, data } : node;
       })
     );
   }
@@ -372,7 +365,7 @@ export function createWorkflowStores(
     nodes.set(
       graph.nodes.map((n) => {
         let nodeType = n.node_type;
-        let nodeData = { ...n.data };
+        const nodeData = { ...n.data };
 
         // Migration: system-prompt -> text-input
         if (nodeType === 'system-prompt') {

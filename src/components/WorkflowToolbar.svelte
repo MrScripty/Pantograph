@@ -1,14 +1,11 @@
 <script lang="ts">
   import {
     workflowGraph,
-    workflowMetadata,
     isDirty,
     isExecuting,
     setNodeExecutionState,
     resetExecutionStates,
     clearWorkflow,
-    loadDefaultWorkflow,
-    nodeDefinitions,
     edges,
     updateNodeRuntimeData,
     clearNodeRuntimeData,
@@ -26,6 +23,7 @@
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { WorkflowEvent } from '../services/workflow/types';
+  import { AUDIO_RUNTIME_DATA_KEYS } from './nodes/workflow/audioOutputState';
   import { get } from 'svelte/store';
   import GraphSelector from './GraphSelector.svelte';
 
@@ -34,7 +32,6 @@
 
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
-  const AUDIO_RUNTIME_KEYS = ['audio', 'audio_mime', 'stream', 'stream_sequence', 'stream_is_final'];
 
   function normalizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim().length > 0) {
@@ -105,7 +102,7 @@
 
     workflowError = null;
     isExecuting.set(true);
-    clearNodeRuntimeData(AUDIO_RUNTIME_KEYS);
+    clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
 
@@ -238,11 +235,6 @@
     } catch (error) {
       console.error('Failed to save workflow:', error);
     }
-  }
-
-  async function handleLoad() {
-    // TODO: Open file picker dialog
-    console.log('Load workflow');
   }
 
   function handleNew() {
