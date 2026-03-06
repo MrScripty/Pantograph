@@ -35,6 +35,18 @@ def _as_int(value: Any, default: int) -> int:
         return default
 
 
+def _as_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
 def _ensure_prompt(inputs: Dict[str, Any]) -> str:
     prompt = inputs.get("prompt")
     if isinstance(prompt, str) and prompt.strip():
@@ -78,6 +90,25 @@ def _to_wav_base64(audio: np.ndarray, sample_rate: int) -> Tuple[str, float]:
     return encoded, duration
 
 
+def _runtime_hint_for_exception(exc: BaseException) -> str:
+    lowered = str(exc).lower()
+    hints: List[str] = []
+
+    if "phonemizer" in lowered or "espeak" in lowered:
+        hints.append(
+            "Phonemizer runtime appears unavailable. Install an OS-level "
+            "espeak/espeak-ng package and ensure it is discoverable from the "
+            "selected Python dependency environment."
+        )
+    if "onnxruntime" in lowered or "onnx runtime" in lowered:
+        hints.append(
+            "ONNX Runtime load failed. Verify the dependency environment "
+            "contains a compatible `onnxruntime` wheel for this platform."
+        )
+
+    return " ".join(hints)
+
+
 def _load_model(model_path: str):
     global _loaded, _loaded_key
 
@@ -89,15 +120,25 @@ def _load_model(model_path: str):
     try:
         from kittentts.onnx_model import KittenTTS_1_Onnx
     except Exception as exc:
+        hint = _runtime_hint_for_exception(exc)
         raise RuntimeError(
             "Failed to import KittenTTS ONNX runtime. Ensure the dependency environment "
             "includes `kittentts`, `onnxruntime`, `numpy`, `phonemizer`, and `soundfile`."
+            + (f" {hint}" if hint else "")
         ) from exc
 
-    _loaded = KittenTTS_1_Onnx(
-        model_path=str(model_file),
-        voices_path=str(voices_file),
-    )
+    try:
+        _loaded = KittenTTS_1_Onnx(
+            model_path=str(model_file),
+            voices_path=str(voices_file),
+        )
+    except Exception as exc:
+        hint = _runtime_hint_for_exception(exc)
+        raise RuntimeError(
+            "Failed to initialize KittenTTS ONNX model bundle."
+            + (f" {hint}" if hint else "")
+            + f" Original error: {exc}"
+        ) from exc
     _loaded_key = key
     return _loaded
 
@@ -143,38 +184,50 @@ def generate_audio(
     voice = str(inputs.get("voice", "expr-voice-5-m") or "expr-voice-5-m")
     speed = _as_float(inputs.get("speed", 1.0), 1.0)
     sample_rate = _as_int(inputs.get("sample_rate", 24000), 24000)
-    clean_text = bool(inputs.get("clean_text", True))
+    clean_text = _as_bool(inputs.get("clean_text", True), True)
 
     tts = _load_model(model_path)
+    voices = getattr(tts, "voices", None)
+    if isinstance(voices, dict) and voice not in voices:
+        sample = ", ".join(list(sorted(voices.keys()))[:8])
+        suffix = f" Available voices include: {sample}" if sample else ""
+        raise RuntimeError(f"Unknown KittenTTS voice '{voice}'.{suffix}")
 
     # Generate per-text-chunk so callers can surface progress if desired.
     chunk_audio: List[np.ndarray] = []
     chunk_payloads: List[Dict[str, Any]] = []
     pending_stream_chunk: Dict[str, Any] | None = None
-    for sequence, chunk_arr in enumerate(_iter_chunks(tts, prompt, voice, speed, clean_text)):
-        arr = np.asarray(chunk_arr, dtype=np.float32)
-        chunk_audio.append(arr)
-        chunk_b64, chunk_duration = _to_wav_base64(arr, sample_rate)
-        chunk_payload = {
-            "type": "audio_chunk",
-            "mode": "append",
-            "audio_base64": chunk_b64,
-            "duration_seconds": chunk_duration,
-            "sample_rate": sample_rate,
-            "mime_type": "audio/wav",
-            "sequence": sequence,
-            "is_final": False,
-        }
-        chunk_payloads.append(chunk_payload)
-        if callable(emit_stream):
-            try:
-                # Delay emission by one chunk so we can mark terminal chunk deterministically.
-                if pending_stream_chunk is not None:
-                    emit_stream(pending_stream_chunk)
-                pending_stream_chunk = chunk_payload
-            except Exception:
-                # Streaming callbacks are best-effort and must not break inference.
-                pass
+    try:
+        for sequence, chunk_arr in enumerate(_iter_chunks(tts, prompt, voice, speed, clean_text)):
+            arr = np.asarray(chunk_arr, dtype=np.float32)
+            chunk_audio.append(arr)
+            chunk_b64, chunk_duration = _to_wav_base64(arr, sample_rate)
+            chunk_payload = {
+                "type": "audio_chunk",
+                "mode": "append",
+                "audio_base64": chunk_b64,
+                "duration_seconds": chunk_duration,
+                "sample_rate": sample_rate,
+                "mime_type": "audio/wav",
+                "sequence": sequence,
+                "is_final": False,
+            }
+            chunk_payloads.append(chunk_payload)
+            if callable(emit_stream):
+                try:
+                    # Delay emission by one chunk so we can mark terminal chunk deterministically.
+                    if pending_stream_chunk is not None:
+                        emit_stream(pending_stream_chunk)
+                    pending_stream_chunk = chunk_payload
+                except Exception:
+                    # Streaming callbacks are best-effort and must not break inference.
+                    pass
+    except Exception as exc:
+        hint = _runtime_hint_for_exception(exc)
+        raise RuntimeError(
+            f"KittenTTS ONNX generation failed: {exc}"
+            + (f" {hint}" if hint else "")
+        ) from exc
 
     if not chunk_audio:
         raise RuntimeError("ONNX worker generated no audio chunks")
