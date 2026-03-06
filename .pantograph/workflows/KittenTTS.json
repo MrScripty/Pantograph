@@ -1,0 +1,882 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "KittenTTS",
+    "created": "2026-03-06T01:37:34-08:00",
+    "modified": "2026-03-06T11:16:03.527392+00:00"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "puma-lib-kittentts",
+        "node_type": "puma-lib",
+        "position": {
+          "x": -1288.1396525379569,
+          "y": 272.2565534974491
+        },
+        "data": {
+          "backend_key": "onnxruntime",
+          "definition": {
+            "category": "input",
+            "description": "Provides AI model file path",
+            "execution_mode": "reactive",
+            "inputs": [],
+            "io_binding_origin": "integrated",
+            "label": "Puma-Lib",
+            "node_type": "puma-lib",
+            "outputs": [
+              {
+                "data_type": "string",
+                "id": "model_path",
+                "label": "Model Path",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "inference_settings",
+                "label": "Inference Settings",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "dependency_requirements",
+                "label": "Dependency Requirements",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "dependency_requirements": {
+            "backend_key": "onnx-runtime",
+            "bindings": [
+              {
+                "backend_key": "onnx-runtime",
+                "binding_id": "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8",
+                "env_id": "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime",
+                "environment_kind": "python-venv",
+                "platform_selector": null,
+                "profile_hash": "96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c",
+                "profile_id": "kittentts-runtime",
+                "profile_version": 1,
+                "python_executable_override": null,
+                "requirements": [
+                  {
+                    "exact_pin": "==0.8.1",
+                    "extra_index_urls": [],
+                    "hashes": [],
+                    "index_url": null,
+                    "kind": "python_package",
+                    "markers": null,
+                    "name": "kittentts",
+                    "platform_constraints": [],
+                    "python_requires": ">=3.12,<3.13",
+                    "source": "https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl"
+                  },
+                  {
+                    "exact_pin": "==0.9.4",
+                    "extra_index_urls": [],
+                    "hashes": [],
+                    "index_url": null,
+                    "kind": "python_package",
+                    "markers": null,
+                    "name": "misaki",
+                    "platform_constraints": [],
+                    "python_requires": null,
+                    "source": "https://github.com/hexgrad/misaki"
+                  }
+                ],
+                "validation_errors": [],
+                "validation_state": "resolved"
+              }
+            ],
+            "dependency_contract_version": 1,
+            "model_id": "audio/kittenml/kitten-tts-mini-0_8",
+            "platform_key": "linux-x86_64",
+            "selected_binding_ids": [
+              "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8"
+            ],
+            "validation_errors": [],
+            "validation_state": "resolved"
+          },
+          "dependency_requirements_id": "audio/kittenml/kitten-tts-mini-0_8",
+          "inference_settings": [
+            {
+              "constraints": {
+                "min": null,
+                "max": null,
+                "allowed_values": [
+                  {
+                    "label": "Bella",
+                    "value": "expr-voice-2-f"
+                  },
+                  {
+                    "label": "Jasper",
+                    "value": "expr-voice-2-m"
+                  },
+                  {
+                    "label": "Luna",
+                    "value": "expr-voice-3-f"
+                  },
+                  {
+                    "label": "Bruno",
+                    "value": "expr-voice-3-m"
+                  },
+                  {
+                    "label": "Rosie",
+                    "value": "expr-voice-4-f"
+                  },
+                  {
+                    "label": "Hugo",
+                    "value": "expr-voice-4-m"
+                  },
+                  {
+                    "label": "Kiki",
+                    "value": "expr-voice-5-f"
+                  },
+                  {
+                    "label": "Leo",
+                    "value": "expr-voice-5-m"
+                  }
+                ]
+              },
+              "default": "expr-voice-5-m",
+              "description": "Voice alias label and runtime value mapping from KittenTTS voice aliases",
+              "key": "voice",
+              "label": "Voice",
+              "param_type": "String"
+            },
+            {
+              "constraints": {
+                "min": 0.5,
+                "max": 2,
+                "allowed_values": null
+              },
+              "default": 1,
+              "description": "Speech rate multiplier (1.0 is default speed)",
+              "key": "speed",
+              "label": "Speed",
+              "param_type": "Number"
+            },
+            {
+              "constraints": null,
+              "default": true,
+              "description": "Apply KittenTTS text normalization before synthesis",
+              "key": "clean_text",
+              "label": "Clean Text",
+              "param_type": "Boolean"
+            },
+            {
+              "constraints": {
+                "min": 8000,
+                "max": 96000,
+                "allowed_values": null
+              },
+              "default": 24000,
+              "description": "Output WAV sample rate used by KittenTTS",
+              "key": "sample_rate",
+              "label": "Sample Rate",
+              "param_type": "Integer"
+            }
+          ],
+          "label": "Puma-Lib",
+          "modelName": "kitten-tts-mini-0.8",
+          "modelPath": "/media/jeremy/OrangeCream/Linux Software/Pumas-Library/shared-resources/models/audio/kittenml/kitten-tts-mini-0_8",
+          "model_id": "audio/kittenml/kitten-tts-mini-0_8",
+          "model_type": "audio",
+          "recommended_backend": "onnx-runtime",
+          "runtime_engine_hints": [
+            "onnx-runtime"
+          ],
+          "selected_binding_ids": [
+            "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8"
+          ],
+          "selectionMode": "library",
+          "task_type_primary": "text-to-audio"
+        }
+      },
+      {
+        "id": "text-input-kittentts-prompt",
+        "node_type": "text-input",
+        "position": {
+          "x": -323.7426256651141,
+          "y": 543.3188693740665
+        },
+        "data": {
+          "definition": {
+            "category": "input",
+            "description": "Provides text input to the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "string",
+                "id": "text",
+                "label": "Text",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Text Input",
+            "node_type": "text-input",
+            "outputs": [
+              {
+                "data_type": "string",
+                "id": "text",
+                "label": "Text",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "label": "Text Input",
+          "text": "There is a notification waiting for you on one terminal, and three terminals have completed their tasks."
+        }
+      },
+      {
+        "id": "selection-input-kittentts-voice",
+        "node_type": "selection-input",
+        "position": {
+          "x": 249.8743847787124,
+          "y": 259.8812527200934
+        },
+        "data": {
+          "definition": {
+            "category": "input",
+            "description": "Provides a metadata-driven selected value to the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "any",
+                "id": "value",
+                "label": "Value",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Selection Input",
+            "node_type": "selection-input",
+            "outputs": [
+              {
+                "data_type": "any",
+                "id": "value",
+                "label": "Value",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "label": "Selection Input",
+          "value": "expr-voice-5-m"
+        }
+      },
+      {
+        "id": "dependency-environment-kittentts",
+        "node_type": "dependency-environment",
+        "position": {
+          "x": -360.27662866417967,
+          "y": -449.2413901726892
+        },
+        "data": {
+          "activity_log": [
+            "[01:42:09] resolve: starting dependency requirement resolution",
+            "[01:42:09] resolve: resolved validation=unknown_profile bindings=0",
+            "[01:42:09] check: starting dependency check",
+            "[01:42:09] resolve: starting dependency requirement resolution",
+            "[01:42:09] resolve: resolved validation=unknown_profile bindings=0",
+            "[01:42:09] check: check complete state=unresolved",
+            "[01:57:30] resolve: starting dependency requirement resolution",
+            "[01:57:30] resolve: resolved validation=resolved bindings=1",
+            "[01:57:30] check: starting dependency check",
+            "[01:57:30] resolve: starting dependency requirement resolution",
+            "[01:57:30] resolve: resolved validation=resolved bindings=1",
+            "[01:57:30] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: checking binding requirements",
+            "[01:57:31] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: binding state=missing missing=2 failed=0",
+            "[01:57:31] check: check complete state=missing",
+            "[01:57:31] install: starting dependency install",
+            "[01:57:31] resolve: starting dependency requirement resolution",
+            "[01:57:31] resolve: resolved validation=resolved bindings=1",
+            "[01:57:31] install | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: starting binding install",
+            "[01:57:31] install | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | kittentts: pip install kittentts==0.8.1",
+            "[01:57:32] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | kittentts | stderr: ERROR: Could not find a version that satisfies the requirement kittentts==0.8.1 (from versions: 0.1.0, 0.1.1, 0.1.2, 0.1.3)",
+            "[01:57:32] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | kittentts | stderr: ERROR: No matching distribution found for kittentts==0.8.1",
+            "[01:57:32] install | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | kittentts: pip install failed for 'kittentts': ERROR: Could not find a version that satisfies the requirement kittentts==0.8.1 (from versions: 0.1.0, 0.1.1, 0.1.2, 0.1.3) | ERROR: No matching distribution found for kittentts==0.8.1",
+            "[01:57:32] install | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki: pip install misaki==0.9.4",
+            "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Collecting misaki==0.9.4",
+            "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading misaki-0.9.4-py3-none-any.whl.metadata (19 kB)",
+            "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Collecting addict (from misaki==0.9.4)",
+            "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading addict-2.4.0-py3-none-any.whl.metadata (1.0 kB)",
+            "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Requirement already satisfied: regex in /media/jeremy/OrangeCream/Linux Software/Pantograph/.venv/lib/python3.10/site-packages (from misaki==0.9.4) (2026.2.19)",
+            "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading misaki-0.9.4-py3-none-any.whl (3.6 MB)",
+            "[01:57:34] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 3.6/3.6 MB 3.9 MB/s  0:00:01",
+            "[01:57:35] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading addict-2.4.0-py3-none-any.whl (3.8 kB)",
+            "[01:57:35] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Installing collected packages: addict, misaki",
+            "[01:57:35] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Successfully installed addict-2.4.0 misaki-0.9.4",
+            "[01:57:36] install | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki: pip install completed",
+            "[01:57:36] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: checking binding requirements",
+            "[01:57:36] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: binding state=missing missing=1 failed=0",
+            "[01:57:36] install | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: binding state=failed installed=1 failed=1",
+            "[01:57:36] install: install complete state=failed",
+            "[01:57:36] check: starting dependency check",
+            "[01:57:36] resolve: starting dependency requirement resolution",
+            "[01:57:36] resolve: resolved validation=resolved bindings=1",
+            "[01:57:36] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: checking binding requirements",
+            "[01:57:37] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: binding state=missing missing=1 failed=0",
+            "[01:57:37] check: check complete state=missing"
+          ],
+          "backend_key": "onnxruntime",
+          "definition": {
+            "category": "processing",
+            "description": "Resolve/check/install model dependencies and output an environment reference",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "string",
+                "id": "model_path",
+                "label": "Model Path",
+                "multiple": false,
+                "required": true
+              },
+              {
+                "data_type": "json",
+                "id": "dependency_requirements",
+                "label": "Dependency Requirements",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "model_id",
+                "label": "Model ID",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "model_type",
+                "label": "Model Type",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "task_type_primary",
+                "label": "Task Type",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "backend_key",
+                "label": "Backend Key",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "platform_context",
+                "label": "Platform",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "selected_binding_ids",
+                "label": "Selected Bindings",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "mode",
+                "label": "Mode",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "manual_overrides",
+                "label": "Manual Overrides",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "voice",
+                "label": "Voice",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "number",
+                "id": "speed",
+                "label": "Speed",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "boolean",
+                "id": "clean_text",
+                "label": "Clean Text",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "number",
+                "id": "sample_rate",
+                "label": "Sample Rate",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "integrated",
+            "label": "Dependency Environment",
+            "node_type": "dependency-environment",
+            "outputs": [
+              {
+                "data_type": "json",
+                "id": "environment_ref",
+                "label": "Environment Ref",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "dependency_requirements",
+                "label": "Dependency Requirements",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "dependency_status",
+                "label": "Dependency Status",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "dependency_override_patches": [],
+          "dependency_requirements": {
+            "backend_key": "onnx-runtime",
+            "bindings": [
+              {
+                "backend_key": "onnx-runtime",
+                "binding_id": "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8",
+                "env_id": "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime",
+                "environment_kind": "python-venv",
+                "platform_selector": null,
+                "profile_hash": "96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c",
+                "profile_id": "kittentts-runtime",
+                "profile_version": 1,
+                "python_executable_override": null,
+                "requirements": [
+                  {
+                    "exact_pin": "==0.8.1",
+                    "extra_index_urls": [],
+                    "hashes": [],
+                    "index_url": null,
+                    "kind": "python_package",
+                    "markers": null,
+                    "name": "kittentts",
+                    "platform_constraints": [],
+                    "python_requires": ">=3.12,<3.13",
+                    "source": "https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl"
+                  },
+                  {
+                    "exact_pin": "==0.9.4",
+                    "extra_index_urls": [],
+                    "hashes": [],
+                    "index_url": null,
+                    "kind": "python_package",
+                    "markers": null,
+                    "name": "misaki",
+                    "platform_constraints": [],
+                    "python_requires": null,
+                    "source": "https://github.com/hexgrad/misaki"
+                  }
+                ],
+                "validation_errors": [],
+                "validation_state": "resolved"
+              }
+            ],
+            "dependency_contract_version": 1,
+            "model_id": "audio/kittenml/kitten-tts-mini-0_8",
+            "platform_key": "linux-x86_64",
+            "selected_binding_ids": [
+              "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8"
+            ],
+            "validation_errors": [],
+            "validation_state": "resolved"
+          },
+          "dependency_status": {
+            "bindings": [
+              {
+                "binding_id": "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8",
+                "code": "requirements_missing",
+                "env_id": "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime",
+                "failed_requirements": [],
+                "installed_requirements": [],
+                "message": null,
+                "missing_requirements": [
+                  "kittentts"
+                ],
+                "state": "missing"
+              }
+            ],
+            "checked_at": "2026-03-06T09:57:37.650296707+00:00",
+            "code": null,
+            "message": null,
+            "requirements": {
+              "backend_key": "onnx-runtime",
+              "bindings": [
+                {
+                  "backend_key": "onnx-runtime",
+                  "binding_id": "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8",
+                  "env_id": "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime",
+                  "environment_kind": "python-venv",
+                  "platform_selector": null,
+                  "profile_hash": "96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c",
+                  "profile_id": "kittentts-runtime",
+                  "profile_version": 1,
+                  "python_executable_override": null,
+                  "requirements": [
+                    {
+                      "exact_pin": "==0.8.1",
+                      "extra_index_urls": [],
+                      "hashes": [],
+                      "index_url": null,
+                      "kind": "python_package",
+                      "markers": null,
+                      "name": "kittentts",
+                      "platform_constraints": [],
+                      "python_requires": ">=3.12,<3.13",
+                      "source": "https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl"
+                    },
+                    {
+                      "exact_pin": "==0.9.4",
+                      "extra_index_urls": [],
+                      "hashes": [],
+                      "index_url": null,
+                      "kind": "python_package",
+                      "markers": null,
+                      "name": "misaki",
+                      "platform_constraints": [],
+                      "python_requires": null,
+                      "source": "https://github.com/hexgrad/misaki"
+                    }
+                  ],
+                  "validation_errors": [],
+                  "validation_state": "resolved"
+                }
+              ],
+              "dependency_contract_version": 1,
+              "model_id": "audio/kittenml/kitten-tts-mini-0_8",
+              "platform_key": "linux-x86_64",
+              "selected_binding_ids": [
+                "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8"
+              ],
+              "validation_errors": [],
+              "validation_state": "resolved"
+            },
+            "state": "missing"
+          },
+          "environment_ref": {
+            "backend_key": "onnx-runtime",
+            "contract_version": 1,
+            "env_id": "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime",
+            "env_ids": [
+              "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime"
+            ],
+            "environment_kind": "python-venv",
+            "platform_key": "linux-x86_64",
+            "state": "missing"
+          },
+          "label": "Dependency Environment",
+          "manual_overrides": [],
+          "mode": "auto",
+          "model_id": "audio/kittenml/kitten-tts-mini-0_8",
+          "model_type": "audio",
+          "selected_binding_ids": [
+            "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8"
+          ],
+          "task_type_primary": "text-to-audio"
+        }
+      },
+      {
+        "id": "onnx-inference-kittentts",
+        "node_type": "onnx-inference",
+        "position": {
+          "x": 842.3049535677079,
+          "y": 260.6326758193008
+        },
+        "data": {
+          "definition": {
+            "category": "processing",
+            "description": "Run ONNX model inference (including text-to-audio pipelines)",
+            "execution_mode": "stream",
+            "inputs": [
+              {
+                "data_type": "string",
+                "id": "model_path",
+                "label": "Model Path",
+                "multiple": false,
+                "required": true
+              },
+              {
+                "data_type": "prompt",
+                "id": "prompt",
+                "label": "Prompt",
+                "multiple": false,
+                "required": true
+              },
+              {
+                "data_type": "json",
+                "id": "inference_settings",
+                "label": "Inference Settings",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "environment_ref",
+                "label": "Environment Ref",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "voice",
+                "label": "Voice",
+                "multiple": false,
+                "required": false,
+                "description": "Voice alias label and runtime value mapping from KittenTTS voice aliases",
+                "default_value": "expr-voice-5-m",
+                "constraints": {
+                  "min": null,
+                  "max": null,
+                  "allowed_values": [
+                    {
+                      "label": "Bella",
+                      "value": "expr-voice-2-f"
+                    },
+                    {
+                      "label": "Jasper",
+                      "value": "expr-voice-2-m"
+                    },
+                    {
+                      "label": "Luna",
+                      "value": "expr-voice-3-f"
+                    },
+                    {
+                      "label": "Bruno",
+                      "value": "expr-voice-3-m"
+                    },
+                    {
+                      "label": "Rosie",
+                      "value": "expr-voice-4-f"
+                    },
+                    {
+                      "label": "Hugo",
+                      "value": "expr-voice-4-m"
+                    },
+                    {
+                      "label": "Kiki",
+                      "value": "expr-voice-5-f"
+                    },
+                    {
+                      "label": "Leo",
+                      "value": "expr-voice-5-m"
+                    }
+                  ]
+                }
+              },
+              {
+                "data_type": "number",
+                "id": "speed",
+                "label": "Speed",
+                "multiple": false,
+                "required": false,
+                "description": "Speech rate multiplier (1.0 is default speed)",
+                "default_value": 1,
+                "constraints": {
+                  "min": 0.5,
+                  "max": 2,
+                  "allowed_values": null
+                }
+              },
+              {
+                "data_type": "boolean",
+                "id": "clean_text",
+                "label": "Clean Text",
+                "multiple": false,
+                "required": false,
+                "description": "Apply KittenTTS text normalization before synthesis",
+                "default_value": true
+              },
+              {
+                "data_type": "number",
+                "id": "sample_rate",
+                "label": "Sample Rate",
+                "multiple": false,
+                "required": false,
+                "description": "Output WAV sample rate used by KittenTTS",
+                "default_value": 24000,
+                "constraints": {
+                  "min": 8000,
+                  "max": 96000,
+                  "allowed_values": null
+                }
+              }
+            ],
+            "io_binding_origin": "integrated",
+            "label": "ONNX Runtime Inference (Python Sidecar)",
+            "node_type": "onnx-inference",
+            "outputs": [
+              {
+                "data_type": "audio",
+                "id": "audio",
+                "label": "Audio",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "number",
+                "id": "duration_seconds",
+                "label": "Duration",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "number",
+                "id": "sample_rate",
+                "label": "Sample Rate",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "model_ref",
+                "label": "Model Reference",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "audio_stream",
+                "id": "stream",
+                "label": "Audio Stream",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "label": "ONNX Runtime Inference"
+        }
+      },
+      {
+        "id": "audio-output-kittentts",
+        "node_type": "audio-output",
+        "position": {
+          "x": 1409.743286948597,
+          "y": 336.2606770135282
+        },
+        "data": {
+          "definition": {
+            "category": "output",
+            "description": "Plays audio output from the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "audio",
+                "id": "audio",
+                "label": "Audio",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "audio_stream",
+                "id": "stream",
+                "label": "Audio Stream",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Audio Output",
+            "node_type": "audio-output",
+            "outputs": [
+              {
+                "data_type": "audio",
+                "id": "audio",
+                "label": "Audio",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          },
+          "label": "Audio Output"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "puma-lib-kittentts-model_path-dependency-environment-kittentts-model_path",
+        "source": "puma-lib-kittentts",
+        "source_handle": "model_path",
+        "target": "dependency-environment-kittentts",
+        "target_handle": "model_path"
+      },
+      {
+        "id": "puma-lib-kittentts-dependency_requirements-dependency-environment-kittentts-dependency_requirements",
+        "source": "puma-lib-kittentts",
+        "source_handle": "dependency_requirements",
+        "target": "dependency-environment-kittentts",
+        "target_handle": "dependency_requirements"
+      },
+      {
+        "id": "puma-lib-kittentts-model_path-onnx-inference-kittentts-model_path",
+        "source": "puma-lib-kittentts",
+        "source_handle": "model_path",
+        "target": "onnx-inference-kittentts",
+        "target_handle": "model_path"
+      },
+      {
+        "id": "puma-lib-kittentts-inference_settings-onnx-inference-kittentts-inference_settings",
+        "source": "puma-lib-kittentts",
+        "source_handle": "inference_settings",
+        "target": "onnx-inference-kittentts",
+        "target_handle": "inference_settings"
+      },
+      {
+        "id": "dependency-environment-kittentts-environment_ref-onnx-inference-kittentts-environment_ref",
+        "source": "dependency-environment-kittentts",
+        "source_handle": "environment_ref",
+        "target": "onnx-inference-kittentts",
+        "target_handle": "environment_ref"
+      },
+      {
+        "id": "text-input-kittentts-prompt-text-onnx-inference-kittentts-prompt",
+        "source": "text-input-kittentts-prompt",
+        "source_handle": "text",
+        "target": "onnx-inference-kittentts",
+        "target_handle": "prompt"
+      },
+      {
+        "id": "onnx-inference-kittentts-stream-audio-output-kittentts-stream",
+        "source": "onnx-inference-kittentts",
+        "source_handle": "stream",
+        "target": "audio-output-kittentts",
+        "target_handle": "stream"
+      },
+      {
+        "id": "selection-input-kittentts-voice-value-onnx-inference-kittentts-voice",
+        "source": "selection-input-kittentts-voice",
+        "source_handle": "value",
+        "target": "onnx-inference-kittentts",
+        "target_handle": "voice"
+      }
+    ]
+  }
+}
