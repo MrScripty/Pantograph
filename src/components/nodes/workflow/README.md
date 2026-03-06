@@ -21,6 +21,7 @@ Svelte UI components for the frontend experience, organized by feature and compo
 | MaskedTextInputNode.svelte | Source file used by modules in this directory. |
 | ModelProviderNode.svelte | Source file used by modules in this directory. |
 | NodeGroupNode.svelte | Source file used by modules in this directory. |
+| OnnxInferenceNode.svelte | Source file used by modules in this directory. |
 | OllamaInferenceNode.svelte | Source file used by modules in this directory. |
 | PointCloudOutputNode.svelte | Source file used by modules in this directory. |
 | PumaLibNode.svelte | Source file used by modules in this directory. |
@@ -32,6 +33,8 @@ Svelte UI components for the frontend experience, organized by feature and compo
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.
 - Maintain predictable naming so callers can discover related modules quickly.
+- `AudioOutputNode.svelte` supports buffered stream playback for low-latency
+  `audio_stream` chunks while preserving final-audio seek/volume controls.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
