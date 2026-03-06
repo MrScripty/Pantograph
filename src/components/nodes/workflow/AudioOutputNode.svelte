@@ -32,6 +32,7 @@
   let currentTime = $state(0);
   let duration = $state(0);
   let volume = $state(1);
+  let loopEnabled = $state(false);
   let lastAudioSignature = $state('');
   let hasStreamAudio = $state(false);
   let streamBufferedDuration = $state(0);
@@ -332,6 +333,25 @@
     currentTime = duration;
   }
 
+  function handleReplay() {
+    if (!finalAudioSrc || !audioElement) return;
+    audioElement.currentTime = 0;
+    currentTime = 0;
+    void audioElement.play().catch(() => {});
+  }
+
+  function handleLoopToggle(event: Event) {
+    const target = event.currentTarget as HTMLInputElement | null;
+    loopEnabled = target?.checked === true;
+    if (audioElement) {
+      audioElement.loop = loopEnabled;
+    }
+  }
+
+  function stopControlEvent(event: Event) {
+    event.stopPropagation();
+  }
+
   function downloadAudio() {
     if (!finalAudioData) return;
     const byteChars = atob(finalAudioData);
@@ -351,6 +371,7 @@
   $effect(() => {
     if (audioElement) {
       audioElement.volume = volume;
+      audioElement.loop = loopEnabled;
     }
     if (streamGainNode) {
       streamGainNode.gain.value = volume;
@@ -404,77 +425,116 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
-      {#if hasAnyAudio}
+    {#if hasAnyAudio}
+      <div class="space-y-1">
+        {#if finalAudioSrc}
+          <audio
+            bind:this={audioElement}
+            src={finalAudioSrc}
+            preload="metadata"
+            onloadedmetadata={handleLoadedMetadata}
+            ontimeupdate={handleTimeUpdate}
+            onplay={handlePlay}
+            onpause={handlePause}
+            onended={handleEnded}
+          ></audio>
+        {/if}
         <div class="space-y-1">
-          {#if finalAudioSrc}
-            <audio
-              bind:this={audioElement}
-              src={finalAudioSrc}
-              preload="metadata"
-              onloadedmetadata={handleLoadedMetadata}
-              ontimeupdate={handleTimeUpdate}
-              onplay={handlePlay}
-              onpause={handlePause}
-              onended={handleEnded}
-            ></audio>
-          {/if}
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                class="text-[10px] px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 border border-neutral-600 cursor-pointer"
-                onclick={togglePlayback}
-              >
-                {isPlaying ? 'Pause' : 'Play'}
-              </button>
-              <span class="text-[10px] text-neutral-400 tabular-nums">
-                {formatTime(currentTime)} / {formatTime(displayedDuration)}
-              </span>
-              {#if !finalAudioSrc}
-                <span class="text-[10px] text-pink-300">Streaming</span>
-              {/if}
-            </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="nodrag nopan nowheel text-[10px] px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 border border-neutral-600 cursor-pointer"
+              onclick={togglePlayback}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onclickcapture={stopControlEvent}
+            >
+              {isPlaying ? 'Pause' : 'Play'}
+            </button>
+            <button
+              type="button"
+              class="nodrag nopan nowheel text-[10px] px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 border border-neutral-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={handleReplay}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onclickcapture={stopControlEvent}
+              disabled={!finalAudioSrc}
+            >
+              Replay
+            </button>
+            <span class="text-[10px] text-neutral-400 tabular-nums">
+              {formatTime(currentTime)} / {formatTime(displayedDuration)}
+            </span>
+            {#if !finalAudioSrc}
+              <span class="text-[10px] text-pink-300">Streaming</span>
+            {/if}
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={displayedDuration > 0 ? displayedDuration : 1}
+            step="0.01"
+            value={currentTime}
+            class="nodrag nopan nowheel w-full h-1.5 accent-pink-500 cursor-pointer"
+            disabled={!canSeek}
+            oninput={handleSeek}
+            onmousedown={stopControlEvent}
+            onmouseup={stopControlEvent}
+            onpointerdown={stopControlEvent}
+            onpointerup={stopControlEvent}
+            onclickcapture={stopControlEvent}
+          />
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-neutral-400">Vol</span>
             <input
               type="range"
               min="0"
-              max={displayedDuration > 0 ? displayedDuration : 1}
+              max="1"
               step="0.01"
-              value={currentTime}
-              class="w-full h-1.5 accent-pink-500 cursor-pointer"
-              disabled={!canSeek}
-              oninput={handleSeek}
+              value={volume}
+              class="nodrag nopan nowheel w-full h-1.5 accent-pink-500 cursor-pointer"
+              oninput={handleVolumeChange}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onpointerdown={stopControlEvent}
+              onpointerup={stopControlEvent}
+              onclickcapture={stopControlEvent}
             />
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] text-neutral-400">Vol</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={volume}
-                class="w-full h-1.5 accent-pink-500 cursor-pointer"
-                oninput={handleVolumeChange}
-              />
-            </div>
           </div>
-          {#if finalAudioSrc}
-            <div class="flex justify-end">
-              <button type="button"
-                class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-                onclick={downloadAudio}
-              >
-                Download
-              </button>
-            </div>
-          {/if}
+          <label class="nodrag nopan nowheel flex items-center gap-2 text-[10px] text-neutral-400">
+            <input
+              type="checkbox"
+              checked={loopEnabled}
+              class="cursor-pointer"
+              disabled={!finalAudioSrc}
+              onchange={handleLoopToggle}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onclickcapture={stopControlEvent}
+            />
+            Loop
+          </label>
         </div>
-      {:else}
-        <div class="text-xs text-neutral-500 italic">
-          No audio yet
-        </div>
-      {/if}
-    {/snippet}
+        {#if finalAudioSrc}
+          <div class="flex justify-end">
+            <button
+              type="button"
+              class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+              onclick={downloadAudio}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onclickcapture={stopControlEvent}
+            >
+              Download
+            </button>
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="text-xs text-neutral-500 italic">
+        No audio yet
+      </div>
+    {/if}
   </BaseNode>
 </div>
 
