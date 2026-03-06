@@ -25,6 +25,13 @@ export interface PortDefinition {
   data_type: PortDataType;
   required: boolean;
   multiple: boolean;
+  description?: string;
+  default_value?: unknown;
+  constraints?: {
+    min?: number;
+    max?: number;
+    allowed_values?: unknown[];
+  };
 }
 
 export type NodeCategory = 'input' | 'processing' | 'tool' | 'output' | 'control';

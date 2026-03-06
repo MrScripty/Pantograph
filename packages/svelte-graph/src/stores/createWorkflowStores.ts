@@ -444,6 +444,25 @@ export function createWorkflowStores(
     }
   }
 
+  function inferenceParamToPortDefinition(param: InferenceParamSchema): PortDefinition {
+    return {
+      id: param.key,
+      label: param.label,
+      data_type: paramTypeToPortDataType(param.param_type),
+      required: false,
+      multiple: false,
+      description: param.description,
+      default_value: param.default,
+      constraints: param.constraints
+        ? {
+            min: param.constraints.min,
+            max: param.constraints.max,
+            allowed_values: param.constraints.allowed_values,
+          }
+        : undefined,
+    };
+  }
+
   /**
    * Find downstream target node IDs connected via a specific source handle.
    */
@@ -488,13 +507,7 @@ export function createWorkflowStores(
       // Convert inference_settings schema to PortDefinitions
       const modelPortMap = new Map<string, PortDefinition>();
       for (const s of inferenceSettings) {
-        modelPortMap.set(s.key, {
-          id: s.key,
-          label: s.label,
-          data_type: paramTypeToPortDataType(s.param_type),
-          required: false,
-          multiple: false,
-        });
+        modelPortMap.set(s.key, inferenceParamToPortDefinition(s));
       }
 
       // Build deduplicated port list: base ports first (excluding those
@@ -528,13 +541,7 @@ export function createWorkflowStores(
 
     const modelPortMap = new Map<string, PortDefinition>();
     for (const s of inferenceSettings) {
-      modelPortMap.set(s.key, {
-        id: s.key,
-        label: s.label,
-        data_type: paramTypeToPortDataType(s.param_type),
-        required: false,
-        multiple: false,
-      });
+      modelPortMap.set(s.key, inferenceParamToPortDefinition(s));
     }
 
     for (const expandId of expandIds) {
