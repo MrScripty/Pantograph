@@ -51,6 +51,9 @@ pub mod runtime_extension_keys {
 }
 
 impl TauriTaskExecutor {
+    const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV64_PRIME: u64 = 0x0000_0100_0000_01B3;
+
     fn canonical_backend_key(value: Option<&str>) -> Option<String> {
         let normalized = value
             .map(|v| v.trim().to_lowercase())
@@ -480,6 +483,15 @@ impl TauriTaskExecutor {
         base.join("pantograph").join("dependency_envs")
     }
 
+    fn stable_hash_hex(value: &str) -> String {
+        let mut digest = Self::FNV64_OFFSET_BASIS;
+        for byte in value.as_bytes() {
+            digest ^= *byte as u64;
+            digest = digest.wrapping_mul(Self::FNV64_PRIME);
+        }
+        format!("{:016x}", digest)
+    }
+
     fn resolve_environment_ref(
         status: &ModelDependencyStatus,
     ) -> std::result::Result<serde_json::Value, String> {
@@ -548,12 +560,16 @@ impl TauriTaskExecutor {
             .clone()
             .unwrap_or_else(|| "any".to_string());
         let requirements_fingerprint = Self::canonical_requirement_fingerprint(requirements);
-        let environment_key = Self::sanitize_key_component(&format!(
-            "v1:{}:{}:{}:{}",
+        let key_material = format!(
+            "{}|{}|{}|{}",
             primary_env_id.clone().unwrap_or_else(|| "none".to_string()),
             requirements.platform_key,
             backend_key,
             requirements_fingerprint
+        );
+        let environment_key = Self::sanitize_key_component(&format!(
+            "v1:{}",
+            Self::stable_hash_hex(&key_material)
         ));
 
         let manifest_dir = Self::dependency_env_store_root()
@@ -1435,6 +1451,16 @@ mod tests {
                 "env:secondary".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn stable_hash_hex_is_deterministic() {
+        let one = TauriTaskExecutor::stable_hash_hex("abc|123");
+        let two = TauriTaskExecutor::stable_hash_hex("abc|123");
+        let three = TauriTaskExecutor::stable_hash_hex("abc|124");
+        assert_eq!(one, two);
+        assert_ne!(one, three);
+        assert_eq!(one.len(), 16);
     }
 
     #[test]
