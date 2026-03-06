@@ -261,7 +261,14 @@
   }
 
   function inferNodeType(): string {
-    return taskTypePrimary === 'text-to-audio' ? 'audio-generation' : 'pytorch-inference';
+    const backend = inferBackendKey();
+    if (backend === 'onnxruntime') {
+      return 'onnx-inference';
+    }
+    if (taskTypePrimary === 'text-to-audio') {
+      return 'audio-generation';
+    }
+    return 'pytorch-inference';
   }
 
   function inferBackendKeyFromTask(taskTypePrimary?: string): string {

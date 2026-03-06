@@ -12,6 +12,7 @@ mod inference;
 mod json_filter;
 mod llamacpp_inference;
 mod ollama_inference;
+mod onnx_inference;
 mod pytorch_inference;
 mod unload_model;
 mod validator;
@@ -30,6 +31,7 @@ pub use inference::{
 pub use json_filter::{JsonFilterConfig, JsonFilterTask};
 pub use llamacpp_inference::LlamaCppInferenceTask;
 pub use ollama_inference::OllamaInferenceTask;
+pub use onnx_inference::OnnxInferenceTask;
 pub use pytorch_inference::PyTorchInferenceTask;
 pub use unload_model::UnloadModelTask;
 pub use validator::{ValidationResult, ValidatorConfig, ValidatorTask};

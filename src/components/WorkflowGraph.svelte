@@ -39,6 +39,7 @@
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
   import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
   import PyTorchInferenceNode from './nodes/workflow/PyTorchInferenceNode.svelte';
+  import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
   import DiffusionInferenceNode from './nodes/workflow/DiffusionInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
@@ -82,6 +83,7 @@
     'llamacpp-inference': LlamaCppInferenceNode,
     'embedding': EmbeddingNode,
     'pytorch-inference': PyTorchInferenceNode,
+    'onnx-inference': OnnxInferenceNode,
     'diffusion-inference': DiffusionInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,
