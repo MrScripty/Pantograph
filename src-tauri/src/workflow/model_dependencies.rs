@@ -263,7 +263,9 @@ impl TauriModelDependencyResolver {
             .filter(|v| !v.is_empty())?;
         match normalized.as_str() {
             "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
-            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnxruntime".to_string()),
+            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => {
+                Some("onnx-runtime".to_string())
+            }
             "torch" | "pytorch" => Some("pytorch".to_string()),
             "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
             other => Some(other.to_string()),
@@ -524,6 +526,26 @@ impl TauriModelDependencyResolver {
             }
         }
         spec
+    }
+
+    fn requirement_install_target(requirement: &ModelDependencyRequirement) -> String {
+        let Some(source) = requirement
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        else {
+            return Self::requirement_spec(requirement);
+        };
+
+        if let Some(path) = source.strip_prefix("wheel_source_path=") {
+            let trimmed = path.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+
+        source.to_string()
     }
 
     fn normalize_override_value(value: &str, field: &str) -> Result<String, String> {
@@ -986,7 +1008,7 @@ impl TauriModelDependencyResolver {
         context: Option<&DependencyActivityContext>,
         binding_id: &str,
     ) -> Result<(), String> {
-        let spec = Self::requirement_spec(requirement);
+        let spec = Self::requirement_install_target(requirement);
         if let Some(context) = context {
             self.emit_activity(
                 context,
@@ -1927,7 +1949,7 @@ mod tests {
     fn normalized_backend_key_canonicalizes_aliases() {
         assert_eq!(
             TauriModelDependencyResolver::normalized_backend_key(&Some("onnx-runtime".to_string())),
-            Some("onnxruntime".to_string())
+            Some("onnx-runtime".to_string())
         );
         assert_eq!(
             TauriModelDependencyResolver::normalized_backend_key(&Some("torch".to_string())),
@@ -2128,5 +2150,47 @@ mod tests {
             TauriModelDependencyResolver::apply_dependency_override_patches(requirements, &[patch])
                 .expect_err("unknown binding should fail");
         assert!(err.contains("unknown binding_id"));
+    }
+
+    #[test]
+    fn requirement_install_target_prefers_source_url_when_present() {
+        let requirement = ModelDependencyRequirement {
+            kind: "python_package".to_string(),
+            name: "kittentts".to_string(),
+            exact_pin: "0.8.1".to_string(),
+            index_url: None,
+            extra_index_urls: Vec::new(),
+            markers: None,
+            python_requires: None,
+            platform_constraints: Vec::new(),
+            hashes: Vec::new(),
+            source: Some("https://example.invalid/kittentts-0.8.1.whl".to_string()),
+        };
+
+        assert_eq!(
+            TauriModelDependencyResolver::requirement_install_target(&requirement),
+            "https://example.invalid/kittentts-0.8.1.whl".to_string()
+        );
+    }
+
+    #[test]
+    fn requirement_install_target_supports_wheel_source_path_override() {
+        let requirement = ModelDependencyRequirement {
+            kind: "python_package".to_string(),
+            name: "kittentts".to_string(),
+            exact_pin: "0.8.1".to_string(),
+            index_url: None,
+            extra_index_urls: Vec::new(),
+            markers: None,
+            python_requires: None,
+            platform_constraints: Vec::new(),
+            hashes: Vec::new(),
+            source: Some("wheel_source_path=/tmp/kittentts-0.8.1.whl".to_string()),
+        };
+
+        assert_eq!(
+            TauriModelDependencyResolver::requirement_install_target(&requirement),
+            "/tmp/kittentts-0.8.1.whl".to_string()
+        );
     }
 }

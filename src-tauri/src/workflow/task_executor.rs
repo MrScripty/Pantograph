@@ -57,7 +57,9 @@ impl TauriTaskExecutor {
             .filter(|v| !v.is_empty())?;
         match normalized.as_str() {
             "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
-            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnxruntime".to_string()),
+            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => {
+                Some("onnx-runtime".to_string())
+            }
             "torch" | "pytorch" => Some("pytorch".to_string()),
             "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
             other => Some(other.to_string()),
@@ -370,7 +372,7 @@ impl TauriTaskExecutor {
         match node_type {
             "audio-generation" => "stable_audio".to_string(),
             "pytorch-inference" => "pytorch".to_string(),
-            "onnx-inference" => "onnxruntime".to_string(),
+            "onnx-inference" => "onnx-runtime".to_string(),
             _ => "pytorch".to_string(),
         }
     }
@@ -1203,7 +1205,7 @@ mod tests {
 
         let resolved_model_ref = ModelRefV2 {
             contract_version: 2,
-            engine: "onnxruntime".to_string(),
+            engine: "onnx-runtime".to_string(),
             model_id: "kitten-tts".to_string(),
             model_path: "/tmp/model.onnx".to_string(),
             task_type_primary: "text-to-audio".to_string(),
@@ -1212,7 +1214,7 @@ mod tests {
                 profile_id: "profile-onnx".to_string(),
                 profile_version: 1,
                 profile_hash: Some("hash".to_string()),
-                backend_key: Some("onnxruntime".to_string()),
+                backend_key: Some("onnx-runtime".to_string()),
                 platform_selector: Some("linux-x86_64".to_string()),
                 environment_kind: Some("python".to_string()),
                 env_id: Some("venv:onnx".to_string()),
@@ -1226,7 +1228,7 @@ mod tests {
 
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
             requirements: ModelDependencyRequirements {
-                backend_key: Some("onnxruntime".to_string()),
+                backend_key: Some("onnx-runtime".to_string()),
                 ..make_requirements(DependencyValidationState::Resolved)
             },
             status: make_status(DependencyState::Ready, None),
@@ -1264,7 +1266,7 @@ mod tests {
 
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
             requirements: ModelDependencyRequirements {
-                backend_key: Some("onnxruntime".to_string()),
+                backend_key: Some("onnx-runtime".to_string()),
                 ..make_requirements(DependencyValidationState::Resolved)
             },
             status: make_status(DependencyState::Ready, None),
@@ -1332,7 +1334,7 @@ mod tests {
 
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
             requirements: ModelDependencyRequirements {
-                backend_key: Some("onnxruntime".to_string()),
+                backend_key: Some("onnx-runtime".to_string()),
                 ..make_requirements(DependencyValidationState::Resolved)
             },
             status: make_status(DependencyState::Ready, None),
@@ -1445,7 +1447,7 @@ mod tests {
             "/tmp/model",
             &inputs,
         );
-        assert_eq!(request.backend_key.as_deref(), Some("onnxruntime"));
+        assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
     }
 
     #[test]

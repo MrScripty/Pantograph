@@ -152,7 +152,7 @@
       case 'onnx-runtime':
       case 'onnxruntime':
       case 'onnx_runtime':
-        return 'onnxruntime';
+        return 'onnx-runtime';
       case 'torch':
       case 'pytorch':
         return 'pytorch';
@@ -262,7 +262,7 @@
 
   function inferNodeType(): string {
     const backend = inferBackendKey();
-    if (backend === 'onnxruntime') {
+    if (backend === 'onnx-runtime') {
       return 'onnx-inference';
     }
     if (taskTypePrimary === 'text-to-audio') {

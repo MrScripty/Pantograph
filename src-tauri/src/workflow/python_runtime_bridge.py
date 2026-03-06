@@ -217,7 +217,7 @@ def _run_onnx(
         "speed_used": result.get("speed_used"),
     }
     outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
-        "onnxruntime", model_path, "text-to-audio"
+        "onnx-runtime", model_path, "text-to-audio"
     )
     return outputs
 
