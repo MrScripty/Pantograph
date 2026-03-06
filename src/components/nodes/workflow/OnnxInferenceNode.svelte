@@ -94,7 +94,9 @@
             <path d="M5 4h6v2H7v4H5V4zm8 0h6v6h-2V6h-4V4zM5 14h2v4h4v2H5v-6zm12 0h2v6h-6v-2h4v-4zM9 9h6v6H9V9z" />
           </svg>
         </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'ONNX Inference'}</span>
+        <span class="text-sm font-medium text-neutral-200">
+          {data.label || 'ONNX Runtime Inference'}
+        </span>
       </div>
     {/snippet}
 

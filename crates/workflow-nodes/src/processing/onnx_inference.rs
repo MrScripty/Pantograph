@@ -48,7 +48,7 @@ impl TaskDescriptor for OnnxInferenceTask {
         TaskMetadata {
             node_type: "onnx-inference".to_string(),
             category: NodeCategory::Processing,
-            label: "ONNX Inference".to_string(),
+            label: "ONNX Runtime Inference (Python Sidecar)".to_string(),
             description: "Run ONNX model inference (including text-to-audio pipelines)".to_string(),
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
@@ -69,7 +69,7 @@ impl TaskDescriptor for OnnxInferenceTask {
                 PortMetadata::optional(PORT_DURATION_SECONDS, "Duration", PortDataType::Number),
                 PortMetadata::optional(PORT_SAMPLE_RATE, "Sample Rate", PortDataType::Number),
                 PortMetadata::optional(PORT_MODEL_REF, "Model Reference", PortDataType::Json),
-                PortMetadata::optional(PORT_STREAM, "Stream", PortDataType::Stream),
+                PortMetadata::optional(PORT_STREAM, "Audio Stream", PortDataType::AudioStream),
             ],
             execution_mode: ExecutionMode::Stream,
         }

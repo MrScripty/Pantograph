@@ -18,6 +18,8 @@ pub enum PortDataType {
     Image,
     /// Audio data for audio models
     Audio,
+    /// Streaming audio chunk data
+    AudioStream,
     /// Svelte component path or content
     Component,
     /// Streaming data (emits chunks over time)
@@ -65,6 +67,14 @@ impl PortDataType {
             (self, target),
             (PortDataType::String, PortDataType::Prompt)
                 | (PortDataType::Prompt, PortDataType::String)
+        ) {
+            return true;
+        }
+        // AudioStream remains compatible with legacy Stream ports
+        if matches!(
+            (self, target),
+            (PortDataType::AudioStream, PortDataType::Stream)
+                | (PortDataType::Stream, PortDataType::AudioStream)
         ) {
             return true;
         }
@@ -485,6 +495,12 @@ mod tests {
     fn test_type_compatibility_string_prompt() {
         assert!(PortDataType::String.is_compatible_with(&PortDataType::Prompt));
         assert!(PortDataType::Prompt.is_compatible_with(&PortDataType::String));
+    }
+
+    #[test]
+    fn test_type_compatibility_audio_stream_legacy_stream() {
+        assert!(PortDataType::AudioStream.is_compatible_with(&PortDataType::Stream));
+        assert!(PortDataType::Stream.is_compatible_with(&PortDataType::AudioStream));
     }
 
     #[test]

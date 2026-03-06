@@ -28,6 +28,8 @@ pub enum PortDataType {
     Image,
     /// Audio data
     Audio,
+    /// Streaming audio chunk data
+    AudioStream,
     /// UI component reference
     Component,
     /// Streaming data
@@ -75,6 +77,14 @@ impl PortDataType {
             return true;
         }
         if matches!(self, PortDataType::String) && matches!(other, PortDataType::Prompt) {
+            return true;
+        }
+        // AudioStream remains compatible with legacy Stream ports
+        if matches!(
+            (self, other),
+            (PortDataType::AudioStream, PortDataType::Stream)
+                | (PortDataType::Stream, PortDataType::AudioStream)
+        ) {
             return true;
         }
 
@@ -336,6 +346,8 @@ mod tests {
         assert!(PortDataType::String.is_compatible_with(&PortDataType::Any));
         assert!(PortDataType::Prompt.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::String.is_compatible_with(&PortDataType::Prompt));
+        assert!(PortDataType::AudioStream.is_compatible_with(&PortDataType::Stream));
+        assert!(PortDataType::Stream.is_compatible_with(&PortDataType::AudioStream));
         assert!(!PortDataType::Number.is_compatible_with(&PortDataType::String));
     }
 

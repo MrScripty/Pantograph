@@ -11,6 +11,7 @@ export const PORT_TYPE_COLORS: Record<PortDataType, string> = {
   boolean: '#ef4444',
   image: '#8b5cf6',
   audio: '#f472b6',
+  audio_stream: '#0ea5e9',
   stream: '#06b6d4',
   json: '#f97316',
   component: '#ec4899',

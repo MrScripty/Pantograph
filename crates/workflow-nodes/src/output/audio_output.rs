@@ -58,7 +58,11 @@ impl TaskDescriptor for AudioOutputTask {
             description: "Plays audio output from the workflow".to_string(),
             inputs: vec![
                 PortMetadata::optional(Self::PORT_AUDIO, "Audio", PortDataType::Audio),
-                PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
+                PortMetadata::optional(
+                    Self::PORT_STREAM,
+                    "Audio Stream",
+                    PortDataType::AudioStream,
+                ),
             ],
             outputs: vec![PortMetadata::optional(
                 Self::PORT_AUDIO,

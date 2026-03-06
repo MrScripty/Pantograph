@@ -82,6 +82,7 @@ fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
         node_engine::PortDataType::String => PortDataType::String,
         node_engine::PortDataType::Image => PortDataType::Image,
         node_engine::PortDataType::Audio => PortDataType::Audio,
+        node_engine::PortDataType::AudioStream => PortDataType::AudioStream,
         node_engine::PortDataType::Component => PortDataType::Component,
         node_engine::PortDataType::Stream => PortDataType::Stream,
         node_engine::PortDataType::Prompt => PortDataType::Prompt,

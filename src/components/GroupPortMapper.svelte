@@ -119,6 +119,7 @@
     boolean: 'bg-red-500',
     image: 'bg-violet-500',
     audio: 'bg-pink-500',
+    audio_stream: 'bg-sky-500',
     stream: 'bg-cyan-500',
     json: 'bg-orange-500',
     component: 'bg-pink-600',

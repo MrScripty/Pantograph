@@ -34,6 +34,7 @@
     boolean: '#f87171',
     image: '#a78bfa',
     audio: '#f9a8d4',
+    audio_stream: '#38bdf8',
     stream: '#22d3ee',
     json: '#fb923c',
     component: '#f472b6',
