@@ -48,6 +48,7 @@ export const removeNode = workflowStores.removeNode;
 export const updateNodePosition = workflowStores.updateNodePosition;
 export const updateNodeData = workflowStores.updateNodeData;
 export const updateNodeRuntimeData = workflowStores.updateNodeRuntimeData;
+export const clearNodeRuntimeData = workflowStores.clearNodeRuntimeData;
 export const getNodeById = workflowStores.getNodeById;
 export const isNodeGroup = workflowStores.isNodeGroup;
 export const getConnectedNodes = workflowStores.getConnectedNodes;

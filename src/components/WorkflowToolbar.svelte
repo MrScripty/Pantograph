@@ -11,6 +11,7 @@
     nodeDefinitions,
     edges,
     updateNodeRuntimeData,
+    clearNodeRuntimeData,
     appendStreamContent,
     setStreamContent,
     clearStreamContent,
@@ -33,6 +34,7 @@
 
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
+  const AUDIO_RUNTIME_KEYS = ['audio', 'audio_mime', 'stream', 'stream_sequence', 'stream_is_final'];
 
   function normalizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim().length > 0) {
@@ -103,6 +105,7 @@
 
     workflowError = null;
     isExecuting.set(true);
+    clearNodeRuntimeData(AUDIO_RUNTIME_KEYS);
     resetExecutionStates();
     clearStreamContent();
 

@@ -43,6 +43,7 @@ export interface WorkflowStores {
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
   updateNodeRuntimeData: (nodeId: string, data: Record<string, unknown>) => void;
+  clearNodeRuntimeData: (keys: string[]) => void;
   getNodeById: (nodeId: string) => Node | undefined;
   isNodeGroup: (nodeId: string) => boolean;
   getConnectedNodes: (nodeId: string) => { inputs: Node[]; outputs: Node[] };
@@ -204,6 +205,26 @@ export function createWorkflowStores(
       n.map((node) =>
         node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
       )
+    );
+  }
+
+  function clearNodeRuntimeData(keys: string[]) {
+    if (keys.length === 0) return;
+
+    const runtimeKeys = new Set(keys);
+    nodes.update((n) =>
+      n.map((node) => {
+        let changed = false;
+        const nextData = { ...node.data };
+
+        for (const key of runtimeKeys) {
+          if (!(key in nextData)) continue;
+          delete nextData[key];
+          changed = true;
+        }
+
+        return changed ? { ...node, data: nextData } : node;
+      })
     );
   }
 
@@ -755,6 +776,7 @@ export function createWorkflowStores(
     workflowGraph, nodeDefinitionsByCategory,
     // Node actions
     addNode, removeNode, updateNodePosition, updateNodeData, updateNodeRuntimeData,
+    clearNodeRuntimeData,
     getNodeById, isNodeGroup: isNodeGroupFn, getConnectedNodes, getNodesBounds,
     // Edge actions
     addEdge: addEdgeFn, removeEdge: removeEdgeFn, syncEdgesFromBackend,
