@@ -191,6 +191,37 @@ impl TauriTaskExecutor {
         out
     }
 
+    fn apply_inference_setting_defaults(inputs: &mut HashMap<String, serde_json::Value>) {
+        let schema = inputs
+            .get("inference_settings")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        for parameter in &schema {
+            let Some(key) = parameter.get("key").and_then(|value| value.as_str()) else {
+                continue;
+            };
+            let key = key.trim();
+            if key.is_empty() {
+                continue;
+            }
+
+            let has_non_null_value = inputs.get(key).is_some_and(|value| !value.is_null());
+            if has_non_null_value {
+                continue;
+            }
+
+            let Some(default_value) = parameter.get("default") else {
+                continue;
+            };
+            if default_value.is_null() {
+                continue;
+            }
+            inputs.insert(key.to_string(), default_value.clone());
+        }
+    }
+
     fn read_optional_input_string(
         inputs: &HashMap<String, serde_json::Value>,
         key: &str,
@@ -831,6 +862,7 @@ impl TauriTaskExecutor {
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         let mut runtime_inputs = inputs.clone();
+        Self::apply_inference_setting_defaults(&mut runtime_inputs);
         if let Some(model_ref) = self
             .enforce_dependency_preflight(node_type, inputs, extensions)
             .await?
@@ -1221,6 +1253,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn onnx_nodes_apply_inference_setting_defaults_before_python_execution() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests: requests.clone(),
+            response: adapter_response,
+        });
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: ModelDependencyRequirements {
+                backend_key: Some("onnxruntime".to_string()),
+                ..make_requirements(DependencyValidationState::Resolved)
+            },
+            status: make_status(DependencyState::Ready, None),
+            model_ref: None,
+        });
+        let (executor, extensions) = test_executor(adapter, resolver);
+
+        let mut inputs = HashMap::new();
+        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model.onnx"));
+        inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "voice", "default": "expr-voice-5-m"},
+                {"key": "speed", "default": 0.9},
+                {"key": "clean_text", "default": true},
+                {"key": "sample_rate", "default": 24000}
+            ]),
+        );
+
+        let _ = executor
+            .execute_task("onnx-inference-defaults", inputs, &Context::new(), &extensions)
+            .await
+            .expect("onnx execution with inference defaults should succeed");
+
+        let recorded = requests.lock().expect("recording lock");
+        assert_eq!(recorded.len(), 1);
+        let request = &recorded[0];
+        assert_eq!(request.inputs.get("voice"), Some(&serde_json::json!("expr-voice-5-m")));
+        assert_eq!(request.inputs.get("speed"), Some(&serde_json::json!(0.9)));
+        assert_eq!(request.inputs.get("clean_text"), Some(&serde_json::json!(true)));
+        assert_eq!(request.inputs.get("sample_rate"), Some(&serde_json::json!(24000)));
+    }
+
+    #[tokio::test]
     async fn python_nodes_emit_stream_events_when_event_sink_extension_exists() {
         let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
         let mut adapter_response = HashMap::new();
@@ -1303,6 +1382,25 @@ mod tests {
         assert_eq!(stream_events[1].3["audio_base64"], "chunk-2");
         assert_eq!(stream_events[1].3["sequence"], 1);
         assert_eq!(stream_events[1].3["is_final"], true);
+    }
+
+    #[test]
+    fn apply_inference_setting_defaults_preserves_explicit_values() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "voice", "default": "expr-voice-5-m"},
+                {"key": "speed", "default": 1.0}
+            ]),
+        );
+        inputs.insert("voice".to_string(), serde_json::json!("custom-voice"));
+        inputs.insert("speed".to_string(), serde_json::Value::Null);
+
+        TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
+
+        assert_eq!(inputs.get("voice"), Some(&serde_json::json!("custom-voice")));
+        assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.0)));
     }
 
     #[test]
