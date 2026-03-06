@@ -13,10 +13,6 @@ use node_engine::{
 
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_PROMPT: &str = "prompt";
-const PORT_VOICE: &str = "voice";
-const PORT_LANGUAGE: &str = "language";
-const PORT_SPEED: &str = "speed";
-const PORT_SEED: &str = "seed";
 const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
 const PORT_ENVIRONMENT_REF: &str = "environment_ref";
 const PORT_AUDIO: &str = "audio";
@@ -53,10 +49,6 @@ impl TaskDescriptor for OnnxInferenceTask {
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_PROMPT, "Prompt", PortDataType::Prompt),
-                PortMetadata::optional(PORT_VOICE, "Voice", PortDataType::String),
-                PortMetadata::optional(PORT_LANGUAGE, "Language", PortDataType::String),
-                PortMetadata::optional(PORT_SPEED, "Speed", PortDataType::Number),
-                PortMetadata::optional(PORT_SEED, "Seed", PortDataType::Number),
                 PortMetadata::optional(
                     PORT_INFERENCE_SETTINGS,
                     "Inference Settings",
@@ -105,15 +97,10 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = OnnxInferenceTask::descriptor();
 
-        // 8 inputs: model_path, prompt, voice, language, speed, seed,
-        // inference_settings, environment_ref
-        assert_eq!(meta.inputs.len(), 8);
+        // 4 inputs: model_path, prompt, inference_settings, environment_ref
+        assert_eq!(meta.inputs.len(), 4);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
-        assert!(meta.inputs.iter().any(|p| p.id == "voice"));
-        assert!(meta.inputs.iter().any(|p| p.id == "language"));
-        assert!(meta.inputs.iter().any(|p| p.id == "speed"));
-        assert!(meta.inputs.iter().any(|p| p.id == "seed"));
         assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
         assert!(meta.inputs.iter().any(|p| p.id == "environment_ref"));
 
