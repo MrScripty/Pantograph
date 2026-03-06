@@ -6,11 +6,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 const ENV_DEFAULT_PYTHON_EXECUTABLE: &str = "PANTOGRAPH_PYTHON_EXECUTABLE";
@@ -29,6 +29,9 @@ pub struct PythonNodeExecutionRequest {
     pub env_ids: Vec<String>,
 }
 
+/// Callback invoked for each streamed python-sidecar chunk.
+pub type PythonStreamHandler = Arc<dyn Fn(serde_json::Value) + Send + Sync>;
+
 /// Host adapter interface for Python-backed node execution.
 #[async_trait]
 pub trait PythonRuntimeAdapter: Send + Sync {
@@ -36,6 +39,15 @@ pub trait PythonRuntimeAdapter: Send + Sync {
         &self,
         request: PythonNodeExecutionRequest,
     ) -> Result<HashMap<String, serde_json::Value>, String>;
+
+    async fn execute_node_with_stream(
+        &self,
+        request: PythonNodeExecutionRequest,
+        on_stream: Option<PythonStreamHandler>,
+    ) -> Result<HashMap<String, serde_json::Value>, String> {
+        let _ = on_stream;
+        self.execute_node(request).await
+    }
 }
 
 /// Default adapter used until a process-based runtime is configured.
@@ -339,6 +351,14 @@ impl ProcessPythonRuntimeAdapter {
         serde_json::from_str::<BridgeResponse>(stdout)
             .map_err(|err| format!("Failed to parse python runtime response: {}", err))
     }
+
+    fn parse_stream_chunk_line(line: &str) -> Option<serde_json::Value> {
+        let parsed: serde_json::Value = serde_json::from_str(line).ok()?;
+        if parsed.get("event").and_then(|v| v.as_str()) != Some("stream") {
+            return None;
+        }
+        parsed.get("chunk").cloned()
+    }
 }
 
 /// Resolve the python executable used for dependency checks/installs for env_id scopes.
@@ -351,6 +371,14 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
     async fn execute_node(
         &self,
         request: PythonNodeExecutionRequest,
+    ) -> Result<HashMap<String, serde_json::Value>, String> {
+        self.execute_node_with_stream(request, None).await
+    }
+
+    async fn execute_node_with_stream(
+        &self,
+        request: PythonNodeExecutionRequest,
+        on_stream: Option<PythonStreamHandler>,
     ) -> Result<HashMap<String, serde_json::Value>, String> {
         let python_executable = Self::resolve_python_executable(&request.env_ids)?;
         let worker_paths = Self::resolve_worker_paths()?;
@@ -388,7 +416,78 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
             })?;
         }
 
-        let output = child.wait_with_output().await.map_err(|err| {
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Failed to capture python runtime stdout".to_string())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "Failed to capture python runtime stderr".to_string())?;
+
+        let mut stdout_reader = BufReader::new(stdout).lines();
+        let mut stderr_reader = BufReader::new(stderr).lines();
+        let mut stdout_lines = Vec::<String>::new();
+        let mut stderr_lines = Vec::<String>::new();
+        let mut parsed_response: Option<BridgeResponse> = None;
+        let mut stdout_done = false;
+        let mut stderr_done = false;
+
+        while !stdout_done || !stderr_done {
+            tokio::select! {
+                line_result = stdout_reader.next_line(), if !stdout_done => {
+                    let line_opt = line_result.map_err(|err| {
+                        format!(
+                            "Failed to read python runtime stdout ('{}'): {}",
+                            python_executable.display(),
+                            err
+                        )
+                    })?;
+                    match line_opt {
+                        Some(line) => {
+                            let trimmed = line.trim().to_string();
+                            stdout_lines.push(line);
+                            if trimmed.is_empty() {
+                                continue;
+                            }
+
+                            if let Some(handler) = on_stream.as_ref() {
+                                if let Some(chunk) = Self::parse_stream_chunk_line(&trimmed) {
+                                    handler(chunk);
+                                    continue;
+                                }
+                            }
+
+                            if parsed_response.is_none() {
+                                if let Ok(response) =
+                                    serde_json::from_str::<BridgeResponse>(&trimmed)
+                                {
+                                    parsed_response = Some(response);
+                                }
+                            }
+                        }
+                        None => {
+                            stdout_done = true;
+                        }
+                    }
+                }
+                line_result = stderr_reader.next_line(), if !stderr_done => {
+                    let line_opt = line_result.map_err(|err| {
+                        format!(
+                            "Failed to read python runtime stderr ('{}'): {}",
+                            python_executable.display(),
+                            err
+                        )
+                    })?;
+                    match line_opt {
+                        Some(line) => stderr_lines.push(line),
+                        None => stderr_done = true,
+                    }
+                }
+            }
+        }
+
+        let status = child.wait().await.map_err(|err| {
             format!(
                 "Failed to wait for python runtime adapter process ('{}'): {}",
                 python_executable.display(),
@@ -396,10 +495,13 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
             )
         })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        if !output.status.success() {
-            if let Ok(response) = Self::parse_bridge_response(&stdout) {
+        let stdout = stdout_lines.join("\n");
+        let stderr = stderr_lines.join("\n");
+
+        if !status.success() {
+            if let Some(response) = parsed_response
+                .or_else(|| Self::parse_bridge_response(&stdout).ok())
+            {
                 let mut details = response
                     .error
                     .unwrap_or_else(|| "Unknown python runtime bridge error".to_string());
@@ -410,7 +512,7 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
                 }
                 return Err(format!(
                     "Python runtime adapter process exited with status {}. {}",
-                    output.status, details
+                    status, details
                 ));
             }
 
@@ -418,7 +520,7 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
             let stdout_trimmed = stdout.trim();
             return Err(format!(
                 "Python runtime adapter process exited with status {}. {}",
-                output.status,
+                status,
                 if !stderr_trimmed.is_empty() {
                     format!("Stderr: {}", stderr_trimmed)
                 } else if !stdout_trimmed.is_empty() {
@@ -429,7 +531,10 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
             ));
         }
 
-        let response = Self::parse_bridge_response(&stdout)?;
+        let response = match parsed_response {
+            Some(response) => response,
+            None => Self::parse_bridge_response(&stdout)?,
+        };
         if response.ok {
             return Ok(response.outputs.unwrap_or_default());
         }
@@ -561,5 +666,14 @@ mod tests {
         assert!(PathBuf::from(workers.torch_worker).exists());
         assert!(PathBuf::from(workers.audio_worker).exists());
         assert!(PathBuf::from(workers.onnx_worker).exists());
+    }
+
+    #[test]
+    fn parse_stream_chunk_line_extracts_chunk_payload() {
+        let line = r#"{"event":"stream","port":"stream","chunk":{"type":"audio_chunk","audio_base64":"abc"}}"#;
+        let parsed = ProcessPythonRuntimeAdapter::parse_stream_chunk_line(line)
+            .expect("stream event should parse");
+        assert_eq!(parsed["type"], "audio_chunk");
+        assert_eq!(parsed["audio_base64"], "abc");
     }
 }

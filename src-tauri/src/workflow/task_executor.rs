@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -20,6 +21,7 @@ use tokio::sync::RwLock;
 use crate::agent::rag::RagManager;
 use crate::workflow::python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
+    PythonStreamHandler,
 };
 
 /// Tauri-specific task executor that handles only host-dependent nodes.
@@ -847,12 +849,31 @@ impl TauriTaskExecutor {
             inputs: runtime_inputs.clone(),
             env_ids: Self::collect_runtime_env_ids(&runtime_inputs),
         };
+
+        let streamed_any = Arc::new(AtomicBool::new(false));
+        let stream_handler: Option<PythonStreamHandler> =
+            Self::resolve_stream_target(extensions).map(|(sink, execution_id)| {
+                let streamed_any = streamed_any.clone();
+                let task_id = task_id.to_string();
+                Arc::new(move |chunk: serde_json::Value| {
+                    streamed_any.store(true, Ordering::Relaxed);
+                    let _ = sink.send(WorkflowEvent::task_stream(
+                        &task_id,
+                        &execution_id,
+                        "stream",
+                        chunk,
+                    ));
+                }) as PythonStreamHandler
+            });
+
         let outputs = self
             .python_runtime
-            .execute_node(request)
+            .execute_node_with_stream(request, stream_handler)
             .await
             .map_err(NodeEngineError::ExecutionFailed)?;
-        Self::emit_python_stream_events(task_id, &outputs, extensions);
+        if !streamed_any.load(Ordering::Relaxed) {
+            Self::emit_python_stream_events(task_id, &outputs, extensions);
+        }
         Ok(outputs)
     }
 

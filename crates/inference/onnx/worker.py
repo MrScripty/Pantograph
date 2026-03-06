@@ -12,7 +12,7 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 import numpy as np
 import soundfile as sf
@@ -130,7 +130,10 @@ def _iter_chunks(
     yield tts_model.generate(text, voice=voice, speed=speed, clean_text=clean_text)
 
 
-def generate_audio(inputs: Dict[str, Any]) -> Dict[str, Any]:
+def generate_audio(
+    inputs: Dict[str, Any],
+    emit_stream: Callable[[Dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
     model_path = inputs.get("model_path")
     if not isinstance(model_path, str) or not model_path.strip():
         raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
@@ -160,6 +163,12 @@ def generate_audio(inputs: Dict[str, Any]) -> Dict[str, Any]:
                 "sample_rate": sample_rate,
             }
         )
+        if callable(emit_stream):
+            try:
+                emit_stream(chunk_payloads[-1])
+            except Exception:
+                # Streaming callbacks are best-effort and must not break inference.
+                pass
 
     if not chunk_audio:
         raise RuntimeError("ONNX worker generated no audio chunks")

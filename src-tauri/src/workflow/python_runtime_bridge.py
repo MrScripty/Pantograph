@@ -14,7 +14,7 @@ import json
 import os
 import pathlib
 import traceback
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 
 def _load_module(module_name: str, module_path: str):
@@ -189,7 +189,11 @@ def _run_audio(inputs: Dict[str, Any], audio_worker_path: str) -> Dict[str, Any]
     return outputs
 
 
-def _run_onnx(inputs: Dict[str, Any], onnx_worker_path: str) -> Dict[str, Any]:
+def _run_onnx(
+    inputs: Dict[str, Any],
+    onnx_worker_path: str,
+    emit_stream: Callable[[Dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
     worker = _load_module("pantograph_onnx_worker_process", onnx_worker_path)
 
     model_path = inputs.get("model_path")
@@ -200,7 +204,7 @@ def _run_onnx(inputs: Dict[str, Any], onnx_worker_path: str) -> Dict[str, Any]:
     if not isinstance(inputs.get("prompt"), str) or not str(inputs.get("prompt")).strip():
         raise RuntimeError("Missing prompt input")
 
-    result = worker.generate_audio(inputs)
+    result = worker.generate_audio(inputs, emit_stream=emit_stream)
     if not isinstance(result, dict):
         raise RuntimeError("ONNX worker returned unexpected payload shape")
 
@@ -225,6 +229,16 @@ def _ensure_worker_path(path: Any, label: str) -> str:
     if not resolved.exists():
         raise RuntimeError(f"Worker path for {label} does not exist: {resolved}")
     return str(resolved)
+
+
+def _emit_stream_event(port: str, chunk: Dict[str, Any]) -> None:
+    print(
+        json.dumps(
+            {"event": "stream", "port": port, "chunk": chunk},
+            separators=(",", ":"),
+        ),
+        flush=True,
+    )
 
 
 def _main() -> int:
@@ -257,7 +271,11 @@ def _main() -> int:
         elif node_type == "audio-generation":
             outputs = _run_audio(inputs, audio_worker)
         elif node_type == "onnx-inference":
-            outputs = _run_onnx(inputs, onnx_worker)
+            outputs = _run_onnx(
+                inputs,
+                onnx_worker,
+                emit_stream=lambda chunk: _emit_stream_event("stream", chunk),
+            )
         else:
             raise RuntimeError(f"Unsupported python runtime node_type '{node_type}'")
 
