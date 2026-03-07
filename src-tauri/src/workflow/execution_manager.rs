@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use node_engine::{EventSink, UndoStack, WorkflowExecutor, WorkflowGraph};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 /// State for a single workflow execution
 pub struct ExecutionState {
@@ -23,6 +23,8 @@ pub struct ExecutionState {
     /// When this execution was last accessed
     pub last_accessed: Instant,
 }
+
+pub type ExecutionHandle = Arc<Mutex<ExecutionState>>;
 
 impl ExecutionState {
     /// Create a new execution state
@@ -90,7 +92,7 @@ impl ExecutionState {
 /// Manager for all workflow executions
 pub struct ExecutionManager {
     /// Active executions keyed by execution ID
-    executions: RwLock<HashMap<String, ExecutionState>>,
+    executions: RwLock<HashMap<String, ExecutionHandle>>,
     /// Timeout for cleaning up stale executions
     stale_timeout: Duration,
 }
@@ -121,7 +123,7 @@ impl ExecutionManager {
     ) -> String {
         let execution_id = execution_id.into();
         let executor = WorkflowExecutor::new(&execution_id, graph, event_sink);
-        let state = ExecutionState::new(executor);
+        let state = Arc::new(Mutex::new(ExecutionState::new(executor)));
 
         let mut executions = self.executions.write().await;
         executions.insert(execution_id.clone(), state);
@@ -129,22 +131,18 @@ impl ExecutionManager {
         execution_id
     }
 
-    /// Get direct access to the executions map for async operations
-    pub async fn executions(
-        &self,
-    ) -> tokio::sync::RwLockWriteGuard<'_, HashMap<String, ExecutionState>> {
-        self.executions.write().await
+    /// Get an execution handle by ID.
+    pub async fn get_execution_handle(&self, execution_id: &str) -> Option<ExecutionHandle> {
+        let executions = self.executions.read().await;
+        executions.get(execution_id).cloned()
     }
 
     /// Get an execution by ID, updating its last accessed time
     pub async fn get_execution(&self, execution_id: &str) -> Option<()> {
-        let mut executions = self.executions.write().await;
-        if let Some(state) = executions.get_mut(execution_id) {
-            state.touch();
-            Some(())
-        } else {
-            None
-        }
+        let handle = self.get_execution_handle(execution_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        Some(())
     }
 
     /// Execute a synchronous function with the execution state
@@ -154,31 +152,37 @@ impl ExecutionManager {
     where
         F: FnOnce(&mut ExecutionState) -> R,
     {
-        let mut executions = self.executions.write().await;
-        if let Some(state) = executions.get_mut(execution_id) {
-            state.touch();
-            Some(f(state))
-        } else {
-            None
-        }
+        let handle = self.get_execution_handle(execution_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        Some(f(&mut state))
     }
 
     /// Remove an execution by ID
-    pub async fn remove_execution(&self, execution_id: &str) -> Option<ExecutionState> {
+    pub async fn remove_execution(&self, execution_id: &str) -> Option<ExecutionHandle> {
         let mut executions = self.executions.write().await;
         executions.remove(execution_id)
     }
 
     /// Clean up stale executions
     pub async fn cleanup_stale(&self) -> usize {
-        let mut executions = self.executions.write().await;
-        let stale_ids: Vec<String> = executions
-            .iter()
-            .filter(|(_, state)| state.is_stale(self.stale_timeout))
-            .map(|(id, _)| id.clone())
-            .collect();
+        let handles: Vec<(String, ExecutionHandle)> = {
+            let executions = self.executions.read().await;
+            executions
+                .iter()
+                .map(|(id, handle)| (id.clone(), handle.clone()))
+                .collect()
+        };
+
+        let mut stale_ids = Vec::new();
+        for (id, handle) in handles {
+            if handle.lock().await.is_stale(self.stale_timeout) {
+                stale_ids.push(id);
+            }
+        }
 
         let count = stale_ids.len();
+        let mut executions = self.executions.write().await;
         for id in stale_ids {
             executions.remove(&id);
             log::debug!("Cleaned up stale execution: {}", id);
@@ -199,8 +203,9 @@ impl ExecutionManager {
 
     /// Get the undo/redo state for an execution
     pub async fn get_undo_redo_state(&self, execution_id: &str) -> Option<UndoRedoState> {
-        let executions = self.executions.read().await;
-        executions.get(execution_id).map(|state| UndoRedoState {
+        let handle = self.get_execution_handle(execution_id).await?;
+        let state = handle.lock().await;
+        Some(UndoRedoState {
             can_undo: state.can_undo(),
             can_redo: state.can_redo(),
             undo_count: state.undo_stack.len(),
@@ -294,5 +299,32 @@ mod tests {
             .await;
 
         assert_eq!(result, Some(false)); // No undo history yet
+    }
+
+    #[tokio::test]
+    async fn test_execution_handle_lock_does_not_block_other_handle_lookups() {
+        let manager = ExecutionManager::new();
+        let graph = make_test_graph();
+        let event_sink = Arc::new(NullEventSink);
+
+        manager
+            .create_execution("exec-1", graph.clone(), event_sink.clone())
+            .await;
+        manager.create_execution("exec-2", graph, event_sink).await;
+
+        let handle = manager
+            .get_execution_handle("exec-1")
+            .await
+            .expect("execution handle should exist");
+        let _locked = handle.lock().await;
+
+        let lookup = tokio::time::timeout(
+            Duration::from_millis(50),
+            manager.get_execution_handle("exec-2"),
+        )
+        .await;
+
+        assert!(lookup.is_ok());
+        assert!(lookup.expect("lookup should complete").is_some());
     }
 }

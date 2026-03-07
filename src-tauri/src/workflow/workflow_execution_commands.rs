@@ -16,7 +16,7 @@ use super::connection_intent::{
 };
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
-use super::execution_manager::{SharedExecutionManager, UndoRedoState};
+use super::execution_manager::{ExecutionHandle, SharedExecutionManager, UndoRedoState};
 use super::task_executor::TauriTaskExecutor;
 use super::types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
@@ -425,6 +425,16 @@ async fn restore_runtime_if_needed(
     }
 }
 
+async fn get_execution_handle(
+    execution_manager: &State<'_, SharedExecutionManager>,
+    execution_id: &str,
+) -> Result<ExecutionHandle, String> {
+    execution_manager
+        .get_execution_handle(execution_id)
+        .await
+        .ok_or_else(|| format!("Execution '{}' not found", execution_id))
+}
+
 pub async fn execute_workflow_v2(
     _app: AppHandle,
     graph: WorkflowGraph,
@@ -487,10 +497,8 @@ pub async fn execute_workflow_v2(
         .collect();
 
     let workflow_result = {
-        let mut executions = execution_manager.executions().await;
-        let state = executions
-            .get_mut(&execution_id)
-            .ok_or_else(|| "Execution not found".to_string())?;
+        let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+        let mut state = execution.lock().await;
         state.touch();
         apply_runtime_extensions(
             &mut state.executor,
@@ -555,10 +563,8 @@ pub async fn undo_workflow(
     execution_id: String,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<WorkflowGraph, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     match state.undo().await {
@@ -572,10 +578,8 @@ pub async fn redo_workflow(
     execution_id: String,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<WorkflowGraph, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     match state.redo().await {
@@ -591,10 +595,8 @@ pub async fn update_node_data(
     data: serde_json::Value,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<(), String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let _ = state.push_undo_snapshot().await;
@@ -613,10 +615,8 @@ pub async fn add_node_to_execution(
 ) -> Result<(), String> {
     let ne_node = convert_node_to_node_engine(&node);
 
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let _ = state.push_undo_snapshot().await;
@@ -633,10 +633,8 @@ pub async fn add_edge_to_execution(
 ) -> Result<WorkflowGraph, String> {
     let ne_edge = convert_edge_to_node_engine(&edge);
 
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let _ = state.push_undo_snapshot().await;
@@ -654,10 +652,8 @@ pub async fn get_connection_candidates(
     graph_revision: Option<String>,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<ConnectionCandidatesResponse, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let graph = state.executor.get_graph_snapshot().await;
@@ -674,10 +670,8 @@ pub async fn connect_anchors_in_execution(
     graph_revision: String,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<ConnectionCommitResponse, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let current_graph = state.executor.get_graph_snapshot().await;
@@ -731,10 +725,8 @@ pub async fn insert_node_and_connect_in_execution(
     preferred_input_port_id: Option<String>,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<InsertNodeConnectionResponse, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let current_graph = state.executor.get_graph_snapshot().await;
@@ -780,10 +772,8 @@ pub async fn remove_edge_from_execution(
     edge_id: String,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<WorkflowGraph, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let _ = state.push_undo_snapshot().await;
@@ -799,10 +789,8 @@ pub async fn get_execution_graph(
     execution_id: String,
     execution_manager: State<'_, SharedExecutionManager>,
 ) -> Result<WorkflowGraph, String> {
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&execution_id)
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
 
     let graph = state.executor.get_graph_snapshot().await;
@@ -824,8 +812,8 @@ pub async fn create_workflow_session(
         .await;
 
     {
-        let mut executions = execution_manager.executions().await;
-        if let Some(state) = executions.get_mut(&session_id) {
+        if let Some(execution) = execution_manager.get_execution_handle(&session_id).await {
+            let mut state = execution.lock().await;
             let _ = state.push_undo_snapshot().await;
         }
     }
@@ -870,10 +858,8 @@ pub async fn run_workflow_session(
     };
 
     let session_graph = {
-        let mut executions = execution_manager.executions().await;
-        let state = executions
-            .get_mut(&session_id)
-            .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+        let execution = get_execution_handle(&execution_manager, &session_id).await?;
+        let mut state = execution.lock().await;
         state.touch();
         state.executor.get_graph_snapshot().await
     };
@@ -888,10 +874,8 @@ pub async fn run_workflow_session(
     )
     .await?;
 
-    let mut executions = execution_manager.executions().await;
-    let state = executions
-        .get_mut(&session_id)
-        .ok_or_else(|| format!("Session '{}' not found", session_id))?;
+    let execution = get_execution_handle(&execution_manager, &session_id).await?;
+    let mut state = execution.lock().await;
     state.touch();
     apply_runtime_extensions(
         &mut state.executor,
@@ -941,7 +925,6 @@ pub async fn run_workflow_session(
         });
     }
 
-    drop(executions);
     restore_runtime_if_needed(gateway.inner(), restore_config).await;
     workflow_result?;
 
