@@ -24,6 +24,12 @@ import type {
   PortMapping,
   CreateGroupResult,
 } from '@pantograph/svelte-graph';
+import {
+  normalizeConnectionCandidatesResponse,
+  normalizeConnectionCommitResponse,
+  normalizeInsertNodeConnectionResponse,
+  serializeConnectionAnchor,
+} from '../lib/tauriConnectionIntentWire';
 
 export class TauriWorkflowBackend implements WorkflowBackend {
   private channel: Channel<WorkflowEvent> | null = null;
@@ -82,11 +88,15 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     sessionId: string,
     graphRevision?: string,
   ): Promise<ConnectionCandidatesResponse> {
-    return invoke<ConnectionCandidatesResponse>('get_connection_candidates', {
+    const response = await invoke<Parameters<typeof normalizeConnectionCandidatesResponse>[0]>(
+      'get_connection_candidates',
+      {
       executionId: sessionId,
-      sourceAnchor,
+      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
       graphRevision,
-    });
+      }
+    );
+    return normalizeConnectionCandidatesResponse(response) as ConnectionCandidatesResponse;
   }
 
   async connectAnchors(
@@ -95,12 +105,16 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     sessionId: string,
     graphRevision: string,
   ): Promise<ConnectionCommitResponse> {
-    return invoke<ConnectionCommitResponse>('connect_anchors_in_execution', {
+    const response = await invoke<Parameters<typeof normalizeConnectionCommitResponse>[0]>(
+      'connect_anchors_in_execution',
+      {
       executionId: sessionId,
-      sourceAnchor,
-      targetAnchor,
+      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
+      targetAnchor: serializeConnectionAnchor(targetAnchor),
       graphRevision,
-    });
+      }
+    );
+    return normalizeConnectionCommitResponse(response) as ConnectionCommitResponse;
   }
 
   async insertNodeAndConnect(
@@ -111,14 +125,18 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     positionHint: InsertNodePositionHint,
     preferredInputPortId?: string,
   ): Promise<InsertNodeConnectionResponse> {
-    return invoke<InsertNodeConnectionResponse>('insert_node_and_connect_in_execution', {
+    const response = await invoke<Parameters<typeof normalizeInsertNodeConnectionResponse>[0]>(
+      'insert_node_and_connect_in_execution',
+      {
       executionId: sessionId,
-      sourceAnchor,
+      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
       nodeType,
       graphRevision,
       positionHint,
       preferredInputPortId,
-    });
+      }
+    );
+    return normalizeInsertNodeConnectionResponse(response) as InsertNodeConnectionResponse;
   }
 
   async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph> {

@@ -18,6 +18,12 @@ import {
   mockExecuteWorkflow,
   mockValidateConnection,
 } from './mocks';
+import {
+  normalizeConnectionCandidatesResponse,
+  normalizeConnectionCommitResponse,
+  normalizeInsertNodeConnectionResponse,
+  serializeConnectionAnchor,
+} from '../../lib/tauriConnectionIntentWire';
 
 // Set to false to use real Rust backend, true to use frontend mocks
 const USE_MOCKS = false;
@@ -311,11 +317,15 @@ export class WorkflowService {
       };
     }
 
-    return invoke<ConnectionCandidatesResponse>('get_connection_candidates', {
+    const response = await invoke<Parameters<typeof normalizeConnectionCandidatesResponse>[0]>(
+      'get_connection_candidates',
+      {
       executionId: id,
-      sourceAnchor,
+      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
       graphRevision,
-    });
+      }
+    );
+    return normalizeConnectionCandidatesResponse(response);
   }
 
   async connectAnchors(
@@ -340,12 +350,16 @@ export class WorkflowService {
       };
     }
 
-    return invoke<ConnectionCommitResponse>('connect_anchors_in_execution', {
+    const response = await invoke<Parameters<typeof normalizeConnectionCommitResponse>[0]>(
+      'connect_anchors_in_execution',
+      {
       executionId: id,
-      sourceAnchor,
-      targetAnchor,
+      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
+      targetAnchor: serializeConnectionAnchor(targetAnchor),
       graphRevision,
-    });
+      }
+    );
+    return normalizeConnectionCommitResponse(response);
   }
 
   async insertNodeAndConnect(
@@ -372,14 +386,18 @@ export class WorkflowService {
       };
     }
 
-    return invoke<InsertNodeConnectionResponse>('insert_node_and_connect_in_execution', {
+    const response = await invoke<Parameters<typeof normalizeInsertNodeConnectionResponse>[0]>(
+      'insert_node_and_connect_in_execution',
+      {
       executionId: id,
-      sourceAnchor,
+      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
       nodeType,
       graphRevision,
       positionHint,
       preferredInputPortId,
-    });
+      }
+    );
+    return normalizeInsertNodeConnectionResponse(response);
   }
 
   /**
