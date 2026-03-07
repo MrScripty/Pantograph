@@ -190,6 +190,14 @@
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
 
+  // Track previous store references so we only push genuine changes to SvelteFlow.
+  // SvelteFlow enriches node/edge objects with internal metadata (measured, internals).
+  // Blindly reassigning from the store overwrites that metadata and causes xyflow to
+  // re-reconcile, which can drop edges or lose measured dimensions.
+  let _prevNodesRef: Node[] | null = null;
+  let _prevEdgesRef: Edge[] | null = null;
+  let _skipNextNodeSync = false;
+
   // Calculate container bounds from all nodes (represents orchestration node boundary)
   let containerBounds = $derived.by(() => {
     if (nodes.length === 0) return null;
@@ -295,15 +303,18 @@
   }
 
   // Sync store changes to local state based on graph type
-  // Combining into a single effect to ensure proper reactivity tracking
   $effect(() => {
     const graphType = $currentGraphType;
     const graphId = $currentGraphId;
     const archGraph = $architectureAsWorkflowGraph;
-    const workflowNodes = $nodesStore;
-    const workflowEdges = $edgesStore;
+    const storeNodes = $nodesStore;
+    const storeEdges = $edgesStore;
 
-    console.log('[WorkflowGraph] Syncing graph:', { graphType, graphId, workflowNodeCount: workflowNodes.length });
+    console.log('[WorkflowGraph] Syncing graph:', {
+      graphType,
+      graphId,
+      workflowNodeCount: storeNodes.length,
+    });
 
     if (graphType === 'system' && graphId === 'app-architecture') {
       // Load architecture graph
@@ -312,9 +323,20 @@
         edges = archGraph.edges;
       }
     } else {
-      // Load workflow graph from store
-      nodes = workflowNodes;
-      edges = workflowEdges;
+      const nodesChanged = storeNodes !== _prevNodesRef;
+      const edgesChanged = storeEdges !== _prevEdgesRef;
+
+      _prevNodesRef = storeNodes;
+      _prevEdgesRef = storeEdges;
+
+      if (nodesChanged && !_skipNextNodeSync) {
+        nodes = storeNodes;
+      }
+      _skipNextNodeSync = false;
+
+      if (edgesChanged) {
+        edges = storeEdges;
+      }
     }
   });
 
@@ -581,6 +603,9 @@
   }) {
     if (!canEdit) return;
     if (targetNode) {
+      // SvelteFlow already has the correct local position via bind:nodes.
+      // Skip the next store-to-local node sync so we do not discard internals.
+      _skipNextNodeSync = true;
       updateNodePosition(targetNode.id, targetNode.position);
     }
   }
