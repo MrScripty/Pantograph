@@ -82,8 +82,8 @@ mod options_provider {
     pub struct PumaLibOptionsProvider;
 
     /// Extract inference settings from a model record, falling back to computed
-    /// defaults when the stored metadata has no settings (pre-existing models).
-    fn resolve_inference_settings(record: &pumas_library::ModelRecord) -> serde_json::Value {
+    /// defaults when the API-backed settings lookup is unavailable.
+    fn resolve_inference_settings_fallback(record: &pumas_library::ModelRecord) -> serde_json::Value {
         // Try the stored value first
         if let Some(stored) = record.metadata.get("inference_settings") {
             if stored.is_array() && !stored.as_array().map_or(true, |a| a.is_empty()) {
@@ -166,82 +166,85 @@ mod options_provider {
                     .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?
             };
 
-            let options: Vec<PortOption> = records
-                .iter()
-                .map(|m| {
-                    let pipeline_tag = metadata_string(m, &["pipeline_tag", "pipelineTag"]);
-                    let task_type_primary = metadata_string(
-                        m,
-                        &[
-                            "task_type_primary",
-                            "taskTypePrimary",
-                            "task_type",
-                            "taskType",
-                        ],
-                    )
-                    .or_else(|| pipeline_tag.as_deref().map(pipeline_tag_to_task))
-                    .unwrap_or_else(|| {
-                        if m.model_type.eq_ignore_ascii_case("audio") {
-                            "text-to-audio".to_string()
-                        } else if m.model_type.eq_ignore_ascii_case("diffusion") {
-                            "text-to-image".to_string()
-                        } else {
-                            "text-generation".to_string()
-                        }
-                    });
-                    let dependency_bindings = m
-                        .metadata
-                        .get("dependency_bindings")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Array(Vec::new()));
-                    let recommended_backend =
-                        metadata_string(m, &["recommended_backend", "recommendedBackend"]);
-                    let runtime_engine_hints = m
-                        .metadata
-                        .get("runtime_engine_hints")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Array(Vec::new()));
-                    let requires_custom_code = m
-                        .metadata
-                        .get("requires_custom_code")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Bool(false));
-                    let custom_code_sources = m
-                        .metadata
-                        .get("custom_code_sources")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Array(Vec::new()));
-                    let review_reasons =
-                        m.metadata
-                            .get("review_reasons")
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                metadata_string(m, &["review_reason", "reviewReason"])
-                                    .map(|reason| serde_json::json!([reason]))
-                                    .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
-                            });
-
-                    PortOption {
-                        value: serde_json::json!(m.path),
-                        label: m.official_name.clone(),
-                        description: Some(format!("{} | {}", m.model_type, m.tags.join(", "))),
-                        metadata: Some(serde_json::json!({
-                            "id": m.id,
-                            "model_type": m.model_type,
-                            "cleaned_name": m.cleaned_name,
-                            "pipeline_tag": pipeline_tag,
-                            "task_type_primary": task_type_primary,
-                            "recommended_backend": recommended_backend,
-                            "runtime_engine_hints": runtime_engine_hints,
-                            "requires_custom_code": requires_custom_code,
-                            "custom_code_sources": custom_code_sources,
-                            "dependency_bindings": dependency_bindings,
-                            "review_reasons": review_reasons,
-                            "inference_settings": resolve_inference_settings(m),
-                        })),
+            let mut options = Vec::with_capacity(records.len());
+            for m in &records {
+                let inference_settings = api
+                    .get_inference_settings(&m.id)
+                    .await
+                    .map(|settings| serde_json::to_value(settings).unwrap_or_default())
+                    .unwrap_or_else(|_| resolve_inference_settings_fallback(m));
+                let pipeline_tag = metadata_string(m, &["pipeline_tag", "pipelineTag"]);
+                let task_type_primary = metadata_string(
+                    m,
+                    &[
+                        "task_type_primary",
+                        "taskTypePrimary",
+                        "task_type",
+                        "taskType",
+                    ],
+                )
+                .or_else(|| pipeline_tag.as_deref().map(pipeline_tag_to_task))
+                .unwrap_or_else(|| {
+                    if m.model_type.eq_ignore_ascii_case("audio") {
+                        "text-to-audio".to_string()
+                    } else if m.model_type.eq_ignore_ascii_case("diffusion") {
+                        "text-to-image".to_string()
+                    } else {
+                        "text-generation".to_string()
                     }
-                })
-                .collect();
+                });
+                let dependency_bindings = m
+                    .metadata
+                    .get("dependency_bindings")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Array(Vec::new()));
+                let recommended_backend =
+                    metadata_string(m, &["recommended_backend", "recommendedBackend"]);
+                let runtime_engine_hints = m
+                    .metadata
+                    .get("runtime_engine_hints")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Array(Vec::new()));
+                let requires_custom_code = m
+                    .metadata
+                    .get("requires_custom_code")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Bool(false));
+                let custom_code_sources = m
+                    .metadata
+                    .get("custom_code_sources")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Array(Vec::new()));
+                let review_reasons = m
+                    .metadata
+                    .get("review_reasons")
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        metadata_string(m, &["review_reason", "reviewReason"])
+                            .map(|reason| serde_json::json!([reason]))
+                            .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
+                    });
+
+                options.push(PortOption {
+                    value: serde_json::json!(m.path),
+                    label: m.official_name.clone(),
+                    description: Some(format!("{} | {}", m.model_type, m.tags.join(", "))),
+                    metadata: Some(serde_json::json!({
+                        "id": m.id,
+                        "model_type": m.model_type,
+                        "cleaned_name": m.cleaned_name,
+                        "pipeline_tag": pipeline_tag,
+                        "task_type_primary": task_type_primary,
+                        "recommended_backend": recommended_backend,
+                        "runtime_engine_hints": runtime_engine_hints,
+                        "requires_custom_code": requires_custom_code,
+                        "custom_code_sources": custom_code_sources,
+                        "dependency_bindings": dependency_bindings,
+                        "review_reasons": review_reasons,
+                        "inference_settings": inference_settings,
+                    })),
+                });
+            }
 
             let total = options.len();
             Ok(PortOptionsResult {
