@@ -97,6 +97,30 @@ export {
   getHorseshoeWindow,
   findBestInsertableMatchIndex,
 } from './horseshoeSelector.js';
+export {
+  isSpaceKey,
+  resolveHorseshoeOpenRequest,
+  formatHorseshoeBlockedReason,
+} from './horseshoeInvocation.js';
+export type {
+  HorseshoeBlockedReason,
+  HorseshoeOpenContext,
+  HorseshoeOpenResolution,
+} from './horseshoeInvocation.js';
+export {
+  clearHorseshoeDragSession,
+  createHorseshoeDragSessionState,
+  requestHorseshoeDisplay,
+  startHorseshoeDrag,
+  syncHorseshoeDisplay,
+  updateHorseshoeAnchor,
+} from './horseshoeDragSession.js';
+export type {
+  HorseshoeAnchorPosition,
+  HorseshoeDisplayState,
+  HorseshoeDragSessionState,
+} from './horseshoeDragSession.js';
+export { isPortTypeCompatible } from './portTypeCompatibility.js';
 
 // --- Components ---
 export { default as WorkflowGraphEditor } from './components/WorkflowGraph.svelte';

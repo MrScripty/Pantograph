@@ -23,11 +23,21 @@
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
   import { isPortTypeCompatible } from '../portTypeCompatibility.js';
+  import { findBestInsertableMatchIndex, rotateHorseshoeIndex } from '../horseshoeSelector.js';
   import {
-    clampHorseshoeIndex,
-    findBestInsertableMatchIndex,
-    rotateHorseshoeIndex,
-  } from '../horseshoeSelector.js';
+    formatHorseshoeBlockedReason,
+    isSpaceKey,
+  } from '../horseshoeInvocation.js';
+  import {
+    clearHorseshoeDragSession,
+    createHorseshoeDragSessionState,
+    requestHorseshoeDisplay,
+    startHorseshoeDrag,
+    syncHorseshoeDisplay,
+    updateHorseshoeAnchor,
+    type HorseshoeBlockedReason,
+    type HorseshoeDragSessionState,
+  } from '../horseshoeDragSession.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
@@ -83,13 +93,13 @@
   let cutToolRef: CutTool;
   let ctrlPressed = $state(false);
   let isCutting = $state(false);
-  let dragCursorPosition = $state<{ x: number; y: number } | null>(null);
-  let horseshoeVisible = $state(false);
-  let horseshoeAnchorPosition = $state<{ x: number; y: number } | null>(null);
+  let horseshoeSession = $state<HorseshoeDragSessionState>(createHorseshoeDragSessionState());
   let horseshoeSelectedIndex = $state(0);
   let horseshoeQuery = $state('');
   let horseshoePending = $state(false);
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
+  let horseshoeLastTrace = $state('idle');
 
   // ContainerBorder ref
   let containerBorderRef: ContainerBorder;
@@ -132,8 +142,14 @@
 
   // Initialize node definitions on mount
   onMount(async () => {
+    window.addEventListener('keydown', handleWindowKeyDown, true);
+
     const definitions = await backend.getNodeDefinitions();
     nodeDefsStore.set(definitions);
+
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeyDown, true);
+    };
   });
 
   onDestroy(() => {
@@ -144,32 +160,106 @@
 
   $effect(() => {
     if (!$connectionIntentStore) {
-      closeHorseshoeSelector();
+      if (
+        !horseshoeSession.dragActive &&
+        !horseshoePending &&
+        horseshoeSession.displayState !== 'hidden'
+      ) {
+        closeHorseshoeSelector();
+      }
+
+      const nextSession = syncHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext());
+      if (nextSession !== horseshoeSession) {
+        applyHorseshoeSession(nextSession);
+      }
       return;
     }
 
-    horseshoeSelectedIndex = clampHorseshoeIndex(
-      horseshoeSelectedIndex,
-      $connectionIntentStore.insertableNodeTypes.length,
-    );
+    if ($connectionIntentStore.insertableNodeTypes.length > 0) {
+      horseshoeSelectedIndex = Math.max(
+        0,
+        Math.min(horseshoeSelectedIndex, $connectionIntentStore.insertableNodeTypes.length - 1),
+      );
+    } else {
+      horseshoeSelectedIndex = 0;
+    }
+
+    const nextSession = syncHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext());
+    if (nextSession !== horseshoeSession) {
+      applyHorseshoeSession(nextSession);
+    }
+  });
+
+  $effect(() => {
+    if (!horseshoeSession.blockedReason || horseshoeSession.blockedReason === lastLoggedHorseshoeBlockedReason) {
+      return;
+    }
+
+    lastLoggedHorseshoeBlockedReason = horseshoeSession.blockedReason;
+    console.warn('[WorkflowGraph] Horseshoe blocked:', formatHorseshoeBlockedReason(horseshoeSession.blockedReason));
   });
 
   function closeHorseshoeSelector() {
-    horseshoeVisible = false;
-    horseshoeAnchorPosition = null;
-    horseshoePending = false;
-    horseshoeSelectedIndex = 0;
-    horseshoeQuery = '';
-
-    if (horseshoeQueryResetTimer) {
-      clearTimeout(horseshoeQueryResetTimer);
-      horseshoeQueryResetTimer = null;
+    if (
+      horseshoeSession.displayState === 'hidden' &&
+      !horseshoeSession.openRequested &&
+      horseshoeSession.blockedReason === null
+    ) {
+      return;
     }
+
+    applyHorseshoeSession({
+      ...horseshoeSession,
+      openRequested: false,
+      displayState: 'hidden',
+      blockedReason: null,
+    });
   }
 
   function clearConnectionInteraction() {
-    closeHorseshoeSelector();
+    applyHorseshoeSession(clearHorseshoeDragSession());
     stores.workflow.clearConnectionIntent();
+  }
+
+  function applyHorseshoeSession(nextSession: HorseshoeDragSessionState) {
+    if (nextSession === horseshoeSession) {
+      return;
+    }
+
+    const previousDisplayState = horseshoeSession.displayState;
+    horseshoeSession = nextSession;
+    horseshoeLastTrace = [
+      'session',
+      nextSession.displayState,
+      nextSession.openRequested ? 'requested' : 'idle',
+      nextSession.blockedReason ?? 'clear',
+      nextSession.anchorPosition ? 'anchor' : 'no-anchor',
+    ].join(':');
+
+    if (nextSession.displayState === 'open' && previousDisplayState !== 'open') {
+      horseshoeQuery = '';
+      horseshoeSelectedIndex = 0;
+    }
+
+    if (nextSession.displayState === 'hidden') {
+      horseshoePending = false;
+      horseshoeSelectedIndex = 0;
+      horseshoeQuery = '';
+
+      if (horseshoeQueryResetTimer) {
+        clearTimeout(horseshoeQueryResetTimer);
+        horseshoeQueryResetTimer = null;
+      }
+    }
+  }
+
+  function getHorseshoeOpenContext() {
+    return {
+      canEdit,
+      hasConnectionIntent: Boolean($connectionIntentStore),
+      insertableCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
+      anchorPosition: horseshoeSession.anchorPosition,
+    };
   }
 
   function getRelativePointerPosition(clientX: number, clientY: number) {
@@ -194,7 +284,7 @@
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
     const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
     if (nextPosition) {
-      dragCursorPosition = nextPosition;
+      applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
     }
   }
 
@@ -209,18 +299,15 @@
     }, 900);
   }
 
-  function openHorseshoeSelector() {
-    if (!canEdit || !$connectionIntentStore || $connectionIntentStore.insertableNodeTypes.length === 0) {
-      return;
-    }
-
-    horseshoeAnchorPosition = dragCursorPosition;
-    if (!horseshoeAnchorPosition) return;
-
-    horseshoeVisible = true;
-    horseshoePending = false;
-    horseshoeQuery = '';
-    horseshoeSelectedIndex = 0;
+  function requestHorseshoeOpen() {
+    horseshoeLastTrace = [
+      'request-open',
+      horseshoeSession.dragActive ? 'drag' : 'idle',
+      $connectionIntentStore ? 'intent' : 'no-intent',
+      `${$connectionIntentStore?.insertableNodeTypes.length ?? 0}-insertables`,
+      horseshoeSession.anchorPosition ? 'anchor' : 'no-anchor',
+    ].join(':');
+    applyHorseshoeSession(requestHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext()));
   }
 
   function rotateInsertSelection(delta: number) {
@@ -253,13 +340,13 @@
   }
 
   function getInsertPositionHint() {
-    if (!horseshoeAnchorPosition) return null;
+    if (!horseshoeSession.anchorPosition) return null;
 
     const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
     return {
       position: {
-        x: (horseshoeAnchorPosition.x - viewport.x) / viewport.zoom,
-        y: (horseshoeAnchorPosition.y - viewport.y) / viewport.zoom,
+        x: (horseshoeSession.anchorPosition.x - viewport.x) / viewport.zoom,
+        y: (horseshoeSession.anchorPosition.y - viewport.y) / viewport.zoom,
       },
     };
   }
@@ -308,7 +395,23 @@
     }
   }
 
-  function handleKeyDown(event: KeyboardEvent) {
+  function getHorseshoeStatusLabel(): string | null {
+    if (horseshoePending) {
+      return 'Inserting node...';
+    }
+
+    if (horseshoeSession.displayState === 'pending') {
+      return 'Loading compatible nodes...';
+    }
+
+    if (horseshoeSession.displayState === 'blocked' && horseshoeSession.blockedReason) {
+      return formatHorseshoeBlockedReason(horseshoeSession.blockedReason);
+    }
+
+    return null;
+  }
+
+  function handleWindowKeyDown(event: KeyboardEvent) {
     const target = event.target as HTMLElement | null;
     if (
       target &&
@@ -318,23 +421,26 @@
       return;
     }
 
-    if (
-      event.key === ' ' &&
-      $connectionIntentStore &&
-      $connectionIntentStore.insertableNodeTypes.length > 0
-    ) {
-      event.preventDefault();
-      openHorseshoeSelector();
+    if (!horseshoeSession.dragActive && horseshoeSession.displayState === 'hidden') {
       return;
     }
 
-    if (!horseshoeVisible) return;
+    if (isSpaceKey(event) && horseshoeSession.dragActive) {
+      event.preventDefault();
+      horseshoeLastTrace = 'keydown:space';
+      requestHorseshoeOpen();
+      return;
+    }
+
+    if (horseshoeSession.displayState === 'hidden') return;
 
     if (event.key === 'Escape') {
       event.preventDefault();
       closeHorseshoeSelector();
       return;
     }
+
+    if (horseshoeSession.displayState !== 'open') return;
 
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -549,9 +655,8 @@
     }
 
     const pointerPosition = getEventPointerPosition(_event);
-    if (pointerPosition) {
-      dragCursorPosition = pointerPosition;
-    }
+    horseshoeLastTrace = `connect-start:${params.nodeId}:${params.handleId ?? 'unknown'}`;
+    applyHorseshoeSession(startHorseshoeDrag(pointerPosition));
 
     await loadConnectionIntent({
       node_id: params.nodeId,
@@ -563,7 +668,7 @@
     _event: MouseEvent | TouchEvent,
     _connectionState: { isValid: boolean },
   ) {
-    if (horseshoeVisible || horseshoePending) return;
+    if (horseshoeSession.displayState === 'open' || horseshoePending || horseshoeSession.openRequested) return;
     clearConnectionInteraction();
   }
 
@@ -660,6 +765,7 @@
         node_id: edge.source,
         port_id: edge.sourceHandle,
       };
+      applyHorseshoeSession(startHorseshoeDrag(horseshoeSession.anchorPosition));
       await loadConnectionIntent(reconnectingSourceAnchor);
       return;
     }
@@ -783,13 +889,17 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeyDown} />
+<svelte:window onmousemove={updateDragCursorFromMouseEvent} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="workflow-graph-container"
   class:cutting={isCutting}
   bind:this={containerElement}
+  tabindex={canEdit ? 0 : -1}
+  data-horseshoe-blocked-reason={horseshoeSession.blockedReason ?? undefined}
+  data-horseshoe-display-state={horseshoeSession.displayState}
+  data-horseshoe-last-trace={horseshoeLastTrace}
   ondrop={handleDrop}
   ondragover={handleDragOver}
   onmousedown={(e) => cutToolRef?.onPaneMouseDown(e)}
@@ -800,6 +910,7 @@
   onmouseup={() => cutToolRef?.onPaneMouseUp()}
   role="application"
 >
+
   <SvelteFlow
     bind:nodes
     bind:edges
@@ -810,6 +921,7 @@
     elementsSelectable={true}
     nodesDraggable={canEdit}
     panOnDrag={!ctrlPressed}
+    panActivationKey={null}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
@@ -877,16 +989,27 @@
   />
 
   <HorseshoeInsertSelector
-    visible={horseshoeVisible}
-    anchorPosition={horseshoeAnchorPosition}
+    displayState={horseshoeSession.displayState}
+    anchorPosition={horseshoeSession.anchorPosition}
     items={$connectionIntentStore?.insertableNodeTypes ?? []}
     selectedIndex={horseshoeSelectedIndex}
     query={horseshoeQuery}
     pending={horseshoePending}
+    statusLabel={getHorseshoeStatusLabel()}
     onSelect={(candidate) => void commitInsertSelection(candidate)}
     onRotate={rotateInsertSelection}
     onCancel={closeHorseshoeSelector}
   />
+
+  {#if horseshoeSession.dragActive || horseshoeSession.displayState !== 'hidden' || horseshoeLastTrace !== 'idle'}
+    <div class="horseshoe-debug">
+      <div>trace: {horseshoeLastTrace}</div>
+      <div>state: {horseshoeSession.displayState}</div>
+      {#if horseshoeSession.blockedReason}
+        <div>blocked: {horseshoeSession.blockedReason}</div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -967,5 +1090,21 @@
 
   .workflow-graph-container.cutting {
     cursor: crosshair;
+  }
+
+  .horseshoe-debug {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 1400;
+    pointer-events: none;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.5rem;
+    background: rgba(10, 10, 10, 0.88);
+    border: 1px solid rgba(82, 82, 91, 0.9);
+    color: #e5e7eb;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
   }
 </style>

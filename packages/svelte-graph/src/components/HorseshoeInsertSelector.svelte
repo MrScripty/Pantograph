@@ -1,26 +1,29 @@
 <script lang="ts">
   import { getHorseshoeWindow } from '../horseshoeSelector.js';
+  import type { HorseshoeDisplayState } from '../horseshoeDragSession.js';
   import type { InsertableNodeTypeCandidate } from '../types/workflow.js';
 
   interface Props {
-    visible: boolean;
+    displayState: HorseshoeDisplayState;
     anchorPosition: { x: number; y: number } | null;
     items: InsertableNodeTypeCandidate[];
     selectedIndex: number;
     query?: string;
     pending?: boolean;
+    statusLabel?: string | null;
     onSelect?: (candidate: InsertableNodeTypeCandidate) => void;
     onRotate?: (delta: number) => void;
     onCancel?: () => void;
   }
 
   let {
-    visible,
+    displayState,
     anchorPosition,
     items,
     selectedIndex,
     query = '',
     pending = false,
+    statusLabel = null,
     onSelect,
     onRotate,
     onCancel,
@@ -56,7 +59,7 @@
   }
 
   function handleWheel(event: WheelEvent) {
-    if (!visible || pending) return;
+    if (displayState !== 'open' || pending) return;
     event.preventDefault();
     event.stopPropagation();
     onRotate?.(event.deltaY > 0 ? 1 : -1);
@@ -76,39 +79,51 @@
   }
 </script>
 
-{#if visible && anchorPosition && items.length > 0}
+{#if displayState !== 'hidden' && (anchorPosition || displayState !== 'open')}
   <div
     class="horseshoe-root"
-    style="left: {anchorPosition.x}px; top: {anchorPosition.y}px;"
+    class:fallback-anchor={!anchorPosition}
+    style:left={anchorPosition ? `${anchorPosition.x}px` : undefined}
+    style:top={anchorPosition ? `${anchorPosition.y}px` : undefined}
     onwheel={handleWheel}
   >
-    {#if hiddenBefore > 0}
+    {#if displayState === 'open' && hiddenBefore > 0}
       <div class="horseshoe-counter left">+{hiddenBefore}</div>
     {/if}
 
-    {#if hiddenAfter > 0}
+    {#if displayState === 'open' && hiddenAfter > 0}
       <div class="horseshoe-counter right">+{hiddenAfter}</div>
     {/if}
 
-    {#each visibleItems as entry}
-      {@const position = itemPosition(entry.slot, visibleItems.length)}
-      <button
-        type="button"
-        class="horseshoe-item"
-        class:selected={entry.index === selectedIndex}
-        class:pending
-        style="left: {position.x}px; top: {position.y}px;"
-        onpointerdown={(event) => handleSelect(event, entry.item)}
-      >
-        <span class="label">{entry.item.label}</span>
-      </button>
-    {/each}
+    {#if displayState === 'open' && anchorPosition && items.length > 0}
+      {#each visibleItems as entry}
+        {@const position = itemPosition(entry.slot, visibleItems.length)}
+        <button
+          type="button"
+          class="horseshoe-item"
+          class:selected={entry.index === selectedIndex}
+          class:pending
+          style="left: {position.x}px; top: {position.y}px;"
+          onpointerdown={(event) => handleSelect(event, entry.item)}
+        >
+          <span class="label">{entry.item.label}</span>
+        </button>
+      {/each}
+    {/if}
+
+    {#if displayState !== 'open' && statusLabel}
+      <div class="horseshoe-status">{statusLabel}</div>
+    {/if}
 
     <button type="button" class="horseshoe-center" onpointerdown={handleCancel}>
-      {#if query}
-        <span>{query}</span>
-      {:else if pending}
+      {#if pending}
         <span>...</span>
+      {:else if query}
+        <span>{query}</span>
+      {:else if displayState === 'pending'}
+        <span>Wait</span>
+      {:else if displayState === 'blocked'}
+        <span>Close</span>
       {:else}
         <span>Esc</span>
       {/if}
@@ -124,6 +139,12 @@
     height: 0;
     pointer-events: none;
     z-index: 1200;
+  }
+
+  .horseshoe-root.fallback-anchor {
+    left: 50%;
+    top: 3rem;
+    transform: translateX(-50%);
   }
 
   .horseshoe-item,
@@ -202,5 +223,26 @@
   .horseshoe-counter.right {
     left: 158px;
     top: -32px;
+  }
+
+  .horseshoe-status {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    left: 0;
+    top: -78px;
+    min-width: 180px;
+    max-width: 240px;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(82, 82, 91, 0.9);
+    background: rgba(23, 23, 23, 0.95);
+    color: #e5e7eb;
+    font-size: 0.72rem;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
   }
 </style>
