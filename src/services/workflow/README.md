@@ -9,7 +9,7 @@ on raw invoke payloads.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, and connection-intent commands. |
+| `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
 | `templateService.ts` | Workflow template discovery/loading helpers. |
@@ -29,9 +29,10 @@ intent.
 
 ## Decision
 Keep `WorkflowService.ts` as the legacy-friendly workflow adapter and extend it
-with `getConnectionCandidates` and `connectAnchors`. That lets the app graph
-adopt the new backend-owned eligibility model without forcing every existing
-caller to migrate to package-level backends immediately.
+with `getConnectionCandidates`, `connectAnchors`, and `insertNodeAndConnect`.
+That lets the app graph adopt the new backend-owned eligibility model and the
+horseshoe insert flow without forcing every existing caller to migrate to
+package-level backends immediately.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -46,6 +47,8 @@ caller to migrate to package-level backends immediately.
   session-scoped graph mutation method runs.
 - Expected connection rejection is returned as structured data, not thrown as an
   exception.
+- Insert-and-connect must remain atomic from the caller’s perspective: the
+  service returns either an updated graph or a structured rejection.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
 
@@ -76,6 +79,13 @@ const candidates = await workflowService.getConnectionCandidates(
   undefined,
   'graph-revision-token'
 );
+
+const inserted = await workflowService.insertNodeAndConnect(
+  { node_id: 'llm', port_id: 'response' },
+  'text-output',
+  'graph-revision-token',
+  { position: { x: 480, y: 160 } }
+);
 ```
 
 ## API Consumer Contract (Host-Facing Modules)
@@ -83,8 +93,9 @@ const candidates = await workflowService.getConnectionCandidates(
   session-scoped graph mutation methods.
 - `getConnectionCandidates` returns compatible existing targets and insertable
   node types for one source anchor.
-- `connectAnchors` requires the caller to provide the graph revision it used to
-  derive UI state; a stale revision returns `accepted: false` with a rejection.
+- `connectAnchors` and `insertNodeAndConnect` require the caller to provide the
+  graph revision it used to derive UI state; a stale revision returns
+  `accepted: false` with a rejection.
 - Mock mode may return placeholder data for some methods; callers should not
   assume mock behavior fully matches native runtime semantics.
 

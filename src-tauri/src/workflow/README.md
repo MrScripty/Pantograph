@@ -9,7 +9,7 @@ through Tauri.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection-commit logic for interactive graph editing. |
+| `connection_intent.rs` | Canonical candidate-discovery, revision-aware connection commits, and atomic insert-and-connect logic for interactive graph editing. |
 | `commands.rs` | Tauri command registration for workflow editing APIs. |
 | `workflow_execution_commands.rs` | Session-oriented command implementations used by the frontend graph editor. |
 | `types.rs` | Rust DTOs mirrored into the TypeScript workflow contracts. |
@@ -31,10 +31,11 @@ eligibility model.
 
 ## Decision
 Add a dedicated `connection_intent.rs` module and expose additive Tauri commands
-for `get_connection_candidates` and `connect_anchors_in_execution`. The command
-path computes eligible targets from live session state, uses graph fingerprints
-for stale-intent detection, and returns structured rejection reasons instead of
-boolean-only failure.
+for `get_connection_candidates`, `connect_anchors_in_execution`, and
+`insert_node_and_connect_in_execution`. The command path computes eligible
+targets from live session state, uses graph fingerprints for stale-intent
+detection, and returns structured rejection reasons instead of boolean-only
+failure.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -49,13 +50,15 @@ boolean-only failure.
 - Candidate discovery is source-anchor scoped and must not mutate the session.
 - Commit commands must reject stale revisions and return structured rejection
   data for expected incompatibility cases.
+- Insert-and-connect must mutate the session atomically so rejected inserts do
+  not leave orphan nodes or disconnected edges.
 - `workflow_execution_commands.rs` must refresh derived graph metadata when it
   returns graphs to the frontend.
 
 ## Revisit Triggers
-- Insert-and-connect becomes a first-class backend command.
 - Headless editing moves to a transport boundary outside Tauri invoke.
 - Eligibility rules expand enough to justify a dedicated policy module or ADR.
+- Insert ranking/placement heuristics need a dedicated policy boundary.
 
 ## Dependencies
 **Internal:** node-engine workflow types, session execution manager, Tauri
@@ -79,6 +82,16 @@ let response = connection_intent::commit_connection(
     target_anchor,
     &graph_revision,
 );
+
+let inserted = connection_intent::insert_node_and_connect(
+    &workflow_registry,
+    &mut execution.graph,
+    source_anchor,
+    "text-output",
+    None,
+    Position { x: 480.0, y: 160.0 },
+    &graph_revision,
+);
 ```
 
 ## API Consumer Contract (Host-Facing Modules)
@@ -86,8 +99,9 @@ let response = connection_intent::commit_connection(
   session-scoped editing commands in this directory.
 - `get_connection_candidates` accepts a source anchor and optional graph
   revision, and returns compatible existing targets plus insertable node types.
-- `connect_anchors_in_execution` requires the revision used to derive UI state
-  and returns either an updated graph or a structured rejection.
+- `connect_anchors_in_execution` and `insert_node_and_connect_in_execution`
+  require the revision used to derive UI state and return either an updated
+  graph or a structured rejection.
 - Expected incompatibility is not exceptional; transport/session errors still
   surface as command failures.
 - Compatibility policy is additive: existing commands remain while new editing

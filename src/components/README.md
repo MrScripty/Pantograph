@@ -9,7 +9,7 @@ architecture views on top of the shared editor.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, and revision-aware connection-intent flows. |
+| `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
@@ -32,7 +32,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
 Keep the app `WorkflowGraph.svelte` as a composition layer over package store
 instances and `workflowService`. The component now follows the same intent flow
 as the reusable graph: load candidates on connect start, use shared store state
-for validation/highlighting, and commit through revision-aware anchor APIs.
+for validation/highlighting, open the shared horseshoe selector on `Space`, and
+commit through revision-aware anchor and insert APIs.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -48,6 +49,8 @@ for validation/highlighting, and commit through revision-aware anchor APIs.
   creating parallel graph state.
 - Connection-intent cleanup must happen on cancel, pane click, escape, and graph
   mutation paths.
+- Horseshoe selection must route through `workflowService.insertNodeAndConnect`
+  so the app never creates orphan nodes on stale or incompatible inserts.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
@@ -79,8 +82,8 @@ for validation/highlighting, and commit through revision-aware anchor APIs.
 - `WorkflowGraph.svelte` relies on `workflowService` session state and the
   shared workflow store exports; callers should not instantiate it outside the
   app shell without recreating those dependencies.
-- Rejection handling for failed connection commits is currently store/console
-  based, not event-emitter based.
+- Rejection handling for failed connection and insert commits is currently
+  store/console based, not event-emitter based.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - None.

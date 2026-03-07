@@ -25,9 +25,10 @@ would depend directly on invoke command names and payload conventions.
 
 ## Decision
 Use `TauriWorkflowBackend.ts` as the only app-layer implementation of
-`WorkflowBackend`. It now forwards `getConnectionCandidates` and
-`connectAnchors` alongside the existing session editing calls so the package
-graph can use revision-aware connection guidance unchanged inside the app.
+`WorkflowBackend`. It now forwards `getConnectionCandidates`,
+`connectAnchors`, and `insertNodeAndConnect` alongside the existing session
+editing calls so the package graph can use revision-aware connection guidance
+and drag-time insert flows unchanged inside the app.
 
 ## Alternatives Rejected
 - Call Tauri `invoke` directly from `WorkflowGraph.svelte`.
@@ -41,6 +42,8 @@ graph can use revision-aware connection guidance unchanged inside the app.
 - Backend errors caused by transport/session failure should throw; expected
   incompatibility should come back as structured commit rejection.
 - Graph revisions are treated as opaque values and echoed unchanged to Rust.
+- Insert commands must remain atomic at the adapter boundary; the adapter should
+  not split insert and connect into separate invokes.
 
 ## Revisit Triggers
 - A non-Tauri production transport is introduced for the app.
@@ -71,8 +74,8 @@ const sessionId = await backend.createSession({ nodes: [], edges: [] });
 - App code consuming this adapter should use package-level backend methods, not
   hardcoded invoke names.
 - `getConnectionCandidates` accepts a source anchor, session id, and optional
-  graph revision; `connectAnchors` requires a revision and returns structured
-  rejection data when a connection is denied.
+  graph revision; `connectAnchors` and `insertNodeAndConnect` require a
+  revision and return structured rejection data when a commit is denied.
 - Session lifecycle ordering remains: create/load session before graph mutation,
   remove session when the consumer is done.
 - Compatibility policy is additive: new invoke-backed methods should extend the

@@ -9,10 +9,11 @@ shared node presentation rules live outside the Pantograph app shell.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, and revision-aware edge commits. |
+| `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
 | `CutTool.svelte` | Edge-cut interaction used for Ctrl-drag deletion. |
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
+| `HorseshoeInsertSelector.svelte` | Cursor-anchored horseshoe selector used to browse compatible insertable node types during an active connection intent. |
 | `nodes/` | Shared node shells and reusable package node components, including connection-intent highlighting. |
 | `edges/` | Edge renderers and reconnect affordances used by `WorkflowGraph.svelte`. |
 
@@ -34,8 +35,11 @@ state cleanup.
 Keep connection intent client-owned in `WorkflowGraph.svelte`: on connect start,
 it requests candidates from the backend, caches them in workflow stores, uses
 that cache for `isValidConnection`, and clears the intent on cancel, pane click,
-or commit. Node shells then read the same store to dim incompatible targets and
-highlight eligible anchors.
+or commit. When the user presses `Space` during an active drag, the same
+component opens `HorseshoeInsertSelector.svelte` at the cursor, browses the
+ranked `insertableNodeTypes` list locally with wheel/typeahead, and commits the
+selection through backend-owned `insertNodeAndConnect`. Node shells then read
+the same store to dim incompatible targets and highlight eligible anchors.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -47,15 +51,18 @@ highlight eligible anchors.
 ## Invariants
 - `WorkflowGraph.svelte` must never create an edge locally that bypasses the
   backend-owned `connectAnchors` commit path.
+- Insert-from-drag must commit through backend-owned `insertNodeAndConnect`; the
+  UI must not compose local `addNode` plus `connectAnchors`.
 - Connection-intent highlighting must clear when the graph changes or the drag
   interaction ends.
 - Reconnect flows that temporarily remove an edge must restore the original edge
   if the replacement commit is rejected.
 
 ## Revisit Triggers
-- Insert-and-connect becomes a committed graph operation with its own UI flow.
 - Backend candidate queries become too slow for one-shot drag-start loading.
 - Package consumers need custom candidate ranking or filtering hooks.
+- Horseshoe result counts routinely exceed the visible window and require
+  category grouping or searchable overflow.
 
 ## Dependencies
 **Internal:** `packages/svelte-graph/src/stores`, `packages/svelte-graph/src/context`,
@@ -84,6 +91,8 @@ highlight eligible anchors.
 - `WorkflowGraph.svelte` consumes workflow, view, and session stores from that
   context and assumes `workflowGraph.derived_graph.graph_fingerprint` is kept
   current.
+- `WorkflowGraph.svelte` binds `Space` to the horseshoe selector only while a
+  connection intent with compatible insertable node types is active.
 - Connection rejection is surfaced through console logging and shared store
   state today; consumers should not expect custom DOM events for rejection yet.
 - Compatibility policy is additive: new graph behaviors should layer on the

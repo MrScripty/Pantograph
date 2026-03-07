@@ -10,6 +10,7 @@ Reusable Svelte graph package source shared with the Pantograph frontend.
 | components/ | Subdirectory containing related implementation details. |
 | constants/ | Subdirectory containing related implementation details. |
 | context/ | Subdirectory containing related implementation details. |
+| horseshoeSelector.ts | Shared horseshoe windowing, rotation, and typeahead helpers for drag-time insert UI. |
 | index.ts | Source file used by modules in this directory. |
 | stores/ | Subdirectory containing related implementation details. |
 | types/ | Subdirectory containing related implementation details. |
@@ -19,6 +20,8 @@ Reusable Svelte graph package source shared with the Pantograph frontend.
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.
 - Maintain predictable naming so callers can discover related modules quickly.
+- Keep drag-time insert ranking/windowing logic in shared source so package and
+  app canvases do not drift on horseshoe behavior.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
