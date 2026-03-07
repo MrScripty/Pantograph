@@ -1,8 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { SvelteFlow, Controls, MiniMap, type NodeTypes, type EdgeTypes, type Node, type Edge, type Connection } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
+  import {
+    HorseshoeInsertSelector,
+    clampHorseshoeIndex,
+    findBestInsertableMatchIndex,
+    rotateHorseshoeIndex,
+  } from '@pantograph/svelte-graph';
 
   import {
     nodes as nodesStore,
@@ -18,8 +24,10 @@
     syncInferencePorts,
     syncExpandPorts,
     workflowGraph,
+    workflowMetadata,
     setConnectionIntent,
     clearConnectionIntent,
+    loadWorkflow,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
   import type {
@@ -27,6 +35,7 @@
     ConnectionAnchor,
     ConnectionCandidatesResponse,
     ConnectionCommitResponse,
+    InsertableNodeTypeCandidate,
   } from '../services/workflow/types';
   import { architectureAsWorkflowGraph } from '../stores/architectureStore';
   import { workflowService } from '../services/workflow/WorkflowService';
@@ -163,6 +172,13 @@
 
   // Current viewport state for rendering the container border
   let currentViewport = $state<{ x: number; y: number; zoom: number } | null>(null);
+  let dragCursorPosition = $state<{ x: number; y: number } | null>(null);
+  let horseshoeVisible = $state(false);
+  let horseshoeAnchorPosition = $state<{ x: number; y: number } | null>(null);
+  let horseshoeSelectedIndex = $state(0);
+  let horseshoeQuery = $state('');
+  let horseshoePending = $state(false);
+  let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Calculate container bounds from all nodes (represents orchestration node boundary)
   let containerBounds = $derived.by(() => {
@@ -265,7 +281,7 @@
   // Deselect container when clicking on the graph background
   function handlePaneClick() {
     containerSelected = false;
-    clearConnectionIntent();
+    clearConnectionInteraction();
   }
 
   // Sync store changes to local state based on graph type
@@ -297,6 +313,176 @@
     const definitions = await workflowService.getNodeDefinitions();
     nodeDefinitions.set(definitions);
   });
+
+  onDestroy(() => {
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+    }
+  });
+
+  $effect(() => {
+    if (!$connectionIntent) {
+      closeHorseshoeSelector();
+      return;
+    }
+
+    horseshoeSelectedIndex = clampHorseshoeIndex(
+      horseshoeSelectedIndex,
+      $connectionIntent.insertableNodeTypes.length,
+    );
+  });
+
+  function closeHorseshoeSelector() {
+    horseshoeVisible = false;
+    horseshoeAnchorPosition = null;
+    horseshoePending = false;
+    horseshoeSelectedIndex = 0;
+    horseshoeQuery = '';
+
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+      horseshoeQueryResetTimer = null;
+    }
+  }
+
+  function clearConnectionInteraction() {
+    closeHorseshoeSelector();
+    clearConnectionIntent();
+  }
+
+  function getRelativePointerPosition(clientX: number, clientY: number) {
+    if (!containerElement) return null;
+    const bounds = containerElement.getBoundingClientRect();
+    return {
+      x: clientX - bounds.left,
+      y: clientY - bounds.top,
+    };
+  }
+
+  function getEventPointerPosition(event: MouseEvent | TouchEvent) {
+    if ('touches' in event) {
+      const touch = event.touches[0] ?? event.changedTouches[0];
+      if (!touch) return null;
+      return getRelativePointerPosition(touch.clientX, touch.clientY);
+    }
+
+    return getRelativePointerPosition(event.clientX, event.clientY);
+  }
+
+  function updateDragCursorFromMouseEvent(event: MouseEvent) {
+    const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
+    if (nextPosition) {
+      dragCursorPosition = nextPosition;
+    }
+  }
+
+  function scheduleHorseshoeQueryReset() {
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+    }
+
+    horseshoeQueryResetTimer = setTimeout(() => {
+      horseshoeQuery = '';
+      horseshoeQueryResetTimer = null;
+    }, 900);
+  }
+
+  function openHorseshoeSelector() {
+    if (!canEdit || !$connectionIntent || $connectionIntent.insertableNodeTypes.length === 0) {
+      return;
+    }
+
+    horseshoeAnchorPosition = dragCursorPosition;
+    if (!horseshoeAnchorPosition) return;
+
+    horseshoeVisible = true;
+    horseshoePending = false;
+    horseshoeQuery = '';
+    horseshoeSelectedIndex = 0;
+  }
+
+  function rotateInsertSelection(delta: number) {
+    if (!$connectionIntent || $connectionIntent.insertableNodeTypes.length === 0) return;
+
+    horseshoeSelectedIndex = rotateHorseshoeIndex(
+      horseshoeSelectedIndex,
+      delta,
+      $connectionIntent.insertableNodeTypes.length,
+    );
+  }
+
+  function updateInsertQuery(nextQuery: string) {
+    horseshoeQuery = nextQuery;
+    horseshoeSelectedIndex = findBestInsertableMatchIndex(
+      $connectionIntent?.insertableNodeTypes ?? [],
+      nextQuery,
+      horseshoeSelectedIndex,
+    );
+
+    if (nextQuery) {
+      scheduleHorseshoeQueryReset();
+      return;
+    }
+
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+      horseshoeQueryResetTimer = null;
+    }
+  }
+
+  function getInsertPositionHint() {
+    if (!horseshoeAnchorPosition) return null;
+
+    const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
+    return {
+      position: {
+        x: (horseshoeAnchorPosition.x - viewport.x) / viewport.zoom,
+        y: (horseshoeAnchorPosition.y - viewport.y) / viewport.zoom,
+      },
+    };
+  }
+
+  async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
+    if (!$connectionIntent || horseshoePending) return;
+
+    const positionHint = getInsertPositionHint();
+    if (!positionHint) return;
+
+    horseshoePending = true;
+
+    try {
+      const response = await workflowService.insertNodeAndConnect(
+        $connectionIntent.sourceAnchor,
+        candidate.node_type,
+        getGraphRevision(),
+        positionHint,
+        candidate.matching_input_port_ids[0],
+      );
+
+      if (response.accepted && response.graph) {
+        loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
+        closeHorseshoeSelector();
+        return;
+      }
+
+      setConnectionIntent({
+        sourceAnchor: $connectionIntent.sourceAnchor,
+        graphRevision: response.graph_revision,
+        compatibleNodeIds: $connectionIntent.compatibleNodeIds,
+        compatibleTargetKeys: $connectionIntent.compatibleTargetKeys,
+        insertableNodeTypes: $connectionIntent.insertableNodeTypes,
+        rejection: response.rejection,
+      });
+      closeHorseshoeSelector();
+
+      if (response.rejection) {
+        console.warn('[WorkflowGraph] Insert rejected:', response.rejection.message);
+      }
+    } catch (error) {
+      horseshoePending = false;
+      console.error('[WorkflowGraph] Failed to insert compatible node:', error);
+    }
+  }
 
   // Handle node drag events - sync back to store
   function onNodeDragStop({
@@ -400,11 +586,12 @@
 
   async function loadConnectionIntent(sourceAnchor: ConnectionAnchor) {
     if (!canEdit) {
-      clearConnectionIntent();
+      clearConnectionInteraction();
       return;
     }
 
     const requestId = ++connectionIntentRequestId;
+    closeHorseshoeSelector();
 
     try {
       const candidates = await workflowService.getConnectionCandidates(
@@ -417,7 +604,7 @@
       setConnectionIntent(toConnectionIntentState(candidates));
     } catch (error) {
       if (requestId === connectionIntentRequestId) {
-        clearConnectionIntent();
+        clearConnectionInteraction();
       }
       console.error('[WorkflowGraph] Failed to load connection candidates:', error);
     }
@@ -447,7 +634,7 @@
 
     if (response.accepted && response.graph) {
       syncEdgesFromBackend(response.graph);
-      clearConnectionIntent();
+      clearConnectionInteraction();
       return response;
     }
 
@@ -475,8 +662,13 @@
     params: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' }
   ) {
     if (!canEdit || params.handleType !== 'source' || !params.handleId) {
-      clearConnectionIntent();
+      clearConnectionInteraction();
       return;
+    }
+
+    const pointerPosition = getEventPointerPosition(_event);
+    if (pointerPosition) {
+      dragCursorPosition = pointerPosition;
     }
 
     await loadConnectionIntent({
@@ -489,7 +681,8 @@
     _event: MouseEvent | TouchEvent,
     _connectionState: { isValid: boolean }
   ) {
-    clearConnectionIntent();
+    if (horseshoeVisible || horseshoePending) return;
+    clearConnectionInteraction();
   }
 
   // Handle new connections - routes through backend for single source of truth
@@ -523,7 +716,7 @@
   // Handle deletion of nodes and edges - edge deletion routes through backend
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
     if (!canEdit) return;
-    clearConnectionIntent();
+    clearConnectionInteraction();
 
     // Delete edges via backend
     for (const edge of deletedEdges) {
@@ -546,7 +739,7 @@
     event.preventDefault();
 
     if (!canEdit) return;
-    clearConnectionIntent();
+    clearConnectionInteraction();
 
     const data = event.dataTransfer?.getData('application/json');
     if (!data) return;
@@ -597,7 +790,7 @@
     }
 
     reconnectingSourceAnchor = null;
-    clearConnectionIntent();
+    clearConnectionInteraction();
   }
 
   async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
@@ -622,7 +815,7 @@
 
       if (response.accepted && response.graph) {
         syncEdgesFromBackend(response.graph);
-        clearConnectionIntent();
+        clearConnectionInteraction();
         return;
       }
 
@@ -665,7 +858,7 @@
 
     reconnectingEdgeId = null;
     reconnectingSourceAnchor = null;
-    clearConnectionIntent();
+    clearConnectionInteraction();
   }
 
   // --- Cut Tool (Ctrl+drag to cut edges) ---
@@ -693,8 +886,65 @@
       e.preventDefault();
       containerSelected = false;
     }
+
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.isContentEditable ||
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+    ) {
+      return;
+    }
+
+    if (e.key === ' ' && $connectionIntent && $connectionIntent.insertableNodeTypes.length > 0) {
+      e.preventDefault();
+      openHorseshoeSelector();
+      return;
+    }
+
+    if (!horseshoeVisible) {
+      if (e.key === 'Escape') {
+        clearConnectionInteraction();
+      }
+      return;
+    }
+
     if (e.key === 'Escape') {
-      clearConnectionIntent();
+      e.preventDefault();
+      closeHorseshoeSelector();
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const candidate = $connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex];
+      if (candidate) {
+        void commitInsertSelection(candidate);
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      rotateInsertSelection(-1);
+      return;
+    }
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      rotateInsertSelection(1);
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      updateInsertQuery(horseshoeQuery.slice(0, -1));
+      return;
+    }
+
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      updateInsertQuery(`${horseshoeQuery}${e.key}`);
     }
   }
 
@@ -723,6 +973,7 @@
   }
 
   function handlePaneMouseMove(e: MouseEvent) {
+    updateDragCursorFromMouseEvent(e);
     if (!isCutting || !cutStart) return;
 
     const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
@@ -745,7 +996,7 @@
       return;
     }
 
-    clearConnectionIntent();
+    clearConnectionInteraction();
 
     // Find edges that intersect with the cut line
     const edgesToRemove = edges.filter((edge) => {
@@ -1037,6 +1288,18 @@
       "
     ></div>
   {/if}
+
+  <HorseshoeInsertSelector
+    visible={horseshoeVisible}
+    anchorPosition={horseshoeAnchorPosition}
+    items={$connectionIntent?.insertableNodeTypes ?? []}
+    selectedIndex={horseshoeSelectedIndex}
+    query={horseshoeQuery}
+    pending={horseshoePending}
+    onSelect={(candidate) => void commitInsertSelection(candidate)}
+    onRotate={rotateInsertSelection}
+    onCancel={closeHorseshoeSelector}
+  />
 
   <!-- Cut line overlay -->
   {#if isCutting && cutStart && cutEnd}
