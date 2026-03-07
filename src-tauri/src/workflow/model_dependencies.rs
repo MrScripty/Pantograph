@@ -283,6 +283,7 @@ impl TauriModelDependencyResolver {
         match node_type {
             "audio-generation" => "stable_audio".to_string(),
             "pytorch-inference" => "pytorch".to_string(),
+            "diffusion-inference" => "pytorch".to_string(),
             "llamacpp-inference" => "llamacpp".to_string(),
             "ollama-inference" => "ollama".to_string(),
             _ => {
@@ -1955,6 +1956,13 @@ mod tests {
             TauriModelDependencyResolver::normalized_backend_key(&Some("torch".to_string())),
             Some("pytorch".to_string())
         );
+    }
+
+    #[test]
+    fn infer_engine_defaults_diffusion_node_to_pytorch() {
+        let engine =
+            TauriModelDependencyResolver::infer_engine(None, "diffusion-inference", Some("diffusion"));
+        assert_eq!(engine, "pytorch");
     }
 
     #[tokio::test]

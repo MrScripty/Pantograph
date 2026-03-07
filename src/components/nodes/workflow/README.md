@@ -11,8 +11,10 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | ----------- | ----------- |
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
+| `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
 | `NumberInputNode.svelte` | Renders a metadata-driven numeric editor that adopts downstream default values and range constraints. |
+| `PumaLibNode.svelte` | Presents model-library selection and routes model metadata into the correct downstream inference node type. |
 | `primitiveInputMetadata.ts` | Shared helpers that resolve downstream port metadata and normalize primitive editor defaults. |
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
@@ -47,7 +49,9 @@ duration is treated as a produced runtime contract (`audio_duration_seconds`)
 that the toolbar forwards from node outputs into the output node so scrub/replay
 controls do not depend solely on browser metadata timing. `AudioGenerationNode`
 also surfaces the batch-only capability boundary so users can distinguish Stable
-Audio final renders from ONNX-backed live chunk playback.
+Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
+also owns the UI-side routing hints that send diffusion models to
+`diffusion-inference` instead of the text-only PyTorch node.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.

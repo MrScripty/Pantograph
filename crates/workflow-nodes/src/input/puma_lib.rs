@@ -183,6 +183,8 @@ mod options_provider {
                     .unwrap_or_else(|| {
                         if m.model_type.eq_ignore_ascii_case("audio") {
                             "text-to-audio".to_string()
+                        } else if m.model_type.eq_ignore_ascii_case("diffusion") {
+                            "text-to-image".to_string()
                         } else {
                             "text-generation".to_string()
                         }

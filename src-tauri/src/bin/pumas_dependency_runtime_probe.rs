@@ -108,6 +108,13 @@ fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option
             Some("text-generation".to_string()),
         );
     }
+    if model_type == "diffusion" {
+        return (
+            "diffusion-inference".to_string(),
+            Some("pytorch".to_string()),
+            Some("text-to-image".to_string()),
+        );
+    }
 
     let task_type_primary = record
         .metadata

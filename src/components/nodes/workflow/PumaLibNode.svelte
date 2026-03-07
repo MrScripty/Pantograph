@@ -261,11 +261,15 @@
   }
 
   function inferNodeType(): string {
+    const task = (taskTypePrimary ?? '').toLowerCase();
+    if (task === 'text-to-image' || task === 'image-to-image') {
+      return 'diffusion-inference';
+    }
     const backend = inferBackendKey();
     if (backend === 'onnx-runtime') {
       return 'onnx-inference';
     }
-    if (taskTypePrimary === 'text-to-audio') {
+    if (task === 'text-to-audio') {
       return 'audio-generation';
     }
     return 'pytorch-inference';
@@ -275,6 +279,9 @@
     const task = (taskTypePrimary ?? '').toLowerCase();
     if (task === 'text-to-audio' || task === 'audio-to-text') {
       return 'stable_audio';
+    }
+    if (task === 'text-to-image' || task === 'image-to-image') {
+      return 'pytorch';
     }
     return 'pytorch';
   }
