@@ -11,10 +11,13 @@
     createHorseshoeDragSessionState,
     formatHorseshoeBlockedReason,
     findBestInsertableMatchIndex,
+    findNearestVisibleHorseshoeIndex,
     isSpaceKey,
+    resolveHorseshoeSpaceKeyAction,
     markConnectionDragFinalizing,
     requestHorseshoeDisplay,
     rotateHorseshoeIndex,
+    shouldUpdateHorseshoeAnchorFromPointer,
     shouldRemoveReconnectedEdge,
     startHorseshoeDrag,
     startConnectionDrag,
@@ -476,6 +479,7 @@
   function getHorseshoeOpenContext() {
     return {
       canEdit,
+      connectionDragActive: horseshoeSession.dragActive,
       supportsInsert: supportsInsertFromConnectionDrag(connectionDragState),
       hasConnectionIntent: Boolean($connectionIntent),
       insertableCount: $connectionIntent?.insertableNodeTypes.length ?? 0,
@@ -504,9 +508,25 @@
 
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
     const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
-    if (nextPosition) {
-      applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
+    if (!nextPosition) return;
+
+    if (!shouldUpdateHorseshoeAnchorFromPointer(horseshoeSession.displayState)) {
+      const nextIndex = horseshoeSession.anchorPosition
+        ? findNearestVisibleHorseshoeIndex(
+            $connectionIntent?.insertableNodeTypes ?? [],
+            horseshoeSelectedIndex,
+            nextPosition,
+            horseshoeSession.anchorPosition,
+          )
+        : null;
+
+      if (nextIndex !== null) {
+        horseshoeSelectedIndex = nextIndex;
+      }
+      return;
     }
+
+    applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
   }
 
   function scheduleHorseshoeQueryReset() {
@@ -574,16 +594,18 @@
   }
 
   async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
-    if (!$connectionIntent || horseshoePending || !supportsInsertFromConnectionDrag(connectionDragState)) return;
+    const currentConnectionIntent = $connectionIntent;
+    if (!currentConnectionIntent || horseshoePending || !supportsInsertFromConnectionDrag(connectionDragState)) return;
 
     const positionHint = getInsertPositionHint();
     if (!positionHint) return;
 
+    clearConnectionDragTracking();
     horseshoePending = true;
 
     try {
       const response = await workflowService.insertNodeAndConnect(
-        $connectionIntent.sourceAnchor,
+        currentConnectionIntent.sourceAnchor,
         candidate.node_type,
         getGraphRevision(),
         positionHint,
@@ -592,25 +614,25 @@
 
       if (response.accepted && response.graph) {
         loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
-        clearConnectionDragTracking();
+        horseshoePending = false;
         return;
       }
 
       setConnectionIntent({
-        sourceAnchor: $connectionIntent.sourceAnchor,
+        sourceAnchor: currentConnectionIntent.sourceAnchor,
         graphRevision: response.graph_revision,
-        compatibleNodeIds: $connectionIntent.compatibleNodeIds,
-        compatibleTargetKeys: $connectionIntent.compatibleTargetKeys,
-        insertableNodeTypes: $connectionIntent.insertableNodeTypes,
+        compatibleNodeIds: currentConnectionIntent.compatibleNodeIds,
+        compatibleTargetKeys: currentConnectionIntent.compatibleTargetKeys,
+        insertableNodeTypes: currentConnectionIntent.insertableNodeTypes,
         rejection: response.rejection,
       });
-      clearConnectionDragTracking();
+      horseshoePending = false;
 
       if (response.rejection) {
         console.warn('[WorkflowGraph] Insert rejected:', response.rejection.message);
       }
     } catch (error) {
-      clearConnectionDragTracking();
+      horseshoePending = false;
       console.error('[WorkflowGraph] Failed to insert compatible node:', error);
     }
   }
@@ -1067,10 +1089,26 @@
       return;
     }
 
-    if (isSpaceKey(e) && horseshoeSession.dragActive) {
+    const spaceAction = isSpaceKey(e)
+      ? resolveHorseshoeSpaceKeyAction({
+          displayState: horseshoeSession.displayState,
+          dragActive: horseshoeSession.dragActive,
+          pending: horseshoePending,
+          hasSelection: Boolean($connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex]),
+        })
+      : 'noop';
+
+    if (spaceAction !== 'noop') {
       e.preventDefault();
       horseshoeLastTrace = 'keydown:space';
-      requestHorseshoeOpen();
+      if (spaceAction === 'confirm') {
+        const candidate = $connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex];
+        if (candidate) {
+          void commitInsertSelection(candidate);
+        }
+      } else {
+        requestHorseshoeOpen();
+      }
       return;
     }
 

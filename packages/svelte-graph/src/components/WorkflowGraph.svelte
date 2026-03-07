@@ -23,10 +23,16 @@
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
   import { isPortTypeCompatible } from '../portTypeCompatibility.js';
-  import { findBestInsertableMatchIndex, rotateHorseshoeIndex } from '../horseshoeSelector.js';
+  import {
+    findBestInsertableMatchIndex,
+    findNearestVisibleHorseshoeIndex,
+    rotateHorseshoeIndex,
+  } from '../horseshoeSelector.js';
   import {
     formatHorseshoeBlockedReason,
     isSpaceKey,
+    resolveHorseshoeSpaceKeyAction,
+    shouldUpdateHorseshoeAnchorFromPointer,
   } from '../horseshoeInvocation.js';
   import {
     clearHorseshoeDragSession,
@@ -272,6 +278,7 @@
   function getHorseshoeOpenContext() {
     return {
       canEdit,
+      connectionDragActive: horseshoeSession.dragActive,
       supportsInsert: supportsInsertFromConnectionDrag(connectionDragState),
       hasConnectionIntent: Boolean($connectionIntentStore),
       insertableCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
@@ -300,9 +307,25 @@
 
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
     const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
-    if (nextPosition) {
-      applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
+    if (!nextPosition) return;
+
+    if (!shouldUpdateHorseshoeAnchorFromPointer(horseshoeSession.displayState)) {
+      const nextIndex = horseshoeSession.anchorPosition
+        ? findNearestVisibleHorseshoeIndex(
+            $connectionIntentStore?.insertableNodeTypes ?? [],
+            horseshoeSelectedIndex,
+            nextPosition,
+            horseshoeSession.anchorPosition,
+          )
+        : null;
+
+      if (nextIndex !== null) {
+        horseshoeSelectedIndex = nextIndex;
+      }
+      return;
     }
+
+    applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
   }
 
   function scheduleHorseshoeQueryReset() {
@@ -370,7 +393,8 @@
   }
 
   async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
-    if (!$connectionIntentStore || horseshoePending || !supportsInsertFromConnectionDrag(connectionDragState)) {
+    const connectionIntent = $connectionIntentStore;
+    if (!connectionIntent || horseshoePending || !supportsInsertFromConnectionDrag(connectionDragState)) {
       return;
     }
 
@@ -378,11 +402,12 @@
     const positionHint = getInsertPositionHint();
     if (!sessionId || !positionHint) return;
 
+    clearConnectionDragTracking();
     horseshoePending = true;
 
     try {
       const response = await backend.insertNodeAndConnect(
-        $connectionIntentStore.sourceAnchor,
+        connectionIntent.sourceAnchor,
         candidate.node_type,
         sessionId,
         getGraphRevision(),
@@ -392,25 +417,25 @@
 
       if (response.accepted && response.graph) {
         stores.workflow.loadWorkflow(response.graph, get(workflowMetadataStore) ?? undefined);
-        clearConnectionDragTracking();
+        horseshoePending = false;
         return;
       }
 
       stores.workflow.setConnectionIntent({
-        sourceAnchor: $connectionIntentStore.sourceAnchor,
+        sourceAnchor: connectionIntent.sourceAnchor,
         graphRevision: response.graph_revision,
-        compatibleNodeIds: $connectionIntentStore.compatibleNodeIds,
-        compatibleTargetKeys: $connectionIntentStore.compatibleTargetKeys,
-        insertableNodeTypes: $connectionIntentStore.insertableNodeTypes,
+        compatibleNodeIds: connectionIntent.compatibleNodeIds,
+        compatibleTargetKeys: connectionIntent.compatibleTargetKeys,
+        insertableNodeTypes: connectionIntent.insertableNodeTypes,
         rejection: response.rejection,
       });
-      clearConnectionDragTracking();
+      horseshoePending = false;
 
       if (response.rejection) {
         console.warn('[WorkflowGraph] Insert rejected:', response.rejection.message);
       }
     } catch (error) {
-      clearConnectionDragTracking();
+      horseshoePending = false;
       console.error('[WorkflowGraph] Failed to insert compatible node:', error);
     }
   }
@@ -445,10 +470,28 @@
       return;
     }
 
-    if (isSpaceKey(event) && horseshoeSession.dragActive) {
+    const spaceAction = isSpaceKey(event)
+      ? resolveHorseshoeSpaceKeyAction({
+          displayState: horseshoeSession.displayState,
+          dragActive: horseshoeSession.dragActive,
+          pending: horseshoePending,
+          hasSelection: Boolean(
+            $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex],
+          ),
+        })
+      : 'noop';
+
+    if (spaceAction !== 'noop') {
       event.preventDefault();
       horseshoeLastTrace = 'keydown:space';
-      requestHorseshoeOpen();
+      if (spaceAction === 'confirm') {
+        const candidate = $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex];
+        if (candidate) {
+          void commitInsertSelection(candidate);
+        }
+      } else {
+        requestHorseshoeOpen();
+      }
       return;
     }
 

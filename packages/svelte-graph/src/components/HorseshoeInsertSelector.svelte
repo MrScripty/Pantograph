@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { getHorseshoeWindow } from '../horseshoeSelector.js';
+  import {
+    getHorseshoeItemPosition,
+    getHorseshoeWindow,
+  } from '../horseshoeSelector.js';
   import type { HorseshoeDisplayState } from '../horseshoeDragSession.js';
   import type { InsertableNodeTypeCandidate } from '../types/workflow.js';
 
@@ -29,34 +32,10 @@
     onCancel,
   }: Props = $props();
 
-  const OUTER_RADIUS = 126;
-  const ITEM_RADIUS = 24;
-  const START_ANGLE = -150;
-  const END_ANGLE = -30;
-
   const windowData = $derived(getHorseshoeWindow(items, selectedIndex));
   const visibleItems = $derived(windowData.visibleItems);
   const hiddenBefore = $derived(windowData.hiddenBefore);
   const hiddenAfter = $derived(windowData.hiddenAfter);
-
-  function itemPosition(slot: number, itemCount: number) {
-    if (itemCount <= 1) {
-      return {
-        x: 0,
-        y: -OUTER_RADIUS,
-        angle: -90,
-      };
-    }
-
-    const step = (END_ANGLE - START_ANGLE) / (itemCount - 1);
-    const angle = START_ANGLE + step * slot;
-    const radians = (angle * Math.PI) / 180;
-    return {
-      x: Math.cos(radians) * OUTER_RADIUS,
-      y: Math.sin(radians) * OUTER_RADIUS,
-      angle,
-    };
-  }
 
   function handleWheel(event: WheelEvent) {
     if (displayState !== 'open' || pending) return;
@@ -97,7 +76,7 @@
 
     {#if displayState === 'open' && anchorPosition && items.length > 0}
       {#each visibleItems as entry}
-        {@const position = itemPosition(entry.slot, visibleItems.length)}
+        {@const position = getHorseshoeItemPosition(entry.slot, visibleItems.length)}
         <button
           type="button"
           class="horseshoe-item"
