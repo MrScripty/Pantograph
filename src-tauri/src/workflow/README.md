@@ -39,7 +39,10 @@ targets from live session state, uses graph fingerprints for stale-intent
 detection, and returns structured rejection reasons instead of boolean-only
 failure. Workflow execution in this directory also owns dependency-aware,
 process-backed Python execution for nodes such as `pytorch-inference`,
-`diffusion-inference`, `audio-generation`, and `onnx-inference`.
+`diffusion-inference`, `audio-generation`, and `onnx-inference`. Execution
+state is now stored as a per-session async mutex behind the global session map
+so long-running mutation commands serialize within one session without blocking
+lookups or edits for every other session.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -58,6 +61,8 @@ process-backed Python execution for nodes such as `pytorch-inference`,
   not leave orphan nodes or disconnected edges.
 - `workflow_execution_commands.rs` must refresh derived graph metadata when it
   returns graphs to the frontend.
+- The global execution registry lock must not be held across awaited graph
+  mutations; only the per-session execution lock may span awaited workflow work.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 
@@ -110,6 +115,9 @@ let inserted = connection_intent::insert_node_and_connect(
   graph or a structured rejection.
 - Expected incompatibility is not exceptional; transport/session errors still
   surface as command failures.
+- Session-scoped commands are serialized per execution, not across the entire
+  workflow registry; callers should not assume mutations on one session block
+  reads or edits on another session.
 - Compatibility policy is additive: existing commands remain while new editing
   capabilities are introduced.
 

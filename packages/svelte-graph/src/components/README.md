@@ -15,7 +15,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
 | `HorseshoeInsertSelector.svelte` | Cursor-anchored horseshoe selector used to browse compatible insertable node types during an active connection intent. |
 | `nodes/` | Shared node shells and reusable package node components, including connection-intent highlighting. |
-| `edges/` | Edge renderers and reconnect affordances used by `WorkflowGraph.svelte`. |
+| `edges/` | Edge renderers and reconnect affordances used by `WorkflowGraph.svelte`; reconnect is intentionally target-side only so occupied output handles stay available for fan-out drags. |
 
 ## Problem
 Package consumers need a graph editor that can enforce backend-owned connection
@@ -42,7 +42,11 @@ preserves queued opens while candidates load, records explicit blocked reasons,
 and renders pending/blocked selector states instead of silently doing nothing.
 `HorseshoeInsertSelector.svelte` opens once the session is ready. Node shells
 then read the same store to dim incompatible targets and highlight eligible
-anchors.
+anchors. The canvas now tracks explicit drag mode as part of that shared
+interaction contract: normal output-handle drags are connect/fan-out flows,
+while explicit target-end reconnect drags are the only reconnect path. Source
+reconnect anchors are not rendered because they overlap occupied output handles
+and conflict with multi-edge fan-out.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -58,6 +62,8 @@ anchors.
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of
   silently doing nothing.
+- Reconnect cleanup must only remove the original edge for unfinished reconnect
+  drags; normal connect/horseshoe flows must never inherit reconnect cleanup.
 - Connection-intent highlighting must clear when the graph changes or the drag
   interaction ends.
 - Reconnect flows that temporarily remove an edge must restore the original edge
@@ -100,6 +106,9 @@ anchors.
   drag-scoped window listeners and the shared drag-session controller; failed
   opens remain visible through pending/blocked selector states plus internal
   blocked-reason diagnostics.
+- Horseshoe insertion is only supported for normal connect drags. Explicit
+  reconnect drags surface a blocked reason instructing the user to start a new
+  drag from the output handle instead of pretending to support splice semantics.
 - Connection rejection is surfaced through console logging and shared store
   state today; consumers should not expect custom DOM events for rejection yet.
 - Compatibility policy is additive: new graph behaviors should layer on the

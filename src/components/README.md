@@ -35,7 +35,10 @@ as the reusable graph: load candidates on connect start, use shared store state
 for validation/highlighting, and route horseshoe invocation through the same
 shared drag-session controller and drag-scoped window input used by the package
 graph before committing through revision-aware anchor and insert APIs. Pending
-and blocked horseshoe states remain visible instead of failing silently.
+and blocked horseshoe states remain visible instead of failing silently. The
+app graph also consumes the shared connection-drag helper contract so occupied
+output handles stay in normal fan-out mode and reconnect cleanup cannot bleed
+into ordinary insert flows.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -51,6 +54,8 @@ and blocked horseshoe states remain visible instead of failing silently.
   creating parallel graph state.
 - Connection-intent cleanup must happen on cancel, pane click, escape, and graph
   mutation paths.
+- Occupied output handles must remain available for multiple outgoing edges even
+  when an edge is already present at that output.
 - Horseshoe selection must route through `workflowService.insertNodeAndConnect`
   so the app never creates orphan nodes on stale or incompatible inserts.
 - Horseshoe open failures should be diagnosable through the shared blocked
@@ -86,6 +91,9 @@ and blocked horseshoe states remain visible instead of failing silently.
 - `WorkflowGraph.svelte` relies on `workflowService` session state and the
   shared workflow store exports; callers should not instantiate it outside the
   app shell without recreating those dependencies.
+- The app graph follows the package contract that only explicit target-end edge
+  drags are reconnect flows; starting from an output handle is always a
+  connection/fan-out gesture.
 - Rejection handling for failed connection and insert commits is currently
   store/console based, not event-emitter based.
 - Horseshoe invocation is drag-session-scoped and uses shared package helpers;
