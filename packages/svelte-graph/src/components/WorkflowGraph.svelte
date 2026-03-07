@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     SvelteFlow,
     Controls,
@@ -20,10 +20,17 @@
     ConnectionAnchor,
     ConnectionCandidatesResponse,
     ConnectionCommitResponse,
+    InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
   import { isPortTypeCompatible } from '../portTypeCompatibility.js';
+  import {
+    clampHorseshoeIndex,
+    findBestInsertableMatchIndex,
+    rotateHorseshoeIndex,
+  } from '../horseshoeSelector.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
+  import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
   import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
 
   const { backend, registry, stores } = useGraphContext();
@@ -41,7 +48,12 @@
   const nodesStore = stores.workflow.nodes;
   const edgesStore = stores.workflow.edges;
   const connectionIntentStore = stores.workflow.connectionIntent;
-  const { isEditing, nodeDefinitions: nodeDefsStore, workflowGraph: workflowGraphStore } =
+  const {
+    isEditing,
+    nodeDefinitions: nodeDefsStore,
+    workflowGraph: workflowGraphStore,
+    workflowMetadata: workflowMetadataStore,
+  } =
     stores.workflow;
   const { isReadOnly, currentSessionId } = stores.session;
   const { viewLevel } = stores.view;
@@ -71,6 +83,13 @@
   let cutToolRef: CutTool;
   let ctrlPressed = $state(false);
   let isCutting = $state(false);
+  let dragCursorPosition = $state<{ x: number; y: number } | null>(null);
+  let horseshoeVisible = $state(false);
+  let horseshoeAnchorPosition = $state<{ x: number; y: number } | null>(null);
+  let horseshoeSelectedIndex = $state(0);
+  let horseshoeQuery = $state('');
+  let horseshoePending = $state(false);
+  let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ContainerBorder ref
   let containerBorderRef: ContainerBorder;
@@ -116,6 +135,239 @@
     const definitions = await backend.getNodeDefinitions();
     nodeDefsStore.set(definitions);
   });
+
+  onDestroy(() => {
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+    }
+  });
+
+  $effect(() => {
+    if (!$connectionIntentStore) {
+      closeHorseshoeSelector();
+      return;
+    }
+
+    horseshoeSelectedIndex = clampHorseshoeIndex(
+      horseshoeSelectedIndex,
+      $connectionIntentStore.insertableNodeTypes.length,
+    );
+  });
+
+  function closeHorseshoeSelector() {
+    horseshoeVisible = false;
+    horseshoeAnchorPosition = null;
+    horseshoePending = false;
+    horseshoeSelectedIndex = 0;
+    horseshoeQuery = '';
+
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+      horseshoeQueryResetTimer = null;
+    }
+  }
+
+  function clearConnectionInteraction() {
+    closeHorseshoeSelector();
+    stores.workflow.clearConnectionIntent();
+  }
+
+  function getRelativePointerPosition(clientX: number, clientY: number) {
+    if (!containerElement) return null;
+    const bounds = containerElement.getBoundingClientRect();
+    return {
+      x: clientX - bounds.left,
+      y: clientY - bounds.top,
+    };
+  }
+
+  function getEventPointerPosition(event: MouseEvent | TouchEvent) {
+    if ('touches' in event) {
+      const touch = event.touches[0] ?? event.changedTouches[0];
+      if (!touch) return null;
+      return getRelativePointerPosition(touch.clientX, touch.clientY);
+    }
+
+    return getRelativePointerPosition(event.clientX, event.clientY);
+  }
+
+  function updateDragCursorFromMouseEvent(event: MouseEvent) {
+    const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
+    if (nextPosition) {
+      dragCursorPosition = nextPosition;
+    }
+  }
+
+  function scheduleHorseshoeQueryReset() {
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+    }
+
+    horseshoeQueryResetTimer = setTimeout(() => {
+      horseshoeQuery = '';
+      horseshoeQueryResetTimer = null;
+    }, 900);
+  }
+
+  function openHorseshoeSelector() {
+    if (!canEdit || !$connectionIntentStore || $connectionIntentStore.insertableNodeTypes.length === 0) {
+      return;
+    }
+
+    horseshoeAnchorPosition = dragCursorPosition;
+    if (!horseshoeAnchorPosition) return;
+
+    horseshoeVisible = true;
+    horseshoePending = false;
+    horseshoeQuery = '';
+    horseshoeSelectedIndex = 0;
+  }
+
+  function rotateInsertSelection(delta: number) {
+    if (!$connectionIntentStore || $connectionIntentStore.insertableNodeTypes.length === 0) return;
+
+    horseshoeSelectedIndex = rotateHorseshoeIndex(
+      horseshoeSelectedIndex,
+      delta,
+      $connectionIntentStore.insertableNodeTypes.length,
+    );
+  }
+
+  function updateInsertQuery(nextQuery: string) {
+    horseshoeQuery = nextQuery;
+    horseshoeSelectedIndex = findBestInsertableMatchIndex(
+      $connectionIntentStore?.insertableNodeTypes ?? [],
+      nextQuery,
+      horseshoeSelectedIndex,
+    );
+
+    if (nextQuery) {
+      scheduleHorseshoeQueryReset();
+      return;
+    }
+
+    if (horseshoeQueryResetTimer) {
+      clearTimeout(horseshoeQueryResetTimer);
+      horseshoeQueryResetTimer = null;
+    }
+  }
+
+  function getInsertPositionHint() {
+    if (!horseshoeAnchorPosition) return null;
+
+    const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
+    return {
+      position: {
+        x: (horseshoeAnchorPosition.x - viewport.x) / viewport.zoom,
+        y: (horseshoeAnchorPosition.y - viewport.y) / viewport.zoom,
+      },
+    };
+  }
+
+  async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
+    if (!$connectionIntentStore || horseshoePending) return;
+
+    const sessionId = get(currentSessionId);
+    const positionHint = getInsertPositionHint();
+    if (!sessionId || !positionHint) return;
+
+    horseshoePending = true;
+
+    try {
+      const response = await backend.insertNodeAndConnect(
+        $connectionIntentStore.sourceAnchor,
+        candidate.node_type,
+        sessionId,
+        getGraphRevision(),
+        positionHint,
+        candidate.matching_input_port_ids[0],
+      );
+
+      if (response.accepted && response.graph) {
+        stores.workflow.loadWorkflow(response.graph, get(workflowMetadataStore) ?? undefined);
+        closeHorseshoeSelector();
+        return;
+      }
+
+      stores.workflow.setConnectionIntent({
+        sourceAnchor: $connectionIntentStore.sourceAnchor,
+        graphRevision: response.graph_revision,
+        compatibleNodeIds: $connectionIntentStore.compatibleNodeIds,
+        compatibleTargetKeys: $connectionIntentStore.compatibleTargetKeys,
+        insertableNodeTypes: $connectionIntentStore.insertableNodeTypes,
+        rejection: response.rejection,
+      });
+      closeHorseshoeSelector();
+
+      if (response.rejection) {
+        console.warn('[WorkflowGraph] Insert rejected:', response.rejection.message);
+      }
+    } catch (error) {
+      horseshoePending = false;
+      console.error('[WorkflowGraph] Failed to insert compatible node:', error);
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    const target = event.target as HTMLElement | null;
+    if (
+      target &&
+      (target.isContentEditable ||
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+    ) {
+      return;
+    }
+
+    if (
+      event.key === ' ' &&
+      $connectionIntentStore &&
+      $connectionIntentStore.insertableNodeTypes.length > 0
+    ) {
+      event.preventDefault();
+      openHorseshoeSelector();
+      return;
+    }
+
+    if (!horseshoeVisible) return;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeHorseshoeSelector();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const candidate = $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex];
+      if (candidate) {
+        void commitInsertSelection(candidate);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      rotateInsertSelection(-1);
+      return;
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      rotateInsertSelection(1);
+      return;
+    }
+
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      updateInsertQuery(horseshoeQuery.slice(0, -1));
+      return;
+    }
+
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      updateInsertQuery(`${horseshoeQuery}${event.key}`);
+    }
+  }
 
   /** Synchronous connection gate — prevents SvelteFlow from creating invalid edges. */
   function checkValidConnection(connection: Edge | Connection): boolean {
@@ -172,11 +424,12 @@
   async function loadConnectionIntent(sourceAnchor: ConnectionAnchor) {
     const sessionId = get(currentSessionId);
     if (!canEdit || !sessionId) {
-      stores.workflow.clearConnectionIntent();
+      clearConnectionInteraction();
       return;
     }
 
     const requestId = ++connectionIntentRequestId;
+    closeHorseshoeSelector();
 
     try {
       const candidates = await backend.getConnectionCandidates(
@@ -189,7 +442,7 @@
       stores.workflow.setConnectionIntent(toConnectionIntentState(candidates));
     } catch (error) {
       if (requestId === connectionIntentRequestId) {
-        stores.workflow.clearConnectionIntent();
+        clearConnectionInteraction();
       }
       console.error('[WorkflowGraph] Failed to load connection candidates:', error);
     }
@@ -226,7 +479,7 @@
 
     if (response.accepted && response.graph) {
       stores.workflow.syncEdgesFromBackend(response.graph);
-      stores.workflow.clearConnectionIntent();
+      clearConnectionInteraction();
       return response;
     }
 
@@ -291,8 +544,13 @@
     params: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' },
   ) {
     if (!canEdit || params.handleType !== 'source' || !params.handleId) {
-      stores.workflow.clearConnectionIntent();
+      clearConnectionInteraction();
       return;
+    }
+
+    const pointerPosition = getEventPointerPosition(_event);
+    if (pointerPosition) {
+      dragCursorPosition = pointerPosition;
     }
 
     await loadConnectionIntent({
@@ -305,7 +563,8 @@
     _event: MouseEvent | TouchEvent,
     _connectionState: { isValid: boolean },
   ) {
-    stores.workflow.clearConnectionIntent();
+    if (horseshoeVisible || horseshoePending) return;
+    clearConnectionInteraction();
   }
 
   async function handleConnect(connection: Connection) {
@@ -341,7 +600,7 @@
     if (!canEdit) return;
 
     const sessionId = get(currentSessionId) || '';
-    stores.workflow.clearConnectionIntent();
+    clearConnectionInteraction();
 
     for (const edge of deletedEdges) {
       try {
@@ -360,7 +619,7 @@
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     if (!canEdit) return;
-    stores.workflow.clearConnectionIntent();
+    clearConnectionInteraction();
 
     const data = event.dataTransfer?.getData('application/json');
     if (!data) return;
@@ -406,7 +665,7 @@
     }
 
     reconnectingSourceAnchor = null;
-    stores.workflow.clearConnectionIntent();
+    clearConnectionInteraction();
   }
 
   async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
@@ -435,7 +694,7 @@
 
       if (response.accepted && response.graph) {
         stores.workflow.syncEdgesFromBackend(response.graph);
-        stores.workflow.clearConnectionIntent();
+        clearConnectionInteraction();
         return;
       }
 
@@ -483,7 +742,7 @@
 
     reconnectingEdgeId = null;
     reconnectingSourceAnchor = null;
-    stores.workflow.clearConnectionIntent();
+    clearConnectionInteraction();
   }
 
   // --- Viewport handling ---
@@ -505,14 +764,14 @@
 
   function handlePaneClick() {
     containerBorderRef?.deselect();
-    stores.workflow.clearConnectionIntent();
+    clearConnectionInteraction();
   }
 
   // --- Cut tool edge removal ---
 
   async function handleEdgesCut(edgeIds: string[]) {
     const sessionId = get(currentSessionId) || '';
-    stores.workflow.clearConnectionIntent();
+    clearConnectionInteraction();
     for (const edgeId of edgeIds) {
       try {
         const updatedGraph = await backend.removeEdge(edgeId, sessionId);
@@ -524,6 +783,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleKeyDown} />
+
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="workflow-graph-container"
@@ -532,7 +793,10 @@
   ondrop={handleDrop}
   ondragover={handleDragOver}
   onmousedown={(e) => cutToolRef?.onPaneMouseDown(e)}
-  onmousemove={(e) => cutToolRef?.onPaneMouseMove(e)}
+  onmousemove={(e) => {
+    updateDragCursorFromMouseEvent(e);
+    cutToolRef?.onPaneMouseMove(e);
+  }}
   onmouseup={() => cutToolRef?.onPaneMouseUp()}
   role="application"
 >
@@ -610,6 +874,18 @@
     {edges}
     enabled={canEdit}
     onEdgesCut={handleEdgesCut}
+  />
+
+  <HorseshoeInsertSelector
+    visible={horseshoeVisible}
+    anchorPosition={horseshoeAnchorPosition}
+    items={$connectionIntentStore?.insertableNodeTypes ?? []}
+    selectedIndex={horseshoeSelectedIndex}
+    query={horseshoeQuery}
+    pending={horseshoePending}
+    onSelect={(candidate) => void commitInsertSelection(candidate)}
+    onRotate={rotateInsertSelection}
+    onCancel={closeHorseshoeSelector}
   />
 </div>
 

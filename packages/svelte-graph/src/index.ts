@@ -90,6 +90,13 @@ export {
   computeGraphFingerprint,
   withDerivedGraph,
 } from './graphRevision.js';
+export {
+  HORSESHOE_VISIBLE_COUNT,
+  clampHorseshoeIndex,
+  rotateHorseshoeIndex,
+  getHorseshoeWindow,
+  findBestInsertableMatchIndex,
+} from './horseshoeSelector.js';
 
 // --- Components ---
 export { default as WorkflowGraphEditor } from './components/WorkflowGraph.svelte';
@@ -101,6 +108,7 @@ export { default as NodeGroupEditor } from './components/NodeGroupEditor.svelte'
 export { default as GroupPortMapper } from './components/GroupPortMapper.svelte';
 export { default as ContainerBorder } from './components/ContainerBorder.svelte';
 export { default as CutTool } from './components/CutTool.svelte';
+export { default as HorseshoeInsertSelector } from './components/HorseshoeInsertSelector.svelte';
 
 // --- Node/Edge Components ---
 export { default as BaseNode } from './components/nodes/BaseNode.svelte';
