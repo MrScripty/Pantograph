@@ -46,7 +46,10 @@ anchors. The canvas now tracks explicit drag mode as part of that shared
 interaction contract: normal output-handle drags are connect/fan-out flows,
 while explicit target-end reconnect drags are the only reconnect path. Source
 reconnect anchors are not rendered because they overlap occupied output handles
-and conflict with multi-edge fan-out.
+and conflict with multi-edge fan-out. Once the horseshoe is open, the first
+`Space` has already been consumed; pressing `Space` again confirms the current
+highlighted insert candidate, clears drag state immediately, and leaves pointer
+motion free to change the highlighted item against a fixed menu anchor.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -62,6 +65,10 @@ and conflict with multi-edge fan-out.
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of
   silently doing nothing.
+- Successful horseshoe confirmation must end the drag before later drag-end
+  cleanup runs so the pointer is no longer treated as dragging an edge.
+- While the horseshoe is open, pointer movement must not reposition the menu;
+  it can only affect item selection inside the existing anchored layout.
 - Reconnect cleanup must only remove the original edge for unfinished reconnect
   drags; normal connect/horseshoe flows must never inherit reconnect cleanup.
 - Connection-intent highlighting must clear when the graph changes or the drag
@@ -106,6 +113,8 @@ and conflict with multi-edge fan-out.
   drag-scoped window listeners and the shared drag-session controller; failed
   opens remain visible through pending/blocked selector states plus internal
   blocked-reason diagnostics.
+- When the horseshoe is open, `Space` and `Enter` both confirm the highlighted
+  insert candidate; successful confirmation ends drag ownership immediately.
 - Horseshoe insertion is only supported for normal connect drags. Explicit
   reconnect drags surface a blocked reason instructing the user to start a new
   drag from the output handle instead of pretending to support splice semantics.

@@ -38,7 +38,10 @@ graph before committing through revision-aware anchor and insert APIs. Pending
 and blocked horseshoe states remain visible instead of failing silently. The
 app graph also consumes the shared connection-drag helper contract so occupied
 output handles stay in normal fan-out mode and reconnect cleanup cannot bleed
-into ordinary insert flows.
+into ordinary insert flows. Once the horseshoe is open, repeated `Space`
+confirms the highlighted insert candidate, clears drag ownership immediately,
+and turns pointer movement into menu selection input instead of menu
+repositioning.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -60,6 +63,10 @@ into ordinary insert flows.
   so the app never creates orphan nodes on stale or incompatible inserts.
 - Horseshoe open failures should be diagnosable through the shared blocked
   reason flow rather than app-only heuristics.
+- Successful horseshoe confirmation must drop drag state immediately so later
+  drag-end events do not keep the pointer in a dragging interaction.
+- While the horseshoe is open, pointer movement must update highlighted menu
+  selection rather than the anchored menu position.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
@@ -94,6 +101,9 @@ into ordinary insert flows.
 - The app graph follows the package contract that only explicit target-end edge
   drags are reconnect flows; starting from an output handle is always a
   connection/fan-out gesture.
+- The app graph follows the package horseshoe contract: first `Space` opens,
+  open-state `Space` or `Enter` confirms, and menu-open pointer motion selects
+  candidates without moving the menu anchor.
 - Rejection handling for failed connection and insert commits is currently
   store/console based, not event-emitter based.
 - Horseshoe invocation is drag-session-scoped and uses shared package helpers;
