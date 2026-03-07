@@ -91,6 +91,10 @@ export interface InsertableNodeTypeCandidate {
   matching_input_port_ids: string[];
 }
 
+export interface InsertNodePositionHint {
+  position: { x: number; y: number };
+}
+
 export interface ConnectionCandidatesResponse {
   graph_revision: string;
   revision_matches: boolean;
@@ -107,7 +111,9 @@ export type ConnectionRejectionReason =
   | 'target_capacity_reached'
   | 'self_connection'
   | 'cycle_detected'
-  | 'incompatible_types';
+  | 'incompatible_types'
+  | 'unknown_insert_node_type'
+  | 'no_compatible_insert_input';
 
 export interface ConnectionRejection {
   reason: ConnectionRejectionReason;
@@ -117,6 +123,14 @@ export interface ConnectionRejection {
 export interface ConnectionCommitResponse {
   accepted: boolean;
   graph_revision: string;
+  graph?: WorkflowGraph;
+  rejection?: ConnectionRejection;
+}
+
+export interface InsertNodeConnectionResponse {
+  accepted: boolean;
+  graph_revision: string;
+  inserted_node_id?: string;
   graph?: WorkflowGraph;
   rejection?: ConnectionRejection;
 }

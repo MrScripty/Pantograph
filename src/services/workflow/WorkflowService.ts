@@ -10,6 +10,8 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  InsertNodePositionHint,
+  InsertNodeConnectionResponse,
 } from './types';
 import {
   MOCK_NODE_DEFINITIONS,
@@ -343,6 +345,40 @@ export class WorkflowService {
       sourceAnchor,
       targetAnchor,
       graphRevision,
+    });
+  }
+
+  async insertNodeAndConnect(
+    sourceAnchor: ConnectionAnchor,
+    nodeType: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+    preferredInputPortId?: string,
+    executionId?: string
+  ): Promise<InsertNodeConnectionResponse> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_MOCKS) {
+      return {
+        accepted: false,
+        graph_revision: graphRevision,
+        rejection: {
+          reason: 'unknown_insert_node_type',
+          message: 'Mock mode does not implement insert-and-connect',
+        },
+      };
+    }
+
+    return invoke<InsertNodeConnectionResponse>('insert_node_and_connect_in_execution', {
+      executionId: id,
+      sourceAnchor,
+      nodeType,
+      graphRevision,
+      positionHint,
+      preferredInputPortId,
     });
   }
 

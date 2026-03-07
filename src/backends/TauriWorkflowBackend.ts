@@ -18,6 +18,8 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  InsertNodePositionHint,
+  InsertNodeConnectionResponse,
   NodeGroup,
   PortMapping,
   CreateGroupResult,
@@ -98,6 +100,24 @@ export class TauriWorkflowBackend implements WorkflowBackend {
       sourceAnchor,
       targetAnchor,
       graphRevision,
+    });
+  }
+
+  async insertNodeAndConnect(
+    sourceAnchor: ConnectionAnchor,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+    preferredInputPortId?: string,
+  ): Promise<InsertNodeConnectionResponse> {
+    return invoke<InsertNodeConnectionResponse>('insert_node_and_connect_in_execution', {
+      executionId: sessionId,
+      sourceAnchor,
+      nodeType,
+      graphRevision,
+      positionHint,
+      preferredInputPortId,
     });
   }
 

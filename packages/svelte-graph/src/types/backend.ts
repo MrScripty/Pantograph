@@ -12,6 +12,8 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  InsertNodePositionHint,
+  InsertNodeConnectionResponse,
 } from './workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from './groups.js';
 
@@ -98,6 +100,16 @@ export interface WorkflowBackend {
     sessionId: string,
     graphRevision: string,
   ): Promise<ConnectionCommitResponse>;
+
+  /** Insert a compatible node type at a position hint and connect the active source anchor to it. */
+  insertNodeAndConnect(
+    sourceAnchor: ConnectionAnchor,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+    preferredInputPortId?: string,
+  ): Promise<InsertNodeConnectionResponse>;
 
   /** Remove an edge. Returns the updated graph for frontend sync. */
   removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph>;

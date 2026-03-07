@@ -10,6 +10,8 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  InsertNodeConnectionResponse,
+  InsertNodePositionHint,
   NodeDefinition,
   PortDataType,
   WorkflowGraph,
@@ -289,6 +291,104 @@ export class MockWorkflowBackend implements WorkflowBackend {
     return {
       accepted: true,
       graph_revision: graph.derived_graph.graph_fingerprint,
+      graph: structuredClone(graph),
+    };
+  }
+
+  async insertNodeAndConnect(
+    sourceAnchor: ConnectionAnchor,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+    preferredInputPortId?: string,
+  ): Promise<InsertNodeConnectionResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+
+    const currentRevision = computeGraphFingerprint(graph);
+    if (graphRevision !== currentRevision) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'stale_revision',
+          message: `graph revision '${graphRevision}' is stale`,
+        },
+      };
+    }
+
+    const sourceNode = graph.nodes.find((node) => node.id === sourceAnchor.node_id);
+    const sourceDef = this.nodeDefinitions.find((def) => def.node_type === sourceNode?.node_type);
+    const sourcePort = sourceDef?.outputs.find((port) => port.id === sourceAnchor.port_id);
+    if (!sourcePort) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_source_anchor',
+          message: `source anchor '${sourceAnchor.node_id}.${sourceAnchor.port_id}' was not found`,
+        },
+      };
+    }
+
+    const insertDef = this.nodeDefinitions.find((def) => def.node_type === nodeType);
+    if (!insertDef) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_insert_node_type',
+          message: `insertable node type '${nodeType}' is unknown`,
+        },
+      };
+    }
+
+    const targetPort =
+      insertDef.inputs.find(
+        (port) =>
+          preferredInputPortId &&
+          port.id === preferredInputPortId &&
+          isPortTypeCompatible(sourcePort.data_type, port.data_type)
+      ) ??
+      insertDef.inputs
+        .filter((port) => isPortTypeCompatible(sourcePort.data_type, port.data_type))
+        .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id))[0];
+
+    if (!targetPort) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'no_compatible_insert_input',
+          message: `node type '${nodeType}' has no compatible input for ${sourcePort.data_type}`,
+        },
+      };
+    }
+
+    const insertedNodeId = `${nodeType}-${Date.now()}`;
+    graph.nodes.push({
+      id: insertedNodeId,
+      node_type: nodeType,
+      position: positionHint.position,
+      data: {
+        label: insertDef.label,
+        ...Object.fromEntries(insertDef.inputs.map((input) => [input.id, null])),
+      },
+    });
+    graph.edges.push({
+      id: `${sourceAnchor.node_id}-${sourceAnchor.port_id}-${insertedNodeId}-${targetPort.id}`,
+      source: sourceAnchor.node_id,
+      source_handle: sourceAnchor.port_id,
+      target: insertedNodeId,
+      target_handle: targetPort.id,
+    });
+    graph.derived_graph = buildDerivedGraph(graph);
+
+    return {
+      accepted: true,
+      graph_revision: graph.derived_graph.graph_fingerprint,
+      inserted_node_id: insertedNodeId,
       graph: structuredClone(graph),
     };
   }
