@@ -100,6 +100,9 @@
             <span class="text-[10px] text-neutral-500">| {dependencyText}</span>
           {/if}
         </div>
+        <div class="text-[10px] text-neutral-500">
+          Stable Audio renders final audio only; use ONNX inference for live audio chunks.
+        </div>
         {#if !isModelConnected}
           <div class="text-[10px] text-amber-400">
             Connect a Puma-Lib node

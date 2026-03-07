@@ -33,6 +33,14 @@ Workflow command handlers, execution plumbing, and validation utilities for grap
 - Audio stream chunks are emitted as workflow stream events and consumed by the
   frontend audio output node for buffered playback.
 
+## Stable Audio Notes
+- `audio-generation` also executes through the Python sidecar path in
+  `task_executor.rs`, but it is a batch-only final-audio path in the current
+  runtime.
+- `task_executor.rs` must not replay buffered `stream` payloads for
+  `audio-generation` after completion, because that would present a completed
+  render as if it were live incremental streaming.
+
 ## Design Decisions
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.

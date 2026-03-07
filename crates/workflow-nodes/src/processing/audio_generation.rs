@@ -48,7 +48,8 @@ impl TaskDescriptor for AudioGenerationTask {
             node_type: "audio-generation".to_string(),
             category: NodeCategory::Processing,
             label: "Audio Generation".to_string(),
-            description: "Generate audio from text prompts via Stable Audio".to_string(),
+            description:
+                "Generate final audio from text prompts via Stable Audio (batch-only)".to_string(),
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_PROMPT, "Prompt", PortDataType::String),

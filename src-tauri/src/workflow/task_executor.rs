@@ -971,10 +971,16 @@ impl TauriTaskExecutor {
             .execute_node_with_stream(request, stream_handler)
             .await
             .map_err(NodeEngineError::ExecutionFailed)?;
-        if !streamed_any.load(Ordering::Relaxed) {
+        if !streamed_any.load(Ordering::Relaxed)
+            && Self::supports_buffered_stream_replay(node_type)
+        {
             Self::emit_python_stream_events(task_id, &outputs, extensions);
         }
         Ok(outputs)
+    }
+
+    fn supports_buffered_stream_replay(node_type: &str) -> bool {
+        node_type != "audio-generation"
     }
 
     fn resolve_stream_target(
@@ -1450,6 +1456,66 @@ mod tests {
         assert_eq!(stream_events[1].3["audio_base64"], "chunk-2");
         assert_eq!(stream_events[1].3["sequence"], 1);
         assert_eq!(stream_events[1].3["is_final"], true);
+    }
+
+    #[tokio::test]
+    async fn audio_generation_nodes_do_not_emit_buffered_stream_events_after_completion() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("audio".to_string(), serde_json::json!("final-audio"));
+        adapter_response.insert(
+            "stream".to_string(),
+            serde_json::json!([
+                {
+                    "type": "audio_chunk",
+                    "mode": "append",
+                    "audio_base64": "chunk-1",
+                    "mime_type": "audio/wav",
+                    "sequence": 0,
+                    "is_final": false
+                }
+            ]),
+        );
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests,
+            response: adapter_response,
+        });
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: ModelDependencyRequirements {
+                backend_key: Some("stable_audio".to_string()),
+                ..make_requirements(DependencyValidationState::Resolved)
+            },
+            status: make_status(DependencyState::Ready, None),
+            model_ref: None,
+        });
+        let (executor, mut extensions) = test_executor(adapter, resolver);
+        let sink = Arc::new(VecEventSink::new());
+        extensions.set(
+            runtime_extension_keys::EVENT_SINK,
+            sink.clone() as Arc<dyn node_engine::EventSink>,
+        );
+        extensions.set(
+            runtime_extension_keys::EXECUTION_ID,
+            "exec-audio-batch-test".to_string(),
+        );
+
+        let mut inputs = HashMap::new();
+        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/stable-audio"));
+        inputs.insert("prompt".to_string(), serde_json::json!("pad ambience"));
+
+        let outputs = executor
+            .execute_task("audio-generation-batch", inputs, &Context::new(), &extensions)
+            .await
+            .expect("audio-generation execution should succeed");
+
+        assert_eq!(outputs.get("audio"), Some(&serde_json::json!("final-audio")));
+        let stream_events: Vec<_> = sink
+            .events()
+            .into_iter()
+            .filter(|event| matches!(event, WorkflowEvent::TaskStream { .. }))
+            .collect();
+        assert!(stream_events.is_empty());
     }
 
     #[test]

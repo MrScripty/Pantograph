@@ -32,6 +32,8 @@ or requiring the whole workflow view to remount.
 - Final generated audio may arrive before browser metadata resolves, so the UI
   must honor backend-provided duration metadata instead of relying only on
   `HTMLAudioElement.duration`.
+- Stable Audio generation is batch-only in the current runtime, so the UI must
+  not imply that its output will arrive as playable stream chunks mid-generation.
 
 ## Decision
 Keep node-specific runtime behavior inside the component that owns the UI, but
@@ -40,7 +42,9 @@ therefore handles playback resources locally while relying on run-start store
 cleanup to clear execution-local audio fields between workflow runs. Final audio
 duration is treated as a produced runtime contract (`audio_duration_seconds`)
 that the toolbar forwards from node outputs into the output node so scrub/replay
-controls do not depend solely on browser metadata timing.
+controls do not depend solely on browser metadata timing. `AudioGenerationNode`
+also surfaces the batch-only capability boundary so users can distinguish Stable
+Audio final renders from ONNX-backed live chunk playback.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
