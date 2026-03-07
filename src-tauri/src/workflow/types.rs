@@ -304,6 +304,14 @@ pub struct InsertableNodeTypeCandidate {
     pub matching_input_port_ids: Vec<String>,
 }
 
+/// Position hint supplied by the client when inserting a compatible node.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertNodePositionHint {
+    /// Preferred canvas position for the inserted node.
+    pub position: Position,
+}
+
 /// Candidate discovery response for an interactive connection intent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -340,6 +348,10 @@ pub enum ConnectionRejectionReason {
     CycleDetected,
     /// Source and target port types are not compatible.
     IncompatibleTypes,
+    /// The requested node type is not registered for insertion.
+    UnknownInsertNodeType,
+    /// The requested node type has no compatible input for the source anchor.
+    NoCompatibleInsertInput,
 }
 
 /// Structured rejection payload returned when a connection commit is denied.
@@ -364,6 +376,25 @@ pub struct ConnectionCommitResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<WorkflowGraph>,
     /// Structured rejection when the connection is denied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection: Option<ConnectionRejection>,
+}
+
+/// Result of inserting a compatible node type and immediately connecting it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertNodeConnectionResponse {
+    /// True when the node and edge were both added to the graph.
+    pub accepted: bool,
+    /// Current graph revision after evaluating the request.
+    pub graph_revision: String,
+    /// Inserted node id when the operation succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inserted_node_id: Option<String>,
+    /// Updated graph when the insert succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<WorkflowGraph>,
+    /// Structured rejection when the insert is denied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }

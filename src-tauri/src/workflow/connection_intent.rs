@@ -5,11 +5,15 @@
 
 use std::collections::{HashSet, VecDeque};
 
+use serde_json::{Map, Value};
+use uuid::Uuid;
+
 use super::registry::NodeRegistry;
 use super::types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
     ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,
-    GraphNode, InsertableNodeTypeCandidate, NodeDefinition, PortDefinition, WorkflowGraph,
+    GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodePositionHint,
+    InsertableNodeTypeCandidate, NodeDefinition, PortDefinition, WorkflowGraph,
 };
 use super::validation::validate_connection;
 
@@ -38,16 +42,19 @@ fn resolve_output_anchor<'a>(
     registry: &'a NodeRegistry,
     anchor: &ConnectionAnchor,
 ) -> Result<ResolvedOutputAnchor<'a>, ConnectionRejection> {
-    let node = graph.find_node(&anchor.node_id).ok_or_else(|| ConnectionRejection {
-        reason: ConnectionRejectionReason::UnknownSourceAnchor,
-        message: format!("source node '{}' was not found", anchor.node_id),
-    })?;
-    let definition = registry
-        .get_definition(&node.node_type)
+    let node = graph
+        .find_node(&anchor.node_id)
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
-            message: format!("source node type '{}' is unknown", node.node_type),
+            message: format!("source node '{}' was not found", anchor.node_id),
         })?;
+    let definition =
+        registry
+            .get_definition(&node.node_type)
+            .ok_or_else(|| ConnectionRejection {
+                reason: ConnectionRejectionReason::UnknownSourceAnchor,
+                message: format!("source node type '{}' is unknown", node.node_type),
+            })?;
     let port = definition
         .outputs
         .iter()
@@ -60,10 +67,7 @@ fn resolve_output_anchor<'a>(
             ),
         })?;
 
-    Ok(ResolvedOutputAnchor {
-        node,
-        port,
-    })
+    Ok(ResolvedOutputAnchor { node, port })
 }
 
 fn resolve_input_anchor<'a>(
@@ -71,16 +75,19 @@ fn resolve_input_anchor<'a>(
     registry: &'a NodeRegistry,
     anchor: &ConnectionAnchor,
 ) -> Result<ResolvedInputAnchor<'a>, ConnectionRejection> {
-    let node = graph.find_node(&anchor.node_id).ok_or_else(|| ConnectionRejection {
-        reason: ConnectionRejectionReason::UnknownTargetAnchor,
-        message: format!("target node '{}' was not found", anchor.node_id),
-    })?;
-    let definition = registry
-        .get_definition(&node.node_type)
+    let node = graph
+        .find_node(&anchor.node_id)
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
-            message: format!("target node type '{}' is unknown", node.node_type),
+            message: format!("target node '{}' was not found", anchor.node_id),
         })?;
+    let definition =
+        registry
+            .get_definition(&node.node_type)
+            .ok_or_else(|| ConnectionRejection {
+                reason: ConnectionRejectionReason::UnknownTargetAnchor,
+                message: format!("target node type '{}' is unknown", node.node_type),
+            })?;
     let port = definition
         .inputs
         .iter()
@@ -93,10 +100,7 @@ fn resolve_input_anchor<'a>(
             ),
         })?;
 
-    Ok(ResolvedInputAnchor {
-        node,
-        port,
-    })
+    Ok(ResolvedInputAnchor { node, port })
 }
 
 fn would_create_cycle(graph: &WorkflowGraph, source_node_id: &str, target_node_id: &str) -> bool {
@@ -318,10 +322,121 @@ pub fn rejected_commit_response(
     }
 }
 
+fn build_insert_node_data(definition: &NodeDefinition) -> Value {
+    let mut data = Map::new();
+    data.insert("label".to_string(), Value::String(definition.label.clone()));
+    for input in &definition.inputs {
+        data.insert(input.id.clone(), Value::Null);
+    }
+    Value::Object(data)
+}
+
+fn resolve_insert_definition<'a>(
+    registry: &'a NodeRegistry,
+    node_type: &str,
+) -> Result<&'a NodeDefinition, ConnectionRejection> {
+    registry
+        .get_definition(node_type)
+        .ok_or_else(|| ConnectionRejection {
+            reason: ConnectionRejectionReason::UnknownInsertNodeType,
+            message: format!("insertable node type '{}' is unknown", node_type),
+        })
+}
+
+fn resolve_insert_target_anchor(
+    source_port: &PortDefinition,
+    definition: &NodeDefinition,
+    preferred_input_port_id: Option<&str>,
+) -> Result<String, ConnectionRejection> {
+    if let Some(preferred) = preferred_input_port_id {
+        if definition.inputs.iter().any(|port| {
+            port.id == preferred && validate_connection(&source_port.data_type, &port.data_type)
+        }) {
+            return Ok(preferred.to_string());
+        }
+    }
+
+    definition
+        .inputs
+        .iter()
+        .filter(|port| validate_connection(&source_port.data_type, &port.data_type))
+        .min_by(|left, right| {
+            left.label
+                .cmp(&right.label)
+                .then_with(|| left.id.cmp(&right.id))
+        })
+        .map(|port| port.id.clone())
+        .ok_or_else(|| ConnectionRejection {
+            reason: ConnectionRejectionReason::NoCompatibleInsertInput,
+            message: format!(
+                "node type '{}' has no compatible input for source type '{:?}'",
+                definition.node_type, source_port.data_type
+            ),
+        })
+}
+
+pub fn insert_node_and_connect(
+    graph: &WorkflowGraph,
+    registry: &NodeRegistry,
+    graph_revision: &str,
+    source_anchor: &ConnectionAnchor,
+    node_type: &str,
+    position_hint: &InsertNodePositionHint,
+    preferred_input_port_id: Option<&str>,
+) -> Result<(GraphNode, GraphEdge), ConnectionRejection> {
+    let current_revision = graph.compute_fingerprint();
+    if graph_revision != current_revision {
+        return Err(ConnectionRejection {
+            reason: ConnectionRejectionReason::StaleRevision,
+            message: format!(
+                "graph revision '{}' is stale; current revision is '{}'",
+                graph_revision, current_revision
+            ),
+        });
+    }
+
+    let source = resolve_output_anchor(graph, registry, source_anchor)?;
+    let definition = resolve_insert_definition(registry, node_type)?;
+    let target_port_id =
+        resolve_insert_target_anchor(source.port, definition, preferred_input_port_id)?;
+
+    let inserted_node = GraphNode {
+        id: format!("{}-{}", definition.node_type, Uuid::new_v4()),
+        node_type: definition.node_type.clone(),
+        position: position_hint.position.clone(),
+        data: build_insert_node_data(definition),
+    };
+    let inserted_edge = GraphEdge {
+        id: format!(
+            "{}-{}-{}-{}",
+            source_anchor.node_id, source_anchor.port_id, inserted_node.id, target_port_id
+        ),
+        source: source_anchor.node_id.clone(),
+        source_handle: source_anchor.port_id.clone(),
+        target: inserted_node.id.clone(),
+        target_handle: target_port_id,
+    };
+
+    Ok((inserted_node, inserted_edge))
+}
+
+pub fn rejected_insert_response(
+    graph: &WorkflowGraph,
+    rejection: ConnectionRejection,
+) -> InsertNodeConnectionResponse {
+    InsertNodeConnectionResponse {
+        accepted: false,
+        graph_revision: graph.compute_fingerprint(),
+        inserted_node_id: None,
+        graph: None,
+        rejection: Some(rejection),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::types::{GraphEdge, NodeCategory, Position};
+    use crate::workflow::types::{GraphEdge, InsertNodePositionHint, NodeCategory, Position};
 
     fn graph() -> WorkflowGraph {
         WorkflowGraph {
@@ -369,7 +484,8 @@ mod tests {
         assert!(response
             .compatible_nodes
             .iter()
-            .any(|node| node.node_id == "target" && node.anchors.iter().any(|port| port.port_id == "text")));
+            .any(|node| node.node_id == "target"
+                && node.anchors.iter().any(|port| port.port_id == "text")));
         assert!(response.insertable_node_types.iter().any(|node| {
             node.node_type == "llm-inference"
                 && node.category == NodeCategory::Processing
@@ -472,5 +588,114 @@ mod tests {
         .expect_err("cycle should be rejected");
 
         assert_eq!(rejection.reason, ConnectionRejectionReason::CycleDetected);
+    }
+
+    #[test]
+    fn insert_node_and_connect_returns_inserted_node_and_edge() {
+        let registry = NodeRegistry::new();
+        let graph = graph();
+        let revision = graph.compute_fingerprint();
+
+        let (node, edge) = insert_node_and_connect(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            "llm-inference",
+            &InsertNodePositionHint {
+                position: Position { x: 140.0, y: 24.0 },
+            },
+            Some("prompt"),
+        )
+        .expect("compatible insert should succeed");
+
+        assert_eq!(node.node_type, "llm-inference");
+        assert_eq!(node.position, Position { x: 140.0, y: 24.0 });
+        assert_eq!(edge.source, "source");
+        assert_eq!(edge.source_handle, "text");
+        assert_eq!(edge.target, node.id);
+        assert_eq!(edge.target_handle, "prompt");
+    }
+
+    #[test]
+    fn insert_node_and_connect_rejects_stale_revision() {
+        let registry = NodeRegistry::new();
+        let graph = graph();
+        let rejection = insert_node_and_connect(
+            &graph,
+            &registry,
+            "stale",
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            "llm-inference",
+            &InsertNodePositionHint {
+                position: Position { x: 0.0, y: 0.0 },
+            },
+            None,
+        )
+        .expect_err("stale revision should reject insert");
+
+        assert_eq!(rejection.reason, ConnectionRejectionReason::StaleRevision);
+    }
+
+    #[test]
+    fn insert_node_and_connect_rejects_unknown_node_type() {
+        let registry = NodeRegistry::new();
+        let graph = graph();
+        let revision = graph.compute_fingerprint();
+
+        let rejection = insert_node_and_connect(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            "missing-node",
+            &InsertNodePositionHint {
+                position: Position { x: 0.0, y: 0.0 },
+            },
+            None,
+        )
+        .expect_err("unknown insert type should be rejected");
+
+        assert_eq!(
+            rejection.reason,
+            ConnectionRejectionReason::UnknownInsertNodeType
+        );
+    }
+
+    #[test]
+    fn insert_node_and_connect_rejects_without_compatible_input() {
+        let registry = NodeRegistry::new();
+        let graph = graph();
+        let revision = graph.compute_fingerprint();
+
+        let rejection = insert_node_and_connect(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "source".into(),
+                port_id: "text".into(),
+            },
+            "number-input",
+            &InsertNodePositionHint {
+                position: Position { x: 0.0, y: 0.0 },
+            },
+            None,
+        )
+        .expect_err("insert without compatible input should reject");
+
+        assert_eq!(
+            rejection.reason,
+            ConnectionRejectionReason::NoCompatibleInsertInput
+        );
     }
 }

@@ -14,8 +14,9 @@ use crate::llm::{SharedAppConfig, SharedGateway};
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
 use super::types::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge,
-    GraphNode, NodeDefinition, PortDataType, WorkflowFile, WorkflowGraph, WorkflowMetadata,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
+    InsertNodeConnectionResponse, InsertNodePositionHint, NodeDefinition, PortDataType,
+    WorkflowFile, WorkflowGraph, WorkflowMetadata,
 };
 
 /// Shared node-engine registry with port options providers.
@@ -344,6 +345,28 @@ pub async fn connect_anchors_in_execution(
         source_anchor,
         target_anchor,
         graph_revision,
+        execution_manager,
+    )
+    .await
+}
+
+#[command]
+pub async fn insert_node_and_connect_in_execution(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    node_type: String,
+    graph_revision: String,
+    position_hint: InsertNodePositionHint,
+    preferred_input_port_id: Option<String>,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<InsertNodeConnectionResponse, String> {
+    super::workflow_execution_commands::insert_node_and_connect_in_execution(
+        execution_id,
+        source_anchor,
+        node_type,
+        graph_revision,
+        position_hint,
+        preferred_input_port_id,
         execution_manager,
     )
     .await

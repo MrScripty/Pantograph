@@ -11,7 +11,8 @@ use node_engine::EventSink;
 
 use super::commands::SharedExtensions;
 use super::connection_intent::{
-    commit_connection, connection_candidates, rejected_commit_response,
+    commit_connection, connection_candidates, insert_node_and_connect, rejected_commit_response,
+    rejected_insert_response,
 };
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
@@ -19,7 +20,7 @@ use super::execution_manager::{SharedExecutionManager, UndoRedoState};
 use super::task_executor::TauriTaskExecutor;
 use super::types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
-    WorkflowGraph,
+    InsertNodeConnectionResponse, InsertNodePositionHint, WorkflowGraph,
 };
 
 #[derive(Clone, Default)]
@@ -198,9 +199,11 @@ fn resolve_embedding_model_id_from_graph(graph: &WorkflowGraph) -> Result<Option
     let mut selected_model_ids = std::collections::BTreeSet::new();
     for embedding_node in embedding_nodes {
         let mut model_ids_for_node = std::collections::BTreeSet::new();
-        for edge in graph.edges.iter().filter(|edge| {
-            edge.target == embedding_node.id && edge.target_handle == "model"
-        }) {
+        for edge in graph
+            .edges
+            .iter()
+            .filter(|edge| edge.target == embedding_node.id && edge.target_handle == "model")
+        {
             let source_node = node_by_id.get(edge.source.as_str()).ok_or_else(|| {
                 format!(
                     "Embedding node '{}' references unknown source node '{}'",
@@ -213,15 +216,13 @@ fn resolve_embedding_model_id_from_graph(graph: &WorkflowGraph) -> Result<Option
                     embedding_node.id
                 ));
             }
-            let model_id =
-                node_data_string(&source_node.data, &["model_id", "modelId"]).ok_or_else(
-                    || {
-                        format!(
-                            "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
-                            source_node.id
-                        )
-                    },
-                )?;
+            let model_id = node_data_string(&source_node.data, &["model_id", "modelId"])
+                .ok_or_else(|| {
+                    format!(
+                        "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
+                        source_node.id
+                    )
+                })?;
             model_ids_for_node.insert(model_id);
         }
 
@@ -270,9 +271,11 @@ fn resolve_embedding_model_id_from_node_engine_graph(
     let mut selected_model_ids = std::collections::BTreeSet::new();
     for embedding_node in embedding_nodes {
         let mut model_ids_for_node = std::collections::BTreeSet::new();
-        for edge in graph.edges.iter().filter(|edge| {
-            edge.target == embedding_node.id && edge.target_handle == "model"
-        }) {
+        for edge in graph
+            .edges
+            .iter()
+            .filter(|edge| edge.target == embedding_node.id && edge.target_handle == "model")
+        {
             let source_node = node_by_id.get(edge.source.as_str()).ok_or_else(|| {
                 format!(
                     "Embedding node '{}' references unknown source node '{}'",
@@ -285,15 +288,13 @@ fn resolve_embedding_model_id_from_node_engine_graph(
                     embedding_node.id
                 ));
             }
-            let model_id =
-                node_data_string(&source_node.data, &["model_id", "modelId"]).ok_or_else(
-                    || {
-                        format!(
-                            "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
-                            source_node.id
-                        )
-                    },
-                )?;
+            let model_id = node_data_string(&source_node.data, &["model_id", "modelId"])
+                .ok_or_else(|| {
+                    format!(
+                        "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
+                        source_node.id
+                    )
+                })?;
             model_ids_for_node.insert(model_id);
         }
 
@@ -368,7 +369,12 @@ async fn prepare_embedding_runtime(
     let model = api
         .get_model(&model_id)
         .await
-        .map_err(|e| format!("Failed to resolve model '{}' from Puma-Lib: {}", model_id, e))?
+        .map_err(|e| {
+            format!(
+                "Failed to resolve model '{}' from Puma-Lib: {}",
+                model_id, e
+            )
+        })?
         .ok_or_else(|| {
             format!(
                 "Puma-Lib model '{}' was not found. Re-select the model in Puma-Lib node.",
@@ -711,6 +717,59 @@ pub async fn connect_anchors_in_execution(
     Ok(ConnectionCommitResponse {
         accepted: true,
         graph_revision: graph.compute_fingerprint(),
+        graph: Some(graph),
+        rejection: None,
+    })
+}
+
+pub async fn insert_node_and_connect_in_execution(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    node_type: String,
+    graph_revision: String,
+    position_hint: InsertNodePositionHint,
+    preferred_input_port_id: Option<String>,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<InsertNodeConnectionResponse, String> {
+    let mut executions = execution_manager.executions().await;
+    let state = executions
+        .get_mut(&execution_id)
+        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    state.touch();
+
+    let current_graph = state.executor.get_graph_snapshot().await;
+    let current_graph = convert_graph_from_node_engine(&current_graph);
+    let registry = super::registry::NodeRegistry::new();
+    let (inserted_node, inserted_edge) = match insert_node_and_connect(
+        &current_graph,
+        &registry,
+        &graph_revision,
+        &source_anchor,
+        &node_type,
+        &position_hint,
+        preferred_input_port_id.as_deref(),
+    ) {
+        Ok(result) => result,
+        Err(rejection) => return Ok(rejected_insert_response(&current_graph, rejection)),
+    };
+
+    let _ = state.push_undo_snapshot().await;
+    state
+        .executor
+        .add_node(convert_node_to_node_engine(&inserted_node))
+        .await;
+    state
+        .executor
+        .add_edge(convert_edge_to_node_engine(&inserted_edge))
+        .await;
+    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
+
+    let graph = state.executor.get_graph_snapshot().await;
+    let graph = convert_graph_from_node_engine(&graph);
+    Ok(InsertNodeConnectionResponse {
+        accepted: true,
+        graph_revision: graph.compute_fingerprint(),
+        inserted_node_id: Some(inserted_node.id),
         graph: Some(graph),
         rejection: None,
     })
