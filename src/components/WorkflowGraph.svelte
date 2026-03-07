@@ -50,6 +50,7 @@
   import { architectureAsWorkflowGraph } from '../stores/architectureStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
+  import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
 
   // Import view store for zoom transitions
   import {
@@ -323,18 +324,23 @@
         edges = archGraph.edges;
       }
     } else {
-      const nodesChanged = storeNodes !== _prevNodesRef;
-      const edgesChanged = storeEdges !== _prevEdgesRef;
+      const syncDecision = computeWorkflowGraphSyncDecision({
+        storeNodes,
+        storeEdges,
+        prevNodesRef: _prevNodesRef,
+        prevEdgesRef: _prevEdgesRef,
+        skipNextNodeSync: _skipNextNodeSync,
+      });
 
-      _prevNodesRef = storeNodes;
-      _prevEdgesRef = storeEdges;
+      _prevNodesRef = syncDecision.nextPrevNodesRef;
+      _prevEdgesRef = syncDecision.nextPrevEdgesRef;
 
-      if (nodesChanged && !_skipNextNodeSync) {
+      if (syncDecision.applyNodes) {
         nodes = storeNodes;
       }
-      _skipNextNodeSync = false;
+      _skipNextNodeSync = syncDecision.nextSkipNextNodeSync;
 
-      if (edgesChanged) {
+      if (syncDecision.applyEdges) {
         edges = storeEdges;
       }
     }

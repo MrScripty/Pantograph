@@ -18,6 +18,10 @@ test('isPortTypeCompatible preserves audio stream and legacy stream compatibilit
   assert.equal(isPortTypeCompatible('stream', 'audio_stream'), true);
 });
 
+test('isPortTypeCompatible accepts identical audio ports', () => {
+  assert.equal(isPortTypeCompatible('audio', 'audio'), true);
+});
+
 test('isPortTypeCompatible allows primitive-to-string coercions', () => {
   assert.equal(isPortTypeCompatible('number', 'string'), true);
   assert.equal(isPortTypeCompatible('boolean', 'string'), true);
