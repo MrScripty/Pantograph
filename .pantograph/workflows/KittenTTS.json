@@ -3,7 +3,7 @@
   "metadata": {
     "name": "KittenTTS",
     "created": "2026-03-06T01:37:34-08:00",
-    "modified": "2026-03-06T11:16:03.527392+00:00"
+    "modified": "2026-03-06T11:58:01.860904541+00:00"
   },
   "graph": {
     "nodes": [
@@ -104,8 +104,6 @@
           "inference_settings": [
             {
               "constraints": {
-                "min": null,
-                "max": null,
                 "allowed_values": [
                   {
                     "label": "Bella",
@@ -139,7 +137,9 @@
                     "label": "Leo",
                     "value": "expr-voice-5-m"
                   }
-                ]
+                ],
+                "max": null,
+                "min": null
               },
               "default": "expr-voice-5-m",
               "description": "Voice alias label and runtime value mapping from KittenTTS voice aliases",
@@ -149,9 +149,9 @@
             },
             {
               "constraints": {
-                "min": 0.5,
+                "allowed_values": null,
                 "max": 2,
-                "allowed_values": null
+                "min": 0.5
               },
               "default": 1,
               "description": "Speech rate multiplier (1.0 is default speed)",
@@ -169,9 +169,9 @@
             },
             {
               "constraints": {
-                "min": 8000,
+                "allowed_values": null,
                 "max": 96000,
-                "allowed_values": null
+                "min": 8000
               },
               "default": 24000,
               "description": "Output WAV sample rate used by KittenTTS",
@@ -238,8 +238,8 @@
         "id": "selection-input-kittentts-voice",
         "node_type": "selection-input",
         "position": {
-          "x": 249.8743847787124,
-          "y": 259.8812527200934
+          "x": 513.6566548767153,
+          "y": 522.511635175747
         },
         "data": {
           "definition": {
@@ -269,7 +269,7 @@
             ]
           },
           "label": "Selection Input",
-          "value": "expr-voice-5-m"
+          "value": "Rosie"
         }
       },
       {
@@ -277,7 +277,7 @@
         "node_type": "dependency-environment",
         "position": {
           "x": -360.27662866417967,
-          "y": -449.2413901726892
+          "y": -514.8989857866026
         },
         "data": {
           "activity_log": [
@@ -310,7 +310,7 @@
             "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading addict-2.4.0-py3-none-any.whl.metadata (1.0 kB)",
             "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Requirement already satisfied: regex in /media/jeremy/OrangeCream/Linux Software/Pantograph/.venv/lib/python3.10/site-packages (from misaki==0.9.4) (2026.2.19)",
             "[01:57:33] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading misaki-0.9.4-py3-none-any.whl (3.6 MB)",
-            "[01:57:34] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 3.6/3.6 MB 3.9 MB/s  0:00:01",
+            "[01:57:34] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.6/3.6 MB 3.9 MB/s  0:00:01",
             "[01:57:35] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Downloading addict-2.4.0-py3-none-any.whl (3.8 kB)",
             "[01:57:35] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Installing collected packages: addict, misaki",
             "[01:57:35] install_stream | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8 | misaki | stdout: Successfully installed addict-2.4.0 misaki-0.9.4",
@@ -324,7 +324,15 @@
             "[01:57:36] resolve: resolved validation=resolved bindings=1",
             "[01:57:36] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: checking binding requirements",
             "[01:57:37] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: binding state=missing missing=1 failed=0",
-            "[01:57:37] check: check complete state=missing"
+            "[01:57:37] check: check complete state=missing",
+            "[03:57:50] resolve: starting dependency requirement resolution",
+            "[03:57:50] resolve: resolved validation=resolved bindings=1",
+            "[03:57:50] check: starting dependency check",
+            "[03:57:50] resolve: starting dependency requirement resolution",
+            "[03:57:50] resolve: resolved validation=resolved bindings=1",
+            "[03:57:50] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: checking binding requirements",
+            "[03:57:51] check | kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8: binding state=ready missing=0 failed=0",
+            "[03:57:51] check: check complete state=ready"
           ],
           "backend_key": "onnxruntime",
           "definition": {
@@ -403,14 +411,37 @@
                 "required": false
               },
               {
+                "constraints": {
+                  "allowed_values": [
+                    "Bella",
+                    "Bruno",
+                    "Hugo",
+                    "Jasper",
+                    "Kiki",
+                    "Leo",
+                    "Luna",
+                    "Rosie"
+                  ],
+                  "max": null,
+                  "min": null
+                },
                 "data_type": "string",
+                "default_value": "Leo",
+                "description": "Voice preset name from KittenTTS voice aliases",
                 "id": "voice",
                 "label": "Voice",
                 "multiple": false,
                 "required": false
               },
               {
+                "constraints": {
+                  "allowed_values": null,
+                  "max": 2,
+                  "min": 0.5
+                },
                 "data_type": "number",
+                "default_value": 1,
+                "description": "Speech rate multiplier (1.0 is default speed)",
                 "id": "speed",
                 "label": "Speed",
                 "multiple": false,
@@ -418,13 +449,22 @@
               },
               {
                 "data_type": "boolean",
+                "default_value": true,
+                "description": "Apply KittenTTS text normalization before synthesis",
                 "id": "clean_text",
                 "label": "Clean Text",
                 "multiple": false,
                 "required": false
               },
               {
+                "constraints": {
+                  "allowed_values": null,
+                  "max": 96000,
+                  "min": 8000
+                },
                 "data_type": "number",
+                "default_value": 24000,
+                "description": "Output WAV sample rate used by KittenTTS",
                 "id": "sample_rate",
                 "label": "Sample Rate",
                 "multiple": false,
@@ -515,18 +555,16 @@
             "bindings": [
               {
                 "binding_id": "kittentts-runtime-audio_kittenml_kitten_tts_mini_0_8",
-                "code": "requirements_missing",
+                "code": null,
                 "env_id": "python-venv:kittentts-runtime:1:96e3ac3faf27ef169041531854e1678747f07addd8735615544fd586c7b5732c:linux-x86_64:onnx-runtime",
                 "failed_requirements": [],
                 "installed_requirements": [],
                 "message": null,
-                "missing_requirements": [
-                  "kittentts"
-                ],
-                "state": "missing"
+                "missing_requirements": [],
+                "state": "ready"
               }
             ],
-            "checked_at": "2026-03-06T09:57:37.650296707+00:00",
+            "checked_at": "2026-03-06T11:57:51.540523061+00:00",
             "code": null,
             "message": null,
             "requirements": {
@@ -581,7 +619,7 @@
               "validation_errors": [],
               "validation_state": "resolved"
             },
-            "state": "missing"
+            "state": "ready"
           },
           "environment_ref": {
             "backend_key": "onnx-runtime",
@@ -592,7 +630,7 @@
             ],
             "environment_kind": "python-venv",
             "platform_key": "linux-x86_64",
-            "state": "missing"
+            "state": "ready"
           },
           "label": "Dependency Environment",
           "manual_overrides": [],
@@ -647,88 +685,64 @@
                 "required": false
               },
               {
+                "constraints": {
+                  "allowed_values": [
+                    "Bella",
+                    "Bruno",
+                    "Hugo",
+                    "Jasper",
+                    "Kiki",
+                    "Leo",
+                    "Luna",
+                    "Rosie"
+                  ],
+                  "max": null,
+                  "min": null
+                },
                 "data_type": "string",
+                "default_value": "Leo",
+                "description": "Voice preset name from KittenTTS voice aliases",
                 "id": "voice",
                 "label": "Voice",
                 "multiple": false,
-                "required": false,
-                "description": "Voice alias label and runtime value mapping from KittenTTS voice aliases",
-                "default_value": "expr-voice-5-m",
-                "constraints": {
-                  "min": null,
-                  "max": null,
-                  "allowed_values": [
-                    {
-                      "label": "Bella",
-                      "value": "expr-voice-2-f"
-                    },
-                    {
-                      "label": "Jasper",
-                      "value": "expr-voice-2-m"
-                    },
-                    {
-                      "label": "Luna",
-                      "value": "expr-voice-3-f"
-                    },
-                    {
-                      "label": "Bruno",
-                      "value": "expr-voice-3-m"
-                    },
-                    {
-                      "label": "Rosie",
-                      "value": "expr-voice-4-f"
-                    },
-                    {
-                      "label": "Hugo",
-                      "value": "expr-voice-4-m"
-                    },
-                    {
-                      "label": "Kiki",
-                      "value": "expr-voice-5-f"
-                    },
-                    {
-                      "label": "Leo",
-                      "value": "expr-voice-5-m"
-                    }
-                  ]
-                }
+                "required": false
               },
               {
+                "constraints": {
+                  "allowed_values": null,
+                  "max": 2,
+                  "min": 0.5
+                },
                 "data_type": "number",
+                "default_value": 1,
+                "description": "Speech rate multiplier (1.0 is default speed)",
                 "id": "speed",
                 "label": "Speed",
                 "multiple": false,
-                "required": false,
-                "description": "Speech rate multiplier (1.0 is default speed)",
-                "default_value": 1,
-                "constraints": {
-                  "min": 0.5,
-                  "max": 2,
-                  "allowed_values": null
-                }
+                "required": false
               },
               {
                 "data_type": "boolean",
+                "default_value": true,
+                "description": "Apply KittenTTS text normalization before synthesis",
                 "id": "clean_text",
                 "label": "Clean Text",
                 "multiple": false,
-                "required": false,
-                "description": "Apply KittenTTS text normalization before synthesis",
-                "default_value": true
+                "required": false
               },
               {
+                "constraints": {
+                  "allowed_values": null,
+                  "max": 96000,
+                  "min": 8000
+                },
                 "data_type": "number",
+                "default_value": 24000,
+                "description": "Output WAV sample rate used by KittenTTS",
                 "id": "sample_rate",
                 "label": "Sample Rate",
                 "multiple": false,
-                "required": false,
-                "description": "Output WAV sample rate used by KittenTTS",
-                "default_value": 24000,
-                "constraints": {
-                  "min": 8000,
-                  "max": 96000,
-                  "allowed_values": null
-                }
+                "required": false
               }
             ],
             "io_binding_origin": "integrated",
@@ -877,6 +891,19 @@
         "target": "onnx-inference-kittentts",
         "target_handle": "voice"
       }
-    ]
+    ],
+    "derived_graph": {
+      "schema_version": 1,
+      "graph_fingerprint": "f88763de981f0aca",
+      "consumer_count_map": {
+        "puma-lib-kittentts:model_path": 2,
+        "text-input-kittentts-prompt:text": 1,
+        "onnx-inference-kittentts:stream": 1,
+        "puma-lib-kittentts:inference_settings": 1,
+        "dependency-environment-kittentts:environment_ref": 1,
+        "selection-input-kittentts-voice:value": 1,
+        "puma-lib-kittentts:dependency_requirements": 1
+      }
+    }
   }
 }
