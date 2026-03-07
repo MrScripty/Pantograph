@@ -121,6 +121,15 @@ export interface ConnectionCommitResponse {
   rejection?: ConnectionRejection;
 }
 
+export interface ConnectionIntentState {
+  sourceAnchor: ConnectionAnchor;
+  graphRevision: string;
+  compatibleNodeIds: string[];
+  compatibleTargetKeys: string[];
+  insertableNodeTypes: InsertableNodeTypeCandidate[];
+  rejection?: ConnectionRejection;
+}
+
 export interface WorkflowGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];

@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { SvelteFlow, Controls, MiniMap, type NodeTypes, type EdgeTypes, type Node, type Edge, type Connection } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
   import {
     nodes as nodesStore,
     edges as edgesStore,
+    connectionIntent,
     nodeDefinitions,
     isEditing,
     updateNodePosition,
@@ -15,9 +17,17 @@
     getNodeById,
     syncInferencePorts,
     syncExpandPorts,
+    workflowGraph,
+    setConnectionIntent,
+    clearConnectionIntent,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
-  import type { GraphEdge } from '../services/workflow/types';
+  import type {
+    GraphEdge,
+    ConnectionAnchor,
+    ConnectionCandidatesResponse,
+    ConnectionCommitResponse,
+  } from '../services/workflow/types';
   import { architectureAsWorkflowGraph } from '../stores/architectureStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
@@ -255,6 +265,7 @@
   // Deselect container when clicking on the graph background
   function handlePaneClick() {
     containerSelected = false;
+    clearConnectionIntent();
   }
 
   // Sync store changes to local state based on graph type
@@ -336,50 +347,159 @@
     }
   }
 
+  function checkValidConnection(connection: Edge | Connection): boolean {
+    if (
+      $connectionIntent &&
+      connection.source === $connectionIntent.sourceAnchor.node_id &&
+      connection.sourceHandle === $connectionIntent.sourceAnchor.port_id &&
+      connection.target &&
+      connection.targetHandle
+    ) {
+      return $connectionIntent.compatibleTargetKeys.includes(
+        `${connection.target}:${connection.targetHandle}`
+      );
+    }
+
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
+    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
+    const sourcePort = sourceDef?.outputs?.find((p) => p.id === connection.sourceHandle);
+    const targetPort = targetDef?.inputs?.find((p) => p.id === connection.targetHandle);
+    if (!sourcePort || !targetPort) return true;
+    return sourcePort.data_type === targetPort.data_type || sourcePort.data_type === 'any' || targetPort.data_type === 'any';
+  }
+
+  function getGraphRevision(): string {
+    return get(workflowGraph).derived_graph?.graph_fingerprint ?? '';
+  }
+
+  function edgeToGraphEdge(edge: Edge): GraphEdge {
+    return {
+      id: edge.id,
+      source: edge.source,
+      source_handle: edge.sourceHandle || 'output',
+      target: edge.target,
+      target_handle: edge.targetHandle || 'input',
+    };
+  }
+
+  function toConnectionIntentState(candidates: ConnectionCandidatesResponse) {
+    return {
+      sourceAnchor: candidates.source_anchor,
+      graphRevision: candidates.graph_revision,
+      compatibleNodeIds: candidates.compatible_nodes.map((node) => node.node_id),
+      compatibleTargetKeys: candidates.compatible_nodes.flatMap((node) =>
+        node.anchors.map((anchor) => `${node.node_id}:${anchor.port_id}`)
+      ),
+      insertableNodeTypes: candidates.insertable_node_types,
+    };
+  }
+
+  let connectionIntentRequestId = $state(0);
+
+  async function loadConnectionIntent(sourceAnchor: ConnectionAnchor) {
+    if (!canEdit) {
+      clearConnectionIntent();
+      return;
+    }
+
+    const requestId = ++connectionIntentRequestId;
+
+    try {
+      const candidates = await workflowService.getConnectionCandidates(
+        sourceAnchor,
+        undefined,
+        getGraphRevision()
+      );
+
+      if (requestId !== connectionIntentRequestId) return;
+      setConnectionIntent(toConnectionIntentState(candidates));
+    } catch (error) {
+      if (requestId === connectionIntentRequestId) {
+        clearConnectionIntent();
+      }
+      console.error('[WorkflowGraph] Failed to load connection candidates:', error);
+    }
+  }
+
+  async function commitConnection(connection: Connection): Promise<ConnectionCommitResponse | null> {
+    if (
+      !connection.source ||
+      !connection.sourceHandle ||
+      !connection.target ||
+      !connection.targetHandle
+    ) {
+      return null;
+    }
+
+    const response = await workflowService.connectAnchors(
+      {
+        node_id: connection.source,
+        port_id: connection.sourceHandle,
+      },
+      {
+        node_id: connection.target,
+        port_id: connection.targetHandle,
+      },
+      getGraphRevision()
+    );
+
+    if (response.accepted && response.graph) {
+      syncEdgesFromBackend(response.graph);
+      clearConnectionIntent();
+      return response;
+    }
+
+    setConnectionIntent({
+      sourceAnchor: {
+        node_id: connection.source,
+        port_id: connection.sourceHandle,
+      },
+      graphRevision: response.graph_revision,
+      compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
+      compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
+      insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+      rejection: response.rejection,
+    });
+
+    if (response.rejection) {
+      console.warn('[WorkflowGraph] Connection rejected:', response.rejection.message);
+    }
+
+    return response;
+  }
+
+  async function handleConnectStart(
+    _event: MouseEvent | TouchEvent,
+    params: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' }
+  ) {
+    if (!canEdit || params.handleType !== 'source' || !params.handleId) {
+      clearConnectionIntent();
+      return;
+    }
+
+    await loadConnectionIntent({
+      node_id: params.nodeId,
+      port_id: params.handleId,
+    });
+  }
+
+  function handleConnectEnd(
+    _event: MouseEvent | TouchEvent,
+    _connectionState: { isValid: boolean }
+  ) {
+    clearConnectionIntent();
+  }
+
   // Handle new connections - routes through backend for single source of truth
   async function handleConnect(connection: Connection) {
     if (!canEdit) return;
-
-    // Get port types from node data
-    const sourceNode = nodes.find((n) => n.id === connection.source);
-    const targetNode = nodes.find((n) => n.id === connection.target);
-
-    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
-    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
-
-    const sourcePort = sourceDef?.outputs?.find((p) => p.id === connection.sourceHandle);
-    const targetPort = targetDef?.inputs?.find((p) => p.id === connection.targetHandle);
-
-    // Validate connection if we have type info
-    if (sourcePort && targetPort) {
-      const isValid = await workflowService.validateConnection(
-        sourcePort.data_type,
-        targetPort.data_type
-      );
-
-      if (!isValid) {
-        console.warn(
-          '[WorkflowGraph] Invalid connection:',
-          sourcePort.data_type,
-          '->',
-          targetPort.data_type
-        );
+    try {
+      const response = await commitConnection(connection);
+      if (!response?.accepted) {
         return;
       }
-    }
-
-    // Create edge via backend
-    const edge: GraphEdge = {
-      id: `${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`,
-      source: connection.source!,
-      source_handle: connection.sourceHandle!,
-      target: connection.target!,
-      target_handle: connection.targetHandle!,
-    };
-
-    try {
-      const updatedGraph = await workflowService.addEdge(edge);
-      syncEdgesFromBackend(updatedGraph);
 
       // Auto-sync when connecting an inference_settings edge
       if (connection.sourceHandle === 'inference_settings') {
@@ -403,6 +523,7 @@
   // Handle deletion of nodes and edges - edge deletion routes through backend
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
     if (!canEdit) return;
+    clearConnectionIntent();
 
     // Delete edges via backend
     for (const edge of deletedEdges) {
@@ -425,6 +546,7 @@
     event.preventDefault();
 
     if (!canEdit) return;
+    clearConnectionIntent();
 
     const data = event.dataTransfer?.getData('application/json');
     if (!data) return;
@@ -454,50 +576,75 @@
   // --- Edge Reconnection (drag-off-anchor to disconnect) ---
   let edgeReconnectSuccessful = $state(false);
   let reconnectingEdgeId = $state<string | null>(null);
+  let reconnectingSourceAnchor = $state<ConnectionAnchor | null>(null);
 
-  function handleReconnectStart(_event: MouseEvent | TouchEvent, edge: Edge) {
+  async function handleReconnectStart(
+    _event: MouseEvent | TouchEvent,
+    edge: Edge,
+    handleType: 'source' | 'target'
+  ) {
     if (!canEdit) return;
     edgeReconnectSuccessful = false;
     reconnectingEdgeId = edge.id;
+
+    if (handleType === 'target' && edge.sourceHandle) {
+      reconnectingSourceAnchor = {
+        node_id: edge.source,
+        port_id: edge.sourceHandle,
+      };
+      await loadConnectionIntent(reconnectingSourceAnchor);
+      return;
+    }
+
+    reconnectingSourceAnchor = null;
+    clearConnectionIntent();
   }
 
   async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
     if (!canEdit) return;
     edgeReconnectSuccessful = true;
 
-    // Validate the new connection
-    const sourceNode = nodes.find((n) => n.id === newConnection.source);
-    const targetNode = nodes.find((n) => n.id === newConnection.target);
-    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
-    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
-    const sourcePort = sourceDef?.outputs?.find((p) => p.id === newConnection.sourceHandle);
-    const targetPort = targetDef?.inputs?.find((p) => p.id === newConnection.targetHandle);
+    try {
+      const graphAfterRemoval = await workflowService.removeEdge(oldEdge.id);
+      syncEdgesFromBackend(graphAfterRemoval);
 
-    if (sourcePort && targetPort) {
-      const isValid = await workflowService.validateConnection(
-        sourcePort.data_type,
-        targetPort.data_type
+      const response = await workflowService.connectAnchors(
+        {
+          node_id: newConnection.source!,
+          port_id: newConnection.sourceHandle!,
+        },
+        {
+          node_id: newConnection.target!,
+          port_id: newConnection.targetHandle!,
+        },
+        graphAfterRemoval.derived_graph?.graph_fingerprint ?? getGraphRevision()
       );
-      if (!isValid) {
-        console.warn('[WorkflowGraph] Invalid reconnection');
+
+      if (response.accepted && response.graph) {
+        syncEdgesFromBackend(response.graph);
+        clearConnectionIntent();
         return;
       }
-    }
 
-    try {
-      // Remove old edge via backend
-      await workflowService.removeEdge(oldEdge.id);
+      const restoredGraph = await workflowService.addEdge(edgeToGraphEdge(oldEdge));
+      syncEdgesFromBackend(restoredGraph);
 
-      // Add new edge via backend
-      const newEdge: GraphEdge = {
-        id: `${newConnection.source}-${newConnection.sourceHandle}-${newConnection.target}-${newConnection.targetHandle}`,
-        source: newConnection.source!,
-        source_handle: newConnection.sourceHandle!,
-        target: newConnection.target!,
-        target_handle: newConnection.targetHandle!,
-      };
-      const updatedGraph = await workflowService.addEdge(newEdge);
-      syncEdgesFromBackend(updatedGraph);
+      if (response.rejection) {
+        setConnectionIntent({
+          sourceAnchor:
+            reconnectingSourceAnchor ??
+            {
+              node_id: newConnection.source!,
+              port_id: newConnection.sourceHandle!,
+            },
+          graphRevision: response.graph_revision,
+          compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
+          compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
+          insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+          rejection: response.rejection,
+        });
+        console.warn('[WorkflowGraph] Reconnection rejected:', response.rejection.message);
+      }
     } catch (error) {
       console.error('[WorkflowGraph] Failed to reconnect edge:', error);
     }
@@ -517,6 +664,8 @@
     }
 
     reconnectingEdgeId = null;
+    reconnectingSourceAnchor = null;
+    clearConnectionIntent();
   }
 
   // --- Cut Tool (Ctrl+drag to cut edges) ---
@@ -543,6 +692,9 @@
     if (e.key === 'Escape' && containerSelected) {
       e.preventDefault();
       containerSelected = false;
+    }
+    if (e.key === 'Escape') {
+      clearConnectionIntent();
     }
   }
 
@@ -592,6 +744,8 @@
       cutEnd = null;
       return;
     }
+
+    clearConnectionIntent();
 
     // Find edges that intersect with the cut line
     const edgesToRemove = edges.filter((edge) => {
@@ -687,8 +841,13 @@
     maxZoom={2}
     deleteKey={canEdit ? 'Delete' : null}
     edgesReconnectable={canEdit}
+    isValidConnection={checkValidConnection}
     onnodedragstop={onNodeDragStop}
     onnodeclick={onNodeClick}
+    onconnectstart={handleConnectStart}
+    onclickconnectstart={handleConnectStart}
+    onconnectend={handleConnectEnd}
+    onclickconnectend={handleConnectEnd}
     onconnect={handleConnect}
     ondelete={handleDelete}
     onreconnectstart={handleReconnectStart}

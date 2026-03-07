@@ -17,6 +17,7 @@ export type {
   ConnectionRejectionReason,
   ConnectionRejection,
   ConnectionCommitResponse,
+  ConnectionIntentState,
   WorkflowGraph,
   WorkflowMetadata,
   WorkflowFile,

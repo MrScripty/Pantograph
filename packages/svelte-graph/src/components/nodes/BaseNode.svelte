@@ -8,6 +8,7 @@
   const { stores } = useGraphContext();
   const nodeExecutionStates = stores.workflow.nodeExecutionStates;
   const edgesStore = stores.workflow.edges;
+  const connectionIntent = stores.workflow.connectionIntent;
 
   interface Props {
     id: string;
@@ -27,6 +28,15 @@
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
   let errorMessage = $derived(executionInfo?.errorMessage);
+  let activeConnectionIntent = $derived($connectionIntent);
+  let hasConnectionIntent = $derived(activeConnectionIntent !== null);
+  let intentSourceAnchor = $derived(activeConnectionIntent?.sourceAnchor ?? null);
+  let intentCompatibleNodeIds = $derived(new Set(activeConnectionIntent?.compatibleNodeIds ?? []));
+  let intentCompatibleTargetKeys = $derived(new Set(activeConnectionIntent?.compatibleTargetKeys ?? []));
+  let isIntentSourceNode = $derived(intentSourceAnchor?.node_id === id);
+  let isIntentCompatibleNode = $derived(
+    !hasConnectionIntent || isIntentSourceNode || intentCompatibleNodeIds.has(id)
+  );
 
   function getPortColor(port: PortDefinition): string {
     return getPortColorFn(port.data_type);
@@ -39,11 +49,30 @@
   function isOutputConnected(portId: string): boolean {
     return $edgesStore.some(edge => edge.source === id && edge.sourceHandle === portId);
   }
+
+  function isIntentTarget(portId: string): boolean {
+    return intentCompatibleTargetKeys.has(`${id}:${portId}`);
+  }
+
+  function getInputHandleClass(portId: string): string {
+    if (!hasConnectionIntent || isIntentSourceNode) return '';
+    return isIntentTarget(portId) ? 'intent-eligible' : 'intent-ineligible';
+  }
+
+  function getOutputHandleClass(portId: string): string {
+    if (!hasConnectionIntent) return '';
+    return isIntentSourceNode && intentSourceAnchor?.port_id === portId
+      ? 'intent-source'
+      : 'intent-ineligible';
+  }
 </script>
 
 <div
   class="base-node"
   class:selected
+  class:intent-dimmed={hasConnectionIntent && !isIntentCompatibleNode}
+  class:intent-compatible={hasConnectionIntent && !isIntentSourceNode && intentCompatibleNodeIds.has(id)}
+  class:intent-source={isIntentSourceNode}
   data-state={executionState}
 >
   <!-- Node Header -->
@@ -107,6 +136,7 @@
       type="target"
       position={Position.Left}
       id={input.id}
+      class={getInputHandleClass(input.id)}
       style="top: {yPos}px; background: {color}; width: 10px; height: 10px; border: none;{connected ? ` box-shadow: 0 0 8px ${color};` : ''}"
     />
   {/each}
@@ -119,6 +149,7 @@
       type="source"
       position={Position.Right}
       id={output.id}
+      class={getOutputHandleClass(output.id)}
       style="top: {yPos}px; background: {color}; width: 10px; height: 10px; border: none;{connected ? ` box-shadow: 0 0 8px ${color};` : ''}"
     />
   {/each}
@@ -143,6 +174,27 @@
       0 0 0 2px #4f46e5,
       0 0 20px rgba(79, 70, 229, 0.4),
       0 0 40px rgba(79, 70, 229, 0.2);
+  }
+
+  .base-node.intent-dimmed {
+    opacity: 0.35;
+    filter: saturate(0.65);
+  }
+
+  .base-node.intent-compatible {
+    border-color: #34d399;
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.3),
+      0 0 18px rgba(52, 211, 153, 0.22),
+      0 0 36px rgba(52, 211, 153, 0.12);
+  }
+
+  .base-node.intent-source {
+    border-color: #f59e0b;
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.3),
+      0 0 18px rgba(245, 158, 11, 0.24),
+      0 0 36px rgba(245, 158, 11, 0.12);
   }
 
   .base-node[data-state="error"] {
@@ -285,5 +337,26 @@
   /* --- Handle overrides --- */
   :global(.base-node .svelte-flow__handle) {
     border-radius: 50%;
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  :global(.base-node .svelte-flow__handle.intent-eligible) {
+    opacity: 1;
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.35);
+  }
+
+  :global(.base-node .svelte-flow__handle.intent-ineligible) {
+    opacity: 0.2;
+    transform: scale(0.92);
+  }
+
+  :global(.base-node .svelte-flow__handle.intent-source) {
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
   }
 </style>

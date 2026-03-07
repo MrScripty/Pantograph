@@ -37,6 +37,7 @@ export const nodeExecutionStates = workflowStores.nodeExecutionStates;
 export const currentViewport = workflowStores.currentViewport;
 export const nodeGroups = workflowStores.nodeGroups;
 export const selectedNodeIds = workflowStores.selectedNodeIds;
+export const connectionIntent = workflowStores.connectionIntent;
 
 // --- Derived stores ---
 export const workflowGraph = workflowStores.workflowGraph;
@@ -74,6 +75,8 @@ export const loadWorkflow = workflowStores.loadWorkflow;
 export const clearWorkflow = workflowStores.clearWorkflow;
 export const loadDefaultWorkflow = workflowStores.loadDefaultWorkflow;
 export const updateViewport = workflowStores.updateViewport;
+export const setConnectionIntent = workflowStores.setConnectionIntent;
+export const clearConnectionIntent = workflowStores.clearConnectionIntent;
 
 // --- Inference settings actions ---
 export const syncInferencePorts = workflowStores.syncInferencePorts;

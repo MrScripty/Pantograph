@@ -11,6 +11,7 @@ import type {
   WorkflowMetadata,
   NodeExecutionState,
   NodeExecutionInfo,
+  ConnectionIntentState,
   NodeDefinition,
   PortDefinition,
   PortDataType,
@@ -34,6 +35,7 @@ export interface WorkflowStores {
   currentViewport: ReturnType<typeof writable<ViewportState>>;
   nodeGroups: ReturnType<typeof writable<Map<string, NodeGroup>>>;
   selectedNodeIds: ReturnType<typeof writable<string[]>>;
+  connectionIntent: ReturnType<typeof writable<ConnectionIntentState | null>>;
 
   // Derived stores
   workflowGraph: ReturnType<typeof derived>;
@@ -71,6 +73,8 @@ export interface WorkflowStores {
   clearWorkflow: () => void;
   loadDefaultWorkflow: (definitions: NodeDefinition[]) => void;
   updateViewport: (viewport: ViewportState) => void;
+  setConnectionIntent: (intent: ConnectionIntentState | null) => void;
+  clearConnectionIntent: () => void;
 
   // Actions — inference settings
   syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
@@ -125,6 +129,7 @@ export function createWorkflowStores(
   const currentViewport = writable<ViewportState>({ x: 0, y: 0, zoom: 1 });
   const nodeGroups = writable<Map<string, NodeGroup>>(new Map());
   const selectedNodeIds = writable<string[]>([]);
+  const connectionIntent = writable<ConnectionIntentState | null>(null);
 
   // --- Derived stores ---
   const workflowGraph = derived(
@@ -159,6 +164,7 @@ export function createWorkflowStores(
 
   function markGraphModified() {
     isDirty.set(true);
+    connectionIntent.set(null);
     derivedGraph.set(
       buildDerivedGraph({
         nodes: get(nodes).map((node) => ({
@@ -321,6 +327,7 @@ export function createWorkflowStores(
     }));
     edges.set(newEdges);
     isDirty.set(true);
+    connectionIntent.set(null);
     derivedGraph.set(backendGraph.derived_graph ?? buildDerivedGraph(backendGraph));
   }
 
@@ -422,6 +429,7 @@ export function createWorkflowStores(
     );
 
     workflowMetadata.set(metadata || null);
+    connectionIntent.set(null);
     derivedGraph.set(graph.derived_graph ?? buildDerivedGraph(graph));
     isDirty.set(false);
   }
@@ -430,6 +438,7 @@ export function createWorkflowStores(
     nodes.set([]);
     edges.set([]);
     workflowMetadata.set(null);
+    connectionIntent.set(null);
     derivedGraph.set(
       buildDerivedGraph({
         nodes: [],
@@ -454,6 +463,7 @@ export function createWorkflowStores(
       { id: 'input-to-llm', source: 'user-input', sourceHandle: 'text', target: 'llm', targetHandle: 'prompt' },
       { id: 'llm-to-output', source: 'llm', sourceHandle: 'response', target: 'output', targetHandle: 'text' },
     ]);
+    connectionIntent.set(null);
     derivedGraph.set(
       buildDerivedGraph({
         nodes: [
@@ -472,6 +482,14 @@ export function createWorkflowStores(
 
   function updateViewport(viewport: ViewportState) {
     currentViewport.set(viewport);
+  }
+
+  function setConnectionIntent(intent: ConnectionIntentState | null) {
+    connectionIntent.set(intent);
+  }
+
+  function clearConnectionIntent() {
+    connectionIntent.set(null);
   }
 
   // --- Inference settings actions ---
@@ -801,6 +819,7 @@ export function createWorkflowStores(
     // Stores
     nodes, edges, nodeDefinitions, workflowMetadata, isDirty, isExecuting,
     isEditing, nodeExecutionStates, currentViewport, nodeGroups, selectedNodeIds,
+    connectionIntent,
     workflowGraph, nodeDefinitionsByCategory,
     // Node actions
     addNode, removeNode, updateNodePosition, updateNodeData, updateNodeRuntimeData,
@@ -814,6 +833,7 @@ export function createWorkflowStores(
     appendStreamContent, setStreamContent, clearStreamContent,
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
+    setConnectionIntent, clearConnectionIntent,
     // Inference settings actions
     syncInferencePorts, syncExpandPorts, autoConnectExpandToInference,
     // Group actions
