@@ -23,6 +23,7 @@
 //! ```
 
 pub mod commands;
+pub mod connection_intent;
 pub mod event_adapter;
 pub mod events;
 pub mod execution_manager;

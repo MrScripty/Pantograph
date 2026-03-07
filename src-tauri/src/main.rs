@@ -346,6 +346,8 @@ fn main() {
             workflow::commands::update_node_data,
             workflow::commands::add_node_to_execution,
             workflow::commands::add_edge_to_execution,
+            workflow::commands::get_connection_candidates,
+            workflow::commands::connect_anchors_in_execution,
             workflow::commands::remove_edge_from_execution,
             workflow::commands::get_execution_graph,
             workflow::commands::remove_execution,

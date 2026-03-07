@@ -213,7 +213,7 @@ pub struct NodeDefinition {
 }
 
 /// A node instance in a workflow graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GraphNode {
     /// Unique instance ID
     pub id: String,
@@ -227,14 +227,14 @@ pub struct GraphNode {
 }
 
 /// Position on the canvas
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
 }
 
 /// An edge connecting two nodes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GraphEdge {
     /// Unique edge ID
     pub id: String,
@@ -248,11 +248,131 @@ pub struct GraphEdge {
     pub target_handle: String,
 }
 
+/// A specific node port anchor used during interactive connection flows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionAnchor {
+    /// Node instance that owns the anchor.
+    pub node_id: String,
+    /// Port/handle identifier on the node.
+    pub port_id: String,
+}
+
+/// A compatible input anchor on an existing node.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionTargetAnchorCandidate {
+    /// Input port identifier.
+    pub port_id: String,
+    /// Human-readable label for the input port.
+    pub port_label: String,
+    /// Data type accepted by the input port.
+    pub data_type: PortDataType,
+    /// Whether the input accepts multiple incoming edges.
+    pub multiple: bool,
+}
+
+/// An existing node that can accept a connection from the active source anchor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionTargetNodeCandidate {
+    /// Node instance identifier.
+    pub node_id: String,
+    /// Registered node type.
+    pub node_type: String,
+    /// Display label for the node.
+    pub node_label: String,
+    /// Canvas position of the node.
+    pub position: Position,
+    /// Compatible input anchors on this node.
+    pub anchors: Vec<ConnectionTargetAnchorCandidate>,
+}
+
+/// A node type that could be inserted to continue the current connection intent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertableNodeTypeCandidate {
+    /// Registered node type identifier.
+    pub node_type: String,
+    /// Palette category for client grouping.
+    pub category: NodeCategory,
+    /// Human-readable label.
+    pub label: String,
+    /// Description presented in search/insert UI.
+    pub description: String,
+    /// Compatible input port ids on the node type.
+    pub matching_input_port_ids: Vec<String>,
+}
+
+/// Candidate discovery response for an interactive connection intent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionCandidatesResponse {
+    /// Structural revision for the graph used to compute these candidates.
+    pub graph_revision: String,
+    /// Whether the caller-provided revision matched the current graph.
+    pub revision_matches: bool,
+    /// Echo of the active source anchor.
+    pub source_anchor: ConnectionAnchor,
+    /// Existing nodes in the graph that can accept this source anchor.
+    pub compatible_nodes: Vec<ConnectionTargetNodeCandidate>,
+    /// Node types that expose at least one compatible input.
+    pub insertable_node_types: Vec<InsertableNodeTypeCandidate>,
+}
+
+/// Canonical structured rejection reasons for connection commits.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionRejectionReason {
+    /// The client's graph revision does not match the current session graph.
+    StaleRevision,
+    /// The source anchor does not exist or is not an output.
+    UnknownSourceAnchor,
+    /// The target anchor does not exist or is not an input.
+    UnknownTargetAnchor,
+    /// The same edge already exists.
+    DuplicateConnection,
+    /// The target input is already occupied and does not accept multiple edges.
+    TargetCapacityReached,
+    /// The connection would create a self-loop.
+    SelfConnection,
+    /// The connection would introduce a cycle.
+    CycleDetected,
+    /// Source and target port types are not compatible.
+    IncompatibleTypes,
+}
+
+/// Structured rejection payload returned when a connection commit is denied.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionRejection {
+    /// Stable machine-consumable reason code.
+    pub reason: ConnectionRejectionReason,
+    /// Human-readable explanation for logs or UI.
+    pub message: String,
+}
+
+/// Result of attempting to commit an interactive connection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionCommitResponse {
+    /// True when the edge was added to the graph.
+    pub accepted: bool,
+    /// Current graph revision after evaluating the request.
+    pub graph_revision: String,
+    /// Updated graph when the connection succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<WorkflowGraph>,
+    /// Structured rejection when the connection is denied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection: Option<ConnectionRejection>,
+}
+
 /// Derived graph metadata persisted alongside the workflow graph.
 ///
 /// This data is advisory and can be recomputed from the graph. It is trusted
 /// only when the fingerprint matches the current graph structure.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct WorkflowDerivedGraph {
     /// Version for derived graph schema evolution.
     pub schema_version: u32,
@@ -263,7 +383,7 @@ pub struct WorkflowDerivedGraph {
 }
 
 /// Complete workflow graph
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct WorkflowGraph {
     /// All nodes in the graph
     pub nodes: Vec<GraphNode>,

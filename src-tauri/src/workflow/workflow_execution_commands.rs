@@ -10,11 +10,17 @@ use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 
 use super::commands::SharedExtensions;
+use super::connection_intent::{
+    commit_connection, connection_candidates, rejected_commit_response,
+};
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
 use super::task_executor::TauriTaskExecutor;
-use super::types::{GraphEdge, GraphNode, WorkflowGraph};
+use super::types::{
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
+    WorkflowGraph,
+};
 
 #[derive(Clone, Default)]
 struct RuntimeExtensionsSnapshot {
@@ -636,6 +642,80 @@ pub async fn add_edge_to_execution(
     Ok(convert_graph_from_node_engine(&graph))
 }
 
+pub async fn get_connection_candidates(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    graph_revision: Option<String>,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<ConnectionCandidatesResponse, String> {
+    let mut executions = execution_manager.executions().await;
+    let state = executions
+        .get_mut(&execution_id)
+        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    state.touch();
+
+    let graph = state.executor.get_graph_snapshot().await;
+    let graph = convert_graph_from_node_engine(&graph);
+    let registry = super::registry::NodeRegistry::new();
+    connection_candidates(&graph, &registry, source_anchor, graph_revision.as_deref())
+        .map_err(|rejection| rejection.message)
+}
+
+pub async fn connect_anchors_in_execution(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    target_anchor: ConnectionAnchor,
+    graph_revision: String,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<ConnectionCommitResponse, String> {
+    let mut executions = execution_manager.executions().await;
+    let state = executions
+        .get_mut(&execution_id)
+        .ok_or_else(|| format!("Execution '{}' not found", execution_id))?;
+    state.touch();
+
+    let current_graph = state.executor.get_graph_snapshot().await;
+    let current_graph = convert_graph_from_node_engine(&current_graph);
+    let registry = super::registry::NodeRegistry::new();
+    if let Err(rejection) = commit_connection(
+        &current_graph,
+        &registry,
+        &graph_revision,
+        &source_anchor,
+        &target_anchor,
+    ) {
+        return Ok(rejected_commit_response(&current_graph, rejection));
+    }
+
+    let _ = state.push_undo_snapshot().await;
+    state
+        .executor
+        .add_edge(node_engine::GraphEdge {
+            id: format!(
+                "{}-{}-{}-{}",
+                source_anchor.node_id,
+                source_anchor.port_id,
+                target_anchor.node_id,
+                target_anchor.port_id
+            ),
+            source: source_anchor.node_id,
+            source_handle: source_anchor.port_id,
+            target: target_anchor.node_id,
+            target_handle: target_anchor.port_id,
+        })
+        .await;
+    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
+
+    let graph = state.executor.get_graph_snapshot().await;
+    let graph = convert_graph_from_node_engine(&graph);
+    Ok(ConnectionCommitResponse {
+        accepted: true,
+        graph_revision: graph.compute_fingerprint(),
+        graph: Some(graph),
+        rejection: None,
+    })
+}
+
 pub async fn remove_edge_from_execution(
     execution_id: String,
     edge_id: String,
@@ -857,7 +937,7 @@ fn convert_edge_to_node_engine(edge: &GraphEdge) -> node_engine::GraphEdge {
 }
 
 fn convert_graph_from_node_engine(graph: &node_engine::WorkflowGraph) -> WorkflowGraph {
-    WorkflowGraph {
+    let mut workflow_graph = WorkflowGraph {
         nodes: graph
             .nodes
             .iter()
@@ -883,5 +963,7 @@ fn convert_graph_from_node_engine(graph: &node_engine::WorkflowGraph) -> Workflo
             })
             .collect(),
         derived_graph: None,
-    }
+    };
+    workflow_graph.refresh_derived_graph();
+    workflow_graph
 }

@@ -14,8 +14,8 @@ use crate::llm::{SharedAppConfig, SharedGateway};
 use super::events::WorkflowEvent;
 use super::execution_manager::{SharedExecutionManager, UndoRedoState};
 use super::types::{
-    GraphEdge, GraphNode, NodeDefinition, PortDataType, WorkflowFile, WorkflowGraph,
-    WorkflowMetadata,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge,
+    GraphNode, NodeDefinition, PortDataType, WorkflowFile, WorkflowGraph, WorkflowMetadata,
 };
 
 /// Shared node-engine registry with port options providers.
@@ -313,6 +313,40 @@ pub async fn add_edge_to_execution(
 ) -> Result<WorkflowGraph, String> {
     super::workflow_execution_commands::add_edge_to_execution(execution_id, edge, execution_manager)
         .await
+}
+
+#[command]
+pub async fn get_connection_candidates(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    graph_revision: Option<String>,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<ConnectionCandidatesResponse, String> {
+    super::workflow_execution_commands::get_connection_candidates(
+        execution_id,
+        source_anchor,
+        graph_revision,
+        execution_manager,
+    )
+    .await
+}
+
+#[command]
+pub async fn connect_anchors_in_execution(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    target_anchor: ConnectionAnchor,
+    graph_revision: String,
+    execution_manager: State<'_, SharedExecutionManager>,
+) -> Result<ConnectionCommitResponse, String> {
+    super::workflow_execution_commands::connect_anchors_in_execution(
+        execution_id,
+        source_anchor,
+        target_anchor,
+        graph_revision,
+        execution_manager,
+    )
+    .await
 }
 
 #[command]
