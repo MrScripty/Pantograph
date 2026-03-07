@@ -14,7 +14,8 @@
   import { get } from 'svelte/store';
 
   import { useGraphContext } from '../context/useGraphContext.js';
-  import type { NodeDefinition, GraphEdge, PortDataType } from '../types/workflow.js';
+  import type { NodeDefinition, GraphEdge } from '../types/workflow.js';
+  import { isPortTypeCompatible } from '../portTypeCompatibility.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
@@ -107,15 +108,6 @@
     const definitions = await backend.getNodeDefinitions();
     nodeDefsStore.set(definitions);
   });
-
-  // --- Port type compatibility (mirrors Rust is_compatible_with) ---
-
-  function isPortTypeCompatible(source: PortDataType, target: PortDataType): boolean {
-    if (source === 'any' || target === 'any') return true;
-    if (source === 'prompt' && target === 'string') return true;
-    if (source === 'string' && target === 'prompt') return true;
-    return source === target;
-  }
 
   /** Synchronous connection gate — prevents SvelteFlow from creating invalid edges. */
   function checkValidConnection(connection: Edge | Connection): boolean {

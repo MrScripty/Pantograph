@@ -88,6 +88,13 @@ impl PortDataType {
             return true;
         }
 
+        if matches!(other, PortDataType::String) {
+            return matches!(
+                self,
+                PortDataType::Json | PortDataType::Number | PortDataType::Boolean
+            );
+        }
+
         // Exact type match
         self == other
     }
@@ -348,7 +355,10 @@ mod tests {
         assert!(PortDataType::String.is_compatible_with(&PortDataType::Prompt));
         assert!(PortDataType::AudioStream.is_compatible_with(&PortDataType::Stream));
         assert!(PortDataType::Stream.is_compatible_with(&PortDataType::AudioStream));
-        assert!(!PortDataType::Number.is_compatible_with(&PortDataType::String));
+        assert!(PortDataType::Number.is_compatible_with(&PortDataType::String));
+        assert!(PortDataType::Boolean.is_compatible_with(&PortDataType::String));
+        assert!(PortDataType::Json.is_compatible_with(&PortDataType::String));
+        assert!(!PortDataType::Number.is_compatible_with(&PortDataType::Boolean));
     }
 
     #[test]

@@ -17,6 +17,7 @@ import type {
   GraphEdge,
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from '../types/groups.js';
+import { isPortTypeCompatible } from '../portTypeCompatibility.js';
 
 /** Default mock node definitions */
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
@@ -59,12 +60,10 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
 ];
 
 function mockValidateConnection(sourceType: string, targetType: string): boolean {
-  if (targetType === 'any' || sourceType === 'any') return true;
-  if (sourceType === targetType) return true;
-  if (sourceType === 'string' && targetType === 'prompt') return true;
-  if (sourceType === 'json' && targetType === 'string') return true;
-  if (sourceType === 'document' && targetType === 'string') return true;
-  return false;
+  return isPortTypeCompatible(
+    sourceType as Parameters<typeof isPortTypeCompatible>[0],
+    targetType as Parameters<typeof isPortTypeCompatible>[1]
+  );
 }
 
 export class MockWorkflowBackend implements WorkflowBackend {

@@ -15,7 +15,7 @@
     "lint": "eslint scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:full": "eslint src packages scripts eslint.config.mjs vite.config.ts --max-warnings 0",
     "lint:critical": "node scripts/check-critical-antipatterns.mjs",
-    "test:frontend": "node --experimental-strip-types --test src/components/nodes/workflow/audioOutputState.test.ts packages/svelte-graph/src/stores/runtimeData.test.ts",
+    "test:frontend": "node --experimental-strip-types --test src/components/nodes/workflow/audioOutputState.test.ts packages/svelte-graph/src/stores/runtimeData.test.ts packages/svelte-graph/src/portTypeCompatibility.test.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
     "test": "cargo test -p node-engine --lib && cargo test -p workflow-nodes --lib",
     "test:runtime-separation": "./scripts/check-no-python-linkage.sh",
