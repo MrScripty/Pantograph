@@ -15,6 +15,8 @@ through Tauri.
 | `types.rs` | Rust DTOs mirrored into the TypeScript workflow contracts. |
 | `validation.rs` | Shared lower-level workflow validation helpers. |
 | `task_executor.rs` | Runtime execution path for workflow node execution once editing commits are accepted. |
+| `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
+| `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
 
 ## Problem
 Pantograph previously exposed mostly pairwise connection validation. The frontend
@@ -35,7 +37,9 @@ for `get_connection_candidates`, `connect_anchors_in_execution`, and
 `insert_node_and_connect_in_execution`. The command path computes eligible
 targets from live session state, uses graph fingerprints for stale-intent
 detection, and returns structured rejection reasons instead of boolean-only
-failure.
+failure. Workflow execution in this directory also owns dependency-aware,
+process-backed Python execution for nodes such as `pytorch-inference`,
+`diffusion-inference`, `audio-generation`, and `onnx-inference`.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -54,6 +58,8 @@ failure.
   not leave orphan nodes or disconnected edges.
 - `workflow_execution_commands.rs` must refresh derived graph metadata when it
   returns graphs to the frontend.
+- Python-backed execution stays out-of-process and is selected by resolved
+  dependency `env_id`, not by frontend code.
 
 ## Revisit Triggers
 - Headless editing moves to a transport boundary outside Tauri invoke.

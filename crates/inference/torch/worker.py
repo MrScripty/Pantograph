@@ -11,6 +11,8 @@ Generation logic is split into sibling modules:
   - autoregressive: standard token-by-token HuggingFace generation
 """
 
+import base64
+import io
 import json
 import logging
 import sys
@@ -48,6 +50,11 @@ _tokenizer = None
 _device = None
 _model_path = None
 _model_type = None
+
+_diffusion_pipeline = None
+_diffusion_device = None
+_diffusion_model_path = None
+_diffusion_dtype = None
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
@@ -107,6 +114,17 @@ def get_loaded_info():
         "model_path": str(_model_path) if _model_path else None,
         "model_type": _model_type,
         "device": str(_device),
+    }
+
+
+def get_loaded_diffusion_info():
+    """Return metadata about the currently loaded diffusion pipeline, or None."""
+    if _diffusion_pipeline is None:
+        return None
+    return {
+        "model_path": str(_diffusion_model_path) if _diffusion_model_path else None,
+        "device": str(_diffusion_device) if _diffusion_device is not None else None,
+        "torch_dtype": _dtype_name(_diffusion_dtype),
     }
 
 
@@ -357,6 +375,169 @@ def unload_model():
         logger.info("Model unloaded: %s", name)
 
 
+def unload_diffusion_model():
+    """Unload the current diffusion pipeline and free GPU memory."""
+    global _diffusion_pipeline, _diffusion_device, _diffusion_model_path, _diffusion_dtype
+
+    if _diffusion_pipeline is not None:
+        name = _diffusion_model_path.name if _diffusion_model_path else "unknown"
+        del _diffusion_pipeline
+        _diffusion_pipeline = None
+        _diffusion_device = None
+        _diffusion_model_path = None
+        _diffusion_dtype = None
+
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+        logger.info("Diffusion pipeline unloaded: %s", name)
+
+
+def load_diffusion_model(
+    model_path,
+    device="auto",
+    torch_dtype=None,
+    enable_attention_slicing=False,
+    enable_vae_slicing=False,
+    enable_vae_tiling=False,
+    model_cpu_offload=False,
+    sequential_cpu_offload=False,
+):
+    """Load a diffusion pipeline into module globals for process-backed use."""
+    global _diffusion_pipeline, _diffusion_device, _diffusion_model_path, _diffusion_dtype
+
+    path = Path(model_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Model path does not exist: {model_path}")
+
+    if _diffusion_pipeline is not None and _diffusion_model_path == path:
+        return get_loaded_diffusion_info()
+
+    if _diffusion_pipeline is not None:
+        unload_diffusion_model()
+
+    try:
+        from diffusers import DiffusionPipeline
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to import diffusers runtime. Ensure the selected dependency environment "
+            "includes `diffusers`, `transformers`, `accelerate`, `torch`, and Pillow."
+        ) from exc
+
+    resolved_device = _resolve_device(device)
+    resolved_dtype = _resolve_torch_dtype(resolved_device, torch_dtype)
+
+    logger.info(
+        "Loading diffusion pipeline from %s onto %s (dtype=%s)",
+        model_path,
+        resolved_device,
+        _dtype_name(resolved_dtype),
+    )
+
+    pipeline = DiffusionPipeline.from_pretrained(
+        str(path),
+        torch_dtype=resolved_dtype,
+        trust_remote_code=True,
+    )
+    pipeline.set_progress_bar_config(disable=True)
+
+    if enable_attention_slicing and hasattr(pipeline, "enable_attention_slicing"):
+        pipeline.enable_attention_slicing()
+    if enable_vae_slicing and hasattr(pipeline, "enable_vae_slicing"):
+        pipeline.enable_vae_slicing()
+    if enable_vae_tiling and hasattr(pipeline, "enable_vae_tiling"):
+        pipeline.enable_vae_tiling()
+
+    offload_active = bool(model_cpu_offload or sequential_cpu_offload)
+    if offload_active:
+        if not torch.cuda.is_available():
+            raise RuntimeError("CPU offload options require CUDA to be available")
+        if sequential_cpu_offload and hasattr(pipeline, "enable_sequential_cpu_offload"):
+            pipeline.enable_sequential_cpu_offload()
+        elif hasattr(pipeline, "enable_model_cpu_offload"):
+            pipeline.enable_model_cpu_offload()
+        else:
+            raise RuntimeError("Selected diffusion pipeline does not support CPU offload")
+        runtime_device = "cuda-offload"
+    else:
+        pipeline.to(resolved_device)
+        runtime_device = str(resolved_device)
+
+    _diffusion_pipeline = pipeline
+    _diffusion_device = runtime_device
+    _diffusion_model_path = path
+    _diffusion_dtype = resolved_dtype
+
+    return get_loaded_diffusion_info()
+
+
+def generate_image(
+    prompt,
+    negative_prompt=None,
+    width=None,
+    height=None,
+    num_inference_steps=30,
+    guidance_scale=None,
+    seed=None,
+    num_images_per_prompt=1,
+    scheduler=None,
+    init_image=None,
+    mask_image=None,
+    strength=None,
+    **kwargs,
+):
+    """Generate one or more images from the loaded diffusion pipeline."""
+    del scheduler  # Reserved for later scheduler swapping support.
+
+    if _diffusion_pipeline is None:
+        raise RuntimeError("No diffusion pipeline loaded. Call load_diffusion_model() first.")
+
+    call_kwargs = {
+        "prompt": prompt,
+        "num_inference_steps": int(num_inference_steps),
+        "num_images_per_prompt": int(num_images_per_prompt),
+    }
+    if isinstance(negative_prompt, str) and negative_prompt.strip():
+        call_kwargs["negative_prompt"] = negative_prompt.strip()
+    if width is not None:
+        call_kwargs["width"] = int(width)
+    if height is not None:
+        call_kwargs["height"] = int(height)
+    if guidance_scale is not None:
+        call_kwargs["guidance_scale"] = float(guidance_scale)
+    if strength is not None:
+        call_kwargs["strength"] = float(strength)
+    if seed is not None:
+        call_kwargs["generator"] = torch.Generator(device="cpu").manual_seed(int(seed))
+    if init_image is not None:
+        call_kwargs["image"] = _decode_base64_image(init_image)
+    if mask_image is not None:
+        call_kwargs["mask_image"] = _decode_base64_image(mask_image)
+
+    for key, value in kwargs.items():
+        if value is not None:
+            call_kwargs[key] = value
+
+    result = _diffusion_pipeline(**call_kwargs)
+    images = getattr(result, "images", None)
+    if not images:
+        raise RuntimeError("Diffusion pipeline returned no images")
+
+    encoded_images = [_encode_image(image) for image in images]
+    primary = encoded_images[0]
+    return {
+        "image_base64": primary["data_base64"],
+        "mime_type": primary["mime_type"],
+        "width": primary.get("width"),
+        "height": primary.get("height"),
+        "images": encoded_images,
+        "seed_used": int(seed) if seed is not None else None,
+    }
+
+
 def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=1.0,
              masked_prompt_json=None, denoising_steps=None, block_length=None,
              **kwargs):
@@ -519,3 +700,60 @@ def _resolve_device(device_str):
             return torch.device("cpu")
 
     return torch.device(device_str)
+
+
+def _resolve_torch_dtype(device, requested_dtype=None):
+    if isinstance(requested_dtype, str):
+        normalized = requested_dtype.strip().lower()
+        if normalized in {"bf16", "bfloat16"}:
+            return torch.bfloat16
+        if normalized in {"fp16", "float16", "half"}:
+            return torch.float16
+        if normalized in {"fp32", "float32", "float"}:
+            return torch.float32
+
+    if isinstance(device, torch.device):
+        device_type = device.type
+    else:
+        device_type = str(device)
+
+    if device_type == "cuda":
+        if hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported():
+            return torch.bfloat16
+        return torch.float16
+    if device_type == "mps":
+        return torch.float16
+    return torch.float32
+
+
+def _dtype_name(dtype):
+    if dtype is None:
+        return None
+    for name in ("bfloat16", "float16", "float32"):
+        if getattr(torch, name) == dtype:
+            return name
+    return str(dtype)
+
+
+def _decode_base64_image(value):
+    from PIL import Image
+
+    if isinstance(value, dict):
+        encoded = value.get("data_base64")
+    else:
+        encoded = value
+    if not isinstance(encoded, str) or not encoded.strip():
+        raise RuntimeError("Expected base64 image payload")
+    raw = base64.b64decode(encoded)
+    return Image.open(io.BytesIO(raw)).convert("RGB")
+
+
+def _encode_image(image):
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return {
+        "data_base64": base64.b64encode(buffer.getvalue()).decode("ascii"),
+        "mime_type": "image/png",
+        "width": getattr(image, "width", None),
+        "height": getattr(image, "height", None),
+    }

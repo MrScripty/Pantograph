@@ -29,6 +29,7 @@ use crate::workflow::python_runtime::{
 /// Currently handles:
 /// - `rag-search`: requires `RagManager` (Tauri-managed state)
 /// - `pytorch-inference`: python sidecar execution
+/// - `diffusion-inference`: python sidecar execution
 /// - `audio-generation`: python sidecar execution
 /// - `onnx-inference`: python sidecar execution
 ///
@@ -38,7 +39,7 @@ use crate::workflow::python_runtime::{
 pub struct TauriTaskExecutor {
     /// RAG manager for document search
     rag_manager: Arc<RwLock<RagManager>>,
-    /// Host adapter for python-backed nodes (pytorch/audio/onnx sidecar).
+    /// Host adapter for python-backed nodes (pytorch/diffusion/audio/onnx).
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
 }
 
@@ -412,6 +413,9 @@ impl TauriTaskExecutor {
         if node_type == "audio-generation" || model_type == "audio" {
             return "text-to-audio".to_string();
         }
+        if node_type == "diffusion-inference" {
+            return "text-to-image".to_string();
+        }
 
         match model_type.as_str() {
             "diffusion" => "text-to-image".to_string(),
@@ -425,6 +429,7 @@ impl TauriTaskExecutor {
         match node_type {
             "audio-generation" => "stable_audio".to_string(),
             "pytorch-inference" => "pytorch".to_string(),
+            "diffusion-inference" => "pytorch".to_string(),
             "onnx-inference" => "onnx-runtime".to_string(),
             _ => "pytorch".to_string(),
         }
@@ -797,6 +802,7 @@ impl TauriTaskExecutor {
         extensions: &ExecutorExtensions,
     ) -> Result<Option<node_engine::ModelRefV2>> {
         if node_type != "pytorch-inference"
+            && node_type != "diffusion-inference"
             && node_type != "audio-generation"
             && node_type != "onnx-inference"
         {
@@ -1046,7 +1052,10 @@ impl TaskExecutor for TauriTaskExecutor {
                 self.execute_dependency_environment(&inputs, extensions)
                     .await
             }
-            "pytorch-inference" | "audio-generation" | "onnx-inference" => {
+            "pytorch-inference"
+            | "diffusion-inference"
+            | "audio-generation"
+            | "onnx-inference" => {
                 self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await
             }
@@ -1262,6 +1271,75 @@ mod tests {
         let request = &recorded[0];
         assert_eq!(request.node_type, "pytorch-inference");
         assert_eq!(request.env_ids, vec!["venv:test".to_string()]);
+        assert!(request.inputs.contains_key("model_ref"));
+    }
+
+    #[tokio::test]
+    async fn diffusion_nodes_route_through_python_adapter_with_preflight() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("image".to_string(), serde_json::json!("base64-image"));
+        adapter_response.insert("seed_used".to_string(), serde_json::json!(1234));
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests: requests.clone(),
+            response: adapter_response,
+        });
+
+        let resolved_model_ref = ModelRefV2 {
+            contract_version: 2,
+            engine: "pytorch".to_string(),
+            model_id: "qwen-image".to_string(),
+            model_path: "/tmp/qwen-image".to_string(),
+            task_type_primary: "text-to-image".to_string(),
+            dependency_bindings: vec![ModelDependencyBinding {
+                binding_id: "binding-diffusion".to_string(),
+                profile_id: "profile-diffusion".to_string(),
+                profile_version: 1,
+                profile_hash: Some("hash".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                platform_selector: Some("linux-x86_64".to_string()),
+                environment_kind: Some("python".to_string()),
+                env_id: Some("venv:diffusion".to_string()),
+                python_executable_override: None,
+                validation_state: DependencyValidationState::Resolved,
+                validation_errors: Vec::new(),
+                requirements: Vec::new(),
+            }],
+            dependency_requirements_id: Some("requirements-diffusion".to_string()),
+        };
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: make_requirements(DependencyValidationState::Resolved),
+            status: make_status(DependencyState::Ready, None),
+            model_ref: Some(resolved_model_ref),
+        });
+        let (executor, extensions) = test_executor(adapter, resolver);
+
+        let mut inputs = HashMap::new();
+        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/qwen-image"));
+        inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+        inputs.insert("prompt".to_string(), serde_json::json!("paper lantern in the rain"));
+
+        let outputs = executor
+            .execute_task("diffusion-inference-1", inputs, &Context::new(), &extensions)
+            .await
+            .expect("diffusion preflight should allow adapter execution");
+        assert_eq!(outputs.get("image"), Some(&serde_json::json!("base64-image")));
+        assert_eq!(outputs.get("seed_used"), Some(&serde_json::json!(1234)));
+
+        let recorded = requests.lock().expect("recording lock");
+        assert_eq!(recorded.len(), 1);
+        let request = &recorded[0];
+        assert_eq!(request.node_type, "diffusion-inference");
+        assert_eq!(request.env_ids, vec!["venv:diffusion".to_string()]);
+        assert_eq!(
+            request
+                .inputs
+                .get("model_ref")
+                .and_then(|value| value.get("taskTypePrimary"))
+                .and_then(|value| value.as_str()),
+            Some("text-to-image")
+        );
         assert!(request.inputs.contains_key("model_ref"));
     }
 

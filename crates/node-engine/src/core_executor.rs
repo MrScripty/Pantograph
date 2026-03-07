@@ -1117,6 +1117,9 @@ fn infer_task_type_primary(node_type: &str, inputs: &HashMap<String, serde_json:
     if node_type == "audio-generation" || model_type == "audio" {
         return "text-to-audio".to_string();
     }
+    if node_type == "diffusion-inference" {
+        return "text-to-image".to_string();
+    }
 
     match model_type.as_str() {
         "diffusion" => "text-to-image".to_string(),
@@ -1192,6 +1195,7 @@ fn infer_backend_key(node_type: &str) -> String {
     match node_type {
         "audio-generation" => "stable_audio".to_string(),
         "pytorch-inference" => "pytorch".to_string(),
+        "diffusion-inference" => "pytorch".to_string(),
         "llamacpp-inference" => "llamacpp".to_string(),
         "ollama-inference" => "ollama".to_string(),
         "onnx-inference" => "onnx-runtime".to_string(),
@@ -1236,7 +1240,10 @@ async fn enforce_dependency_preflight(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
 ) -> Result<Option<ModelRefV2>> {
-    if node_type != "pytorch-inference" && node_type != "audio-generation" {
+    if node_type != "pytorch-inference"
+        && node_type != "diffusion-inference"
+        && node_type != "audio-generation"
+    {
         return Ok(None);
     }
 
@@ -3869,5 +3876,24 @@ mod tests {
 
         let request = build_model_dependency_request("pytorch-inference", "/tmp/model", &inputs);
         assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[test]
+    fn test_infer_task_type_primary_defaults_diffusion_node_to_text_to_image() {
+        let inputs = HashMap::new();
+        let task = infer_task_type_primary("diffusion-inference", &inputs);
+        assert_eq!(task, "text-to-image");
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[test]
+    fn test_build_model_dependency_request_defaults_diffusion_backend_to_pytorch() {
+        let mut inputs = HashMap::new();
+        inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+
+        let request = build_model_dependency_request("diffusion-inference", "/tmp/model", &inputs);
+        assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
+        assert_eq!(request.task_type_primary.as_deref(), Some("text-to-image"));
     }
 }

@@ -3,8 +3,8 @@
 """Process bridge for python-backed Pantograph workflow nodes.
 
 Reads a JSON request from stdin, executes the requested node by loading
-Pantograph worker modules (torch/audio/onnx) from explicit file paths, and
-writes a JSON response to stdout.
+Pantograph worker modules (torch/diffusion/audio/onnx) from explicit file
+paths, and writes a JSON response to stdout.
 """
 
 from __future__ import annotations
@@ -83,6 +83,45 @@ def _build_extra_settings(inputs: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _extract_prompt(inputs: Dict[str, Any]) -> str:
+    prompt_value = inputs.get("prompt")
+    if isinstance(prompt_value, str) and prompt_value.strip():
+        return prompt_value
+    if isinstance(prompt_value, dict) and prompt_value.get("type") == "masked_prompt":
+        segments = prompt_value.get("segments")
+        if not isinstance(segments, list):
+            segments = []
+        prompt = "".join(
+            segment.get("text", "")
+            for segment in segments
+            if isinstance(segment, dict)
+        )
+        if prompt.strip():
+            return prompt
+    raise RuntimeError("Missing prompt input: expected string or masked_prompt object")
+
+
+def _coalesce_setting(inputs: Dict[str, Any], extra: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in inputs and inputs.get(key) is not None:
+            return inputs.get(key)
+        if key in extra and extra.get(key) is not None:
+            return extra.get(key)
+    return None
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
 def _input_model_ref(inputs: Dict[str, Any]) -> Dict[str, Any] | None:
     model_ref = inputs.get("model_ref")
     if isinstance(model_ref, dict):
@@ -106,20 +145,9 @@ def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, An
 
     prompt_value = inputs.get("prompt")
     masked_prompt_json = None
-    if isinstance(prompt_value, str):
-        prompt = prompt_value
-    elif isinstance(prompt_value, dict) and prompt_value.get("type") == "masked_prompt":
-        segments = prompt_value.get("segments")
-        if not isinstance(segments, list):
-            segments = []
-        prompt = "".join(
-            segment.get("text", "")
-            for segment in segments
-            if isinstance(segment, dict)
-        )
+    prompt = _extract_prompt(inputs)
+    if isinstance(prompt_value, dict) and prompt_value.get("type") == "masked_prompt":
         masked_prompt_json = json.dumps(prompt_value)
-    else:
-        raise RuntimeError("Missing prompt input: expected string or masked_prompt object")
 
     model_path = inputs.get("model_path")
     if not isinstance(model_path, str) or not model_path.strip():
@@ -165,6 +193,118 @@ def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, An
         task_type_primary = "text-generation"
 
     outputs: Dict[str, Any] = {"response": response_text}
+    outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
+        "pytorch", model_path, task_type_primary
+    )
+    return outputs
+
+
+def _run_diffusion(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, Any]:
+    worker = _load_module("pantograph_torch_worker_process", torch_worker_path)
+
+    prompt = _extract_prompt(inputs)
+
+    model_path = inputs.get("model_path")
+    if not isinstance(model_path, str) or not model_path.strip():
+        raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
+    model_path = model_path.strip()
+
+    extra_settings = _build_extra_settings(inputs)
+
+    model_info = worker.get_loaded_diffusion_info()
+    loaded_path = ""
+    if isinstance(model_info, dict):
+        loaded_path = str(model_info.get("model_path", ""))
+    if loaded_path != model_path:
+        worker.load_diffusion_model(
+            model_path=model_path,
+            device=str(inputs.get("device", "auto") or "auto"),
+            torch_dtype=_coalesce_setting(inputs, extra_settings, "torch_dtype", "dtype"),
+            enable_attention_slicing=_as_bool(
+                _coalesce_setting(inputs, extra_settings, "enable_attention_slicing"),
+                False,
+            ),
+            enable_vae_slicing=_as_bool(
+                _coalesce_setting(inputs, extra_settings, "enable_vae_slicing"),
+                False,
+            ),
+            enable_vae_tiling=_as_bool(
+                _coalesce_setting(inputs, extra_settings, "enable_vae_tiling"),
+                False,
+            ),
+            model_cpu_offload=_as_bool(
+                _coalesce_setting(inputs, extra_settings, "model_cpu_offload"),
+                False,
+            ),
+            sequential_cpu_offload=_as_bool(
+                _coalesce_setting(inputs, extra_settings, "sequential_cpu_offload"),
+                False,
+            ),
+        )
+
+    generation_kwargs: Dict[str, Any] = {
+        "prompt": prompt,
+        "negative_prompt": _coalesce_setting(inputs, extra_settings, "negative_prompt"),
+        "width": _coalesce_setting(inputs, extra_settings, "width"),
+        "height": _coalesce_setting(inputs, extra_settings, "height"),
+        "num_inference_steps": _coalesce_setting(
+            inputs, extra_settings, "steps", "num_inference_steps"
+        ),
+        "guidance_scale": _coalesce_setting(
+            inputs, extra_settings, "cfg_scale", "guidance_scale"
+        ),
+        "seed": _coalesce_setting(inputs, extra_settings, "seed"),
+        "scheduler": _coalesce_setting(inputs, extra_settings, "scheduler"),
+        "num_images_per_prompt": _coalesce_setting(
+            inputs, extra_settings, "num_images_per_prompt"
+        ),
+        "init_image": _coalesce_setting(inputs, extra_settings, "init_image"),
+        "mask_image": _coalesce_setting(inputs, extra_settings, "mask_image"),
+        "strength": _coalesce_setting(inputs, extra_settings, "strength"),
+    }
+
+    reserved_keys = {
+        "steps",
+        "num_inference_steps",
+        "cfg_scale",
+        "guidance_scale",
+        "seed",
+        "width",
+        "height",
+        "negative_prompt",
+        "scheduler",
+        "num_images_per_prompt",
+        "init_image",
+        "mask_image",
+        "strength",
+        "torch_dtype",
+        "dtype",
+        "enable_attention_slicing",
+        "enable_vae_slicing",
+        "enable_vae_tiling",
+        "model_cpu_offload",
+        "sequential_cpu_offload",
+    }
+    for key, value in extra_settings.items():
+        if key not in reserved_keys and value is not None:
+            generation_kwargs[key] = value
+
+    result = worker.generate_image(**generation_kwargs)
+    if not isinstance(result, dict):
+        raise RuntimeError("Diffusion worker returned unexpected payload shape")
+
+    task_type_primary = inputs.get("task_type_primary")
+    if not isinstance(task_type_primary, str) or not task_type_primary.strip():
+        task_type_primary = "text-to-image"
+
+    outputs: Dict[str, Any] = {
+        "image": result.get("image_base64", ""),
+        "images": result.get("images", []),
+        "mime_type": result.get("mime_type", "image/png"),
+        "seed_used": result.get("seed_used"),
+        "width": result.get("width"),
+        "height": result.get("height"),
+    }
     outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
         "pytorch", model_path, task_type_primary
     )
@@ -290,6 +430,8 @@ def _main() -> int:
 
         if node_type == "pytorch-inference":
             outputs = _run_pytorch(inputs, torch_worker)
+        elif node_type == "diffusion-inference":
+            outputs = _run_diffusion(inputs, torch_worker)
         elif node_type == "audio-generation":
             outputs = _run_audio(inputs, audio_worker)
         elif node_type == "onnx-inference":
