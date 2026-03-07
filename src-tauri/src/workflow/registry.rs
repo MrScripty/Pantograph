@@ -36,8 +36,8 @@ fn determine_io_binding_origin(node_type: &str, category: &NodeCategory) -> IoBi
         | "point-cloud-output" => IoBindingOrigin::Integrated,
 
         // Client/session bindable surfaces.
-        "audio-input" | "human-input" | "image-input" | "masked-text-input"
-        | "selection-input" | "text-input" | "vector-input" | "audio-output"
+        "audio-input" | "boolean-input" | "human-input" | "image-input" | "masked-text-input"
+        | "number-input" | "selection-input" | "text-input" | "vector-input" | "audio-output"
         | "image-output" | "text-output" | "vector-output" => IoBindingOrigin::ClientSession,
 
         _ => panic!(
@@ -180,6 +180,8 @@ mod tests {
         let registry = NodeRegistry::new();
 
         // Nodes from TaskDescriptor (workflow-nodes crate)
+        assert!(registry.has_node_type("boolean-input"));
+        assert!(registry.has_node_type("number-input"));
         assert!(registry.has_node_type("text-input"));
         assert!(registry.has_node_type("selection-input"));
         assert!(registry.has_node_type("image-input"));
@@ -220,6 +222,15 @@ mod tests {
         assert_eq!(def.node_type, "text-input");
         assert_eq!(def.category, NodeCategory::Input);
         assert_eq!(def.io_binding_origin, IoBindingOrigin::ClientSession);
+
+        let number_def = registry.get_definition("number-input").unwrap();
+        assert_eq!(number_def.io_binding_origin, IoBindingOrigin::ClientSession);
+
+        let boolean_def = registry.get_definition("boolean-input").unwrap();
+        assert_eq!(
+            boolean_def.io_binding_origin,
+            IoBindingOrigin::ClientSession
+        );
     }
 
     #[test]

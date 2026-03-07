@@ -19,6 +19,34 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'reactive',
   },
   {
+    node_type: 'number-input',
+    category: 'input',
+    label: 'Number Input',
+    description: 'User numeric input field',
+    io_binding_origin: 'client_session',
+    inputs: [
+      { id: 'value', label: 'Value', data_type: 'number', required: false, multiple: false },
+    ],
+    outputs: [
+      { id: 'value', label: 'Value', data_type: 'number', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
+    node_type: 'boolean-input',
+    category: 'input',
+    label: 'Boolean Input',
+    description: 'User true/false input field',
+    io_binding_origin: 'client_session',
+    inputs: [
+      { id: 'value', label: 'Value', data_type: 'boolean', required: false, multiple: false },
+    ],
+    outputs: [
+      { id: 'value', label: 'Value', data_type: 'boolean', required: true, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
     node_type: 'selection-input',
     category: 'input',
     label: 'Selection Input',
@@ -334,11 +362,24 @@ export function mockValidateConnection(sourceType: string, targetType: string): 
   // String can connect to Prompt
   if (sourceType === 'string' && targetType === 'prompt') return true;
 
-  // Json can connect to String
-  if (sourceType === 'json' && targetType === 'string') return true;
+  // Prompt can connect to String
+  if (sourceType === 'prompt' && targetType === 'string') return true;
 
-  // Document can connect to String
-  if (sourceType === 'document' && targetType === 'string') return true;
+  // Audio stream can connect to legacy stream ports
+  if (
+    (sourceType === 'audio_stream' && targetType === 'stream') ||
+    (sourceType === 'stream' && targetType === 'audio_stream')
+  ) {
+    return true;
+  }
+
+  // Primitive values can connect to String
+  if (
+    targetType === 'string' &&
+    (sourceType === 'json' || sourceType === 'number' || sourceType === 'boolean')
+  ) {
+    return true;
+  }
 
   return false;
 }

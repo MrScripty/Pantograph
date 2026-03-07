@@ -7,14 +7,18 @@ Submodule source for this crate, grouped by responsibility.
 | File/Folder | Description |
 | ----------- | ----------- |
 | audio_input.rs | Source file used by modules in this directory. |
+| boolean_input.rs | Source file used by modules in this directory. |
 | human_input.rs | Source file used by modules in this directory. |
 | image_input.rs | Source file used by modules in this directory. |
 | linked_input.rs | Source file used by modules in this directory. |
 | masked_text_input.rs | Source file used by modules in this directory. |
 | mod.rs | Source file used by modules in this directory. |
 | model_provider.rs | Source file used by modules in this directory. |
+| number_input.rs | Source file used by modules in this directory. |
 | puma_lib.rs | Source file used by modules in this directory. |
+| selection_input.rs | Source file used by modules in this directory. |
 | text_input.rs | Source file used by modules in this directory. |
+| vector_input.rs | Source file used by modules in this directory. |
 
 ## Design Decisions
 - Keep files in this directory scoped to a single responsibility boundary.

@@ -9,6 +9,8 @@
 
   // Import workflow node components (reuse from main workflow)
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
+  import NumberInputNode from './nodes/workflow/NumberInputNode.svelte';
+  import BooleanInputNode from './nodes/workflow/BooleanInputNode.svelte';
   import SelectionInputNode from './nodes/workflow/SelectionInputNode.svelte';
   import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
@@ -43,6 +45,8 @@
   // Define custom node types
   const nodeTypes: NodeTypes = {
     'text-input': TextInputNode,
+    'number-input': NumberInputNode,
+    'boolean-input': BooleanInputNode,
     'selection-input': SelectionInputNode,
     'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,

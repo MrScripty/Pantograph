@@ -1,7 +1,11 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition, PortDataType } from '../../../services/workflow/types';
+  import type { NodeDefinition } from '../../../services/workflow/types';
   import { updateNodeData, edges, nodes } from '../../../stores/workflowStore';
+  import {
+    findConnectedTargetPort,
+    normalizePortDefaultValue,
+  } from './primitiveInputMetadata';
 
   interface Props {
     id: string;
@@ -15,11 +19,8 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let text = $state('');
-
-  $effect(() => {
-    text = data.text || '';
-  });
+  const DEFAULT_PLACEHOLDER = 'Enter text...';
+  let text = $derived(data.text || '');
 
   // Port type colors (same as BaseNode)
   const typeColors: Record<string, string> = {
@@ -48,19 +49,16 @@
     $edges.some((edge) => edge.target === id && edge.targetHandle === 'text')
   );
 
-  // Find what this node's output is connected to and get the target port type
-  let connectedTargetPortType = $derived.by(() => {
-    // Find an edge where this node is the source
-    const outEdge = $edges.find((edge) => edge.source === id && edge.sourceHandle === 'text');
-    if (!outEdge) return null;
+  let targetPort = $derived.by(() => findConnectedTargetPort(id, 'text', $nodes, $edges));
+  let connectedTargetPortType = $derived(targetPort?.data_type || null);
+  let defaultText = $derived(normalizePortDefaultValue(targetPort?.default_value));
 
-    // Find the target node
-    const targetNode = $nodes.find((n) => n.id === outEdge.target);
-    if (!targetNode?.data?.definition) return null;
+  $effect(() => {
+    if (data.text !== undefined || typeof defaultText !== 'string') {
+      return;
+    }
 
-    const def = targetNode.data.definition as NodeDefinition;
-    const port = def.inputs.find((p) => p.id === outEdge.targetHandle);
-    return port?.data_type || null;
+    updateNodeData(id, { text: defaultText });
   });
 
   // Get the color based on connected port type
@@ -88,22 +86,25 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
-      {#if isTextConnected}
-        <div class="text-xs text-neutral-400 italic py-1">
-          Connected to external input
-        </div>
-      {:else}
+    {#if isTextConnected}
+      <div class="text-xs text-neutral-400 italic py-1">
+        Connected to external input
+      </div>
+    {:else}
+      <div class="flex flex-col gap-1">
+        {#if targetPort}
+          <div class="text-[10px] text-neutral-400">{targetPort.label}</div>
+        {/if}
         <textarea
           class="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 resize-none focus:outline-none"
           style="--focus-color: {nodeColor}"
           rows="3"
-          placeholder="Enter text..."
+          placeholder={targetPort?.description || DEFAULT_PLACEHOLDER}
           value={text}
           oninput={handleInput}
         ></textarea>
-      {/if}
-    {/snippet}
+      </div>
+    {/if}
   </BaseNode>
 </div>
 

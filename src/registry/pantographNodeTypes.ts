@@ -5,10 +5,13 @@
  * definitions to Svelte components, then adds Pantograph-specific nodes.
  */
 import type { NodeTypeRegistry, NodeDefinition } from '@pantograph/svelte-graph';
+import type { Component } from 'svelte';
 import { buildRegistry } from '@pantograph/svelte-graph';
 
 // Specialized workflow node components (Pantograph-only overrides)
 import TextInputNode from '../components/nodes/workflow/TextInputNode.svelte';
+import NumberInputNode from '../components/nodes/workflow/NumberInputNode.svelte';
+import BooleanInputNode from '../components/nodes/workflow/BooleanInputNode.svelte';
 import VectorInputNode from '../components/nodes/workflow/VectorInputNode.svelte';
 import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svelte';
 import OllamaInferenceNode from '../components/nodes/workflow/OllamaInferenceNode.svelte';
@@ -39,8 +42,10 @@ import ArchBackendNode from '../components/nodes/architecture/ArchBackendNode.sv
 import ArchCommandNode from '../components/nodes/architecture/ArchCommandNode.svelte';
 
 /** Specialized component overrides for engine node types */
-const SPECIALIZED_NODES: Record<string, any> = {
+const SPECIALIZED_NODES: Record<string, Component<Record<string, unknown>>> = {
   'text-input': TextInputNode,
+  'number-input': NumberInputNode,
+  'boolean-input': BooleanInputNode,
   'vector-input': VectorInputNode,
   'llm-inference': LLMInferenceNode,
   'ollama-inference': OllamaInferenceNode,
@@ -64,7 +69,7 @@ const SPECIALIZED_NODES: Record<string, any> = {
 };
 
 /** Non-engine nodes (architecture + grouping, Pantograph desktop only) */
-const EXTRA_NODES: Record<string, any> = {
+const EXTRA_NODES: Record<string, Component<Record<string, unknown>>> = {
   'node-group': NodeGroupNode,
   'arch-component': ArchComponentNode,
   'arch-service': ArchServiceNode,

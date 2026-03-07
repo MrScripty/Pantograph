@@ -121,6 +121,61 @@ fn execute_text_input(
     Ok(outputs)
 }
 
+fn parse_number_input_value(value: &serde_json::Value) -> Option<f64> {
+    if let Some(number) = value.as_f64() {
+        return number.is_finite().then_some(number);
+    }
+
+    value
+        .as_str()
+        .and_then(|raw| raw.parse::<f64>().ok())
+        .and_then(|number| number.is_finite().then_some(number))
+}
+
+fn execute_number_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let value = inputs
+        .get("_data")
+        .and_then(|d| d.get("value"))
+        .cloned()
+        .or_else(|| inputs.get("value").cloned());
+
+    let Some(number) = value.as_ref().and_then(parse_number_input_value) else {
+        return Ok(HashMap::new());
+    };
+
+    let mut outputs = HashMap::new();
+    outputs.insert("value".to_string(), serde_json::json!(number));
+    Ok(outputs)
+}
+
+fn parse_boolean_input_value(value: &serde_json::Value) -> Option<bool> {
+    value.as_bool().or_else(|| match value.as_str()? {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    })
+}
+
+fn execute_boolean_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let value = inputs
+        .get("_data")
+        .and_then(|d| d.get("value"))
+        .cloned()
+        .or_else(|| inputs.get("value").cloned());
+
+    let Some(boolean) = value.as_ref().and_then(parse_boolean_input_value) else {
+        return Ok(HashMap::new());
+    };
+
+    let mut outputs = HashMap::new();
+    outputs.insert("value".to_string(), serde_json::json!(boolean));
+    Ok(outputs)
+}
+
 fn execute_selection_input(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
@@ -1409,6 +1464,8 @@ impl TaskExecutor for CoreTaskExecutor {
         match node_type.as_str() {
             // Input nodes
             "text-input" => execute_text_input(&inputs),
+            "number-input" => execute_number_input(&inputs),
+            "boolean-input" => execute_boolean_input(&inputs),
             "selection-input" => execute_selection_input(&inputs),
             "vector-input" => execute_vector_input(&inputs),
             "masked-text-input" => execute_masked_text_input(&inputs),
@@ -3101,6 +3158,36 @@ mod tests {
     }
 
     #[test]
+    fn test_number_input() {
+        let mut inputs = HashMap::new();
+        inputs.insert("_data".to_string(), serde_json::json!({"value": 1.2}));
+        let result = execute_number_input(&inputs).unwrap();
+        assert_eq!(result["value"], 1.2);
+    }
+
+    #[test]
+    fn test_number_input_skips_missing_value() {
+        let inputs = HashMap::new();
+        let result = execute_number_input(&inputs).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_boolean_input() {
+        let mut inputs = HashMap::new();
+        inputs.insert("_data".to_string(), serde_json::json!({"value": true}));
+        let result = execute_boolean_input(&inputs).unwrap();
+        assert_eq!(result["value"], true);
+    }
+
+    #[test]
+    fn test_boolean_input_skips_missing_value() {
+        let inputs = HashMap::new();
+        let result = execute_boolean_input(&inputs).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
     fn test_selection_input() {
         let mut inputs = HashMap::new();
         inputs.insert(
@@ -3539,6 +3626,34 @@ mod tests {
         inputs.insert("voice".to_string(), serde_json::json!("Leo"));
         let settings = build_extra_settings(&inputs);
         assert_eq!(settings["voice"], "expr-voice-5-m");
+    }
+
+    #[test]
+    fn test_expand_settings_numeric_override_flows_into_extra_settings() {
+        let mut expand_inputs = HashMap::new();
+        expand_inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "speed", "label": "Speed", "param_type": "Number", "default": 1.0}
+            ]),
+        );
+
+        let expanded = execute_expand_settings(&expand_inputs).unwrap();
+        assert_eq!(expanded.get("speed"), Some(&serde_json::json!(1.0)));
+
+        let mut number_inputs = HashMap::new();
+        number_inputs.insert("_data".to_string(), serde_json::json!({"value": 1.2}));
+        let number_output = execute_number_input(&number_inputs).unwrap();
+
+        let mut inference_inputs = HashMap::new();
+        inference_inputs.insert(
+            "inference_settings".to_string(),
+            expand_inputs["inference_settings"].clone(),
+        );
+        inference_inputs.insert("speed".to_string(), number_output["value"].clone());
+
+        let settings = build_extra_settings(&inference_inputs);
+        assert_eq!(settings.get("speed"), Some(&serde_json::json!(1.2)));
     }
 
     #[test]
