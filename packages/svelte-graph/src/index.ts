@@ -9,6 +9,14 @@ export type {
   NodeDefinition,
   GraphNode,
   GraphEdge,
+  ConnectionAnchor,
+  ConnectionTargetAnchorCandidate,
+  ConnectionTargetNodeCandidate,
+  InsertableNodeTypeCandidate,
+  ConnectionCandidatesResponse,
+  ConnectionRejectionReason,
+  ConnectionRejection,
+  ConnectionCommitResponse,
   WorkflowGraph,
   WorkflowMetadata,
   WorkflowFile,
@@ -73,6 +81,12 @@ export { MockWorkflowBackend, MOCK_NODE_DEFINITIONS } from './backends/MockWorkf
 
 // --- Utilities ---
 export { linesIntersect } from './utils/geometry.js';
+export {
+  buildDerivedGraph,
+  computeConsumerCountMap,
+  computeGraphFingerprint,
+  withDerivedGraph,
+} from './graphRevision.js';
 
 // --- Components ---
 export { default as WorkflowGraphEditor } from './components/WorkflowGraph.svelte';

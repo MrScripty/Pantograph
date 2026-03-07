@@ -7,6 +7,9 @@ import type {
   WorkflowMetadata,
   GraphNode,
   GraphEdge,
+  ConnectionAnchor,
+  ConnectionCandidatesResponse,
+  ConnectionCommitResponse,
 } from './types';
 import {
   MOCK_NODE_DEFINITIONS,
@@ -284,6 +287,63 @@ export class WorkflowService {
     }
 
     return invoke<WorkflowGraph>('add_edge_to_execution', { executionId: id, edge });
+  }
+
+  async getConnectionCandidates(
+    sourceAnchor: ConnectionAnchor,
+    executionId?: string,
+    graphRevision?: string
+  ): Promise<ConnectionCandidatesResponse> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_MOCKS) {
+      return {
+        graph_revision: '',
+        revision_matches: true,
+        source_anchor: sourceAnchor,
+        compatible_nodes: [],
+        insertable_node_types: [],
+      };
+    }
+
+    return invoke<ConnectionCandidatesResponse>('get_connection_candidates', {
+      executionId: id,
+      sourceAnchor,
+      graphRevision,
+    });
+  }
+
+  async connectAnchors(
+    sourceAnchor: ConnectionAnchor,
+    targetAnchor: ConnectionAnchor,
+    graphRevision: string,
+    executionId?: string
+  ): Promise<ConnectionCommitResponse> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_MOCKS) {
+      return {
+        accepted: false,
+        graph_revision: graphRevision,
+        rejection: {
+          reason: 'unknown_target_anchor',
+          message: 'Mock mode does not implement connection commits',
+        },
+      };
+    }
+
+    return invoke<ConnectionCommitResponse>('connect_anchors_in_execution', {
+      executionId: id,
+      sourceAnchor,
+      targetAnchor,
+      graphRevision,
+    });
   }
 
   /**

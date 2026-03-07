@@ -7,6 +7,9 @@
 import type { WorkflowBackend } from '../types/backend.js';
 import type { UndoRedoState } from '../types/backend.js';
 import type {
+  ConnectionAnchor,
+  ConnectionCandidatesResponse,
+  ConnectionCommitResponse,
   NodeDefinition,
   PortDataType,
   WorkflowGraph,
@@ -18,6 +21,7 @@ import type {
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from '../types/groups.js';
 import { isPortTypeCompatible } from '../portTypeCompatibility.js';
+import { buildDerivedGraph, computeGraphFingerprint } from '../graphRevision.js';
 
 /** Default mock node definitions */
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
@@ -105,7 +109,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   async createSession(graph: WorkflowGraph): Promise<string> {
     const sessionId = `mock-session-${++this.sessionCounter}`;
-    this.sessions.set(sessionId, structuredClone(graph));
+    this.sessions.set(sessionId, { ...structuredClone(graph), derived_graph: buildDerivedGraph(graph) });
     return sessionId;
   }
 
@@ -128,19 +132,172 @@ export class MockWorkflowBackend implements WorkflowBackend {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.nodes.push(node);
+    graph.derived_graph = buildDerivedGraph(graph);
   }
 
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.edges.push(edge);
+    graph.derived_graph = buildDerivedGraph(graph);
     return structuredClone(graph);
+  }
+
+  async getConnectionCandidates(
+    sourceAnchor: ConnectionAnchor,
+    sessionId: string,
+    graphRevision?: string,
+  ): Promise<ConnectionCandidatesResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+
+    const sourceNode = graph.nodes.find((node) => node.id === sourceAnchor.node_id);
+    if (!sourceNode) throw new Error(`Source node not found: ${sourceAnchor.node_id}`);
+    const sourceDef = this.nodeDefinitions.find((def) => def.node_type === sourceNode.node_type);
+    const sourcePort = sourceDef?.outputs.find((port) => port.id === sourceAnchor.port_id);
+    if (!sourcePort) throw new Error(`Source anchor not found: ${sourceAnchor.node_id}.${sourceAnchor.port_id}`);
+
+    const compatibleNodes = graph.nodes
+      .filter((node) => node.id !== sourceAnchor.node_id)
+      .map((node) => {
+        const definition = this.nodeDefinitions.find((def) => def.node_type === node.node_type);
+        if (!definition) return null;
+
+        const anchors = definition.inputs
+          .filter((port) => {
+            if (!isPortTypeCompatible(sourcePort.data_type, port.data_type)) return false;
+            if (!port.multiple) {
+              return !graph.edges.some(
+                (edge) => edge.target === node.id && edge.target_handle === port.id
+              );
+            }
+            return true;
+          })
+          .map((port) => ({
+            port_id: port.id,
+            port_label: port.label,
+            data_type: port.data_type,
+            multiple: port.multiple,
+          }));
+
+        if (anchors.length === 0) return null;
+
+        return {
+          node_id: node.id,
+          node_type: node.node_type,
+          node_label: String(node.data.label ?? definition.label),
+          position: node.position,
+          anchors,
+        };
+      })
+      .filter((node): node is NonNullable<typeof node> => node !== null);
+
+    const insertableNodeTypes = this.nodeDefinitions
+      .map((definition) => {
+        const matchingInputPortIds = definition.inputs
+          .filter((port) => isPortTypeCompatible(sourcePort.data_type, port.data_type))
+          .map((port) => port.id);
+        if (matchingInputPortIds.length === 0) return null;
+        return {
+          node_type: definition.node_type,
+          category: definition.category,
+          label: definition.label,
+          description: definition.description,
+          matching_input_port_ids: matchingInputPortIds,
+        };
+      })
+      .filter((node): node is NonNullable<typeof node> => node !== null);
+
+    const currentRevision = computeGraphFingerprint(graph);
+    return {
+      graph_revision: currentRevision,
+      revision_matches: !graphRevision || graphRevision === currentRevision,
+      source_anchor: sourceAnchor,
+      compatible_nodes: compatibleNodes,
+      insertable_node_types: insertableNodeTypes,
+    };
+  }
+
+  async connectAnchors(
+    sourceAnchor: ConnectionAnchor,
+    targetAnchor: ConnectionAnchor,
+    sessionId: string,
+    graphRevision: string,
+  ): Promise<ConnectionCommitResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+
+    const currentRevision = computeGraphFingerprint(graph);
+    if (graphRevision !== currentRevision) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'stale_revision',
+          message: `graph revision '${graphRevision}' is stale`,
+        },
+      };
+    }
+
+    const sourceNode = graph.nodes.find((node) => node.id === sourceAnchor.node_id);
+    const targetNode = graph.nodes.find((node) => node.id === targetAnchor.node_id);
+    const sourceDef = this.nodeDefinitions.find((def) => def.node_type === sourceNode?.node_type);
+    const targetDef = this.nodeDefinitions.find((def) => def.node_type === targetNode?.node_type);
+    const sourcePort = sourceDef?.outputs.find((port) => port.id === sourceAnchor.port_id);
+    const targetPort = targetDef?.inputs.find((port) => port.id === targetAnchor.port_id);
+
+    if (!sourcePort) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_source_anchor',
+          message: `source anchor '${sourceAnchor.node_id}.${sourceAnchor.port_id}' was not found`,
+        },
+      };
+    }
+    if (!targetPort) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_target_anchor',
+          message: `target anchor '${targetAnchor.node_id}.${targetAnchor.port_id}' was not found`,
+        },
+      };
+    }
+    if (!isPortTypeCompatible(sourcePort.data_type, targetPort.data_type)) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'incompatible_types',
+          message: `${sourcePort.data_type} cannot connect to ${targetPort.data_type}`,
+        },
+      };
+    }
+
+    const edge: GraphEdge = {
+      id: `${sourceAnchor.node_id}-${sourceAnchor.port_id}-${targetAnchor.node_id}-${targetAnchor.port_id}`,
+      source: sourceAnchor.node_id,
+      source_handle: sourceAnchor.port_id,
+      target: targetAnchor.node_id,
+      target_handle: targetAnchor.port_id,
+    };
+    graph.edges.push(edge);
+    graph.derived_graph = buildDerivedGraph(graph);
+    return {
+      accepted: true,
+      graph_revision: graph.derived_graph.graph_fingerprint,
+      graph: structuredClone(graph),
+    };
   }
 
   async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.edges = graph.edges.filter((e) => e.id !== edgeId);
+    graph.derived_graph = buildDerivedGraph(graph);
     return structuredClone(graph);
   }
 
@@ -155,6 +312,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
     if (node) {
       node.data = { ...node.data, ...data };
     }
+    graph.derived_graph = buildDerivedGraph(graph);
   }
 
   async getExecutionGraph(sessionId: string): Promise<WorkflowGraph> {
@@ -197,7 +355,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
     return {
       version: '1.0',
       metadata: { name, created: new Date().toISOString(), modified: new Date().toISOString() },
-      graph: { nodes: [], edges: [] },
+      graph: { nodes: [], edges: [], derived_graph: buildDerivedGraph({ nodes: [], edges: [] }) },
     };
   }
 

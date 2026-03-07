@@ -64,6 +64,64 @@ export interface GraphEdge {
   target_handle: string;
 }
 
+export interface ConnectionAnchor {
+  node_id: string;
+  port_id: string;
+}
+
+export interface ConnectionTargetAnchorCandidate {
+  port_id: string;
+  port_label: string;
+  data_type: PortDataType;
+  multiple: boolean;
+}
+
+export interface ConnectionTargetNodeCandidate {
+  node_id: string;
+  node_type: string;
+  node_label: string;
+  position: { x: number; y: number };
+  anchors: ConnectionTargetAnchorCandidate[];
+}
+
+export interface InsertableNodeTypeCandidate {
+  node_type: string;
+  category: NodeCategory;
+  label: string;
+  description: string;
+  matching_input_port_ids: string[];
+}
+
+export interface ConnectionCandidatesResponse {
+  graph_revision: string;
+  revision_matches: boolean;
+  source_anchor: ConnectionAnchor;
+  compatible_nodes: ConnectionTargetNodeCandidate[];
+  insertable_node_types: InsertableNodeTypeCandidate[];
+}
+
+export type ConnectionRejectionReason =
+  | 'stale_revision'
+  | 'unknown_source_anchor'
+  | 'unknown_target_anchor'
+  | 'duplicate_connection'
+  | 'target_capacity_reached'
+  | 'self_connection'
+  | 'cycle_detected'
+  | 'incompatible_types';
+
+export interface ConnectionRejection {
+  reason: ConnectionRejectionReason;
+  message: string;
+}
+
+export interface ConnectionCommitResponse {
+  accepted: boolean;
+  graph_revision: string;
+  graph?: WorkflowGraph;
+  rejection?: ConnectionRejection;
+}
+
 export interface WorkflowGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];

@@ -19,6 +19,7 @@ import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import { removeNodeDataKeys } from './runtimeData.js';
+import { buildDerivedGraph } from '../graphRevision.js';
 
 export interface WorkflowStores {
   // Writable stores
@@ -158,7 +159,23 @@ export function createWorkflowStores(
 
   function markGraphModified() {
     isDirty.set(true);
-    derivedGraph.set(undefined);
+    derivedGraph.set(
+      buildDerivedGraph({
+        nodes: get(nodes).map((node) => ({
+          id: node.id,
+          node_type: node.type || 'unknown',
+          position: node.position,
+          data: node.data,
+        })),
+        edges: get(edges).map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          source_handle: edge.sourceHandle || 'output',
+          target: edge.target,
+          target_handle: edge.targetHandle || 'input',
+        })),
+      })
+    );
   }
 
   // --- Node actions ---
@@ -303,7 +320,8 @@ export function createWorkflowStores(
       targetHandle: e.target_handle,
     }));
     edges.set(newEdges);
-    markGraphModified();
+    isDirty.set(true);
+    derivedGraph.set(backendGraph.derived_graph ?? buildDerivedGraph(backendGraph));
   }
 
   // --- Execution actions ---
@@ -404,7 +422,7 @@ export function createWorkflowStores(
     );
 
     workflowMetadata.set(metadata || null);
-    derivedGraph.set(graph.derived_graph);
+    derivedGraph.set(graph.derived_graph ?? buildDerivedGraph(graph));
     isDirty.set(false);
   }
 
@@ -412,7 +430,12 @@ export function createWorkflowStores(
     nodes.set([]);
     edges.set([]);
     workflowMetadata.set(null);
-    derivedGraph.set(undefined);
+    derivedGraph.set(
+      buildDerivedGraph({
+        nodes: [],
+        edges: [],
+      })
+    );
     isDirty.set(false);
     resetExecutionStates();
   }
@@ -431,7 +454,19 @@ export function createWorkflowStores(
       { id: 'input-to-llm', source: 'user-input', sourceHandle: 'text', target: 'llm', targetHandle: 'prompt' },
       { id: 'llm-to-output', source: 'llm', sourceHandle: 'response', target: 'output', targetHandle: 'text' },
     ]);
-    derivedGraph.set(undefined);
+    derivedGraph.set(
+      buildDerivedGraph({
+        nodes: [
+          { id: 'user-input', node_type: 'text-input', position: { x: 50, y: 150 }, data: { label: 'User Input', text: '', definition: textInputDef } },
+          { id: 'llm', node_type: 'llm-inference', position: { x: 350, y: 150 }, data: { label: 'LLM Inference', definition: llmDef } },
+          { id: 'output', node_type: 'text-output', position: { x: 650, y: 150 }, data: { label: 'Output', text: '', definition: outputDef } },
+        ],
+        edges: [
+          { id: 'input-to-llm', source: 'user-input', source_handle: 'text', target: 'llm', target_handle: 'prompt' },
+          { id: 'llm-to-output', source: 'llm', source_handle: 'response', target: 'output', target_handle: 'text' },
+        ],
+      })
+    );
     isDirty.set(false);
   }
 

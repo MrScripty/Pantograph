@@ -9,6 +9,9 @@ import type {
   WorkflowEvent,
   GraphNode,
   GraphEdge,
+  ConnectionAnchor,
+  ConnectionCandidatesResponse,
+  ConnectionCommitResponse,
 } from './workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from './groups.js';
 
@@ -80,6 +83,21 @@ export interface WorkflowBackend {
 
   /** Add an edge. Returns the updated graph for frontend sync. */
   addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph>;
+
+  /** Discover eligible targets and insertable node types for an active source anchor. */
+  getConnectionCandidates(
+    sourceAnchor: ConnectionAnchor,
+    sessionId: string,
+    graphRevision?: string,
+  ): Promise<ConnectionCandidatesResponse>;
+
+  /** Commit a connection using a revision-aware, backend-owned eligibility check. */
+  connectAnchors(
+    sourceAnchor: ConnectionAnchor,
+    targetAnchor: ConnectionAnchor,
+    sessionId: string,
+    graphRevision: string,
+  ): Promise<ConnectionCommitResponse>;
 
   /** Remove an edge. Returns the updated graph for frontend sync. */
   removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph>;

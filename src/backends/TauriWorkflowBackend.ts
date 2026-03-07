@@ -15,6 +15,9 @@ import type {
   WorkflowEvent,
   GraphNode,
   GraphEdge,
+  ConnectionAnchor,
+  ConnectionCandidatesResponse,
+  ConnectionCommitResponse,
   NodeGroup,
   PortMapping,
   CreateGroupResult,
@@ -70,6 +73,32 @@ export class TauriWorkflowBackend implements WorkflowBackend {
 
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph> {
     return invoke<WorkflowGraph>('add_edge_to_execution', { executionId: sessionId, edge });
+  }
+
+  async getConnectionCandidates(
+    sourceAnchor: ConnectionAnchor,
+    sessionId: string,
+    graphRevision?: string,
+  ): Promise<ConnectionCandidatesResponse> {
+    return invoke<ConnectionCandidatesResponse>('get_connection_candidates', {
+      executionId: sessionId,
+      sourceAnchor,
+      graphRevision,
+    });
+  }
+
+  async connectAnchors(
+    sourceAnchor: ConnectionAnchor,
+    targetAnchor: ConnectionAnchor,
+    sessionId: string,
+    graphRevision: string,
+  ): Promise<ConnectionCommitResponse> {
+    return invoke<ConnectionCommitResponse>('connect_anchors_in_execution', {
+      executionId: sessionId,
+      sourceAnchor,
+      targetAnchor,
+      graphRevision,
+    });
   }
 
   async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph> {
