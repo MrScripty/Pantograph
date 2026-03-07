@@ -1,6 +1,7 @@
 export type HorseshoeBlockedReason =
   | 'not_editable'
   | 'no_active_drag'
+  | 'insert_not_supported'
   | 'candidates_pending'
   | 'no_insertable_nodes'
   | 'missing_anchor_position';
@@ -8,6 +9,7 @@ export type HorseshoeBlockedReason =
 export interface HorseshoeOpenContext {
   canEdit: boolean;
   connectionDragActive: boolean;
+  supportsInsert: boolean;
   hasConnectionIntent: boolean;
   insertableCount: number;
   anchorPosition: { x: number; y: number } | null;
@@ -44,6 +46,13 @@ export function resolveHorseshoeOpenRequest(
     };
   }
 
+  if (!context.supportsInsert) {
+    return {
+      action: 'blocked',
+      reason: 'insert_not_supported',
+    };
+  }
+
   if (!context.hasConnectionIntent) {
     return {
       action: 'queue',
@@ -77,6 +86,8 @@ export function formatHorseshoeBlockedReason(reason: HorseshoeBlockedReason): st
       return 'graph is not editable';
     case 'no_active_drag':
       return 'no active connection drag';
+    case 'insert_not_supported':
+      return 'insert from reconnect is not supported; start a new drag from the output handle';
     case 'candidates_pending':
       return 'compatible insert candidates are still loading';
     case 'no_insertable_nodes':

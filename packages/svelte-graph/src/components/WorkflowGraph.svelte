@@ -38,6 +38,16 @@
     type HorseshoeBlockedReason,
     type HorseshoeDragSessionState,
   } from '../horseshoeDragSession.js';
+  import {
+    clearConnectionDragState,
+    createConnectionDragState,
+    markConnectionDragFinalizing,
+    shouldRemoveReconnectedEdge,
+    startConnectionDrag,
+    startReconnectDrag,
+    supportsInsertFromConnectionDrag,
+    type ConnectionDragState,
+  } from '../connectionDragState.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
@@ -93,6 +103,7 @@
   let cutToolRef: CutTool;
   let ctrlPressed = $state(false);
   let isCutting = $state(false);
+  let connectionDragState = $state<ConnectionDragState>(createConnectionDragState());
   let horseshoeSession = $state<HorseshoeDragSessionState>(createHorseshoeDragSessionState());
   let horseshoeSelectedIndex = $state(0);
   let horseshoeQuery = $state('');
@@ -216,8 +227,13 @@
     });
   }
 
-  function clearConnectionInteraction() {
+  function clearConnectionDragTracking() {
+    connectionDragState = clearConnectionDragState();
     applyHorseshoeSession(clearHorseshoeDragSession());
+  }
+
+  function clearConnectionInteraction() {
+    clearConnectionDragTracking();
     stores.workflow.clearConnectionIntent();
   }
 
@@ -256,6 +272,7 @@
   function getHorseshoeOpenContext() {
     return {
       canEdit,
+      supportsInsert: supportsInsertFromConnectionDrag(connectionDragState),
       hasConnectionIntent: Boolean($connectionIntentStore),
       insertableCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
       anchorPosition: horseshoeSession.anchorPosition,
@@ -303,6 +320,7 @@
     horseshoeLastTrace = [
       'request-open',
       horseshoeSession.dragActive ? 'drag' : 'idle',
+      connectionDragState.mode,
       $connectionIntentStore ? 'intent' : 'no-intent',
       `${$connectionIntentStore?.insertableNodeTypes.length ?? 0}-insertables`,
       horseshoeSession.anchorPosition ? 'anchor' : 'no-anchor',
@@ -352,7 +370,9 @@
   }
 
   async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
-    if (!$connectionIntentStore || horseshoePending) return;
+    if (!$connectionIntentStore || horseshoePending || !supportsInsertFromConnectionDrag(connectionDragState)) {
+      return;
+    }
 
     const sessionId = get(currentSessionId);
     const positionHint = getInsertPositionHint();
@@ -372,7 +392,7 @@
 
       if (response.accepted && response.graph) {
         stores.workflow.loadWorkflow(response.graph, get(workflowMetadataStore) ?? undefined);
-        closeHorseshoeSelector();
+        clearConnectionDragTracking();
         return;
       }
 
@@ -384,13 +404,13 @@
         insertableNodeTypes: $connectionIntentStore.insertableNodeTypes,
         rejection: response.rejection,
       });
-      closeHorseshoeSelector();
+      clearConnectionDragTracking();
 
       if (response.rejection) {
         console.warn('[WorkflowGraph] Insert rejected:', response.rejection.message);
       }
     } catch (error) {
-      horseshoePending = false;
+      clearConnectionDragTracking();
       console.error('[WorkflowGraph] Failed to insert compatible node:', error);
     }
   }
@@ -655,6 +675,7 @@
     }
 
     const pointerPosition = getEventPointerPosition(_event);
+    connectionDragState = startConnectionDrag();
     horseshoeLastTrace = `connect-start:${params.nodeId}:${params.handleId ?? 'unknown'}`;
     applyHorseshoeSession(startHorseshoeDrag(pointerPosition));
 
@@ -747,9 +768,6 @@
   }
 
   // --- Edge Reconnection ---
-  let edgeReconnectSuccessful = $state(false);
-  let reconnectingEdgeId = $state<string | null>(null);
-  let reconnectingSourceAnchor = $state<ConnectionAnchor | null>(null);
 
   async function handleReconnectStart(
     _event: MouseEvent | TouchEvent,
@@ -757,26 +775,24 @@
     handleType: 'source' | 'target',
   ) {
     if (!canEdit) return;
-    edgeReconnectSuccessful = false;
-    reconnectingEdgeId = edge.id;
 
     if (handleType === 'target' && edge.sourceHandle) {
-      reconnectingSourceAnchor = {
+      const sourceAnchor = {
         node_id: edge.source,
         port_id: edge.sourceHandle,
       };
-      applyHorseshoeSession(startHorseshoeDrag(horseshoeSession.anchorPosition));
-      await loadConnectionIntent(reconnectingSourceAnchor);
+      connectionDragState = startReconnectDrag(edge.id, sourceAnchor);
+      applyHorseshoeSession(startHorseshoeDrag(getEventPointerPosition(_event)));
+      await loadConnectionIntent(sourceAnchor);
       return;
     }
 
-    reconnectingSourceAnchor = null;
     clearConnectionInteraction();
   }
 
   async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
     if (!canEdit) return;
-    edgeReconnectSuccessful = true;
+    connectionDragState = markConnectionDragFinalizing(connectionDragState);
 
     const sessionId = get(currentSessionId);
     if (!sessionId) return;
@@ -810,7 +826,7 @@
       if (response.rejection) {
         stores.workflow.setConnectionIntent({
           sourceAnchor:
-            reconnectingSourceAnchor ??
+            connectionDragState.reconnectingSourceAnchor ??
             {
               node_id: newConnection.source!,
               port_id: newConnection.sourceHandle!,
@@ -836,7 +852,8 @@
   ) {
     if (!canEdit) return;
 
-    if (!connectionState.isValid && reconnectingEdgeId) {
+    const reconnectingEdgeId = shouldRemoveReconnectedEdge(connectionDragState, connectionState);
+    if (reconnectingEdgeId) {
       try {
         const sessionId = get(currentSessionId) || '';
         const updatedGraph = await backend.removeEdge(reconnectingEdgeId, sessionId);
@@ -846,8 +863,6 @@
       }
     }
 
-    reconnectingEdgeId = null;
-    reconnectingSourceAnchor = null;
     clearConnectionInteraction();
   }
 

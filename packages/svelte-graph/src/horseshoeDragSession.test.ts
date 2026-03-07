@@ -16,6 +16,7 @@ test('requestHorseshoeDisplay enters pending while candidates are loading', () =
     {
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: false,
       insertableCount: 0,
       anchorPosition: { x: 10, y: 20 },
@@ -33,6 +34,7 @@ test('syncHorseshoeDisplay opens once candidates arrive', () => {
     {
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: false,
       insertableCount: 0,
       anchorPosition: { x: 10, y: 20 },
@@ -42,6 +44,7 @@ test('syncHorseshoeDisplay opens once candidates arrive', () => {
   const opened = syncHorseshoeDisplay(pendingState, {
     canEdit: true,
     connectionDragActive: true,
+    supportsInsert: true,
     hasConnectionIntent: true,
     insertableCount: 3,
     anchorPosition: { x: 10, y: 20 },
@@ -58,6 +61,7 @@ test('missing anchor keeps request alive until anchor is restored', () => {
     {
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 2,
       anchorPosition: null,
@@ -73,6 +77,7 @@ test('missing anchor keeps request alive until anchor is restored', () => {
     {
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 2,
       anchorPosition: { x: 40, y: 80 },
@@ -89,6 +94,7 @@ test('no insertable nodes blocks and stops retrying', () => {
     {
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 0,
       anchorPosition: { x: 10, y: 20 },

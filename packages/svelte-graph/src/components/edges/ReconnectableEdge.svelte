@@ -122,5 +122,4 @@
   class="react-flow__edge-interaction"
 />
 
-<EdgeReconnectAnchor type="source" position={{ x: sourceX, y: sourceY }} />
 <EdgeReconnectAnchor type="target" position={{ x: targetX, y: targetY }} />

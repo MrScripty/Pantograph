@@ -20,6 +20,7 @@ test('resolveHorseshoeOpenRequest queues while candidates are still loading', ()
     resolveHorseshoeOpenRequest({
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: false,
       insertableCount: 0,
       anchorPosition: { x: 10, y: 20 },
@@ -36,6 +37,7 @@ test('resolveHorseshoeOpenRequest blocks for explicit reasons', () => {
     resolveHorseshoeOpenRequest({
       canEdit: false,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 1,
       anchorPosition: { x: 10, y: 20 },
@@ -50,6 +52,22 @@ test('resolveHorseshoeOpenRequest blocks for explicit reasons', () => {
     resolveHorseshoeOpenRequest({
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: false,
+      hasConnectionIntent: true,
+      insertableCount: 1,
+      anchorPosition: { x: 10, y: 20 },
+    }),
+    {
+      action: 'blocked',
+      reason: 'insert_not_supported',
+    },
+  );
+
+  assert.deepEqual(
+    resolveHorseshoeOpenRequest({
+      canEdit: true,
+      connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 0,
       anchorPosition: { x: 10, y: 20 },
@@ -64,6 +82,7 @@ test('resolveHorseshoeOpenRequest blocks for explicit reasons', () => {
     resolveHorseshoeOpenRequest({
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 2,
       anchorPosition: null,
@@ -80,6 +99,7 @@ test('resolveHorseshoeOpenRequest opens when drag state is ready', () => {
     resolveHorseshoeOpenRequest({
       canEdit: true,
       connectionDragActive: true,
+      supportsInsert: true,
       hasConnectionIntent: true,
       insertableCount: 3,
       anchorPosition: { x: 10, y: 20 },
@@ -95,5 +115,9 @@ test('formatHorseshoeBlockedReason returns actionable diagnostics', () => {
   assert.match(
     formatHorseshoeBlockedReason('candidates_pending'),
     /still loading/i,
+  );
+  assert.match(
+    formatHorseshoeBlockedReason('insert_not_supported'),
+    /output handle/i,
   );
 });

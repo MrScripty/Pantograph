@@ -108,6 +108,19 @@ export type {
   HorseshoeOpenResolution,
 } from './horseshoeInvocation.js';
 export {
+  clearConnectionDragState,
+  createConnectionDragState,
+  markConnectionDragFinalizing,
+  shouldRemoveReconnectedEdge,
+  startConnectionDrag,
+  startReconnectDrag,
+  supportsInsertFromConnectionDrag,
+} from './connectionDragState.js';
+export type {
+  ConnectionDragMode,
+  ConnectionDragState,
+} from './connectionDragState.js';
+export {
   clearHorseshoeDragSession,
   createHorseshoeDragSessionState,
   requestHorseshoeDisplay,
