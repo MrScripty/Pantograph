@@ -1,6 +1,19 @@
 import type { InsertableNodeTypeCandidate } from './types/workflow.js';
 
 export const HORSESHOE_VISIBLE_COUNT = 5;
+export const HORSESHOE_OUTER_RADIUS = 126;
+export const HORSESHOE_SELECTION_RADIUS = 64;
+export const HORSESHOE_START_ANGLE = -150;
+export const HORSESHOE_END_ANGLE = -30;
+
+export interface HorseshoePoint {
+  x: number;
+  y: number;
+}
+
+export interface HorseshoeItemPosition extends HorseshoePoint {
+  angle: number;
+}
 
 export interface HorseshoeVisibleItem<T> {
   item: T;
@@ -25,6 +38,28 @@ export function rotateHorseshoeIndex(
   itemCount: number,
 ): number {
   return clampHorseshoeIndex(currentIndex + delta, itemCount);
+}
+
+export function getHorseshoeItemPosition(
+  slot: number,
+  itemCount: number,
+): HorseshoeItemPosition {
+  if (itemCount <= 1) {
+    return {
+      x: 0,
+      y: -HORSESHOE_OUTER_RADIUS,
+      angle: -90,
+    };
+  }
+
+  const step = (HORSESHOE_END_ANGLE - HORSESHOE_START_ANGLE) / (itemCount - 1);
+  const angle = HORSESHOE_START_ANGLE + step * slot;
+  const radians = (angle * Math.PI) / 180;
+  return {
+    x: Math.cos(radians) * HORSESHOE_OUTER_RADIUS,
+    y: Math.sin(radians) * HORSESHOE_OUTER_RADIUS,
+    angle,
+  };
 }
 
 export function getHorseshoeWindow<T>(
@@ -116,4 +151,34 @@ export function findBestInsertableMatchIndex(
   return bestScore === Number.POSITIVE_INFINITY
     ? clampHorseshoeIndex(fallbackIndex, items.length)
     : bestIndex;
+}
+
+export function findNearestVisibleHorseshoeIndex<T>(
+  items: T[],
+  selectedIndex: number,
+  pointerPosition: HorseshoePoint,
+  anchorPosition: HorseshoePoint,
+  visibleCount = HORSESHOE_VISIBLE_COUNT,
+  selectionRadius = HORSESHOE_SELECTION_RADIUS,
+): number | null {
+  if (items.length === 0) return null;
+
+  const window = getHorseshoeWindow(items, selectedIndex, visibleCount);
+  const maxDistanceSquared = selectionRadius * selectionRadius;
+  let nearestIndex: number | null = null;
+  let nearestDistanceSquared = maxDistanceSquared;
+
+  for (const entry of window.visibleItems) {
+    const position = getHorseshoeItemPosition(entry.slot, window.visibleItems.length);
+    const dx = anchorPosition.x + position.x - pointerPosition.x;
+    const dy = anchorPosition.y + position.y - pointerPosition.y;
+    const distanceSquared = dx * dx + dy * dy;
+
+    if (distanceSquared <= nearestDistanceSquared) {
+      nearestIndex = entry.index;
+      nearestDistanceSquared = distanceSquared;
+    }
+  }
+
+  return nearestIndex;
 }

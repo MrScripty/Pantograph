@@ -1,3 +1,5 @@
+import type { HorseshoeDisplayState } from './horseshoeDragSession.js';
+
 export type HorseshoeBlockedReason =
   | 'not_editable'
   | 'no_active_drag'
@@ -19,6 +21,15 @@ export interface HorseshoeOpenResolution {
   action: 'open' | 'queue' | 'blocked';
   reason: HorseshoeBlockedReason | null;
 }
+
+export interface HorseshoeSpaceKeyContext {
+  displayState: HorseshoeDisplayState;
+  dragActive: boolean;
+  pending: boolean;
+  hasSelection: boolean;
+}
+
+export type HorseshoeSpaceKeyAction = 'open' | 'confirm' | 'noop';
 
 export function isSpaceKey(event: Pick<KeyboardEvent, 'code' | 'key'>): boolean {
   return (
@@ -78,6 +89,22 @@ export function resolveHorseshoeOpenRequest(
     action: 'open',
     reason: null,
   };
+}
+
+export function resolveHorseshoeSpaceKeyAction(
+  context: HorseshoeSpaceKeyContext,
+): HorseshoeSpaceKeyAction {
+  if (context.displayState === 'open') {
+    return !context.pending && context.hasSelection ? 'confirm' : 'noop';
+  }
+
+  return context.dragActive ? 'open' : 'noop';
+}
+
+export function shouldUpdateHorseshoeAnchorFromPointer(
+  displayState: HorseshoeDisplayState,
+): boolean {
+  return displayState !== 'open';
 }
 
 export function formatHorseshoeBlockedReason(reason: HorseshoeBlockedReason): string {

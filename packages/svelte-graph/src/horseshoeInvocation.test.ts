@@ -5,6 +5,8 @@ import {
   formatHorseshoeBlockedReason,
   isSpaceKey,
   resolveHorseshoeOpenRequest,
+  resolveHorseshoeSpaceKeyAction,
+  shouldUpdateHorseshoeAnchorFromPointer,
 } from './horseshoeInvocation.ts';
 
 test('isSpaceKey accepts runtime space variants', () => {
@@ -109,6 +111,57 @@ test('resolveHorseshoeOpenRequest opens when drag state is ready', () => {
       reason: null,
     },
   );
+});
+
+test('resolveHorseshoeSpaceKeyAction opens first and confirms second', () => {
+  assert.equal(
+    resolveHorseshoeSpaceKeyAction({
+      displayState: 'hidden',
+      dragActive: true,
+      pending: false,
+      hasSelection: false,
+    }),
+    'open',
+  );
+
+  assert.equal(
+    resolveHorseshoeSpaceKeyAction({
+      displayState: 'open',
+      dragActive: true,
+      pending: false,
+      hasSelection: true,
+    }),
+    'confirm',
+  );
+});
+
+test('resolveHorseshoeSpaceKeyAction ignores unavailable confirmations', () => {
+  assert.equal(
+    resolveHorseshoeSpaceKeyAction({
+      displayState: 'open',
+      dragActive: true,
+      pending: true,
+      hasSelection: true,
+    }),
+    'noop',
+  );
+
+  assert.equal(
+    resolveHorseshoeSpaceKeyAction({
+      displayState: 'hidden',
+      dragActive: false,
+      pending: false,
+      hasSelection: false,
+    }),
+    'noop',
+  );
+});
+
+test('shouldUpdateHorseshoeAnchorFromPointer freezes the menu once open', () => {
+  assert.equal(shouldUpdateHorseshoeAnchorFromPointer('hidden'), true);
+  assert.equal(shouldUpdateHorseshoeAnchorFromPointer('pending'), true);
+  assert.equal(shouldUpdateHorseshoeAnchorFromPointer('blocked'), true);
+  assert.equal(shouldUpdateHorseshoeAnchorFromPointer('open'), false);
 });
 
 test('formatHorseshoeBlockedReason returns actionable diagnostics', () => {

@@ -92,20 +92,30 @@ export {
 } from './graphRevision.js';
 export {
   HORSESHOE_VISIBLE_COUNT,
+  HORSESHOE_OUTER_RADIUS,
+  HORSESHOE_SELECTION_RADIUS,
+  HORSESHOE_START_ANGLE,
+  HORSESHOE_END_ANGLE,
   clampHorseshoeIndex,
+  findNearestVisibleHorseshoeIndex,
   rotateHorseshoeIndex,
+  getHorseshoeItemPosition,
   getHorseshoeWindow,
   findBestInsertableMatchIndex,
 } from './horseshoeSelector.js';
 export {
   isSpaceKey,
   resolveHorseshoeOpenRequest,
+  resolveHorseshoeSpaceKeyAction,
+  shouldUpdateHorseshoeAnchorFromPointer,
   formatHorseshoeBlockedReason,
 } from './horseshoeInvocation.js';
 export type {
   HorseshoeBlockedReason,
   HorseshoeOpenContext,
   HorseshoeOpenResolution,
+  HorseshoeSpaceKeyAction,
+  HorseshoeSpaceKeyContext,
 } from './horseshoeInvocation.js';
 export {
   clearConnectionDragState,

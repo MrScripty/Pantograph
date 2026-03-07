@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   findBestInsertableMatchIndex,
+  findNearestVisibleHorseshoeIndex,
+  getHorseshoeItemPosition,
   getHorseshoeWindow,
   rotateHorseshoeIndex,
 } from './horseshoeSelector.ts';
@@ -63,4 +65,44 @@ test('findBestInsertableMatchIndex prefers prefix matches before substring match
   assert.equal(findBestInsertableMatchIndex(candidates, 'mask'), 2);
   assert.equal(findBestInsertableMatchIndex(candidates, 'infer'), 1);
   assert.equal(findBestInsertableMatchIndex(candidates, 'output', 1), 0);
+});
+
+test('getHorseshoeItemPosition places a single item at the top of the arc', () => {
+  assert.deepEqual(getHorseshoeItemPosition(0, 1), {
+    x: 0,
+    y: -126,
+    angle: -90,
+  });
+});
+
+test('findNearestVisibleHorseshoeIndex selects the closest visible item', () => {
+  const anchorPosition = { x: 300, y: 240 };
+  const itemPosition = getHorseshoeItemPosition(1, 3);
+
+  assert.equal(
+    findNearestVisibleHorseshoeIndex(
+      candidates,
+      2,
+      {
+        x: anchorPosition.x + itemPosition.x,
+        y: anchorPosition.y + itemPosition.y,
+      },
+      anchorPosition,
+      3,
+    ),
+    2,
+  );
+});
+
+test('findNearestVisibleHorseshoeIndex ignores pointers outside the menu radius', () => {
+  assert.equal(
+    findNearestVisibleHorseshoeIndex(
+      candidates,
+      2,
+      { x: 0, y: 0 },
+      { x: 300, y: 240 },
+      3,
+    ),
+    null,
+  );
 });
