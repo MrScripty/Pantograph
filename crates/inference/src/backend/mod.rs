@@ -26,6 +26,7 @@ use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 
 use crate::process::ProcessSpawner;
+use crate::types::{ImageGenerationRequest, ImageGenerationResult};
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
@@ -74,6 +75,8 @@ pub enum BackendError {
 pub struct BackendCapabilities {
     /// Supports vision/multimodal models (image + text)
     pub vision: bool,
+    /// Supports image generation / diffusion requests
+    pub image_generation: bool,
     /// Supports embedding generation
     pub embeddings: bool,
     /// Has GPU acceleration available
@@ -147,6 +150,11 @@ pub struct EmbeddingResult {
     pub token_count: usize,
 }
 
+/// Re-export diffusion request/result types from the shared `types` module so
+/// backend consumers can reach them from the backend facade.
+pub type ImageRequest = ImageGenerationRequest;
+pub type ImageResult = ImageGenerationResult;
+
 /// The core trait that all inference backends must implement.
 ///
 /// Backends can be HTTP-based (llama.cpp, Ollama, External) or in-process (Candle).
@@ -208,4 +216,14 @@ pub trait InferenceBackend: Send + Sync {
         texts: Vec<String>,
         model: &str,
     ) -> Result<Vec<EmbeddingResult>, BackendError>;
+
+    /// Generate one or more images from a diffusion-capable backend.
+    async fn generate_image(
+        &self,
+        _request: ImageGenerationRequest,
+    ) -> Result<ImageGenerationResult, BackendError> {
+        Err(BackendError::Inference(
+            "Image generation not supported by this backend".to_string(),
+        ))
+    }
 }

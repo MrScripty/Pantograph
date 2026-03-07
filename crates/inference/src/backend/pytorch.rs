@@ -113,6 +113,7 @@ impl PyTorchBackend {
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {
             vision: false,
+            image_generation: false,
             embeddings: false,
             gpu: true,
             device_selection: true,

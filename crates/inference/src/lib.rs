@@ -57,7 +57,11 @@ pub use device::DeviceBackend;
 pub use gateway::{GatewayError, InferenceGateway, SharedGateway};
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
-pub use types::LLMStatus;
+pub use types::{
+    ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
+    ImageGenerationResult, ImageUrlData, LLMStatus, MaskedPrompt, PromptSegment, ServerModeInfo,
+    StreamChoice, StreamChunk, StreamEvent,
+};
 
 #[cfg(feature = "std-process")]
 pub use process::StdProcessSpawner;

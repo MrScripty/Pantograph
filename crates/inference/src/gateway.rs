@@ -16,7 +16,7 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::process::ProcessSpawner;
-use crate::types::ServerModeInfo;
+use crate::types::{ImageGenerationRequest, ImageGenerationResult, ServerModeInfo};
 
 #[cfg(feature = "backend-llamacpp")]
 use crate::backend::LlamaCppBackend;
@@ -286,6 +286,18 @@ impl InferenceGateway {
             .map_err(GatewayError::Backend)
     }
 
+    /// Generate one or more images through the active backend.
+    pub async fn generate_image(
+        &self,
+        request: ImageGenerationRequest,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        let guard = self.backend.read().await;
+        if !guard.is_ready() {
+            return Err(GatewayError::Backend(BackendError::NotReady));
+        }
+        guard.generate_image(request).await.map_err(GatewayError::Backend)
+    }
+
     // ─── LEGACY COMPATIBILITY ───────────────────────────────────────
 
     /// Get a reference to the underlying backend for legacy code
@@ -310,6 +322,85 @@ pub type SharedGateway = Arc<InferenceGateway>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use futures_util::stream;
+
+    struct MockImageBackend;
+
+    #[async_trait]
+    impl InferenceBackend for MockImageBackend {
+        fn name(&self) -> &'static str {
+            "Mock"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock image backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities {
+                image_generation: true,
+                ..BackendCapabilities::default()
+            }
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<(), BackendError> {
+            Ok(())
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn generate_image(
+            &self,
+            request: ImageGenerationRequest,
+        ) -> Result<ImageGenerationResult, BackendError> {
+            Ok(ImageGenerationResult {
+                images: vec![crate::types::EncodedImage {
+                    data_base64: request.prompt,
+                    mime_type: "image/png".to_string(),
+                    width: Some(512),
+                    height: Some(512),
+                }],
+                seed_used: Some(7),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
 
     #[cfg(feature = "backend-llamacpp")]
     #[test]
@@ -332,5 +423,33 @@ mod tests {
     async fn test_not_ready_initially() {
         let gateway = InferenceGateway::new();
         assert!(!gateway.is_ready().await);
+    }
+
+    #[tokio::test]
+    async fn test_generate_image_forwards_to_active_backend() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        let result = gateway
+            .generate_image(ImageGenerationRequest {
+                model: "mock".to_string(),
+                prompt: "paper lantern".to_string(),
+                negative_prompt: None,
+                width: Some(512),
+                height: Some(512),
+                num_inference_steps: Some(20),
+                guidance_scale: Some(4.0),
+                seed: Some(7),
+                scheduler: None,
+                num_images_per_prompt: Some(1),
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.seed_used, Some(7));
+        assert_eq!(result.images.len(), 1);
+        assert_eq!(result.images[0].data_base64, "paper lantern");
     }
 }

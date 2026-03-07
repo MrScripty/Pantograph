@@ -45,6 +45,7 @@ impl LlamaCppBackend {
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {
             vision: true,           // GGUF + mmproj support
+            image_generation: false,
             embeddings: true,       // Via --embedding mode
             gpu: true,              // CUDA, Vulkan, Metal
             device_selection: true, // Manual device choice
