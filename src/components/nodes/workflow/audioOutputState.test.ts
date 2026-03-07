@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   AUDIO_RUNTIME_DATA_KEYS,
+  buildAudioRuntimeDataFromCompletedOutputs,
   shouldResetAudioPlaybackState,
 } from './audioOutputState.ts';
 
@@ -49,8 +50,34 @@ test('AUDIO_RUNTIME_DATA_KEYS lists the execution-local audio fields cleared bet
   assert.deepEqual([...AUDIO_RUNTIME_DATA_KEYS], [
     'audio',
     'audio_mime',
+    'audio_duration_seconds',
+    'audio_sample_rate',
     'stream',
     'stream_sequence',
     'stream_is_final',
   ]);
+});
+
+test('buildAudioRuntimeDataFromCompletedOutputs maps final audio metadata for audio targets', () => {
+  assert.deepEqual(
+    buildAudioRuntimeDataFromCompletedOutputs('audio', 'audio', {
+      duration_seconds: 12.5,
+      sample_rate: 44100,
+      mime_type: 'audio/wav',
+    }),
+    {
+      audio_duration_seconds: 12.5,
+      audio_sample_rate: 44100,
+      audio_mime: 'audio/wav',
+    }
+  );
+});
+
+test('buildAudioRuntimeDataFromCompletedOutputs ignores non-audio connections', () => {
+  assert.equal(
+    buildAudioRuntimeDataFromCompletedOutputs('response', 'audio', {
+      duration_seconds: 12.5,
+    }),
+    null
+  );
 });

@@ -23,7 +23,10 @@
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { WorkflowEvent } from '../services/workflow/types';
-  import { AUDIO_RUNTIME_DATA_KEYS } from './nodes/workflow/audioOutputState';
+  import {
+    AUDIO_RUNTIME_DATA_KEYS,
+    buildAudioRuntimeDataFromCompletedOutputs,
+  } from './nodes/workflow/audioOutputState';
   import { get } from 'svelte/store';
   import GraphSelector from './GraphSelector.svelte';
 
@@ -154,9 +157,17 @@
             if (outputValue !== undefined) {
               // Update the target node's data with the incoming value
               const targetHandle = edge.targetHandle || '';
-              updateNodeRuntimeData(edge.target, {
-                [targetHandle]: outputValue
-              });
+              const runtimeData = {
+                [targetHandle]: outputValue,
+                ...(
+                  buildAudioRuntimeDataFromCompletedOutputs(
+                    sourceHandle,
+                    targetHandle,
+                    completedData.outputs
+                  ) ?? {}
+                ),
+              };
+              updateNodeRuntimeData(edge.target, runtimeData);
             }
           }
         }

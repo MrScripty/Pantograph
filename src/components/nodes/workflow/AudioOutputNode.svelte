@@ -12,6 +12,8 @@
       label?: string;
       audio?: string;
       audio_mime?: string;
+      audio_duration_seconds?: number;
+      audio_sample_rate?: number;
       stream?: unknown;
       streamContent?: string;
     };
@@ -50,6 +52,13 @@
 
   let finalAudioData = $derived(data.audio || '');
   let finalAudioMime = $derived(data.audio_mime || 'audio/wav');
+  let finalAudioDurationSeconds = $derived(
+    typeof data.audio_duration_seconds === 'number' &&
+      Number.isFinite(data.audio_duration_seconds) &&
+      data.audio_duration_seconds > 0
+      ? data.audio_duration_seconds
+      : 0
+  );
   let finalAudioSrc = $derived(finalAudioData ? `data:${finalAudioMime};base64,${finalAudioData}` : '');
 
   let streamPayload = $derived.by((): StreamAudioChunk | null => {
@@ -100,7 +109,8 @@
     };
   });
 
-  let displayedDuration = $derived(finalAudioSrc ? duration : streamBufferedDuration);
+  let finalDisplayedDuration = $derived(Math.max(duration, finalAudioDurationSeconds));
+  let displayedDuration = $derived(finalAudioSrc ? finalDisplayedDuration : streamBufferedDuration);
   let canSeek = $derived(Boolean(finalAudioSrc));
   let hasAnyAudio = $derived(Boolean(finalAudioSrc) || hasStreamAudio);
 
@@ -265,7 +275,9 @@
 
   function handleLoadedMetadata() {
     if (!audioElement) return;
-    const nextDuration = Number.isFinite(audioElement.duration) ? audioElement.duration : 0;
+    const nextDuration = Number.isFinite(audioElement.duration) && audioElement.duration > 0
+      ? audioElement.duration
+      : finalAudioDurationSeconds;
     duration = nextDuration;
     currentTime = audioElement.currentTime || 0;
   }
@@ -331,7 +343,7 @@
 
   function handleEnded() {
     isPlaying = false;
-    currentTime = duration;
+    currentTime = finalDisplayedDuration;
   }
 
   function handleReplay() {
@@ -389,6 +401,10 @@
     if (!finalAudioSrc) return;
     if (streamContext || hasStreamAudio) {
       void stopStreamPlayback(true);
+    }
+
+    if (finalAudioDurationSeconds > 0 && duration <= 0) {
+      duration = finalAudioDurationSeconds;
     }
 
     if (!audioElement || finalAudioData === lastAudioSignature) {

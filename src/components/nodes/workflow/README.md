@@ -10,6 +10,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | File/Folder | Description |
 | ----------- | ----------- |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
+| `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
 | `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
@@ -28,12 +29,18 @@ or requiring the whole workflow view to remount.
   must react to those updates declaratively instead of polling.
 - Audio playback must support both low-latency stream playback and final-audio
   controls while cleaning up timers and `AudioContext` resources deterministically.
+- Final generated audio may arrive before browser metadata resolves, so the UI
+  must honor backend-provided duration metadata instead of relying only on
+  `HTMLAudioElement.duration`.
 
 ## Decision
 Keep node-specific runtime behavior inside the component that owns the UI, but
 drive run-boundary resets from shared workflow state. `AudioOutputNode.svelte`
 therefore handles playback resources locally while relying on run-start store
-cleanup to clear execution-local audio fields between workflow runs.
+cleanup to clear execution-local audio fields between workflow runs. Final audio
+duration is treated as a produced runtime contract (`audio_duration_seconds`)
+that the toolbar forwards from node outputs into the output node so scrub/replay
+controls do not depend solely on browser metadata timing.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -50,6 +57,9 @@ cleanup to clear execution-local audio fields between workflow runs.
   resources on rerun reset and component teardown.
 - Final-audio controls such as seek, replay, and loop remain tied to final audio
   payloads, not transient stream chunks.
+- Workflow completion handlers must forward final audio metadata together with
+  the audio payload so output playback stays seekable even when metadata loading
+  lags in the browser.
 
 ## Revisit Triggers
 - Another output node needs the same rerun-reset pattern and the logic starts to
