@@ -32,8 +32,10 @@ as the package graph so GUI behavior and backend validation stay aligned.
 Keep the app `WorkflowGraph.svelte` as a composition layer over package store
 instances and `workflowService`. The component now follows the same intent flow
 as the reusable graph: load candidates on connect start, use shared store state
-for validation/highlighting, open the shared horseshoe selector on `Space`, and
-commit through revision-aware anchor and insert APIs.
+for validation/highlighting, and route horseshoe invocation through the same
+shared drag-session controller and drag-scoped window input used by the package
+graph before committing through revision-aware anchor and insert APIs. Pending
+and blocked horseshoe states remain visible instead of failing silently.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -51,6 +53,8 @@ commit through revision-aware anchor and insert APIs.
   mutation paths.
 - Horseshoe selection must route through `workflowService.insertNodeAndConnect`
   so the app never creates orphan nodes on stale or incompatible inserts.
+- Horseshoe open failures should be diagnosable through the shared blocked
+  reason flow rather than app-only heuristics.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
@@ -84,6 +88,8 @@ commit through revision-aware anchor and insert APIs.
   app shell without recreating those dependencies.
 - Rejection handling for failed connection and insert commits is currently
   store/console based, not event-emitter based.
+- Horseshoe invocation is drag-session-scoped and uses shared package helpers;
+  app code should not reintroduce container-focus-only keyboard assumptions.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - None.

@@ -35,11 +35,14 @@ state cleanup.
 Keep connection intent client-owned in `WorkflowGraph.svelte`: on connect start,
 it requests candidates from the backend, caches them in workflow stores, uses
 that cache for `isValidConnection`, and clears the intent on cancel, pane click,
-or commit. When the user presses `Space` during an active drag, the same
-component opens `HorseshoeInsertSelector.svelte` at the cursor, browses the
-ranked `insertableNodeTypes` list locally with wheel/typeahead, and commits the
-selection through backend-owned `insertNodeAndConnect`. Node shells then read
-the same store to dim incompatible targets and highlight eligible anchors.
+or commit. Horseshoe invocation now goes through a shared drag-session
+controller: the graph starts a shared drag session on connect/reconnect start,
+captures `Space` and pointer movement through drag-scoped window listeners,
+preserves queued opens while candidates load, records explicit blocked reasons,
+and renders pending/blocked selector states instead of silently doing nothing.
+`HorseshoeInsertSelector.svelte` opens once the session is ready. Node shells
+then read the same store to dim incompatible targets and highlight eligible
+anchors.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -53,6 +56,8 @@ the same store to dim incompatible targets and highlight eligible anchors.
   backend-owned `connectAnchors` commit path.
 - Insert-from-drag must commit through backend-owned `insertNodeAndConnect`; the
   UI must not compose local `addNode` plus `connectAnchors`.
+- Horseshoe open failures must resolve to an explicit blocked reason instead of
+  silently doing nothing.
 - Connection-intent highlighting must clear when the graph changes or the drag
   interaction ends.
 - Reconnect flows that temporarily remove an edge must restore the original edge
@@ -91,8 +96,10 @@ the same store to dim incompatible targets and highlight eligible anchors.
 - `WorkflowGraph.svelte` consumes workflow, view, and session stores from that
   context and assumes `workflowGraph.derived_graph.graph_fingerprint` is kept
   current.
-- `WorkflowGraph.svelte` binds `Space` to the horseshoe selector only while a
-  connection intent with compatible insertable node types is active.
+- `WorkflowGraph.svelte` binds `Space` to the horseshoe selector through
+  drag-scoped window listeners and the shared drag-session controller; failed
+  opens remain visible through pending/blocked selector states plus internal
+  blocked-reason diagnostics.
 - Connection rejection is surfaced through console logging and shared store
   state today; consumers should not expect custom DOM events for rejection yet.
 - Compatibility policy is additive: new graph behaviors should layer on the
