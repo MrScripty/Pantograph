@@ -665,7 +665,7 @@
     const sourcePort = sourceDef?.outputs?.find((p) => p.id === connection.sourceHandle);
     const targetPort = targetDef?.inputs?.find((p) => p.id === connection.targetHandle);
     if (!sourcePort || !targetPort) return true;
-    return sourcePort.data_type === targetPort.data_type || sourcePort.data_type === 'any' || targetPort.data_type === 'any';
+    return isPortTypeCompatible(sourcePort.data_type, targetPort.data_type);
   }
 
   function getGraphRevision(): string {
