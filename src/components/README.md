@@ -1,52 +1,90 @@
 # src/components
 
 ## Purpose
-Svelte UI components for the frontend experience, organized by feature and composition boundaries.
+This directory contains Pantograph’s application-facing Svelte components. It
+wraps the reusable graph package with app-specific node registries, orchestration
+navigation, and shell UI so the product can layer its own workflows and
+architecture views on top of the shared editor.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| BackendSelector.svelte | Source file used by modules in this directory. |
-| BinaryDownloader.svelte | Source file used by modules in this directory. |
-| Canvas.svelte | Source file used by modules in this directory. |
-| ChunkPreview.svelte | Source file used by modules in this directory. |
-| ClearButton.svelte | Source file used by modules in this directory. |
-| CommitTimeline.svelte | Source file used by modules in this directory. |
-| DeviceConfig.svelte | Source file used by modules in this directory. |
-| GraphSelector.svelte | Source file used by modules in this directory. |
-| GroupPortMapper.svelte | Source file used by modules in this directory. |
-| HotLoadContainer.svelte | Source file used by modules in this directory. |
-| ModelConfig.svelte | Source file used by modules in this directory. |
-| NavigationBreadcrumb.svelte | Source file used by modules in this directory. |
-| NodeGroupEditor.svelte | Source file used by modules in this directory. |
-| NodePalette.svelte | Source file used by modules in this directory. |
-| RagStatus.svelte | Source file used by modules in this directory. |
-| Rulers.svelte | Source file used by modules in this directory. |
-| SandboxSettings.svelte | Source file used by modules in this directory. |
-| ServerStatus.svelte | Source file used by modules in this directory. |
-| SidePanel.svelte | Source file used by modules in this directory. |
-| Toolbar.svelte | Source file used by modules in this directory. |
-| TopBar.svelte | Source file used by modules in this directory. |
-| UnifiedGraphView.svelte | Source file used by modules in this directory. |
-| WorkflowGraph.svelte | Source file used by modules in this directory. |
-| WorkflowToolbar.svelte | Source file used by modules in this directory. |
-| ZoomTransition.svelte | Source file used by modules in this directory. |
-| edges/ | Subdirectory containing related implementation details. |
-| nodes/ | Subdirectory containing related implementation details. |
-| orchestration/ | Subdirectory containing related implementation details. |
-| side-panel/ | Subdirectory containing related implementation details. |
+| `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, and revision-aware connection-intent flows. |
+| `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
+| `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
+| `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
+| `WorkflowToolbar.svelte` | Toolbar actions for workflow graph editing. |
+| `nodes/` | Pantograph-specific node renderers and the shared app node shell. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+Pantograph needs app-specific graph composition on top of the reusable package:
+extra node types, orchestration transitions, and compatibility with legacy app
+stores/services. The app still needs to honor the same connection-intent rules
+as the package graph so GUI behavior and backend validation stay aligned.
+
+## Constraints
+- Components must coexist with package-provided store factories and node types.
+- The app graph supports both workflow and architecture modes.
+- Legacy service/store callers still exist, so migration to package-native APIs
+  is incremental.
+
+## Decision
+Keep the app `WorkflowGraph.svelte` as a composition layer over package store
+instances and `workflowService`. The component now follows the same intent flow
+as the reusable graph: load candidates on connect start, use shared store state
+for validation/highlighting, and commit through revision-aware anchor APIs.
+
+## Alternatives Rejected
+- Replace the app graph entirely with the package component immediately.
+  Rejected because Pantograph still needs app-specific node sets and
+  orchestration integration.
+- Keep legacy `addEdge`/`validateConnection` behavior only in the app graph.
+  Rejected because it would diverge from the backend-owned eligibility model.
+
+## Invariants
+- `WorkflowGraph.svelte` must stay compatible with Pantograph’s architecture and
+  workflow graph modes.
+- App components should consume shared workflow store instances instead of
+  creating parallel graph state.
+- Connection-intent cleanup must happen on cancel, pane click, escape, and graph
+  mutation paths.
+
+## Revisit Triggers
+- The app graph fully converges with the package graph and can be deleted.
+- Pantograph introduces a second graph canvas with different interaction rules.
+- Orchestration transitions require server-owned connection intent or insert
+  flows.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** `src/stores`, `src/services/workflow`, `src/registry`,
+`packages/svelte-graph`.
+
+**External:** Svelte 5 and `@xyflow/svelte`.
+
+## Related ADRs
+- None.
+- Reason: the app composition layer is still evolving toward the reusable
+  package shape.
+- Revisit trigger: the app/package graph split becomes stable enough to warrant
+  a formal ADR.
 
 ## Usage Examples
-```ts
-// Example: import API from this directory.
-import { value } from './module';
+```svelte
+<WorkflowGraph />
 ```
+
+## API Consumer Contract (Host-Facing Modules)
+- These components are app-internal and expect Pantograph store singletons to be
+  initialized before rendering.
+- `WorkflowGraph.svelte` relies on `workflowService` session state and the
+  shared workflow store exports; callers should not instantiate it outside the
+  app shell without recreating those dependencies.
+- Rejection handling for failed connection commits is currently store/console
+  based, not event-emitter based.
+
+## Structured Producer Contract (Machine-Consumed Modules)
+- None.
+- Reason: this directory renders UI and does not publish persisted machine
+  artifacts directly.
+- Revisit trigger: components begin generating saved manifests, templates, or
+  other structured outputs.

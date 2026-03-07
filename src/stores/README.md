@@ -1,40 +1,93 @@
 # src/stores
 
 ## Purpose
-State management stores that coordinate reactive application data across the frontend.
+This directory contains Pantograph’s app-level store surface. It wraps the
+reusable graph package store factories with singleton instances and re-exports
+them alongside Pantograph-specific stores so legacy components and newer package
+components observe the same graph state.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| accordionStore.ts | Source file used by modules in this directory. |
-| architectureStore.ts | Source file used by modules in this directory. |
-| canvasStore.ts | Source file used by modules in this directory. |
-| chunkPreviewStore.ts | Source file used by modules in this directory. |
-| graphSessionStore.ts | Source file used by modules in this directory. |
-| interactionModeStore.ts | Source file used by modules in this directory. |
-| linkStore.ts | Source file used by modules in this directory. |
-| orchestrationStore.ts | Source file used by modules in this directory. |
-| panelStore.ts | Source file used by modules in this directory. |
-| promptHistoryStore.ts | Source file used by modules in this directory. |
-| sidePanelTabStore.ts | Source file used by modules in this directory. |
-| storeInstances.ts | Source file used by modules in this directory. |
-| timelineStore.ts | Source file used by modules in this directory. |
-| undoStore.ts | Source file used by modules in this directory. |
-| viewModeStore.ts | Source file used by modules in this directory. |
-| viewStore.ts | Source file used by modules in this directory. |
-| workflowStore.ts | Source file used by modules in this directory. |
+| `storeInstances.ts` | Creates the shared backend, registry, and package-derived store singletons used across the app. |
+| `workflowStore.ts` | Thin compatibility layer that re-exports workflow store instances and actions for app components. |
+| `graphSessionStore.ts` | Tracks the active graph/session identity at the app layer. |
+| `viewStore.ts` | App navigation and zoom wrappers built around the package view stores. |
+| `architectureStore.ts` | Converts architecture data into workflow-like graph structures for the shared canvas. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+Pantograph has older app components that import global stores directly, but the
+reusable graph package expects per-instance stores provided through context. The
+app needs one place where those models meet so connection-intent state,
+graph revisions, and execution overlays do not split.
+
+## Constraints
+- Legacy imports from `workflowStore.ts` must keep working during migration.
+- Package components and app components must point at the same workflow store
+  instances.
+- Graph revision metadata and connection-intent state must stay synchronized
+  regardless of whether the caller uses package context or legacy re-exports.
+
+## Decision
+Create package store singletons once in `storeInstances.ts`, then re-export the
+relevant workflow store handles through `workflowStore.ts`. The new
+`connectionIntent`, `setConnectionIntent`, and `clearConnectionIntent` exports
+follow that pattern so app nodes and the app graph consume the same transient
+eligibility state as package components.
+
+## Alternatives Rejected
+- Keep separate app-only and package-only workflow stores.
+  Rejected because graph revisions and intent highlighting would drift.
+- Remove the legacy store facade immediately.
+  Rejected because too many existing app components still import it directly.
+
+## Invariants
+- `workflowStore.ts` remains a facade over the singleton package workflow stores,
+  not a second source of truth.
+- Store singletons must be created once per app runtime.
+- Connection-intent state exported here must reflect the same object seen by
+  package components through context.
+
+## Revisit Triggers
+- The legacy store facade is no longer imported anywhere.
+- Multiple concurrent graph editors need isolated singleton sets.
+- App-specific state diverges enough from package stores that a new boundary is
+  required.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** `packages/svelte-graph`, `src/backends`, `src/registry`,
+`src/services/workflow`.
+
+**External:** Svelte stores.
+
+## Related ADRs
+- None.
+- Reason: the singleton/facade pattern remains transitional.
+- Revisit trigger: the migration off the facade reaches a stable end state.
 
 ## Usage Examples
 ```ts
-// Example: import API from this directory.
-import { value } from './module';
+import { connectionIntent, clearConnectionIntent } from '../stores/workflowStore';
+
+connectionIntent.subscribe((intent) => {
+  console.log(intent?.compatibleTargetKeys ?? []);
+});
+
+clearConnectionIntent();
 ```
+
+## API Consumer Contract (Host-Facing Modules)
+- App components should import from `workflowStore.ts` when they need the legacy
+  global store facade.
+- New graph features added to package workflow stores should be re-exported here
+  only when app components still need direct access.
+- The re-export surface is compatibility-oriented; breaking removals should wait
+  until app callers have migrated.
+
+## Structured Producer Contract (Machine-Consumed Modules)
+- `workflowGraph` remains the graph projection consumed by backend/service
+  layers.
+- `connectionIntent` is transient and may be `null`; consumers must not persist
+  it.
+- `workflowGraph.derived_graph.graph_fingerprint` is regenerated metadata and is
+  the revision token used for connection-intent commits.

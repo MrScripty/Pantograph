@@ -1,99 +1,101 @@
 # packages/svelte-graph/src/stores
 
 ## Purpose
-This directory contains the store factories that assemble graph session, view,
-and workflow state for the reusable `@pantograph/svelte-graph` package. The
-boundary exists so graph state mutations, derived graph snapshots, and runtime
-execution updates are defined once and reused by both package consumers and the
-Pantograph application wrapper.
+This directory assembles the package’s reactive state model for workflow,
+session, and view concerns. The boundary exists so reusable graph components and
+Pantograph app wrappers share one definition of graph structure, derived graph
+metadata, execution overlays, and transient connection-intent state.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `createWorkflowStores.ts` | Owns workflow node, edge, execution, and streaming state, including execution-local runtime data updates. |
-| `createViewStores.ts` | Manages viewport, group navigation, and presentation-oriented graph view state. |
-| `createSessionStores.ts` | Coordinates graph loading, selection, and session lifecycle around the workflow stores. |
-| `runtimeData.ts` | Pure helpers for removing execution-local node data fields without mutating saved configuration. |
+| `createWorkflowStores.ts` | Owns workflow nodes, edges, derived graph metadata, execution state, and connection intent for the active editor. |
+| `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
+| `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
+| `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
 
 ## Problem
-The graph UI needs a single source of truth for both persisted graph structure
-and transient execution state. Without a dedicated store layer, runtime updates
-from workflow events would leak through components inconsistently and rerun
-cleanup rules would be duplicated across the application.
+The graph editor needs a shared state boundary that can serve both UI rendering
+and transport payload generation. Interactive connection guidance adds another
+cross-cutting concern: the UI needs backend-derived target eligibility while the
+stores still own the graph revision snapshot used to validate a commit.
 
 ## Constraints
-- Store updates must remain reactive and cheap enough for frequent workflow
-  execution events.
-- Runtime state cleanup must not delete durable node configuration that is saved
-  with the workflow graph.
-- The package store API is shared by Pantograph app code and reusable graph
-  components, so surface changes have broad frontend impact.
+- Derived graph fingerprints must stay synchronized with node and edge edits or
+  revision-aware connection commits become unreliable.
+- Runtime execution data must remain separable from persisted graph state.
+- Connection intent is transient UI state and must be cleared aggressively when
+  the graph changes, a session changes, or the interaction is cancelled.
 
 ## Decision
-Keep persisted graph edits and execution-local runtime data in the same workflow
-store, but expose explicit actions for runtime-only mutations and cleanup. The
-audio rerun fix follows that rule by clearing targeted runtime keys at run start
-instead of rebuilding nodes or mutating saved graph data.
+Keep `connectionIntent` inside `createWorkflowStores.ts` alongside the graph and
+derived graph state. That lets `WorkflowGraph.svelte` fetch candidates once,
+store them centrally, reuse them for synchronous drag validation, and clear the
+intent from one place whenever nodes, edges, or workflow loads change.
 
 ## Alternatives Rejected
-- Store runtime execution data in ad hoc component state only.
-  Rejected because upstream workflow events need a shared distribution path to
-  downstream nodes.
-- Recreate the whole workflow graph on every run to clear runtime state.
-  Rejected because it would disrupt selection, viewport state, and local UI
-  ownership for no benefit.
+- Store connection intent only inside `WorkflowGraph.svelte`.
+  Rejected because nodes also need the same state to render eligibility cues.
+- Recompute graph revision only when saving or syncing from the backend.
+  Rejected because drag-time commits need a current fingerprint for stale-intent
+  protection.
 
 ## Invariants
-- `updateNodeData` is for durable graph/configuration edits; runtime-only cleanup
-  must not rely on it.
-- Execution-local cleanup helpers must remove only targeted keys and leave all
-  other node data unchanged.
-- Derived `workflowGraph` output must continue to reflect the current node and
-  edge stores after runtime updates and user edits.
+- `workflowGraph` must reflect the latest nodes, edges, and derived graph
+  fingerprint after every structural edit.
+- `connectionIntent` is not persisted; it must reset on graph mutation,
+  workflow load, workflow clear, and default-graph load.
+- Runtime cleanup helpers must continue to touch only explicitly requested
+  transient keys.
 
 ## Revisit Triggers
-- Multiple runtime-data cleanup policies emerge and require per-node-type
-  ownership rather than key-based clearing.
-- Workflow execution begins supporting overlapping runs and needs execution-id
-  partitioning inside the store layer.
-- Package consumers need a formal separation between persisted graph state and
-  runtime overlays.
+- Multiple simultaneous connection intents need independent store partitions.
+- Session-driven server state becomes authoritative for active drag intent.
+- Derived graph computation becomes expensive enough to require incremental
+  updates instead of full recomputation on every edit.
 
 ## Dependencies
 **Internal:** `packages/svelte-graph/src/types`, `packages/svelte-graph/src/backends`,
-and view/session store factories in this directory.
+`packages/svelte-graph/src/graphRevision.ts`.
 
 **External:** Svelte stores and `@xyflow/svelte` node/edge types.
 
 ## Related ADRs
 - None.
-- Reason: no ADR currently covers store-level ownership of execution-local node
-  data versus persisted workflow configuration.
-- Revisit trigger: the store API changes in a way that affects external package
-  consumers or serialized workflow compatibility.
+- Reason: the store ownership split is still local to the package and app.
+- Revisit trigger: a future refactor separates persisted graph state and
+  transient UI intent into distinct supported APIs.
 
 ## Usage Examples
 ```ts
 import { createWorkflowStores } from '@pantograph/svelte-graph';
 
 const stores = createWorkflowStores(backend);
-stores.clearNodeRuntimeData(['audio', 'stream']);
+stores.setConnectionIntent({
+  sourceAnchor: { node_id: 'llm', port_id: 'response' },
+  graphRevision: 'abc123',
+  compatibleNodeIds: ['output'],
+  compatibleTargetKeys: ['output:text'],
+  insertableNodeTypes: [],
+});
 ```
 
 ## API Consumer Contract (Host-Facing Modules)
-None.
-Reason: this store API is consumed by frontend code within the package/app
-boundary, not by external hosts or a cross-process API surface.
-Revisit trigger: these stores become a supported plugin SDK surface.
+- Store consumers should mutate graph structure through store actions or backend
+  sync helpers, not by assigning directly to node/edge arrays.
+- `setConnectionIntent` accepts either a fully derived UI intent object or
+  `null`; `clearConnectionIntent` is the preferred cancellation path.
+- Session/view stores depend on workflow stores being created first and passed
+  into `createSessionStores`.
+- Compatibility policy is additive: store fields may grow, but existing graph
+  and connection-intent semantics should not silently change.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
-- `workflowGraph` mirrors the current node and edge stores into the graph shape
-  consumed by backend workflow execution commands.
-- Runtime node data may contain transient execution fields such as stream chunks
-  and terminal outputs; callers must treat those fields as volatile unless the
-  node definition documents them as persisted configuration.
-- Cleanup helpers such as `clearNodeRuntimeData` remove only the requested keys;
-  absence of a key means “no runtime value is currently present,” not “use a
-  persisted default.”
-- If persisted workflow compatibility changes, update this README or add an ADR
-  before changing the store contract.
+- `workflowGraph` is the machine-consumed projection of the active node and edge
+  stores.
+- `derived_graph.graph_fingerprint` and `consumer_count_map` are regenerated
+  metadata; consumers should not persist hand-authored values.
+- `connectionIntent.graphRevision` records the candidate query snapshot and is
+  invalid once `workflowGraph.derived_graph.graph_fingerprint` changes.
+- Missing `connectionIntent` means “no active connect/reconnect interaction,”
+  not “no compatible targets exist.”

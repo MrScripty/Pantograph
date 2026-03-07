@@ -1,57 +1,104 @@
 # src-tauri/src/workflow
 
 ## Purpose
-Workflow command handlers, execution plumbing, and validation utilities for graph operations.
+This directory contains Pantograph’s Rust-side workflow editing and execution
+layer. It owns command handlers, session-backed graph mutation, execution
+plumbing, and the canonical connection-eligibility rules that the frontend calls
+through Tauri.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| commands.rs | Source file used by modules in this directory. |
-| event_adapter.rs | Source file used by modules in this directory. |
-| events.rs | Source file used by modules in this directory. |
-| execution_manager.rs | Source file used by modules in this directory. |
-| groups.rs | Source file used by modules in this directory. |
-| headless_workflow_commands.rs | Source file used by modules in this directory. |
-| mod.rs | Source file used by modules in this directory. |
-| model_dependencies.rs | Source file used by modules in this directory. |
-| orchestration.rs | Source file used by modules in this directory. |
-| python_runtime.rs | Python sidecar adapter boundary for workflow nodes. |
-| python_runtime_bridge.py | Python bridge entrypoint used by `python_runtime.rs`. |
-| registry.rs | Source file used by modules in this directory. |
-| task_executor.rs | Source file used by modules in this directory. |
-| types.rs | Source file used by modules in this directory. |
-| validation.rs | Source file used by modules in this directory. |
-| workflow_execution_commands.rs | Source file used by modules in this directory. |
-| workflow_model_review_commands.rs | Source file used by modules in this directory. |
-| workflow_persistence_commands.rs | Source file used by modules in this directory. |
-| workflow_port_query_commands.rs | Source file used by modules in this directory. |
+| `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection-commit logic for interactive graph editing. |
+| `commands.rs` | Tauri command registration for workflow editing APIs. |
+| `workflow_execution_commands.rs` | Session-oriented command implementations used by the frontend graph editor. |
+| `types.rs` | Rust DTOs mirrored into the TypeScript workflow contracts. |
+| `validation.rs` | Shared lower-level workflow validation helpers. |
+| `task_executor.rs` | Runtime execution path for workflow node execution once editing commits are accepted. |
 
-## ONNX/KittenTTS Notes
-- `onnx-inference` executes through the Python sidecar path in `task_executor.rs`.
-- Model-specific options must come from `inference_settings` metadata (Puma-Library),
-  not hardcoded ONNX node ports.
-- Audio stream chunks are emitted as workflow stream events and consumed by the
-  frontend audio output node for buffered playback.
+## Problem
+Pantograph previously exposed mostly pairwise connection validation. The frontend
+now needs backend-owned candidate discovery, structured rejection reasons, and
+revision-aware commit semantics so GUI and headless-style consumers follow one
+eligibility model.
 
-## Stable Audio Notes
-- `audio-generation` also executes through the Python sidecar path in
-  `task_executor.rs`, but it is a batch-only final-audio path in the current
-  runtime.
-- `task_executor.rs` must not replay buffered `stream` payloads for
-  `audio-generation` after completion, because that would present a completed
-  render as if it were live incremental streaming.
+## Constraints
+- Editing commands must operate against session-backed graph state.
+- Rust DTOs must stay aligned with the mirrored TypeScript contracts.
+- Expected incompatibility must not be reported as transport failure.
+- Existing public facades such as `validate_connection` must keep working during
+  the migration.
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Decision
+Add a dedicated `connection_intent.rs` module and expose additive Tauri commands
+for `get_connection_candidates` and `connect_anchors_in_execution`. The command
+path computes eligible targets from live session state, uses graph fingerprints
+for stale-intent detection, and returns structured rejection reasons instead of
+boolean-only failure.
+
+## Alternatives Rejected
+- Extend `workflow_get_io` to cover graph-editing intent.
+  Rejected because workflow I/O surfaces are for execution boundaries, not
+  internal graph editing.
+- Keep the frontend as the primary source of compatibility truth.
+  Rejected because capacity, cycle, and stale-revision checks depend on backend
+  session state.
+
+## Invariants
+- `connection_intent.rs` is the canonical source of connection eligibility.
+- Candidate discovery is source-anchor scoped and must not mutate the session.
+- Commit commands must reject stale revisions and return structured rejection
+  data for expected incompatibility cases.
+- `workflow_execution_commands.rs` must refresh derived graph metadata when it
+  returns graphs to the frontend.
+
+## Revisit Triggers
+- Insert-and-connect becomes a first-class backend command.
+- Headless editing moves to a transport boundary outside Tauri invoke.
+- Eligibility rules expand enough to justify a dedicated policy module or ADR.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** node-engine workflow types, session execution manager, Tauri
+command registration, mirrored frontend contracts.
+
+**External:** Tauri command runtime and serde serialization.
+
+## Related ADRs
+- None.
+- Reason: the connection-intent change is still local to the workflow editing
+  subsystem.
+- Revisit trigger: editing/session APIs become a supported external embedding
+  contract with explicit versioning.
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+let response = connection_intent::commit_connection(
+    &workflow_registry,
+    &mut execution.graph,
+    source_anchor,
+    target_anchor,
+    &graph_revision,
+);
 ```
+
+## API Consumer Contract (Host-Facing Modules)
+- Frontend callers must create or load an execution session before calling the
+  session-scoped editing commands in this directory.
+- `get_connection_candidates` accepts a source anchor and optional graph
+  revision, and returns compatible existing targets plus insertable node types.
+- `connect_anchors_in_execution` requires the revision used to derive UI state
+  and returns either an updated graph or a structured rejection.
+- Expected incompatibility is not exceptional; transport/session errors still
+  surface as command failures.
+- Compatibility policy is additive: existing commands remain while new editing
+  capabilities are introduced.
+
+## Structured Producer Contract (Machine-Consumed Modules)
+- `ConnectionCandidatesResponse` always includes `graph_revision`,
+  `revision_matches`, `source_anchor`, `compatible_nodes`, and
+  `insertable_node_types`.
+- `ConnectionCommitResponse` uses `accepted` plus optional `graph`/`rejection`
+  rather than overloading `Result` for expected validation failure.
+- Rejection enums are stable snake_case labels shared with TypeScript.
+- Graph fingerprints are regenerated metadata; callers must not persist them as
+  durable workflow configuration.
