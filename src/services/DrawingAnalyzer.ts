@@ -1,5 +1,4 @@
 import type { Stroke, Point } from '../types';
-import { componentRegistry } from './HotLoadRegistry';
 
 export interface DrawingBounds {
   minX: number;

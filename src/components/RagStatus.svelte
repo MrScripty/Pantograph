@@ -150,9 +150,6 @@
     !ragState.isIndexing
   );
 
-  // Check if server is in embedding mode
-  let isEmbeddingMode = $derived(configState.serverMode.is_embedding_mode);
-
   // Check if server is in inference mode (will need to switch)
   let needsModeSwitch = $derived(
     configState.serverMode.mode === 'sidecar_inference' &&

@@ -9,10 +9,8 @@
     restoreViewState,
     zoomToOrchestration,
     zoomToDataGraph,
-    tabIntoGroup,
     tabOutOfGroup,
     navigateBack,
-    currentDataGraphId,
     groupStack,
     type ViewLevel,
   } from '../stores/viewStore';
@@ -23,7 +21,6 @@
   } from '../stores/orchestrationStore';
   import { nodeGroups, expandedGroupId } from '../stores/workflowStore';
 
-  import ZoomTransition from './ZoomTransition.svelte';
   import NavigationBreadcrumb from './NavigationBreadcrumb.svelte';
   import WorkflowGraph from './WorkflowGraph.svelte';
   import OrchestrationGraph from './orchestration/OrchestrationGraph.svelte';
@@ -94,11 +91,6 @@
         zoomToDataGraph(nodeId, dataGraphId);
       }
     }
-  }
-
-  // Handle double-click on group node in data graph to tab in
-  function handleGroupDoubleClick(groupId: string) {
-    tabIntoGroup(groupId);
   }
 
   // Get current group being edited (if in group view)

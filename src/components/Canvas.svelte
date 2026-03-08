@@ -117,7 +117,7 @@
     engine.addPoint(getPoint(e));
   };
 
-  const handleMouseUp = (e: MouseEvent) => {
+  const handleMouseUp = () => {
     if (isPanning) {
       isPanning = false;
       return;

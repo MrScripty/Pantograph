@@ -13,7 +13,7 @@
   let { children }: Props = $props();
 
   const { workflowGraph, isDirty, isExecuting, edges: edgesStore } = stores.workflow;
-  const { isReadOnly, currentGraphId, currentGraphName, currentSessionId } = stores.session;
+  const { isReadOnly, currentGraphId, currentGraphName } = stores.session;
 
   let workflowName = $derived($currentGraphName || 'Untitled Workflow');
 

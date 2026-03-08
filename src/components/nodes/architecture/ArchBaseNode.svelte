@@ -6,7 +6,6 @@
     Database,
     Server,
     Zap,
-    type Icon as LucideIcon,
   } from 'lucide-svelte';
   import type { ArchNodeCategory } from '../../../services/architecture/types';
   import type { Component } from 'svelte';
@@ -23,7 +22,7 @@
     selected?: boolean;
   }
 
-  let { id, data, selected = false }: Props = $props();
+  let { data, selected = false }: Props = $props();
 
   const categoryIcons: Record<ArchNodeCategory, Component<{ class?: string; size?: number }>> = {
     component: Box,

@@ -6,7 +6,7 @@
     data: { label?: string; config?: Record<string, unknown> };
   }
 
-  let { id, data }: Props = $props();
+  let { id }: Props = $props();
 
   const outputHandles = [{ id: 'next', label: 'Start' }];
 </script>

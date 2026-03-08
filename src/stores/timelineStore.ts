@@ -57,7 +57,7 @@ function createTimelineStore() {
     error: null,
   };
 
-  const { subscribe, set, update } = writable<TimelineState>(initial);
+  const { subscribe, update } = writable<TimelineState>(initial);
 
   const store = {
     subscribe,

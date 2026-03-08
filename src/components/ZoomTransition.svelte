@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { scale, fade } from 'svelte/transition';
+  import { scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import {
     viewLevel,
@@ -24,11 +24,8 @@
   // Animation parameters based on transition direction
   let transitionParams = $derived.by(() => {
     const config = $animationConfig;
-    const target = $zoomTarget;
-
     // Default scale values
     let startScale = 0.1;
-    let endScale = 1;
 
     // Adjust based on zoom direction
     if (level === 'orchestration') {

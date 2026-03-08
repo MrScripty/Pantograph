@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { scale, fade } from 'svelte/transition';
+  import { scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { useGraphContext } from '../context/useGraphContext.js';
   import type { ViewLevel } from '../types/view.js';
@@ -18,8 +18,6 @@
 
   let transitionParams = $derived.by(() => {
     const config = $animationConfig;
-    const target = $zoomTarget;
-
     let startScale = 0.1;
     if (level === 'orchestration') {
       startScale = 2;

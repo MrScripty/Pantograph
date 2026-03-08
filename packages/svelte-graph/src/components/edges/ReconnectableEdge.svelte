@@ -22,9 +22,6 @@
     targetY,
     sourcePosition,
     targetPosition,
-    style,
-    markerEnd,
-    markerStart,
     interactionWidth = 20,
     selected,
   }: EdgeProps = $props();
@@ -66,7 +63,7 @@
     return port ? (typeColors[port.data_type] || '#60a5fa') : '#60a5fa';
   });
 
-  const [path, labelX, labelY] = $derived(
+  const [path] = $derived(
     getBezierPath({
       sourceX,
       sourceY,

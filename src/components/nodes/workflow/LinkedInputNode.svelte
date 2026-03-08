@@ -8,7 +8,6 @@
     startLinkMode,
     unlinkNode,
     clearNodeLink,
-    getLinkedValue,
   } from '../../../stores/linkStore';
 
   interface Props {

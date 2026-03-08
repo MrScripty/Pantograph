@@ -14,7 +14,6 @@
 
   import { useGraphContext } from '../context/useGraphContext.js';
   import type { NodeGroup, PortMapping } from '../types/groups.js';
-  import type { GraphEdge } from '../types/workflow.js';
   import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
 
   const { registry, stores } = useGraphContext();

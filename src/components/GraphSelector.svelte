@@ -9,8 +9,6 @@
     refreshWorkflowList,
     type GraphType,
   } from '../stores/graphSessionStore';
-  import { isReadOnly } from '../stores/graphSessionStore';
-
   let isOpen = $state(false);
   let dropdownRef: HTMLDivElement | null = $state(null);
 

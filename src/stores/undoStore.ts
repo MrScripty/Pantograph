@@ -64,7 +64,7 @@ let redoCallbacks: Map<UndoableAction['type'], RedoCallback> = new Map();
 
 function createUndoStore() {
   const initial = loadFromStorage();
-  const { subscribe, set, update } = writable<UndoState>(initial);
+  const { subscribe, set } = writable<UndoState>(initial);
 
   const store = {
     subscribe,

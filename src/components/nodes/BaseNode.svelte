@@ -81,8 +81,6 @@
       : 'intent-ineligible';
   }
 
-  // Calculate node height based on port count
-  let nodeHeight = $derived(Math.max(inputs.length, outputs.length) * 28 + 60);
 </script>
 
 <div

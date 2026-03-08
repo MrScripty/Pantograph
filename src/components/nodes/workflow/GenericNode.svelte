@@ -1,6 +1,6 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition, NodeExecutionState } from '../../../services/workflow/types';
+  import type { NodeDefinition } from '../../../services/workflow/types';
   import { nodeExecutionStates } from '../../../stores/workflowStore';
 
   interface Props {

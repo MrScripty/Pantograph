@@ -1,4 +1,4 @@
-import type { DrawingBounds, ComponentPosition } from '../DrawingAnalyzer';
+import type { DrawingBounds } from '../DrawingAnalyzer';
 
 // Types matching the Rust backend
 export interface AgentRequest {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PortMapping, NodeGroup } from '../services/workflow/groupTypes';
-  import type { NodeDefinition, PortDefinition } from '../services/workflow/types';
+  import type { PortDefinition } from '../services/workflow/types';
   import { nodeDefinitions } from '../stores/workflowStore';
 
   interface Props {

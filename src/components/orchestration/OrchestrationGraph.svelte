@@ -6,7 +6,6 @@
   import {
     orchestrationFlowNodes,
     orchestrationFlowEdges,
-    selectedOrchestrationNodeId,
     selectOrchestrationNode,
     addOrchestrationEdge,
     removeOrchestrationEdge,

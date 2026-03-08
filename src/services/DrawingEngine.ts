@@ -1,4 +1,4 @@
-import { DrawingState, Stroke, Point, ToolType } from '../types';
+import { DrawingState, Point, ToolType } from '../types';
 import { Logger } from './Logger';
 
 export class DrawingEngine {

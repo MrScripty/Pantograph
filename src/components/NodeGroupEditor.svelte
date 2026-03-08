@@ -3,9 +3,7 @@
   import '@xyflow/svelte/dist/style.css';
 
   import type { NodeGroup, PortMapping } from '../services/workflow/groupTypes';
-  import type { NodeDefinition, GraphEdge } from '../services/workflow/types';
-  import { nodeDefinitions, expandedGroupId, collapseGroup } from '../stores/workflowStore';
-  import { workflowService } from '../services/workflow/WorkflowService';
+  import { nodeDefinitions, collapseGroup } from '../stores/workflowStore';
 
   // Import workflow node components (reuse from main workflow)
   import TextInputNode from './nodes/workflow/TextInputNode.svelte';
@@ -132,22 +130,6 @@
   }
 
   function handleSave() {
-    // Convert back to graph format
-    const graphNodes = nodes.map((n) => ({
-      id: n.id,
-      node_type: n.type || 'unknown',
-      position: n.position,
-      data: n.data,
-    }));
-
-    const graphEdges: GraphEdge[] = edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      source_handle: e.sourceHandle || 'output',
-      target: e.target,
-      target_handle: e.targetHandle || 'input',
-    }));
-
     onSave(nodes, edges, exposedInputs, exposedOutputs);
   }
 
