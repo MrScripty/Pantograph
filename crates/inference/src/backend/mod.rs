@@ -26,7 +26,9 @@ use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 
 use crate::process::ProcessSpawner;
-use crate::types::{ImageGenerationRequest, ImageGenerationResult};
+use crate::types::{
+    ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse,
+};
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
@@ -79,6 +81,8 @@ pub struct BackendCapabilities {
     pub image_generation: bool,
     /// Supports embedding generation
     pub embeddings: bool,
+    /// Supports document reranking
+    pub reranking: bool,
     /// Has GPU acceleration available
     pub gpu: bool,
     /// Allows manual GPU device selection
@@ -127,6 +131,8 @@ pub struct BackendConfig {
     pub context_size: Option<u32>,
     /// Embedding mode
     pub embedding_mode: bool,
+    /// Reranking mode
+    pub reranking_mode: bool,
     /// Model type hint for PyTorch backend (dllm, sherry, text-generation).
     /// If None, auto-detected from config.json.
     pub model_type: Option<String>,
@@ -216,6 +222,9 @@ pub trait InferenceBackend: Send + Sync {
         texts: Vec<String>,
         model: &str,
     ) -> Result<Vec<EmbeddingResult>, BackendError>;
+
+    /// Rank candidate documents against a query.
+    async fn rerank(&self, request: RerankRequest) -> Result<RerankResponse, BackendError>;
 
     /// Generate one or more images from a diffusion-capable backend.
     async fn generate_image(

@@ -76,6 +76,15 @@ fn platform_key() -> String {
 
 fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option<String>) {
     let model_type = record.model_type.to_lowercase();
+    let metadata_task = record
+        .metadata
+        .as_object()
+        .and_then(|meta| {
+            meta.get("task_type_primary")
+                .and_then(|v| v.as_str())
+                .or_else(|| meta.get("taskTypePrimary").and_then(|v| v.as_str()))
+        })
+        .map(|value| value.to_lowercase());
     if model_type == "audio" {
         return (
             "audio-generation".to_string(),
@@ -96,6 +105,13 @@ fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option
                 })
             });
         if has_gguf {
+            if metadata_task.as_deref() == Some("reranking") {
+                return (
+                    "reranker".to_string(),
+                    Some("llamacpp".to_string()),
+                    Some("reranking".to_string()),
+                );
+            }
             return (
                 "llamacpp-inference".to_string(),
                 Some("llamacpp".to_string()),
@@ -113,6 +129,13 @@ fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option
             "diffusion-inference".to_string(),
             Some("pytorch".to_string()),
             Some("text-to-image".to_string()),
+        );
+    }
+    if model_type == "reranker" {
+        return (
+            "reranker".to_string(),
+            Some("llamacpp".to_string()),
+            Some("reranking".to_string()),
         );
     }
 

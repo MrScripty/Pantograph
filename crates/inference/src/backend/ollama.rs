@@ -13,6 +13,7 @@ use super::{
     BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
+use crate::types::{RerankRequest, RerankResponse};
 
 /// Ollama backend using the Ollama daemon
 ///
@@ -46,6 +47,7 @@ impl OllamaBackend {
             vision: true, // Ollama supports multimodal models
             image_generation: false,
             embeddings: true,        // Via embedding API
+            reranking: false,
             gpu: true,               // Ollama handles GPU automatically
             device_selection: false, // Ollama manages devices internally
             streaming: true,         // SSE streaming
@@ -290,6 +292,12 @@ impl InferenceBackend for OllamaBackend {
         }
 
         Ok(results)
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "Reranking not supported by Ollama backend".to_string(),
+        ))
     }
 }
 

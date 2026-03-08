@@ -1128,11 +1128,15 @@ fn infer_task_type_primary(node_type: &str, inputs: &HashMap<String, serde_json:
     if node_type == "diffusion-inference" {
         return "text-to-image".to_string();
     }
+    if node_type == "reranker" || model_type == "reranker" {
+        return "reranking".to_string();
+    }
 
     match model_type.as_str() {
         "diffusion" => "text-to-image".to_string(),
         "vision" => "image-to-text".to_string(),
         "embedding" => "feature-extraction".to_string(),
+        "reranker" => "reranking".to_string(),
         _ => "text-generation".to_string(),
     }
 }
@@ -1208,6 +1212,7 @@ fn infer_backend_key(node_type: &str) -> Option<String> {
         // execution profile.
         "diffusion-inference" => None,
         "llamacpp-inference" => Some("llamacpp".to_string()),
+        "reranker" => Some("llamacpp".to_string()),
         "ollama-inference" => Some("ollama".to_string()),
         "onnx-inference" => Some("onnx-runtime".to_string()),
         _ => Some("pytorch".to_string()),
@@ -1561,6 +1566,10 @@ impl TaskExecutor for CoreTaskExecutor {
                 .await
             }
             #[cfg(feature = "inference-nodes")]
+            "reranker" => {
+                execute_reranker(self.gateway.as_ref(), &inputs).await
+            }
+            #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 execute_llm_inference(
@@ -1662,6 +1671,50 @@ fn resolve_gguf_path(path: &str) -> Result<String> {
     } else {
         Ok(path.to_string())
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn parse_reranker_documents(value: &serde_json::Value) -> Result<Vec<String>> {
+    let items = if let Some(items) = value.as_array() {
+        items
+    } else {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Reranker documents input must be a JSON array".to_string(),
+        ));
+    };
+
+    let mut documents = Vec::with_capacity(items.len());
+    for item in items {
+        if let Some(text) = item.as_str() {
+            if !text.trim().is_empty() {
+                documents.push(text.to_string());
+            }
+            continue;
+        }
+        if let Some(text) = item
+            .get("text")
+            .and_then(|v| v.as_str())
+            .or_else(|| item.get("content").and_then(|v| v.as_str()))
+            .or_else(|| item.get("document").and_then(|v| v.as_str()))
+        {
+            if !text.trim().is_empty() {
+                documents.push(text.to_string());
+            }
+            continue;
+        }
+        return Err(NodeEngineError::ExecutionFailed(
+            "Reranker documents must be strings or objects with text/content/document fields"
+                .to_string(),
+        ));
+    }
+
+    if documents.is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Reranker documents input cannot be empty".to_string(),
+        ));
+    }
+
+    Ok(documents)
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1870,6 +1923,147 @@ async fn execute_llamacpp_inference(
                 "taskTypePrimary": task_type_primary,
             })
         }),
+    );
+    Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_reranker(
+    gateway: Option<&Arc<InferenceGateway>>,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<HashMap<String, serde_json::Value>> {
+    let gw = require_gateway(gateway)?;
+
+    let query = inputs
+        .get("query")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing query input".to_string()))?;
+    if query.trim().is_empty() {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Reranker query cannot be empty".to_string(),
+        ));
+    }
+
+    let documents_value = inputs.get("documents").ok_or_else(|| {
+        NodeEngineError::ExecutionFailed("Missing documents input".to_string())
+    })?;
+    let documents = parse_reranker_documents(documents_value)?;
+
+    let model_path_raw = inputs
+        .get("model_path")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(
+                "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+            )
+        })?;
+    let model_path = resolve_gguf_path(model_path_raw)?;
+
+    let top_k = inputs
+        .get("top_k")
+        .and_then(|value| value.as_u64().map(|v| v as usize))
+        .or_else(|| {
+            inputs
+                .get("top_k")
+                .and_then(|value| value.as_i64())
+                .filter(|v| *v > 0)
+                .map(|v| v as usize)
+        });
+    let return_documents =
+        read_optional_input_bool_aliases(inputs, &["return_documents", "returnDocuments"])
+            .unwrap_or(true);
+
+    let mut extra_settings = build_extra_settings(inputs);
+    let mut config = inference::BackendConfig {
+        model_path: Some(PathBuf::from(&model_path)),
+        device: Some("auto".to_string()),
+        gpu_layers: Some(-1),
+        reranking_mode: true,
+        ..Default::default()
+    };
+
+    if let Some(v) = extra_settings.get("gpu_layers").and_then(|v| v.as_i64()) {
+        config.gpu_layers = Some(v as i32);
+    }
+    if let Some(v) = extra_settings.get("context_length").and_then(|v| v.as_i64()) {
+        config.context_size = Some(v as u32);
+    }
+    extra_settings.remove("gpu_layers");
+    extra_settings.remove("context_length");
+
+    if !gw.is_ready().await || !gw.is_reranking_mode().await {
+        if gw.is_ready().await {
+            gw.stop().await;
+        }
+
+        gw.start(&config).await.map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Failed to start reranking server: {}", e))
+        })?;
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while !gw.is_ready().await {
+            if std::time::Instant::now() > deadline {
+                return Err(NodeEngineError::ExecutionFailed(
+                    "Timeout waiting for reranking server to start".to_string(),
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    let response = gw
+        .rerank(inference::RerankRequest {
+            model: model_path.clone(),
+            query: query.to_string(),
+            documents,
+            top_n: top_k,
+            return_documents,
+            extra_options: serde_json::Value::Object(extra_settings.into_iter().collect()),
+        })
+        .await
+        .map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!("Reranker request failed: {}", e))
+        })?;
+
+    let scores = response
+        .results
+        .iter()
+        .map(|result| serde_json::json!(result.score))
+        .collect::<Vec<_>>();
+    let top_document = response
+        .results
+        .first()
+        .and_then(|result| result.document.clone());
+    let top_score = response.results.first().map(|result| result.score);
+
+    let mut outputs = HashMap::new();
+    outputs.insert(
+        "results".to_string(),
+        serde_json::to_value(&response.results).unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert("scores".to_string(), serde_json::json!(scores));
+    outputs.insert("model_path".to_string(), serde_json::json!(model_path.clone()));
+    outputs.insert(
+        "model_ref".to_string(),
+        serde_json::json!({
+            "contractVersion": 2,
+            "engine": "llamacpp",
+            "modelId": model_path,
+            "modelPath": model_path,
+            "taskTypePrimary": "reranking"
+        }),
+    );
+    outputs.insert(
+        "top_document".to_string(),
+        top_document
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
+    );
+    outputs.insert(
+        "top_score".to_string(),
+        top_score
+            .map(|value| serde_json::json!(value))
+            .unwrap_or(serde_json::Value::Null),
     );
     Ok(outputs)
 }
@@ -3941,5 +4135,39 @@ mod tests {
         let request = build_model_dependency_request("diffusion-inference", "/tmp/model", &inputs);
         assert_eq!(request.backend_key, None);
         assert_eq!(request.task_type_primary.as_deref(), Some("text-to-image"));
+    }
+
+    #[cfg(feature = "inference-nodes")]
+    #[test]
+    fn test_parse_reranker_documents_accepts_strings_and_objects() {
+        let value = serde_json::json!([
+            "first",
+            {"text": "second"},
+            {"content": "third"},
+            {"document": "fourth"}
+        ]);
+        let documents = parse_reranker_documents(&value).expect("documents should parse");
+        assert_eq!(documents, vec!["first", "second", "third", "fourth"]);
+    }
+
+    #[cfg(feature = "inference-nodes")]
+    #[test]
+    fn test_parse_reranker_documents_rejects_invalid_item() {
+        let value = serde_json::json!([{"id": 1}]);
+        let error = parse_reranker_documents(&value).expect_err("invalid item should fail");
+        match error {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("strings or objects"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[test]
+    fn test_infer_task_type_primary_detects_reranker() {
+        let mut inputs = HashMap::new();
+        inputs.insert("model_type".to_string(), serde_json::json!("reranker"));
+        assert_eq!(infer_task_type_primary("reranker", &inputs), "reranking");
     }
 }

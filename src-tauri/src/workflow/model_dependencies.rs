@@ -289,6 +289,7 @@ impl TauriModelDependencyResolver {
             "pytorch-inference" => "pytorch".to_string(),
             "diffusion-inference" => "pytorch".to_string(),
             "llamacpp-inference" => "llamacpp".to_string(),
+            "reranker" => "llamacpp".to_string(),
             "ollama-inference" => "ollama".to_string(),
             _ => {
                 if model_type.unwrap_or_default().eq_ignore_ascii_case("audio") {
@@ -306,6 +307,7 @@ impl TauriModelDependencyResolver {
             "automatic-speech-recognition" => "audio-to-text".to_string(),
             "text-to-image" | "image-to-image" => "text-to-image".to_string(),
             "feature-extraction" | "sentence-similarity" => "feature-extraction".to_string(),
+            "reranking" | "reranker" => "reranking".to_string(),
             "image-classification" | "object-detection" | "image-to-text" => {
                 "image-to-text".to_string()
             }
@@ -2141,6 +2143,18 @@ mod tests {
             Some("diffusion"),
         );
         assert_eq!(engine, "pytorch");
+    }
+
+    #[test]
+    fn infer_engine_uses_llamacpp_for_reranker_node() {
+        let engine = TauriModelDependencyResolver::infer_engine(None, "reranker", Some("reranker"));
+        assert_eq!(engine, "llamacpp");
+    }
+
+    #[test]
+    fn map_pipeline_tag_recognizes_reranking() {
+        let task = TauriModelDependencyResolver::map_pipeline_tag_to_task("reranking");
+        assert_eq!(task, "reranking");
     }
 
     #[tokio::test]

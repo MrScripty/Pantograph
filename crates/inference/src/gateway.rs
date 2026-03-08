@@ -16,7 +16,9 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::process::ProcessSpawner;
-use crate::types::{ImageGenerationRequest, ImageGenerationResult, ServerModeInfo};
+use crate::types::{
+    ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse, ServerModeInfo,
+};
 
 #[cfg(feature = "backend-llamacpp")]
 use crate::backend::LlamaCppBackend;
@@ -51,6 +53,8 @@ pub struct InferenceGateway {
     current_backend_name: Arc<RwLock<String>>,
     /// Whether running in embedding mode (for legacy compatibility)
     embedding_mode: Arc<RwLock<bool>>,
+    /// Whether running in reranking mode
+    reranking_mode: Arc<RwLock<bool>>,
     /// Last used inference config (for mode switching)
     last_inference_config: Arc<RwLock<Option<BackendConfig>>>,
     /// Current embedding memory mode
@@ -68,6 +72,7 @@ impl InferenceGateway {
             registry: BackendRegistry::new(),
             current_backend_name: Arc::new(RwLock::new("llama.cpp".to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
+            reranking_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
@@ -81,6 +86,7 @@ impl InferenceGateway {
             registry: BackendRegistry::new(),
             current_backend_name: Arc::new(RwLock::new(name.to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
+            reranking_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
@@ -155,9 +161,13 @@ impl InferenceGateway {
             let mut mode = self.embedding_mode.write().await;
             *mode = config.embedding_mode;
         }
+        {
+            let mut mode = self.reranking_mode.write().await;
+            *mode = config.reranking_mode;
+        }
 
         // Store inference config for mode restoration
-        if !config.embedding_mode {
+        if !config.embedding_mode && !config.reranking_mode {
             let mut last_config = self.last_inference_config.write().await;
             *last_config = Some(config.clone());
         }
@@ -176,6 +186,8 @@ impl InferenceGateway {
         // Reset embedding mode
         let mut mode = self.embedding_mode.write().await;
         *mode = false;
+        let mut reranking_mode = self.reranking_mode.write().await;
+        *reranking_mode = false;
     }
 
     /// Check if currently in embedding mode
@@ -185,7 +197,12 @@ impl InferenceGateway {
 
     /// Check if currently in inference mode (ready and not embedding)
     pub async fn is_inference_mode(&self) -> bool {
-        self.is_ready().await && !self.is_embedding_mode().await
+        self.is_ready().await && !self.is_embedding_mode().await && !self.is_reranking_mode().await
+    }
+
+    /// Check if currently in reranking mode
+    pub async fn is_reranking_mode(&self) -> bool {
+        *self.reranking_mode.read().await
     }
 
     /// Get the last inference config (for restoring after embedding mode)
@@ -197,6 +214,7 @@ impl InferenceGateway {
     pub async fn mode_info(&self) -> ServerModeInfo {
         let ready = self.is_ready().await;
         let is_embedding = self.is_embedding_mode().await;
+        let is_reranking = self.is_reranking_mode().await;
         let url = self.base_url().await;
 
         ServerModeInfo {
@@ -204,6 +222,8 @@ impl InferenceGateway {
                 "none".to_string()
             } else if is_embedding {
                 "sidecar_embedding".to_string()
+            } else if is_reranking {
+                "sidecar_reranking".to_string()
             } else {
                 "sidecar_inference".to_string()
             },
@@ -284,6 +304,15 @@ impl InferenceGateway {
             .embeddings(texts, model)
             .await
             .map_err(GatewayError::Backend)
+    }
+
+    /// Rank documents through the active backend.
+    pub async fn rerank(&self, request: RerankRequest) -> Result<RerankResponse, GatewayError> {
+        let guard = self.backend.read().await;
+        if !guard.is_ready() {
+            return Err(GatewayError::Backend(BackendError::NotReady));
+        }
+        guard.rerank(request).await.map_err(GatewayError::Backend)
     }
 
     /// Generate one or more images through the active backend.
@@ -388,6 +417,13 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
         async fn generate_image(
             &self,
             request: ImageGenerationRequest,
@@ -454,5 +490,22 @@ mod tests {
         assert_eq!(result.seed_used, Some(7));
         assert_eq!(result.images.len(), 1);
         assert_eq!(result.images[0].data_base64, "paper lantern");
+    }
+
+    #[tokio::test]
+    async fn test_rerank_forwards_to_active_backend() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        let result = gateway
+            .rerank(RerankRequest {
+                model: "mock".to_string(),
+                query: "alpha".to_string(),
+                documents: vec!["a".to_string()],
+                top_n: Some(1),
+                return_documents: true,
+                extra_options: serde_json::Value::Null,
+            })
+            .await
+            .expect("rerank should forward");
+        assert!(result.results.is_empty());
     }
 }

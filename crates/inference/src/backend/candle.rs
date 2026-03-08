@@ -13,6 +13,7 @@ use super::{
     BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
+use crate::types::{RerankRequest, RerankResponse};
 
 /// Candle backend for in-process inference
 ///
@@ -43,6 +44,7 @@ impl CandleBackend {
             vision: false, // Candle doesn't support vision models yet
             image_generation: false,
             embeddings: true,        // Primary use case
+            reranking: false,
             gpu: true,               // CUDA support
             device_selection: false, // Limited device selection
             streaming: false,        // Not supported yet
@@ -202,6 +204,12 @@ impl InferenceBackend for CandleBackend {
         }
 
         Ok(results)
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "Reranking not supported by Candle backend".to_string(),
+        ))
     }
 }
 

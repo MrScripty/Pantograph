@@ -20,6 +20,7 @@ use super::{
     BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
+use crate::types::{RerankRequest, RerankResponse};
 
 /// The Python worker source, embedded at compile time.
 const WORKER_PY: &str = include_str!("../../torch/worker.py");
@@ -115,6 +116,7 @@ impl PyTorchBackend {
             vision: false,
             image_generation: false,
             embeddings: false,
+            reranking: false,
             gpu: true,
             device_selection: true,
             streaming: true,
@@ -496,6 +498,12 @@ impl InferenceBackend for PyTorchBackend {
     ) -> Result<Vec<EmbeddingResult>, BackendError> {
         Err(BackendError::Inference(
             "Embeddings not supported by PyTorch backend".to_string(),
+        ))
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "Reranking not supported by PyTorch backend".to_string(),
         ))
     }
 }

@@ -84,6 +84,8 @@ pub enum ServerMode {
     },
     /// Sidecar running in embedding mode (for RAG indexing)
     SidecarEmbedding { port: u16, model_path: String },
+    /// Sidecar running in reranking mode
+    SidecarReranking { port: u16, model_path: String },
 }
 
 /// Information about current server mode for frontend
@@ -324,6 +326,63 @@ impl LlamaServer {
         self.wait_for_ready(rx).await
     }
 
+    /// Start sidecar in reranking mode.
+    pub async fn start_sidecar_reranking(
+        &mut self,
+        spawner: Arc<dyn ProcessSpawner>,
+        model_path: &str,
+        device: &DeviceConfig,
+    ) -> Result<(), String> {
+        self.stop();
+
+        let port = ports::SERVER;
+        let gpu_layers_str = device.gpu_layers.to_string();
+        let port_str = port.to_string();
+
+        let app_data_dir = spawner.app_data_dir()?;
+        let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
+        let pid_file_str = pid_file.to_string_lossy().to_string();
+
+        let mut args: Vec<String> = vec![
+            "-m".to_string(),
+            model_path.to_string(),
+            "--port".to_string(),
+            port_str,
+            "--host".to_string(),
+            hosts::LOCAL.to_string(),
+            "--reranking".to_string(),
+            "-ngl".to_string(),
+            gpu_layers_str,
+            "--pid-file".to_string(),
+            pid_file_str,
+        ];
+
+        if device.device != device_types::AUTO {
+            args.push("--device".to_string());
+            args.push(device.device.clone());
+        }
+
+        log::info!(
+            "Starting reranking server with device config: device={}, gpu_layers={}",
+            device.device,
+            device.gpu_layers
+        );
+
+        let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let (rx, child) = spawner
+            .spawn_sidecar("llama-server-wrapper", &args_refs)
+            .await?;
+
+        self.child = Some(child);
+        self.pid_file = Some(pid_file);
+        self.mode = ServerMode::SidecarReranking {
+            port,
+            model_path: model_path.to_string(),
+        };
+
+        self.wait_for_ready(rx).await
+    }
+
     /// Verify the server is responding to HTTP requests
     async fn verify_http_ready(&self, timeout_ms: u64) -> Result<(), String> {
         let base_url = self
@@ -468,6 +527,9 @@ impl LlamaServer {
             ServerMode::External { url } => Some(url.trim_end_matches('/').to_string()),
             ServerMode::SidecarInference { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
             ServerMode::SidecarEmbedding { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
+            ServerMode::SidecarReranking { port, .. } => {
+                Some(format!("http://127.0.0.1:{}", port))
+            }
         }
     }
 
@@ -484,7 +546,9 @@ impl LlamaServer {
     pub fn is_sidecar(&self) -> bool {
         matches!(
             self.mode,
-            ServerMode::SidecarInference { .. } | ServerMode::SidecarEmbedding { .. }
+            ServerMode::SidecarInference { .. }
+                | ServerMode::SidecarEmbedding { .. }
+                | ServerMode::SidecarReranking { .. }
         )
     }
 
@@ -496,6 +560,11 @@ impl LlamaServer {
     /// Check if currently in inference mode
     pub fn is_inference_mode(&self) -> bool {
         matches!(self.mode, ServerMode::SidecarInference { .. })
+    }
+
+    /// Check if currently in reranking mode
+    pub fn is_reranking_mode(&self) -> bool {
+        matches!(self.mode, ServerMode::SidecarReranking { .. })
     }
 
     /// Get the current mode
@@ -511,6 +580,7 @@ impl LlamaServer {
                 ServerMode::External { .. } => "external".to_string(),
                 ServerMode::SidecarInference { .. } => "sidecar_inference".to_string(),
                 ServerMode::SidecarEmbedding { .. } => "sidecar_embedding".to_string(),
+                ServerMode::SidecarReranking { .. } => "sidecar_reranking".to_string(),
             },
             url: self.base_url(),
         }
@@ -524,12 +594,14 @@ impl LlamaServer {
                 ServerMode::External { .. } => "external".to_string(),
                 ServerMode::SidecarInference { .. } => "sidecar_inference".to_string(),
                 ServerMode::SidecarEmbedding { .. } => "sidecar_embedding".to_string(),
+                ServerMode::SidecarReranking { .. } => "sidecar_reranking".to_string(),
             },
             ready: self.ready,
             url: self.base_url(),
             model_path: match &self.mode {
                 ServerMode::SidecarInference { model_path, .. } => Some(model_path.clone()),
                 ServerMode::SidecarEmbedding { model_path, .. } => Some(model_path.clone()),
+                ServerMode::SidecarReranking { model_path, .. } => Some(model_path.clone()),
                 _ => None,
             },
             is_embedding_mode: self.is_embedding_mode(),

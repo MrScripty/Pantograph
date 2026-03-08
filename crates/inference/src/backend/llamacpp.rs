@@ -15,6 +15,7 @@ use super::{
 use crate::config::DeviceConfig;
 use crate::process::ProcessSpawner;
 use crate::server::LlamaServer;
+use crate::types::{RerankRequest, RerankResponse, RerankResult};
 
 /// llama.cpp backend using sidecar process management
 ///
@@ -47,11 +48,100 @@ impl LlamaCppBackend {
             vision: true, // GGUF + mmproj support
             image_generation: false,
             embeddings: true,       // Via --embedding mode
+            reranking: true,        // Via --reranking mode
             gpu: true,              // CUDA, Vulkan, Metal
             device_selection: true, // Manual device choice
             streaming: true,        // SSE streaming
             tool_calling: true,     // Via OpenAI-compatible API
         }
+    }
+
+    fn normalize_rerank_results(
+        json: serde_json::Value,
+        documents: &[String],
+        return_documents: bool,
+    ) -> Result<RerankResponse, BackendError> {
+        let (items, metadata) = if let Some(results) = json
+            .get("results")
+            .and_then(|value| value.as_array())
+            .cloned()
+        {
+            let mut metadata = json;
+            if let Some(object) = metadata.as_object_mut() {
+                object.remove("results");
+            }
+            (results, metadata)
+        } else if let Some(results) = json.as_array() {
+            (results.clone(), serde_json::Value::Null)
+        } else {
+            return Err(BackendError::Inference(
+                "Invalid rerank response format".to_string(),
+            ));
+        };
+
+        let mut normalized = Vec::with_capacity(items.len());
+        for item in items {
+            let index = item
+                .get("index")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| BackendError::Inference("Missing rerank result index".to_string()))?
+                as usize;
+            let score = item
+                .get("score")
+                .or_else(|| item.get("relevance_score"))
+                .and_then(|v| v.as_f64())
+                .ok_or_else(|| BackendError::Inference("Missing rerank score".to_string()))?
+                as f32;
+            let document = if return_documents {
+                item.get("document")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| documents.get(index).cloned())
+            } else {
+                None
+            };
+            normalized.push(RerankResult {
+                index,
+                score,
+                document,
+            });
+        }
+
+        Ok(RerankResponse {
+            results: normalized,
+            metadata,
+        })
+    }
+
+    async fn post_rerank_request(
+        &self,
+        url: &str,
+        request: &serde_json::Value,
+        documents: &[String],
+        return_documents: bool,
+    ) -> Result<RerankResponse, BackendError> {
+        let response = self
+            .http_client
+            .post(url)
+            .json(request)
+            .send()
+            .await
+            .map_err(BackendError::Http)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(BackendError::Inference(format!(
+                "Rerank API error {}: {}",
+                status, body
+            )));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
+        Self::normalize_rerank_results(json, documents, return_documents)
     }
 
     /// Parse SSE stream into ChatChunk stream
@@ -148,6 +238,23 @@ impl InferenceBackend for LlamaCppBackend {
 
             self.server
                 .start_sidecar_embedding(spawner, &model_path.to_string_lossy(), &device_config)
+                .await
+                .map_err(|e| {
+                    if e.to_lowercase().contains("out of memory")
+                        || e.to_lowercase().contains("oom")
+                    {
+                        BackendError::OutOfMemory(e)
+                    } else {
+                        BackendError::StartupFailed(e)
+                    }
+                })
+        } else if config.reranking_mode {
+            let model_path = config.model_path.as_ref().ok_or_else(|| {
+                BackendError::Config("model_path required for reranking mode".to_string())
+            })?;
+
+            self.server
+                .start_sidecar_reranking(spawner, &model_path.to_string_lossy(), &device_config)
                 .await
                 .map_err(|e| {
                     if e.to_lowercase().contains("out of memory")
@@ -310,6 +417,63 @@ impl InferenceBackend for LlamaCppBackend {
         }
 
         Ok(results)
+    }
+
+    async fn rerank(&self, request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        let base_url = self.base_url().ok_or(BackendError::NotReady)?;
+        let mut body = serde_json::json!({
+            "model": request.model,
+            "query": request.query,
+            "documents": request.documents,
+            "top_n": request.top_n,
+            "return_documents": request.return_documents,
+            "return_text": request.return_documents,
+        });
+
+        if let Some(options) = request.extra_options.as_object() {
+            for (key, value) in options {
+                body[key] = value.clone();
+            }
+        }
+
+        let documents = body
+            .get("documents")
+            .and_then(|value| value.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let preferred_url = format!("{}/v1/rerank", base_url);
+        match self
+            .post_rerank_request(
+                &preferred_url,
+                &body,
+                &documents,
+                request.return_documents,
+            )
+            .await
+        {
+            Ok(response) => Ok(response),
+            Err(BackendError::Inference(message))
+                if message.contains(" 404 ")
+                    || message.contains(" 405 ")
+                    || message.contains("Not Found") =>
+            {
+                let fallback_url = format!("{}/reranking", base_url);
+                self.post_rerank_request(
+                    &fallback_url,
+                    &body,
+                    &documents,
+                    request.return_documents,
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        }
     }
 }
 

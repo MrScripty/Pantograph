@@ -123,6 +123,48 @@ pub struct ImageGenerationResult {
     pub metadata: Value,
 }
 
+/// Reranking request contract shared across backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RerankRequest {
+    /// Backend-specific model identifier or path.
+    pub model: String,
+    /// Query to rank documents against.
+    pub query: String,
+    /// Candidate documents in original input order.
+    pub documents: Vec<String>,
+    /// Optional top-N truncation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_n: Option<usize>,
+    /// Whether to include document text in results.
+    #[serde(default)]
+    pub return_documents: bool,
+    /// Backend/model-specific append-only options.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra_options: Value,
+}
+
+/// A single reranked result item.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RerankResult {
+    /// Original candidate index.
+    pub index: usize,
+    /// Normalized relevance score.
+    pub score: f32,
+    /// Optional document text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document: Option<String>,
+}
+
+/// Reranking response contract returned by reranker-capable backends.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RerankResponse {
+    /// Ranked results in output order.
+    pub results: Vec<RerankResult>,
+    /// Optional backend metadata such as timings.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub metadata: Value,
+}
+
 /// Streaming response chunk
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamChunk {
