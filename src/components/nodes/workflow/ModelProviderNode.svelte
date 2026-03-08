@@ -15,12 +15,8 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelName = $state('');
+  let modelName = $derived(data.model_name || 'llama2');
   const modelNameInputId = $derived(`model-provider-${id}-model-name`);
-
-  $effect(() => {
-    modelName = data.model_name || 'llama2';
-  });
 
   // Input category color (blue)
   const nodeColor = '#2563eb';
@@ -32,8 +28,7 @@
 
   function handleInput(e: Event) {
     const target = e.target as HTMLInputElement;
-    modelName = target.value;
-    updateNodeData(id, { model_name: modelName });
+    updateNodeData(id, { model_name: target.value });
   }
 </script>
 

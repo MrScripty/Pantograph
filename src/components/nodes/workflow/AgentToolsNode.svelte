@@ -23,19 +23,13 @@
     { id: 'shell', label: 'Shell Command', description: 'Run shell commands' },
   ];
 
-  let enabledTools = $state<string[]>([]);
-
-  $effect(() => {
-    enabledTools = data.enabledTools || [];
-  });
+  let enabledTools = $derived(data.enabledTools || []);
 
   function toggleTool(toolId: string) {
-    if (enabledTools.includes(toolId)) {
-      enabledTools = enabledTools.filter((t) => t !== toolId);
-    } else {
-      enabledTools = [...enabledTools, toolId];
-    }
-    updateNodeData(id, { enabledTools });
+    const nextEnabledTools = enabledTools.includes(toolId)
+      ? enabledTools.filter((t) => t !== toolId)
+      : [...enabledTools, toolId];
+    updateNodeData(id, { enabledTools: nextEnabledTools });
   }
 </script>
 

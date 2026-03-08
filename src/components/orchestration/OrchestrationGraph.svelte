@@ -40,17 +40,8 @@
   };
 
   // Local reactive state for SvelteFlow
-  let nodes = $state<Node[]>([]);
-  let edges = $state<Edge[]>([]);
-
-  // Sync from store to local state
-  $effect(() => {
-    nodes = $orchestrationFlowNodes;
-  });
-
-  $effect(() => {
-    edges = $orchestrationFlowEdges;
-  });
+  let nodes = $derived($orchestrationFlowNodes);
+  let edges = $derived($orchestrationFlowEdges);
 
   // Track click times for double-click detection
   let lastClickTime = 0;

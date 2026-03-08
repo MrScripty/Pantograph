@@ -20,11 +20,7 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let text = $state('');
-
-  $effect(() => {
-    text = data.text || '';
-  });
+  let text = $derived(data.text || '');
 
   // Default color (blue — input category)
   const defaultColor = '#2563eb';
@@ -53,8 +49,7 @@
 
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
-    text = target.value;
-    stores.workflow.updateNodeData(id, { text });
+    stores.workflow.updateNodeData(id, { text: target.value });
   }
 </script>
 

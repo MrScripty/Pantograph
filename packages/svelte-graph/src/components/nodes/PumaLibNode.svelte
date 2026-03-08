@@ -20,14 +20,10 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let modelPath = $state('');
+  let modelPath = $derived(data.modelPath || '');
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
   let searchQuery = $state('');
-
-  $effect(() => {
-    modelPath = data.modelPath || '';
-  });
 
   let filteredModels = $derived(
     searchQuery
@@ -62,9 +58,9 @@
     const target = e.target as HTMLSelectElement;
     const match = availableModels.find((m) => String(m.value) === target.value);
     if (match) {
-      modelPath = String(match.value);
+      const nextModelPath = String(match.value);
       stores.workflow.updateNodeData(id, {
-        modelPath,
+        modelPath: nextModelPath,
         modelName: match.label,
       });
     }
