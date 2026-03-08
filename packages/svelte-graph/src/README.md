@@ -12,6 +12,7 @@ fork core canvas behavior.
 | `components/` | Reusable graph UI, including the main canvas, reconnect affordances, and horseshoe selector. |
 | `connectionDragState.ts` | Shared state machine helpers that distinguish normal connect drags from explicit reconnect drags and gate reconnect cleanup. |
 | `horseshoeDragSession.ts` | Shared visibility and anchor lifecycle for the horseshoe insert UI during active drags. |
+| `horseshoeInsertFeedback.ts` | Shared pending/rejection feedback state and status-label resolution for horseshoe insert outcomes. |
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
@@ -53,6 +54,9 @@ layer can consume the same connect/reconnect rules instead of copying them.
   valid selection.
 - Open horseshoe sessions freeze anchor updates; pointer motion is interpreted
   as menu selection input instead of menu repositioning.
+- Horseshoe insert feedback stays visible until the backend accepts the insert
+  or the interaction is explicitly cleared; rejected inserts must not collapse
+  into a silent no-op.
 - Package exports must remain additive and backward compatible unless a planned
   breaking change is documented separately.
 - Helpers in this directory do not perform backend mutations directly; they

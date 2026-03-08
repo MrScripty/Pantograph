@@ -41,7 +41,10 @@ output handles stay in normal fan-out mode and reconnect cleanup cannot bleed
 into ordinary insert flows. Once the horseshoe is open, repeated `Space`
 confirms the highlighted insert candidate, clears drag ownership immediately,
 and turns pointer movement into menu selection input instead of menu
-repositioning.
+repositioning. Insert confirmation now waits for the backend outcome before the
+UI tears the interaction down; rejected inserts keep the horseshoe visible,
+show the rejection message in-context, and refresh candidates against the
+backend-returned graph revision.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -67,6 +70,8 @@ repositioning.
   drag-end events do not keep the pointer in a dragging interaction.
 - While the horseshoe is open, pointer movement must update highlighted menu
   selection rather than the anchored menu position.
+- Rejected insert attempts must remain visible to the user and preserve retry
+  context instead of failing only through hidden console output.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
@@ -104,6 +109,8 @@ repositioning.
 - The app graph follows the package horseshoe contract: first `Space` opens,
   open-state `Space` or `Enter` confirms, and menu-open pointer motion selects
   candidates without moving the menu anchor.
+- The app graph must preserve horseshoe state through pending/rejected inserts
+  so release-mode users can see and retry backend rejections.
 - Rejection handling for failed connection and insert commits is currently
   store/console based, not event-emitter based.
 - Horseshoe invocation is drag-session-scoped and uses shared package helpers;

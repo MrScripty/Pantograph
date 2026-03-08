@@ -49,7 +49,10 @@ reconnect anchors are not rendered because they overlap occupied output handles
 and conflict with multi-edge fan-out. Once the horseshoe is open, the first
 `Space` has already been consumed; pressing `Space` again confirms the current
 highlighted insert candidate, clears drag state immediately, and leaves pointer
-motion free to change the highlighted item against a fixed menu anchor.
+motion free to change the highlighted item against a fixed menu anchor. Insert
+confirmation now keeps the horseshoe state alive until the backend responds; if
+the insert is rejected, the selector stays visible, shows the rejection
+message, and refreshes candidates from the returned graph revision for retry.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -69,6 +72,9 @@ motion free to change the highlighted item against a fixed menu anchor.
   cleanup runs so the pointer is no longer treated as dragging an edge.
 - While the horseshoe is open, pointer movement must not reposition the menu;
   it can only affect item selection inside the existing anchored layout.
+- Rejected horseshoe inserts must remain visible in-context and refresh
+  connection-intent candidates against the backend-returned revision instead of
+  silently clearing the interaction.
 - Reconnect cleanup must only remove the original edge for unfinished reconnect
   drags; normal connect/horseshoe flows must never inherit reconnect cleanup.
 - Connection-intent highlighting must clear when the graph changes or the drag
@@ -115,6 +121,8 @@ motion free to change the highlighted item against a fixed menu anchor.
   blocked-reason diagnostics.
 - When the horseshoe is open, `Space` and `Enter` both confirm the highlighted
   insert candidate; successful confirmation ends drag ownership immediately.
+- Rejected insert confirmations keep the horseshoe visible with a status
+  message so release users are not dependent on browser-console warnings.
 - Horseshoe insertion is only supported for normal connect drags. Explicit
   reconnect drags surface a blocked reason instructing the user to start a new
   drag from the output handle instead of pretending to support splice semantics.
