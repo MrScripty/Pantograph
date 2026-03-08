@@ -12,9 +12,11 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+chrono = { version = "0.4", features = ["serde"] }
 
 # Shared framework/domain crates
 node-engine = { path = "../node-engine" }
+workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 
 [dev-dependencies]
 tokio.workspace = true

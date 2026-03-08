@@ -4,9 +4,30 @@
 //! interfaces. Transport adapters (Tauri/UniFFI/Rustler) should delegate into
 //! this crate rather than duplicate business logic.
 
+// Force linker to include workflow-nodes inventory::submit!() statics so the
+// graph registry can discover built-in descriptors in headless consumers too.
+extern crate workflow_nodes;
+
 pub mod capabilities;
+pub mod graph;
 pub mod workflow;
 
+pub use graph::{
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
+    ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,
+    ExecutionMode, FileSystemWorkflowGraphStore, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodePositionHint, InsertableNodeTypeCandidate, IoBindingOrigin, NodeCategory,
+    NodeDefinition, PortDataType, PortDefinition, Position, UndoRedoState, Viewport, WorkflowFile,
+    WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    WorkflowGraphMetadata, WorkflowGraphRemoveEdgeRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
+};
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,
     WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost, WorkflowHostCapabilities,
