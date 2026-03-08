@@ -58,11 +58,7 @@ impl TaskDescriptor for PumaLibTask {
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_ID, "Model ID", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
-                PortMetadata::optional(
-                    PORT_TASK_TYPE_PRIMARY,
-                    "Task Type",
-                    PortDataType::String,
-                ),
+                PortMetadata::optional(PORT_TASK_TYPE_PRIMARY, "Task Type", PortDataType::String),
                 PortMetadata::optional(PORT_BACKEND_KEY, "Backend Key", PortDataType::String),
                 PortMetadata::optional(
                     PORT_RECOMMENDED_BACKEND,
@@ -126,7 +122,9 @@ mod options_provider {
 
     /// Extract inference settings from a model record, falling back to computed
     /// defaults when the API-backed settings lookup is unavailable.
-    fn resolve_inference_settings_fallback(record: &pumas_library::ModelRecord) -> serde_json::Value {
+    fn resolve_inference_settings_fallback(
+        record: &pumas_library::ModelRecord,
+    ) -> serde_json::Value {
         // Try the stored value first
         if let Some(stored) = record.metadata.get("inference_settings") {
             if stored.is_array() && !stored.as_array().map_or(true, |a| a.is_empty()) {
@@ -189,7 +187,9 @@ mod options_provider {
             return None;
         }
 
-        api.resolve_model_execution_descriptor(&record.id).await.ok()
+        api.resolve_model_execution_descriptor(&record.id)
+            .await
+            .ok()
     }
 
     fn pipeline_tag_to_task(pipeline_tag: &str) -> String {
@@ -265,13 +265,10 @@ mod options_provider {
                     .get("dependency_bindings")
                     .cloned()
                     .unwrap_or(serde_json::Value::Array(Vec::new()));
-                let recommended_backend =
-                    execution_descriptor
-                        .as_ref()
-                        .and_then(|descriptor| descriptor.recommended_backend.clone())
-                        .or_else(|| {
-                            metadata_string(m, &["recommended_backend", "recommendedBackend"])
-                        });
+                let recommended_backend = execution_descriptor
+                    .as_ref()
+                    .and_then(|descriptor| descriptor.recommended_backend.clone())
+                    .or_else(|| metadata_string(m, &["recommended_backend", "recommendedBackend"]));
                 let runtime_engine_hints = execution_descriptor
                     .as_ref()
                     .map(|descriptor| {
@@ -294,15 +291,15 @@ mod options_provider {
                     .get("custom_code_sources")
                     .cloned()
                     .unwrap_or(serde_json::Value::Array(Vec::new()));
-                let review_reasons = m
-                    .metadata
-                    .get("review_reasons")
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        metadata_string(m, &["review_reason", "reviewReason"])
-                            .map(|reason| serde_json::json!([reason]))
-                            .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
-                    });
+                let review_reasons =
+                    m.metadata
+                        .get("review_reasons")
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            metadata_string(m, &["review_reason", "reviewReason"])
+                                .map(|reason| serde_json::json!([reason]))
+                                .unwrap_or_else(|| serde_json::Value::Array(Vec::new()))
+                        });
                 let execution_path = execution_descriptor
                     .as_ref()
                     .map(|descriptor| descriptor.entry_path.clone())
@@ -467,7 +464,10 @@ mod model_library_tests {
         .unwrap();
     }
 
-    fn write_imported_diffusion_metadata(model_dir: &std::path::Path, entry_path: &std::path::Path) {
+    fn write_imported_diffusion_metadata(
+        model_dir: &std::path::Path,
+        entry_path: &std::path::Path,
+    ) {
         std::fs::create_dir_all(model_dir).unwrap();
         std::fs::write(
             model_dir.join("metadata.json"),

@@ -69,11 +69,7 @@ impl TaskDescriptor for DiffusionInferenceTask {
                 PortMetadata::optional(PORT_SEED, "Seed", PortDataType::Number),
                 PortMetadata::optional(PORT_WIDTH, "Width", PortDataType::Number),
                 PortMetadata::optional(PORT_HEIGHT, "Height", PortDataType::Number),
-                PortMetadata::optional(
-                    PORT_ENVIRONMENT_REF,
-                    "Environment Ref",
-                    PortDataType::Json,
-                ),
+                PortMetadata::optional(PORT_ENVIRONMENT_REF, "Environment Ref", PortDataType::Json),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_IMAGE, "Image", PortDataType::Image),

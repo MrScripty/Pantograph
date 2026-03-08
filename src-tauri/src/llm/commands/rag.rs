@@ -1,7 +1,7 @@
 //! RAG (Retrieval Augmented Generation) commands.
 
-use super::shared::{get_project_data_dir, SharedAppConfig};
 use super::resolve_embedding_model_path;
+use super::shared::{get_project_data_dir, SharedAppConfig};
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;

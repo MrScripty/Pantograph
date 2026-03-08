@@ -1240,8 +1240,8 @@ fn build_model_dependency_request(
     model_path: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
-    let backend_key = preferred_backend_key(node_type, inputs)
-        .or_else(|| infer_backend_key(node_type));
+    let backend_key =
+        preferred_backend_key(node_type, inputs).or_else(|| infer_backend_key(node_type));
 
     let task_type_primary =
         read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
@@ -3915,7 +3915,10 @@ mod tests {
     fn test_build_model_dependency_request_prefers_recommended_backend_for_diffusion() {
         let mut inputs = HashMap::new();
         inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-        inputs.insert("recommended_backend".to_string(), serde_json::json!("diffusers"));
+        inputs.insert(
+            "recommended_backend".to_string(),
+            serde_json::json!("diffusers"),
+        );
 
         let request = build_model_dependency_request("diffusion-inference", "/tmp/model", &inputs);
         assert_eq!(request.backend_key.as_deref(), Some("diffusers"));

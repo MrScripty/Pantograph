@@ -295,7 +295,10 @@ impl InferenceGateway {
         if !guard.is_ready() {
             return Err(GatewayError::Backend(BackendError::NotReady));
         }
-        guard.generate_image(request).await.map_err(GatewayError::Backend)
+        guard
+            .generate_image(request)
+            .await
+            .map_err(GatewayError::Backend)
     }
 
     // ─── LEGACY COMPATIBILITY ───────────────────────────────────────

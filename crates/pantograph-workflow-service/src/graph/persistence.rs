@@ -33,8 +33,9 @@ impl FileSystemWorkflowGraphStore {
 
     fn workflows_dir(&self) -> Result<PathBuf, WorkflowServiceError> {
         let workflows_dir = self.project_root.join(".pantograph").join("workflows");
-        fs::create_dir_all(&workflows_dir)
-            .map_err(|e| WorkflowServiceError::Internal(format!("Failed to create workflows directory: {}", e)))?;
+        fs::create_dir_all(&workflows_dir).map_err(|e| {
+            WorkflowServiceError::Internal(format!("Failed to create workflows directory: {}", e))
+        })?;
         Ok(workflows_dir)
     }
 

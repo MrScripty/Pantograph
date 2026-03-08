@@ -382,7 +382,12 @@ pub fn insert_node_and_connect(
     }
 
     let target_port = preferred_input_port_id
-        .and_then(|preferred| compatible_inputs.iter().find(|port| port.id == preferred).copied())
+        .and_then(|preferred| {
+            compatible_inputs
+                .iter()
+                .find(|port| port.id == preferred)
+                .copied()
+        })
         .or_else(|| compatible_inputs.first().copied())
         .expect("compatible inputs must be non-empty");
 

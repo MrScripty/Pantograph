@@ -261,7 +261,10 @@ mod tests {
 
         assert_eq!(decoded.model, "Qwen/Qwen-Image");
         assert_eq!(decoded.seed, Some(42));
-        assert_eq!(decoded.extra_options["true_cfg_scale"], serde_json::json!(4.0));
+        assert_eq!(
+            decoded.extra_options["true_cfg_scale"],
+            serde_json::json!(4.0)
+        );
     }
 
     #[test]
@@ -285,6 +288,9 @@ mod tests {
         assert_eq!(decoded.seed_used, Some(42));
         assert_eq!(decoded.images.len(), 1);
         assert_eq!(decoded.images[0].mime_type, "image/png");
-        assert_eq!(decoded.metadata["scheduler"], serde_json::json!("flow_match_euler"));
+        assert_eq!(
+            decoded.metadata["scheduler"],
+            serde_json::json!("flow_match_euler")
+        );
     }
 }

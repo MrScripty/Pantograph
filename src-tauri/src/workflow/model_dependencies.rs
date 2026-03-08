@@ -269,9 +269,7 @@ impl TauriModelDependencyResolver {
             .filter(|v| !v.is_empty())?;
         match normalized.as_str() {
             "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
-            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => {
-                Some("onnx-runtime".to_string())
-            }
+            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
             "torch" | "pytorch" => Some("pytorch".to_string()),
             "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
             other => Some(other.to_string()),
@@ -333,7 +331,10 @@ impl TauriModelDependencyResolver {
         record.metadata.as_object()
     }
 
-    fn record_metadata_string(record: &pumas_library::ModelRecord, keys: &[&str]) -> Option<String> {
+    fn record_metadata_string(
+        record: &pumas_library::ModelRecord,
+        keys: &[&str],
+    ) -> Option<String> {
         let metadata = Self::record_metadata_object(record)?;
         Self::metadata_string(metadata, keys)
     }
@@ -1983,9 +1984,9 @@ mod tests {
     use super::*;
     use node_engine::extension_keys;
     use pumas_library::PumasApi;
-    use tempfile::TempDir;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tempfile::TempDir;
     use tokio::sync::RwLock;
 
     fn test_resolver() -> TauriModelDependencyResolver {
@@ -2026,7 +2027,10 @@ mod tests {
         .unwrap();
     }
 
-    fn write_imported_diffusion_metadata(model_dir: &std::path::Path, entry_path: &std::path::Path) {
+    fn write_imported_diffusion_metadata(
+        model_dir: &std::path::Path,
+        entry_path: &std::path::Path,
+    ) {
         std::fs::create_dir_all(model_dir).unwrap();
         std::fs::write(
             model_dir.join("metadata.json"),
@@ -2131,8 +2135,11 @@ mod tests {
 
     #[test]
     fn infer_engine_defaults_diffusion_node_to_pytorch() {
-        let engine =
-            TauriModelDependencyResolver::infer_engine(None, "diffusion-inference", Some("diffusion"));
+        let engine = TauriModelDependencyResolver::infer_engine(
+            None,
+            "diffusion-inference",
+            Some("diffusion"),
+        );
         assert_eq!(engine, "pytorch");
     }
 

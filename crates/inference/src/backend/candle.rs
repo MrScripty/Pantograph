@@ -40,7 +40,7 @@ impl CandleBackend {
     /// Get static capabilities (for registry info before instantiation)
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {
-            vision: false,           // Candle doesn't support vision models yet
+            vision: false, // Candle doesn't support vision models yet
             image_generation: false,
             embeddings: true,        // Primary use case
             gpu: true,               // CUDA support

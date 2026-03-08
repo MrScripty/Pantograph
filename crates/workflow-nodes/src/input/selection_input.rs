@@ -70,7 +70,10 @@ impl Task for SelectionInputTask {
         let output_key = ContextKeys::output(&self.task_id, Self::PORT_VALUE);
         context.set(&output_key, value.clone()).await;
 
-        Ok(TaskResult::new(Some(value.to_string()), NextAction::Continue))
+        Ok(TaskResult::new(
+            Some(value.to_string()),
+            NextAction::Continue,
+        ))
     }
 }
 

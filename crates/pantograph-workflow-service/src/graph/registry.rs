@@ -91,7 +91,10 @@ fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
     }
 }
 
-pub fn validate_workflow_connection(source_type: &PortDataType, target_type: &PortDataType) -> bool {
+pub fn validate_workflow_connection(
+    source_type: &PortDataType,
+    target_type: &PortDataType,
+) -> bool {
     source_type.is_compatible_with(target_type)
 }
 
@@ -122,7 +125,10 @@ impl NodeRegistry {
         let mut grouped = HashMap::new();
         for def in self.definitions.values() {
             let category = format!("{:?}", def.category).to_lowercase();
-            grouped.entry(category).or_insert_with(Vec::new).push(def.clone());
+            grouped
+                .entry(category)
+                .or_insert_with(Vec::new)
+                .push(def.clone());
         }
         grouped
     }

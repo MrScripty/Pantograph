@@ -499,8 +499,8 @@ impl PythonRuntimeAdapter for ProcessPythonRuntimeAdapter {
         let stderr = stderr_lines.join("\n");
 
         if !status.success() {
-            if let Some(response) = parsed_response
-                .or_else(|| Self::parse_bridge_response(&stdout).ok())
+            if let Some(response) =
+                parsed_response.or_else(|| Self::parse_bridge_response(&stdout).ok())
             {
                 let mut details = response
                     .error

@@ -54,7 +54,11 @@ fn find_gguf_files_in_dir(dir: &Path, limit: usize) -> Result<Vec<PathBuf>, Stri
     Ok(matches)
 }
 
-fn find_model_files_by_name(models_root: &Path, file_name: &std::ffi::OsStr, limit: usize) -> Vec<PathBuf> {
+fn find_model_files_by_name(
+    models_root: &Path,
+    file_name: &std::ffi::OsStr,
+    limit: usize,
+) -> Vec<PathBuf> {
     let mut matches = Vec::new();
     let mut stack = vec![models_root.to_path_buf()];
 

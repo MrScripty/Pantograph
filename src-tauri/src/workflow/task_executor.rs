@@ -12,9 +12,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
-    core_executor::resolve_node_type, extension_keys, Context, DependencyState, ExecutorExtensions,
-    EventSink, ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
-    ModelDependencyStatus, NodeEngineError, Result, TaskExecutor, WorkflowEvent,
+    core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
+    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
+    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
+    WorkflowEvent,
 };
 use tokio::sync::RwLock;
 
@@ -61,9 +62,7 @@ impl TauriTaskExecutor {
             .filter(|v| !v.is_empty())?;
         match normalized.as_str() {
             "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
-            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => {
-                Some("onnx-runtime".to_string())
-            }
+            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
             "torch" | "pytorch" => Some("pytorch".to_string()),
             "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
             other => Some(other.to_string()),
@@ -222,7 +221,8 @@ impl TauriTaskExecutor {
             let Some(raw_value) = candidate_value else {
                 continue;
             };
-            let resolved_value = Self::resolve_inference_setting_runtime_value(parameter, raw_value);
+            let resolved_value =
+                Self::resolve_inference_setting_runtime_value(parameter, raw_value);
             if resolved_value.is_null() {
                 continue;
             }
@@ -460,7 +460,9 @@ impl TauriTaskExecutor {
                 .as_deref(),
         )
         .or_else(|| {
-            Self::canonical_backend_key(requirements.as_ref().and_then(|r| r.backend_key.as_deref()))
+            Self::canonical_backend_key(
+                requirements.as_ref().and_then(|r| r.backend_key.as_deref()),
+            )
         })
     }
 
@@ -470,9 +472,8 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
         let requirements = Self::parse_requirements_fallback(inputs);
-        let backend_key =
-            Self::preferred_backend_key(node_type, inputs, requirements.as_ref())
-                .or_else(|| Self::infer_backend_key(node_type));
+        let backend_key = Self::preferred_backend_key(node_type, inputs, requirements.as_ref())
+            .or_else(|| Self::infer_backend_key(node_type));
 
         let task_type_primary = Self::infer_task_type_primary(node_type, inputs);
         let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
@@ -660,10 +661,8 @@ impl TauriTaskExecutor {
             backend_key,
             requirements_fingerprint
         );
-        let environment_key = Self::sanitize_key_component(&format!(
-            "v1:{}",
-            Self::stable_hash_hex(&key_material)
-        ));
+        let environment_key =
+            Self::sanitize_key_component(&format!("v1:{}", Self::stable_hash_hex(&key_material)));
 
         let manifest_dir = Self::dependency_env_store_root()
             .join(environment_kind.replace(':', "_"))
@@ -1012,8 +1011,8 @@ impl TauriTaskExecutor {
         };
 
         let streamed_any = Arc::new(AtomicBool::new(false));
-        let stream_handler: Option<PythonStreamHandler> =
-            Self::resolve_stream_target(extensions).map(|(sink, execution_id)| {
+        let stream_handler: Option<PythonStreamHandler> = Self::resolve_stream_target(extensions)
+            .map(|(sink, execution_id)| {
                 let streamed_any = streamed_any.clone();
                 let task_id = task_id.to_string();
                 Arc::new(move |chunk: serde_json::Value| {
@@ -1032,8 +1031,7 @@ impl TauriTaskExecutor {
             .execute_node_with_stream(request, stream_handler)
             .await
             .map_err(NodeEngineError::ExecutionFailed)?;
-        if !streamed_any.load(Ordering::Relaxed)
-            && Self::supports_buffered_stream_replay(node_type)
+        if !streamed_any.load(Ordering::Relaxed) && Self::supports_buffered_stream_replay(node_type)
         {
             Self::emit_python_stream_events(task_id, &outputs, extensions);
         }
@@ -1107,10 +1105,7 @@ impl TaskExecutor for TauriTaskExecutor {
                 self.execute_dependency_environment(&inputs, extensions)
                     .await
             }
-            "pytorch-inference"
-            | "diffusion-inference"
-            | "audio-generation"
-            | "onnx-inference" => {
+            "pytorch-inference" | "diffusion-inference" | "audio-generation" | "onnx-inference" => {
                 self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await
             }
@@ -1391,15 +1386,29 @@ mod tests {
         let (executor, extensions) = test_executor(adapter, resolver);
 
         let mut inputs = HashMap::new();
-        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/qwen-image"));
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/qwen-image"),
+        );
         inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
-        inputs.insert("prompt".to_string(), serde_json::json!("paper lantern in the rain"));
+        inputs.insert(
+            "prompt".to_string(),
+            serde_json::json!("paper lantern in the rain"),
+        );
 
         let outputs = executor
-            .execute_task("diffusion-inference-1", inputs, &Context::new(), &extensions)
+            .execute_task(
+                "diffusion-inference-1",
+                inputs,
+                &Context::new(),
+                &extensions,
+            )
             .await
             .expect("diffusion preflight should allow adapter execution");
-        assert_eq!(outputs.get("image"), Some(&serde_json::json!("base64-image")));
+        assert_eq!(
+            outputs.get("image"),
+            Some(&serde_json::json!("base64-image"))
+        );
         assert_eq!(outputs.get("seed_used"), Some(&serde_json::json!(1234)));
 
         let recorded = requests.lock().expect("recording lock");
@@ -1462,14 +1471,20 @@ mod tests {
         let (executor, extensions) = test_executor(adapter, resolver);
 
         let mut inputs = HashMap::new();
-        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model.onnx"));
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model.onnx"),
+        );
         inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
         let outputs = executor
             .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
             .await
             .expect("onnx preflight should allow adapter execution");
-        assert_eq!(outputs.get("audio"), Some(&serde_json::json!("base64-audio")));
+        assert_eq!(
+            outputs.get("audio"),
+            Some(&serde_json::json!("base64-audio"))
+        );
 
         let recorded = requests.lock().expect("recording lock");
         assert_eq!(recorded.len(), 1);
@@ -1500,7 +1515,10 @@ mod tests {
         let (executor, extensions) = test_executor(adapter, resolver);
 
         let mut inputs = HashMap::new();
-        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model.onnx"));
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model.onnx"),
+        );
         inputs.insert("prompt".to_string(), serde_json::json!("hello"));
         inputs.insert(
             "inference_settings".to_string(),
@@ -1513,17 +1531,31 @@ mod tests {
         );
 
         let _ = executor
-            .execute_task("onnx-inference-defaults", inputs, &Context::new(), &extensions)
+            .execute_task(
+                "onnx-inference-defaults",
+                inputs,
+                &Context::new(),
+                &extensions,
+            )
             .await
             .expect("onnx execution with inference defaults should succeed");
 
         let recorded = requests.lock().expect("recording lock");
         assert_eq!(recorded.len(), 1);
         let request = &recorded[0];
-        assert_eq!(request.inputs.get("voice"), Some(&serde_json::json!("expr-voice-5-m")));
+        assert_eq!(
+            request.inputs.get("voice"),
+            Some(&serde_json::json!("expr-voice-5-m"))
+        );
         assert_eq!(request.inputs.get("speed"), Some(&serde_json::json!(0.9)));
-        assert_eq!(request.inputs.get("clean_text"), Some(&serde_json::json!(true)));
-        assert_eq!(request.inputs.get("sample_rate"), Some(&serde_json::json!(24000)));
+        assert_eq!(
+            request.inputs.get("clean_text"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            request.inputs.get("sample_rate"),
+            Some(&serde_json::json!(24000))
+        );
     }
 
     #[tokio::test]
@@ -1577,11 +1609,19 @@ mod tests {
         );
 
         let mut inputs = HashMap::new();
-        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model.onnx"));
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model.onnx"),
+        );
         inputs.insert("prompt".to_string(), serde_json::json!("stream this"));
 
         let _ = executor
-            .execute_task("onnx-inference-stream", inputs, &Context::new(), &extensions)
+            .execute_task(
+                "onnx-inference-stream",
+                inputs,
+                &Context::new(),
+                &extensions,
+            )
             .await
             .expect("onnx stream execution should succeed");
 
@@ -1654,15 +1694,26 @@ mod tests {
         );
 
         let mut inputs = HashMap::new();
-        inputs.insert("model_path".to_string(), serde_json::json!("/tmp/stable-audio"));
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/stable-audio"),
+        );
         inputs.insert("prompt".to_string(), serde_json::json!("pad ambience"));
 
         let outputs = executor
-            .execute_task("audio-generation-batch", inputs, &Context::new(), &extensions)
+            .execute_task(
+                "audio-generation-batch",
+                inputs,
+                &Context::new(),
+                &extensions,
+            )
             .await
             .expect("audio-generation execution should succeed");
 
-        assert_eq!(outputs.get("audio"), Some(&serde_json::json!("final-audio")));
+        assert_eq!(
+            outputs.get("audio"),
+            Some(&serde_json::json!("final-audio"))
+        );
         let stream_events: Vec<_> = sink
             .events()
             .into_iter()
@@ -1686,7 +1737,10 @@ mod tests {
 
         TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
 
-        assert_eq!(inputs.get("voice"), Some(&serde_json::json!("custom-voice")));
+        assert_eq!(
+            inputs.get("voice"),
+            Some(&serde_json::json!("custom-voice"))
+        );
         assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.0)));
     }
 
@@ -1707,7 +1761,10 @@ mod tests {
 
         TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
 
-        assert_eq!(inputs.get("voice"), Some(&serde_json::json!("expr-voice-5-m")));
+        assert_eq!(
+            inputs.get("voice"),
+            Some(&serde_json::json!("expr-voice-5-m"))
+        );
         assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.2)));
     }
 
@@ -1733,7 +1790,10 @@ mod tests {
 
         TauriTaskExecutor::apply_inference_setting_defaults(&mut inputs);
 
-        assert_eq!(inputs.get("voice"), Some(&serde_json::json!("expr-voice-5-m")));
+        assert_eq!(
+            inputs.get("voice"),
+            Some(&serde_json::json!("expr-voice-5-m"))
+        );
         assert_eq!(inputs.get("speed"), Some(&serde_json::json!(1.2)));
     }
 
@@ -1821,7 +1881,10 @@ mod tests {
     fn build_model_dependency_request_prefers_recommended_backend_for_diffusion() {
         let mut inputs = HashMap::new();
         inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
-        inputs.insert("recommended_backend".to_string(), serde_json::json!("diffusers"));
+        inputs.insert(
+            "recommended_backend".to_string(),
+            serde_json::json!("diffusers"),
+        );
 
         let request = TauriTaskExecutor::build_model_dependency_request(
             "diffusion-inference",
@@ -1909,10 +1972,7 @@ mod tests {
 
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
             requirements: make_requirements(DependencyValidationState::Resolved),
-            status: make_status(
-                DependencyState::Unresolved,
-                Some("no_dependency_bindings"),
-            ),
+            status: make_status(DependencyState::Unresolved, Some("no_dependency_bindings")),
             model_ref: Some(resolved_model_ref),
         });
         let (executor, extensions) = test_executor(adapter, resolver);
@@ -1923,13 +1983,24 @@ mod tests {
             serde_json::json!("/tmp/external/tiny-sd-turbo"),
         );
         inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
-        inputs.insert("prompt".to_string(), serde_json::json!("paper lantern in the rain"));
+        inputs.insert(
+            "prompt".to_string(),
+            serde_json::json!("paper lantern in the rain"),
+        );
 
         let outputs = executor
-            .execute_task("diffusion-inference-2", inputs, &Context::new(), &extensions)
+            .execute_task(
+                "diffusion-inference-2",
+                inputs,
+                &Context::new(),
+                &extensions,
+            )
             .await
             .expect("python nodes should execute without dependency bindings");
-        assert_eq!(outputs.get("image"), Some(&serde_json::json!("base64-image")));
+        assert_eq!(
+            outputs.get("image"),
+            Some(&serde_json::json!("base64-image"))
+        );
 
         let recorded = requests.lock().expect("recording lock");
         assert_eq!(recorded.len(), 1);
@@ -1979,13 +2050,24 @@ mod tests {
             serde_json::json!("/tmp/external/tiny-sd-turbo"),
         );
         inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
-        inputs.insert("prompt".to_string(), serde_json::json!("paper lantern in the rain"));
+        inputs.insert(
+            "prompt".to_string(),
+            serde_json::json!("paper lantern in the rain"),
+        );
 
         let outputs = executor
-            .execute_task("diffusion-inference-3", inputs, &Context::new(), &extensions)
+            .execute_task(
+                "diffusion-inference-3",
+                inputs,
+                &Context::new(),
+                &extensions,
+            )
             .await
             .expect("python nodes should execute when only runtime packages are missing");
-        assert_eq!(outputs.get("image"), Some(&serde_json::json!("base64-image")));
+        assert_eq!(
+            outputs.get("image"),
+            Some(&serde_json::json!("base64-image"))
+        );
 
         let recorded = requests.lock().expect("recording lock");
         assert_eq!(recorded.len(), 1);

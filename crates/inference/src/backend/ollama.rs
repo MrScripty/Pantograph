@@ -43,7 +43,7 @@ impl OllamaBackend {
     /// Get static capabilities (for registry info before instantiation)
     pub fn static_capabilities() -> BackendCapabilities {
         BackendCapabilities {
-            vision: true,            // Ollama supports multimodal models
+            vision: true, // Ollama supports multimodal models
             image_generation: false,
             embeddings: true,        // Via embedding API
             gpu: true,               // Ollama handles GPU automatically

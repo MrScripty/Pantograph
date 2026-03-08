@@ -222,7 +222,10 @@ pub fn extract_required_extensions(nodes: &[StoredGraphNode], has_models: bool) 
     if has_models {
         out.push("pumas_api".to_string());
     }
-    if nodes.iter().any(|n| n.node_type == "dependency-environment") {
+    if nodes
+        .iter()
+        .any(|n| n.node_type == "dependency-environment")
+    {
         out.push("model_dependency_resolver".to_string());
     }
     out.sort();
@@ -235,7 +238,13 @@ pub fn estimate_memory_requirements(
     model_metadata: &HashMap<String, serde_json::Value>,
 ) -> (Option<u64>, Option<u64>, Option<u64>, Option<u64>, String) {
     if required_models.is_empty() {
-        return (Some(0), Some(0), Some(0), Some(0), "exact_no_models".to_string());
+        return (
+            Some(0),
+            Some(0),
+            Some(0),
+            Some(0),
+            "exact_no_models".to_string(),
+        );
     }
 
     const MB: u64 = 1024 * 1024;
@@ -482,6 +491,9 @@ mod tests {
             ("blake3".to_string(), "bbb".to_string()),
             ("sha256".to_string(), "aaa".to_string()),
         ]);
-        assert_eq!(select_preferred_hash(&hashes).as_deref(), Some("sha256:aaa"));
+        assert_eq!(
+            select_preferred_hash(&hashes).as_deref(),
+            Some("sha256:aaa")
+        );
     }
 }

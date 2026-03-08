@@ -9,10 +9,7 @@ struct ExampleHost;
 
 #[async_trait]
 impl WorkflowHost for ExampleHost {
-    async fn validate_workflow(
-        &self,
-        workflow_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
         if workflow_id.trim().is_empty() {
             return Err(WorkflowServiceError::WorkflowNotFound(
                 "workflow_id is empty".to_string(),
