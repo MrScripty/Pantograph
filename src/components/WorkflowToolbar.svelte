@@ -148,6 +148,16 @@
 
         // Propagate outputs to connected downstream nodes
         if (completedData.outputs) {
+          const completedNodeRuntimeData = {
+            ...completedData.outputs,
+            ...(buildAudioRuntimeDataFromCompletedOutputs(
+              'audio',
+              'audio',
+              completedData.outputs
+            ) ?? {}),
+          };
+          updateNodeRuntimeData(completedData.node_id, completedNodeRuntimeData);
+
           const currentEdges = get(edges);
           const outgoingEdges = currentEdges.filter(e => e.source === completedData.node_id);
 
