@@ -28,6 +28,12 @@ Adopt a three-layer boundary for headless workflow features:
 - Transport-only mapping and dependency injection.
 - No duplicated business logic.
 
+Graph editing is part of the core application-service boundary, not a Tauri-only
+desktop concern. The core service crate owns graph document CRUD, edit-session
+lifecycle, canonical mutation validation, revision-aware connection intent, and
+undo/redo semantics. Host adapters may expose those operations over transport,
+but they must not implement or fork graph-edit business logic.
+
 ## Consequences
 
 ### Positive
@@ -44,8 +50,10 @@ Adopt a three-layer boundary for headless workflow features:
 
 ## Implementation Notes
 - Freeze `workflow_run` and `workflow_get_capabilities` contracts before implementation.
+- Freeze graph-edit contracts before moving editing code out of Tauri.
 - Extend capabilities with model inventory (`models[]`) derived from graph usage.
 - Keep workflow sessions scheduler-managed in service layer (`create/run/close`).
+- Keep graph edit sessions distinct from scheduler-managed run sessions.
 - Migrate Tauri workflow commands to thin delegation wrappers.
 - Isolate frontend HTTP host behavior in a dedicated adapter crate and keep it
   out of default binding surfaces.

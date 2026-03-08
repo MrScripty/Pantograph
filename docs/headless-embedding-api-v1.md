@@ -61,6 +61,56 @@ Change priority of a pending queue item for a session.
 ### 12) `workflow_set_session_keep_alive`
 Update whether a session runtime should stay warm between runs.
 
+### 13) `workflow_graph_save`
+Persist a workflow graph document through the host-configured graph store.
+
+### 14) `workflow_graph_load`
+Load a persisted workflow graph document.
+
+### 15) `workflow_graph_list`
+List persisted workflow graph metadata.
+
+### 16) `workflow_graph_create_edit_session`
+Create an editable graph session from a supplied workflow graph snapshot.
+
+### 17) `workflow_graph_close_edit_session`
+Close an editable graph session and release its undo/redo state.
+
+### 18) `workflow_graph_get_edit_session_graph`
+Get the latest graph snapshot and revision for an editable graph session.
+
+### 19) `workflow_graph_get_undo_redo_state`
+Get undo/redo availability for an editable graph session.
+
+### 20) `workflow_graph_update_node_data`
+Submit a node-data mutation and receive the updated graph snapshot.
+
+### 21) `workflow_graph_add_node`
+Submit a node insertion and receive the updated graph snapshot.
+
+### 22) `workflow_graph_add_edge`
+Submit an edge insertion and receive the updated graph snapshot.
+
+### 23) `workflow_graph_remove_edge`
+Submit an edge removal and receive the updated graph snapshot.
+
+### 24) `workflow_graph_undo`
+Undo the last accepted graph mutation and receive the restored graph snapshot.
+
+### 25) `workflow_graph_redo`
+Redo the last undone graph mutation and receive the restored graph snapshot.
+
+### 26) `workflow_graph_get_connection_candidates`
+Discover backend-owned connection candidates for one source anchor.
+
+### 27) `workflow_graph_connect`
+Attempt a revision-aware connection commit and receive either the updated graph
+or a structured rejection.
+
+### 28) `workflow_graph_insert_node_and_connect`
+Atomically insert a compatible node type and connect it, or return a structured
+rejection.
+
 ## Request Contract: `WorkflowRunRequest`
 
 ### Required
@@ -216,6 +266,91 @@ Update whether a session runtime should stay warm between runs.
 ### `WorkflowSessionKeepAliveResponse`
 - `session`: `WorkflowSessionSummary`
 
+## Graph Document Contracts
+
+### `WorkflowGraphSaveRequest`
+- `name`: string
+- `graph`: `WorkflowGraph`
+
+### `WorkflowGraphSaveResponse`
+- `path`: string
+
+### `WorkflowGraphLoadRequest`
+- `path`: string
+
+### `WorkflowGraphListResponse`
+- `workflows`: array of `WorkflowMetadata`
+
+## Graph Edit Session Contracts
+
+Graph edit sessions are distinct from scheduler-managed workflow run sessions.
+They own editable graph state, revision tracking, and undo/redo history only.
+
+### `WorkflowGraphEditSessionCreateRequest`
+- `graph`: `WorkflowGraph`
+
+### `WorkflowGraphEditSessionCreateResponse`
+- `session_id`: string
+- `graph_revision`: string
+
+### `WorkflowGraphEditSessionCloseRequest`
+- `session_id`: string
+
+### `WorkflowGraphEditSessionCloseResponse`
+- `ok`: boolean
+
+### `WorkflowGraphEditSessionGraphRequest`
+- `session_id`: string
+
+### `WorkflowGraphEditSessionGraphResponse`
+- `session_id`: string
+- `graph_revision`: string
+- `graph`: `WorkflowGraph`
+
+### `WorkflowGraphUndoRedoStateRequest`
+- `session_id`: string
+
+### `WorkflowGraphUndoRedoStateResponse`
+- `can_undo`: boolean
+- `can_redo`: boolean
+- `undo_count`: integer
+
+### `WorkflowGraphUpdateNodeDataRequest`
+- `session_id`: string
+- `node_id`: string
+- `data`: JSON value
+
+### `WorkflowGraphAddNodeRequest`
+- `session_id`: string
+- `node`: `GraphNode`
+
+### `WorkflowGraphAddEdgeRequest`
+- `session_id`: string
+- `edge`: `GraphEdge`
+
+### `WorkflowGraphRemoveEdgeRequest`
+- `session_id`: string
+- `edge_id`: string
+
+### `WorkflowGraphConnectionCandidatesRequest`
+- `session_id`: string
+- `source_anchor`: `ConnectionAnchor`
+- `graph_revision`: string (optional)
+
+### `WorkflowGraphConnectRequest`
+- `session_id`: string
+- `source_anchor`: `ConnectionAnchor`
+- `target_anchor`: `ConnectionAnchor`
+- `graph_revision`: string
+
+### `WorkflowGraphInsertNodeAndConnectRequest`
+- `session_id`: string
+- `source_anchor`: `ConnectionAnchor`
+- `node_type`: string
+- `graph_revision`: string
+- `position_hint`: `InsertNodePositionHint`
+- `preferred_input_port_id`: string (optional)
+
 ## Preflight Contract
 
 ### `WorkflowPreflightRequest`
@@ -252,9 +387,20 @@ Update whether a session runtime should stay warm between runs.
 - Runtime warm/unload is scheduler-owned; `keep_alive` is intent, not an
   override of scheduler safety decisions.
 - Generic workflows are not constrained to embedding-specific output types.
+- Backend-owned graph state must not be mutated optimistically in the GUI.
+  Clients submit graph actions and render the returned graph snapshot.
+- Graph edit sessions serialize mutations per session; one session's edits must
+  not block unrelated sessions.
+- Graph revisions are volatile concurrency tokens, not persisted identifiers.
+- Connection candidate lookup must not mutate edit-session state.
+- Insert-and-connect must be atomic from the client's perspective.
 
 Recommended client flow:
 - `workflow_get_io` -> `workflow_preflight` -> `workflow_run`
+
+Recommended graph-edit client flow:
+- `workflow_graph_create_edit_session` -> graph mutation commands ->
+  `workflow_graph_get_edit_session_graph` as needed -> `workflow_graph_save`
 
 ## Error Model
 - Canonical transport payload is `WorkflowErrorEnvelope` JSON:

@@ -28,6 +28,22 @@ Primary operations:
 - `workflow_cancel_session_queue_item`
 - `workflow_reprioritize_session_queue_item`
 - `workflow_set_session_keep_alive`
+- `workflow_graph_save`
+- `workflow_graph_load`
+- `workflow_graph_list`
+- `workflow_graph_create_edit_session`
+- `workflow_graph_close_edit_session`
+- `workflow_graph_get_edit_session_graph`
+- `workflow_graph_get_undo_redo_state`
+- `workflow_graph_update_node_data`
+- `workflow_graph_add_node`
+- `workflow_graph_add_edge`
+- `workflow_graph_remove_edge`
+- `workflow_graph_undo`
+- `workflow_graph_redo`
+- `workflow_graph_get_connection_candidates`
+- `workflow_graph_connect`
+- `workflow_graph_insert_node_and_connect`
 
 `workflow_get_io` strict discovery rule:
 - only nodes marked `definition.category` in `{input, output}` with
@@ -57,6 +73,8 @@ Primary contract types:
 - Runtime requirement extraction/estimation is backend-owned in this crate.
 - Adapters should provide host dependencies (workflow roots, backend identity,
   optional model metadata), not duplicate capability business logic.
+- Graph edit sessions, graph persistence contracts, revision-aware connection
+  intent, and undo/redo semantics are backend-owned in this crate.
 - `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
   optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
   `roles`.
