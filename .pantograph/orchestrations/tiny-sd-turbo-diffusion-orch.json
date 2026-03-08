@@ -1,0 +1,48 @@
+{
+  "id": "tiny-sd-turbo-diffusion-orch",
+  "name": "Tiny SD Turbo Diffusion",
+  "description": "Orchestration wrapper for the tiny-sd-turbo image diffusion test workflow.",
+  "nodes": [
+    {
+      "id": "start",
+      "nodeType": "start",
+      "position": [100, 200],
+      "config": {}
+    },
+    {
+      "id": "tiny-sd-turbo-diffusion-graph",
+      "nodeType": "data_graph",
+      "position": [400, 200],
+      "config": {
+        "dataGraphId": "tiny-sd-turbo-diffusion",
+        "inputMappings": {},
+        "outputMappings": {}
+      }
+    },
+    {
+      "id": "end",
+      "nodeType": "end",
+      "position": [700, 200],
+      "config": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "start",
+      "sourceHandle": "next",
+      "target": "tiny-sd-turbo-diffusion-graph",
+      "targetHandle": "input"
+    },
+    {
+      "id": "e2",
+      "source": "tiny-sd-turbo-diffusion-graph",
+      "sourceHandle": "next",
+      "target": "end",
+      "targetHandle": "input"
+    }
+  ],
+  "dataGraphs": {
+    "tiny-sd-turbo-diffusion-graph": "tiny-sd-turbo-diffusion"
+  }
+}

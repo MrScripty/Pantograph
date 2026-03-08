@@ -9,7 +9,7 @@ versioned with the app and reviewable as structured artifacts.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `svelte-code-agent.json` | Multi-graph agent workflow template used to scaffold Svelte code-generation flows. |
-| `tiny-sd-turbo-text-to-image.json` | Minimal local text-to-image starter that wires `puma-lib`, dependency preflight, diffusion inference, and image output. |
+| `tiny-sd-turbo-text-to-image.json` | Minimal local text-to-image starter that wires `puma-lib`, direct diffusion inference, and image output for imported bundles such as tiny-sd-turbo. |
 
 ## Problem
 Starter workflows must demonstrate real graph shapes that match current node
@@ -26,26 +26,31 @@ text-to-image generation to be wired.
 ## Decision
 Store built-in workflow templates here as JSON and import them statically into
 the frontend template service. The tiny-sd-turbo template deliberately uses the
-same `puma-lib -> dependency-environment -> diffusion-inference` path that the
-runtime executes, rather than a template-only shortcut.
+same direct `puma-lib -> diffusion-inference` path that Pantograph can execute
+today for imported bundles without Pumas dependency bindings, rather than
+shipping a starter graph that stalls on an unresolved dependency-environment
+step.
 
 ## Alternatives Rejected
 - Generate workflow templates dynamically in code.
   Rejected because structured JSON is easier to review, diff, and validate.
-- Ship a text-to-image template that bypasses dependency preflight.
-  Rejected because it would teach a workflow shape that diverges from the
-  backend dependency model.
+- Ship a text-to-image template that inserts dependency-environment even when
+  imported bundles have no dependency bindings yet.
+  Rejected because it teaches a starter graph that cannot execute for the
+  currently supported imported tiny-sd-turbo path.
 
 ## Invariants
 - Template JSON must deserialize into the frontend `WorkflowTemplate` shape.
-- Built-in text-to-image templates must use declared node ports, not hidden
-  runtime-only fields.
+- Built-in text-to-image templates must use declared node ports and may omit
+  optional `environment_ref` handoff when the recommended starter path relies on
+  Pantograph's local Python fallback.
 - Example workflows should remain small enough to serve as operator references.
 
 ## Revisit Triggers
 - Built-in templates need schema validation tooling beyond JSON parse checks.
-- The diffusion runtime contract changes enough that the tiny-sd-turbo starter
-  no longer represents the recommended graph shape.
+- Pumas dependency bindings become available for imported diffusion bundles and
+  the recommended starter path should reintroduce explicit dependency
+  environment staging.
 
 ## Dependencies
 **Internal:** `src/services/workflow/templateService.ts`, workflow DTOs, and

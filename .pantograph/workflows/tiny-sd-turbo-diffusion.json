@@ -1,0 +1,292 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "Tiny SD Turbo Diffusion",
+    "description": "Ready-to-run local text-to-image workflow for the imported tiny-sd-turbo Pumas bundle.",
+    "created": "2026-03-08T00:00:00Z",
+    "modified": "2026-03-08T00:00:00Z",
+    "orchestrationId": "tiny-sd-turbo-diffusion-orch"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "puma-lib-tiny-sd-turbo",
+        "node_type": "puma-lib",
+        "position": {
+          "x": -980.0,
+          "y": 120.0
+        },
+        "data": {
+          "label": "Puma-Lib",
+          "selectionMode": "library",
+          "modelName": "tiny-sd-turbo",
+          "modelPath": "/media/jeremy/OrangeCream/Linux Software/Pumas-Library/shared-resources/models/diffusion/cc-nms/tiny-sd-turbo",
+          "model_id": "diffusion/cc-nms/tiny-sd-turbo",
+          "model_type": "diffusion",
+          "task_type_primary": "text-to-image",
+          "backend_key": "pytorch",
+          "recommended_backend": "diffusers",
+          "runtime_engine_hints": [
+            "diffusers",
+            "pytorch"
+          ],
+          "dependency_bindings": [],
+          "dependency_requirements": {
+            "model_id": "diffusion/cc-nms/tiny-sd-turbo",
+            "platform_key": "linux-x86_64",
+            "backend_key": "pytorch",
+            "dependency_contract_version": 1,
+            "validation_state": "resolved",
+            "validation_errors": [],
+            "bindings": [],
+            "selected_binding_ids": []
+          },
+          "dependency_requirements_id": "diffusion/cc-nms/tiny-sd-turbo",
+          "inference_settings": [
+            {
+              "key": "num_inference_steps",
+              "label": "Inference Steps",
+              "param_type": "Integer",
+              "default": 20,
+              "description": "Number of diffusion steps",
+              "constraints": {
+                "min": 1,
+                "max": 150
+              }
+            },
+            {
+              "key": "guidance_scale",
+              "label": "Guidance Scale",
+              "param_type": "Number",
+              "default": 7.0,
+              "description": "Classifier-free guidance scale",
+              "constraints": {
+                "min": 1,
+                "max": 30
+              }
+            },
+            {
+              "key": "width",
+              "label": "Width",
+              "param_type": "Integer",
+              "default": 1024,
+              "description": "Output image width in pixels",
+              "constraints": {
+                "min": 64,
+                "max": 4096
+              }
+            },
+            {
+              "key": "height",
+              "label": "Height",
+              "param_type": "Integer",
+              "default": 1024,
+              "description": "Output image height in pixels",
+              "constraints": {
+                "min": 64,
+                "max": 4096
+              }
+            },
+            {
+              "key": "seed",
+              "label": "Seed",
+              "param_type": "Integer",
+              "default": -1,
+              "description": "Random seed (-1 = random)",
+              "constraints": {
+                "min": -1
+              }
+            }
+          ],
+          "platform_context": {
+            "arch": "x86_64",
+            "os": "linux"
+          }
+        }
+      },
+      {
+        "id": "prompt-input",
+        "node_type": "text-input",
+        "position": {
+          "x": -680.0,
+          "y": 0.0
+        },
+        "data": {
+          "label": "Prompt",
+          "text": "paper lantern in the rain, cinematic lighting, detailed illustration"
+        }
+      },
+      {
+        "id": "negative-prompt-input",
+        "node_type": "text-input",
+        "position": {
+          "x": -680.0,
+          "y": 220.0
+        },
+        "data": {
+          "label": "Negative Prompt",
+          "text": "blurry, low quality, distorted"
+        }
+      },
+      {
+        "id": "steps-input",
+        "node_type": "number-input",
+        "position": {
+          "x": -420.0,
+          "y": 420.0
+        },
+        "data": {
+          "label": "Steps",
+          "value": 1
+        }
+      },
+      {
+        "id": "cfg-scale-input",
+        "node_type": "number-input",
+        "position": {
+          "x": -220.0,
+          "y": 420.0
+        },
+        "data": {
+          "label": "CFG Scale",
+          "value": 0
+        }
+      },
+      {
+        "id": "seed-input",
+        "node_type": "number-input",
+        "position": {
+          "x": -20.0,
+          "y": 420.0
+        },
+        "data": {
+          "label": "Seed",
+          "value": 42
+        }
+      },
+      {
+        "id": "width-input",
+        "node_type": "number-input",
+        "position": {
+          "x": 180.0,
+          "y": 420.0
+        },
+        "data": {
+          "label": "Width",
+          "value": 256
+        }
+      },
+      {
+        "id": "height-input",
+        "node_type": "number-input",
+        "position": {
+          "x": 380.0,
+          "y": 420.0
+        },
+        "data": {
+          "label": "Height",
+          "value": 256
+        }
+      },
+      {
+        "id": "diffusion-inference",
+        "node_type": "diffusion-inference",
+        "position": {
+          "x": 120.0,
+          "y": 120.0
+        },
+        "data": {
+          "label": "Tiny SD Turbo Diffusion"
+        }
+      },
+      {
+        "id": "image-output",
+        "node_type": "image-output",
+        "position": {
+          "x": 520.0,
+          "y": 120.0
+        },
+        "data": {
+          "label": "Generated Image"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "prompt-to-diffusion",
+        "source": "prompt-input",
+        "source_handle": "text",
+        "target": "diffusion-inference",
+        "target_handle": "prompt"
+      },
+      {
+        "id": "negative-prompt-to-diffusion",
+        "source": "negative-prompt-input",
+        "source_handle": "text",
+        "target": "diffusion-inference",
+        "target_handle": "negative_prompt"
+      },
+      {
+        "id": "model-path-to-diffusion",
+        "source": "puma-lib-tiny-sd-turbo",
+        "source_handle": "model_path",
+        "target": "diffusion-inference",
+        "target_handle": "model_path"
+      },
+      {
+        "id": "settings-to-diffusion",
+        "source": "puma-lib-tiny-sd-turbo",
+        "source_handle": "inference_settings",
+        "target": "diffusion-inference",
+        "target_handle": "inference_settings"
+      },
+      {
+        "id": "steps-to-diffusion",
+        "source": "steps-input",
+        "source_handle": "value",
+        "target": "diffusion-inference",
+        "target_handle": "steps"
+      },
+      {
+        "id": "cfg-to-diffusion",
+        "source": "cfg-scale-input",
+        "source_handle": "value",
+        "target": "diffusion-inference",
+        "target_handle": "cfg_scale"
+      },
+      {
+        "id": "seed-to-diffusion",
+        "source": "seed-input",
+        "source_handle": "value",
+        "target": "diffusion-inference",
+        "target_handle": "seed"
+      },
+      {
+        "id": "width-to-diffusion",
+        "source": "width-input",
+        "source_handle": "value",
+        "target": "diffusion-inference",
+        "target_handle": "width"
+      },
+      {
+        "id": "height-to-diffusion",
+        "source": "height-input",
+        "source_handle": "value",
+        "target": "diffusion-inference",
+        "target_handle": "height"
+      },
+      {
+        "id": "image-to-output",
+        "source": "diffusion-inference",
+        "source_handle": "image",
+        "target": "image-output",
+        "target_handle": "image"
+      }
+    ]
+  },
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}
