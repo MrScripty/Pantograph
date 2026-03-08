@@ -1,0 +1,48 @@
+{
+  "id": "juggernaut-x-v10-sdxl-orch",
+  "name": "Juggernaut X v10 SDXL",
+  "description": "Orchestration wrapper for the Juggernaut-X-v10 SDXL starter workflow.",
+  "nodes": [
+    {
+      "id": "start",
+      "nodeType": "start",
+      "position": [100, 200],
+      "config": {}
+    },
+    {
+      "id": "juggernaut-x-v10-sdxl-graph",
+      "nodeType": "data_graph",
+      "position": [400, 200],
+      "config": {
+        "dataGraphId": "juggernaut-x-v10-sdxl",
+        "inputMappings": {},
+        "outputMappings": {}
+      }
+    },
+    {
+      "id": "end",
+      "nodeType": "end",
+      "position": [700, 200],
+      "config": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "start",
+      "sourceHandle": "next",
+      "target": "juggernaut-x-v10-sdxl-graph",
+      "targetHandle": "input"
+    },
+    {
+      "id": "e2",
+      "source": "juggernaut-x-v10-sdxl-graph",
+      "sourceHandle": "next",
+      "target": "end",
+      "targetHandle": "input"
+    }
+  ],
+  "dataGraphs": {
+    "juggernaut-x-v10-sdxl-graph": "juggernaut-x-v10-sdxl"
+  }
+}
