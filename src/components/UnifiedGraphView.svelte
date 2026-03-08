@@ -233,7 +233,7 @@
               </div>
               <div class="group-nodes-preview">
                 <h4>Nodes in Group</h4>
-                {#each currentGroup.nodes as node}
+                {#each currentGroup.nodes as node (node.id)}
                   <div class="preview-node">
                     <span class="node-type">{node.node_type}</span>
                     <span class="node-id">{node.id}</span>

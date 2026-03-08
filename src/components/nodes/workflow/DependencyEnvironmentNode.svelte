@@ -1007,7 +1007,7 @@
 
         {#if dependencyRequirements && dependencyRequirements.bindings.length > 0}
           <div class="rounded border border-neutral-700 px-2 py-1 text-[10px] space-y-1">
-            {#each filteredBindings(dependencyRequirements) as binding}
+            {#each filteredBindings(dependencyRequirements) as binding (binding.binding_id)}
               <div class="rounded border border-neutral-800 px-2 py-1">
                 <div class="flex items-center gap-2">
                   <input
@@ -1061,7 +1061,7 @@
                       </div>
                     {/if}
 
-                    {#each binding.requirements as requirement}
+                    {#each binding.requirements as requirement (`${binding.binding_id}:${requirement.name}`)}
                       <div class="rounded border border-neutral-800 px-2 py-1 space-y-1">
                         <div class="text-[9px] text-neutral-200">
                           {requirement.name}{requirement.exact_pin}
@@ -1163,7 +1163,7 @@
               {#if activityLog.length === 0}
                 <div class="text-neutral-500">No activity yet. Use Run/Resolve/Check/Install to capture logs.</div>
               {:else}
-                {#each activityLog as line}
+                {#each activityLog as line, i (`${i}:${line}`)}
                   <div class="whitespace-pre-wrap break-words">{line}</div>
                 {/each}
               {/if}

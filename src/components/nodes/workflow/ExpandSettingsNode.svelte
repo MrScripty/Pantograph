@@ -75,7 +75,7 @@
     {#snippet children()}
       {#if settings.length > 0}
         <div class="settings-list">
-          {#each settings as param}
+          {#each settings as param (param.key)}
             <div class="setting-row" title={param.description || ''}>
               <span class="setting-label">{param.label}</span>
               <span class="setting-value">{formatValue(param.default)}</span>

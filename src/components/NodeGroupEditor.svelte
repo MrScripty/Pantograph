@@ -229,7 +229,7 @@
       <div class="flex gap-4">
         <div>
           <div class="text-neutral-400 text-xs mb-1">Inputs ({exposedInputs.length})</div>
-          {#each exposedInputs as input}
+          {#each exposedInputs as input (input.group_port_id)}
             <div class="text-purple-400 text-xs">{input.group_port_label}</div>
           {/each}
           {#if exposedInputs.length === 0}
@@ -238,7 +238,7 @@
         </div>
         <div>
           <div class="text-neutral-400 text-xs mb-1">Outputs ({exposedOutputs.length})</div>
-          {#each exposedOutputs as output}
+          {#each exposedOutputs as output (output.group_port_id)}
             <div class="text-purple-400 text-xs">{output.group_port_label}</div>
           {/each}
           {#if exposedOutputs.length === 0}

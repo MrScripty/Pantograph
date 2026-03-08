@@ -127,7 +127,7 @@
   <div class="w-[1px] h-6 bg-neutral-700"></div>
 
   <div class="flex gap-3">
-    {#each COLORS as color}
+    {#each COLORS as color (color)}
       <button type="button"
         onclick={() => engine.setColor(color)}
         class="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 {state.currentColor === color ? 'border-white scale-125' : 'border-transparent'}"

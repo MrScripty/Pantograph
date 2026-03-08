@@ -104,14 +104,14 @@
   <div class="ports-section">
     <div class="ports-grid" style="min-height: {Math.max(inputs.length, outputs.length) * 20}px;">
       <div class="input-labels">
-        {#each inputs as input}
+        {#each inputs as input (input.id)}
           <span class="port-label" title="{input.data_type}">
             {input.label}
           </span>
         {/each}
       </div>
       <div class="output-labels">
-        {#each outputs as output}
+        {#each outputs as output (output.id)}
           <span class="port-label" title="{output.data_type}">
             {output.label}
           </span>
@@ -128,7 +128,7 @@
   {/if}
 
   <!-- Handles positioned absolutely on edges -->
-  {#each inputs as input, i}
+  {#each inputs as input, i (input.id)}
     {@const yPos = 54 + i * 20}
     {@const color = getPortColor(input)}
     {@const connected = isInputConnected(input.id)}
@@ -141,7 +141,7 @@
     />
   {/each}
 
-  {#each outputs as output, i}
+  {#each outputs as output, i (output.id)}
     {@const yPos = 54 + i * 20}
     {@const color = getPortColor(output)}
     {@const connected = isOutputConnected(output.id)}

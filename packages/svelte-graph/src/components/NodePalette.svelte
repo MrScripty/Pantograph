@@ -66,7 +66,7 @@
   </div>
 
   <div class="palette-list">
-    {#each [...filteredByCategory()] as [category, definitions]}
+    {#each [...filteredByCategory()] as [category, definitions] (category)}
       <div class="category">
         <button type="button"
           class="category-header"
@@ -84,7 +84,7 @@
 
         {#if expandedCategories.has(category)}
           <div class="category-items">
-            {#each definitions as definition}
+            {#each definitions as definition (definition.node_type)}
               <div
                 class="node-item"
                 draggable="true"

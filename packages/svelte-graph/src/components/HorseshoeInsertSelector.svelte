@@ -75,7 +75,7 @@
     {/if}
 
     {#if displayState === 'open' && anchorPosition && items.length > 0}
-      {#each visibleItems as entry}
+      {#each visibleItems as entry (entry.item.node_type)}
         {@const position = getHorseshoeItemPosition(entry.slot, visibleItems.length)}
         <button
           type="button"

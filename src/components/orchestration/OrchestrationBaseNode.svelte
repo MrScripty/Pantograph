@@ -51,14 +51,14 @@
   <div class="handles-section" style="min-height: {handleCount * 24 + 8}px;">
     <!-- Input labels -->
     <div class="input-handles">
-      {#each inputHandles as handle, i}
+      {#each inputHandles as handle (handle.id)}
         <div class="handle-label input">{handle.label}</div>
       {/each}
     </div>
 
     <!-- Output labels -->
     <div class="output-handles">
-      {#each outputHandles as handle, i}
+      {#each outputHandles as handle (handle.id)}
         <div class="handle-label output">{handle.label}</div>
       {/each}
     </div>
@@ -72,7 +72,7 @@
   {/if}
 
   <!-- Input Handles -->
-  {#each inputHandles as handle, i}
+  {#each inputHandles as handle, i (handle.id)}
     {@const yPos = 44 + i * 24}
     <Handle
       type="target"
@@ -83,7 +83,7 @@
   {/each}
 
   <!-- Output Handles -->
-  {#each outputHandles as handle, i}
+  {#each outputHandles as handle, i (handle.id)}
     {@const yPos = 44 + i * 24}
     <Handle
       type="source"

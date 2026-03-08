@@ -237,7 +237,7 @@
       {:else}
         <!-- Backend selection buttons -->
         <div class="flex flex-wrap gap-2">
-          {#each backends as backend}
+          {#each backends as backend (backend.name)}
             <div class="flex flex-col">
               <button type="button"
                 class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.name ===

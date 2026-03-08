@@ -89,7 +89,7 @@
     <div class="ports-grid" style="min-height: {Math.max(inputs.length, outputs.length, 1) * 20}px;">
       <!-- Input labels (left column) -->
       <div class="input-labels flex flex-col gap-1">
-        {#each inputs as input}
+        {#each inputs as input (input.id)}
           <span class="text-[10px] text-purple-300/70 h-4 leading-4" title="{input.data_type}">
             {input.label}
           </span>
@@ -97,7 +97,7 @@
       </div>
       <!-- Output labels (right column) -->
       <div class="output-labels flex flex-col gap-1 text-right">
-        {#each outputs as output}
+        {#each outputs as output (output.id)}
           <span class="text-[10px] text-purple-300/70 h-4 leading-4" title="{output.data_type}">
             {output.label}
           </span>
@@ -115,7 +115,7 @@
   </div>
 
   <!-- Handles positioned absolutely on edges -->
-  {#each inputs as input, i}
+  {#each inputs as input, i (input.id)}
     {@const yPos = 52 + i * 20}
     <Handle
       type="target"
@@ -125,7 +125,7 @@
     />
   {/each}
 
-  {#each outputs as output, i}
+  {#each outputs as output, i (output.id)}
     {@const yPos = 52 + i * 20}
     <Handle
       type="source"

@@ -77,7 +77,7 @@
         {#if $availableWorkflows.length === 0}
           <div class="px-3 py-2 text-sm text-neutral-500 italic">No saved workflows</div>
         {:else}
-          {#each $availableWorkflows as workflow}
+          {#each $availableWorkflows as workflow (workflow.id ?? workflow.name)}
             <button type="button"
               class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
               class:bg-neutral-700={$currentGraphId === workflow.id && $currentGraphType === 'workflow'}
@@ -103,7 +103,7 @@
         <div class="section-header px-3 py-2 text-xs text-neutral-400 uppercase tracking-wider bg-neutral-900">
           System
         </div>
-        {#each SYSTEM_GRAPHS as graph}
+        {#each SYSTEM_GRAPHS as graph (graph.id)}
           <button type="button"
             class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
             class:bg-neutral-700={$currentGraphId === graph.id && $currentGraphType === 'system'}

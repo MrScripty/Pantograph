@@ -164,7 +164,7 @@
       <div class="ports-indicator-grid">
         <div>
           <div class="ports-indicator-label">Inputs ({exposedInputs.length})</div>
-          {#each exposedInputs as input}
+          {#each exposedInputs as input (input.group_port_id)}
             <div class="ports-indicator-item">{input.group_port_label}</div>
           {/each}
           {#if exposedInputs.length === 0}
@@ -173,7 +173,7 @@
         </div>
         <div>
           <div class="ports-indicator-label">Outputs ({exposedOutputs.length})</div>
-          {#each exposedOutputs as output}
+          {#each exposedOutputs as output (output.group_port_id)}
             <div class="ports-indicator-item">{output.group_port_label}</div>
           {/each}
           {#if exposedOutputs.length === 0}

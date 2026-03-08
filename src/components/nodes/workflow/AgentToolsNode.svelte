@@ -54,7 +54,7 @@
 
     {#snippet children()}
       <div class="space-y-1">
-        {#each availableTools as tool}
+        {#each availableTools as tool (tool.id)}
           <label
             class="flex items-center gap-2 cursor-pointer hover:bg-neutral-700/50 rounded px-1 py-0.5"
             title={tool.description}

@@ -73,7 +73,7 @@
   </div>
 
   <div class="flex-1 overflow-y-auto">
-    {#each [...filteredByCategory()] as [category, definitions]}
+    {#each [...filteredByCategory()] as [category, definitions] (category)}
       <div class="category">
         <button type="button"
           class="w-full px-3 py-2 bg-neutral-800/50 border-b border-neutral-700 flex items-center gap-2 text-left hover:bg-neutral-800 transition-colors"
@@ -91,7 +91,7 @@
 
         {#if expandedCategories.has(category)}
           <div class="py-1">
-            {#each definitions as definition}
+            {#each definitions as definition (definition.node_type)}
               <div
                 class="node-item px-4 py-2 cursor-grab flex justify-between items-center text-sm text-neutral-300 hover:bg-neutral-800 transition-colors"
                 draggable="true"

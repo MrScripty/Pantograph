@@ -137,7 +137,7 @@
       <div class="port-section">
         <h3 class="section-title">Exposed Input Ports</h3>
         <div class="port-list">
-          {#each exposedInputs as input, i}
+          {#each exposedInputs as input, i (input.group_port_id)}
             <div class="port-row">
               <span class="type-dot" style="background-color: {getPortColor(input.data_type)}"></span>
               <input
@@ -159,7 +159,7 @@
             <div class="add-port-section">
               <span class="add-label">Add input:</span>
               <div class="add-port-list">
-                {#each availableInputPorts() as { nodeId, nodeName, port }}
+                {#each availableInputPorts() as { nodeId, nodeName, port } (`${nodeId}:${port.id}`)}
                   <button type="button" class="add-port-btn" onclick={() => addInput(nodeId, port)}>
                     {nodeName} / {port.label}
                   </button>
@@ -174,7 +174,7 @@
       <div class="port-section">
         <h3 class="section-title">Exposed Output Ports</h3>
         <div class="port-list">
-          {#each exposedOutputs as output, i}
+          {#each exposedOutputs as output, i (output.group_port_id)}
             <div class="port-row">
               <span class="type-dot" style="background-color: {getPortColor(output.data_type)}"></span>
               <input
@@ -196,7 +196,7 @@
             <div class="add-port-section">
               <span class="add-label">Add output:</span>
               <div class="add-port-list">
-                {#each availableOutputPorts() as { nodeId, nodeName, port }}
+                {#each availableOutputPorts() as { nodeId, nodeName, port } (`${nodeId}:${port.id}`)}
                   <button type="button" class="add-port-btn" onclick={() => addOutput(nodeId, port)}>
                     {nodeName} / {port.label}
                   </button>

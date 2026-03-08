@@ -140,9 +140,9 @@
           {#if state.docs.length === 0}
             <option value="">No documents available</option>
           {:else}
-            {#each [...groupDocsBySection(state.docs)] as [section, docs]}
+            {#each [...groupDocsBySection(state.docs)] as [section, docs] (section)}
               <optgroup label={section}>
-                {#each docs as doc}
+                {#each docs as doc (doc.id)}
                   <option value={doc.id}>
                     {doc.title} ({Math.round(doc.char_count / 1000)}k chars)
                   </option>
@@ -165,7 +165,7 @@
           </div>
         {:else if state.preview}
           <div class="space-y-6">
-            {#each state.preview.chunks as chunk}
+            {#each state.preview.chunks as chunk (chunk.chunk_index)}
               <!-- Chunk Divider -->
               <div class="relative">
                 <div class="absolute inset-0 flex items-center">

@@ -311,7 +311,7 @@
             class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
             style="color-scheme: dark;"
           >
-            {#each deviceOptions as device}
+            {#each deviceOptions as device (device.id)}
               <option value={device.id} class="bg-neutral-900 text-neutral-200">{getDeviceDisplayName(device)}</option>
             {/each}
           </select>

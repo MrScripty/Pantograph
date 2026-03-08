@@ -115,7 +115,7 @@
           <option value="">
             {isLoading ? 'Loading...' : 'Select a model'}
           </option>
-          {#each filteredModels as model}
+          {#each filteredModels as model (String(model.value))}
             <option value={String(model.value)}>
               {model.label}
             </option>

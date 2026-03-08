@@ -105,7 +105,7 @@
             {status.missing_files.length} missing file(s)
           </summary>
           <ul class="mt-1 ml-3 list-disc">
-            {#each status.missing_files as file}
+            {#each status.missing_files as file (file)}
               <li class="font-mono">{file}</li>
             {/each}
           </ul>

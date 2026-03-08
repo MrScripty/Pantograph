@@ -161,7 +161,7 @@
       <div>
         <h3 class="text-sm font-medium text-purple-300 mb-2">Exposed Input Ports</h3>
         <div class="space-y-2">
-          {#each exposedInputs as input, i}
+          {#each exposedInputs as input, i (input.group_port_id)}
             <div class="flex items-center gap-2 bg-neutral-700/50 rounded px-3 py-2">
               <span class="w-2 h-2 rounded-full {getTypeColor(input.data_type)}"></span>
               <input
@@ -186,7 +186,7 @@
             <div class="mt-2">
               <span class="text-xs text-neutral-400">Add input:</span>
               <div class="flex flex-wrap gap-1 mt-1">
-                {#each availableInputPorts() as { nodeId, nodeName, port }}
+                {#each availableInputPorts() as { nodeId, nodeName, port } (`${nodeId}:${port.id}`)}
                   <button type="button"
                     class="text-xs px-2 py-1 bg-neutral-700 hover:bg-purple-600/50 rounded text-neutral-300 transition-colors"
                     onclick={() => addInput(nodeId, port)}
@@ -204,7 +204,7 @@
       <div>
         <h3 class="text-sm font-medium text-purple-300 mb-2">Exposed Output Ports</h3>
         <div class="space-y-2">
-          {#each exposedOutputs as output, i}
+          {#each exposedOutputs as output, i (output.group_port_id)}
             <div class="flex items-center gap-2 bg-neutral-700/50 rounded px-3 py-2">
               <span class="w-2 h-2 rounded-full {getTypeColor(output.data_type)}"></span>
               <input
@@ -229,7 +229,7 @@
             <div class="mt-2">
               <span class="text-xs text-neutral-400">Add output:</span>
               <div class="flex flex-wrap gap-1 mt-1">
-                {#each availableOutputPorts() as { nodeId, nodeName, port }}
+                {#each availableOutputPorts() as { nodeId, nodeName, port } (`${nodeId}:${port.id}`)}
                   <button type="button"
                     class="text-xs px-2 py-1 bg-neutral-700 hover:bg-purple-600/50 rounded text-neutral-300 transition-colors"
                     onclick={() => addOutput(nodeId, port)}
