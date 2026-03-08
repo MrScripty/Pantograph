@@ -101,6 +101,10 @@ export function createSessionStores(
       const path = `.pantograph/workflows/${name}.json`;
       const file = await backend.loadWorkflow(path);
 
+      const sessionId = await backend.createSession(file.graph);
+      currentSessionId.set(sessionId);
+      workflowStores.setActiveSessionId(sessionId);
+
       workflowStores.loadWorkflow(file.graph, file.metadata);
 
       // Call optional hook for consumer-specific post-load behavior
@@ -111,10 +115,6 @@ export function createSessionStores(
           console.warn('[sessionStores] onWorkflowLoaded hook failed:', error);
         }
       }
-
-      // Create a backend session for this workflow
-      const sessionId = await backend.createSession(file.graph);
-      currentSessionId.set(sessionId);
 
       currentGraphId.set(name);
       currentGraphType.set('workflow');
@@ -129,16 +129,17 @@ export function createSessionStores(
   }
 
   async function createNewWorkflow(): Promise<void> {
+    const emptyGraph = { nodes: [], edges: [] };
+    const sessionId = await backend.createSession(emptyGraph);
+    currentSessionId.set(sessionId);
+    workflowStores.setActiveSessionId(sessionId);
+
     workflowStores.clearWorkflow();
 
     const newId = `workflow-${Date.now()}`;
     currentGraphId.set(newId);
     currentGraphType.set('workflow');
     currentGraphName.set('Untitled Workflow');
-
-    const emptyGraph = { nodes: [], edges: [] };
-    const sessionId = await backend.createSession(emptyGraph);
-    currentSessionId.set(sessionId);
   }
 
   function saveLastGraph(id: string, type: GraphType): void {

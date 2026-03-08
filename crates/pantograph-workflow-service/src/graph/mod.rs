@@ -16,13 +16,14 @@ pub use persistence::{
 pub use registry::{validate_workflow_connection, NodeRegistry};
 pub use session::{
     convert_graph_to_node_engine, GraphSessionStore, UndoRedoState, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
-    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest,
 };
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,

@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{ipc::Channel, AppHandle, State};
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
 use crate::llm::{SharedAppConfig, SharedGateway};
@@ -9,13 +8,15 @@ use node_engine::EventSink;
 use pantograph_workflow_service::{
     convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
     ConnectionCommitResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodePositionHint, UndoRedoState, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    InsertNodePositionHint, Position, UndoRedoState, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest,
 };
+use tauri::{ipc::Channel, AppHandle, State};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::event_adapter::TauriEventAdapter;
@@ -449,8 +450,11 @@ async fn run_session_graph_snapshot(
         .map(|node| node.id.clone())
         .collect();
 
-    let mut executor =
-        node_engine::WorkflowExecutor::new(&session_id, convert_graph_to_node_engine(&session_graph), event_adapter.clone());
+    let mut executor = node_engine::WorkflowExecutor::new(
+        &session_id,
+        convert_graph_to_node_engine(&session_graph),
+        event_adapter.clone(),
+    );
     apply_runtime_extensions(
         &mut executor,
         &runtime_ext,
@@ -587,6 +591,23 @@ pub async fn update_node_data(
         .map_err(|e| e.to_envelope_json())
 }
 
+pub async fn update_node_position_in_execution(
+    execution_id: String,
+    node_id: String,
+    position: Position,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_update_node_position(WorkflowGraphUpdateNodePositionRequest {
+            session_id: execution_id,
+            node_id,
+            position,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
 pub async fn add_node_to_execution(
     execution_id: String,
     node: GraphNode,
@@ -596,6 +617,21 @@ pub async fn add_node_to_execution(
         .workflow_graph_add_node(WorkflowGraphAddNodeRequest {
             session_id: execution_id,
             node,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn remove_node_from_execution(
+    execution_id: String,
+    node_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_remove_node(WorkflowGraphRemoveNodeRequest {
+            session_id: execution_id,
+            node_id,
         })
         .await
         .map(|response| response.graph)

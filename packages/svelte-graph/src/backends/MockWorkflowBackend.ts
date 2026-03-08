@@ -130,11 +130,21 @@ export class MockWorkflowBackend implements WorkflowBackend {
     await this.simulateExecution(graph);
   }
 
-  async addNode(node: GraphNode, sessionId: string): Promise<void> {
+  async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraph> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.nodes.push(node);
     graph.derived_graph = buildDerivedGraph(graph);
+    return structuredClone(graph);
+  }
+
+  async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraph> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    graph.nodes = graph.nodes.filter((node) => node.id !== nodeId);
+    graph.edges = graph.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
+    graph.derived_graph = buildDerivedGraph(graph);
+    return structuredClone(graph);
   }
 
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph> {
@@ -405,7 +415,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
     nodeId: string,
     data: Record<string, unknown>,
     sessionId: string,
-  ): Promise<void> {
+  ): Promise<WorkflowGraph> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     const node = graph.nodes.find((n) => n.id === nodeId);
@@ -413,6 +423,22 @@ export class MockWorkflowBackend implements WorkflowBackend {
       node.data = { ...node.data, ...data };
     }
     graph.derived_graph = buildDerivedGraph(graph);
+    return structuredClone(graph);
+  }
+
+  async updateNodePosition(
+    nodeId: string,
+    position: { x: number; y: number },
+    sessionId: string,
+  ): Promise<WorkflowGraph> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    const node = graph.nodes.find((n) => n.id === nodeId);
+    if (node) {
+      node.position = position;
+    }
+    graph.derived_graph = buildDerivedGraph(graph);
+    return structuredClone(graph);
   }
 
   async getExecutionGraph(sessionId: string): Promise<WorkflowGraph> {

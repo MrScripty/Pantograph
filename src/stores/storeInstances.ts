@@ -53,5 +53,6 @@ viewStores.enablePersistence();
 // Sync session IDs to the legacy workflowService so existing components
 // that call workflowService.addEdge() etc. continue to work.
 sessionStores.currentSessionId.subscribe((id) => {
+  workflowStores.setActiveSessionId(id);
   workflowService.setCurrentExecutionId(id);
 });

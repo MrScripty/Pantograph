@@ -248,7 +248,7 @@ export class WorkflowService {
     nodeId: string,
     data: Record<string, unknown>,
     executionId?: string
-  ): Promise<void> {
+  ): Promise<WorkflowGraph> {
     const id = executionId ?? this.currentExecutionId;
     if (!id) {
       throw new Error('No active execution');
@@ -256,16 +256,38 @@ export class WorkflowService {
 
     if (USE_MOCKS) {
       console.log('[WorkflowService] Mock: Update node data', nodeId, data);
-      return;
+      return { nodes: [], edges: [] };
     }
 
-    return invoke('update_node_data', { executionId: id, nodeId, data });
+    return invoke<WorkflowGraph>('update_node_data', { executionId: id, nodeId, data });
+  }
+
+  async updateNodePosition(
+    nodeId: string,
+    position: { x: number; y: number },
+    executionId?: string
+  ): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Update node position', nodeId, position);
+      return { nodes: [], edges: [] };
+    }
+
+    return invoke<WorkflowGraph>('update_node_position_in_execution', {
+      executionId: id,
+      nodeId,
+      position,
+    });
   }
 
   /**
    * Add a node to the graph during execution.
    */
-  async addNode(node: GraphNode, executionId?: string): Promise<void> {
+  async addNode(node: GraphNode, executionId?: string): Promise<WorkflowGraph> {
     const id = executionId ?? this.currentExecutionId;
     if (!id) {
       throw new Error('No active execution');
@@ -273,10 +295,24 @@ export class WorkflowService {
 
     if (USE_MOCKS) {
       console.log('[WorkflowService] Mock: Add node', node);
-      return;
+      return { nodes: [], edges: [] };
     }
 
-    return invoke('add_node_to_execution', { executionId: id, node });
+    return invoke<WorkflowGraph>('add_node_to_execution', { executionId: id, node });
+  }
+
+  async removeNode(nodeId: string, executionId?: string): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_MOCKS) {
+      console.log('[WorkflowService] Mock: Remove node', nodeId);
+      return { nodes: [], edges: [] };
+    }
+
+    return invoke<WorkflowGraph>('remove_node_from_execution', { executionId: id, nodeId });
   }
 
   /**

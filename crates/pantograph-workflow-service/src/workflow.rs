@@ -14,9 +14,10 @@ use crate::graph::{
     WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
     WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
-    WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
-    WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -1754,21 +1755,27 @@ impl WorkflowService {
         &self,
         request: WorkflowGraphEditSessionCloseRequest,
     ) -> Result<WorkflowGraphEditSessionCloseResponse, WorkflowServiceError> {
-        self.graph_session_store.close_session(&request.session_id).await
+        self.graph_session_store
+            .close_session(&request.session_id)
+            .await
     }
 
     pub async fn workflow_graph_get_edit_session_graph(
         &self,
         request: WorkflowGraphEditSessionGraphRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.graph_session_store.get_session_graph(&request.session_id).await
+        self.graph_session_store
+            .get_session_graph(&request.session_id)
+            .await
     }
 
     pub async fn workflow_graph_get_undo_redo_state(
         &self,
         request: WorkflowGraphUndoRedoStateRequest,
     ) -> Result<WorkflowGraphUndoRedoStateResponse, WorkflowServiceError> {
-        self.graph_session_store.get_undo_redo_state(&request.session_id).await
+        self.graph_session_store
+            .get_undo_redo_state(&request.session_id)
+            .await
     }
 
     pub async fn workflow_graph_update_node_data(
@@ -1778,11 +1785,25 @@ impl WorkflowService {
         self.graph_session_store.update_node_data(request).await
     }
 
+    pub async fn workflow_graph_update_node_position(
+        &self,
+        request: WorkflowGraphUpdateNodePositionRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.update_node_position(request).await
+    }
+
     pub async fn workflow_graph_add_node(
         &self,
         request: WorkflowGraphAddNodeRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
         self.graph_session_store.add_node(request).await
+    }
+
+    pub async fn workflow_graph_remove_node(
+        &self,
+        request: WorkflowGraphRemoveNodeRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.remove_node(request).await
     }
 
     pub async fn workflow_graph_add_edge(
@@ -1817,7 +1838,9 @@ impl WorkflowService {
         &self,
         request: WorkflowGraphGetConnectionCandidatesRequest,
     ) -> Result<crate::graph::ConnectionCandidatesResponse, WorkflowServiceError> {
-        self.graph_session_store.get_connection_candidates(request).await
+        self.graph_session_store
+            .get_connection_candidates(request)
+            .await
     }
 
     pub async fn workflow_graph_connect(
@@ -1831,7 +1854,9 @@ impl WorkflowService {
         &self,
         request: WorkflowGraphInsertNodeAndConnectRequest,
     ) -> Result<crate::graph::InsertNodeConnectionResponse, WorkflowServiceError> {
-        self.graph_session_store.insert_node_and_connect(request).await
+        self.graph_session_store
+            .insert_node_and_connect(request)
+            .await
     }
 
     pub fn workflow_graph_save<S: WorkflowGraphStore>(
@@ -2194,15 +2219,14 @@ fn classify_workflow_io_direction(
         return Ok(None);
     };
 
-    let origin =
-        extract_nested_trimmed_str(node.data(), &["definition", "io_binding_origin"])
-            .map(|v| v.to_ascii_lowercase())
-            .ok_or_else(|| {
-                WorkflowServiceError::InvalidRequest(format!(
-                    "workflow I/O schema error: node '{}' missing definition.io_binding_origin",
-                    node.id()
-                ))
-            })?;
+    let origin = extract_nested_trimmed_str(node.data(), &["definition", "io_binding_origin"])
+        .map(|v| v.to_ascii_lowercase())
+        .ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "workflow I/O schema error: node '{}' missing definition.io_binding_origin",
+                node.id()
+            ))
+        })?;
 
     match origin.as_str() {
         "client_session" => Ok(Some(direction)),

@@ -14,7 +14,7 @@ use super::connection_intent::{
 use super::registry::NodeRegistry;
 use super::types::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, WorkflowGraph,
+    InsertNodeConnectionResponse, Position, WorkflowGraph,
 };
 use super::{ConnectionAnchor, InsertNodePositionHint};
 
@@ -87,6 +87,21 @@ pub struct WorkflowGraphUpdateNodeDataRequest {
     pub session_id: String,
     pub node_id: String,
     pub data: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphUpdateNodePositionRequest {
+    pub session_id: String,
+    pub node_id: String,
+    pub position: Position,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphRemoveNodeRequest {
+    pub session_id: String,
+    pub node_id: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -187,19 +202,27 @@ impl GraphEditSession {
         }
     }
 
-    fn undo(&mut self, session_id: &str) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let previous = self.undo_stack.pop().ok_or_else(|| {
-            WorkflowServiceError::InvalidRequest("Nothing to undo".to_string())
-        })?;
+    fn undo(
+        &mut self,
+        session_id: &str,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let previous = self
+            .undo_stack
+            .pop()
+            .ok_or_else(|| WorkflowServiceError::InvalidRequest("Nothing to undo".to_string()))?;
         self.redo_stack.push(self.graph.clone());
         self.graph = previous;
         Ok(self.snapshot_response(session_id))
     }
 
-    fn redo(&mut self, session_id: &str) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let next = self.redo_stack.pop().ok_or_else(|| {
-            WorkflowServiceError::InvalidRequest("Nothing to redo".to_string())
-        })?;
+    fn redo(
+        &mut self,
+        session_id: &str,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let next = self
+            .redo_stack
+            .pop()
+            .ok_or_else(|| WorkflowServiceError::InvalidRequest("Nothing to redo".to_string()))?;
         self.undo_stack.push(self.graph.clone());
         self.graph = next;
         Ok(self.snapshot_response(session_id))
@@ -250,7 +273,10 @@ impl GraphSessionStore {
             let state = session.lock().await;
             state.graph.compute_fingerprint()
         };
-        self.sessions.write().await.insert(session_id.clone(), session);
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.clone(), session);
         WorkflowGraphEditSessionCreateResponse {
             session_id,
             graph_revision,
@@ -332,7 +358,32 @@ impl GraphSessionStore {
                 request.node_id
             ))
         })?;
-        node.data = request.data;
+        merge_node_data(&mut node.data, request.data);
+        sync_embedding_emit_metadata_flags(&mut state.graph);
+        Ok(state.snapshot_response(&request.session_id))
+    }
+
+    pub async fn update_node_position(
+        &self,
+        request: WorkflowGraphUpdateNodePositionRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let handle = self.get_session_handle(&request.session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        if state.graph.find_node(&request.node_id).is_none() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "node '{}' was not found",
+                request.node_id
+            )));
+        }
+        state.push_undo_snapshot();
+        let node = state.graph.find_node_mut(&request.node_id).ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "node '{}' was not found",
+                request.node_id
+            ))
+        })?;
+        node.position = request.position;
         sync_embedding_emit_metadata_flags(&mut state.graph);
         Ok(state.snapshot_response(&request.session_id))
     }
@@ -346,6 +397,29 @@ impl GraphSessionStore {
         state.touch();
         state.push_undo_snapshot();
         state.graph.nodes.push(request.node);
+        sync_embedding_emit_metadata_flags(&mut state.graph);
+        Ok(state.snapshot_response(&request.session_id))
+    }
+
+    pub async fn remove_node(
+        &self,
+        request: WorkflowGraphRemoveNodeRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let handle = self.get_session_handle(&request.session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        if state.graph.find_node(&request.node_id).is_none() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "node '{}' was not found",
+                request.node_id
+            )));
+        }
+        state.push_undo_snapshot();
+        state.graph.nodes.retain(|node| node.id != request.node_id);
+        state
+            .graph
+            .edges
+            .retain(|edge| edge.source != request.node_id && edge.target != request.node_id);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         Ok(state.snapshot_response(&request.session_id))
     }
@@ -587,4 +661,122 @@ pub fn convert_graph_to_node_engine(graph: &WorkflowGraph) -> node_engine::Workf
     }
 
     ne_graph
+}
+
+fn merge_node_data(existing: &mut serde_json::Value, patch: serde_json::Value) {
+    match (existing, patch) {
+        (serde_json::Value::Object(existing_map), serde_json::Value::Object(patch_map)) => {
+            for (key, value) in patch_map {
+                existing_map.insert(key, value);
+            }
+        }
+        (existing_value, replacement) => {
+            *existing_value = replacement;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "text-input".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "label": "Text Input",
+                        "text": "hello",
+                        "definition": {
+                            "node_type": "text-input"
+                        }
+                    }),
+                },
+                GraphNode {
+                    id: "text-output".to_string(),
+                    node_type: "text-output".to_string(),
+                    position: Position { x: 120.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "label": "Text Output"
+                    }),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "text-input-text-text-output-text".to_string(),
+                source: "text-input".to_string(),
+                source_handle: "text".to_string(),
+                target: "text-output".to_string(),
+                target_handle: "text".to_string(),
+            }],
+            derived_graph: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn update_node_data_merges_patch_into_existing_data() {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(sample_graph()).await;
+
+        let response = store
+            .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+                session_id: session.session_id.clone(),
+                node_id: "text-input".to_string(),
+                data: serde_json::json!({
+                    "text": "updated",
+                    "placeholder": "Prompt"
+                }),
+            })
+            .await
+            .expect("update node data");
+
+        let node = response
+            .graph
+            .find_node("text-input")
+            .expect("text-input node");
+        assert_eq!(node.data["text"], "updated");
+        assert_eq!(node.data["placeholder"], "Prompt");
+        assert_eq!(node.data["label"], "Text Input");
+        assert!(node.data.get("definition").is_some());
+    }
+
+    #[tokio::test]
+    async fn update_node_position_updates_session_graph() {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(sample_graph()).await;
+
+        let response = store
+            .update_node_position(WorkflowGraphUpdateNodePositionRequest {
+                session_id: session.session_id.clone(),
+                node_id: "text-output".to_string(),
+                position: Position { x: 320.0, y: 48.0 },
+            })
+            .await
+            .expect("update node position");
+
+        let node = response
+            .graph
+            .find_node("text-output")
+            .expect("text-output node");
+        assert_eq!(node.position, Position { x: 320.0, y: 48.0 });
+    }
+
+    #[tokio::test]
+    async fn remove_node_prunes_attached_edges() {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(sample_graph()).await;
+
+        let response = store
+            .remove_node(WorkflowGraphRemoveNodeRequest {
+                session_id: session.session_id.clone(),
+                node_id: "text-output".to_string(),
+            })
+            .await
+            .expect("remove node");
+
+        assert!(response.graph.find_node("text-output").is_none());
+        assert!(response.graph.edges.is_empty());
+    }
 }

@@ -80,8 +80,11 @@ export interface WorkflowBackend {
 
   // --- Graph Mutation (session-scoped) ---
 
-  /** Add a node to the graph during a session */
-  addNode(node: GraphNode, sessionId: string): Promise<void>;
+  /** Add a node. Returns the updated graph for frontend sync. */
+  addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraph>;
+
+  /** Remove a node and any attached edges. Returns the updated graph for frontend sync. */
+  removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraph>;
 
   /** Add an edge. Returns the updated graph for frontend sync. */
   addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph>;
@@ -114,8 +117,19 @@ export interface WorkflowBackend {
   /** Remove an edge. Returns the updated graph for frontend sync. */
   removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph>;
 
-  /** Update a node's data. Marks the node as modified for re-execution. */
-  updateNodeData(nodeId: string, data: Record<string, unknown>, sessionId: string): Promise<void>;
+  /** Update a node's data. Returns the updated graph for frontend sync. */
+  updateNodeData(
+    nodeId: string,
+    data: Record<string, unknown>,
+    sessionId: string,
+  ): Promise<WorkflowGraph>;
+
+  /** Update a node's position. Returns the updated graph for frontend sync. */
+  updateNodePosition(
+    nodeId: string,
+    position: { x: number; y: number },
+    sessionId: string,
+  ): Promise<WorkflowGraph>;
 
   /** Get the current graph state from a session */
   getExecutionGraph(sessionId: string): Promise<WorkflowGraph>;

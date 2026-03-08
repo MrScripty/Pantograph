@@ -15,7 +15,7 @@ use super::events::WorkflowEvent;
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     FileSystemWorkflowGraphStore, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodePositionHint, NodeDefinition, PortDataType, UndoRedoState, WorkflowFile,
+    InsertNodePositionHint, NodeDefinition, PortDataType, Position, UndoRedoState, WorkflowFile,
     WorkflowGraph, WorkflowGraphMetadata,
 };
 
@@ -325,6 +325,22 @@ pub async fn update_node_data(
 }
 
 #[command]
+pub async fn update_node_position_in_execution(
+    execution_id: String,
+    node_id: String,
+    position: Position,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    super::workflow_execution_commands::update_node_position_in_execution(
+        execution_id,
+        node_id,
+        position,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
 pub async fn add_node_to_execution(
     execution_id: String,
     node: GraphNode,
@@ -332,6 +348,20 @@ pub async fn add_node_to_execution(
 ) -> Result<WorkflowGraph, String> {
     super::workflow_execution_commands::add_node_to_execution(execution_id, node, workflow_service)
         .await
+}
+
+#[command]
+pub async fn remove_node_from_execution(
+    execution_id: String,
+    node_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    super::workflow_execution_commands::remove_node_from_execution(
+        execution_id,
+        node_id,
+        workflow_service,
+    )
+    .await
 }
 
 #[command]

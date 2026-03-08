@@ -75,8 +75,15 @@ export class TauriWorkflowBackend implements WorkflowBackend {
 
   // --- Graph Mutation ---
 
-  async addNode(node: GraphNode, sessionId: string): Promise<void> {
-    return invoke('add_node_to_execution', { executionId: sessionId, node });
+  async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraph> {
+    return invoke<WorkflowGraph>('add_node_to_execution', { executionId: sessionId, node });
+  }
+
+  async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraph> {
+    return invoke<WorkflowGraph>('remove_node_from_execution', {
+      executionId: sessionId,
+      nodeId,
+    });
   }
 
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph> {
@@ -147,8 +154,20 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     nodeId: string,
     data: Record<string, unknown>,
     sessionId: string,
-  ): Promise<void> {
-    return invoke('update_node_data', { executionId: sessionId, nodeId, data });
+  ): Promise<WorkflowGraph> {
+    return invoke<WorkflowGraph>('update_node_data', { executionId: sessionId, nodeId, data });
+  }
+
+  async updateNodePosition(
+    nodeId: string,
+    position: { x: number; y: number },
+    sessionId: string,
+  ): Promise<WorkflowGraph> {
+    return invoke<WorkflowGraph>('update_node_position_in_execution', {
+      executionId: sessionId,
+      nodeId,
+      position,
+    });
   }
 
   async getExecutionGraph(sessionId: string): Promise<WorkflowGraph> {

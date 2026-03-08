@@ -15,6 +15,7 @@ import type {
   NodeDefinition,
   PortDefinition,
   PortDataType,
+  GraphNode,
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
@@ -75,6 +76,7 @@ export interface WorkflowStores {
   updateViewport: (viewport: ViewportState) => void;
   setConnectionIntent: (intent: ConnectionIntentState | null) => void;
   clearConnectionIntent: () => void;
+  setActiveSessionId: (sessionId: string | null) => void;
 
   // Actions — inference settings
   syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
@@ -130,6 +132,7 @@ export function createWorkflowStores(
   const nodeGroups = writable<Map<string, NodeGroup>>(new Map());
   const selectedNodeIds = writable<string[]>([]);
   const connectionIntent = writable<ConnectionIntentState | null>(null);
+  let activeSessionId: string | null = null;
 
   // --- Derived stores ---
   const workflowGraph = derived(
@@ -162,6 +165,89 @@ export function createWorkflowStores(
     return grouped;
   });
 
+  function setActiveSessionId(sessionId: string | null) {
+    activeSessionId = sessionId;
+  }
+
+  function materializeWorkflowGraph(graph: WorkflowGraph) {
+    const definitions = get(nodeDefinitions);
+    const migratedNodeIds = new Set<string>();
+
+    const graphNodes: Node[] = graph.nodes.map((n) => {
+      let nodeType = n.node_type;
+      const nodeData = { ...n.data };
+
+      if (nodeType === 'system-prompt') {
+        nodeType = 'text-input';
+        migratedNodeIds.add(n.id);
+        if ('prompt' in nodeData && !('text' in nodeData)) {
+          nodeData.text = nodeData.prompt;
+          delete nodeData.prompt;
+        }
+      }
+
+      const definition = definitions.find((d) => d.node_type === nodeType);
+      return {
+        id: n.id,
+        type: nodeType,
+        position: n.position,
+        data: { ...nodeData, definition },
+      };
+    });
+
+    const graphEdges: Edge[] = graph.edges.map((e) => {
+      let sourceHandle = e.source_handle;
+      let targetHandle = e.target_handle;
+      if (migratedNodeIds.has(e.source) && sourceHandle === 'prompt') sourceHandle = 'text';
+      if (migratedNodeIds.has(e.target) && targetHandle === 'prompt') targetHandle = 'text';
+      return {
+        id: e.id,
+        source: e.source,
+        sourceHandle,
+        target: e.target,
+        targetHandle,
+      };
+    });
+
+    return { graphNodes, graphEdges };
+  }
+
+  function applyWorkflowGraph(
+    graph: WorkflowGraph,
+    options?: {
+      metadata?: WorkflowMetadata | null;
+      markDirty?: boolean;
+    },
+  ) {
+    const { graphNodes, graphEdges } = materializeWorkflowGraph(graph);
+    nodes.set(graphNodes);
+    edges.set(graphEdges);
+    if (typeof options?.metadata !== 'undefined') {
+      workflowMetadata.set(options.metadata);
+    }
+    connectionIntent.set(null);
+    derivedGraph.set(graph.derived_graph ?? buildDerivedGraph(graph));
+    isDirty.set(options?.markDirty ?? true);
+  }
+
+  function syncGraphMutationFromBackend(
+    action: string,
+    mutate: (sessionId: string) => Promise<WorkflowGraph>,
+  ) {
+    if (!activeSessionId) {
+      console.warn(`[workflowStores] Ignoring ${action} without an active session`);
+      return;
+    }
+
+    void mutate(activeSessionId)
+      .then((graph) => {
+        applyWorkflowGraph(graph, { markDirty: true });
+      })
+      .catch((error) => {
+        console.error(`[workflowStores] Failed to ${action}:`, error);
+      });
+  }
+
   function markGraphModified() {
     isDirty.set(true);
     connectionIntent.set(null);
@@ -188,9 +274,9 @@ export function createWorkflowStores(
 
   function addNode(definition: NodeDefinition, position: { x: number; y: number }) {
     const id = `${definition.node_type}-${Date.now()}`;
-    const newNode: Node = {
+    const newNode: GraphNode = {
       id,
-      type: definition.node_type,
+      node_type: definition.node_type,
       position,
       data: {
         label: definition.label,
@@ -198,30 +284,23 @@ export function createWorkflowStores(
         ...Object.fromEntries(definition.inputs.map((input) => [input.id, null])),
       },
     };
-    nodes.update((n) => [...n, newNode]);
-    markGraphModified();
+    syncGraphMutationFromBackend('add node', (sessionId) => backend.addNode(newNode, sessionId));
   }
 
   function removeNode(nodeId: string) {
-    nodes.update((n) => n.filter((node) => node.id !== nodeId));
-    edges.update((e) => e.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    markGraphModified();
+    syncGraphMutationFromBackend('remove node', (sessionId) => backend.removeNode(nodeId, sessionId));
   }
 
   function updateNodePosition(nodeId: string, position: { x: number; y: number }) {
-    nodes.update((n) =>
-      n.map((node) => (node.id === nodeId ? { ...node, position } : node))
+    syncGraphMutationFromBackend('update node position', (sessionId) =>
+      backend.updateNodePosition(nodeId, position, sessionId)
     );
-    markGraphModified();
   }
 
   function updateNodeData(nodeId: string, data: Record<string, unknown>) {
-    nodes.update((n) =>
-      n.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
-      )
+    syncGraphMutationFromBackend('update node data', (sessionId) =>
+      backend.updateNodeData(nodeId, data, sessionId)
     );
-    markGraphModified();
   }
 
   function updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
@@ -285,50 +364,28 @@ export function createWorkflowStores(
   // --- Edge actions ---
 
   function addEdgeFn(edge: Edge) {
-    let added = false;
-    edges.update((e) => {
-      const exists = e.some(
-        (existing) =>
-          existing.source === edge.source &&
-          existing.sourceHandle === edge.sourceHandle &&
-          existing.target === edge.target &&
-          existing.targetHandle === edge.targetHandle
-      );
-      if (exists) return e;
-      added = true;
-      return [...e, edge];
-    });
-    if (!added) return;
-    markGraphModified();
-
-    // Auto-sync when connecting an inference_settings edge
-    if (edge.sourceHandle === 'inference_settings') {
-      const sourceNode = getNodeById(edge.source);
-      const settings = sourceNode?.data?.inference_settings as InferenceParamSchema[] | undefined;
-      if (settings && settings.length > 0) {
-        syncExpandPorts(edge.source, settings);
-        syncInferencePorts(edge.source, settings);
-      }
-    }
+    syncGraphMutationFromBackend('add edge', (sessionId) =>
+      backend.addEdge(
+        {
+          id: edge.id,
+          source: edge.source,
+          source_handle: edge.sourceHandle || 'output',
+          target: edge.target,
+          target_handle: edge.targetHandle || 'input',
+        },
+        sessionId,
+      ),
+    );
   }
 
   function removeEdgeFn(edgeId: string) {
-    edges.update((e) => e.filter((edge) => edge.id !== edgeId));
-    markGraphModified();
+    syncGraphMutationFromBackend('remove edge', (sessionId) =>
+      backend.removeEdge(edgeId, sessionId)
+    );
   }
 
   function syncEdgesFromBackend(backendGraph: WorkflowGraph) {
-    const newEdges: Edge[] = backendGraph.edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      sourceHandle: e.source_handle,
-      target: e.target,
-      targetHandle: e.target_handle,
-    }));
-    edges.set(newEdges);
-    isDirty.set(true);
-    connectionIntent.set(null);
-    derivedGraph.set(backendGraph.derived_graph ?? buildDerivedGraph(backendGraph));
+    applyWorkflowGraph(backendGraph, { markDirty: true });
   }
 
   // --- Execution actions ---
@@ -384,54 +441,10 @@ export function createWorkflowStores(
   // --- Workflow actions ---
 
   function loadWorkflowFn(graph: WorkflowGraph, metadata?: WorkflowMetadata) {
-    const definitions = get(nodeDefinitions);
-    const migratedNodeIds = new Set<string>();
-
-    nodes.set(
-      graph.nodes.map((n) => {
-        let nodeType = n.node_type;
-        const nodeData = { ...n.data };
-
-        // Migration: system-prompt -> text-input
-        if (nodeType === 'system-prompt') {
-          nodeType = 'text-input';
-          migratedNodeIds.add(n.id);
-          if ('prompt' in nodeData && !('text' in nodeData)) {
-            nodeData.text = nodeData.prompt;
-            delete nodeData.prompt;
-          }
-        }
-
-        const definition = definitions.find((d) => d.node_type === nodeType);
-        return {
-          id: n.id,
-          type: nodeType,
-          position: n.position,
-          data: { ...nodeData, definition },
-        };
-      })
-    );
-
-    edges.set(
-      graph.edges.map((e) => {
-        let sourceHandle = e.source_handle;
-        let targetHandle = e.target_handle;
-        if (migratedNodeIds.has(e.source) && sourceHandle === 'prompt') sourceHandle = 'text';
-        if (migratedNodeIds.has(e.target) && targetHandle === 'prompt') targetHandle = 'text';
-        return {
-          id: e.id,
-          source: e.source,
-          sourceHandle,
-          target: e.target,
-          targetHandle,
-        };
-      })
-    );
-
-    workflowMetadata.set(metadata || null);
-    connectionIntent.set(null);
-    derivedGraph.set(graph.derived_graph ?? buildDerivedGraph(graph));
-    isDirty.set(false);
+    applyWorkflowGraph(graph, {
+      metadata: metadata || null,
+      markDirty: false,
+    });
   }
 
   function clearWorkflow() {
@@ -833,7 +846,7 @@ export function createWorkflowStores(
     appendStreamContent, setStreamContent, clearStreamContent,
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
-    setConnectionIntent, clearConnectionIntent,
+    setConnectionIntent, clearConnectionIntent, setActiveSessionId,
     // Inference settings actions
     syncInferencePorts, syncExpandPorts, autoConnectExpandToInference,
     // Group actions
