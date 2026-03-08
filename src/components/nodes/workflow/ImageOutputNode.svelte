@@ -22,6 +22,7 @@
   let imageSrc = $derived(imageData ? `data:image/png;base64,${imageData}` : '');
 
   let showModal = $state(false);
+  let modalElement = $state<HTMLDialogElement | null>(null);
 
   let statusColor = $derived(
     {
@@ -32,7 +33,21 @@
     }[executionState]
   );
 
-  function downloadImage() {
+  function stopControlEvent(event: Event) {
+    event.stopPropagation();
+  }
+
+  function openModal(event?: Event) {
+    event?.stopPropagation();
+    showModal = true;
+  }
+
+  function closeModal() {
+    showModal = false;
+  }
+
+  function downloadImage(event?: Event) {
+    event?.stopPropagation();
     if (!imageData) return;
     const byteChars = atob(imageData);
     const bytes = new Uint8Array(byteChars.length);
@@ -45,8 +60,25 @@
     a.href = url;
     a.download = 'output.png';
     a.click();
-    URL.revokeObjectURL(url);
+    requestAnimationFrame(() => URL.revokeObjectURL(url));
   }
+
+  $effect(() => {
+    if (!modalElement) {
+      return;
+    }
+
+    if (showModal) {
+      if (!modalElement.open) {
+        modalElement.showModal();
+      }
+      return;
+    }
+
+    if (modalElement.open) {
+      modalElement.close();
+    }
+  });
 </script>
 
 <div class="image-output-wrapper">
@@ -68,7 +100,12 @@
         <div class="space-y-1">
           <button type="button"
             class="w-full cursor-pointer border-0 bg-transparent p-0"
-            onclick={() => (showModal = true)}
+            onclick={openModal}
+            onmousedown={stopControlEvent}
+            onmouseup={stopControlEvent}
+            onpointerdown={stopControlEvent}
+            onpointerup={stopControlEvent}
+            onclickcapture={stopControlEvent}
           >
             <img src={imageSrc} alt="Output" class="max-h-40 w-full object-contain rounded" />
           </button>
@@ -76,12 +113,22 @@
             <button type="button"
               class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
               onclick={downloadImage}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onpointerdown={stopControlEvent}
+              onpointerup={stopControlEvent}
+              onclickcapture={stopControlEvent}
             >
               Download
             </button>
             <button type="button"
               class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
-              onclick={() => (showModal = true)}
+              onclick={openModal}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onpointerdown={stopControlEvent}
+              onpointerup={stopControlEvent}
+              onclickcapture={stopControlEvent}
             >
               Expand
             </button>
@@ -96,15 +143,21 @@
   </BaseNode>
 </div>
 
-{#if showModal && imageSrc}
-  <button type="button"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 border-0 cursor-default p-4"
-    onclick={() => (showModal = false)}
-    onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
-  >
-    <img src={imageSrc} alt="Full resolution output" class="max-w-full max-h-full object-contain" />
-  </button>
-{/if}
+<dialog
+  bind:this={modalElement}
+  class="image-preview-dialog"
+  onclick={(event) => event.target === modalElement && closeModal()}
+  onclose={closeModal}
+>
+  {#if imageSrc}
+    <div class="dialog-content" onclick={stopControlEvent}>
+      <button type="button" class="dialog-close" onclick={closeModal}>
+        Close
+      </button>
+      <img src={imageSrc} alt="Full resolution output" class="dialog-image" />
+    </div>
+  {/if}
+</dialog>
 
 <style>
   .image-output-wrapper :global(.base-node) {
@@ -114,5 +167,55 @@
   .image-output-wrapper :global(.node-header) {
     background-color: rgba(139, 92, 246, 0.2);
     border-color: rgba(139, 92, 246, 0.3);
+  }
+
+  .image-preview-dialog {
+    width: min(96vw, 1600px);
+    max-width: 96vw;
+    height: min(96vh, 1100px);
+    max-height: 96vh;
+    border: 0;
+    border-radius: 16px;
+    padding: 0;
+    background: rgba(10, 10, 10, 0.96);
+    color: white;
+  }
+
+  .image-preview-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.82);
+  }
+
+  .dialog-content {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 1rem;
+  }
+
+  .dialog-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 12px;
+  }
+
+  .dialog-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.4rem 0.75rem;
+    background: rgba(38, 38, 38, 0.9);
+    color: rgb(229, 229, 229);
+    cursor: pointer;
+    font-size: 0.75rem;
+  }
+
+  .dialog-close:hover {
+    background: rgba(82, 82, 82, 0.95);
   }
 </style>

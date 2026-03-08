@@ -1,3 +1,10 @@
+<script context="module" lang="ts">
+  import type { PortOption } from '../../../services/workflow/types';
+
+  let cachedModelOptions: PortOption[] | null = null;
+  let inflightModelOptions: Promise<PortOption[]> | null = null;
+</script>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
@@ -239,23 +246,45 @@
       }
     }
 
-    if (data.modelPath) {
+    if (data.modelPath && !data.dependency_requirements) {
       await resolveDependencyRequirements();
     }
   });
 
   async function loadModels() {
+    if (cachedModelOptions) {
+      availableModels = cachedModelOptions;
+      loadError = null;
+      return;
+    }
+
+    if (inflightModelOptions) {
+      isLoading = true;
+      try {
+        availableModels = await inflightModelOptions;
+        loadError = null;
+      } catch (error) {
+        loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
+      } finally {
+        isLoading = false;
+      }
+      return;
+    }
+
     isLoading = true;
     try {
-      const result = await invoke<PortOptionsResult>('query_port_options', {
+      inflightModelOptions = invoke<PortOptionsResult>('query_port_options', {
         nodeType: 'puma-lib',
         portId: 'model_path',
-      });
-      availableModels = result.options;
+      }).then((result) => result.options);
+
+      availableModels = await inflightModelOptions;
+      cachedModelOptions = availableModels;
       loadError = null;
     } catch (error) {
       loadError = error instanceof Error ? error.message : 'Failed to load models from pumas library';
     } finally {
+      inflightModelOptions = null;
       isLoading = false;
     }
   }
