@@ -823,16 +823,26 @@
       return null;
     }
 
+    const sourceAnchor = {
+      node_id: connection.source,
+      port_id: connection.sourceHandle,
+    };
+    const targetAnchor = {
+      node_id: connection.target,
+      port_id: connection.targetHandle,
+    };
+    const activeIntent = $connectionIntent;
+    const requestedRevision =
+      activeIntent &&
+      activeIntent.sourceAnchor.node_id === sourceAnchor.node_id &&
+      activeIntent.sourceAnchor.port_id === sourceAnchor.port_id
+        ? activeIntent.graphRevision
+        : getGraphRevision();
+
     const response = await workflowService.connectAnchors(
-      {
-        node_id: connection.source,
-        port_id: connection.sourceHandle,
-      },
-      {
-        node_id: connection.target,
-        port_id: connection.targetHandle,
-      },
-      getGraphRevision()
+      sourceAnchor,
+      targetAnchor,
+      requestedRevision
     );
 
     if (response.accepted && response.graph) {
@@ -841,11 +851,15 @@
       return response;
     }
 
+    try {
+      const backendGraph = await workflowService.getExecutionGraph();
+      syncEdgesFromBackend(backendGraph);
+    } catch (error) {
+      console.warn('[WorkflowGraph] Failed to refresh execution graph after rejected connect:', error);
+    }
+
     setConnectionIntent({
-      sourceAnchor: {
-        node_id: connection.source,
-        port_id: connection.sourceHandle,
-      },
+      sourceAnchor,
       graphRevision: response.graph_revision,
       compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
       compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
