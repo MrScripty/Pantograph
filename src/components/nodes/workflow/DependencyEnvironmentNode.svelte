@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteMap } from 'svelte/reactivity';
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
@@ -296,7 +297,7 @@
     base: DependencyOverridePatchV1[],
     overlay: DependencyOverridePatchV1[]
   ): DependencyOverridePatchV1[] {
-    const byKey = new Map<string, DependencyOverridePatchV1>();
+    const byKey = new SvelteMap<string, DependencyOverridePatchV1>();
     const patchKey = (patch: DependencyOverridePatchV1): string =>
       `${patch.binding_id}|${patch.scope}|${(patch.requirement_name ?? '').toLowerCase()}`;
 

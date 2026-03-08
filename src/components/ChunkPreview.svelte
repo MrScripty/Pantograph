@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteMap } from 'svelte/reactivity';
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import {
@@ -75,7 +76,7 @@
 
   // Group docs by section for the dropdown
   function groupDocsBySection(docs: DocInfo[]): Map<string, DocInfo[]> {
-    const grouped = new Map<string, DocInfo[]>();
+    const grouped = new SvelteMap<string, DocInfo[]>();
     for (const doc of docs) {
       const section = doc.section || 'General';
       if (!grouped.has(section)) {

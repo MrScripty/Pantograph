@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { nodeDefinitionsByCategory, addNode } from '../stores/workflowStore';
   import type { NodeDefinition } from '../services/workflow/types';
 
   let searchQuery = $state('');
-  let expandedCategories = $state(new Set(['input', 'processing', 'output']));
+  let expandedCategories = new SvelteSet(['input', 'processing', 'output']);
 
   // Format category names for display (snake_case -> Title Case)
   function formatCategoryName(category: string): string {
@@ -11,7 +12,7 @@
   }
 
   let filteredByCategory = $derived(() => {
-    const result = new Map<string, NodeDefinition[]>();
+    const result = new SvelteMap<string, NodeDefinition[]>();
     for (const [category, defs] of $nodeDefinitionsByCategory) {
       const filtered = defs.filter(
         (d) =>
@@ -31,7 +32,6 @@
     } else {
       expandedCategories.add(category);
     }
-    expandedCategories = new Set(expandedCategories);
   }
 
   function handleDragStart(event: DragEvent, definition: NodeDefinition) {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { NodeDefinition } from '../types/workflow.js';
   import { useGraphContext } from '../context/useGraphContext.js';
 
@@ -6,14 +7,14 @@
   const nodeDefinitionsByCategory = stores.workflow.nodeDefinitionsByCategory;
 
   let searchQuery = $state('');
-  let expandedCategories = $state(new Set(['input', 'processing', 'output']));
+  let expandedCategories = new SvelteSet(['input', 'processing', 'output']);
 
   function formatCategoryName(category: string): string {
     return category.charAt(0).toUpperCase() + category.slice(1);
   }
 
   let filteredByCategory = $derived(() => {
-    const result = new Map<string, NodeDefinition[]>();
+    const result = new SvelteMap<string, NodeDefinition[]>();
     for (const [category, defs] of $nodeDefinitionsByCategory) {
       const filtered = defs.filter(
         (d) =>
@@ -33,7 +34,6 @@
     } else {
       expandedCategories.add(category);
     }
-    expandedCategories = new Set(expandedCategories);
   }
 
   function handleDragStart(event: DragEvent, definition: NodeDefinition) {

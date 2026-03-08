@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteMap } from 'svelte/reactivity';
   import { onMount } from 'svelte';
   import type { GeneratedComponent, LoggerInterface, HotloadConfig } from '../types';
   import { defaultLogger } from '../types';
@@ -33,7 +34,7 @@
   let components: GeneratedComponent[] = $state([]);
 
   // Track render errors locally (in addition to registry)
-  let renderErrors: Map<string, Error> = $state(new Map());
+  let renderErrors: Map<string, Error> = new SvelteMap();
 
   // Track interaction mode for pointer-events
   let currentMode: 'draw' | 'interact' = $state('draw');
@@ -69,9 +70,7 @@
     activeLogger.log('container_render_error', { componentId, error: error.message }, 'error');
 
     // Update local state - create new Map to trigger Svelte 5 reactivity
-    const newErrors = new Map(renderErrors);
-    newErrors.set(componentId, error);
-    renderErrors = newErrors;
+    renderErrors.set(componentId, error);
 
     // Update registry
     registry.setRenderError(componentId, error.message);
@@ -84,9 +83,7 @@
     activeLogger.log('container_retry', { componentId });
 
     // Clear local error - create new Map to trigger Svelte 5 reactivity
-    const newErrors = new Map(renderErrors);
-    newErrors.delete(componentId);
-    renderErrors = newErrors;
+    renderErrors.delete(componentId);
 
     // Retry via registry
     await registry.retry(componentId);

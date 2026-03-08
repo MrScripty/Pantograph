@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteSet } from 'svelte/reactivity';
   import { slide } from 'svelte/transition';
   import type { AgentActivityItem } from '../../services/AgentService';
   import type { ChatMessage } from '../../services/LLMService';
@@ -29,7 +30,7 @@
   }: Props = $props();
 
   // Local state
-  let expandedItems: Set<string> = $state(new Set());
+  let expandedItems: Set<string> = new SvelteSet();
   let hoveredItemId: string | null = $state(null);
 
   // Handle Ctrl+C to copy hovered item content
@@ -63,7 +64,6 @@
     } else {
       expandedItems.add(id);
     }
-    expandedItems = new Set(expandedItems);
   };
 
   // Truncate long text for display

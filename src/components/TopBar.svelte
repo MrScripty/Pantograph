@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+  import { SvelteSet } from 'svelte/reactivity';
   import { onMount } from 'svelte';
   import { Logger } from '../services/Logger';
   import { AgentService, type ComponentUpdate } from '../services/AgentService';
@@ -79,7 +80,7 @@
     openSidePanel();
 
     // Track components registered via streaming events to avoid duplicate registration
-    const registeredIds = new Set<string>();
+    const registeredIds = new SvelteSet<string>();
 
     // Subscribe to events for immediate component registration
     const unsubscribe = AgentService.subscribeEvents(async (event) => {
