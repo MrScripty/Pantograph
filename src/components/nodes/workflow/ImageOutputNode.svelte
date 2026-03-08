@@ -59,7 +59,9 @@
     const a = document.createElement('a');
     a.href = url;
     a.download = 'output.png';
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     requestAnimationFrame(() => URL.revokeObjectURL(url));
   }
 
@@ -99,7 +101,7 @@
       {#if imageSrc}
         <div class="space-y-1">
           <button type="button"
-            class="w-full cursor-pointer border-0 bg-transparent p-0"
+            class="nodrag nopan nowheel w-full cursor-pointer border-0 bg-transparent p-0"
             onclick={openModal}
             onmousedown={stopControlEvent}
             onmouseup={stopControlEvent}
@@ -111,7 +113,7 @@
           </button>
           <div class="flex justify-end gap-1">
             <button type="button"
-              class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+              class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
               onclick={downloadImage}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -122,7 +124,7 @@
               Download
             </button>
             <button type="button"
-              class="text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
+              class="nodrag nopan nowheel text-[10px] text-neutral-400 hover:text-neutral-200 bg-transparent border-0 cursor-pointer px-1"
               onclick={openModal}
               onmousedown={stopControlEvent}
               onmouseup={stopControlEvent}
@@ -151,7 +153,7 @@
 >
   {#if imageSrc}
     <div class="dialog-content" onclick={stopControlEvent}>
-      <button type="button" class="dialog-close" onclick={closeModal}>
+      <button type="button" class="nodrag nopan nowheel dialog-close" onclick={closeModal}>
         Close
       </button>
       <img src={imageSrc} alt="Full resolution output" class="dialog-image" />

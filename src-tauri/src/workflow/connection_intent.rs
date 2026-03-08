@@ -591,6 +591,62 @@ mod tests {
     }
 
     #[test]
+    fn diffusion_image_can_connect_to_image_output() {
+        let registry = NodeRegistry::new();
+        let graph = WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "diffusion".into(),
+                    node_type: "diffusion-inference".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+                GraphNode {
+                    id: "image-output".into(),
+                    node_type: "image-output".into(),
+                    position: Position { x: 240.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: Vec::new(),
+            derived_graph: None,
+        };
+
+        let response = connection_candidates(
+            &graph,
+            &registry,
+            ConnectionAnchor {
+                node_id: "diffusion".into(),
+                port_id: "image".into(),
+            },
+            None,
+        )
+        .expect("candidate query should succeed");
+
+        assert!(response.compatible_nodes.iter().any(|node| {
+            node.node_id == "image-output"
+                && node.anchors.iter().any(|port| port.port_id == "image")
+        }));
+
+        let revision = graph.compute_fingerprint();
+        let result = commit_connection(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "diffusion".into(),
+                port_id: "image".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "image-output".into(),
+                port_id: "image".into(),
+            },
+        );
+
+        assert!(result.is_ok(), "image output should accept diffusion image");
+    }
+
+    #[test]
     fn insert_node_and_connect_returns_inserted_node_and_edge() {
         let registry = NodeRegistry::new();
         let graph = graph();
