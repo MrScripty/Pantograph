@@ -7,7 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type { OrchestrationGraph } from '../../stores/orchestrationStore';
-import type { GraphNode } from './types';
+import type { WorkflowGraph, GraphNode } from './types';
 import type { NodeGroup, PortMapping } from './groupTypes';
 
 // Import templates statically (bundled with the app)

@@ -9,9 +9,9 @@ import type { Component } from 'svelte';
  */
 export interface NodeTypeRegistry {
   /** Map of node_type string to Svelte component */
-  nodeTypes: Record<string, Component<any>>;
+  nodeTypes: Record<string, Component<Record<string, unknown>>>;
   /** Fallback component for unknown node types */
-  fallbackNode: Component<any>;
+  fallbackNode: Component<Record<string, unknown>>;
   /** Optional custom edge types (defaults to ReconnectableEdge) */
-  edgeTypes?: Record<string, Component<any>>;
+  edgeTypes?: Record<string, Component<Record<string, unknown>>>;
 }

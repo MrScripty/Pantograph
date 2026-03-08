@@ -13,9 +13,9 @@ import ReconnectableEdge from '../components/edges/ReconnectableEdge.svelte';
  */
 export function buildRegistry(
   definitions: NodeDefinition[],
-  specializedNodes?: Record<string, Component<any>>,
+  specializedNodes?: Record<string, Component<Record<string, unknown>>>,
 ): NodeTypeRegistry {
-  const nodeTypes: Record<string, Component<any>> = {};
+  const nodeTypes: Record<string, Component<Record<string, unknown>>> = {};
   for (const def of definitions) {
     nodeTypes[def.node_type] = specializedNodes?.[def.node_type] ?? GenericNode;
   }

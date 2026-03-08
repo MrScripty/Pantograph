@@ -238,10 +238,12 @@ export class ImportManager {
           };
         }
 
+        const validatedModule = module as { default: ComponentType<SvelteComponent> };
+
         this.logger.log('IMPORT_SUCCESS', { path, duration, method: 'glob' });
         return {
           success: true,
-          component: module.default,
+          component: validatedModule.default,
           error: null,
           duration,
         };

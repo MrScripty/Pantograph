@@ -12,15 +12,14 @@
 
 import { clearValidationCache } from './ValidationCache';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let componentModules: Record<string, () => Promise<any>> =
+let componentModules: Record<string, () => Promise<unknown>> =
   import.meta.glob('/src/generated/**/*.svelte');
 
 /**
  * Get the current glob result for component modules.
  * Returns a record of paths to dynamic import functions.
  */
-export function getComponentModules(): Record<string, () => Promise<any>> {
+export function getComponentModules(): Record<string, () => Promise<unknown>> {
   return componentModules;
 }
 
