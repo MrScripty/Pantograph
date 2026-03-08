@@ -118,6 +118,17 @@ export type {
   HorseshoeSpaceKeyContext,
 } from './horseshoeInvocation.js';
 export {
+  clearHorseshoeInsertFeedback,
+  createHorseshoeInsertFeedbackState,
+  rejectHorseshoeInsertFeedback,
+  resolveHorseshoeStatusLabel,
+  startHorseshoeInsertFeedback,
+} from './horseshoeInsertFeedback.js';
+export type {
+  HorseshoeInsertFeedbackState,
+  HorseshoeStatusContext,
+} from './horseshoeInsertFeedback.js';
+export {
   clearConnectionDragState,
   createConnectionDragState,
   markConnectionDragFinalizing,
