@@ -42,7 +42,9 @@ process-backed Python execution for nodes such as `pytorch-inference`,
 `diffusion-inference`, `audio-generation`, and `onnx-inference`. Execution
 state is now stored as a per-session async mutex behind the global session map
 so long-running mutation commands serialize within one session without blocking
-lookups or edits for every other session.
+lookups or edits for every other session. Session-scoped candidate lookup and
+insert commands now also emit release-visible tracing at the command boundary so
+interactive horseshoe failures can be diagnosed from `--run-release` logs.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -61,6 +63,9 @@ lookups or edits for every other session.
   not leave orphan nodes or disconnected edges.
 - `workflow_execution_commands.rs` must refresh derived graph metadata when it
   returns graphs to the frontend.
+- Session-scoped candidate and insert commands must log enough request/rejection
+  context to diagnose release-only interaction failures without relying on
+  browser-console access.
 - The global execution registry lock must not be held across awaited graph
   mutations; only the per-session execution lock may span awaited workflow work.
 - Python-backed execution stays out-of-process and is selected by resolved
