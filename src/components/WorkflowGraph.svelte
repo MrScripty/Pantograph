@@ -620,7 +620,7 @@
       const response = await workflowService.insertNodeAndConnect(
         currentConnectionIntent.sourceAnchor,
         candidate.node_type,
-        getGraphRevision(),
+        currentConnectionIntent.graphRevision || getGraphRevision(),
         positionHint,
         candidate.matching_input_port_ids[0],
       );

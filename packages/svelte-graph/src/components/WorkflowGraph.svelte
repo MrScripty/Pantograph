@@ -425,7 +425,7 @@
         connectionIntent.sourceAnchor,
         candidate.node_type,
         sessionId,
-        getGraphRevision(),
+        connectionIntent.graphRevision || getGraphRevision(),
         positionHint,
         candidate.matching_input_port_ids[0],
       );
