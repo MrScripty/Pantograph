@@ -8,13 +8,13 @@ and library-provided metadata before host-specific executors take over.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `audio_input.rs` | Audio file input descriptor. |
-| `image_input.rs` | Image input descriptor for workflow-provided image payloads. |
-| `model_provider.rs` | Generic model-provider node contract. |
-| `puma_lib.rs` | Puma-Lib model selector that emits model path, dependency requirements, and inference settings metadata. |
-| `text_input.rs` | Plain text input descriptor. |
-| `number_input.rs` | Numeric input descriptor. |
-| `boolean_input.rs` | Boolean input descriptor. |
+| `puma_lib.rs` | Host-bridged model selector that publishes routing and dependency metadata from Pumas into workflow graphs. |
+| `model_provider.rs` | Generic model selector used when the workflow is not backed by the Pantograph/Pumas library path. |
+| `text_input.rs` | Freeform text source for prompts and other string inputs. |
+| `number_input.rs` | Numeric source node that adopts downstream defaults and constraints. |
+| `boolean_input.rs` | Boolean source node for true/false workflow settings. |
+| `image_input.rs` | Image payload source for image-consuming workflows. |
+| `audio_input.rs` | Audio payload source for audio-consuming workflows. |
 
 ## Problem
 Workflow graphs need stable input contracts that can be shared across hosts.
@@ -55,7 +55,10 @@ settings so downstream routing can distinguish text, audio, and diffusion flows.
 - `puma-lib` outputs are append-only workflow metadata contracts.
 
 ## Structured Producer Contract
-- `puma-lib` emits `model_path`, `inference_settings`, and
+- `puma-lib` emits `model_path`, `model_id`, `model_type`,
+  `task_type_primary`, `backend_key`, `platform_context`,
+  `selected_binding_ids`, `dependency_bindings`,
+  `dependency_requirements_id`, `inference_settings`, and
   `dependency_requirements`.
 - Diffusion models should resolve to `text-to-image` when explicit metadata is
   missing but `model_type == diffusion`.

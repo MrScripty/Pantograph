@@ -20,6 +20,7 @@ const PORT_CFG_SCALE: &str = "cfg_scale";
 const PORT_SEED: &str = "seed";
 const PORT_WIDTH: &str = "width";
 const PORT_HEIGHT: &str = "height";
+const PORT_ENVIRONMENT_REF: &str = "environment_ref";
 const PORT_IMAGE: &str = "image";
 const PORT_SEED_USED: &str = "seed_used";
 const PORT_STREAM: &str = "stream";
@@ -68,6 +69,11 @@ impl TaskDescriptor for DiffusionInferenceTask {
                 PortMetadata::optional(PORT_SEED, "Seed", PortDataType::Number),
                 PortMetadata::optional(PORT_WIDTH, "Width", PortDataType::Number),
                 PortMetadata::optional(PORT_HEIGHT, "Height", PortDataType::Number),
+                PortMetadata::optional(
+                    PORT_ENVIRONMENT_REF,
+                    "Environment Ref",
+                    PortDataType::Json,
+                ),
             ],
             outputs: vec![
                 PortMetadata::required(PORT_IMAGE, "Image", PortDataType::Image),
@@ -110,9 +116,9 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = DiffusionInferenceTask::descriptor();
 
-        // 9 inputs: model_path, prompt, negative_prompt, inference_settings,
-        //           steps, cfg_scale, seed, width, height
-        assert_eq!(meta.inputs.len(), 9);
+        // 10 inputs: model_path, prompt, negative_prompt, inference_settings,
+        //            steps, cfg_scale, seed, width, height, environment_ref
+        assert_eq!(meta.inputs.len(), 10);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "negative_prompt"));
@@ -122,6 +128,7 @@ mod tests {
         assert!(meta.inputs.iter().any(|p| p.id == "seed"));
         assert!(meta.inputs.iter().any(|p| p.id == "width"));
         assert!(meta.inputs.iter().any(|p| p.id == "height"));
+        assert!(meta.inputs.iter().any(|p| p.id == "environment_ref"));
 
         // 3 outputs: image, seed_used, stream
         assert_eq!(meta.outputs.len(), 3);

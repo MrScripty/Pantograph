@@ -16,6 +16,14 @@ use node_engine::{
 };
 
 const PORT_MODEL_PATH: &str = "model_path";
+const PORT_MODEL_ID: &str = "model_id";
+const PORT_MODEL_TYPE: &str = "model_type";
+const PORT_TASK_TYPE_PRIMARY: &str = "task_type_primary";
+const PORT_BACKEND_KEY: &str = "backend_key";
+const PORT_PLATFORM_CONTEXT: &str = "platform_context";
+const PORT_SELECTED_BINDING_IDS: &str = "selected_binding_ids";
+const PORT_DEPENDENCY_BINDINGS: &str = "dependency_bindings";
+const PORT_DEPENDENCY_REQUIREMENTS_ID: &str = "dependency_requirements_id";
 const PORT_INFERENCE_SETTINGS: &str = "inference_settings";
 const PORT_DEPENDENCY_REQUIREMENTS: &str = "dependency_requirements";
 
@@ -47,6 +55,34 @@ impl TaskDescriptor for PumaLibTask {
             inputs: vec![],
             outputs: vec![
                 PortMetadata::optional(PORT_MODEL_PATH, "Model Path", PortDataType::String),
+                PortMetadata::optional(PORT_MODEL_ID, "Model ID", PortDataType::String),
+                PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
+                PortMetadata::optional(
+                    PORT_TASK_TYPE_PRIMARY,
+                    "Task Type",
+                    PortDataType::String,
+                ),
+                PortMetadata::optional(PORT_BACKEND_KEY, "Backend Key", PortDataType::String),
+                PortMetadata::optional(
+                    PORT_PLATFORM_CONTEXT,
+                    "Platform Context",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    PORT_SELECTED_BINDING_IDS,
+                    "Selected Bindings",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    PORT_DEPENDENCY_BINDINGS,
+                    "Dependency Bindings",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    PORT_DEPENDENCY_REQUIREMENTS_ID,
+                    "Dependency Requirements ID",
+                    PortDataType::String,
+                ),
                 PortMetadata::optional(
                     PORT_INFERENCE_SETTINGS,
                     "Inference Settings",
@@ -291,9 +327,28 @@ mod tests {
         let meta = PumaLibTask::descriptor();
 
         assert!(meta.inputs.is_empty());
-        assert_eq!(meta.outputs.len(), 3);
+        assert_eq!(meta.outputs.len(), 11);
 
         assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
+        assert!(meta.outputs.iter().any(|p| p.id == "model_id"));
+        assert!(meta.outputs.iter().any(|p| p.id == "model_type"));
+        assert!(meta.outputs.iter().any(|p| p.id == "task_type_primary"));
+        assert!(meta.outputs.iter().any(|p| p.id == "backend_key"));
+        assert!(meta.outputs.iter().any(|p| p.id == "platform_context"
+            && p.data_type == PortDataType::Json
+            && !p.required));
+        assert!(meta.outputs.iter().any(|p| p.id == "selected_binding_ids"
+            && p.data_type == PortDataType::Json
+            && !p.required));
+        assert!(meta.outputs.iter().any(|p| p.id == "dependency_bindings"
+            && p.data_type == PortDataType::Json
+            && !p.required));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == "dependency_requirements_id"
+                && p.data_type == PortDataType::String
+                && !p.required));
         assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"
             && p.data_type == PortDataType::Json
             && !p.required));
