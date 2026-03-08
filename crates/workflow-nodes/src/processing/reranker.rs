@@ -13,6 +13,7 @@ use node_engine::{
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_QUERY: &str = "query";
 const PORT_DOCUMENTS: &str = "documents";
+const PORT_DOCUMENTS_JSON: &str = "documents_json";
 const PORT_TOP_K: &str = "top_k";
 const PORT_RETURN_DOCUMENTS: &str = "return_documents";
 const PORT_RESULTS: &str = "results";
@@ -46,6 +47,11 @@ impl TaskDescriptor for RerankerTask {
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_QUERY, "Query", PortDataType::String),
                 PortMetadata::required(PORT_DOCUMENTS, "Documents", PortDataType::Json),
+                PortMetadata::optional(
+                    PORT_DOCUMENTS_JSON,
+                    "Documents JSON",
+                    PortDataType::String,
+                ),
                 PortMetadata::optional(PORT_TOP_K, "Top K", PortDataType::Number),
                 PortMetadata::optional(
                     PORT_RETURN_DOCUMENTS,
@@ -102,10 +108,11 @@ mod tests {
     fn test_descriptor_has_expected_ports() {
         let meta = RerankerTask::descriptor();
 
-        assert_eq!(meta.inputs.len(), 6);
+        assert_eq!(meta.inputs.len(), 7);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "query"));
         assert!(meta.inputs.iter().any(|p| p.id == "documents"));
+        assert!(meta.inputs.iter().any(|p| p.id == "documents_json"));
         assert!(meta.inputs.iter().any(|p| p.id == "top_k"));
         assert!(meta.inputs.iter().any(|p| p.id == "return_documents"));
         assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));

@@ -152,6 +152,8 @@
         return 'Sidecar (VLM)';
       case 'sidecar_embedding':
         return 'Sidecar (Embedding)';
+      case 'sidecar_reranking':
+        return 'Sidecar (Reranker)';
       default:
         return 'None';
     }

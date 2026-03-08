@@ -1,0 +1,187 @@
+{
+  "name": "GGUF Reranker Workflow",
+  "description": "Minimal reranking workflow that routes a Puma-Lib GGUF reranker model into the dedicated reranker node and displays both the top result and the full ranking JSON.",
+  "version": "1.0.0",
+  "orchestration": {
+    "id": "gguf-reranker-workflow-orch",
+    "name": "GGUF Reranker Workflow",
+    "description": "Single data-graph orchestration for local GGUF reranking.",
+    "nodes": [
+      {
+        "id": "start",
+        "nodeType": "start",
+        "position": [80, 180],
+        "config": {}
+      },
+      {
+        "id": "rerank-documents",
+        "nodeType": "data_graph",
+        "position": [260, 180],
+        "config": {
+          "dataGraphId": "gguf-reranker-graph",
+          "inputMappings": {},
+          "outputMappings": {}
+        }
+      },
+      {
+        "id": "end",
+        "nodeType": "end",
+        "position": [460, 180],
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "sourceHandle": "next",
+        "target": "rerank-documents",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e2",
+        "source": "rerank-documents",
+        "sourceHandle": "next",
+        "target": "end",
+        "targetHandle": "input"
+      }
+    ],
+    "dataGraphs": {
+      "rerank-documents": "gguf-reranker-graph"
+    }
+  },
+  "dataGraphs": {
+    "gguf-reranker-graph": {
+      "id": "gguf-reranker-graph",
+      "name": "GGUF Reranker Graph",
+      "nodes": [
+        {
+          "id": "query",
+          "node_type": "text-input",
+          "position": { "x": 80, "y": 120 },
+          "data": {
+            "label": "Query",
+            "text": "Which candidate best answers the question about Pantograph reranker support?"
+          }
+        },
+        {
+          "id": "documents-json",
+          "node_type": "text-input",
+          "position": { "x": 80, "y": 320 },
+          "data": {
+            "label": "Documents JSON",
+            "text": "[\n  \"Pantograph currently supports llama.cpp text generation and embeddings.\",\n  \"Pantograph needs a dedicated reranker node to run GGUF reranker models cleanly.\",\n  \"The generic llama inference node is already sufficient for reranking models.\"\n]"
+          }
+        },
+        {
+          "id": "top-k",
+          "node_type": "number-input",
+          "position": { "x": 80, "y": 520 },
+          "data": {
+            "label": "Top K",
+            "value": 3
+          }
+        },
+        {
+          "id": "return-documents",
+          "node_type": "boolean-input",
+          "position": { "x": 260, "y": 520 },
+          "data": {
+            "label": "Return Documents",
+            "value": true
+          }
+        },
+        {
+          "id": "model",
+          "node_type": "puma-lib",
+          "position": { "x": 360, "y": 120 },
+          "data": {
+            "label": "Qwen3-Reranker-4B-GGUF"
+          }
+        },
+        {
+          "id": "reranker",
+          "node_type": "reranker",
+          "position": { "x": 640, "y": 240 },
+          "data": {
+            "label": "GGUF Reranker"
+          }
+        },
+        {
+          "id": "top-document",
+          "node_type": "text-output",
+          "position": { "x": 960, "y": 160 },
+          "data": {
+            "label": "Top Document"
+          }
+        },
+        {
+          "id": "results",
+          "node_type": "text-output",
+          "position": { "x": 960, "y": 360 },
+          "data": {
+            "label": "Ranking JSON"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "query",
+          "source_handle": "text",
+          "target": "reranker",
+          "target_handle": "query"
+        },
+        {
+          "id": "e2",
+          "source": "documents-json",
+          "source_handle": "text",
+          "target": "reranker",
+          "target_handle": "documents_json"
+        },
+        {
+          "id": "e3",
+          "source": "top-k",
+          "source_handle": "value",
+          "target": "reranker",
+          "target_handle": "top_k"
+        },
+        {
+          "id": "e4",
+          "source": "return-documents",
+          "source_handle": "value",
+          "target": "reranker",
+          "target_handle": "return_documents"
+        },
+        {
+          "id": "e5",
+          "source": "model",
+          "source_handle": "model_path",
+          "target": "reranker",
+          "target_handle": "model_path"
+        },
+        {
+          "id": "e6",
+          "source": "model",
+          "source_handle": "inference_settings",
+          "target": "reranker",
+          "target_handle": "inference_settings"
+        },
+        {
+          "id": "e7",
+          "source": "reranker",
+          "source_handle": "top_document",
+          "target": "top-document",
+          "target_handle": "text"
+        },
+        {
+          "id": "e8",
+          "source": "reranker",
+          "source_handle": "results",
+          "target": "results",
+          "target_handle": "text"
+        }
+      ]
+    }
+  }
+}

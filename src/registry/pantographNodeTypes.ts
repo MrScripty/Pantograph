@@ -17,6 +17,7 @@ import LLMInferenceNode from '../components/nodes/workflow/LLMInferenceNode.svel
 import OllamaInferenceNode from '../components/nodes/workflow/OllamaInferenceNode.svelte';
 import LlamaCppInferenceNode from '../components/nodes/workflow/LlamaCppInferenceNode.svelte';
 import EmbeddingNode from '../components/nodes/workflow/EmbeddingNode.svelte';
+import RerankerNode from '../components/nodes/workflow/RerankerNode.svelte';
 import PyTorchInferenceNode from '../components/nodes/workflow/PyTorchInferenceNode.svelte';
 import DiffusionInferenceNode from '../components/nodes/workflow/DiffusionInferenceNode.svelte';
 import ModelProviderNode from '../components/nodes/workflow/ModelProviderNode.svelte';
@@ -51,6 +52,7 @@ const SPECIALIZED_NODES: Record<string, Component<Record<string, unknown>>> = {
   'ollama-inference': OllamaInferenceNode,
   'llamacpp-inference': LlamaCppInferenceNode,
   'embedding': EmbeddingNode,
+  'reranker': RerankerNode,
   'pytorch-inference': PyTorchInferenceNode,
   'diffusion-inference': DiffusionInferenceNode,
   'model-provider': ModelProviderNode,

@@ -15,6 +15,7 @@
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
   import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
+  import RerankerNode from './nodes/workflow/RerankerNode.svelte';
   import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
@@ -51,6 +52,7 @@
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
     'embedding': EmbeddingNode,
+    'reranker': RerankerNode,
     'onnx-inference': OnnxInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,

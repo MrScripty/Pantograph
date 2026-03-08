@@ -88,6 +88,7 @@
   import OllamaInferenceNode from './nodes/workflow/OllamaInferenceNode.svelte';
   import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
   import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
+  import RerankerNode from './nodes/workflow/RerankerNode.svelte';
   import PyTorchInferenceNode from './nodes/workflow/PyTorchInferenceNode.svelte';
   import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
   import DiffusionInferenceNode from './nodes/workflow/DiffusionInferenceNode.svelte';
@@ -135,6 +136,7 @@
     'ollama-inference': OllamaInferenceNode,
     'llamacpp-inference': LlamaCppInferenceNode,
     'embedding': EmbeddingNode,
+    'reranker': RerankerNode,
     'pytorch-inference': PyTorchInferenceNode,
     'onnx-inference': OnnxInferenceNode,
     'diffusion-inference': DiffusionInferenceNode,

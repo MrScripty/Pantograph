@@ -1718,6 +1718,29 @@ fn parse_reranker_documents(value: &serde_json::Value) -> Result<Vec<String>> {
 }
 
 #[cfg(feature = "inference-nodes")]
+fn parse_reranker_documents_input(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<Vec<String>> {
+    if let Some(value) = inputs.get("documents") {
+        return parse_reranker_documents(value);
+    }
+
+    if let Some(raw) = inputs.get("documents_json").and_then(|value| value.as_str()) {
+        let parsed: serde_json::Value = serde_json::from_str(raw).map_err(|e| {
+            NodeEngineError::ExecutionFailed(format!(
+                "Reranker documents_json must be valid JSON: {}",
+                e
+            ))
+        })?;
+        return parse_reranker_documents(&parsed);
+    }
+
+    Err(NodeEngineError::ExecutionFailed(
+        "Missing documents input".to_string(),
+    ))
+}
+
+#[cfg(feature = "inference-nodes")]
 async fn execute_llamacpp_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
@@ -1944,10 +1967,7 @@ async fn execute_reranker(
         ));
     }
 
-    let documents_value = inputs.get("documents").ok_or_else(|| {
-        NodeEngineError::ExecutionFailed("Missing documents input".to_string())
-    })?;
-    let documents = parse_reranker_documents(documents_value)?;
+    let documents = parse_reranker_documents_input(inputs)?;
 
     let model_path_raw = inputs
         .get("model_path")
@@ -4169,5 +4189,18 @@ mod tests {
         let mut inputs = HashMap::new();
         inputs.insert("model_type".to_string(), serde_json::json!("reranker"));
         assert_eq!(infer_task_type_primary("reranker", &inputs), "reranking");
+    }
+
+    #[cfg(feature = "inference-nodes")]
+    #[test]
+    fn test_parse_reranker_documents_input_accepts_json_string_alias() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "documents_json".to_string(),
+            serde_json::json!("[\"alpha\", {\"text\": \"beta\"}]"),
+        );
+        let documents =
+            parse_reranker_documents_input(&inputs).expect("documents_json should parse");
+        assert_eq!(documents, vec!["alpha", "beta"]);
     }
 }

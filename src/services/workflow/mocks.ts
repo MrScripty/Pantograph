@@ -175,6 +175,28 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'stream',
   },
   {
+    node_type: 'reranker',
+    category: 'processing',
+    label: 'LlamaCpp Reranker',
+    description: 'Rank candidate documents with a GGUF reranker via llama.cpp',
+    io_binding_origin: 'integrated',
+    inputs: [
+      { id: 'model_path', label: 'Model Path', data_type: 'string', required: true, multiple: false },
+      { id: 'query', label: 'Query', data_type: 'string', required: true, multiple: false },
+      { id: 'documents', label: 'Documents', data_type: 'json', required: true, multiple: false },
+      { id: 'documents_json', label: 'Documents JSON', data_type: 'string', required: false, multiple: false },
+      { id: 'top_k', label: 'Top K', data_type: 'number', required: false, multiple: false },
+      { id: 'return_documents', label: 'Return Documents', data_type: 'boolean', required: false, multiple: false },
+    ],
+    outputs: [
+      { id: 'results', label: 'Results', data_type: 'json', required: true, multiple: false },
+      { id: 'scores', label: 'Scores', data_type: 'json', required: false, multiple: false },
+      { id: 'top_document', label: 'Top Document', data_type: 'string', required: false, multiple: false },
+      { id: 'top_score', label: 'Top Score', data_type: 'number', required: false, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
     node_type: 'vision-analysis',
     category: 'processing',
     label: 'Vision Analysis',

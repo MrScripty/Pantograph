@@ -12,6 +12,7 @@ import type { NodeGroup, PortMapping } from './groupTypes';
 
 // Import templates statically (bundled with the app)
 import svelteCodeAgentTemplate from '../../templates/workflows/svelte-code-agent.json';
+import rerankerTemplate from '../../templates/workflows/gguf-reranker-workflow.json';
 import tinySdTurboTemplate from '../../templates/workflows/tiny-sd-turbo-text-to-image.json';
 
 /**
@@ -86,6 +87,7 @@ export interface NodeGroupTemplate {
  * Note: We use unknown cast due to JSON position arrays not matching tuple types
  */
 export const workflowTemplates: Record<string, WorkflowTemplate> = {
+  'gguf-reranker-workflow': rerankerTemplate as unknown as WorkflowTemplate,
   'svelte-code-agent': svelteCodeAgentTemplate as unknown as WorkflowTemplate,
   'tiny-sd-turbo-text-to-image': tinySdTurboTemplate as unknown as WorkflowTemplate,
 };
