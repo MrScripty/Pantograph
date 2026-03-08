@@ -35,7 +35,9 @@ templates need the same service-level graph registration path and session-aware
 loading behavior. That lets the app graph adopt the new backend-owned
 eligibility model, the horseshoe insert flow, and built-in workflow bootstraps
 without forcing every existing caller to migrate to package-level backends
-immediately.
+immediately. Session-scoped graph mutation methods now also return the updated
+graph snapshot from core so legacy callers can stay aligned with backend-owned
+state.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -48,6 +50,8 @@ immediately.
 ## Invariants
 - `currentExecutionId` must refer to the active editable session before any
   session-scoped graph mutation method runs.
+- Edit mutation methods must forward backend-owned graph state rather than
+  reconstructing local graph changes client-side.
 - Expected connection rejection is returned as structured data, not thrown as an
   exception.
 - Insert-and-connect must remain atomic from the caller’s perspective: the
@@ -96,6 +100,8 @@ const inserted = await workflowService.insertNodeAndConnect(
 ## API Consumer Contract (Host-Facing Modules)
 - Callers must establish or inherit `currentExecutionId` before using
   session-scoped graph mutation methods.
+- Add/update/remove/move mutation methods return the updated graph for callers
+  that need to refresh rendered state directly.
 - `getConnectionCandidates` returns compatible existing targets and insertable
   node types for one source anchor.
 - `connectAnchors` and `insertNodeAndConnect` require the caller to provide the

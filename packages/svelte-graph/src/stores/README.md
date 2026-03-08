@@ -18,7 +18,7 @@ metadata, execution overlays, and transient connection-intent state.
 The graph editor needs a shared state boundary that can serve both UI rendering
 and transport payload generation. Interactive connection guidance adds another
 cross-cutting concern: the UI needs backend-derived target eligibility while the
-stores still own the graph revision snapshot used to validate a commit.
+stores still need a current graph revision snapshot to validate a commit.
 
 ## Constraints
 - Derived graph fingerprints must stay synchronized with node and edge edits or
@@ -32,6 +32,9 @@ Keep `connectionIntent` inside `createWorkflowStores.ts` alongside the graph and
 derived graph state. That lets `WorkflowGraph.svelte` fetch candidates once,
 store them centrally, reuse them for synchronous drag validation, and clear the
 intent from one place whenever nodes, edges, or workflow loads change.
+`createSessionStores.ts` now binds the active edit-session id into
+`createWorkflowStores.ts`, and structural graph edits flow through the backend
+session before the stores replace local graph state from the returned snapshot.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -41,8 +44,10 @@ intent from one place whenever nodes, edges, or workflow loads change.
   protection.
 
 ## Invariants
+- Structural graph edits must originate from a backend session and update local
+  stores only from the returned graph snapshot.
 - `workflowGraph` must reflect the latest nodes, edges, and derived graph
-  fingerprint after every structural edit.
+  fingerprint after every applied graph snapshot.
 - `connectionIntent` is not persisted; it must reset on graph mutation,
   workflow load, workflow clear, and default-graph load.
 - Runtime cleanup helpers must continue to touch only explicitly requested
@@ -83,6 +88,8 @@ stores.setConnectionIntent({
 ## API Consumer Contract (Host-Facing Modules)
 - Store consumers should mutate graph structure through store actions or backend
   sync helpers, not by assigning directly to node/edge arrays.
+- Session stores must set the active session id before loading a graph that can
+  trigger backend-owned edits.
 - `setConnectionIntent` accepts either a fully derived UI intent object or
   `null`; `clearConnectionIntent` is the preferred cancellation path.
 - Session/view stores depend on workflow stores being created first and passed

@@ -1,50 +1,46 @@
 # src-tauri/src/workflow
 
 ## Purpose
-This directory contains Pantograph’s Rust-side workflow editing and execution
-layer. It owns command handlers, session-backed graph mutation, execution
-plumbing, and the canonical connection-eligibility rules that the frontend calls
-through Tauri.
+This directory contains Pantograph’s Tauri-side workflow transport and runtime
+integration layer. It wires frontend commands onto the core
+`pantograph-workflow-service` graph-edit/session APIs and hosts desktop-specific
+execution concerns such as event streaming, dependency-aware runtime setup, and
+process-backed task execution.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `connection_intent.rs` | Canonical candidate-discovery, revision-aware connection commits, and atomic insert-and-connect logic for interactive graph editing. |
-| `commands.rs` | Tauri command registration for workflow editing APIs. |
-| `workflow_execution_commands.rs` | Session-oriented command implementations used by the frontend graph editor. |
-| `types.rs` | Rust DTOs mirrored into the TypeScript workflow contracts. |
-| `validation.rs` | Shared lower-level workflow validation helpers. |
+| `commands.rs` | Tauri command registration for workflow editing and execution APIs. |
+| `workflow_execution_commands.rs` | Thin Tauri wrappers that delegate graph edits to core and execute runtime snapshots for desktop event streaming. |
+| `connection_intent.rs` | Legacy local connection-intent implementation retained during migration; core now owns the canonical policy. |
+| `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
+| `validation.rs` | Legacy local validation helpers retained during migration; core validation is authoritative for new editing surfaces. |
 | `task_executor.rs` | Runtime execution path for workflow node execution once editing commits are accepted. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
 
 ## Problem
-Pantograph previously exposed mostly pairwise connection validation. The frontend
-now needs backend-owned candidate discovery, structured rejection reasons, and
-revision-aware commit semantics so GUI and headless-style consumers follow one
-eligibility model.
+Pantograph’s standalone GUI still needs a native bridge, but graph editing can
+no longer live in Tauri because headless and embedded clients need the same
+editing contract. Desktop-specific code must stop owning workflow graph state
+while still handling desktop runtime execution concerns.
 
 ## Constraints
-- Editing commands must operate against session-backed graph state.
+- Tauri must not own canonical graph mutation or persistence rules.
+- Editing commands must delegate to the host-agnostic core service.
 - Rust DTOs must stay aligned with the mirrored TypeScript contracts.
 - Expected incompatibility must not be reported as transport failure.
 - Existing public facades such as `validate_connection` must keep working during
   the migration.
 
 ## Decision
-Add a dedicated `connection_intent.rs` module and expose additive Tauri commands
-for `get_connection_candidates`, `connect_anchors_in_execution`, and
-`insert_node_and_connect_in_execution`. The command path computes eligible
-targets from live session state, uses graph fingerprints for stale-intent
-detection, and returns structured rejection reasons instead of boolean-only
-failure. Workflow execution in this directory also owns dependency-aware,
-process-backed Python execution for nodes such as `pytorch-inference`,
-`diffusion-inference`, `audio-generation`, and `onnx-inference`. Execution
-state is now stored as a per-session async mutex behind the global session map
-so long-running mutation commands serialize within one session without blocking
-lookups or edits for every other session. Session-scoped candidate lookup and
-insert commands now also emit release-visible tracing at the command boundary so
-interactive horseshoe failures can be diagnosed from `--run-release` logs.
+Delegate workflow graph editing, connection intent, undo/redo, and persistence
+to `pantograph-workflow-service`. Tauri commands now translate invoke payloads
+into core requests, return core graph snapshots to the GUI, and keep only the
+desktop-specific runtime execution path here. Execution still owns
+dependency-aware, process-backed Python execution for nodes such as
+`pytorch-inference`, `diffusion-inference`, `audio-generation`, and
+`onnx-inference`.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -55,61 +51,50 @@ interactive horseshoe failures can be diagnosed from `--run-release` logs.
   session state.
 
 ## Invariants
-- `connection_intent.rs` is the canonical source of connection eligibility.
+- Core workflow service is the canonical source of graph mutation and connection
+  eligibility.
 - Candidate discovery is source-anchor scoped and must not mutate the session.
 - Commit commands must reject stale revisions and return structured rejection
   data for expected incompatibility cases.
 - Insert-and-connect must mutate the session atomically so rejected inserts do
   not leave orphan nodes or disconnected edges.
-- `workflow_execution_commands.rs` must refresh derived graph metadata when it
-  returns graphs to the frontend.
+- Tauri editing commands must return the graph snapshots received from core
+  rather than reconstructing local state.
 - Session-scoped candidate and insert commands must log enough request/rejection
   context to diagnose release-only interaction failures without relying on
   browser-console access.
-- The global execution registry lock must not be held across awaited graph
-  mutations; only the per-session execution lock may span awaited workflow work.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas
   execution descriptors rather than from raw library record paths.
 
 ## Revisit Triggers
-- Headless editing moves to a transport boundary outside Tauri invoke.
-- Eligibility rules expand enough to justify a dedicated policy module or ADR.
+- Legacy local graph-edit helpers are removed after all callers use core-owned
+  contracts.
+- Desktop execution needs a reusable host implementation outside Tauri.
 - Insert ranking/placement heuristics need a dedicated policy boundary.
 
 ## Dependencies
-**Internal:** node-engine workflow types, session execution manager, Tauri
+**Internal:** `pantograph-workflow-service`, node-engine workflow types, Tauri
 command registration, mirrored frontend contracts.
 
 **External:** Tauri command runtime and serde serialization.
 
 ## Related ADRs
-- None.
-- Reason: the connection-intent change is still local to the workflow editing
-  subsystem.
-- Revisit trigger: editing/session APIs become a supported external embedding
-  contract with explicit versioning.
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- Reason: graph editing is now part of the supported core service boundary.
+- Revisit trigger: the Tauri runtime host itself needs an ADR-level split from
+  transport command wiring.
 
 ## Usage Examples
 ```rust
-let response = connection_intent::commit_connection(
-    &workflow_registry,
-    &mut execution.graph,
-    source_anchor,
-    target_anchor,
-    &graph_revision,
-);
+let response = workflow_service
+    .workflow_graph_connect(request)
+    .await?;
 
-let inserted = connection_intent::insert_node_and_connect(
-    &workflow_registry,
-    &mut execution.graph,
-    source_anchor,
-    "text-output",
-    None,
-    Position { x: 480.0, y: 160.0 },
-    &graph_revision,
-);
+let snapshot = workflow_service
+    .workflow_graph_get_runtime_snapshot(&session_id)
+    .await?;
 ```
 
 ## API Consumer Contract (Host-Facing Modules)
@@ -120,11 +105,12 @@ let inserted = connection_intent::insert_node_and_connect(
 - `connect_anchors_in_execution` and `insert_node_and_connect_in_execution`
   require the revision used to derive UI state and return either an updated
   graph or a structured rejection.
+- Node add/update/remove/move commands also return updated graph snapshots so
+  the GUI can render backend-owned state directly.
 - Expected incompatibility is not exceptional; transport/session errors still
   surface as command failures.
-- Session-scoped commands are serialized per execution, not across the entire
-  workflow registry; callers should not assume mutations on one session block
-  reads or edits on another session.
+- Session-scoped commands are serialized per core edit session; callers should
+  not assume mutations on one session block reads or edits on another session.
 - Compatibility policy is additive: existing commands remain while new editing
   capabilities are introduced.
 - Workflow dependency resolution and execution treat Pumas as the source of
@@ -137,8 +123,8 @@ let inserted = connection_intent::insert_node_and_connect(
 - `ConnectionCommitResponse` uses `accepted` plus optional `graph`/`rejection`
   rather than overloading `Result` for expected validation failure.
 - Rejection enums are stable snake_case labels shared with TypeScript.
-- Graph fingerprints are regenerated metadata; callers must not persist them as
-  durable workflow configuration.
+- Graph fingerprints and returned graph snapshots come from core; Tauri must not
+  invent or persist adapter-owned edit metadata.
 - `model_path` remains the workflow-facing field name, but for external bundle
   assets it must carry the Pumas execution descriptor `entry_path` so runtime
   consumers receive the executable root instead of the library stub directory.

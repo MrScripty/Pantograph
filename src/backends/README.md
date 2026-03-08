@@ -28,7 +28,9 @@ Use `TauriWorkflowBackend.ts` as the only app-layer implementation of
 `WorkflowBackend`. It now forwards `getConnectionCandidates`,
 `connectAnchors`, and `insertNodeAndConnect` alongside the existing session
 editing calls so the package graph can use revision-aware connection guidance
-and drag-time insert flows unchanged inside the app.
+and drag-time insert flows unchanged inside the app. Structural graph edits now
+return authoritative graph snapshots from the backend, which the shared stores
+apply directly instead of reconstructing local state first.
 
 ## Alternatives Rejected
 - Call Tauri `invoke` directly from `WorkflowGraph.svelte`.
@@ -41,6 +43,8 @@ and drag-time insert flows unchanged inside the app.
   `WorkflowBackend` interface.
 - Backend errors caused by transport/session failure should throw; expected
   incompatibility should come back as structured commit rejection.
+- Add/update/remove/move edit commands must return the graph snapshot produced
+  by core so app stores can render backend-owned state directly.
 - Graph revisions are treated as opaque values and echoed unchanged to Rust.
 - Insert commands must remain atomic at the adapter boundary; the adapter should
   not split insert and connect into separate invokes.
@@ -76,6 +80,8 @@ const sessionId = await backend.createSession({ nodes: [], edges: [] });
 - `getConnectionCandidates` accepts a source anchor, session id, and optional
   graph revision; `connectAnchors` and `insertNodeAndConnect` require a
   revision and return structured rejection data when a commit is denied.
+- `addNode`, `removeNode`, `updateNodeData`, `updateNodePosition`, `addEdge`,
+  and `removeEdge` return updated graphs for store synchronization.
 - Session lifecycle ordering remains: create/load session before graph mutation,
   remove session when the consumer is done.
 - Compatibility policy is additive: new invoke-backed methods should extend the
