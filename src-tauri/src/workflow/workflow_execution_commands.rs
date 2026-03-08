@@ -659,8 +659,44 @@ pub async fn get_connection_candidates(
     let graph = state.executor.get_graph_snapshot().await;
     let graph = convert_graph_from_node_engine(&graph);
     let registry = super::registry::NodeRegistry::new();
-    connection_candidates(&graph, &registry, source_anchor, graph_revision.as_deref())
-        .map_err(|rejection| rejection.message)
+    let current_revision = graph.compute_fingerprint();
+    let source_node_id = source_anchor.node_id.clone();
+    let source_port_id = source_anchor.port_id.clone();
+    log::info!(
+        "workflow candidates request: execution={} source={}:{} requested_revision={} current_revision={}",
+        execution_id,
+        source_node_id,
+        source_port_id,
+        graph_revision.as_deref().unwrap_or("<none>"),
+        current_revision,
+    );
+
+    match connection_candidates(&graph, &registry, source_anchor, graph_revision.as_deref()) {
+        Ok(response) => {
+            log::info!(
+                "workflow candidates response: execution={} source={}:{} revision_matches={} compatible_nodes={} insertable_types={} response_revision={}",
+                execution_id,
+                response.source_anchor.node_id,
+                response.source_anchor.port_id,
+                response.revision_matches,
+                response.compatible_nodes.len(),
+                response.insertable_node_types.len(),
+                response.graph_revision,
+            );
+            Ok(response)
+        }
+        Err(rejection) => {
+            log::warn!(
+                "workflow candidates rejected: execution={} source={}:{} reason={:?} message={}",
+                execution_id,
+                source_node_id,
+                source_port_id,
+                rejection.reason,
+                rejection.message,
+            );
+            Err(rejection.message)
+        }
+    }
 }
 
 pub async fn connect_anchors_in_execution(
@@ -731,6 +767,19 @@ pub async fn insert_node_and_connect_in_execution(
 
     let current_graph = state.executor.get_graph_snapshot().await;
     let current_graph = convert_graph_from_node_engine(&current_graph);
+    let current_revision = current_graph.compute_fingerprint();
+    log::info!(
+        "workflow insert request: execution={} source={}:{} node_type={} preferred_input={} requested_revision={} current_revision={} position=({:.1},{:.1})",
+        execution_id,
+        source_anchor.node_id,
+        source_anchor.port_id,
+        node_type,
+        preferred_input_port_id.as_deref().unwrap_or("<auto>"),
+        graph_revision,
+        current_revision,
+        position_hint.position.x,
+        position_hint.position.y,
+    );
     let registry = super::registry::NodeRegistry::new();
     let (inserted_node, inserted_edge) = match insert_node_and_connect(
         &current_graph,
@@ -742,7 +791,20 @@ pub async fn insert_node_and_connect_in_execution(
         preferred_input_port_id.as_deref(),
     ) {
         Ok(result) => result,
-        Err(rejection) => return Ok(rejected_insert_response(&current_graph, rejection)),
+        Err(rejection) => {
+            log::warn!(
+                "workflow insert rejected: execution={} source={}:{} node_type={} reason={:?} message={} requested_revision={} current_revision={}",
+                execution_id,
+                source_anchor.node_id,
+                source_anchor.port_id,
+                node_type,
+                rejection.reason,
+                rejection.message,
+                graph_revision,
+                current_revision,
+            );
+            return Ok(rejected_insert_response(&current_graph, rejection));
+        }
     };
 
     let _ = state.push_undo_snapshot().await;
@@ -758,9 +820,18 @@ pub async fn insert_node_and_connect_in_execution(
 
     let graph = state.executor.get_graph_snapshot().await;
     let graph = convert_graph_from_node_engine(&graph);
+    let response_revision = graph.compute_fingerprint();
+    log::info!(
+        "workflow insert accepted: execution={} inserted_node={} inserted_edge={} target_handle={} response_revision={}",
+        execution_id,
+        inserted_node.id,
+        inserted_edge.id,
+        inserted_edge.target_handle,
+        response_revision,
+    );
     Ok(InsertNodeConnectionResponse {
         accepted: true,
-        graph_revision: graph.compute_fingerprint(),
+        graph_revision: response_revision,
         inserted_node_id: Some(inserted_node.id),
         graph: Some(graph),
         rejection: None,
