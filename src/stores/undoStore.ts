@@ -59,8 +59,8 @@ type UndoCallback = (action: UndoableAction) => void;
 type RedoCallback = (action: UndoableAction) => void;
 
 let agedActionCallback: AgedActionCallback | null = null;
-let undoCallbacks: Map<UndoableAction['type'], UndoCallback> = new Map();
-let redoCallbacks: Map<UndoableAction['type'], RedoCallback> = new Map();
+const undoCallbacks: Map<UndoableAction['type'], UndoCallback> = new Map();
+const redoCallbacks: Map<UndoableAction['type'], RedoCallback> = new Map();
 
 function createUndoStore() {
   const initial = loadFromStorage();

@@ -26,9 +26,7 @@ export type Size = SandboxSize;
 export type ComponentUpdate = SandboxComponentUpdate;
 
 // Extended GeneratedComponent type with backwards-compatible fields
-export interface GeneratedComponent extends SandboxGeneratedComponent {
-  // All fields from SandboxGeneratedComponent plus any legacy fields
-}
+export type GeneratedComponent = SandboxGeneratedComponent;
 
 // Create the sandbox instance with Pantograph's logger
 // Use HMR data to preserve state across hot reloads
@@ -53,7 +51,7 @@ function createSandbox() {
 }
 
 // Preserve sandbox across HMR - check if we have previous instance data
-let sandbox = import.meta.hot?.data?.sandbox ?? createSandbox();
+const sandbox = import.meta.hot?.data?.sandbox ?? createSandbox();
 
 // Store sandbox in HMR data for preservation across hot reloads
 if (import.meta.hot) {
