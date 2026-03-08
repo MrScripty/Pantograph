@@ -13,6 +13,7 @@ adapters such as the Python runtime.
 | `diffusion_inference.rs` | Declares the graph contract for process-backed diffusion generation, including optional dependency-environment handoff. |
 | `pytorch_inference.rs` | Defines the general PyTorch inference contract used for text-generation style models. |
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
+| `reranker.rs` | Declares the GGUF reranker node contract used to rank candidate documents via llama.cpp. |
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Turns inference-setting schemas into graph-visible override ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
@@ -36,6 +37,9 @@ Keep descriptors in this directory as the graph-visible contract layer and let
 host executors implement the runtime behavior. Python-backed diffusion nodes now
 declare an optional `environment_ref` input so dependency-environment workflows
 can express the handoff explicitly instead of relying on hidden runtime fields.
+The reranker node follows the same pattern: the graph sees explicit query,
+candidate-document, and ranked-result contracts while the host owns the
+runtime-specific llama.cpp execution details.
 
 ## Alternatives Rejected
 - Leave dependency environment handoff as an undocumented runtime-only input.
@@ -48,6 +52,8 @@ can express the handoff explicitly instead of relying on hidden runtime fields.
 - Python-backed node contracts must stay additive across releases.
 - Dependency environment handoff, when used, is represented as structured JSON
   rather than opaque string flags.
+- Reranker outputs must preserve stable ranked-result fields so saved workflows
+  and templates can consume them without endpoint-specific parsing logic.
 
 ## Revisit Triggers
 - Another runtime requires a different environment handoff contract than the

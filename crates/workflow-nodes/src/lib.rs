@@ -42,14 +42,14 @@ mod tests {
         #[cfg(feature = "desktop")]
         assert_eq!(
             all.len(),
-            44,
-            "Expected 44 built-in nodes with desktop feature"
+            45,
+            "Expected 45 built-in nodes with desktop feature"
         );
         #[cfg(not(feature = "desktop"))]
         assert_eq!(
             all.len(),
-            41,
-            "Expected 41 built-in nodes without desktop feature"
+            42,
+            "Expected 42 built-in nodes without desktop feature"
         );
 
         // Spot-check known types
@@ -70,6 +70,7 @@ mod tests {
         assert!(registry.has_node_type("depth-estimation"));
         assert!(registry.has_node_type("process"));
         assert!(registry.has_node_type("llamacpp-inference"));
+        assert!(registry.has_node_type("reranker"));
         assert!(registry.has_node_type("puma-lib"));
         assert!(registry.has_node_type("agent-tools"));
         assert!(registry.has_node_type("unload-model"));
