@@ -55,6 +55,10 @@ Configure Python executables using one of:
 - `./launcher.sh --install` provisions both the base Python runtime
   requirements and `requirements-diffusion.txt`, so local text-to-image
   workflows can use the default `.venv` without a second manual install step.
+- When a Python-backed workflow resolves a model successfully but no dependency
+  bindings are available yet, Pantograph may still execute it with an empty
+  `env_ids` set and rely on the configured fallback Python executable (typically
+  the project `.venv`).
 
 ## Migration Notes
 
