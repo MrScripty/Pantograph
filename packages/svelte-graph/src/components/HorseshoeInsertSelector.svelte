@@ -90,7 +90,7 @@
       {/each}
     {/if}
 
-    {#if displayState !== 'open' && statusLabel}
+    {#if statusLabel}
       <div class="horseshoe-status">{statusLabel}</div>
     {/if}
 

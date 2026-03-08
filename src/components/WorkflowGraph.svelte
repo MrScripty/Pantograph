@@ -5,18 +5,23 @@
   import '@xyflow/svelte/dist/style.css';
   import {
     HorseshoeInsertSelector,
+    clearHorseshoeInsertFeedback,
     clearConnectionDragState,
     clearHorseshoeDragSession,
     createConnectionDragState,
+    createHorseshoeInsertFeedbackState,
     createHorseshoeDragSessionState,
     formatHorseshoeBlockedReason,
     findBestInsertableMatchIndex,
     findNearestVisibleHorseshoeIndex,
     isSpaceKey,
+    rejectHorseshoeInsertFeedback,
     resolveHorseshoeSpaceKeyAction,
+    resolveHorseshoeStatusLabel,
     markConnectionDragFinalizing,
     requestHorseshoeDisplay,
     rotateHorseshoeIndex,
+    startHorseshoeInsertFeedback,
     shouldUpdateHorseshoeAnchorFromPointer,
     shouldRemoveReconnectedEdge,
     startHorseshoeDrag,
@@ -27,6 +32,7 @@
     updateHorseshoeAnchor,
     type ConnectionDragState,
     type HorseshoeBlockedReason,
+    type HorseshoeInsertFeedbackState,
     type HorseshoeDragSessionState,
     isPortTypeCompatible,
   } from '@pantograph/svelte-graph';
@@ -196,9 +202,10 @@
   let currentViewport = $state<{ x: number; y: number; zoom: number } | null>(null);
   let connectionDragState = $state<ConnectionDragState>(createConnectionDragState());
   let horseshoeSession = $state<HorseshoeDragSessionState>(createHorseshoeDragSessionState());
+  let horseshoeInsertFeedback =
+    $state<HorseshoeInsertFeedbackState>(createHorseshoeInsertFeedbackState());
   let horseshoeSelectedIndex = $state(0);
   let horseshoeQuery = $state('');
-  let horseshoePending = $state(false);
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
@@ -380,7 +387,7 @@
     if (!$connectionIntent) {
       if (
         !horseshoeSession.dragActive &&
-        !horseshoePending &&
+        !horseshoeInsertFeedback.pending &&
         horseshoeSession.displayState !== 'hidden'
       ) {
         closeHorseshoeSelector();
@@ -436,6 +443,7 @@
 
   function clearConnectionDragTracking() {
     connectionDragState = clearConnectionDragState();
+    horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
     applyHorseshoeSession(clearHorseshoeDragSession());
   }
 
@@ -465,7 +473,7 @@
     }
 
     if (nextSession.displayState === 'hidden') {
-      horseshoePending = false;
+      horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
       horseshoeSelectedIndex = 0;
       horseshoeQuery = '';
 
@@ -555,6 +563,7 @@
   function rotateInsertSelection(delta: number) {
     if (!$connectionIntent || $connectionIntent.insertableNodeTypes.length === 0) return;
 
+    horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
     horseshoeSelectedIndex = rotateHorseshoeIndex(
       horseshoeSelectedIndex,
       delta,
@@ -563,6 +572,7 @@
   }
 
   function updateInsertQuery(nextQuery: string) {
+    horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
     horseshoeQuery = nextQuery;
     horseshoeSelectedIndex = findBestInsertableMatchIndex(
       $connectionIntent?.insertableNodeTypes ?? [],
@@ -595,13 +605,16 @@
 
   async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
     const currentConnectionIntent = $connectionIntent;
-    if (!currentConnectionIntent || horseshoePending || !supportsInsertFromConnectionDrag(connectionDragState)) return;
+    if (
+      !currentConnectionIntent ||
+      horseshoeInsertFeedback.pending ||
+      !supportsInsertFromConnectionDrag(connectionDragState)
+    ) return;
 
     const positionHint = getInsertPositionHint();
     if (!positionHint) return;
 
-    clearConnectionDragTracking();
-    horseshoePending = true;
+    horseshoeInsertFeedback = startHorseshoeInsertFeedback();
 
     try {
       const response = await workflowService.insertNodeAndConnect(
@@ -614,25 +627,28 @@
 
       if (response.accepted && response.graph) {
         loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
-        horseshoePending = false;
+        clearConnectionInteraction();
         return;
       }
 
-      setConnectionIntent({
-        sourceAnchor: currentConnectionIntent.sourceAnchor,
+      horseshoeInsertFeedback = rejectHorseshoeInsertFeedback(response.rejection);
+      horseshoeLastTrace = `insert-rejected:${response.rejection?.reason ?? 'unknown'}`;
+      await loadConnectionIntent(currentConnectionIntent.sourceAnchor, {
+        preserveDisplay: true,
         graphRevision: response.graph_revision,
-        compatibleNodeIds: currentConnectionIntent.compatibleNodeIds,
-        compatibleTargetKeys: currentConnectionIntent.compatibleTargetKeys,
-        insertableNodeTypes: currentConnectionIntent.insertableNodeTypes,
         rejection: response.rejection,
       });
-      horseshoePending = false;
 
       if (response.rejection) {
-        console.warn('[WorkflowGraph] Insert rejected:', response.rejection.message);
+        console.error('[WorkflowGraph] Insert rejected:', {
+          reason: response.rejection.reason,
+          message: response.rejection.message,
+          graphRevision: response.graph_revision,
+        });
       }
     } catch (error) {
-      horseshoePending = false;
+      horseshoeInsertFeedback = rejectHorseshoeInsertFeedback();
+      horseshoeLastTrace = 'insert-error';
       console.error('[WorkflowGraph] Failed to insert compatible node:', error);
     }
   }
@@ -738,29 +754,60 @@
     };
   }
 
+  function setConnectionIntentState(
+    candidates: ConnectionCandidatesResponse,
+    rejection?: ConnectionCommitResponse['rejection'],
+  ) {
+    setConnectionIntent({
+      ...toConnectionIntentState(candidates),
+      rejection,
+    });
+  }
+
   let connectionIntentRequestId = $state(0);
 
-  async function loadConnectionIntent(sourceAnchor: ConnectionAnchor) {
+  async function loadConnectionIntent(
+    sourceAnchor: ConnectionAnchor,
+    options?: {
+      preserveDisplay?: boolean;
+      graphRevision?: string;
+      rejection?: ConnectionCommitResponse['rejection'];
+    },
+  ) {
     if (!canEdit) {
       clearConnectionInteraction();
       return;
     }
 
     const requestId = ++connectionIntentRequestId;
-    closeHorseshoeSelector();
+    if (!options?.preserveDisplay) {
+      horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
+      closeHorseshoeSelector();
+    }
 
     try {
       const candidates = await workflowService.getConnectionCandidates(
         sourceAnchor,
         undefined,
-        getGraphRevision()
+        options?.graphRevision ?? getGraphRevision()
       );
 
       if (requestId !== connectionIntentRequestId) return;
-      setConnectionIntent(toConnectionIntentState(candidates));
+      setConnectionIntentState(candidates, options?.rejection);
     } catch (error) {
       if (requestId === connectionIntentRequestId) {
-        clearConnectionInteraction();
+        if (options?.preserveDisplay) {
+          setConnectionIntent({
+            sourceAnchor,
+            graphRevision: options?.graphRevision ?? getGraphRevision(),
+            compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
+            compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
+            insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+            rejection: options?.rejection,
+          });
+        } else {
+          clearConnectionInteraction();
+        }
       }
       console.error('[WorkflowGraph] Failed to load connection candidates:', error);
     }
@@ -837,7 +884,11 @@
     _event: MouseEvent | TouchEvent,
     _connectionState: { isValid: boolean }
   ) {
-    if (horseshoeSession.displayState === 'open' || horseshoePending || horseshoeSession.openRequested) return;
+    if (
+      horseshoeSession.displayState === 'open' ||
+      horseshoeInsertFeedback.pending ||
+      horseshoeSession.openRequested
+    ) return;
     clearConnectionInteraction();
   }
 
@@ -1060,19 +1111,12 @@
   }
 
   function getHorseshoeStatusLabel(): string | null {
-    if (horseshoePending) {
-      return 'Inserting node...';
-    }
-
-    if (horseshoeSession.displayState === 'pending') {
-      return 'Loading compatible nodes...';
-    }
-
-    if (horseshoeSession.displayState === 'blocked' && horseshoeSession.blockedReason) {
-      return formatHorseshoeBlockedReason(horseshoeSession.blockedReason);
-    }
-
-    return null;
+    return resolveHorseshoeStatusLabel({
+      pending: horseshoeInsertFeedback.pending,
+      rejectionMessage: horseshoeInsertFeedback.rejectionMessage,
+      displayState: horseshoeSession.displayState,
+      blockedReason: horseshoeSession.blockedReason,
+    });
   }
 
   function handleWindowKeyDown(e: KeyboardEvent) {
@@ -1093,7 +1137,7 @@
       ? resolveHorseshoeSpaceKeyAction({
           displayState: horseshoeSession.displayState,
           dragActive: horseshoeSession.dragActive,
-          pending: horseshoePending,
+          pending: horseshoeInsertFeedback.pending,
           hasSelection: Boolean($connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex]),
         })
       : 'noop';
@@ -1508,7 +1552,7 @@
     items={$connectionIntent?.insertableNodeTypes ?? []}
     selectedIndex={horseshoeSelectedIndex}
     query={horseshoeQuery}
-    pending={horseshoePending}
+    pending={horseshoeInsertFeedback.pending}
     statusLabel={getHorseshoeStatusLabel()}
     onSelect={(candidate) => void commitInsertSelection(candidate)}
     onRotate={rotateInsertSelection}
