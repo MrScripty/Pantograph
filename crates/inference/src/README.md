@@ -4,8 +4,9 @@
 
 This directory contains the core inference facade used by Pantograph to talk to
 multiple runtime engines through one Rust API. The boundary exists so callers
-can depend on stable contracts for chat, embeddings, and image generation
-without depending on backend-specific launch logic or model-family details.
+can depend on stable contracts for chat, embeddings, reranking, and image
+generation without depending on backend-specific launch logic or model-family
+details.
 
 ## Contents
 
@@ -22,7 +23,9 @@ without depending on backend-specific launch logic or model-family details.
 
 Pantograph needs one inference-facing crate that can swap execution engines
 without forcing the rest of the backend to know whether a request is served by a
-local sidecar, a daemon, or an in-process runtime.
+local sidecar, a daemon, or an in-process runtime. The same facade now has to
+cover GGUF reranking without pretending rerank requests are text-generation
+prompts.
 
 ## Constraints
 
@@ -31,14 +34,17 @@ local sidecar, a daemon, or an in-process runtime.
   abstracted.
 - Machine-consumed request/response payloads must preserve semantics across
   process and language boundaries.
-- New capability areas such as diffusion must extend the contract additively.
+- New capability areas such as diffusion and reranking must extend the contract
+  additively.
 
 ## Decision
 
 Use a gateway + backend trait architecture with shared request/response types.
 Backends implement a common interface, while the gateway owns lifecycle and
-routing. Shared payload types live in `types.rs` so chat, embedding, and image
-generation contracts stay explicit and testable.
+routing. Shared payload types live in `types.rs` so chat, embedding, reranking,
+and image-generation contracts stay explicit and testable. llama.cpp reranking
+is modeled as its own capability and sidecar mode rather than as a chat
+completion variant.
 
 ## Alternatives Rejected
 
@@ -55,6 +61,8 @@ generation contracts stay explicit and testable.
   future support.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
+- Reranking mode selection must be explicit; callers must not infer reranker
+  support from text-generation readiness.
 
 ## Revisit Triggers
 
@@ -112,6 +120,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - Backend startup must happen before inference calls.
 - `generate_image()` is synchronous-at-contract-level and returns final images;
   streaming progress is not yet part of the facade.
+- `rerank()` accepts one query plus candidate documents and returns scored,
+  ordered results; callers should treat response order, not input order, as
+  authoritative.
 - Process-backed diffusion loaders may infer narrow bundle-root load overrides
   such as consistent safetensors variants when the diffusers directory layout
   makes them deterministic.
@@ -126,5 +137,7 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   “backend default”.
 - `ImageGenerationRequest` reserves optional `init_image`, `mask_image`, and
   `strength` for later img2img/inpaint support.
+- `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only
+  contracts shared across gateway, backend, and host layers.
 - Contract changes that affect persisted consumers or saved workflows must be
   append-only or accompanied by migration guidance.

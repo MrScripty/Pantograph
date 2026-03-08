@@ -12,7 +12,7 @@ on raw invoke payloads.
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
-| `templateService.ts` | Workflow template discovery/loading helpers, including the built-in tiny-sd-turbo text-to-image workflow. |
+| `templateService.ts` | Workflow template discovery/loading helpers, including the built-in tiny-sd-turbo and GGUF reranker starter workflows. |
 | `groupTypes.ts` | Node-group result and mapping types used by workflow editing flows. |
 
 ## Problem
@@ -66,6 +66,8 @@ state.
   placeholders.
 - Built-in template loading grows into a separate catalog or remote-discovery
   subsystem with its own lifecycle and persistence concerns.
+- Template count or complexity grows enough that per-template validation needs a
+  dedicated service boundary.
 
 ## Dependencies
 **Internal:** `src-tauri` workflow commands, `src/backends`, app workflow
@@ -118,3 +120,6 @@ const inserted = await workflowService.insertNodeAndConnect(
 - Workflow templates loaded through `templateService.ts` must remain valid
   `WorkflowTemplate` objects whose data-graph node/edge shapes match the
   workflow DTO contracts in `types.ts`.
+- Built-in templates that demonstrate inference-family nodes must stay aligned
+  with the backend-owned node registry and port contracts shipped in the same
+  build.

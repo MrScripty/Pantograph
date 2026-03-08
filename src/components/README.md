@@ -27,6 +27,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
 - The app graph supports both workflow and architecture modes.
 - Legacy service/store callers still exist, so migration to package-native APIs
   is incremental.
+- Built-in node UI must stay aligned with backend-owned node contracts and
+  starter workflow templates.
 
 ## Decision
 Keep the app `WorkflowGraph.svelte` as a composition layer over package store
@@ -72,6 +74,8 @@ backend-returned graph revision.
   selection rather than the anchored menu position.
 - Rejected insert attempts must remain visible to the user and preserve retry
   context instead of failing only through hidden console output.
+- Node registration must stay consistent with bundled templates so shipped
+  starter workflows render without fallback-node surprises.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

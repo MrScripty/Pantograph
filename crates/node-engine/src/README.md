@@ -1,42 +1,98 @@
 # crates/node-engine/src
 
 ## Purpose
-Core library source files for this crate's runtime and domain behavior.
+This directory contains Pantograph's workflow execution and descriptor core. It
+turns node definitions into runnable behavior, validates graph/runtime inputs,
+and keeps execution dispatch aligned with the contracts published by
+`workflow-nodes`.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| builder.rs | Source file used by modules in this directory. |
-| composite_executor.rs | Source file used by modules in this directory. |
-| core_executor.rs | Source file used by modules in this directory. |
-| descriptor.rs | Source file used by modules in this directory. |
-| engine.rs | Source file used by modules in this directory. |
-| error.rs | Source file used by modules in this directory. |
-| events.rs | Source file used by modules in this directory. |
-| extensions.rs | Source file used by modules in this directory. |
-| groups.rs | Source file used by modules in this directory. |
-| lib.rs | Source file used by modules in this directory. |
-| model_dependencies.rs | Source file used by modules in this directory. |
-| orchestration/ | Subdirectory containing related implementation details. |
-| path_validation.rs | Source file used by modules in this directory. |
-| port_options.rs | Source file used by modules in this directory. |
-| registry.rs | Source file used by modules in this directory. |
-| tasks/ | Subdirectory containing related implementation details. |
-| types.rs | Source file used by modules in this directory. |
-| undo.rs | Source file used by modules in this directory. |
-| validation.rs | Source file used by modules in this directory. |
+| `builder.rs` | Engine construction helpers and composition wiring. |
+| `composite_executor.rs` | Executor composition for multi-stage task execution. |
+| `core_executor.rs` | Main node-type dispatch, dependency-aware execution, and payload normalization. |
+| `descriptor.rs` | Node descriptor contracts consumed by the graph and runtime layers. |
+| `engine.rs` | Workflow engine entry points and orchestration helpers. |
+| `error.rs` | Shared engine and execution error types. |
+| `events.rs` | Runtime event contracts emitted during workflow execution. |
+| `extensions.rs` | Extension points used to add engine behavior without mutating the core API. |
+| `groups.rs` | Group/node graph helpers. |
+| `model_dependencies.rs` | Model dependency typing used by execution preflight and runtime selection. |
+| `orchestration/` | Orchestration-specific execution and state modules. |
+| `path_validation.rs` | Validation helpers for file and model-path inputs. |
+| `port_options.rs` | Port metadata helpers used by graph editing and execution. |
+| `registry.rs` | Built-in node registration and descriptor inventory. |
+| `tasks/` | Task metadata and task-oriented helpers. |
+| `types.rs` | Shared workflow graph and runtime DTOs. |
+| `undo.rs` | Undo/redo support for workflow graph editing. |
+| `validation.rs` | Graph validation and invariants. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+Pantograph needs one execution layer that understands workflow node contracts
+without hard-coding frontend assumptions. As node types expand from generation
+and embeddings into reranking, execution dispatch must preserve semantic
+boundaries instead of forcing new workloads through incompatible legacy paths.
+
+## Constraints
+- Node descriptors are shared across frontend, backend, and saved workflow
+  artifacts, so runtime assumptions must stay append-only.
+- Execution helpers must tolerate heterogeneous port payloads while still
+  normalizing them into typed backend requests.
+- Task-type inference drives dependency/runtime selection, so incorrect
+  classification can start the wrong engine mode.
+
+## Decision
+Keep `core_executor.rs` as the single dispatch boundary for built-in node types
+and normalize node inputs there before handing them to downstream runtimes.
+Reranking therefore enters as a first-class `reranker` node with dedicated
+document parsing and task classification instead of overloading
+`llamacpp-inference`.
+
+## Alternatives Rejected
+- Reusing the generic llama.cpp inference node for reranking.
+  Rejected because reranking expects query-plus-documents semantics and ordered
+  scored output, not prompt completion.
+- Letting the frontend classify reranker models independently.
+  Rejected because runtime mode selection must stay backend-owned.
+
+## Invariants
+- Built-in node dispatch in `core_executor.rs` must match descriptor inventory
+  published by `workflow-nodes`.
+- Task-type inference must reflect execution semantics, not UI naming.
+- Input normalization may be permissive for additive compatibility, but output
+  shapes must stay stable once published.
+
+## Revisit Triggers
+- A second reranker family requires materially different request normalization.
+- Node execution dispatch becomes too large to keep maintainable in one file and
+  needs an extracted per-capability executor split.
+- Saved workflow migrations become necessary for structured document inputs.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** `workflow-nodes`, `inference`, `pantograph-workflow-service`,
+graph/task modules in this crate.
+
+**External:** `serde_json`, async runtime support, and dependencies declared in
+the crate manifest.
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+use node_engine::core_executor::CoreNodeExecutor;
 ```
+
+## API Consumer Contract
+- Hosts call into the engine/executor surface with workflow graphs whose node
+  types and port IDs match descriptor inventory.
+- Execution errors distinguish invalid workflow input from backend/runtime
+  failures where possible.
+- Additive node inputs may be accepted for compatibility, but callers should
+  prefer the canonical descriptor fields when constructing new workflows.
+
+## Structured Producer Contract
+- Built-in node descriptors and execution dispatch must evolve together.
+- Task metadata such as `taskTypePrimary` is machine-consumed by dependency
+  selection and must remain stable once introduced.
+- Reranker outputs are published as ordered result lists plus convenience fields
+  such as top score/document; consumers should not infer ranking from raw input
+  order.

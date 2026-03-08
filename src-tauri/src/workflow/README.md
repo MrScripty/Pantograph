@@ -67,6 +67,8 @@ dependency-aware, process-backed Python execution for nodes such as
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas
   execution descriptors rather than from raw library record paths.
+- Task-type-derived backend selection must preserve distinct execution modes
+  such as llama.cpp reranking rather than collapsing them into text generation.
 
 ## Revisit Triggers
 - Legacy local graph-edit helpers are removed after all callers use core-owned
@@ -128,3 +130,6 @@ let snapshot = workflow_service
 - `model_path` remains the workflow-facing field name, but for external bundle
   assets it must carry the Pumas execution descriptor `entry_path` so runtime
   consumers receive the executable root instead of the library stub directory.
+- Pumas pipeline tags and node-type hints may classify reranking additively, but
+  they must still resolve to executable backend/runtime metadata before
+  execution starts.

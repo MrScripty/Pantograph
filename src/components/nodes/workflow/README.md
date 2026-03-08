@@ -19,6 +19,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
 | `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
+| `RerankerNode.svelte` | Presents query, candidate-document, and ranked-output state for GGUF reranker execution. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
 
 ## Problem
@@ -51,7 +52,8 @@ controls do not depend solely on browser metadata timing. `AudioGenerationNode`
 also surfaces the batch-only capability boundary so users can distinguish Stable
 Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
 also owns the UI-side routing hints that send diffusion models to
-`diffusion-inference` instead of the text-only PyTorch node.
+`diffusion-inference` and reranker models to the dedicated reranker node
+instead of the text-only PyTorch or llama.cpp generation nodes.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -71,6 +73,8 @@ also owns the UI-side routing hints that send diffusion models to
 - Workflow completion handlers must forward final audio metadata together with
   the audio payload so output playback stays seekable even when metadata loading
   lags in the browser.
+- Specialized node components must mirror canonical backend-owned port names so
+  template graphs and execution bindings do not depend on UI-local aliases.
 
 ## Revisit Triggers
 - Another output node needs the same rerun-reset pattern and the logic starts to
@@ -78,6 +82,8 @@ also owns the UI-side routing hints that send diffusion models to
 - Workflow events gain execution identifiers, allowing stale-event rejection to
   move out of the component layer.
 - Product requirements change so streamed audio must also support seekable replay.
+- More inference-family nodes need shared execution-status rendering and the
+  specialized node components start repeating the same state layout.
 
 ## Dependencies
 **Internal:** `src/stores/workflowStore.ts`, `src/components/nodes/BaseNode.svelte`,
