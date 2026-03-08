@@ -116,6 +116,11 @@ npm run check
 
 Python-backed model execution is intentionally out-of-process and externally provisioned.
 See `docs/python-runtime-separation.md` for configuration and migration details.
+For a local diffusion worker smoke path, run:
+
+```bash
+./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
+```
 
 ### Headless Workflow API
 

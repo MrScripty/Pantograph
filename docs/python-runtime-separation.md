@@ -68,6 +68,11 @@ If your deployment previously relied on embedded Python:
 npm run test:runtime-separation
 ```
 
+For local diffusion worker verification against an imported model bundle, use:
+```bash
+./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
+```
+
 ## Verification Guard
 
 The separation guard is implemented in:
