@@ -112,6 +112,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - Backend startup must happen before inference calls.
 - `generate_image()` is synchronous-at-contract-level and returns final images;
   streaming progress is not yet part of the facade.
+- Process-backed diffusion loaders may infer narrow bundle-root load overrides
+  such as consistent safetensors variants when the diffusers directory layout
+  makes them deterministic.
 - Unsupported capabilities return backend errors rather than silent no-ops.
 - Additive fields may be introduced to request/response structs; existing field
   semantics must remain stable.

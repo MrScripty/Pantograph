@@ -437,10 +437,12 @@ def load_diffusion_model(
         _dtype_name(resolved_dtype),
     )
 
+    load_overrides = _detect_diffusion_load_overrides(path)
     pipeline = DiffusionPipeline.from_pretrained(
         str(path),
         torch_dtype=resolved_dtype,
         trust_remote_code=True,
+        **load_overrides,
     )
     pipeline.set_progress_bar_config(disable=True)
 
@@ -495,10 +497,12 @@ def generate_image(
     if _diffusion_pipeline is None:
         raise RuntimeError("No diffusion pipeline loaded. Call load_diffusion_model() first.")
 
+    resolved_steps = 30 if num_inference_steps is None else int(num_inference_steps)
+    resolved_num_images = 1 if num_images_per_prompt is None else int(num_images_per_prompt)
     call_kwargs = {
         "prompt": prompt,
-        "num_inference_steps": int(num_inference_steps),
-        "num_images_per_prompt": int(num_images_per_prompt),
+        "num_inference_steps": resolved_steps,
+        "num_images_per_prompt": resolved_num_images,
     }
     if isinstance(negative_prompt, str) and negative_prompt.strip():
         call_kwargs["negative_prompt"] = negative_prompt.strip()
@@ -733,6 +737,36 @@ def _dtype_name(dtype):
         if getattr(torch, name) == dtype:
             return name
     return str(dtype)
+
+
+def _detect_diffusion_load_overrides(bundle_root):
+    """Infer narrow from_pretrained overrides from a diffusers bundle layout."""
+    safetensor_variants = set()
+    saw_safetensors = False
+
+    for child in bundle_root.iterdir():
+        if not child.is_dir():
+            continue
+        for candidate in child.iterdir():
+            if not candidate.is_file():
+                continue
+            name = candidate.name
+            if not name.endswith(".safetensors"):
+                continue
+            saw_safetensors = True
+            stem = candidate.stem
+            if "." not in stem:
+                continue
+            variant = stem.rsplit(".", 1)[-1].strip().lower()
+            if variant:
+                safetensor_variants.add(variant)
+
+    overrides = {}
+    if saw_safetensors:
+        overrides["use_safetensors"] = True
+    if len(safetensor_variants) == 1:
+        overrides["variant"] = next(iter(safetensor_variants))
+    return overrides
 
 
 def _decode_base64_image(value):
