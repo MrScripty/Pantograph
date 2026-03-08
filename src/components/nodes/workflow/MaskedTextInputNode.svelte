@@ -234,7 +234,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="masked-text-content">
         <!-- Toolbar -->
         <div class="toolbar flex gap-1 mb-2">
@@ -300,7 +299,6 @@
           </div>
         </div>
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

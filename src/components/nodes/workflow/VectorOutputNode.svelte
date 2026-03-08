@@ -65,7 +65,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if vector}
         <div class="text-xs text-cyan-300 mb-1">{vector.length} dimensions</div>
         <div class="copyable-output nodrag nopan nowheel p-2 bg-neutral-900 rounded text-[10px] text-neutral-300 max-h-28 overflow-y-auto break-all">
@@ -76,7 +75,6 @@
           No vector yet
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

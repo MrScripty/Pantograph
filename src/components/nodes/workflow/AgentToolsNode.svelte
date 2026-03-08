@@ -52,7 +52,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="space-y-1">
         {#each availableTools as tool (tool.id)}
           <label
@@ -69,7 +68,6 @@
           </label>
         {/each}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

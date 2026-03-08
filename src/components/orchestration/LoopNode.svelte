@@ -40,7 +40,6 @@
     </svg>
   {/snippet}
 
-  {#snippet children()}
     <div class="loop-config">
       <div class="config-row">
         <span class="config-label">Max:</span>
@@ -53,7 +52,6 @@
         </div>
       {/if}
     </div>
-  {/snippet}
 </OrchestrationBaseNode>
 
 <style>

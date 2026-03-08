@@ -50,7 +50,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="space-y-2">
         <div class="flex items-center gap-2 text-xs text-neutral-400">
           <span>{statusText}</span>
@@ -66,7 +65,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

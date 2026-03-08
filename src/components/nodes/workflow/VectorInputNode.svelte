@@ -78,7 +78,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if isVectorConnected}
         <div class="text-xs text-neutral-400 italic py-1">
           Connected to upstream vector
@@ -95,7 +94,6 @@
           <div class="mt-1 text-[10px] text-red-300">{parseError}</div>
         {/if}
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

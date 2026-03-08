@@ -50,7 +50,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if isModelConnected}
         <div class="text-xs text-neutral-400 italic py-1">
           Model from connection
@@ -68,7 +67,6 @@
           />
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

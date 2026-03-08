@@ -71,7 +71,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if isTextConnected}
         <div class="connected-hint">
           Connected to external input
@@ -86,7 +85,6 @@
           oninput={handleInput}
         ></textarea>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

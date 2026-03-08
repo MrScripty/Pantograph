@@ -172,7 +172,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if hasData}
         <div class="space-y-1">
           <canvas
@@ -196,7 +195,6 @@
           No point cloud yet
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

@@ -34,12 +34,10 @@
     </svg>
   {/snippet}
 
-  {#snippet children()}
     <div class="condition-config">
       <span class="config-label">Check:</span>
       <span class="config-value">{conditionKey}</span>
     </div>
-  {/snippet}
 </OrchestrationBaseNode>
 
 <style>

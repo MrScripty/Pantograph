@@ -47,12 +47,10 @@
 
 <div class="generic-node-wrapper {categoryColor}">
   <BaseNode {id} {data} {selected}>
-    {#snippet children()}
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full {statusColor}"></span>
         <span class="text-xs text-neutral-400">{statusText}</span>
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

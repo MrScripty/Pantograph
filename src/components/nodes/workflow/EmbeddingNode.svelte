@@ -46,7 +46,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="space-y-2">
         <div class="text-xs text-neutral-400">{statusText}</div>
         {#if !hasTextInput}
@@ -58,7 +57,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

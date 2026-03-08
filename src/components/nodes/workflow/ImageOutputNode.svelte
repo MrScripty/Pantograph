@@ -97,7 +97,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if imageSrc}
         <div class="space-y-1">
           <button type="button"
@@ -141,7 +140,6 @@
           No image yet
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

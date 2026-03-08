@@ -32,12 +32,10 @@
 
 <div class="generic-node-wrapper" data-category={data.definition?.category || 'processing'}>
   <BaseNode {id} {data} {selected}>
-    {#snippet children()}
       <div class="status-row">
         <span class="status-dot" data-state={executionState}></span>
         <span class="status-text">{statusText}</span>
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

@@ -174,7 +174,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="space-y-2">
         <input
           bind:this={fileInputElement}
@@ -243,7 +242,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

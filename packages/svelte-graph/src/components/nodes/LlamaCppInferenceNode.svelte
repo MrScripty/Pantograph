@@ -52,7 +52,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="body-content">
         <div class="status-row">
           <span>{statusText}</span>
@@ -68,7 +67,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

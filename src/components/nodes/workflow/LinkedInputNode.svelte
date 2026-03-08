@@ -85,7 +85,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="linked-input-content">
         {#if status === 'unlinked'}
           <!-- Unlinked state -->
@@ -167,7 +166,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

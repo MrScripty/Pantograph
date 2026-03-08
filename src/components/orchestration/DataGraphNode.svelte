@@ -38,7 +38,6 @@
     </svg>
   {/snippet}
 
-  {#snippet children()}
     <div class="datagraph-config">
       <div class="graph-id">{dataGraphId}</div>
       <div class="mapping-info">
@@ -47,7 +46,6 @@
         <span class="mapping">{outputCount} out</span>
       </div>
     </div>
-  {/snippet}
 </OrchestrationBaseNode>
 
 <style>

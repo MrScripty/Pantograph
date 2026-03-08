@@ -889,7 +889,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="space-y-2">
         {#if !upstreamModelPath}
           <div class="text-[10px] text-amber-400">
@@ -1171,7 +1170,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

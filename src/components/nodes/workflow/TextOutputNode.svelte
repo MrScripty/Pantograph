@@ -55,7 +55,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if displayText}
         <div
           bind:this={outputContainer}
@@ -66,7 +65,6 @@
           No output yet
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

@@ -84,7 +84,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       <div class="puma-lib-body">
         <div class="toolbar-row">
           <button
@@ -128,7 +127,6 @@
           </div>
         {/if}
       </div>
-    {/snippet}
   </BaseNode>
 </div>
 

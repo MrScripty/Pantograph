@@ -40,7 +40,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if streamContent}
         <div
           class="output-text copyable-output stream-active nodrag nopan nowheel"
@@ -58,7 +57,6 @@
           No output yet
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 

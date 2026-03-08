@@ -72,7 +72,6 @@
       </div>
     {/snippet}
 
-    {#snippet children()}
       {#if settings.length > 0}
         <div class="settings-list">
           {#each settings as param (param.key)}
@@ -90,7 +89,6 @@
           Connect inference settings to expand
         </div>
       {/if}
-    {/snippet}
   </BaseNode>
 </div>
 
