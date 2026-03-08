@@ -27,6 +27,7 @@ pub use graph::{
     WorkflowGraphMetadata, WorkflowGraphRemoveEdgeRequest, WorkflowGraphSaveRequest,
     WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
+    convert_graph_to_node_engine, validate_workflow_connection, NodeRegistry,
 };
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,

@@ -1,6 +1,7 @@
-use super::registry::NodeRegistry;
-use super::types::{NodeDefinition, PortDataType};
-use super::validation::validate_connection as validate_connection_internal;
+use pantograph_workflow_service::{
+    validate_workflow_connection as validate_connection_internal, NodeDefinition,
+    NodeRegistry, PortDataType,
+};
 
 pub fn validate_workflow_connection(source_type: PortDataType, target_type: PortDataType) -> bool {
     validate_connection_internal(&source_type, &target_type)

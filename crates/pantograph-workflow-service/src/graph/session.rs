@@ -271,7 +271,7 @@ impl GraphSessionStore {
         Ok(WorkflowGraphEditSessionCloseResponse { ok: true })
     }
 
-    pub async fn get_session_handle(
+    async fn get_session_handle(
         &self,
         session_id: &str,
     ) -> Result<GraphSessionHandle, WorkflowServiceError> {

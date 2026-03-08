@@ -12,11 +12,11 @@ use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedAppConfig, SharedGateway};
 
 use super::events::WorkflowEvent;
-use super::execution_manager::{SharedExecutionManager, UndoRedoState};
-use super::types::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, InsertNodePositionHint, NodeDefinition, PortDataType,
-    WorkflowFile, WorkflowGraph, WorkflowMetadata,
+use pantograph_workflow_service::{
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    FileSystemWorkflowGraphStore, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodePositionHint, NodeDefinition, PortDataType, UndoRedoState, WorkflowFile,
+    WorkflowGraph, WorkflowGraphMetadata,
 };
 
 /// Shared node-engine registry with port options providers.
@@ -26,6 +26,8 @@ pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
 pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
 /// Shared headless workflow service state (session-aware).
 pub type SharedWorkflowService = Arc<pantograph_workflow_service::WorkflowService>;
+/// Shared filesystem-backed workflow graph store.
+pub type SharedWorkflowGraphStore = Arc<FileSystemWorkflowGraphStore>;
 
 #[command]
 pub fn validate_workflow_connection(source_type: PortDataType, target_type: PortDataType) -> bool {
@@ -49,18 +51,44 @@ pub fn get_node_definition(node_type: String) -> Option<NodeDefinition> {
 }
 
 #[command]
-pub fn save_workflow(name: String, graph: WorkflowGraph) -> Result<String, String> {
-    super::workflow_persistence_commands::save_workflow(name, graph)
+pub fn save_workflow(
+    name: String,
+    graph: WorkflowGraph,
+    workflow_service: State<'_, SharedWorkflowService>,
+    workflow_graph_store: State<'_, SharedWorkflowGraphStore>,
+) -> Result<String, String> {
+    workflow_service
+        .workflow_graph_save(
+            workflow_graph_store.inner().as_ref(),
+            pantograph_workflow_service::WorkflowGraphSaveRequest { name, graph },
+        )
+        .map(|response| response.path)
+        .map_err(|e| e.to_envelope_json())
 }
 
 #[command]
-pub fn load_workflow(path: String) -> Result<WorkflowFile, String> {
-    super::workflow_persistence_commands::load_workflow(path)
+pub fn load_workflow(
+    path: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+    workflow_graph_store: State<'_, SharedWorkflowGraphStore>,
+) -> Result<WorkflowFile, String> {
+    workflow_service
+        .workflow_graph_load(
+            workflow_graph_store.inner().as_ref(),
+            pantograph_workflow_service::WorkflowGraphLoadRequest { path },
+        )
+        .map_err(|e| e.to_envelope_json())
 }
 
 #[command]
-pub fn list_workflows() -> Result<Vec<WorkflowMetadata>, String> {
-    super::workflow_persistence_commands::list_workflows()
+pub fn list_workflows(
+    workflow_service: State<'_, SharedWorkflowService>,
+    workflow_graph_store: State<'_, SharedWorkflowGraphStore>,
+) -> Result<Vec<WorkflowGraphMetadata>, String> {
+    workflow_service
+        .workflow_graph_list(workflow_graph_store.inner().as_ref())
+        .map(|response| response.workflows)
+        .map_err(|e| e.to_envelope_json())
 }
 
 #[command]
@@ -239,8 +267,8 @@ pub async fn execute_workflow_v2(
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
-    execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<String, String> {
     super::workflow_execution_commands::execute_workflow_v2(
@@ -249,8 +277,8 @@ pub async fn execute_workflow_v2(
         gateway,
         config,
         rag_manager,
-        execution_manager,
         extensions,
+        workflow_service,
         channel,
     )
     .await
@@ -259,25 +287,25 @@ pub async fn execute_workflow_v2(
 #[command]
 pub async fn get_undo_redo_state(
     execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<UndoRedoState, String> {
-    super::workflow_execution_commands::get_undo_redo_state(execution_id, execution_manager).await
+    super::workflow_execution_commands::get_undo_redo_state(execution_id, workflow_service).await
 }
 
 #[command]
 pub async fn undo_workflow(
     execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowGraph, String> {
-    super::workflow_execution_commands::undo_workflow(execution_id, execution_manager).await
+    super::workflow_execution_commands::undo_workflow(execution_id, workflow_service).await
 }
 
 #[command]
 pub async fn redo_workflow(
     execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowGraph, String> {
-    super::workflow_execution_commands::redo_workflow(execution_id, execution_manager).await
+    super::workflow_execution_commands::redo_workflow(execution_id, workflow_service).await
 }
 
 #[command]
@@ -285,13 +313,13 @@ pub async fn update_node_data(
     execution_id: String,
     node_id: String,
     data: serde_json::Value,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<(), String> {
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
     super::workflow_execution_commands::update_node_data(
         execution_id,
         node_id,
         data,
-        execution_manager,
+        workflow_service,
     )
     .await
 }
@@ -300,9 +328,9 @@ pub async fn update_node_data(
 pub async fn add_node_to_execution(
     execution_id: String,
     node: GraphNode,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<(), String> {
-    super::workflow_execution_commands::add_node_to_execution(execution_id, node, execution_manager)
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    super::workflow_execution_commands::add_node_to_execution(execution_id, node, workflow_service)
         .await
 }
 
@@ -310,9 +338,9 @@ pub async fn add_node_to_execution(
 pub async fn add_edge_to_execution(
     execution_id: String,
     edge: GraphEdge,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowGraph, String> {
-    super::workflow_execution_commands::add_edge_to_execution(execution_id, edge, execution_manager)
+    super::workflow_execution_commands::add_edge_to_execution(execution_id, edge, workflow_service)
         .await
 }
 
@@ -321,13 +349,13 @@ pub async fn get_connection_candidates(
     execution_id: String,
     source_anchor: ConnectionAnchor,
     graph_revision: Option<String>,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<ConnectionCandidatesResponse, String> {
     super::workflow_execution_commands::get_connection_candidates(
         execution_id,
         source_anchor,
         graph_revision,
-        execution_manager,
+        workflow_service,
     )
     .await
 }
@@ -338,14 +366,14 @@ pub async fn connect_anchors_in_execution(
     source_anchor: ConnectionAnchor,
     target_anchor: ConnectionAnchor,
     graph_revision: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<ConnectionCommitResponse, String> {
     super::workflow_execution_commands::connect_anchors_in_execution(
         execution_id,
         source_anchor,
         target_anchor,
         graph_revision,
-        execution_manager,
+        workflow_service,
     )
     .await
 }
@@ -358,7 +386,7 @@ pub async fn insert_node_and_connect_in_execution(
     graph_revision: String,
     position_hint: InsertNodePositionHint,
     preferred_input_port_id: Option<String>,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<InsertNodeConnectionResponse, String> {
     super::workflow_execution_commands::insert_node_and_connect_in_execution(
         execution_id,
@@ -367,7 +395,7 @@ pub async fn insert_node_and_connect_in_execution(
         graph_revision,
         position_hint,
         preferred_input_port_id,
-        execution_manager,
+        workflow_service,
     )
     .await
 }
@@ -376,12 +404,12 @@ pub async fn insert_node_and_connect_in_execution(
 pub async fn remove_edge_from_execution(
     execution_id: String,
     edge_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowGraph, String> {
     super::workflow_execution_commands::remove_edge_from_execution(
         execution_id,
         edge_id,
-        execution_manager,
+        workflow_service,
     )
     .await
 }
@@ -389,17 +417,17 @@ pub async fn remove_edge_from_execution(
 #[command]
 pub async fn get_execution_graph(
     execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowGraph, String> {
-    super::workflow_execution_commands::get_execution_graph(execution_id, execution_manager).await
+    super::workflow_execution_commands::get_execution_graph(execution_id, workflow_service).await
 }
 
 #[command]
 pub async fn create_workflow_session(
     graph: WorkflowGraph,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<String, String> {
-    super::workflow_execution_commands::create_workflow_session(graph, execution_manager).await
+    super::workflow_execution_commands::create_workflow_session(graph, workflow_service).await
 }
 
 #[command]
@@ -409,8 +437,8 @@ pub async fn run_workflow_session(
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
-    execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
     super::workflow_execution_commands::run_workflow_session(
@@ -419,8 +447,8 @@ pub async fn run_workflow_session(
         gateway,
         config,
         rag_manager,
-        execution_manager,
         extensions,
+        workflow_service,
         channel,
     )
     .await
@@ -429,9 +457,9 @@ pub async fn run_workflow_session(
 #[command]
 pub async fn remove_execution(
     execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<(), String> {
-    super::workflow_execution_commands::remove_execution(execution_id, execution_manager).await
+    super::workflow_execution_commands::remove_execution(execution_id, workflow_service).await
 }
 
 #[command]

@@ -59,6 +59,9 @@ fn main() {
         .parent()
         .expect("Failed to get project root from CARGO_MANIFEST_DIR");
     let orchestrations_path = project_root.join(".pantograph/orchestrations");
+    let workflow_graph_store: workflow::commands::SharedWorkflowGraphStore = Arc::new(
+        pantograph_workflow_service::FileSystemWorkflowGraphStore::new(project_root.to_path_buf()),
+    );
 
     let mut orchestration_store =
         node_engine::OrchestrationStore::with_persistence(&orchestrations_path);
@@ -103,6 +106,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(execution_manager)
         .manage(workflow_service)
+        .manage(workflow_graph_store)
         .manage(orchestration_store)
         .manage(node_registry)
         .manage(shared_extensions.clone())

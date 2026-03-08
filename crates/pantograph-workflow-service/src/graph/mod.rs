@@ -15,7 +15,7 @@ pub use persistence::{
 };
 pub use registry::{validate_workflow_connection, NodeRegistry};
 pub use session::{
-    GraphSessionStore, UndoRedoState, WorkflowGraphAddEdgeRequest,
+    convert_graph_to_node_engine, GraphSessionStore, UndoRedoState, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,

@@ -2,26 +2,25 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{ipc::Channel, AppHandle, State};
-use uuid::Uuid;
-
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
-
-use super::commands::SharedExtensions;
-use super::connection_intent::{
-    commit_connection, connection_candidates, insert_node_and_connect, rejected_commit_response,
-    rejected_insert_response,
+use pantograph_workflow_service::{
+    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
+    ConnectionCommitResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodePositionHint, UndoRedoState, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUpdateNodeDataRequest,
 };
+
+use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
-use super::execution_manager::{ExecutionHandle, SharedExecutionManager, UndoRedoState};
 use super::task_executor::TauriTaskExecutor;
-use super::types::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, InsertNodePositionHint, WorkflowGraph,
-};
 
 #[derive(Clone, Default)]
 struct RuntimeExtensionsSnapshot {
@@ -80,31 +79,6 @@ fn apply_runtime_extensions(
         super::task_executor::runtime_extension_keys::EXECUTION_ID,
         execution_id.to_string(),
     );
-}
-
-fn hydrate_embedding_emit_metadata_flags(mut graph: WorkflowGraph) -> WorkflowGraph {
-    let counts = graph.effective_consumer_count_map();
-    for node in &mut graph.nodes {
-        if node.node_type != "embedding" {
-            continue;
-        }
-        let key = format!("{}:metadata", node.id);
-        let emit_metadata = counts.get(&key).copied().unwrap_or(0) > 0;
-
-        match node.data {
-            serde_json::Value::Object(ref mut map) => {
-                map.insert(
-                    "emit_metadata".to_string(),
-                    serde_json::json!(emit_metadata),
-                );
-            }
-            _ => {
-                node.data = serde_json::json!({ "emit_metadata": emit_metadata });
-            }
-        }
-    }
-
-    graph
 }
 
 async fn sync_embedding_emit_metadata_flags_for_executor(
@@ -425,480 +399,12 @@ async fn restore_runtime_if_needed(
     }
 }
 
-async fn get_execution_handle(
-    execution_manager: &State<'_, SharedExecutionManager>,
-    execution_id: &str,
-) -> Result<ExecutionHandle, String> {
-    execution_manager
-        .get_execution_handle(execution_id)
-        .await
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))
-}
-
-pub async fn execute_workflow_v2(
-    _app: AppHandle,
-    graph: WorkflowGraph,
-    gateway: State<'_, SharedGateway>,
-    config: State<'_, SharedAppConfig>,
-    rag_manager: State<'_, SharedRagManager>,
-    execution_manager: State<'_, SharedExecutionManager>,
-    extensions: State<'_, SharedExtensions>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<String, String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let project_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    let execution_id = Uuid::new_v4().to_string();
-
-    let event_adapter = Arc::new(TauriEventAdapter::new(channel, &execution_id));
-
-    let graph = hydrate_embedding_emit_metadata_flags(graph);
-    let ne_graph = convert_graph_to_node_engine(&graph);
-    let runtime_ext = {
-        let shared = extensions.read().await;
-        snapshot_runtime_extensions(&shared)
-    };
-    let embedding_model_id_from_graph = resolve_embedding_model_id_from_graph(&graph)?;
-    let restore_config = prepare_embedding_runtime(
-        gateway.inner(),
-        config.inner(),
-        runtime_ext.pumas_api.clone(),
-        embedding_model_id_from_graph,
-        graph_has_embedding_node(&graph),
-        graph_has_llamacpp_inference_node(&graph),
-    )
-    .await?;
-
-    execution_manager
-        .create_execution(&execution_id, ne_graph, event_adapter.clone())
-        .await;
-
-    let core = Arc::new(
-        node_engine::CoreTaskExecutor::new()
-            .with_project_root(project_root)
-            .with_gateway(gateway.inner_arc())
-            .with_event_sink(event_adapter.clone() as Arc<dyn EventSink>)
-            .with_execution_id(execution_id.clone()),
-    );
-    let host = Arc::new(TauriTaskExecutor::new(rag_manager.inner().clone()));
-    let task_executor = node_engine::CompositeTaskExecutor::new(
-        Some(host as Arc<dyn node_engine::TaskExecutor>),
-        core,
-    );
-
-    let terminal_nodes: Vec<String> = graph
-        .nodes
-        .iter()
-        .filter(|node| !graph.edges.iter().any(|e| e.source == node.id))
-        .map(|node| node.id.clone())
-        .collect();
-
-    let workflow_result = {
-        let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-        let mut state = execution.lock().await;
-        state.touch();
-        apply_runtime_extensions(
-            &mut state.executor,
-            &runtime_ext,
-            event_adapter.clone() as Arc<dyn EventSink>,
-            &execution_id,
-        );
-
-        let _ = state.push_undo_snapshot().await;
-
-        let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowStarted {
-            workflow_id: execution_id.clone(),
-            execution_id: execution_id.clone(),
-        });
-
-        let mut workflow_result: Result<(), String> = Ok(());
-        for node_id in &terminal_nodes {
-            match state.executor.demand(node_id, &task_executor).await {
-                Ok(_outputs) => {
-                    log::debug!("Demanded outputs from node: {}", node_id);
-                }
-                Err(e) => {
-                    log::error!("Error demanding from node {}: {}", node_id, e);
-                    let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowFailed {
-                        workflow_id: execution_id.clone(),
-                        execution_id: execution_id.clone(),
-                        error: e.to_string(),
-                    });
-                    workflow_result = Err(e.to_string());
-                    break;
-                }
-            }
-        }
-
-        if workflow_result.is_ok() {
-            let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
-                workflow_id: execution_id.clone(),
-                execution_id: execution_id.clone(),
-            });
-        }
-
-        workflow_result
-    };
-
-    restore_runtime_if_needed(gateway.inner(), restore_config).await;
-    workflow_result?;
-
-    Ok(execution_id)
-}
-
-pub async fn get_undo_redo_state(
-    execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<UndoRedoState, String> {
-    execution_manager
-        .get_undo_redo_state(&execution_id)
-        .await
-        .ok_or_else(|| format!("Execution '{}' not found", execution_id))
-}
-
-pub async fn undo_workflow(
-    execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<WorkflowGraph, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    match state.undo().await {
-        Some(Ok(graph)) => Ok(convert_graph_from_node_engine(&graph)),
-        Some(Err(e)) => Err(format!("Undo failed: {}", e)),
-        None => Err("Nothing to undo".to_string()),
-    }
-}
-
-pub async fn redo_workflow(
-    execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<WorkflowGraph, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    match state.redo().await {
-        Some(Ok(graph)) => Ok(convert_graph_from_node_engine(&graph)),
-        Some(Err(e)) => Err(format!("Redo failed: {}", e)),
-        None => Err("Nothing to redo".to_string()),
-    }
-}
-
-pub async fn update_node_data(
-    execution_id: String,
-    node_id: String,
-    data: serde_json::Value,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<(), String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let _ = state.push_undo_snapshot().await;
-
-    state
-        .executor
-        .update_node_data(&node_id, data)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-pub async fn add_node_to_execution(
-    execution_id: String,
-    node: GraphNode,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<(), String> {
-    let ne_node = convert_node_to_node_engine(&node);
-
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let _ = state.push_undo_snapshot().await;
-
-    state.executor.add_node(ne_node).await;
-    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
-    Ok(())
-}
-
-pub async fn add_edge_to_execution(
-    execution_id: String,
-    edge: GraphEdge,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<WorkflowGraph, String> {
-    let ne_edge = convert_edge_to_node_engine(&edge);
-
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let _ = state.push_undo_snapshot().await;
-
-    state.executor.add_edge(ne_edge).await;
-    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
-
-    let graph = state.executor.get_graph_snapshot().await;
-    Ok(convert_graph_from_node_engine(&graph))
-}
-
-pub async fn get_connection_candidates(
-    execution_id: String,
-    source_anchor: ConnectionAnchor,
-    graph_revision: Option<String>,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<ConnectionCandidatesResponse, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let graph = state.executor.get_graph_snapshot().await;
-    let graph = convert_graph_from_node_engine(&graph);
-    let registry = super::registry::NodeRegistry::new();
-    let current_revision = graph.compute_fingerprint();
-    let source_node_id = source_anchor.node_id.clone();
-    let source_port_id = source_anchor.port_id.clone();
-    log::info!(
-        "workflow candidates request: execution={} source={}:{} requested_revision={} current_revision={}",
-        execution_id,
-        source_node_id,
-        source_port_id,
-        graph_revision.as_deref().unwrap_or("<none>"),
-        current_revision,
-    );
-
-    match connection_candidates(&graph, &registry, source_anchor, graph_revision.as_deref()) {
-        Ok(response) => {
-            log::info!(
-                "workflow candidates response: execution={} source={}:{} revision_matches={} compatible_nodes={} insertable_types={} response_revision={}",
-                execution_id,
-                response.source_anchor.node_id,
-                response.source_anchor.port_id,
-                response.revision_matches,
-                response.compatible_nodes.len(),
-                response.insertable_node_types.len(),
-                response.graph_revision,
-            );
-            Ok(response)
-        }
-        Err(rejection) => {
-            log::warn!(
-                "workflow candidates rejected: execution={} source={}:{} reason={:?} message={}",
-                execution_id,
-                source_node_id,
-                source_port_id,
-                rejection.reason,
-                rejection.message,
-            );
-            Err(rejection.message)
-        }
-    }
-}
-
-pub async fn connect_anchors_in_execution(
-    execution_id: String,
-    source_anchor: ConnectionAnchor,
-    target_anchor: ConnectionAnchor,
-    graph_revision: String,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<ConnectionCommitResponse, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let current_graph = state.executor.get_graph_snapshot().await;
-    let current_graph = convert_graph_from_node_engine(&current_graph);
-    let registry = super::registry::NodeRegistry::new();
-    if let Err(rejection) = commit_connection(
-        &current_graph,
-        &registry,
-        &graph_revision,
-        &source_anchor,
-        &target_anchor,
-    ) {
-        return Ok(rejected_commit_response(&current_graph, rejection));
-    }
-
-    let _ = state.push_undo_snapshot().await;
-    state
-        .executor
-        .add_edge(node_engine::GraphEdge {
-            id: format!(
-                "{}-{}-{}-{}",
-                source_anchor.node_id,
-                source_anchor.port_id,
-                target_anchor.node_id,
-                target_anchor.port_id
-            ),
-            source: source_anchor.node_id,
-            source_handle: source_anchor.port_id,
-            target: target_anchor.node_id,
-            target_handle: target_anchor.port_id,
-        })
-        .await;
-    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
-
-    let graph = state.executor.get_graph_snapshot().await;
-    let graph = convert_graph_from_node_engine(&graph);
-    Ok(ConnectionCommitResponse {
-        accepted: true,
-        graph_revision: graph.compute_fingerprint(),
-        graph: Some(graph),
-        rejection: None,
-    })
-}
-
-pub async fn insert_node_and_connect_in_execution(
-    execution_id: String,
-    source_anchor: ConnectionAnchor,
-    node_type: String,
-    graph_revision: String,
-    position_hint: InsertNodePositionHint,
-    preferred_input_port_id: Option<String>,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<InsertNodeConnectionResponse, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let current_graph = state.executor.get_graph_snapshot().await;
-    let current_graph = convert_graph_from_node_engine(&current_graph);
-    let current_revision = current_graph.compute_fingerprint();
-    log::info!(
-        "workflow insert request: execution={} source={}:{} node_type={} preferred_input={} requested_revision={} current_revision={} position=({:.1},{:.1})",
-        execution_id,
-        source_anchor.node_id,
-        source_anchor.port_id,
-        node_type,
-        preferred_input_port_id.as_deref().unwrap_or("<auto>"),
-        graph_revision,
-        current_revision,
-        position_hint.position.x,
-        position_hint.position.y,
-    );
-    let registry = super::registry::NodeRegistry::new();
-    let (inserted_node, inserted_edge) = match insert_node_and_connect(
-        &current_graph,
-        &registry,
-        &graph_revision,
-        &source_anchor,
-        &node_type,
-        &position_hint,
-        preferred_input_port_id.as_deref(),
-    ) {
-        Ok(result) => result,
-        Err(rejection) => {
-            log::warn!(
-                "workflow insert rejected: execution={} source={}:{} node_type={} reason={:?} message={} requested_revision={} current_revision={}",
-                execution_id,
-                source_anchor.node_id,
-                source_anchor.port_id,
-                node_type,
-                rejection.reason,
-                rejection.message,
-                graph_revision,
-                current_revision,
-            );
-            return Ok(rejected_insert_response(&current_graph, rejection));
-        }
-    };
-
-    let _ = state.push_undo_snapshot().await;
-    state
-        .executor
-        .add_node(convert_node_to_node_engine(&inserted_node))
-        .await;
-    state
-        .executor
-        .add_edge(convert_edge_to_node_engine(&inserted_edge))
-        .await;
-    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
-
-    let graph = state.executor.get_graph_snapshot().await;
-    let graph = convert_graph_from_node_engine(&graph);
-    let response_revision = graph.compute_fingerprint();
-    log::info!(
-        "workflow insert accepted: execution={} inserted_node={} inserted_edge={} target_handle={} response_revision={}",
-        execution_id,
-        inserted_node.id,
-        inserted_edge.id,
-        inserted_edge.target_handle,
-        response_revision,
-    );
-    Ok(InsertNodeConnectionResponse {
-        accepted: true,
-        graph_revision: response_revision,
-        inserted_node_id: Some(inserted_node.id),
-        graph: Some(graph),
-        rejection: None,
-    })
-}
-
-pub async fn remove_edge_from_execution(
-    execution_id: String,
-    edge_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<WorkflowGraph, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let _ = state.push_undo_snapshot().await;
-
-    state.executor.remove_edge(&edge_id).await;
-    sync_embedding_emit_metadata_flags_for_executor(&mut state.executor).await?;
-
-    let graph = state.executor.get_graph_snapshot().await;
-    Ok(convert_graph_from_node_engine(&graph))
-}
-
-pub async fn get_execution_graph(
-    execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<WorkflowGraph, String> {
-    let execution = get_execution_handle(&execution_manager, &execution_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
-
-    let graph = state.executor.get_graph_snapshot().await;
-    Ok(convert_graph_from_node_engine(&graph))
-}
-
-pub async fn create_workflow_session(
-    graph: WorkflowGraph,
-    execution_manager: State<'_, SharedExecutionManager>,
-) -> Result<String, String> {
-    let session_id = Uuid::new_v4().to_string();
-
-    let graph = hydrate_embedding_emit_metadata_flags(graph);
-    let ne_graph = convert_graph_to_node_engine(&graph);
-
-    let event_sink = Arc::new(node_engine::NullEventSink);
-    execution_manager
-        .create_execution(&session_id, ne_graph, event_sink)
-        .await;
-
-    {
-        if let Some(execution) = execution_manager.get_execution_handle(&session_id).await {
-            let mut state = execution.lock().await;
-            let _ = state.push_undo_snapshot().await;
-        }
-    }
-
-    Ok(session_id)
-}
-
-pub async fn run_workflow_session(
-    _app: AppHandle,
+async fn run_session_graph_snapshot(
     session_id: String,
+    session_graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
-    execution_manager: State<'_, SharedExecutionManager>,
     extensions: State<'_, SharedExtensions>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
@@ -909,6 +415,19 @@ pub async fn run_workflow_session(
         .unwrap_or_else(|| PathBuf::from("."));
 
     let event_adapter = Arc::new(TauriEventAdapter::new(channel, &session_id));
+    let runtime_ext = {
+        let shared = extensions.read().await;
+        snapshot_runtime_extensions(&shared)
+    };
+    let restore_config = prepare_embedding_runtime(
+        gateway.inner(),
+        config.inner(),
+        runtime_ext.pumas_api.clone(),
+        resolve_embedding_model_id_from_graph(&session_graph)?,
+        graph_has_embedding_node(&session_graph),
+        graph_has_llamacpp_inference_node(&session_graph),
+    )
+    .await?;
 
     let core = Arc::new(
         node_engine::CoreTaskExecutor::new()
@@ -923,47 +442,23 @@ pub async fn run_workflow_session(
         core,
     );
 
-    let runtime_ext = {
-        let shared = extensions.read().await;
-        snapshot_runtime_extensions(&shared)
-    };
+    let terminal_nodes: Vec<String> = session_graph
+        .nodes
+        .iter()
+        .filter(|node| !session_graph.edges.iter().any(|e| e.source == node.id))
+        .map(|node| node.id.clone())
+        .collect();
 
-    let session_graph = {
-        let execution = get_execution_handle(&execution_manager, &session_id).await?;
-        let mut state = execution.lock().await;
-        state.touch();
-        state.executor.get_graph_snapshot().await
-    };
-
-    let restore_config = prepare_embedding_runtime(
-        gateway.inner(),
-        config.inner(),
-        runtime_ext.pumas_api.clone(),
-        resolve_embedding_model_id_from_node_engine_graph(&session_graph)?,
-        node_engine_graph_has_embedding_node(&session_graph),
-        node_engine_graph_has_llamacpp_inference_node(&session_graph),
-    )
-    .await?;
-
-    let execution = get_execution_handle(&execution_manager, &session_id).await?;
-    let mut state = execution.lock().await;
-    state.touch();
+    let mut executor =
+        node_engine::WorkflowExecutor::new(&session_id, convert_graph_to_node_engine(&session_graph), event_adapter.clone());
     apply_runtime_extensions(
-        &mut state.executor,
+        &mut executor,
         &runtime_ext,
         event_adapter.clone() as Arc<dyn EventSink>,
         &session_id,
     );
-
-    state.executor.set_event_sink(event_adapter.clone());
-
-    let graph = state.executor.get_graph_snapshot().await;
-    let terminal_nodes: Vec<String> = graph
-        .nodes
-        .iter()
-        .filter(|node| !graph.edges.iter().any(|e| e.source == node.id))
-        .map(|node| node.id.clone())
-        .collect();
+    executor.set_event_sink(event_adapter.clone());
+    sync_embedding_emit_metadata_flags_for_executor(&mut executor).await?;
 
     let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowStarted {
         workflow_id: session_id.clone(),
@@ -972,7 +467,7 @@ pub async fn run_workflow_session(
 
     let mut workflow_result: Result<(), String> = Ok(());
     for node_id in &terminal_nodes {
-        match state.executor.demand(node_id, &task_executor).await {
+        match executor.demand(node_id, &task_executor).await {
             Ok(_outputs) => {
                 log::debug!("Demanded outputs from node: {}", node_id);
             }
@@ -997,86 +492,263 @@ pub async fn run_workflow_session(
     }
 
     restore_runtime_if_needed(gateway.inner(), restore_config).await;
-    workflow_result?;
+    workflow_result
+}
 
-    Ok(())
+pub async fn execute_workflow_v2(
+    _app: AppHandle,
+    graph: WorkflowGraph,
+    gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
+    rag_manager: State<'_, SharedRagManager>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    channel: Channel<WorkflowEvent>,
+) -> Result<String, String> {
+    let session = workflow_service
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest { graph })
+        .await
+        .map_err(|e| e.to_envelope_json())?;
+    let execution_id = session.session_id.clone();
+    let session_graph = workflow_service
+        .workflow_graph_get_runtime_snapshot(&execution_id)
+        .await
+        .map_err(|e| e.to_envelope_json())?;
+    run_session_graph_snapshot(
+        execution_id.clone(),
+        session_graph,
+        gateway,
+        config,
+        rag_manager,
+        extensions,
+        channel,
+    )
+    .await?;
+    Ok(execution_id)
+}
+
+pub async fn get_undo_redo_state(
+    execution_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<UndoRedoState, String> {
+    workflow_service
+        .workflow_graph_get_undo_redo_state(WorkflowGraphUndoRedoStateRequest {
+            session_id: execution_id,
+        })
+        .await
+        .map(|state| UndoRedoState {
+            can_undo: state.can_undo,
+            can_redo: state.can_redo,
+            undo_count: state.undo_count,
+        })
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn undo_workflow(
+    execution_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_undo(WorkflowGraphEditSessionGraphRequest {
+            session_id: execution_id,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn redo_workflow(
+    execution_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_redo(WorkflowGraphEditSessionGraphRequest {
+            session_id: execution_id,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn update_node_data(
+    execution_id: String,
+    node_id: String,
+    data: serde_json::Value,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_update_node_data(WorkflowGraphUpdateNodeDataRequest {
+            session_id: execution_id,
+            node_id,
+            data,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn add_node_to_execution(
+    execution_id: String,
+    node: GraphNode,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_add_node(WorkflowGraphAddNodeRequest {
+            session_id: execution_id,
+            node,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn add_edge_to_execution(
+    execution_id: String,
+    edge: GraphEdge,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_add_edge(WorkflowGraphAddEdgeRequest {
+            session_id: execution_id,
+            edge,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn get_connection_candidates(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    graph_revision: Option<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ConnectionCandidatesResponse, String> {
+    workflow_service
+        .workflow_graph_get_connection_candidates(WorkflowGraphGetConnectionCandidatesRequest {
+            session_id: execution_id,
+            source_anchor,
+            graph_revision,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn connect_anchors_in_execution(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    target_anchor: ConnectionAnchor,
+    graph_revision: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ConnectionCommitResponse, String> {
+    workflow_service
+        .workflow_graph_connect(WorkflowGraphConnectRequest {
+            session_id: execution_id,
+            source_anchor,
+            target_anchor,
+            graph_revision,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn insert_node_and_connect_in_execution(
+    execution_id: String,
+    source_anchor: ConnectionAnchor,
+    node_type: String,
+    graph_revision: String,
+    position_hint: InsertNodePositionHint,
+    preferred_input_port_id: Option<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<InsertNodeConnectionResponse, String> {
+    workflow_service
+        .workflow_graph_insert_node_and_connect(WorkflowGraphInsertNodeAndConnectRequest {
+            session_id: execution_id,
+            source_anchor,
+            node_type,
+            graph_revision,
+            position_hint,
+            preferred_input_port_id,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn remove_edge_from_execution(
+    execution_id: String,
+    edge_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_remove_edge(WorkflowGraphRemoveEdgeRequest {
+            session_id: execution_id,
+            edge_id,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn get_execution_graph(
+    execution_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraph, String> {
+    workflow_service
+        .workflow_graph_get_edit_session_graph(WorkflowGraphEditSessionGraphRequest {
+            session_id: execution_id,
+        })
+        .await
+        .map(|response| response.graph)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn create_workflow_session(
+    graph: WorkflowGraph,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<String, String> {
+    workflow_service
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest { graph })
+        .await
+        .map(|response| response.session_id)
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn run_workflow_session(
+    _app: AppHandle,
+    session_id: String,
+    gateway: State<'_, SharedGateway>,
+    config: State<'_, SharedAppConfig>,
+    rag_manager: State<'_, SharedRagManager>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    channel: Channel<WorkflowEvent>,
+) -> Result<(), String> {
+    let session_graph = workflow_service
+        .workflow_graph_get_runtime_snapshot(&session_id)
+        .await
+        .map_err(|e| e.to_envelope_json())?;
+    run_session_graph_snapshot(
+        session_id,
+        session_graph,
+        gateway,
+        config,
+        rag_manager,
+        extensions,
+        channel,
+    )
+    .await
 }
 
 pub async fn remove_execution(
     execution_id: String,
-    execution_manager: State<'_, SharedExecutionManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<(), String> {
-    execution_manager.remove_execution(&execution_id).await;
-    Ok(())
-}
-
-fn convert_graph_to_node_engine(graph: &WorkflowGraph) -> node_engine::WorkflowGraph {
-    let mut ne_graph =
-        node_engine::WorkflowGraph::new(Uuid::new_v4().to_string(), "Workflow".to_string());
-
-    for node in &graph.nodes {
-        ne_graph.nodes.push(convert_node_to_node_engine(node));
-    }
-
-    for edge in &graph.edges {
-        ne_graph.edges.push(convert_edge_to_node_engine(edge));
-    }
-
-    ne_graph
-}
-
-fn convert_node_to_node_engine(node: &GraphNode) -> node_engine::GraphNode {
-    let mut data = node.data.clone();
-    if let serde_json::Value::Object(ref mut map) = data {
-        map.insert("node_type".to_string(), serde_json::json!(node.node_type));
-    }
-
-    node_engine::GraphNode {
-        id: node.id.clone(),
-        node_type: node.node_type.clone(),
-        data,
-        position: (node.position.x, node.position.y),
-    }
-}
-
-fn convert_edge_to_node_engine(edge: &GraphEdge) -> node_engine::GraphEdge {
-    node_engine::GraphEdge {
-        id: edge.id.clone(),
-        source: edge.source.clone(),
-        source_handle: edge.source_handle.clone(),
-        target: edge.target.clone(),
-        target_handle: edge.target_handle.clone(),
-    }
-}
-
-fn convert_graph_from_node_engine(graph: &node_engine::WorkflowGraph) -> WorkflowGraph {
-    let mut workflow_graph = WorkflowGraph {
-        nodes: graph
-            .nodes
-            .iter()
-            .map(|n| GraphNode {
-                id: n.id.clone(),
-                node_type: n.node_type.clone(),
-                position: super::types::Position {
-                    x: n.position.0,
-                    y: n.position.1,
-                },
-                data: n.data.clone(),
-            })
-            .collect(),
-        edges: graph
-            .edges
-            .iter()
-            .map(|e| GraphEdge {
-                id: e.id.clone(),
-                source: e.source.clone(),
-                source_handle: e.source_handle.clone(),
-                target: e.target.clone(),
-                target_handle: e.target_handle.clone(),
-            })
-            .collect(),
-        derived_graph: None,
-    };
-    workflow_graph.refresh_derived_graph();
-    workflow_graph
+    workflow_service
+        .workflow_graph_close_edit_session(
+            pantograph_workflow_service::WorkflowGraphEditSessionCloseRequest {
+                session_id: execution_id,
+            },
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_envelope_json())
 }
