@@ -1,0 +1,250 @@
+{
+  "name": "Tiny SD Turbo Text to Image",
+  "description": "Minimal text-to-image workflow that routes an imported tiny-sd-turbo model from Puma-Lib through dependency preflight into diffusion inference.",
+  "version": "1.0.0",
+  "orchestration": {
+    "id": "tiny-sd-turbo-text-to-image-orch",
+    "name": "Tiny SD Turbo Text to Image",
+    "description": "Single data-graph orchestration for local tiny-sd-turbo text-to-image generation.",
+    "nodes": [
+      {
+        "id": "start",
+        "nodeType": "start",
+        "position": [80, 180],
+        "config": {}
+      },
+      {
+        "id": "generate-image",
+        "nodeType": "data_graph",
+        "position": [260, 180],
+        "config": {
+          "dataGraphId": "tiny-sd-turbo-generate",
+          "inputMappings": {},
+          "outputMappings": {}
+        }
+      },
+      {
+        "id": "end",
+        "nodeType": "end",
+        "position": [460, 180],
+        "config": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "start",
+        "sourceHandle": "next",
+        "target": "generate-image",
+        "targetHandle": "input"
+      },
+      {
+        "id": "e2",
+        "source": "generate-image",
+        "sourceHandle": "next",
+        "target": "end",
+        "targetHandle": "input"
+      }
+    ],
+    "dataGraphs": {
+      "generate-image": "tiny-sd-turbo-generate"
+    }
+  },
+  "dataGraphs": {
+    "tiny-sd-turbo-generate": {
+      "id": "tiny-sd-turbo-generate",
+      "name": "Tiny SD Turbo Generate",
+      "nodes": [
+        {
+          "id": "prompt",
+          "node_type": "text-input",
+          "position": { "x": 80, "y": 120 },
+          "data": {
+            "label": "Prompt",
+            "text": "paper lantern in the rain, cinematic lighting, detailed illustration"
+          }
+        },
+        {
+          "id": "negative-prompt",
+          "node_type": "text-input",
+          "position": { "x": 80, "y": 310 },
+          "data": {
+            "label": "Negative Prompt",
+            "text": "blurry, low quality, distorted"
+          }
+        },
+        {
+          "id": "steps",
+          "node_type": "number-input",
+          "position": { "x": 80, "y": 500 },
+          "data": {
+            "label": "Steps",
+            "value": 4
+          }
+        },
+        {
+          "id": "cfg-scale",
+          "node_type": "number-input",
+          "position": { "x": 260, "y": 500 },
+          "data": {
+            "label": "CFG Scale",
+            "value": 0
+          }
+        },
+        {
+          "id": "seed",
+          "node_type": "number-input",
+          "position": { "x": 440, "y": 500 },
+          "data": {
+            "label": "Seed",
+            "value": 42
+          }
+        },
+        {
+          "id": "width",
+          "node_type": "number-input",
+          "position": { "x": 620, "y": 500 },
+          "data": {
+            "label": "Width",
+            "value": 512
+          }
+        },
+        {
+          "id": "height",
+          "node_type": "number-input",
+          "position": { "x": 800, "y": 500 },
+          "data": {
+            "label": "Height",
+            "value": 512
+          }
+        },
+        {
+          "id": "model",
+          "node_type": "puma-lib",
+          "position": { "x": 320, "y": 120 },
+          "data": {
+            "label": "Puma-Lib Model"
+          }
+        },
+        {
+          "id": "dependency-env",
+          "node_type": "dependency-environment",
+          "position": { "x": 580, "y": 120 },
+          "data": {
+            "label": "Dependency Environment",
+            "mode": "auto"
+          }
+        },
+        {
+          "id": "diffusion",
+          "node_type": "diffusion-inference",
+          "position": { "x": 860, "y": 220 },
+          "data": {
+            "label": "Tiny SD Turbo Diffusion"
+          }
+        },
+        {
+          "id": "image-output",
+          "node_type": "image-output",
+          "position": { "x": 1140, "y": 220 },
+          "data": {
+            "label": "Generated Image"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "prompt",
+          "source_handle": "text",
+          "target": "diffusion",
+          "target_handle": "prompt"
+        },
+        {
+          "id": "e2",
+          "source": "negative-prompt",
+          "source_handle": "text",
+          "target": "diffusion",
+          "target_handle": "negative_prompt"
+        },
+        {
+          "id": "e3",
+          "source": "model",
+          "source_handle": "model_path",
+          "target": "dependency-env",
+          "target_handle": "model_path"
+        },
+        {
+          "id": "e4",
+          "source": "model",
+          "source_handle": "dependency_requirements",
+          "target": "dependency-env",
+          "target_handle": "dependency_requirements"
+        },
+        {
+          "id": "e5",
+          "source": "model",
+          "source_handle": "model_path",
+          "target": "diffusion",
+          "target_handle": "model_path"
+        },
+        {
+          "id": "e6",
+          "source": "model",
+          "source_handle": "inference_settings",
+          "target": "diffusion",
+          "target_handle": "inference_settings"
+        },
+        {
+          "id": "e7",
+          "source": "dependency-env",
+          "source_handle": "environment_ref",
+          "target": "diffusion",
+          "target_handle": "environment_ref"
+        },
+        {
+          "id": "e8",
+          "source": "steps",
+          "source_handle": "value",
+          "target": "diffusion",
+          "target_handle": "steps"
+        },
+        {
+          "id": "e9",
+          "source": "cfg-scale",
+          "source_handle": "value",
+          "target": "diffusion",
+          "target_handle": "cfg_scale"
+        },
+        {
+          "id": "e10",
+          "source": "seed",
+          "source_handle": "value",
+          "target": "diffusion",
+          "target_handle": "seed"
+        },
+        {
+          "id": "e11",
+          "source": "width",
+          "source_handle": "value",
+          "target": "diffusion",
+          "target_handle": "width"
+        },
+        {
+          "id": "e12",
+          "source": "height",
+          "source_handle": "value",
+          "target": "diffusion",
+          "target_handle": "height"
+        },
+        {
+          "id": "e13",
+          "source": "diffusion",
+          "source_handle": "image",
+          "target": "image-output",
+          "target_handle": "image"
+        }
+      ]
+    }
+  }
+}

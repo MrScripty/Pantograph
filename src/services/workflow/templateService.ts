@@ -12,6 +12,7 @@ import type { NodeGroup, PortMapping } from './groupTypes';
 
 // Import templates statically (bundled with the app)
 import svelteCodeAgentTemplate from '../../templates/workflows/svelte-code-agent.json';
+import tinySdTurboTemplate from '../../templates/workflows/tiny-sd-turbo-text-to-image.json';
 
 /**
  * A workflow template containing an orchestration and its data graphs
@@ -86,6 +87,7 @@ export interface NodeGroupTemplate {
  */
 export const workflowTemplates: Record<string, WorkflowTemplate> = {
   'svelte-code-agent': svelteCodeAgentTemplate as unknown as WorkflowTemplate,
+  'tiny-sd-turbo-text-to-image': tinySdTurboTemplate as unknown as WorkflowTemplate,
 };
 
 /**

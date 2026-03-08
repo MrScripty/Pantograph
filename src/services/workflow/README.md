@@ -12,7 +12,7 @@ on raw invoke payloads.
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
-| `templateService.ts` | Workflow template discovery/loading helpers. |
+| `templateService.ts` | Workflow template discovery/loading helpers, including the built-in tiny-sd-turbo text-to-image workflow. |
 | `groupTypes.ts` | Node-group result and mapping types used by workflow editing flows. |
 
 ## Problem
@@ -30,9 +30,12 @@ intent.
 ## Decision
 Keep `WorkflowService.ts` as the legacy-friendly workflow adapter and extend it
 with `getConnectionCandidates`, `connectAnchors`, and `insertNodeAndConnect`.
-That lets the app graph adopt the new backend-owned eligibility model and the
-horseshoe insert flow without forcing every existing caller to migrate to
-package-level backends immediately.
+Keep `templateService.ts` in the same boundary because built-in workflow
+templates need the same service-level graph registration path and session-aware
+loading behavior. That lets the app graph adopt the new backend-owned
+eligibility model, the horseshoe insert flow, and built-in workflow bootstraps
+without forcing every existing caller to migrate to package-level backends
+immediately.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -57,6 +60,8 @@ package-level backends immediately.
 - Workflow service state needs to support multiple simultaneous active sessions.
 - Mock mode requires full connection-intent semantics instead of shape-only
   placeholders.
+- Built-in template loading grows into a separate catalog or remote-discovery
+  subsystem with its own lifecycle and persistence concerns.
 
 ## Dependencies
 **Internal:** `src-tauri` workflow commands, `src/backends`, app workflow
@@ -104,3 +109,6 @@ const inserted = await workflowService.insertNodeAndConnect(
 - `ConnectionCommitResponse.rejection.reason` uses stable snake_case labels.
 - `graph_revision` is opaque and volatile; callers must refresh it from the
   latest graph before retrying a rejected stale commit.
+- Workflow templates loaded through `templateService.ts` must remain valid
+  `WorkflowTemplate` objects whose data-graph node/edge shapes match the
+  workflow DTO contracts in `types.ts`.
