@@ -22,7 +22,7 @@ EXIT_USAGE_ERROR=2
 EXIT_MISSING_DEP=3
 EXIT_MISSING_RELEASE_ARTIFACT=4
 
-INSTALL_DEPENDENCIES=("npm" "cargo" "python3" "node_modules" "venv" "python_base_requirements")
+INSTALL_DEPENDENCIES=("npm" "cargo" "python3" "node_modules" "venv" "python_base_requirements" "python_diffusion_requirements")
 RUNTIME_DEPENDENCIES=("npm" "cargo" "python3" "node_modules" "venv")
 
 # Raise file descriptor limits for local dev watchers where possible.
@@ -97,7 +97,10 @@ check_requirements() {
       pkg="${pkg%%[>=<\[]*}"
       pkg="${pkg// /}"
     fi
-    pkg="${pkg//-/_}"
+    case "$pkg" in
+      Pillow) pkg="PIL" ;;
+      *) pkg="${pkg//-/_}" ;;
+    esac
 
     if ! "$VENV_PYTHON" -c "import $pkg" >/dev/null 2>&1; then
       return 1
@@ -132,6 +135,15 @@ check_python_base_requirements() {
 install_python_base_requirements() {
   check_venv || install_venv
   "$VENV_PYTHON" -m pip install -r "$ROOT_DIR/requirements.txt"
+}
+
+check_python_diffusion_requirements() {
+  check_venv || return 1
+  check_requirements "$ROOT_DIR/requirements-diffusion.txt"
+}
+install_python_diffusion_requirements() {
+  check_venv || install_venv
+  "$VENV_PYTHON" -m pip install -r "$ROOT_DIR/requirements-diffusion.txt"
 }
 
 check_dep() { "check_$1"; }

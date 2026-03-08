@@ -1,0 +1,7 @@
+# Diffusion/image-generation runtime dependencies.
+# Installed into the project venv by: ./launcher.sh --install
+# Keep this file scoped to process-backed diffusion workflows so the base
+# text-generation runtime can remain documented separately.
+diffusers
+Pillow
+safetensors

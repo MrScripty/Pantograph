@@ -52,6 +52,9 @@ Configure Python executables using one of:
 - A bridge script is materialized at runtime in the system temp directory:
   - `pantograph_python_runtime_bridge.py`
 - `launcher.sh` exports `PANTOGRAPH_PYTHON_EXECUTABLE` to the project `.venv` Python by default.
+- `./launcher.sh --install` provisions both the base Python runtime
+  requirements and `requirements-diffusion.txt`, so local text-to-image
+  workflows can use the default `.venv` without a second manual install step.
 
 ## Migration Notes
 
