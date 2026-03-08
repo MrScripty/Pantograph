@@ -13,8 +13,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
     core_executor::resolve_node_type, extension_keys, Context, DependencyState, ExecutorExtensions,
-    EventSink, ModelDependencyRequest, ModelDependencyResolver, ModelDependencyStatus,
-    NodeEngineError, Result, TaskExecutor, WorkflowEvent,
+    EventSink, ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
+    ModelDependencyStatus, NodeEngineError, Result, TaskExecutor, WorkflowEvent,
 };
 use tokio::sync::RwLock;
 
@@ -425,14 +425,43 @@ impl TauriTaskExecutor {
         }
     }
 
-    fn infer_backend_key(node_type: &str) -> String {
+    fn infer_backend_key(node_type: &str) -> Option<String> {
         match node_type {
-            "audio-generation" => "stable_audio".to_string(),
-            "pytorch-inference" => "pytorch".to_string(),
-            "diffusion-inference" => "pytorch".to_string(),
-            "onnx-inference" => "onnx-runtime".to_string(),
-            _ => "pytorch".to_string(),
+            "audio-generation" => Some("stable_audio".to_string()),
+            "pytorch-inference" => Some("pytorch".to_string()),
+            // Leave diffusion unspecified when the graph does not provide a
+            // concrete backend so Pumas can apply the model's recommended
+            // execution profile.
+            "diffusion-inference" => None,
+            "onnx-inference" => Some("onnx-runtime".to_string()),
+            _ => Some("pytorch".to_string()),
         }
+    }
+
+    fn preferred_backend_key(
+        node_type: &str,
+        inputs: &HashMap<String, serde_json::Value>,
+        requirements: Option<&ModelDependencyRequirements>,
+    ) -> Option<String> {
+        if node_type == "diffusion-inference" {
+            if let Some(backend) = Self::canonical_backend_key(
+                Self::read_optional_input_string_aliases(
+                    inputs,
+                    &["recommended_backend", "recommendedBackend"],
+                )
+                .as_deref(),
+            ) {
+                return Some(backend);
+            }
+        }
+
+        Self::canonical_backend_key(
+            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
+                .as_deref(),
+        )
+        .or_else(|| {
+            Self::canonical_backend_key(requirements.as_ref().and_then(|r| r.backend_key.as_deref()))
+        })
     }
 
     fn build_model_dependency_request(
@@ -441,16 +470,9 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
     ) -> ModelDependencyRequest {
         let requirements = Self::parse_requirements_fallback(inputs);
-        let backend_key = Self::canonical_backend_key(
-            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-                .as_deref(),
-        )
-        .or_else(|| {
-            Self::canonical_backend_key(
-                requirements.as_ref().and_then(|r| r.backend_key.as_deref()),
-            )
-        })
-        .unwrap_or_else(|| Self::infer_backend_key(node_type));
+        let backend_key =
+            Self::preferred_backend_key(node_type, inputs, requirements.as_ref())
+                .or_else(|| Self::infer_backend_key(node_type));
 
         let task_type_primary = Self::infer_task_type_primary(node_type, inputs);
         let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"])
@@ -481,7 +503,7 @@ impl TauriTaskExecutor {
                 &["model_type", "modelType"],
             ),
             task_type_primary: Some(task_type_primary),
-            backend_key: Some(backend_key),
+            backend_key,
             platform_context,
             selected_binding_ids,
             dependency_override_patches: Self::read_input_dependency_override_patches(inputs),
@@ -890,6 +912,25 @@ impl TauriTaskExecutor {
                     node_type, e
                 ))
             })?;
+
+        if status.state == DependencyState::Unresolved
+            && status.code.as_deref() == Some("no_dependency_bindings")
+        {
+            let resolved = resolver.resolve_model_ref(request, Some(requirements)).await.map_err(
+                |e| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "Dependency preflight failed to resolve model_ref without dependency bindings: {}",
+                        e
+                    ))
+                },
+            )?;
+            if let Some(ref model_ref) = resolved {
+                model_ref
+                    .validate()
+                    .map_err(NodeEngineError::ExecutionFailed)?;
+            }
+            return Ok(resolved);
+        }
 
         if status.state != DependencyState::Ready {
             let payload = serde_json::json!({
@@ -1742,6 +1783,33 @@ mod tests {
         assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
     }
 
+    #[test]
+    fn build_model_dependency_request_prefers_recommended_backend_for_diffusion() {
+        let mut inputs = HashMap::new();
+        inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
+        inputs.insert("recommended_backend".to_string(), serde_json::json!("diffusers"));
+
+        let request = TauriTaskExecutor::build_model_dependency_request(
+            "diffusion-inference",
+            "/tmp/model",
+            &inputs,
+        );
+        assert_eq!(request.backend_key.as_deref(), Some("diffusers"));
+    }
+
+    #[test]
+    fn build_model_dependency_request_leaves_diffusion_backend_unspecified_by_default() {
+        let mut inputs = HashMap::new();
+        inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+
+        let request = TauriTaskExecutor::build_model_dependency_request(
+            "diffusion-inference",
+            "/tmp/model",
+            &inputs,
+        );
+        assert_eq!(request.backend_key, None);
+    }
+
     #[tokio::test]
     async fn python_nodes_fail_fast_when_environment_ref_is_not_ready() {
         let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
@@ -1783,5 +1851,64 @@ mod tests {
             other => panic!("unexpected error variant: {other:?}"),
         }
         assert_eq!(requests.lock().expect("recording lock").len(), 0);
+    }
+
+    #[tokio::test]
+    async fn python_nodes_allow_execution_when_no_dependency_bindings_are_available() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("image".to_string(), serde_json::json!("base64-image"));
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests: requests.clone(),
+            response: adapter_response,
+        });
+
+        let resolved_model_ref = ModelRefV2 {
+            contract_version: 2,
+            engine: "pytorch".to_string(),
+            model_id: "diffusion/imported/tiny-sd-turbo".to_string(),
+            model_path: "/tmp/external/tiny-sd-turbo".to_string(),
+            task_type_primary: "text-to-image".to_string(),
+            dependency_bindings: Vec::new(),
+            dependency_requirements_id: Some("requirements-diffusion".to_string()),
+        };
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: make_requirements(DependencyValidationState::Resolved),
+            status: make_status(
+                DependencyState::Unresolved,
+                Some("no_dependency_bindings"),
+            ),
+            model_ref: Some(resolved_model_ref),
+        });
+        let (executor, extensions) = test_executor(adapter, resolver);
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/external/tiny-sd-turbo"),
+        );
+        inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
+        inputs.insert("prompt".to_string(), serde_json::json!("paper lantern in the rain"));
+
+        let outputs = executor
+            .execute_task("diffusion-inference-2", inputs, &Context::new(), &extensions)
+            .await
+            .expect("python nodes should execute without dependency bindings");
+        assert_eq!(outputs.get("image"), Some(&serde_json::json!("base64-image")));
+
+        let recorded = requests.lock().expect("recording lock");
+        assert_eq!(recorded.len(), 1);
+        let request = &recorded[0];
+        assert_eq!(request.node_type, "diffusion-inference");
+        assert!(request.env_ids.is_empty());
+        assert_eq!(
+            request
+                .inputs
+                .get("model_ref")
+                .and_then(|value| value.get("modelPath"))
+                .and_then(|value| value.as_str()),
+            Some("/tmp/external/tiny-sd-turbo")
+        );
     }
 }

@@ -70,6 +70,8 @@ interactive horseshoe failures can be diagnosed from `--run-release` logs.
   mutations; only the per-session execution lock may span awaited workflow work.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
+- Bundle-capable model assets must resolve executable paths from Pumas
+  execution descriptors rather than from raw library record paths.
 
 ## Revisit Triggers
 - Headless editing moves to a transport boundary outside Tauri invoke.
@@ -125,6 +127,8 @@ let inserted = connection_intent::insert_node_and_connect(
   reads or edits on another session.
 - Compatibility policy is additive: existing commands remain while new editing
   capabilities are introduced.
+- Workflow dependency resolution and execution treat Pumas as the source of
+  truth for executable model asset paths when bundle metadata requires it.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - `ConnectionCandidatesResponse` always includes `graph_revision`,
@@ -135,3 +139,6 @@ let inserted = connection_intent::insert_node_and_connect(
 - Rejection enums are stable snake_case labels shared with TypeScript.
 - Graph fingerprints are regenerated metadata; callers must not persist them as
   durable workflow configuration.
+- `model_path` remains the workflow-facing field name, but for external bundle
+  assets it must carry the Pumas execution descriptor `entry_path` so runtime
+  consumers receive the executable root instead of the library stub directory.

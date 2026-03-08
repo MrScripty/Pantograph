@@ -80,3 +80,6 @@ tokio-stream = { workspace = true, optional = true }
 # Axum HTTP server - required for streaming proxy, optional features for backend-candle
 axum = { workspace = true }
 tower-http = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"

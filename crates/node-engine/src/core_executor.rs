@@ -500,6 +500,14 @@ fn execute_puma_lib(
     if let Some(backend_key) = data_string(inputs, "backend_key", "backendKey") {
         outputs.insert("backend_key".to_string(), serde_json::json!(backend_key));
     }
+    if let Some(recommended_backend) =
+        data_string(inputs, "recommended_backend", "recommendedBackend")
+    {
+        outputs.insert(
+            "recommended_backend".to_string(),
+            serde_json::json!(recommended_backend),
+        );
+    }
     if let Some(selected_binding_ids) =
         data_value(inputs, "selected_binding_ids", "selectedBindingIds").filter(|v| v.is_array())
     {
@@ -1191,16 +1199,39 @@ fn canonical_backend_key(value: Option<&str>) -> Option<String> {
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-fn infer_backend_key(node_type: &str) -> String {
+fn infer_backend_key(node_type: &str) -> Option<String> {
     match node_type {
-        "audio-generation" => "stable_audio".to_string(),
-        "pytorch-inference" => "pytorch".to_string(),
-        "diffusion-inference" => "pytorch".to_string(),
-        "llamacpp-inference" => "llamacpp".to_string(),
-        "ollama-inference" => "ollama".to_string(),
-        "onnx-inference" => "onnx-runtime".to_string(),
-        _ => "pytorch".to_string(),
+        "audio-generation" => Some("stable_audio".to_string()),
+        "pytorch-inference" => Some("pytorch".to_string()),
+        // Leave diffusion unspecified when the graph does not provide a
+        // concrete backend so Pumas can apply the model's recommended
+        // execution profile.
+        "diffusion-inference" => None,
+        "llamacpp-inference" => Some("llamacpp".to_string()),
+        "ollama-inference" => Some("ollama".to_string()),
+        "onnx-inference" => Some("onnx-runtime".to_string()),
+        _ => Some("pytorch".to_string()),
     }
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn preferred_backend_key(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    if node_type == "diffusion-inference" {
+        if let Some(backend) = read_optional_input_string_aliases(
+            inputs,
+            &["recommended_backend", "recommendedBackend"],
+        )
+        .and_then(|value| canonical_backend_key(Some(value.as_str())))
+        {
+            return Some(backend);
+        }
+    }
+
+    read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
+        .and_then(|value| canonical_backend_key(Some(value.as_str())))
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -1209,9 +1240,8 @@ fn build_model_dependency_request(
     model_path: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
-    let backend_key = read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-        .and_then(|value| canonical_backend_key(Some(value.as_str())))
-        .unwrap_or_else(|| infer_backend_key(node_type));
+    let backend_key = preferred_backend_key(node_type, inputs)
+        .or_else(|| infer_backend_key(node_type));
 
     let task_type_primary =
         read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
@@ -1224,7 +1254,7 @@ fn build_model_dependency_request(
         model_id: read_optional_input_string_aliases(inputs, &["model_id", "modelId"]),
         model_type: read_optional_input_string_aliases(inputs, &["model_type", "modelType"]),
         task_type_primary: Some(task_type_primary),
-        backend_key: Some(backend_key),
+        backend_key,
         platform_context: read_optional_input_value_aliases(
             inputs,
             &["platform_context", "platformContext"],
@@ -3415,6 +3445,7 @@ mod tests {
                 "model_type": "llm",
                 "task_type_primary": "text-generation",
                 "backend_key": "pytorch",
+                "recommended_backend": "transformers",
                 "selected_binding_ids": ["binding-a", "binding-b"],
                 "platform_context": {"os":"linux","arch":"x86_64"},
                 "dependency_bindings": [{"binding_id":"binding-a"}],
@@ -3440,6 +3471,7 @@ mod tests {
         assert_eq!(result["model_type"], "llm");
         assert_eq!(result["task_type_primary"], "text-generation");
         assert_eq!(result["backend_key"], "pytorch");
+        assert_eq!(result["recommended_backend"], "transformers");
         assert_eq!(
             result["selected_binding_ids"],
             serde_json::json!(["binding-a", "binding-b"])
@@ -3880,6 +3912,17 @@ mod tests {
 
     #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
     #[test]
+    fn test_build_model_dependency_request_prefers_recommended_backend_for_diffusion() {
+        let mut inputs = HashMap::new();
+        inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
+        inputs.insert("recommended_backend".to_string(), serde_json::json!("diffusers"));
+
+        let request = build_model_dependency_request("diffusion-inference", "/tmp/model", &inputs);
+        assert_eq!(request.backend_key.as_deref(), Some("diffusers"));
+    }
+
+    #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+    #[test]
     fn test_infer_task_type_primary_defaults_diffusion_node_to_text_to_image() {
         let inputs = HashMap::new();
         let task = infer_task_type_primary("diffusion-inference", &inputs);
@@ -3893,7 +3936,7 @@ mod tests {
         inputs.insert("model_type".to_string(), serde_json::json!("diffusion"));
 
         let request = build_model_dependency_request("diffusion-inference", "/tmp/model", &inputs);
-        assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
+        assert_eq!(request.backend_key, None);
         assert_eq!(request.task_type_primary.as_deref(), Some("text-to-image"));
     }
 }

@@ -70,6 +70,12 @@ struct ResolvedModelDescriptor {
     model_id_resolved: bool,
 }
 
+#[derive(Debug, Clone)]
+struct ResolvedPumasModel {
+    record: pumas_library::ModelRecord,
+    execution_descriptor: Option<pumas_library::models::ModelExecutionDescriptor>,
+}
+
 /// Tauri host implementation for model dependency resolution/check/install.
 pub struct TauriModelDependencyResolver {
     shared_extensions: Arc<RwLock<node_engine::ExecutorExtensions>>,
@@ -319,6 +325,32 @@ impl TauriModelDependencyResolver {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
         })
+    }
+
+    fn record_metadata_object(
+        record: &pumas_library::ModelRecord,
+    ) -> Option<&serde_json::Map<String, serde_json::Value>> {
+        record.metadata.as_object()
+    }
+
+    fn record_metadata_string(record: &pumas_library::ModelRecord, keys: &[&str]) -> Option<String> {
+        let metadata = Self::record_metadata_object(record)?;
+        Self::metadata_string(metadata, keys)
+    }
+
+    fn record_entry_path(record: &pumas_library::ModelRecord) -> Option<String> {
+        Self::record_metadata_string(record, &["entry_path", "entryPath"])
+            .filter(|path| !path.trim().is_empty())
+    }
+
+    fn record_uses_execution_descriptor(record: &pumas_library::ModelRecord) -> bool {
+        matches!(
+            Self::record_metadata_string(record, &["bundle_format", "bundleFormat"]).as_deref(),
+            Some("diffusers_directory")
+        ) || matches!(
+            Self::record_metadata_string(record, &["storage_kind", "storageKind"]).as_deref(),
+            Some("external_reference")
+        )
     }
 
     fn normalized_backend_key(value: &Option<String>) -> Option<String> {
@@ -798,7 +830,45 @@ impl TauriModelDependencyResolver {
         let target = Self::normalize_path(&request.model_path);
         Ok(all.into_iter().find(|record| {
             let rp = Self::normalize_path(&record.path);
-            rp == target || target == record.path || record.path == request.model_path
+            if rp == target || target == record.path || record.path == request.model_path {
+                return true;
+            }
+
+            let Some(entry_path) = Self::record_entry_path(record) else {
+                return false;
+            };
+            let ep = Self::normalize_path(&entry_path);
+            ep == target || target == entry_path || entry_path == request.model_path
+        }))
+    }
+
+    async fn resolve_model_with_api(
+        &self,
+        api: &Arc<pumas_library::PumasApi>,
+        request: &ModelDependencyRequest,
+    ) -> Result<Option<ResolvedPumasModel>, String> {
+        let Some(record) = self.resolve_model_record_with_api(api, request).await? else {
+            return Ok(None);
+        };
+
+        let execution_descriptor = if Self::record_uses_execution_descriptor(&record) {
+            Some(
+                api.resolve_model_execution_descriptor(&record.id)
+                    .await
+                    .map_err(|e| {
+                        format!(
+                            "Failed to resolve execution descriptor for '{}': {}",
+                            record.id, e
+                        )
+                    })?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Some(ResolvedPumasModel {
+            record,
+            execution_descriptor,
         }))
     }
 
@@ -808,7 +878,7 @@ impl TauriModelDependencyResolver {
         api: Option<&Arc<pumas_library::PumasApi>>,
     ) -> Result<ResolvedModelDescriptor, String> {
         let resolved_record = if let Some(api) = api {
-            self.resolve_model_record_with_api(api, request).await?
+            self.resolve_model_with_api(api, request).await?
         } else {
             None
         };
@@ -826,10 +896,25 @@ impl TauriModelDependencyResolver {
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "text-generation".to_string());
 
-        if let Some(record) = resolved_record {
-            model_id = record.id;
-            model_path = record.path;
-            model_type = Some(record.model_type.clone());
+        if let Some(resolved) = resolved_record {
+            let record = resolved.record;
+            model_id = record.id.clone();
+            model_path = resolved
+                .execution_descriptor
+                .as_ref()
+                .map(|descriptor| descriptor.entry_path.clone())
+                .unwrap_or_else(|| record.path.clone());
+            model_type = resolved
+                .execution_descriptor
+                .as_ref()
+                .map(|descriptor| descriptor.model_type.clone())
+                .or_else(|| Some(record.model_type.clone()));
+            if let Some(descriptor) = resolved.execution_descriptor.as_ref() {
+                let task = descriptor.task_type_primary.trim();
+                if !task.is_empty() && task != "unknown" {
+                    task_type_primary = task.to_string();
+                }
+            }
             if let Some(meta) = record.metadata.as_object() {
                 if let Some(task) = Self::metadata_string(
                     meta,
@@ -1896,6 +1981,9 @@ impl ModelDependencyResolver for TauriModelDependencyResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use node_engine::extension_keys;
+    use pumas_library::PumasApi;
+    use tempfile::TempDir;
     use std::path::PathBuf;
     use std::sync::Arc;
     use tokio::sync::RwLock;
@@ -1904,6 +1992,89 @@ mod tests {
         TauriModelDependencyResolver::new(
             Arc::new(RwLock::new(node_engine::ExecutorExtensions::default())),
             PathBuf::from("."),
+        )
+    }
+
+    fn create_test_env() -> TempDir {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/metadata")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/cache")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("launcher-data/logs")).unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("shared-resources/models")).unwrap();
+        temp_dir
+    }
+
+    fn write_test_diffusers_bundle(root: &std::path::Path) {
+        std::fs::create_dir_all(root.join("scheduler")).unwrap();
+        std::fs::create_dir_all(root.join("text_encoder")).unwrap();
+        std::fs::create_dir_all(root.join("tokenizer")).unwrap();
+        std::fs::create_dir_all(root.join("unet")).unwrap();
+        std::fs::create_dir_all(root.join("vae")).unwrap();
+        std::fs::write(
+            root.join("model_index.json"),
+            serde_json::json!({
+                "_class_name": "StableDiffusionPipeline",
+                "scheduler": ["diffusers", "EulerDiscreteScheduler"],
+                "text_encoder": ["transformers", "CLIPTextModel"],
+                "tokenizer": ["transformers", "CLIPTokenizer"],
+                "unet": ["diffusers", "UNet2DConditionModel"],
+                "vae": ["diffusers", "AutoencoderKL"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    fn write_imported_diffusion_metadata(model_dir: &std::path::Path, entry_path: &std::path::Path) {
+        std::fs::create_dir_all(model_dir).unwrap();
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::json!({
+                "schema_version": 2,
+                "model_id": "diffusion/imported/test-bundle",
+                "family": "imported",
+                "model_type": "diffusion",
+                "official_name": "test-bundle",
+                "cleaned_name": "test-bundle",
+                "source_path": entry_path.display().to_string(),
+                "entry_path": entry_path.display().to_string(),
+                "storage_kind": "external_reference",
+                "bundle_format": "diffusers_directory",
+                "pipeline_class": "StableDiffusionPipeline",
+                "import_state": "ready",
+                "validation_state": "valid",
+                "pipeline_tag": "text-to-image",
+                "task_type_primary": "text-to-image",
+                "input_modalities": ["text"],
+                "output_modalities": ["image"],
+                "task_classification_source": "external-diffusers-import",
+                "task_classification_confidence": 1.0,
+                "model_type_resolution_source": "external-diffusers-import",
+                "model_type_resolution_confidence": 1.0,
+                "recommended_backend": "diffusers",
+                "runtime_engine_hints": ["diffusers", "pytorch"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    async fn test_resolver_with_pumas(
+        temp_dir: &TempDir,
+    ) -> (TauriModelDependencyResolver, Arc<PumasApi>) {
+        let api = Arc::new(PumasApi::builder(temp_dir.path()).build().await.unwrap());
+        api.rebuild_model_index().await.unwrap();
+
+        let shared_extensions = Arc::new(RwLock::new(node_engine::ExecutorExtensions::default()));
+        shared_extensions
+            .write()
+            .await
+            .set(extension_keys::PUMAS_API, api.clone());
+
+        (
+            TauriModelDependencyResolver::new(shared_extensions, PathBuf::from(".")),
+            api,
         )
     }
 
@@ -2052,6 +2223,45 @@ mod tests {
         assert_eq!(model_ref.contract_version, 2);
         assert_eq!(model_ref.dependency_bindings.len(), 1);
         assert_eq!(model_ref.dependency_bindings[0].binding_id, "binding-a");
+    }
+
+    #[tokio::test]
+    async fn resolve_descriptor_uses_entry_path_for_external_diffusers_bundle() {
+        let temp_dir = create_test_env();
+        let bundle_root = temp_dir.path().join("external/tiny-sd-turbo");
+        write_test_diffusers_bundle(&bundle_root);
+
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/diffusion/imported/test-bundle");
+        write_imported_diffusion_metadata(&model_dir, &bundle_root);
+
+        let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
+        let request = ModelDependencyRequest {
+            node_type: "diffusion-inference".to_string(),
+            model_path: bundle_root.display().to_string(),
+            model_id: Some("diffusion/imported/test-bundle".to_string()),
+            model_type: Some("diffusion".to_string()),
+            task_type_primary: Some("text-to-image".to_string()),
+            backend_key: Some("diffusers".to_string()),
+            platform_context: Some(serde_json::json!({
+                "os": "linux",
+                "arch": "x86_64"
+            })),
+            selected_binding_ids: Vec::new(),
+            dependency_override_patches: Vec::new(),
+        };
+
+        let descriptor = resolver
+            .resolve_descriptor(&request, Some(&api))
+            .await
+            .expect("descriptor should resolve");
+
+        assert_eq!(descriptor.model_id, "diffusion/imported/test-bundle");
+        assert_eq!(descriptor.model_path, bundle_root.display().to_string());
+        assert_eq!(descriptor.task_type_primary, "text-to-image");
+        assert_eq!(descriptor.model_type.as_deref(), Some("diffusion"));
+        assert!(descriptor.model_id_resolved);
     }
 
     #[test]

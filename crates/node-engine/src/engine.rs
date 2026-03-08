@@ -275,6 +275,7 @@ impl DemandEngine {
                                 "model_type",
                                 "task_type_primary",
                                 "backend_key",
+                                "recommended_backend",
                                 "selected_binding_ids",
                                 "platform_context",
                                 "dependency_bindings",

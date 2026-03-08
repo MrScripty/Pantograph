@@ -32,6 +32,9 @@ routing without hardcoding runtime choices into the UI or executor.
 Keep input nodes as descriptor-first modules. `puma_lib.rs` emits model path,
 `task_type_primary`, backend hints, dependency requirements, and inference
 settings so downstream routing can distinguish text, audio, and diffusion flows.
+For bundle-shaped assets such as imported diffusers directories, `model_path`
+now follows the Pumas execution descriptor `entry_path` while the graph-facing
+field name stays unchanged.
 
 ## Invariants
 - Input nodes do not own runtime execution side effects.
@@ -53,12 +56,17 @@ settings so downstream routing can distinguish text, audio, and diffusion flows.
 - Consumers should treat these modules as node descriptor sources, not direct
   execution APIs.
 - `puma-lib` outputs are append-only workflow metadata contracts.
+- `puma-lib` preserves the `model_path` facade, but hosts may source that value
+  from Pumas execution descriptors for bundle-capable assets instead of raw
+  library record paths.
 
 ## Structured Producer Contract
 - `puma-lib` emits `model_path`, `model_id`, `model_type`,
-  `task_type_primary`, `backend_key`, `platform_context`,
+  `task_type_primary`, `backend_key`, `recommended_backend`, `platform_context`,
   `selected_binding_ids`, `dependency_bindings`,
   `dependency_requirements_id`, `inference_settings`, and
   `dependency_requirements`.
+- For external diffusers bundles, `model_path` must be the executable bundle
+  root (`entry_path`), not the library stub directory that stores metadata.
 - Diffusion models should resolve to `text-to-image` when explicit metadata is
   missing but `model_type == diffusion`.
