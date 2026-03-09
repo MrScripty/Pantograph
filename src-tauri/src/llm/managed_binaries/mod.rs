@@ -1,0 +1,470 @@
+use crate::llm::llama_cpp_platform::{
+    current_platform as current_llama_platform, install_distribution as install_llama_distribution,
+};
+use crate::llm::paths::{get_binary_search_roots, get_managed_binaries_dir};
+use crate::llm::types::{BinaryStatus, DownloadProgress};
+use flate2::read::GzDecoder;
+use futures_util::TryStreamExt;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::ffi::OsString;
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use tauri::{ipc::Channel, AppHandle};
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) enum ManagedBinaryId {
+    LlamaCpp,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ArchiveKind {
+    TarGz,
+    TarZst,
+    Zip,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ReleaseAsset {
+    pub(crate) archive_name: String,
+    pub(crate) archive_kind: ArchiveKind,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedCommand {
+    pub(crate) executable_path: PathBuf,
+    pub(crate) working_directory: PathBuf,
+    pub(crate) args: Vec<OsString>,
+    pub(crate) env_overrides: Vec<(OsString, OsString)>,
+    pub(crate) pid_file: Option<PathBuf>,
+}
+
+pub(crate) trait ManagedBinaryDefinition: Sync {
+    fn id(&self) -> ManagedBinaryId;
+    fn display_name(&self) -> &'static str;
+    fn release_asset(&self) -> Result<ReleaseAsset, String>;
+    fn download_url(&self, release_asset: &ReleaseAsset) -> String;
+    fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
+    fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String>;
+    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String>;
+
+    fn system_command(&self) -> Option<PathBuf> {
+        None
+    }
+}
+
+struct LlamaCppBinary;
+
+impl ManagedBinaryDefinition for LlamaCppBinary {
+    fn id(&self) -> ManagedBinaryId {
+        ManagedBinaryId::LlamaCpp
+    }
+
+    fn display_name(&self) -> &'static str {
+        "llama.cpp"
+    }
+
+    fn release_asset(&self) -> Result<ReleaseAsset, String> {
+        Ok(current_llama_platform().release_asset())
+    }
+
+    fn download_url(&self, release_asset: &ReleaseAsset) -> String {
+        format!(
+            "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
+            crate::llm::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG,
+            release_asset.archive_name
+        )
+    }
+
+    fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
+        current_llama_platform().validate_installation(install_dir)
+    }
+
+    fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String> {
+        install_llama_distribution(extracted_dir, install_dir)
+    }
+
+    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+        current_llama_platform().resolve_command(install_dir, args)
+    }
+}
+
+static LLAMA_CPP_BINARY: LlamaCppBinary = LlamaCppBinary;
+
+static TRANSITION_LOCKS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<tokio::sync::Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn definition(id: ManagedBinaryId) -> &'static dyn ManagedBinaryDefinition {
+    match id {
+        ManagedBinaryId::LlamaCpp => &LLAMA_CPP_BINARY,
+    }
+}
+
+fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
+    let mut locks = TRANSITION_LOCKS
+        .lock()
+        .expect("managed binary transition locks poisoned");
+    locks
+        .entry(id)
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
+}
+
+pub(crate) async fn check_binary_status(
+    app: &AppHandle,
+    id: ManagedBinaryId,
+) -> Result<BinaryStatus, String> {
+    let definition = definition(id);
+
+    if definition.system_command().is_some() {
+        return Ok(BinaryStatus {
+            available: true,
+            missing_files: Vec::new(),
+        });
+    }
+
+    if resolve_install_dir(app, id)?.is_some() {
+        return Ok(BinaryStatus {
+            available: true,
+            missing_files: Vec::new(),
+        });
+    }
+
+    let managed_dir = get_managed_binaries_dir(app)?;
+    Ok(BinaryStatus {
+        available: false,
+        missing_files: definition.validate_installation(&managed_dir),
+    })
+}
+
+pub(crate) async fn download_binary(
+    app: &AppHandle,
+    id: ManagedBinaryId,
+    channel: Channel<DownloadProgress>,
+) -> Result<(), String> {
+    let lock = transition_lock(id);
+    let _guard = lock.lock().await;
+    let definition = definition(id);
+    let install_dir = get_managed_binaries_dir(app)?;
+    let release_asset = definition.release_asset()?;
+    let download_url = definition.download_url(&release_asset);
+
+    fs::create_dir_all(&install_dir)
+        .map_err(|e| format!("Failed to create binaries directory: {}", e))?;
+
+    channel
+        .send(DownloadProgress {
+            status: format!("Downloading {} binaries...", definition.display_name()),
+            current: 0,
+            total: 0,
+            done: false,
+            error: None,
+        })
+        .ok();
+
+    log::info!(
+        "Downloading {} from: {}",
+        definition.display_name(),
+        download_url
+    );
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to start download: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Download failed with status: {}",
+            response.status()
+        ));
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+    let temp_path = install_dir.join(&release_asset.archive_name);
+    let mut file =
+        fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
+
+    let mut downloaded = 0_u64;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream
+        .try_next()
+        .await
+        .map_err(|e| format!("Download error: {}", e))?
+    {
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write chunk: {}", e))?;
+        downloaded += chunk.len() as u64;
+
+        channel
+            .send(DownloadProgress {
+                status: "Downloading...".to_string(),
+                current: downloaded,
+                total: total_size,
+                done: false,
+                error: None,
+            })
+            .ok();
+    }
+    drop(file);
+
+    channel
+        .send(DownloadProgress {
+            status: "Extracting...".to_string(),
+            current: total_size,
+            total: total_size,
+            done: false,
+            error: None,
+        })
+        .ok();
+
+    let extract_dir =
+        std::env::temp_dir().join(format!("pantograph-binary-extract-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&extract_dir)
+        .map_err(|e| format!("Failed to create extraction directory: {}", e))?;
+
+    let extraction_result =
+        extract_archive(&temp_path, &extract_dir, release_asset.archive_kind)
+            .and_then(|_| definition.install_distribution(&extract_dir, &install_dir));
+
+    let _ = fs::remove_dir_all(&extract_dir);
+    let _ = fs::remove_file(&temp_path);
+    extraction_result?;
+
+    let missing = definition.validate_installation(&install_dir);
+    if let Some(first_missing) = missing.first() {
+        return Err(format!(
+            "{} extraction completed but runtime file is still missing: {}",
+            definition.display_name(),
+            first_missing
+        ));
+    }
+
+    channel
+        .send(DownloadProgress {
+            status: "Complete".to_string(),
+            current: total_size,
+            total: total_size,
+            done: true,
+            error: None,
+        })
+        .ok();
+
+    log::info!(
+        "{} binaries downloaded and extracted successfully",
+        definition.display_name()
+    );
+    Ok(())
+}
+
+pub(crate) fn resolve_binary_command(
+    app: &AppHandle,
+    id: ManagedBinaryId,
+    args: &[&str],
+) -> Result<ResolvedCommand, String> {
+    let definition = definition(id);
+
+    if let Some(executable_path) = definition.system_command() {
+        let (args, pid_file) = extract_pid_file(args);
+        let working_directory = executable_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        return Ok(ResolvedCommand {
+            executable_path,
+            working_directory,
+            args,
+            env_overrides: Vec::new(),
+            pid_file,
+        });
+    }
+
+    let install_dir = resolve_install_dir(app, id)?.ok_or_else(|| {
+        format!(
+            "{} binaries are not installed for the current platform",
+            definition.display_name()
+        )
+    })?;
+
+    definition.resolve_command(&install_dir, args)
+}
+
+pub(crate) fn extract_pid_file(args: &[&str]) -> (Vec<OsString>, Option<PathBuf>) {
+    let mut sanitized = Vec::with_capacity(args.len());
+    let mut pid_file = None;
+    let mut index = 0;
+
+    while index < args.len() {
+        let arg = args[index];
+
+        if arg == "--pid-file" {
+            if let Some(path) = args.get(index + 1) {
+                pid_file = Some(PathBuf::from(path));
+            }
+            index += 2;
+            continue;
+        }
+
+        if let Some(path) = arg.strip_prefix("--pid-file=") {
+            pid_file = Some(PathBuf::from(path));
+            index += 1;
+            continue;
+        }
+
+        sanitized.push(OsString::from(arg));
+        index += 1;
+    }
+
+    (sanitized, pid_file)
+}
+
+pub(crate) fn prepend_env_path(
+    key: &str,
+    prefix: &Path,
+    separator: &str,
+) -> (OsString, OsString) {
+    let mut value = prefix.as_os_str().to_os_string();
+    if let Some(existing) = std::env::var_os(key) {
+        if !existing.is_empty() {
+            value.push(separator);
+            value.push(existing);
+        }
+    }
+
+    (OsString::from(key), value)
+}
+
+fn resolve_install_dir(
+    app: &AppHandle,
+    id: ManagedBinaryId,
+) -> Result<Option<PathBuf>, String> {
+    let definition = definition(id);
+
+    for root in get_binary_search_roots(app)? {
+        if definition.validate_installation(&root).is_empty() {
+            return Ok(Some(root));
+        }
+    }
+
+    Ok(None)
+}
+
+fn extract_archive(
+    archive_path: &Path,
+    destination: &Path,
+    archive_kind: ArchiveKind,
+) -> Result<(), String> {
+    match archive_kind {
+        ArchiveKind::TarGz => extract_tar_gz_archive(archive_path, destination),
+        ArchiveKind::TarZst => extract_tar_zst_archive(archive_path, destination),
+        ArchiveKind::Zip => extract_zip_archive(archive_path, destination),
+    }
+}
+
+fn extract_tar_gz_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
+    let archive_file =
+        fs::File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
+    let decoder = GzDecoder::new(archive_file);
+    let mut archive = tar::Archive::new(decoder);
+    archive
+        .unpack(destination)
+        .map_err(|e| format!("Failed to unpack tar.gz archive: {}", e))
+}
+
+fn extract_tar_zst_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
+    let archive_file =
+        fs::File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
+    let decoder =
+        zstd::Decoder::new(archive_file).map_err(|e| format!("Failed to create zstd decoder: {}", e))?;
+    let mut archive = tar::Archive::new(decoder);
+    archive
+        .unpack(destination)
+        .map_err(|e| format!("Failed to unpack tar.zst archive: {}", e))
+}
+
+fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
+    let archive_file =
+        fs::File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(archive_file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+        let relative_path = entry
+            .enclosed_name()
+            .map(|path| path.to_path_buf())
+            .ok_or_else(|| format!("Archive entry has invalid path: {}", entry.name()))?;
+        let output_path = destination.join(relative_path);
+
+        if entry.is_dir() {
+            fs::create_dir_all(&output_path)
+                .map_err(|e| format!("Failed to create {:?}: {}", output_path, e))?;
+            continue;
+        }
+
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create {:?}: {}", parent, e))?;
+        }
+
+        #[cfg(unix)]
+        if zip_entry_is_symlink(&entry) {
+            let mut target = String::new();
+            entry.read_to_string(&mut target)
+                .map_err(|e| format!("Failed to read symlink target: {}", e))?;
+            let target_path = Path::new(target.trim())
+                .file_name()
+                .ok_or_else(|| format!("Invalid symlink target in {}", entry.name()))?;
+            std::os::unix::fs::symlink(target_path, &output_path)
+                .map_err(|e| format!("Failed to create symlink {:?}: {}", output_path, e))?;
+            continue;
+        }
+
+        let mut output =
+            fs::File::create(&output_path).map_err(|e| format!("Failed to create {:?}: {}", output_path, e))?;
+        io::copy(&mut entry, &mut output)
+            .map_err(|e| format!("Failed to extract {:?}: {}", output_path, e))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+    entry.unix_mode()
+        .map(|mode| (mode & 0o170000) == 0o120000)
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_pid_file;
+
+    #[test]
+    fn extract_pid_file_strips_split_flag() {
+        let args = ["--host", "127.0.0.1", "--pid-file", "/tmp/pid", "--port", "8080"];
+        let (sanitized, pid_file) = extract_pid_file(&args);
+
+        assert_eq!(
+            sanitized,
+            vec!["--host", "127.0.0.1", "--port", "8080"]
+        );
+        assert_eq!(pid_file.as_deref(), Some(std::path::Path::new("/tmp/pid")));
+    }
+
+    #[test]
+    fn extract_pid_file_strips_inline_flag() {
+        let args = ["--pid-file=/tmp/pid", "--port", "8080"];
+        let (sanitized, pid_file) = extract_pid_file(&args);
+
+        assert_eq!(sanitized, vec!["--port", "8080"]);
+        assert_eq!(pid_file.as_deref(), Some(std::path::Path::new("/tmp/pid")));
+    }
+}

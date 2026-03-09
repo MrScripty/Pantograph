@@ -1,22 +1,25 @@
-//! Tauri-specific ProcessSpawner implementation
+//! Tauri-specific ProcessSpawner implementation.
 //!
-//! This module provides a ProcessSpawner that uses Tauri's shell plugin
-//! to spawn and manage sidecar processes.
+//! This spawner resolves the downloaded llama.cpp binary for the current
+//! platform and launches it directly via `std::process`/`tokio::process`.
 
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use tauri_plugin_shell::ShellExt;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
-/// Tauri process handle wrapper
+use crate::llm::managed_binaries::{resolve_binary_command, ManagedBinaryId};
+use crate::llm::paths::get_binaries_dir;
+
 struct TauriProcessHandle {
     pid: u32,
-    child: Mutex<Option<CommandChild>>,
+    child: Arc<Mutex<Option<Child>>>,
 }
 
 impl ProcessHandle for TauriProcessHandle {
@@ -25,14 +28,17 @@ impl ProcessHandle for TauriProcessHandle {
     }
 
     fn kill(&self) -> Result<(), String> {
-        let mut guard = self
-            .child
-            .lock()
-            .map_err(|e| format!("Failed to acquire process lock: {}", e))?;
+        let child = {
+            let mut guard = self
+                .child
+                .lock()
+                .map_err(|e| format!("Failed to acquire process lock: {}", e))?;
+            guard.take()
+        };
 
-        if let Some(child) = guard.take() {
+        if let Some(mut child) = child {
             child
-                .kill()
+                .start_kill()
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
 
@@ -40,16 +46,11 @@ impl ProcessHandle for TauriProcessHandle {
     }
 }
 
-/// Process spawner using Tauri's shell plugin
-///
-/// This spawner is designed for use in Tauri desktop applications.
-/// It uses the `tauri-plugin-shell` for secure sidecar process management.
 pub struct TauriProcessSpawner {
     app: AppHandle,
 }
 
 impl TauriProcessSpawner {
-    /// Create a new Tauri process spawner
     pub fn new(app: AppHandle) -> Self {
         Self { app }
     }
@@ -62,47 +63,115 @@ impl ProcessSpawner for TauriProcessSpawner {
         sidecar_name: &str,
         args: &[&str],
     ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
-        // Create the sidecar command
-        let sidecar = self
-            .app
-            .shell()
-            .sidecar(sidecar_name)
-            .map_err(|e| format!("Failed to create sidecar: {}", e))?
-            .args(args);
+        let resolved = match sidecar_name {
+            "llama-server-wrapper" => {
+                resolve_binary_command(&self.app, ManagedBinaryId::LlamaCpp, args)?
+            }
+            other => {
+                return Err(format!(
+                    "Unsupported direct process spawn target for Tauri runtime: {}",
+                    other
+                ));
+            }
+        };
 
-        // Spawn the process
-        let (mut rx, child) = sidecar
-            .spawn()
-            .map_err(|e| format!("Failed to spawn {}: {}", sidecar_name, e))?;
+        let mut command = Command::new(&resolved.executable_path);
+        command
+            .args(&resolved.args)
+            .current_dir(&resolved.working_directory)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
-        // Create channel for ProcessEvents
-        let (tx, out_rx) = mpsc::channel(100);
+        for (key, value) in resolved.env_overrides {
+            command.env(key, value);
+        }
 
-        // Spawn a task to convert Tauri events to ProcessEvents
-        tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                let process_event = match event {
-                    CommandEvent::Stdout(data) => ProcessEvent::Stdout(data),
-                    CommandEvent::Stderr(data) => ProcessEvent::Stderr(data),
-                    CommandEvent::Error(err) => ProcessEvent::Error(err),
-                    CommandEvent::Terminated(status) => {
-                        ProcessEvent::Terminated(status.code.map(|c| c as i32))
+        let mut child = command.spawn().map_err(|e| {
+            format!(
+                "Failed to spawn {}: {}",
+                resolved.executable_path.display(),
+                e
+            )
+        })?;
+
+        let pid = child
+            .id()
+            .ok_or_else(|| "Spawned llama.cpp process did not report a PID".to_string())?;
+
+        if let Some(pid_file) = resolved.pid_file {
+            if let Some(parent) = pid_file.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create PID file directory: {}", e))?;
+            }
+            std::fs::write(&pid_file, pid.to_string())
+                .map_err(|e| format!("Failed to write PID file: {}", e))?;
+        }
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        let (tx, rx) = mpsc::channel(100);
+        let child = Arc::new(Mutex::new(Some(child)));
+
+        if let Some(stdout) = stdout {
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let reader = BufReader::new(stdout);
+                let mut lines = reader.lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if tx.send(ProcessEvent::Stdout(line.into_bytes())).await.is_err() {
+                        break;
                     }
-                    _ => continue, // Skip other event types
+                }
+            });
+        }
+
+        if let Some(stderr) = stderr {
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let reader = BufReader::new(stderr);
+                let mut lines = reader.lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if tx.send(ProcessEvent::Stderr(line.into_bytes())).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+
+        let monitor = Arc::clone(&child);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+                let wait_result = {
+                    let mut guard = match monitor.lock() {
+                        Ok(guard) => guard,
+                        Err(_) => break,
+                    };
+                    let Some(child) = guard.as_mut() else {
+                        break;
+                    };
+                    child.try_wait()
                 };
 
-                if tx.send(process_event).await.is_err() {
-                    break; // Receiver dropped
+                match wait_result {
+                    Ok(Some(status)) => {
+                        let _ = tx.send(ProcessEvent::Terminated(status.code())).await;
+                        break;
+                    }
+                    Ok(None) => continue,
+                    Err(error) => {
+                        let _ = tx
+                            .send(ProcessEvent::Error(format!("Wait error: {}", error)))
+                            .await;
+                        break;
+                    }
                 }
             }
         });
 
-        let handle = TauriProcessHandle {
-            pid: child.pid(),
-            child: Mutex::new(Some(child)),
-        };
-
-        Ok((out_rx, Box::new(handle)))
+        Ok((rx, Box::new(TauriProcessHandle { pid, child })))
     }
 
     fn app_data_dir(&self) -> Result<PathBuf, String> {
@@ -113,16 +182,10 @@ impl ProcessSpawner for TauriProcessSpawner {
     }
 
     fn binaries_dir(&self) -> Result<PathBuf, String> {
-        // Tauri sidecars are resolved by the shell plugin automatically
-        // Return the app's resource directory for reference
-        self.app
-            .path()
-            .resource_dir()
-            .map_err(|e| format!("Failed to get resource dir: {}", e))
+        get_binaries_dir(&self.app)
     }
 }
 
-/// Create a shared process spawner from an AppHandle
 pub fn create_spawner(app: AppHandle) -> Arc<dyn ProcessSpawner> {
     Arc::new(TauriProcessSpawner::new(app))
 }

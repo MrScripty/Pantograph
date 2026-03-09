@@ -2,9 +2,9 @@
 
 use super::shared::SharedAppConfig;
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig};
+use crate::llm::managed_binaries::{resolve_binary_command, ManagedBinaryId};
 use tauri::{command, AppHandle, Manager, State};
-use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
+use tokio::process::Command;
 
 #[command]
 pub async fn get_model_config(config: State<'_, SharedAppConfig>) -> Result<ModelConfig, String> {
@@ -95,34 +95,26 @@ pub async fn set_device_config(
 pub async fn list_devices(app: AppHandle) -> Result<Vec<DeviceInfo>, String> {
     log::info!("Listing available devices...");
 
-    // Run llama-server with --list-devices flag
-    // Use --device CUDA0 to trigger the CUDA binary which shows all device types
-    let (mut rx, _child) = app
-        .shell()
-        .sidecar("llama-server-wrapper")
-        .map_err(|e| format!("Failed to create sidecar: {}", e))?
-        .args(["--device", "CUDA0", "--list-devices"])
-        .spawn()
-        .map_err(|e| format!("Failed to spawn llama-server: {}", e))?;
+    let resolved = resolve_binary_command(
+        &app,
+        ManagedBinaryId::LlamaCpp,
+        &["--device", "CUDA0", "--list-devices"],
+    )?;
 
-    // Collect output
-    let mut output = String::new();
-    while let Some(event) = rx.recv().await {
-        match event {
-            CommandEvent::Stdout(line) => {
-                if let Ok(text) = String::from_utf8(line) {
-                    output.push_str(&text);
-                }
-            }
-            CommandEvent::Stderr(line) => {
-                if let Ok(text) = String::from_utf8(line) {
-                    output.push_str(&text);
-                }
-            }
-            CommandEvent::Terminated(_) => break,
-            _ => {}
-        }
+    let mut command = Command::new(&resolved.executable_path);
+    command
+        .current_dir(&resolved.working_directory)
+        .args(&resolved.args);
+    for (key, value) in resolved.env_overrides {
+        command.env(key, value);
     }
+
+    let output = command
+        .output()
+        .await
+        .map_err(|e| format!("Failed to spawn llama-server: {}", e))?;
+    let output = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
 
     log::info!("Device list output: {}", output);
 

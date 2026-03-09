@@ -9,9 +9,7 @@
     "devUrl": "http://localhost:3001",
     "frontendDist": "../dist"
   },
-  "bundle": {
-    "externalBin": ["binaries/llama-server-wrapper"]
-  },
+  "bundle": {},
   "app": {
     "windows": [
       {
