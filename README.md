@@ -1,5 +1,8 @@
 # Pantograph
 
+![banner_3](https://github.com/user-attachments/assets/32b9a8c3-39b1-4fdf-ae55-c0ea9d850929)
+
+
 Pantograph is a local-first desktop app that turns sketches and prompts into editable Svelte UI.
 
 ## Quick Start
