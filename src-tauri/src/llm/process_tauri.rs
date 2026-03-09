@@ -67,6 +67,7 @@ impl ProcessSpawner for TauriProcessSpawner {
             "llama-server-wrapper" => {
                 resolve_binary_command(&self.app, ManagedBinaryId::LlamaCpp, args)?
             }
+            "ollama" => resolve_binary_command(&self.app, ManagedBinaryId::Ollama, args)?,
             other => {
                 return Err(format!(
                     "Unsupported direct process spawn target for Tauri runtime: {}",

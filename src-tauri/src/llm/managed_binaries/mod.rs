@@ -1,6 +1,10 @@
 use crate::llm::llama_cpp_platform::{
     current_platform as current_llama_platform, install_distribution as install_llama_distribution,
 };
+use crate::llm::ollama_platform::{
+    current_platform as current_ollama_platform,
+    install_distribution as install_ollama_distribution,
+};
 use crate::llm::paths::{get_binary_search_roots, get_managed_binaries_dir};
 use crate::llm::types::{BinaryStatus, DownloadProgress};
 use flate2::read::GzDecoder;
@@ -17,6 +21,7 @@ use tauri::{ipc::Channel, AppHandle};
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum ManagedBinaryId {
     LlamaCpp,
+    Ollama,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,7 +47,6 @@ pub(crate) struct ResolvedCommand {
 }
 
 pub(crate) trait ManagedBinaryDefinition: Sync {
-    fn id(&self) -> ManagedBinaryId;
     fn display_name(&self) -> &'static str;
     fn release_asset(&self) -> Result<ReleaseAsset, String>;
     fn download_url(&self, release_asset: &ReleaseAsset) -> String;
@@ -56,12 +60,9 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
 }
 
 struct LlamaCppBinary;
+struct OllamaBinary;
 
 impl ManagedBinaryDefinition for LlamaCppBinary {
-    fn id(&self) -> ManagedBinaryId {
-        ManagedBinaryId::LlamaCpp
-    }
-
     fn display_name(&self) -> &'static str {
         "llama.cpp"
     }
@@ -91,7 +92,42 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
     }
 }
 
+impl ManagedBinaryDefinition for OllamaBinary {
+    fn display_name(&self) -> &'static str {
+        "Ollama"
+    }
+
+    fn release_asset(&self) -> Result<ReleaseAsset, String> {
+        Ok(current_ollama_platform().release_asset())
+    }
+
+    fn download_url(&self, release_asset: &ReleaseAsset) -> String {
+        format!(
+            "https://github.com/ollama/ollama/releases/download/{}/{}",
+            crate::llm::ollama_platform::OLLAMA_RELEASE_TAG,
+            release_asset.archive_name
+        )
+    }
+
+    fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
+        current_ollama_platform().validate_installation(install_dir)
+    }
+
+    fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String> {
+        install_ollama_distribution(extracted_dir, install_dir)
+    }
+
+    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+        current_ollama_platform().resolve_command(install_dir, args)
+    }
+
+    fn system_command(&self) -> Option<PathBuf> {
+        which::which("ollama").ok()
+    }
+}
+
 static LLAMA_CPP_BINARY: LlamaCppBinary = LlamaCppBinary;
+static OLLAMA_BINARY: OllamaBinary = OllamaBinary;
 
 static TRANSITION_LOCKS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<tokio::sync::Mutex<()>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -99,6 +135,7 @@ static TRANSITION_LOCKS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<tokio::sync::Mu
 fn definition(id: ManagedBinaryId) -> &'static dyn ManagedBinaryDefinition {
     match id {
         ManagedBinaryId::LlamaCpp => &LLAMA_CPP_BINARY,
+        ManagedBinaryId::Ollama => &OLLAMA_BINARY,
     }
 }
 

@@ -12,7 +12,7 @@ use futures_util::{Stream, StreamExt};
 use super::{
     BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
 };
-use crate::process::ProcessSpawner;
+use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::types::{RerankRequest, RerankResponse};
 
 /// Ollama backend using the Ollama daemon
@@ -28,9 +28,13 @@ pub struct OllamaBackend {
     ready: bool,
     /// Process spawner (stored after start)
     spawner: Option<Arc<dyn ProcessSpawner>>,
+    /// Managed Ollama child process started by this backend, if any.
+    managed_child: Option<Box<dyn ProcessHandle>>,
 }
 
 impl OllamaBackend {
+    const DEFAULT_BASE_URL: &'static str = "http://127.0.0.1:11434";
+
     /// Create a new Ollama backend
     pub fn new() -> Self {
         Self {
@@ -38,6 +42,7 @@ impl OllamaBackend {
             base_url: None,
             ready: false,
             spawner: None,
+            managed_child: None,
         }
     }
 
@@ -57,21 +62,70 @@ impl OllamaBackend {
 
     /// Check if Ollama is available on the system
     pub fn check_availability() -> (bool, Option<String>) {
-        // Check if ollama binary exists
         if which::which("ollama").is_ok() {
             (true, None)
         } else {
             (
                 false,
-                Some("Ollama not found in PATH. Install from ollama.ai".to_string()),
+                Some("Ollama not found in PATH. Install it or download it through Pantograph.".to_string()),
             )
         }
     }
 
     /// Check if auto-installation is supported
     pub fn can_auto_install() -> bool {
-        // Only support auto-install on Linux x86_64
-        cfg!(all(target_os = "linux", target_arch = "x86_64"))
+        cfg!(any(
+            all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "windows", target_arch = "x86_64"),
+            all(target_os = "macos", target_arch = "aarch64"),
+            all(target_os = "macos", target_arch = "x86_64")
+        ))
+    }
+
+    async fn tags_ready(&self, base_url: &str) -> bool {
+        let health_url = format!("{}/api/tags", base_url);
+        match self.http_client.get(&health_url).send().await {
+            Ok(resp) => resp.status().is_success(),
+            Err(_) => false,
+        }
+    }
+
+    async fn wait_for_ready(&self, base_url: &str, timeout_ms: u64) -> Result<(), BackendError> {
+        let started = std::time::Instant::now();
+        while started.elapsed().as_millis() < timeout_ms as u128 {
+            if self.tags_ready(base_url).await {
+                return Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+
+        Err(BackendError::StartupFailed(format!(
+            "Ollama server did not become ready within {}ms",
+            timeout_ms
+        )))
+    }
+
+    fn drain_process_events(mut rx: tokio::sync::mpsc::Receiver<ProcessEvent>) {
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                match event {
+                    ProcessEvent::Stdout(line) => {
+                        log::debug!("[ollama] {}", String::from_utf8_lossy(&line));
+                    }
+                    ProcessEvent::Stderr(line) => {
+                        log::debug!("[ollama stderr] {}", String::from_utf8_lossy(&line));
+                    }
+                    ProcessEvent::Terminated(code) => {
+                        log::warn!("Managed Ollama process terminated: {:?}", code);
+                        break;
+                    }
+                    ProcessEvent::Error(error) => {
+                        log::warn!("Managed Ollama process error: {}", error);
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     /// Parse SSE stream into ChatChunk stream
@@ -149,30 +203,41 @@ impl InferenceBackend for OllamaBackend {
         _config: &BackendConfig,
         spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<(), BackendError> {
-        self.spawner = Some(spawner);
+        self.stop();
+        self.spawner = Some(spawner.clone());
+        let base_url = Self::DEFAULT_BASE_URL.to_string();
 
-        // Default Ollama URL
-        let base_url = "http://127.0.0.1:11434".to_string();
-
-        // Check if Ollama is already running
-        let health_url = format!("{}/api/tags", &base_url);
-        match self.http_client.get(&health_url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                self.base_url = Some(base_url);
-                self.ready = true;
-                log::info!("Connected to Ollama server");
-                Ok(())
-            }
-            _ => {
-                // TODO: Optionally start Ollama daemon here
-                Err(BackendError::StartupFailed(
-                    "Ollama server not running. Start with 'ollama serve'".to_string(),
-                ))
-            }
+        if self.tags_ready(&base_url).await {
+            self.base_url = Some(base_url);
+            self.ready = true;
+            log::info!("Connected to existing Ollama server");
+            return Ok(());
         }
+
+        let (rx, child) = spawner
+            .spawn_sidecar("ollama", &["serve"])
+            .await
+            .map_err(BackendError::StartupFailed)?;
+        Self::drain_process_events(rx);
+        self.managed_child = Some(child);
+
+        if let Err(error) = self.wait_for_ready(&base_url, 30_000).await {
+            if let Some(child) = self.managed_child.take() {
+                let _ = child.kill();
+            }
+            return Err(error);
+        }
+
+        self.base_url = Some(base_url);
+        self.ready = true;
+        log::info!("Started managed Ollama server");
+        Ok(())
     }
 
     fn stop(&mut self) {
+        if let Some(child) = self.managed_child.take() {
+            let _ = child.kill();
+        }
         self.base_url = None;
         self.ready = false;
     }
@@ -183,11 +248,7 @@ impl InferenceBackend for OllamaBackend {
 
     async fn health_check(&self) -> bool {
         if let Some(ref base_url) = self.base_url {
-            let health_url = format!("{}/api/tags", base_url);
-            match self.http_client.get(&health_url).send().await {
-                Ok(resp) => resp.status().is_success(),
-                Err(_) => false,
-            }
+            self.tags_ready(base_url).await
         } else {
             false
         }

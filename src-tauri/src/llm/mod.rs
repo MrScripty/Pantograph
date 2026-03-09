@@ -6,6 +6,7 @@ pub mod gateway;
 pub mod health_monitor;
 pub(crate) mod llama_cpp_platform;
 pub(crate) mod managed_binaries;
+pub(crate) mod ollama_platform;
 pub(crate) mod paths;
 pub mod port_manager;
 pub mod process_tauri;
