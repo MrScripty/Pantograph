@@ -30,6 +30,7 @@ pub mod constants;
 pub mod device;
 pub mod gateway;
 pub mod kv_cache;
+pub mod managed_runtime;
 pub mod process;
 pub mod server;
 pub mod types;
@@ -55,6 +56,10 @@ pub use backend::PyTorchBackend;
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::DeviceBackend;
 pub use gateway::{GatewayError, InferenceGateway, SharedGateway};
+pub use managed_runtime::{
+    check_binary_status, download_binary, managed_runtime_dir, resolve_binary_command,
+    BinaryStatus, DownloadProgress, ManagedBinaryId, ResolvedCommand,
+};
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{

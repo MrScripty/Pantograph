@@ -1,27 +1,52 @@
-use crate::llm::llama_cpp_platform::{
+use crate::managed_runtime::llama_cpp_platform::{
     current_platform as current_llama_platform, install_distribution as install_llama_distribution,
 };
-use crate::llm::ollama_platform::{
+use crate::managed_runtime::ollama_platform::{
     current_platform as current_ollama_platform,
     install_distribution as install_ollama_distribution,
 };
-use crate::llm::paths::{get_binary_search_roots, get_managed_binaries_dir};
-use crate::llm::types::{BinaryStatus, DownloadProgress};
 use flate2::read::GzDecoder;
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tauri::{ipc::Channel, AppHandle};
+
+pub mod llama_cpp_platform;
+pub mod ollama_platform;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum ManagedBinaryId {
+pub enum ManagedBinaryId {
     LlamaCpp,
     Ollama,
+}
+
+impl ManagedBinaryId {
+    fn install_dir_name(self) -> &'static str {
+        match self {
+            Self::LlamaCpp => "llama-cpp",
+            Self::Ollama => "ollama",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryStatus {
+    pub available: bool,
+    pub missing_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DownloadProgress {
+    pub status: String,
+    pub current: u64,
+    pub total: u64,
+    pub done: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,15 +63,15 @@ pub(crate) struct ReleaseAsset {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ResolvedCommand {
-    pub(crate) executable_path: PathBuf,
-    pub(crate) working_directory: PathBuf,
-    pub(crate) args: Vec<OsString>,
-    pub(crate) env_overrides: Vec<(OsString, OsString)>,
-    pub(crate) pid_file: Option<PathBuf>,
+pub struct ResolvedCommand {
+    pub executable_path: PathBuf,
+    pub working_directory: PathBuf,
+    pub args: Vec<OsString>,
+    pub env_overrides: Vec<(OsString, OsString)>,
+    pub pid_file: Option<PathBuf>,
 }
 
-pub(crate) trait ManagedBinaryDefinition: Sync {
+trait ManagedBinaryDefinition: Sync {
     fn display_name(&self) -> &'static str;
     fn release_asset(&self) -> Result<ReleaseAsset, String>;
     fn download_url(&self, release_asset: &ReleaseAsset) -> String;
@@ -74,7 +99,7 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
     fn download_url(&self, release_asset: &ReleaseAsset) -> String {
         format!(
             "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
-            crate::llm::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG,
+            crate::managed_runtime::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG,
             release_asset.archive_name
         )
     }
@@ -104,7 +129,7 @@ impl ManagedBinaryDefinition for OllamaBinary {
     fn download_url(&self, release_asset: &ReleaseAsset) -> String {
         format!(
             "https://github.com/ollama/ollama/releases/download/{}/{}",
-            crate::llm::ollama_platform::OLLAMA_RELEASE_TAG,
+            crate::managed_runtime::ollama_platform::OLLAMA_RELEASE_TAG,
             release_asset.archive_name
         )
     }
@@ -149,8 +174,16 @@ fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
         .clone()
 }
 
-pub(crate) async fn check_binary_status(
-    app: &AppHandle,
+pub fn managed_runtime_dir(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("runtimes")
+}
+
+fn managed_install_dir(app_data_dir: &Path, id: ManagedBinaryId) -> PathBuf {
+    managed_runtime_dir(app_data_dir).join(id.install_dir_name())
+}
+
+pub async fn check_binary_status(
+    app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<BinaryStatus, String> {
     let definition = definition(id);
@@ -162,44 +195,40 @@ pub(crate) async fn check_binary_status(
         });
     }
 
-    if resolve_install_dir(app, id)?.is_some() {
-        return Ok(BinaryStatus {
-            available: true,
-            missing_files: Vec::new(),
-        });
-    }
-
-    let managed_dir = get_managed_binaries_dir(app)?;
+    let install_dir = managed_install_dir(app_data_dir, id);
+    let missing_files = definition.validate_installation(&install_dir);
     Ok(BinaryStatus {
-        available: false,
-        missing_files: definition.validate_installation(&managed_dir),
+        available: missing_files.is_empty(),
+        missing_files,
     })
 }
 
-pub(crate) async fn download_binary(
-    app: &AppHandle,
+pub async fn download_binary<F>(
+    app_data_dir: &Path,
     id: ManagedBinaryId,
-    channel: Channel<DownloadProgress>,
-) -> Result<(), String> {
+    mut on_progress: F,
+) -> Result<(), String>
+where
+    F: FnMut(DownloadProgress),
+{
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
     let definition = definition(id);
-    let install_dir = get_managed_binaries_dir(app)?;
+    let runtime_root = managed_runtime_dir(app_data_dir);
+    let install_dir = managed_install_dir(app_data_dir, id);
     let release_asset = definition.release_asset()?;
     let download_url = definition.download_url(&release_asset);
 
-    fs::create_dir_all(&install_dir)
-        .map_err(|e| format!("Failed to create binaries directory: {}", e))?;
+    fs::create_dir_all(&runtime_root)
+        .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
 
-    channel
-        .send(DownloadProgress {
-            status: format!("Downloading {} binaries...", definition.display_name()),
-            current: 0,
-            total: 0,
-            done: false,
-            error: None,
-        })
-        .ok();
+    on_progress(DownloadProgress {
+        status: format!("Downloading {} binaries...", definition.display_name()),
+        current: 0,
+        total: 0,
+        done: false,
+        error: None,
+    });
 
     log::info!(
         "Downloading {} from: {}",
@@ -222,7 +251,11 @@ pub(crate) async fn download_binary(
     }
 
     let total_size = response.content_length().unwrap_or(0);
-    let temp_path = install_dir.join(&release_asset.archive_name);
+    let temp_path = runtime_root.join(format!(
+        ".{}-{}",
+        uuid::Uuid::new_v4(),
+        release_asset.archive_name
+    ));
     let mut file =
         fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
 
@@ -237,43 +270,48 @@ pub(crate) async fn download_binary(
             .map_err(|e| format!("Failed to write chunk: {}", e))?;
         downloaded += chunk.len() as u64;
 
-        channel
-            .send(DownloadProgress {
-                status: "Downloading...".to_string(),
-                current: downloaded,
-                total: total_size,
-                done: false,
-                error: None,
-            })
-            .ok();
-    }
-    drop(file);
-
-    channel
-        .send(DownloadProgress {
-            status: "Extracting...".to_string(),
-            current: total_size,
+        on_progress(DownloadProgress {
+            status: "Downloading...".to_string(),
+            current: downloaded,
             total: total_size,
             done: false,
             error: None,
-        })
-        .ok();
+        });
+    }
+    drop(file);
+
+    on_progress(DownloadProgress {
+        status: "Extracting...".to_string(),
+        current: total_size,
+        total: total_size,
+        done: false,
+        error: None,
+    });
 
     let extract_dir =
-        std::env::temp_dir().join(format!("pantograph-binary-extract-{}", uuid::Uuid::new_v4()));
+        runtime_root.join(format!(".{}-extract-{}", id.install_dir_name(), uuid::Uuid::new_v4()));
+    let staging_dir =
+        runtime_root.join(format!(".{}-staging-{}", id.install_dir_name(), uuid::Uuid::new_v4()));
     fs::create_dir_all(&extract_dir)
         .map_err(|e| format!("Failed to create extraction directory: {}", e))?;
+    fs::create_dir_all(&staging_dir)
+        .map_err(|e| format!("Failed to create staging directory: {}", e))?;
 
     let extraction_result =
         extract_archive(&temp_path, &extract_dir, release_asset.archive_kind)
-            .and_then(|_| definition.install_distribution(&extract_dir, &install_dir));
+            .and_then(|_| definition.install_distribution(&extract_dir, &staging_dir));
 
     let _ = fs::remove_dir_all(&extract_dir);
     let _ = fs::remove_file(&temp_path);
-    extraction_result?;
 
-    let missing = definition.validate_installation(&install_dir);
+    if let Err(error) = extraction_result {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(error);
+    }
+
+    let missing = definition.validate_installation(&staging_dir);
     if let Some(first_missing) = missing.first() {
+        let _ = fs::remove_dir_all(&staging_dir);
         return Err(format!(
             "{} extraction completed but runtime file is still missing: {}",
             definition.display_name(),
@@ -281,15 +319,24 @@ pub(crate) async fn download_binary(
         ));
     }
 
-    channel
-        .send(DownloadProgress {
-            status: "Complete".to_string(),
-            current: total_size,
-            total: total_size,
-            done: true,
-            error: None,
-        })
-        .ok();
+    if install_dir.exists() {
+        fs::remove_dir_all(&install_dir)
+            .map_err(|e| format!("Failed to replace existing install: {}", e))?;
+    }
+    if let Some(parent) = install_dir.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create install directory: {}", e))?;
+    }
+    fs::rename(&staging_dir, &install_dir)
+        .map_err(|e| format!("Failed to finalize install: {}", e))?;
+
+    on_progress(DownloadProgress {
+        status: "Complete".to_string(),
+        current: total_size,
+        total: total_size,
+        done: true,
+        error: None,
+    });
 
     log::info!(
         "{} binaries downloaded and extracted successfully",
@@ -298,8 +345,8 @@ pub(crate) async fn download_binary(
     Ok(())
 }
 
-pub(crate) fn resolve_binary_command(
-    app: &AppHandle,
+pub fn resolve_binary_command(
+    app_data_dir: &Path,
     id: ManagedBinaryId,
     args: &[&str],
 ) -> Result<ResolvedCommand, String> {
@@ -321,12 +368,15 @@ pub(crate) fn resolve_binary_command(
         });
     }
 
-    let install_dir = resolve_install_dir(app, id)?.ok_or_else(|| {
-        format!(
-            "{} binaries are not installed for the current platform",
-            definition.display_name()
-        )
-    })?;
+    let install_dir = managed_install_dir(app_data_dir, id);
+    let missing = definition.validate_installation(&install_dir);
+    if let Some(first_missing) = missing.first() {
+        return Err(format!(
+            "{} binaries are not installed for the current platform (missing {})",
+            definition.display_name(),
+            first_missing
+        ));
+    }
 
     definition.resolve_command(&install_dir, args)
 }
@@ -376,21 +426,6 @@ pub(crate) fn prepend_env_path(
     (OsString::from(key), value)
 }
 
-fn resolve_install_dir(
-    app: &AppHandle,
-    id: ManagedBinaryId,
-) -> Result<Option<PathBuf>, String> {
-    let definition = definition(id);
-
-    for root in get_binary_search_roots(app)? {
-        if definition.validate_installation(&root).is_empty() {
-            return Ok(Some(root));
-        }
-    }
-
-    Ok(None)
-}
-
 fn extract_archive(
     archive_path: &Path,
     destination: &Path,
@@ -416,8 +451,8 @@ fn extract_tar_gz_archive(archive_path: &Path, destination: &Path) -> Result<(),
 fn extract_tar_zst_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
     let archive_file =
         fs::File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
-    let decoder =
-        zstd::Decoder::new(archive_file).map_err(|e| format!("Failed to create zstd decoder: {}", e))?;
+    let decoder = zstd::Decoder::new(archive_file)
+        .map_err(|e| format!("Failed to create zstd decoder: {}", e))?;
     let mut archive = tar::Archive::new(decoder);
     archive
         .unpack(destination)

@@ -1,4 +1,7 @@
-use crate::llm::managed_binaries::{ArchiveKind, ReleaseAsset, ResolvedCommand};
+use crate::managed_runtime::{
+    extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
+    ArchiveKind, ReleaseAsset, ResolvedCommand,
+};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -166,7 +169,7 @@ fn copy_entry(source: &Path, destination: &Path, file_type: &fs::FileType) -> Re
 }
 
 pub(crate) fn extract_pid_file(args: &[&str]) -> (Vec<OsString>, Option<PathBuf>) {
-    crate::llm::managed_binaries::extract_pid_file(args)
+    extract_pid_file_impl(args)
 }
 
 pub(crate) fn find_option_value<'a>(args: &'a [&'a str], option_name: &str) -> Option<&'a str> {
@@ -189,7 +192,7 @@ pub(crate) fn prepend_env_path(
     prefix: &Path,
     separator: &str,
 ) -> (OsString, OsString) {
-    crate::llm::managed_binaries::prepend_env_path(key, prefix, separator)
+    prepend_env_path_impl(key, prefix, separator)
 }
 
 #[cfg(unix)]

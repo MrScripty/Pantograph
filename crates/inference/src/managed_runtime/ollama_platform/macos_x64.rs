@@ -1,17 +1,17 @@
 use std::path::Path;
 
 use super::{find_executable, OllamaPlatform, OLLAMA_RELEASE_TAG};
-use crate::llm::managed_binaries::{prepend_env_path, ArchiveKind, ReleaseAsset, ResolvedCommand};
+use crate::managed_runtime::{extract_pid_file, prepend_env_path, ArchiveKind, ReleaseAsset, ResolvedCommand};
 
-pub(crate) struct LinuxPlatform;
+pub(crate) struct MacOsX64Platform;
 
-pub(crate) static PLATFORM: LinuxPlatform = LinuxPlatform;
+pub(crate) static PLATFORM: MacOsX64Platform = MacOsX64Platform;
 
-impl OllamaPlatform for LinuxPlatform {
+impl OllamaPlatform for MacOsX64Platform {
     fn release_asset(&self) -> ReleaseAsset {
         ReleaseAsset {
-            archive_name: format!("ollama-linux-amd64.tar.zst"),
-            archive_kind: ArchiveKind::TarZst,
+            archive_name: "Ollama-darwin.zip".to_string(),
+            archive_kind: ArchiveKind::Zip,
         }
     }
 
@@ -39,14 +39,14 @@ impl OllamaPlatform for LinuxPlatform {
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| install_dir.to_path_buf());
-        let (args, pid_file) = crate::llm::managed_binaries::extract_pid_file(args);
+        let (args, pid_file) = extract_pid_file(args);
 
         Ok(ResolvedCommand {
             executable_path,
             working_directory: working_directory.clone(),
             args,
             env_overrides: vec![prepend_env_path(
-                "LD_LIBRARY_PATH",
+                "DYLD_LIBRARY_PATH",
                 &working_directory,
                 ":",
             )],

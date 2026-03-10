@@ -2,7 +2,7 @@
 
 use super::shared::SharedAppConfig;
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig};
-use crate::llm::managed_binaries::{resolve_binary_command, ManagedBinaryId};
+use inference::{resolve_binary_command, ManagedBinaryId};
 use tauri::{command, AppHandle, Manager, State};
 use tokio::process::Command;
 
@@ -94,9 +94,13 @@ pub async fn set_device_config(
 #[command]
 pub async fn list_devices(app: AppHandle) -> Result<Vec<DeviceInfo>, String> {
     log::info!("Listing available devices...");
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
     let resolved = resolve_binary_command(
-        &app,
+        &app_data_dir,
         ManagedBinaryId::LlamaCpp,
         &["--device", "CUDA0", "--list-devices"],
     )?;

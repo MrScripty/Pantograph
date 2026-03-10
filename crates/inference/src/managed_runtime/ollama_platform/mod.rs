@@ -1,4 +1,4 @@
-use crate::llm::managed_binaries::{ReleaseAsset, ResolvedCommand};
+use crate::managed_runtime::{ReleaseAsset, ResolvedCommand};
 use std::fs;
 use std::path::{Path, PathBuf};
 

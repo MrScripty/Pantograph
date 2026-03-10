@@ -53,6 +53,10 @@ pyo3 = { workspace = true, optional = true }
 # Utilities
 uuid.workspace = true
 zstd.workspace = true
+flate2.workspace = true
+tar.workspace = true
+zip.workspace = true
+once_cell.workspace = true
 
 [dev-dependencies]
 env_logger = "0.11"

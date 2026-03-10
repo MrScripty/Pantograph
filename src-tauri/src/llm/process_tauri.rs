@@ -9,13 +9,11 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use inference::{managed_runtime_dir, resolve_binary_command, ManagedBinaryId};
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
-
-use crate::llm::managed_binaries::{resolve_binary_command, ManagedBinaryId};
-use crate::llm::paths::get_binaries_dir;
 
 struct TauriProcessHandle {
     pid: u32,
@@ -63,11 +61,12 @@ impl ProcessSpawner for TauriProcessSpawner {
         sidecar_name: &str,
         args: &[&str],
     ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+        let app_data_dir = self.app_data_dir()?;
         let resolved = match sidecar_name {
             "llama-server-wrapper" => {
-                resolve_binary_command(&self.app, ManagedBinaryId::LlamaCpp, args)?
+                resolve_binary_command(&app_data_dir, ManagedBinaryId::LlamaCpp, args)?
             }
-            "ollama" => resolve_binary_command(&self.app, ManagedBinaryId::Ollama, args)?,
+            "ollama" => resolve_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)?,
             other => {
                 return Err(format!(
                     "Unsupported direct process spawn target for Tauri runtime: {}",
@@ -183,7 +182,7 @@ impl ProcessSpawner for TauriProcessSpawner {
     }
 
     fn binaries_dir(&self) -> Result<PathBuf, String> {
-        get_binaries_dir(&self.app)
+        Ok(managed_runtime_dir(&self.app_data_dir()?))
     }
 }
 
