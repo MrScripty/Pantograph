@@ -5,7 +5,8 @@ A Rust library for multi-backend AI inference, supporting llama.cpp, Ollama, and
 ## Features
 
 - **Multi-backend support**: Unified interface for different inference engines
-- **ProcessSpawner abstraction**: Pluggable process management for different environments
+- **ProcessSpawner abstraction**: Pluggable runtime process management for different environments
+- **Managed runtimes**: `llama.cpp` and `Ollama` download, install, and launch through the inference crate
 - **Feature-gated backends**: Include only what you need
 - **OpenAI-compatible API**: All backends expose the same chat/embedding interface
 
@@ -50,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 The library uses a `ProcessSpawner` trait to abstract process management. This allows it to work in different environments:
 
-- **Tauri apps**: Use `tauri-plugin-shell` for secure sidecar management
+- **Tauri apps**: Provide an app-data-backed spawner while inference owns runtime resolution
 - **CLI tools**: Use `StdProcessSpawner` (enable `std-process` feature)
 - **Custom**: Implement `ProcessSpawner` for your environment
 
@@ -63,6 +64,9 @@ let spawner = StdProcessSpawner::new(
     PathBuf::from("/path/to/binaries"),
     PathBuf::from("/path/to/data"),
 );
+
+// Managed runtime downloads/install paths are owned by inference.
+// Hosts only provide process spawning and app-data locations.
 ```
 
 ## Feature Flags

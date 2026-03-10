@@ -2,7 +2,7 @@
 //!
 //! This module provides a trait-based abstraction for spawning external processes.
 //! This allows the inference library to work with different process management systems:
-//! - Tauri's `tauri-plugin-shell` for desktop apps
+//! - Host-managed process launchers for desktop apps
 //! - Standard `std::process::Command` for CLI tools and servers
 //!
 //! # Example
@@ -57,14 +57,14 @@ pub trait ProcessHandle: Send + Sync {
 /// Trait for spawning external processes
 ///
 /// Implementations can use different process management systems:
-/// - `TauriProcessSpawner` for Tauri desktop apps (uses `tauri-plugin-shell`)
+/// - `TauriProcessSpawner` for Tauri desktop apps
 /// - `StdProcessSpawner` for standalone use (uses `std::process::Command`)
 #[async_trait]
 pub trait ProcessSpawner: Send + Sync {
-    /// Spawn a sidecar process
+    /// Spawn a managed runtime process
     ///
     /// # Arguments
-    /// * `sidecar_name` - Name of the sidecar binary (e.g., "llama-server-wrapper")
+    /// * `sidecar_name` - Internal runtime program key
     /// * `args` - Command line arguments
     ///
     /// # Returns
@@ -78,7 +78,7 @@ pub trait ProcessSpawner: Send + Sync {
     /// Get the app data directory for storing PID files and other runtime data
     fn app_data_dir(&self) -> Result<PathBuf, String>;
 
-    /// Get the directory containing sidecar binaries
+    /// Get the directory containing managed runtime installs
     fn binaries_dir(&self) -> Result<PathBuf, String>;
 }
 
@@ -127,7 +127,7 @@ mod std_process {
         /// Create a new standard process spawner
         ///
         /// # Arguments
-        /// * `binaries_dir` - Directory containing sidecar binaries
+        /// * `binaries_dir` - Directory containing runtime executables
         /// * `data_dir` - Directory for storing runtime data (PID files, etc.)
         pub fn new(binaries_dir: PathBuf, data_dir: PathBuf) -> Self {
             Self {

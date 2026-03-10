@@ -49,6 +49,7 @@ pub struct DownloadProgress {
     pub error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ArchiveKind {
     TarGz,

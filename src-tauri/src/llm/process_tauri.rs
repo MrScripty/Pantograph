@@ -1,7 +1,7 @@
 //! Tauri-specific ProcessSpawner implementation.
 //!
-//! This spawner resolves the downloaded llama.cpp binary for the current
-//! platform and launches it directly via `std::process`/`tokio::process`.
+//! This spawner delegates runtime resolution to the inference crate and
+//! launches the resolved executable directly via `tokio::process`.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -96,7 +96,7 @@ impl ProcessSpawner for TauriProcessSpawner {
 
         let pid = child
             .id()
-            .ok_or_else(|| "Spawned llama.cpp process did not report a PID".to_string())?;
+            .ok_or_else(|| "Spawned managed runtime process did not report a PID".to_string())?;
 
         if let Some(pid_file) = resolved.pid_file {
             if let Some(parent) = pid_file.parent() {

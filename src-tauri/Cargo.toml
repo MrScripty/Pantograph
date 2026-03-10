@@ -48,7 +48,6 @@ pumas-library.workspace = true
 
 # Tauri-specific dependencies
 tauri = { version = "2.9.0", features = [] }
-tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 
 # Other app-specific dependencies
