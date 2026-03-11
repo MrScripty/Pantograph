@@ -6,7 +6,7 @@ A Rust library for multi-backend AI inference, supporting llama.cpp, Ollama, and
 
 - **Multi-backend support**: Unified interface for different inference engines
 - **ProcessSpawner abstraction**: Pluggable runtime process management for different environments
-- **Managed runtimes**: `llama.cpp` and `Ollama` download, install, and launch through the inference crate
+- **Managed runtimes**: `llama.cpp` and `Ollama` install, remove, resolve, and launch through the inference crate
 - **Feature-gated backends**: Include only what you need
 - **OpenAI-compatible API**: All backends expose the same chat/embedding interface
 
@@ -69,6 +69,14 @@ let spawner = StdProcessSpawner::new(
 // Hosts only provide process spawning and app-data locations.
 ```
 
+## Managed Runtime Lifecycle
+
+- Hosts query managed runtime capability state from inference.
+- Runtime installation is explicit and selective per backend.
+- Inference owns install/remove/resolve/launch behavior for managed runtimes.
+- Workflow execution should preflight runtime requirements instead of triggering
+  implicit downloads at run time.
+
 ## Feature Flags
 
 ```toml
@@ -77,7 +85,7 @@ inference = { version = "0.1", features = ["backend-llamacpp", "backend-ollama"]
 ```
 
 Available features:
-- `backend-llamacpp` (default): llama.cpp sidecar support
+- `backend-llamacpp` (default): llama.cpp managed-runtime support
 - `backend-ollama`: Ollama daemon integration
 - `backend-candle`: In-process Candle inference (requires CUDA)
 - `std-process`: Standard library process spawner

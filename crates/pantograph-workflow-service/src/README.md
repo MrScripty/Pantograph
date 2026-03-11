@@ -49,6 +49,15 @@ Primary operations:
 - only nodes marked `definition.category` in `{input, output}` with
   `definition.io_binding_origin == "client_session"` are externally bindable.
 
+Runtime capability rule:
+- hosts expose runtime availability through `runtime_capabilities()`
+- `workflow_get_capabilities` and `create_workflow_session` return those
+  capabilities to clients
+- `workflow_preflight` reports runtime warnings and blocking runtime issues
+- `run_workflow_session` reuses a session-scoped runtime preflight cache keyed
+  by graph fingerprint and runtime capability fingerprint
+- execution never triggers runtime installation implicitly
+
 Primary contract types:
 
 - `WorkflowRunRequest`
@@ -59,7 +68,12 @@ Primary contract types:
 - `WorkflowCapabilitiesResponse`
 - `WorkflowIoRequest`
 - `WorkflowIoResponse`
+- `WorkflowPreflightRequest`
+- `WorkflowPreflightResponse`
+- `WorkflowRuntimeCapability`
+- `WorkflowRuntimeIssue`
 - `WorkflowSessionCreateRequest`
+- `WorkflowSessionCreateResponse`
 - `WorkflowSessionRunRequest`
 - `WorkflowSessionCloseRequest`
 - `WorkflowSessionStatusRequest`
@@ -78,6 +92,9 @@ Primary contract types:
 - `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
   optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
   `roles`.
+- Runtime install/remove/status actions remain outside this crate. Clients use
+  the host's inference/runtime facade to change runtime availability, then read
+  updated capability state from workflow contracts.
 
 ## Verification
 
