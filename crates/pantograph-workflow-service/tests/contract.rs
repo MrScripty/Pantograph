@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeRequirements,
-    WorkflowService, WorkflowServiceError,
+    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeCapability,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowServiceError,
 };
 
 struct ContractHost;
@@ -39,7 +40,26 @@ impl WorkflowHost for ContractHost {
                 node_ids: vec!["node-embed".to_string()],
                 roles: vec!["embedding".to_string(), "inference".to_string()],
             }],
+            runtime_capabilities: vec![WorkflowRuntimeCapability {
+                runtime_id: "llama_cpp".to_string(),
+                display_name: "llama.cpp".to_string(),
+                install_state: WorkflowRuntimeInstallState::Installed,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: true,
+                backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
         })
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        Ok("contract-graph".to_string())
     }
 
     async fn run_workflow(
@@ -183,6 +203,18 @@ async fn workflow_capabilities_contract_snapshot() {
             "model_type": "embedding",
             "node_ids": ["node-embed"],
             "roles": ["embedding", "inference"]
+        }],
+        "runtime_capabilities": [{
+            "runtime_id": "llama_cpp",
+            "display_name": "llama.cpp",
+            "install_state": "installed",
+            "available": true,
+            "configured": true,
+            "can_install": false,
+            "can_remove": true,
+            "backend_keys": ["llamacpp", "llama.cpp"],
+            "missing_files": [],
+            "unavailable_reason": null
         }]
     });
 
@@ -292,9 +324,10 @@ async fn workflow_preflight_contract_snapshot() {
     let expected = serde_json::json!({
         "missing_required_inputs": [],
         "invalid_targets": [],
-        "warnings": [
-            "preflight performs static validation only; runtime availability is evaluated by workflow_run"
-        ],
+        "warnings": [],
+        "graph_fingerprint": "contract-graph",
+        "runtime_warnings": [],
+        "blocking_runtime_issues": [],
         "can_run": true
     });
     assert_eq!(value, expected);

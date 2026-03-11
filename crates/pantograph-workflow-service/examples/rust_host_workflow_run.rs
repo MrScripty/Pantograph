@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
     WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeCapability,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowService,
     WorkflowServiceError,
 };
 
@@ -42,6 +43,18 @@ impl WorkflowHost for ExampleHost {
                 model_type: Some("embedding".to_string()),
                 node_ids: vec!["embedding-node".to_string()],
                 roles: vec!["embedding".to_string()],
+            }],
+            runtime_capabilities: vec![WorkflowRuntimeCapability {
+                runtime_id: "example-backend".to_string(),
+                display_name: "Example Backend".to_string(),
+                install_state: WorkflowRuntimeInstallState::Installed,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                backend_keys: vec!["example-backend".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
             }],
         })
     }

@@ -124,6 +124,42 @@ impl Default for WorkflowRuntimeRequirements {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRuntimeInstallState {
+    Installed,
+    SystemProvided,
+    Missing,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRuntimeCapability {
+    pub runtime_id: String,
+    pub display_name: String,
+    pub install_state: WorkflowRuntimeInstallState,
+    pub available: bool,
+    pub configured: bool,
+    pub can_install: bool,
+    pub can_remove: bool,
+    #[serde(default)]
+    pub backend_keys: Vec<String>,
+    #[serde(default)]
+    pub missing_files: Vec<String>,
+    #[serde(default)]
+    pub unavailable_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRuntimeIssue {
+    pub runtime_id: String,
+    pub display_name: String,
+    pub required_backend_key: String,
+    pub message: String,
+}
+
 /// Host capability payload consumed by the service.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -134,6 +170,8 @@ pub struct WorkflowHostCapabilities {
     pub runtime_requirements: WorkflowRuntimeRequirements,
     #[serde(default)]
     pub models: Vec<WorkflowCapabilityModel>,
+    #[serde(default)]
+    pub runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }
 
 /// Workflow capabilities response.
@@ -146,6 +184,8 @@ pub struct WorkflowCapabilitiesResponse {
     pub runtime_requirements: WorkflowRuntimeRequirements,
     #[serde(default)]
     pub models: Vec<WorkflowCapabilityModel>,
+    #[serde(default)]
+    pub runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }
 
 /// Workflow I/O discovery request.
@@ -165,7 +205,7 @@ pub struct WorkflowIoResponse {
     pub outputs: Vec<WorkflowIoNode>,
 }
 
-/// Workflow preflight request for static, non-runtime validation.
+/// Workflow preflight request for request-shape and runtime-readiness validation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowPreflightRequest {
@@ -184,7 +224,7 @@ pub struct WorkflowInputTarget {
     pub port_id: String,
 }
 
-/// Workflow preflight response for static request validation diagnostics.
+/// Workflow preflight response for request validation and runtime-readiness diagnostics.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowPreflightResponse {
@@ -194,6 +234,11 @@ pub struct WorkflowPreflightResponse {
     pub invalid_targets: Vec<WorkflowOutputTarget>,
     #[serde(default)]
     pub warnings: Vec<String>,
+    pub graph_fingerprint: String,
+    #[serde(default)]
+    pub runtime_warnings: Vec<WorkflowRuntimeIssue>,
+    #[serde(default)]
+    pub blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
     pub can_run: bool,
 }
 
@@ -244,6 +289,8 @@ pub struct WorkflowSessionCreateRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowSessionCreateResponse {
     pub session_id: String,
+    #[serde(default)]
+    pub runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }
 
 /// Session run request.
@@ -591,9 +638,24 @@ pub trait WorkflowHost: Send + Sync {
         Ok(None)
     }
 
+    /// Report runtime capability state for the current host.
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        Ok(Vec::new())
+    }
+
     /// Resolve workflow identity and fail if it is unknown to the host.
     async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
         capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots()).map(|_| ())
+    }
+
+    /// Return the current graph fingerprint for session-scoped preflight caching.
+    async fn workflow_graph_fingerprint(
+        &self,
+        workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        capabilities::workflow_graph_fingerprint(workflow_id, &self.workflow_roots())
     }
 
     /// Return capability limits and model support metadata.
@@ -664,6 +726,7 @@ pub trait WorkflowHost: Send + Sync {
                 required_extensions,
             },
             models,
+            runtime_capabilities: self.runtime_capabilities().await?,
         })
     }
 
@@ -730,6 +793,13 @@ struct WorkflowSessionActiveRun {
 }
 
 #[derive(Debug, Clone)]
+struct WorkflowSessionPreflightCache {
+    graph_fingerprint: String,
+    runtime_capability_fingerprint: String,
+    blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
+}
+
+#[derive(Debug, Clone)]
 struct WorkflowSessionRecord {
     workflow_id: String,
     usage_profile: Option<String>,
@@ -739,6 +809,7 @@ struct WorkflowSessionRecord {
     queue: Vec<WorkflowSessionQueuedRun>,
     access_tick: u64,
     run_count: u64,
+    preflight_cache: Option<WorkflowSessionPreflightCache>,
 }
 
 #[derive(Debug, Clone)]
@@ -806,6 +877,7 @@ impl WorkflowSessionStore {
             queue: Vec::new(),
             access_tick: self.next_tick(),
             run_count: 0,
+            preflight_cache: None,
         };
         self.active.insert(session_id.clone(), state);
         Ok(session_id)
@@ -860,6 +932,34 @@ impl WorkflowSessionStore {
             queued_runs: state.queue.len(),
             run_count: state.run_count,
         })
+    }
+
+    fn cached_preflight(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<WorkflowSessionPreflightCache>, WorkflowServiceError> {
+        Ok(self
+            .active
+            .get(session_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+            })?
+            .preflight_cache
+            .clone())
+    }
+
+    fn cache_preflight(
+        &mut self,
+        session_id: &str,
+        cache: WorkflowSessionPreflightCache,
+    ) -> Result<(), WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        state.preflight_cache = Some(cache);
+        state.access_tick = tick;
+        Ok(())
     }
 
     fn list_queue(
@@ -1269,6 +1369,48 @@ impl WorkflowService {
         }
     }
 
+    async fn ensure_session_runtime_preflight<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        workflow_id: &str,
+    ) -> Result<WorkflowSessionPreflightCache, WorkflowServiceError> {
+        let graph_fingerprint = host.workflow_graph_fingerprint(workflow_id).await?;
+        let runtime_capabilities = host.runtime_capabilities().await?;
+        let runtime_capability_fingerprint =
+            compute_runtime_capability_fingerprint(&runtime_capabilities);
+
+        {
+            let store = self.session_store.lock().map_err(|_| {
+                WorkflowServiceError::Internal("session store lock poisoned".to_string())
+            })?;
+            if let Some(cached) = store.cached_preflight(session_id)? {
+                if cached.graph_fingerprint == graph_fingerprint
+                    && cached.runtime_capability_fingerprint == runtime_capability_fingerprint
+                {
+                    return Ok(cached);
+                }
+            }
+        }
+
+        let capabilities = host.workflow_capabilities(workflow_id).await?;
+        let (_, blocking_runtime_issues) = evaluate_runtime_preflight(
+            &capabilities.runtime_requirements.required_backends,
+            &runtime_capabilities,
+        );
+        let cache = WorkflowSessionPreflightCache {
+            graph_fingerprint,
+            runtime_capability_fingerprint,
+            blocking_runtime_issues,
+        };
+
+        let mut store = self.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session store lock poisoned".to_string())
+        })?;
+        store.cache_preflight(session_id, cache.clone())?;
+        Ok(cache)
+    }
+
     pub async fn create_workflow_session<H: WorkflowHost>(
         &self,
         host: &H,
@@ -1301,7 +1443,10 @@ impl WorkflowService {
             }
         }
 
-        Ok(WorkflowSessionCreateResponse { session_id })
+        Ok(WorkflowSessionCreateResponse {
+            session_id,
+            runtime_capabilities: host.runtime_capabilities().await?,
+        })
     }
 
     pub async fn run_workflow_session<H: WorkflowHost>(
@@ -1348,8 +1493,21 @@ impl WorkflowService {
             return Err(error);
         }
 
+        let preflight_cache = match self
+            .ensure_session_runtime_preflight(host, &session_id, &queued_run.workflow_id)
+            .await
+        {
+            Ok(cache) => cache,
+            Err(error) => {
+                if let Ok(mut store) = self.session_store.lock() {
+                    let _ = store.finish_run(&session_id, &queue_id);
+                }
+                return Err(error);
+            }
+        };
+
         let run_result = self
-            .workflow_run(
+            .workflow_run_internal(
                 host,
                 WorkflowRunRequest {
                     workflow_id: queued_run.workflow_id,
@@ -1358,6 +1516,7 @@ impl WorkflowService {
                     timeout_ms: queued_run.queued.timeout_ms,
                     run_id: queued_run.queued.run_id,
                 },
+                Some(preflight_cache),
             )
             .await;
 
@@ -1543,6 +1702,15 @@ impl WorkflowService {
         host: &H,
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.workflow_run_internal(host, request, None).await
+    }
+
+    async fn workflow_run_internal<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowRunRequest,
+        cached_preflight: Option<WorkflowSessionPreflightCache>,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         validate_timeout_ms(request.timeout_ms)?;
         validate_bindings(&request.inputs, "inputs")?;
@@ -1550,34 +1718,53 @@ impl WorkflowService {
             validate_output_targets(targets)?;
         }
 
+        let max_input_bindings = host.max_input_bindings();
+        let max_output_targets = host.max_output_targets();
+        let max_value_bytes = host.max_value_bytes();
+
         host.validate_workflow(&request.workflow_id).await?;
         if let Some(targets) = request.output_targets.as_ref() {
             let io = host.workflow_io(&request.workflow_id).await?;
             validate_workflow_io(&io)?;
             validate_output_targets_against_io(targets, &io)?;
         }
-        let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
+        let blocking_runtime_issues = if let Some(cache) = cached_preflight.as_ref() {
+            cache.blocking_runtime_issues.clone()
+        } else {
+            let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
+            evaluate_runtime_preflight(
+                &capabilities.runtime_requirements.required_backends,
+                &capabilities.runtime_capabilities,
+            )
+            .1
+        };
 
-        if request.inputs.len() > capabilities.max_input_bindings {
+        if !blocking_runtime_issues.is_empty() {
+            return Err(WorkflowServiceError::RuntimeNotReady(
+                format_runtime_not_ready_message(&blocking_runtime_issues),
+            ));
+        }
+
+        if request.inputs.len() > max_input_bindings {
             return Err(WorkflowServiceError::CapabilityViolation(format!(
                 "input binding count {} exceeds max_input_bindings {}",
                 request.inputs.len(),
-                capabilities.max_input_bindings
+                max_input_bindings
             )));
         }
 
         if let Some(targets) = request.output_targets.as_ref() {
-            if targets.len() > capabilities.max_output_targets {
+            if targets.len() > max_output_targets {
                 return Err(WorkflowServiceError::CapabilityViolation(format!(
                     "output target count {} exceeds max_output_targets {}",
                     targets.len(),
-                    capabilities.max_output_targets
+                    max_output_targets
                 )));
             }
         }
 
         for binding in &request.inputs {
-            validate_payload_size(binding, capabilities.max_value_bytes)?;
+            validate_payload_size(binding, max_value_bytes)?;
         }
 
         let started = Instant::now();
@@ -1625,7 +1812,7 @@ impl WorkflowService {
 
         validate_host_output_bindings(&outputs, "outputs")?;
         for binding in &outputs {
-            validate_payload_size(binding, capabilities.max_value_bytes)?;
+            validate_payload_size(binding, max_value_bytes)?;
         }
 
         let run_id = request
@@ -1657,6 +1844,7 @@ impl WorkflowService {
             max_value_bytes: capabilities.max_value_bytes,
             runtime_requirements: capabilities.runtime_requirements,
             models: capabilities.models,
+            runtime_capabilities: capabilities.runtime_capabilities,
         })
     }
 
@@ -1685,6 +1873,9 @@ impl WorkflowService {
 
         host.validate_workflow(&request.workflow_id).await?;
         let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
+        let graph_fingerprint = host
+            .workflow_graph_fingerprint(&request.workflow_id)
+            .await?;
         if request.inputs.len() > capabilities.max_input_bindings {
             return Err(WorkflowServiceError::CapabilityViolation(format!(
                 "input binding count {} exceeds max_input_bindings {}",
@@ -1733,13 +1924,22 @@ impl WorkflowService {
             .map(|targets| collect_invalid_output_targets(targets, &io))
             .unwrap_or_default();
 
-        let warnings = collect_preflight_warnings(&io);
-        let can_run = missing_required_inputs.is_empty() && invalid_targets.is_empty();
+        let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
+            &capabilities.runtime_requirements.required_backends,
+            &capabilities.runtime_capabilities,
+        );
+        let warnings = collect_preflight_warnings(&io, &runtime_warnings, &blocking_runtime_issues);
+        let can_run = missing_required_inputs.is_empty()
+            && invalid_targets.is_empty()
+            && blocking_runtime_issues.is_empty();
 
         Ok(WorkflowPreflightResponse {
             missing_required_inputs,
             invalid_targets,
             warnings,
+            graph_fingerprint,
+            runtime_warnings,
+            blocking_runtime_issues,
             can_run,
         })
     }
@@ -2070,7 +2270,11 @@ fn derive_required_external_inputs(io: &WorkflowIoResponse) -> Vec<WorkflowInput
     required_inputs
 }
 
-fn collect_preflight_warnings(io: &WorkflowIoResponse) -> Vec<String> {
+fn collect_preflight_warnings(
+    io: &WorkflowIoResponse,
+    runtime_warnings: &[WorkflowRuntimeIssue],
+    blocking_runtime_issues: &[WorkflowRuntimeIssue],
+) -> Vec<String> {
     let mut warnings = io
         .inputs
         .iter()
@@ -2088,11 +2292,165 @@ fn collect_preflight_warnings(io: &WorkflowIoResponse) -> Vec<String> {
         })
         .collect::<Vec<_>>();
     warnings.sort();
-    warnings.push(
-        "preflight performs static validation only; runtime availability is evaluated by workflow_run"
-            .to_string(),
+    warnings.extend(runtime_warnings.iter().map(|issue| issue.message.clone()));
+    warnings.extend(
+        blocking_runtime_issues
+            .iter()
+            .map(|issue| issue.message.clone()),
     );
+    warnings.sort();
+    warnings.dedup();
     warnings
+}
+
+fn evaluate_runtime_preflight(
+    required_backends: &[String],
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+) -> (Vec<WorkflowRuntimeIssue>, Vec<WorkflowRuntimeIssue>) {
+    let mut runtime_warnings = Vec::new();
+    let mut blocking_runtime_issues = Vec::new();
+
+    for required_backend_key in required_backends {
+        let required_backend_key = required_backend_key.trim();
+        if required_backend_key.is_empty() {
+            continue;
+        }
+
+        let Some(runtime) = find_runtime_capability(required_backend_key, runtime_capabilities)
+        else {
+            let issue = WorkflowRuntimeIssue {
+                runtime_id: required_backend_key.to_string(),
+                display_name: required_backend_key.to_string(),
+                required_backend_key: required_backend_key.to_string(),
+                message: format!(
+                    "workflow requires backend '{}' but no matching runtime capability is available",
+                    required_backend_key
+                ),
+            };
+            runtime_warnings.push(issue.clone());
+            blocking_runtime_issues.push(issue);
+            continue;
+        };
+
+        if runtime.available && runtime.configured {
+            continue;
+        }
+
+        let issue = WorkflowRuntimeIssue {
+            runtime_id: runtime.runtime_id.clone(),
+            display_name: runtime.display_name.clone(),
+            required_backend_key: required_backend_key.to_string(),
+            message: describe_runtime_issue(runtime, required_backend_key),
+        };
+        runtime_warnings.push(issue.clone());
+        blocking_runtime_issues.push(issue);
+    }
+
+    runtime_warnings.sort_by(|a, b| {
+        a.runtime_id
+            .cmp(&b.runtime_id)
+            .then_with(|| a.required_backend_key.cmp(&b.required_backend_key))
+    });
+    runtime_warnings.dedup_by(|left, right| {
+        left.runtime_id == right.runtime_id
+            && left.required_backend_key == right.required_backend_key
+            && left.message == right.message
+    });
+    blocking_runtime_issues.sort_by(|a, b| {
+        a.runtime_id
+            .cmp(&b.runtime_id)
+            .then_with(|| a.required_backend_key.cmp(&b.required_backend_key))
+    });
+    blocking_runtime_issues.dedup_by(|left, right| {
+        left.runtime_id == right.runtime_id
+            && left.required_backend_key == right.required_backend_key
+            && left.message == right.message
+    });
+
+    (runtime_warnings, blocking_runtime_issues)
+}
+
+fn find_runtime_capability<'a>(
+    required_backend_key: &str,
+    runtime_capabilities: &'a [WorkflowRuntimeCapability],
+) -> Option<&'a WorkflowRuntimeCapability> {
+    let needle = normalize_runtime_key(required_backend_key);
+    runtime_capabilities.iter().find(|runtime| {
+        normalize_runtime_key(&runtime.runtime_id) == needle
+            || runtime
+                .backend_keys
+                .iter()
+                .any(|backend_key| normalize_runtime_key(backend_key) == needle)
+    })
+}
+
+fn describe_runtime_issue(
+    runtime: &WorkflowRuntimeCapability,
+    required_backend_key: &str,
+) -> String {
+    if !runtime.configured {
+        return format!(
+            "workflow requires backend '{}' but {} is not configured",
+            required_backend_key, runtime.display_name
+        );
+    }
+
+    match runtime.install_state {
+        WorkflowRuntimeInstallState::Missing => {
+            format!(
+                "workflow requires backend '{}' but {} is not installed",
+                required_backend_key, runtime.display_name
+            )
+        }
+        WorkflowRuntimeInstallState::Unsupported => format!(
+            "workflow requires backend '{}' but {} is unsupported on this platform",
+            required_backend_key, runtime.display_name
+        ),
+        WorkflowRuntimeInstallState::Installed | WorkflowRuntimeInstallState::SystemProvided => {
+            runtime.unavailable_reason.clone().unwrap_or_else(|| {
+                format!(
+                    "workflow requires backend '{}' but {} is not ready",
+                    required_backend_key, runtime.display_name
+                )
+            })
+        }
+    }
+}
+
+fn format_runtime_not_ready_message(issues: &[WorkflowRuntimeIssue]) -> String {
+    issues
+        .iter()
+        .map(|issue| issue.message.as_str())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn compute_runtime_capability_fingerprint(
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+) -> String {
+    let mut normalized = runtime_capabilities.to_vec();
+    normalized.sort_by(|a, b| a.runtime_id.cmp(&b.runtime_id));
+    for capability in &mut normalized {
+        capability.backend_keys.sort();
+        capability.missing_files.sort();
+    }
+
+    let encoded = serde_json::to_string(&normalized).unwrap_or_default();
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in encoded.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{:016x}", hash)
+}
+
+fn normalize_runtime_key(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 fn validate_requested_outputs_produced(
@@ -2383,7 +2741,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
@@ -2415,6 +2773,7 @@ mod tests {
                         node_ids: vec!["node-1".to_string()],
                         roles: vec!["embedding".to_string(), "inference".to_string()],
                     }],
+                    runtime_capabilities: vec![ready_runtime_capability()],
                 },
                 omit_requested_target_output: false,
                 emit_invalid_output_binding: false,
@@ -2439,6 +2798,21 @@ mod tests {
         }
     }
 
+    fn ready_runtime_capability() -> WorkflowRuntimeCapability {
+        WorkflowRuntimeCapability {
+            runtime_id: "llama_cpp".to_string(),
+            display_name: "llama.cpp".to_string(),
+            install_state: WorkflowRuntimeInstallState::Installed,
+            available: true,
+            configured: true,
+            can_install: false,
+            can_remove: true,
+            backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        }
+    }
+
     struct TimeoutAwareHost {
         cancelled: Arc<AtomicBool>,
         capabilities: WorkflowHostCapabilities,
@@ -2454,6 +2828,7 @@ mod tests {
                     max_value_bytes: 4096,
                     runtime_requirements: WorkflowRuntimeRequirements::default(),
                     models: Vec::new(),
+                    runtime_capabilities: Vec::new(),
                 },
             }
         }
@@ -2472,6 +2847,7 @@ mod tests {
                     max_value_bytes: 4096,
                     runtime_requirements: WorkflowRuntimeRequirements::default(),
                     models: Vec::new(),
+                    runtime_capabilities: Vec::new(),
                 },
             }
         }
@@ -2479,6 +2855,12 @@ mod tests {
 
     struct DefaultCapabilitiesHost {
         workflow_root: PathBuf,
+    }
+
+    struct CountingPreflightHost {
+        workflow_capabilities_calls: Arc<AtomicUsize>,
+        runtime_capabilities_calls: Arc<AtomicUsize>,
+        graph_fingerprint: Arc<Mutex<String>>,
     }
 
     #[async_trait]
@@ -2549,9 +2931,76 @@ mod tests {
     }
 
     #[async_trait]
+    impl WorkflowHost for CountingPreflightHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok(self
+                .graph_fingerprint
+                .lock()
+                .expect("graph fingerprint lock poisoned")
+                .clone())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            self.workflow_capabilities_calls
+                .fetch_add(1, Ordering::SeqCst);
+            Ok(WorkflowHostCapabilities {
+                max_input_bindings: 8,
+                max_output_targets: 8,
+                max_value_bytes: 4096,
+                runtime_requirements: WorkflowRuntimeRequirements {
+                    required_backends: vec!["llamacpp".to_string()],
+                    ..WorkflowRuntimeRequirements::default()
+                },
+                models: Vec::new(),
+                runtime_capabilities: vec![ready_runtime_capability()],
+            })
+        }
+
+        async fn runtime_capabilities(
+            &self,
+        ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+            self.runtime_capabilities_calls
+                .fetch_add(1, Ordering::SeqCst);
+            Ok(vec![ready_runtime_capability()])
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
+        }
+    }
+
+    #[async_trait]
     impl WorkflowHost for TimeoutAwareHost {
         async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
             Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("timeout-graph".to_string())
         }
 
         async fn workflow_capabilities(
@@ -2590,6 +3039,13 @@ mod tests {
                 ));
             }
             Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("mock-graph".to_string())
         }
 
         async fn workflow_capabilities(
@@ -2698,6 +3154,13 @@ mod tests {
     impl WorkflowHost for PreflightHost {
         async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
             Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("preflight-graph".to_string())
         }
 
         async fn workflow_capabilities(
@@ -2932,9 +3395,10 @@ mod tests {
             .expect_err("invalid host output should be internal");
 
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("outputs.0.port_id must be non-empty"));
+        assert!(
+            err.to_string()
+                .contains("outputs.0.port_id must be non-empty")
+        );
     }
 
     #[tokio::test]
@@ -3179,19 +3643,23 @@ mod tests {
             response.inputs[0].ports[0].data_type.as_deref(),
             Some("string")
         );
-        assert!(response.inputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "legacy-out"));
+        assert!(
+            response.inputs[0]
+                .ports
+                .iter()
+                .all(|port| port.port_id != "legacy-out")
+        );
 
         assert_eq!(response.outputs.len(), 1);
         assert_eq!(response.outputs[0].node_id, "text-output-1");
         assert_eq!(response.outputs[0].ports.len(), 1);
         assert_eq!(response.outputs[0].ports[0].port_id, "text");
-        assert!(response.outputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "stream"));
+        assert!(
+            response.outputs[0]
+                .ports
+                .iter()
+                .all(|port| port.port_id != "stream")
+        );
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -3348,9 +3816,10 @@ mod tests {
             .expect_err("workflow io should reject missing io_binding_origin");
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
-        assert!(err
-            .to_string()
-            .contains("missing definition.io_binding_origin"));
+        assert!(
+            err.to_string()
+                .contains("missing definition.io_binding_origin")
+        );
         let _ = fs::remove_dir_all(temp_root);
     }
 
@@ -3550,9 +4019,10 @@ mod tests {
             .expect_err("expected output_not_produced");
 
         assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-        assert!(err
-            .to_string()
-            .contains("requested output target 'text-output-1.text' was not produced"));
+        assert!(
+            err.to_string()
+                .contains("requested output target 'text-output-1.text' was not produced")
+        );
     }
 
     #[tokio::test]
@@ -3610,16 +4080,19 @@ mod tests {
             .expect("preflight response");
 
         assert!(!response.can_run);
+        assert_eq!(response.graph_fingerprint, "preflight-graph");
         assert_eq!(response.missing_required_inputs.len(), 1);
         assert_eq!(response.missing_required_inputs[0].node_id, "text-input-1");
         assert_eq!(response.missing_required_inputs[0].port_id, "text");
         assert_eq!(response.invalid_targets.len(), 1);
         assert_eq!(response.invalid_targets[0].node_id, "text-output-1");
         assert_eq!(response.invalid_targets[0].port_id, "stream");
-        assert!(response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata")));
+        assert!(
+            response
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not declare required metadata"))
+        );
     }
 
     #[tokio::test]
@@ -3647,12 +4120,15 @@ mod tests {
             .expect("preflight response");
 
         assert!(response.can_run);
+        assert_eq!(response.graph_fingerprint, "preflight-graph");
         assert!(response.missing_required_inputs.is_empty());
         assert!(response.invalid_targets.is_empty());
-        assert!(response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("static validation only")));
+        assert!(
+            response
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not declare required metadata"))
+        );
     }
 
     #[tokio::test]
@@ -3722,6 +4198,7 @@ mod tests {
             )
             .await
             .expect("create session");
+        assert_eq!(created.runtime_capabilities.len(), 1);
 
         let response = service
             .run_workflow_session(
@@ -3776,6 +4253,92 @@ mod tests {
             .await
             .expect_err("closed session should not run");
         assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
+        let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
+        let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
+        let graph_fingerprint = Arc::new(Mutex::new("graph-a".to_string()));
+        let host = CountingPreflightHost {
+            workflow_capabilities_calls: workflow_capabilities_calls.clone(),
+            runtime_capabilities_calls: runtime_capabilities_calls.clone(),
+            graph_fingerprint: graph_fingerprint.clone(),
+        };
+        let service = WorkflowService::with_max_sessions(1);
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("first run");
+        assert_eq!(workflow_capabilities_calls.load(Ordering::SeqCst), 1);
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("second run");
+        assert_eq!(
+            workflow_capabilities_calls.load(Ordering::SeqCst),
+            1,
+            "unchanged graph should reuse cached preflight"
+        );
+        assert_eq!(runtime_capabilities_calls.load(Ordering::SeqCst), 3);
+
+        *graph_fingerprint
+            .lock()
+            .expect("graph fingerprint lock poisoned") = "graph-b".to_string();
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id,
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("third run after graph change");
+        assert_eq!(
+            workflow_capabilities_calls.load(Ordering::SeqCst),
+            2,
+            "graph change should invalidate cached preflight"
+        );
     }
 
     #[tokio::test]

@@ -27,6 +27,10 @@ impl StoredWorkflowFile {
         &self.graph.nodes
     }
 
+    pub(crate) fn edges(&self) -> &[StoredGraphEdge] {
+        &self.graph.edges
+    }
+
     pub fn to_workflow_graph(&self, workflow_id: &str) -> node_engine::WorkflowGraph {
         node_engine::WorkflowGraph {
             id: workflow_id.to_string(),
@@ -105,13 +109,16 @@ struct StoredPosition {
 }
 
 #[derive(Debug, Deserialize)]
-struct StoredGraphEdge {
+pub(crate) struct StoredGraphEdge {
     id: String,
     source: String,
     source_handle: String,
     target: String,
     target_handle: String,
 }
+
+const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+const FNV64_PRIME: u64 = 0x100000001b3;
 
 pub fn default_workflow_roots(manifest_dir: &Path) -> Vec<PathBuf> {
     let mut roots = Vec::new();
@@ -157,6 +164,14 @@ pub fn load_and_validate_workflow(
         "workflow '{}' failed graph validation: {}",
         workflow_id, error_text
     )))
+}
+
+pub fn workflow_graph_fingerprint(
+    workflow_id: &str,
+    roots: &[PathBuf],
+) -> Result<String, WorkflowServiceError> {
+    let stored = load_and_validate_workflow(workflow_id, roots)?;
+    Ok(compute_graph_fingerprint(stored.nodes(), stored.edges()))
 }
 
 pub fn extract_required_models(nodes: &[StoredGraphNode]) -> Vec<String> {
@@ -281,6 +296,47 @@ pub fn estimate_memory_requirements(
         Some(min),
         confidence.to_string(),
     )
+}
+
+fn compute_graph_fingerprint(nodes: &[StoredGraphNode], edges: &[StoredGraphEdge]) -> String {
+    let mut node_rows = nodes
+        .iter()
+        .map(|node| format!("{}|{}", node.id, node.node_type))
+        .collect::<Vec<_>>();
+    node_rows.sort();
+
+    let mut edge_rows = edges
+        .iter()
+        .map(|edge| {
+            format!(
+                "{}|{}|{}|{}",
+                edge.source, edge.source_handle, edge.target, edge.target_handle
+            )
+        })
+        .collect::<Vec<_>>();
+    edge_rows.sort();
+
+    let mut digest = FNV64_OFFSET_BASIS;
+    digest = fnv1a64_update(digest, b"v1");
+    for row in node_rows {
+        digest = fnv1a64_update(digest, row.as_bytes());
+        digest = fnv1a64_update(digest, b"\n");
+    }
+    digest = fnv1a64_update(digest, b"--");
+    for row in edge_rows {
+        digest = fnv1a64_update(digest, row.as_bytes());
+        digest = fnv1a64_update(digest, b"\n");
+    }
+
+    format!("{:016x}", digest)
+}
+
+fn fnv1a64_update(mut hash: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(FNV64_PRIME);
+    }
+    hash
 }
 
 pub fn extract_model_size_bytes(metadata: &serde_json::Value) -> Option<u64> {

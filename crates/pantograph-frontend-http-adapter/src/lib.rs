@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    capabilities, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost,
-    WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
-    WorkflowRunOptions, WorkflowServiceError,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost, WorkflowHostModelDescriptor,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
+    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowServiceError, capabilities,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -137,6 +137,23 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
             hashes: m.hashes,
         }))
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        Ok(vec![WorkflowRuntimeCapability {
+            runtime_id: self.backend_name.to_ascii_lowercase().replace(' ', "_"),
+            display_name: self.backend_name.clone(),
+            install_state: WorkflowRuntimeInstallState::Installed,
+            available: true,
+            configured: true,
+            can_install: false,
+            can_remove: false,
+            backend_keys: vec![self.backend_name.clone()],
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        }])
     }
 
     async fn run_workflow(
@@ -546,9 +563,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            err.to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 
     #[test]

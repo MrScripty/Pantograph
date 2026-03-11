@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, command, ipc::Channel};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;
@@ -94,6 +94,7 @@ pub fn list_workflows(
 #[command]
 pub async fn workflow_run(
     request: pantograph_workflow_service::WorkflowRunRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
@@ -101,6 +102,7 @@ pub async fn workflow_run(
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
     super::headless_workflow_commands::workflow_run(
         request,
+        app,
         gateway,
         extensions,
         rag_manager,
@@ -112,12 +114,14 @@ pub async fn workflow_run(
 #[command]
 pub async fn workflow_get_capabilities(
     request: pantograph_workflow_service::WorkflowCapabilitiesRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowCapabilitiesResponse, String> {
     super::headless_workflow_commands::workflow_get_capabilities(
         request,
+        app,
         gateway,
         extensions,
         workflow_service,
@@ -128,12 +132,14 @@ pub async fn workflow_get_capabilities(
 #[command]
 pub async fn workflow_get_io(
     request: pantograph_workflow_service::WorkflowIoRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowIoResponse, String> {
     super::headless_workflow_commands::workflow_get_io(
         request,
+        app,
         gateway,
         extensions,
         workflow_service,
@@ -144,12 +150,14 @@ pub async fn workflow_get_io(
 #[command]
 pub async fn workflow_preflight(
     request: pantograph_workflow_service::WorkflowPreflightRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowPreflightResponse, String> {
     super::headless_workflow_commands::workflow_preflight(
         request,
+        app,
         gateway,
         extensions,
         workflow_service,
@@ -160,12 +168,14 @@ pub async fn workflow_preflight(
 #[command]
 pub async fn workflow_create_session(
     request: pantograph_workflow_service::WorkflowSessionCreateRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowSessionCreateResponse, String> {
     super::headless_workflow_commands::workflow_create_session(
         request,
+        app,
         gateway,
         extensions,
         workflow_service,
@@ -176,6 +186,7 @@ pub async fn workflow_create_session(
 #[command]
 pub async fn workflow_run_session(
     request: pantograph_workflow_service::WorkflowSessionRunRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
@@ -183,6 +194,7 @@ pub async fn workflow_run_session(
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
     super::headless_workflow_commands::workflow_run_session(
         request,
+        app,
         gateway,
         extensions,
         rag_manager,
@@ -194,12 +206,14 @@ pub async fn workflow_run_session(
 #[command]
 pub async fn workflow_close_session(
     request: pantograph_workflow_service::WorkflowSessionCloseRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowSessionCloseResponse, String> {
     super::headless_workflow_commands::workflow_close_session(
         request,
+        app,
         gateway,
         extensions,
         workflow_service,
@@ -247,12 +261,14 @@ pub async fn workflow_reprioritize_session_queue_item(
 #[command]
 pub async fn workflow_set_session_keep_alive(
     request: pantograph_workflow_service::WorkflowSessionKeepAliveRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowSessionKeepAliveResponse, String> {
     super::headless_workflow_commands::workflow_set_session_keep_alive(
         request,
+        app,
         gateway,
         extensions,
         workflow_service,

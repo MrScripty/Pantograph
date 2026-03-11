@@ -9,18 +9,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    capabilities, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRunRequest, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowService,
+    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
+    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, capabilities,
 };
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use crate::agent::rag::SharedRagManager;
@@ -36,6 +37,12 @@ const DEFAULT_MAX_VALUE_BYTES: usize = 32_768;
 
 fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
+}
+
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
 }
 
 #[derive(Clone, Default)]
@@ -88,12 +95,14 @@ fn apply_runtime_extensions(
 
 pub async fn workflow_run(
     request: WorkflowRunRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowRunResponse, String> {
     let host = TauriWorkflowHost::with_rag_manager(
+        app_data_dir(&app)?,
         gateway.inner().clone(),
         extensions.inner().clone(),
         rag_manager.inner().clone(),
@@ -106,11 +115,16 @@ pub async fn workflow_run(
 
 pub async fn workflow_get_capabilities(
     request: WorkflowCapabilitiesRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowCapabilitiesResponse, String> {
-    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    let host = TauriWorkflowHost::new(
+        app_data_dir(&app)?,
+        gateway.inner().clone(),
+        extensions.inner().clone(),
+    );
     workflow_service
         .workflow_get_capabilities(&host, request)
         .await
@@ -119,11 +133,16 @@ pub async fn workflow_get_capabilities(
 
 pub async fn workflow_get_io(
     request: WorkflowIoRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowIoResponse, String> {
-    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    let host = TauriWorkflowHost::new(
+        app_data_dir(&app)?,
+        gateway.inner().clone(),
+        extensions.inner().clone(),
+    );
     workflow_service
         .workflow_get_io(&host, request)
         .await
@@ -132,11 +151,16 @@ pub async fn workflow_get_io(
 
 pub async fn workflow_preflight(
     request: WorkflowPreflightRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowPreflightResponse, String> {
-    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    let host = TauriWorkflowHost::new(
+        app_data_dir(&app)?,
+        gateway.inner().clone(),
+        extensions.inner().clone(),
+    );
     workflow_service
         .workflow_preflight(&host, request)
         .await
@@ -145,11 +169,16 @@ pub async fn workflow_preflight(
 
 pub async fn workflow_create_session(
     request: WorkflowSessionCreateRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionCreateResponse, String> {
-    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    let host = TauriWorkflowHost::new(
+        app_data_dir(&app)?,
+        gateway.inner().clone(),
+        extensions.inner().clone(),
+    );
     workflow_service
         .create_workflow_session(&host, request)
         .await
@@ -158,12 +187,14 @@ pub async fn workflow_create_session(
 
 pub async fn workflow_run_session(
     request: WorkflowSessionRunRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowRunResponse, String> {
     let host = TauriWorkflowHost::with_rag_manager(
+        app_data_dir(&app)?,
         gateway.inner().clone(),
         extensions.inner().clone(),
         rag_manager.inner().clone(),
@@ -176,11 +207,16 @@ pub async fn workflow_run_session(
 
 pub async fn workflow_close_session(
     request: WorkflowSessionCloseRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionCloseResponse, String> {
-    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    let host = TauriWorkflowHost::new(
+        app_data_dir(&app)?,
+        gateway.inner().clone(),
+        extensions.inner().clone(),
+    );
     workflow_service
         .close_workflow_session(&host, request)
         .await
@@ -229,11 +265,16 @@ pub async fn workflow_reprioritize_session_queue_item(
 
 pub async fn workflow_set_session_keep_alive(
     request: WorkflowSessionKeepAliveRequest,
+    app: AppHandle,
     gateway: State<'_, SharedGateway>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionKeepAliveResponse, String> {
-    let host = TauriWorkflowHost::new(gateway.inner().clone(), extensions.inner().clone());
+    let host = TauriWorkflowHost::new(
+        app_data_dir(&app)?,
+        gateway.inner().clone(),
+        extensions.inner().clone(),
+    );
     workflow_service
         .workflow_set_session_keep_alive(&host, request)
         .await
@@ -241,14 +282,16 @@ pub async fn workflow_set_session_keep_alive(
 }
 
 struct TauriWorkflowHost {
+    app_data_dir: PathBuf,
     gateway: SharedGateway,
     extensions: SharedExtensions,
     rag_manager: Option<SharedRagManager>,
 }
 
 impl TauriWorkflowHost {
-    fn new(gateway: SharedGateway, extensions: SharedExtensions) -> Self {
+    fn new(app_data_dir: PathBuf, gateway: SharedGateway, extensions: SharedExtensions) -> Self {
         Self {
+            app_data_dir,
             gateway,
             extensions,
             rag_manager: None,
@@ -256,11 +299,13 @@ impl TauriWorkflowHost {
     }
 
     fn with_rag_manager(
+        app_data_dir: PathBuf,
         gateway: SharedGateway,
         extensions: SharedExtensions,
         rag_manager: SharedRagManager,
     ) -> Self {
         Self {
+            app_data_dir,
             gateway,
             extensions,
             rag_manager: Some(rag_manager),
@@ -271,6 +316,15 @@ impl TauriWorkflowHost {
         let ext = self.extensions.read().await;
         ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
             .cloned()
+    }
+
+    fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
+        match binary_id {
+            inference::ManagedBinaryId::LlamaCpp => {
+                vec!["llama.cpp".to_string(), "llamacpp".to_string()]
+            }
+            inference::ManagedBinaryId::Ollama => vec!["ollama".to_string()],
+        }
     }
 
     fn apply_input_bindings(
@@ -449,6 +503,42 @@ impl WorkflowHost for TauriWorkflowHost {
             model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
             hashes: m.hashes,
         }))
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        let mut runtimes = inference::list_binary_capabilities(&self.app_data_dir)
+            .map_err(WorkflowServiceError::RuntimeNotReady)?
+            .into_iter()
+            .map(|runtime| WorkflowRuntimeCapability {
+                runtime_id: runtime.id.key().to_string(),
+                display_name: runtime.display_name,
+                install_state: match runtime.install_state {
+                    inference::ManagedBinaryInstallState::Installed => {
+                        WorkflowRuntimeInstallState::Installed
+                    }
+                    inference::ManagedBinaryInstallState::SystemProvided => {
+                        WorkflowRuntimeInstallState::SystemProvided
+                    }
+                    inference::ManagedBinaryInstallState::Missing => {
+                        WorkflowRuntimeInstallState::Missing
+                    }
+                    inference::ManagedBinaryInstallState::Unsupported => {
+                        WorkflowRuntimeInstallState::Unsupported
+                    }
+                },
+                available: runtime.available,
+                configured: runtime.available,
+                can_install: runtime.can_install,
+                can_remove: runtime.can_remove,
+                backend_keys: Self::runtime_backend_keys(runtime.id),
+                missing_files: runtime.missing_files,
+                unavailable_reason: runtime.unavailable_reason,
+            })
+            .collect::<Vec<_>>();
+        runtimes.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
+        Ok(runtimes)
     }
 
     async fn run_workflow(
