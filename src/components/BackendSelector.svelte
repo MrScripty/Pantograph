@@ -22,6 +22,18 @@
     available: boolean;
     unavailable_reason: string | null;
     can_install: boolean;
+    runtime_binary_id: 'llama_cpp' | 'ollama' | null;
+  }
+
+  interface ManagedRuntimeCapability {
+    id: 'llama_cpp' | 'ollama';
+    display_name: string;
+    install_state: 'installed' | 'system_provided' | 'missing' | 'unsupported';
+    available: boolean;
+    can_install: boolean;
+    can_remove: boolean;
+    missing_files: string[];
+    unavailable_reason: string | null;
   }
 
   interface DownloadProgress {
@@ -39,6 +51,7 @@
   };
 
   let backends: BackendInfo[] = $state([]);
+  let runtimes: ManagedRuntimeCapability[] = $state([]);
   let currentBackend: string = $state('');
   let isLoading = $state(false);
   let isSwitching = $state(false);
@@ -60,6 +73,7 @@
     error = null;
     try {
       backends = await invoke<BackendInfo[]>('list_backends');
+      runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
       const backendName = await invoke<string>('get_current_backend');
       // Only set currentBackend if server is actually running
       const status = await LLMService.refreshStatus();
@@ -126,6 +140,7 @@
   const startDownload = async () => {
     if (!confirmDownload) return;
     const name = confirmDownload.name;
+    const runtime = runtimeForBackend(confirmDownload);
     confirmDownload = null;
 
     downloadingBackend = name;
@@ -149,16 +164,34 @@
         }
       };
 
-      // Call backend-specific download command
-      if (name === 'llama.cpp') {
-        await invoke('download_llama_binaries', { channel });
-      } else if (name === 'Ollama') {
-        await invoke('download_ollama_binary', { channel });
+      if (!runtime) {
+        throw new Error(`No managed runtime is associated with ${name}`);
       }
+
+      await invoke('install_managed_runtime', {
+        binaryId: runtime.id,
+        channel
+      });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       downloadingBackend = null;
       downloadProgress = null;
+    }
+  };
+
+  const removeRuntime = async (backend: BackendInfo) => {
+    const runtime = runtimeForBackend(backend);
+    if (!runtime?.can_remove || isSwitching || downloadingBackend !== null) return;
+
+    isSwitching = true;
+    error = null;
+    try {
+      await invoke('remove_managed_runtime', { binaryId: runtime.id });
+      await loadBackends();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      isSwitching = false;
     }
   };
 
@@ -192,6 +225,11 @@
   onDestroy(() => {
     if (unsubscribe) unsubscribe();
   });
+
+  const runtimeForBackend = (backend: BackendInfo): ManagedRuntimeCapability | undefined => {
+    if (!backend.runtime_binary_id) return undefined;
+    return runtimes.find((runtime) => runtime.id === backend.runtime_binary_id);
+  };
 
   // Get the active backend info
   // Only show backend as active if server is actually running
@@ -238,52 +276,69 @@
         <!-- Backend selection buttons -->
         <div class="flex flex-wrap gap-2">
           {#each backends as backend (backend.name)}
+            {@const runtime = runtimeForBackend(backend)}
             <div class="flex flex-col">
-              <button type="button"
-                class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.name ===
-                  currentBackend && serverRunning
-                  ? 'bg-blue-600 text-white'
-                  : backend.available
-                    ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+              <div class="flex items-center gap-1.5">
+                <button type="button"
+                  class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.name ===
+                    currentBackend && serverRunning
+                    ? 'bg-blue-600 text-white'
+                    : backend.available
+                      ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                      : backend.can_install
+                        ? 'bg-neutral-700/50 text-neutral-400 hover:bg-neutral-600/50 cursor-pointer'
+                        : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}"
+                  onclick={() => handleBackendClick(backend)}
+                  disabled={(!backend.available && !backend.can_install) ||
+                    isSwitching ||
+                    downloadingBackend !== null}
+                  title={backend.available
+                    ? backend.description
                     : backend.can_install
-                      ? 'bg-neutral-700/50 text-neutral-400 hover:bg-neutral-600/50 cursor-pointer'
-                      : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}"
-                onclick={() => handleBackendClick(backend)}
-                disabled={(!backend.available && !backend.can_install) ||
-                  isSwitching ||
-                  downloadingBackend !== null}
-                title={backend.available
-                  ? backend.description
-                  : backend.can_install
-                    ? `Click to download (${DOWNLOAD_SIZES[backend.name] || 'Unknown size'})`
-                    : backend.unavailable_reason || 'Not available'}
-              >
-                {#if isSwitching && backend.name === currentBackend}
-                  <span
-                    class="inline-block w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"
-                  ></span>
-                {:else if downloadingBackend === backend.name}
-                  <span
-                    class="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"
-                  ></span>
-                {:else if !backend.available && backend.can_install}
-                  <!-- Lucide Download Icon -->
-                  <svg
-                    class="w-3 h-3"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
+                      ? `Click to download (${DOWNLOAD_SIZES[backend.name] || 'Unknown size'})`
+                      : backend.unavailable_reason || 'Not available'}
+                >
+                  {#if isSwitching && backend.name === currentBackend}
+                    <span
+                      class="inline-block w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"
+                    ></span>
+                  {:else if downloadingBackend === backend.name}
+                    <span
+                      class="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"
+                    ></span>
+                  {:else if !backend.available && backend.can_install}
+                    <svg
+                      class="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  {/if}
+                  {backend.name}
+                </button>
+
+                {#if runtime?.can_remove}
+                  <button
+                    type="button"
+                    class="px-2 py-1 text-[10px] rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      removeRuntime(backend);
+                    }}
+                    disabled={isSwitching || downloadingBackend !== null}
+                    title={`Remove ${runtime.display_name}`}
                   >
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
+                    Remove
+                  </button>
                 {/if}
-                {backend.name}
-              </button>
+              </div>
 
               {#if downloadingBackend === backend.name && downloadProgress}
                 <div class="mt-1 space-y-1">
@@ -307,6 +362,10 @@
                   {:else}
                     {backend.unavailable_reason}
                   {/if}
+                </span>
+              {:else if runtime?.install_state === 'system_provided'}
+                <span class="text-[9px] text-neutral-500 mt-0.5 max-w-[140px] leading-tight">
+                  Using system runtime
                 </span>
               {/if}
             </div>

@@ -2,9 +2,15 @@
   import { onMount } from 'svelte';
   import { invoke, Channel } from '@tauri-apps/api/core';
 
-  interface BinaryStatus {
+  interface ManagedRuntimeCapability {
+    id: 'llama_cpp' | 'ollama';
+    display_name: string;
+    install_state: 'installed' | 'system_provided' | 'missing' | 'unsupported';
     available: boolean;
+    can_install: boolean;
+    can_remove: boolean;
     missing_files: string[];
+    unavailable_reason: string | null;
   }
 
   interface DownloadProgress {
@@ -15,14 +21,24 @@
     error: string | null;
   }
 
-  let status: BinaryStatus = $state({ available: true, missing_files: [] });
+  let status: ManagedRuntimeCapability = $state({
+    id: 'llama_cpp',
+    display_name: 'llama.cpp',
+    install_state: 'installed',
+    available: true,
+    can_install: false,
+    can_remove: false,
+    missing_files: [],
+    unavailable_reason: null
+  });
   let downloading = $state(false);
   let progress: DownloadProgress = $state({ status: '', current: 0, total: 0, done: false, error: null });
   let error: string | null = $state(null);
 
   onMount(async () => {
     try {
-      status = await invoke<BinaryStatus>('check_llama_binaries');
+      const runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
+      status = runtimes.find((runtime) => runtime.id === 'llama_cpp') ?? status;
     } catch (e) {
       console.error('Failed to check binary status:', e);
     }
@@ -43,11 +59,12 @@
         }
         if (event.done && !event.error) {
           downloading = false;
-          status = { available: true, missing_files: [] };
+          const runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
+          status = runtimes.find((runtime) => runtime.id === 'llama_cpp') ?? status;
         }
       };
 
-      await invoke('download_llama_binaries', { channel });
+      await invoke('install_managed_runtime', { binaryId: 'llama_cpp', channel });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       downloading = false;
@@ -97,7 +114,7 @@
       </div>
     {:else}
       <p class="text-sm text-neutral-400 mb-3">
-        llama.cpp binaries are required for local inference.
+        llama.cpp is required for local inference.
       </p>
       {#if status.missing_files.length > 0}
         <details class="text-xs text-neutral-500 mb-3">

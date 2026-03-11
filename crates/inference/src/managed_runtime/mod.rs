@@ -19,19 +19,50 @@ use std::sync::{Arc, Mutex};
 pub mod llama_cpp_platform;
 pub mod ollama_platform;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ManagedBinaryId {
     LlamaCpp,
     Ollama,
 }
 
 impl ManagedBinaryId {
+    pub fn all() -> &'static [Self] {
+        &[Self::LlamaCpp, Self::Ollama]
+    }
+
+    pub fn display_name(self) -> &'static str {
+        definition(self).display_name()
+    }
+
     fn install_dir_name(self) -> &'static str {
         match self {
             Self::LlamaCpp => "llama-cpp",
             Self::Ollama => "ollama",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedBinaryInstallState {
+    Installed,
+    SystemProvided,
+    Missing,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ManagedBinaryCapability {
+    pub id: ManagedBinaryId,
+    pub display_name: String,
+    pub install_state: ManagedBinaryInstallState,
+    pub available: bool,
+    pub can_install: bool,
+    pub can_remove: bool,
+    pub missing_files: Vec<String>,
+    pub unavailable_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +109,8 @@ trait ManagedBinaryDefinition: Sync {
     fn download_url(&self, release_asset: &ReleaseAsset) -> String;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
     fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String>;
-    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String>;
+    fn resolve_command(&self, install_dir: &Path, args: &[&str])
+        -> Result<ResolvedCommand, String>;
 
     fn system_command(&self) -> Option<PathBuf> {
         None
@@ -113,7 +145,11 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
         install_llama_distribution(extracted_dir, install_dir)
     }
 
-    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+    fn resolve_command(
+        &self,
+        install_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String> {
         current_llama_platform().resolve_command(install_dir, args)
     }
 }
@@ -143,7 +179,11 @@ impl ManagedBinaryDefinition for OllamaBinary {
         install_ollama_distribution(extracted_dir, install_dir)
     }
 
-    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+    fn resolve_command(
+        &self,
+        install_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String> {
         current_ollama_platform().resolve_command(install_dir, args)
     }
 
@@ -187,21 +227,75 @@ pub async fn check_binary_status(
     app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<BinaryStatus, String> {
+    let capability = binary_capability(app_data_dir, id)?;
+    Ok(BinaryStatus {
+        available: capability.available,
+        missing_files: capability.missing_files,
+    })
+}
+
+pub fn binary_capability(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+) -> Result<ManagedBinaryCapability, String> {
     let definition = definition(id);
+    let install_dir = managed_install_dir(app_data_dir, id);
+    let has_managed_install = install_dir.exists();
 
     if definition.system_command().is_some() {
-        return Ok(BinaryStatus {
+        return Ok(ManagedBinaryCapability {
+            id,
+            display_name: definition.display_name().to_string(),
+            install_state: ManagedBinaryInstallState::SystemProvided,
             available: true,
+            can_install: false,
+            can_remove: has_managed_install,
             missing_files: Vec::new(),
+            unavailable_reason: None,
         });
     }
 
-    let install_dir = managed_install_dir(app_data_dir, id);
+    let release_asset = definition.release_asset();
+    if let Err(reason) = release_asset {
+        return Ok(ManagedBinaryCapability {
+            id,
+            display_name: definition.display_name().to_string(),
+            install_state: ManagedBinaryInstallState::Unsupported,
+            available: false,
+            can_install: false,
+            can_remove: has_managed_install,
+            missing_files: Vec::new(),
+            unavailable_reason: Some(reason),
+        });
+    }
+
     let missing_files = definition.validate_installation(&install_dir);
-    Ok(BinaryStatus {
+    let install_state = if missing_files.is_empty() {
+        ManagedBinaryInstallState::Installed
+    } else {
+        ManagedBinaryInstallState::Missing
+    };
+
+    Ok(ManagedBinaryCapability {
+        id,
+        display_name: definition.display_name().to_string(),
+        install_state,
         available: missing_files.is_empty(),
+        can_install: !missing_files.is_empty(),
+        can_remove: has_managed_install,
         missing_files,
+        unavailable_reason: None,
     })
+}
+
+pub fn list_binary_capabilities(
+    app_data_dir: &Path,
+) -> Result<Vec<ManagedBinaryCapability>, String> {
+    ManagedBinaryId::all()
+        .iter()
+        .copied()
+        .map(|id| binary_capability(app_data_dir, id))
+        .collect()
 }
 
 pub async fn download_binary<F>(
@@ -215,6 +309,12 @@ where
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
     let definition = definition(id);
+    if definition.system_command().is_some() {
+        return Err(format!(
+            "{} is already available from the system PATH",
+            definition.display_name()
+        ));
+    }
     let runtime_root = managed_runtime_dir(app_data_dir);
     let install_dir = managed_install_dir(app_data_dir, id);
     let release_asset = definition.release_asset()?;
@@ -289,18 +389,23 @@ where
         error: None,
     });
 
-    let extract_dir =
-        runtime_root.join(format!(".{}-extract-{}", id.install_dir_name(), uuid::Uuid::new_v4()));
-    let staging_dir =
-        runtime_root.join(format!(".{}-staging-{}", id.install_dir_name(), uuid::Uuid::new_v4()));
+    let extract_dir = runtime_root.join(format!(
+        ".{}-extract-{}",
+        id.install_dir_name(),
+        uuid::Uuid::new_v4()
+    ));
+    let staging_dir = runtime_root.join(format!(
+        ".{}-staging-{}",
+        id.install_dir_name(),
+        uuid::Uuid::new_v4()
+    ));
     fs::create_dir_all(&extract_dir)
         .map_err(|e| format!("Failed to create extraction directory: {}", e))?;
     fs::create_dir_all(&staging_dir)
         .map_err(|e| format!("Failed to create staging directory: {}", e))?;
 
-    let extraction_result =
-        extract_archive(&temp_path, &extract_dir, release_asset.archive_kind)
-            .and_then(|_| definition.install_distribution(&extract_dir, &staging_dir));
+    let extraction_result = extract_archive(&temp_path, &extract_dir, release_asset.archive_kind)
+        .and_then(|_| definition.install_distribution(&extract_dir, &staging_dir));
 
     let _ = fs::remove_dir_all(&extract_dir);
     let _ = fs::remove_file(&temp_path);
@@ -344,6 +449,25 @@ where
         definition.display_name()
     );
     Ok(())
+}
+
+pub async fn remove_binary(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    let lock = transition_lock(id);
+    let _guard = lock.lock().await;
+
+    let install_dir = managed_install_dir(app_data_dir, id);
+    if !install_dir.exists() {
+        return Ok(());
+    }
+
+    fs::remove_dir_all(&install_dir).map_err(|e| {
+        format!(
+            "Failed to remove {} runtime directory {:?}: {}",
+            definition(id).display_name(),
+            install_dir,
+            e
+        )
+    })
 }
 
 pub fn resolve_binary_command(
@@ -411,11 +535,7 @@ pub(crate) fn extract_pid_file(args: &[&str]) -> (Vec<OsString>, Option<PathBuf>
     (sanitized, pid_file)
 }
 
-pub(crate) fn prepend_env_path(
-    key: &str,
-    prefix: &Path,
-    separator: &str,
-) -> (OsString, OsString) {
+pub(crate) fn prepend_env_path(key: &str, prefix: &Path, separator: &str) -> (OsString, OsString) {
     let mut value = prefix.as_os_str().to_os_string();
     if let Some(existing) = std::env::var_os(key) {
         if !existing.is_empty() {
@@ -463,8 +583,8 @@ fn extract_tar_zst_archive(archive_path: &Path, destination: &Path) -> Result<()
 fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
     let archive_file =
         fs::File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
-    let mut archive =
-        zip::ZipArchive::new(archive_file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+    let mut archive = zip::ZipArchive::new(archive_file)
+        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
 
     for index in 0..archive.len() {
         let mut entry = archive
@@ -490,7 +610,8 @@ fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), St
         #[cfg(unix)]
         if zip_entry_is_symlink(&entry) {
             let mut target = String::new();
-            entry.read_to_string(&mut target)
+            entry
+                .read_to_string(&mut target)
                 .map_err(|e| format!("Failed to read symlink target: {}", e))?;
             let target_path = Path::new(target.trim())
                 .file_name()
@@ -500,8 +621,8 @@ fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), St
             continue;
         }
 
-        let mut output =
-            fs::File::create(&output_path).map_err(|e| format!("Failed to create {:?}: {}", output_path, e))?;
+        let mut output = fs::File::create(&output_path)
+            .map_err(|e| format!("Failed to create {:?}: {}", output_path, e))?;
         io::copy(&mut entry, &mut output)
             .map_err(|e| format!("Failed to extract {:?}: {}", output_path, e))?;
     }
@@ -511,7 +632,8 @@ fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), St
 
 #[cfg(unix)]
 fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
-    entry.unix_mode()
+    entry
+        .unix_mode()
         .map(|mode| (mode & 0o170000) == 0o120000)
         .unwrap_or(false)
 }
@@ -522,13 +644,17 @@ mod tests {
 
     #[test]
     fn extract_pid_file_strips_split_flag() {
-        let args = ["--host", "127.0.0.1", "--pid-file", "/tmp/pid", "--port", "8080"];
+        let args = [
+            "--host",
+            "127.0.0.1",
+            "--pid-file",
+            "/tmp/pid",
+            "--port",
+            "8080",
+        ];
         let (sanitized, pid_file) = extract_pid_file(&args);
 
-        assert_eq!(
-            sanitized,
-            vec!["--host", "127.0.0.1", "--port", "8080"]
-        );
+        assert_eq!(sanitized, vec!["--host", "127.0.0.1", "--port", "8080"]);
         assert_eq!(pid_file.as_deref(), Some(std::path::Path::new("/tmp/pid")));
     }
 

@@ -25,10 +25,9 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 
+use crate::managed_runtime::ManagedBinaryId;
 use crate::process::ProcessSpawner;
-use crate::types::{
-    ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse,
-};
+use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
@@ -110,6 +109,9 @@ pub struct BackendInfo {
     pub unavailable_reason: Option<String>,
     /// Whether this backend can be auto-installed (binaries can be downloaded)
     pub can_install: bool,
+    /// Managed runtime backing this backend, when applicable.
+    #[serde(default)]
+    pub runtime_binary_id: Option<ManagedBinaryId>,
 }
 
 /// Configuration for starting a backend

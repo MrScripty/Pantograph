@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use super::{BackendError, BackendInfo, InferenceBackend};
+use crate::managed_runtime::ManagedBinaryId;
 
 #[cfg(feature = "backend-llamacpp")]
 use super::LlamaCppBackend;
@@ -48,6 +49,7 @@ impl BackendFactory for LlamaCppFactory {
             available: true,
             unavailable_reason: None,
             can_install: true, // Binaries can be downloaded from GitHub releases
+            runtime_binary_id: Some(ManagedBinaryId::LlamaCpp),
         }
     }
 }
@@ -72,6 +74,7 @@ impl BackendFactory for OllamaFactory {
             available,
             unavailable_reason,
             can_install: OllamaBackend::can_auto_install(),
+            runtime_binary_id: Some(ManagedBinaryId::Ollama),
         }
     }
 }
@@ -100,6 +103,7 @@ impl BackendFactory for CandleFactory {
             available,
             unavailable_reason,
             can_install: false, // CUDA must be installed system-wide, can't auto-install
+            runtime_binary_id: None,
         }
     }
 }
@@ -125,6 +129,7 @@ impl BackendFactory for PyTorchFactory {
             available,
             unavailable_reason,
             can_install: false, // Requires Python + PyTorch to be pre-installed
+            runtime_binary_id: None,
         }
     }
 }

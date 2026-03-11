@@ -1,56 +1,44 @@
-//! Binary download and management commands.
+//! Runtime download and management commands.
 
-use inference::{check_binary_status, download_binary, BinaryStatus, DownloadProgress, ManagedBinaryId};
+use inference::{
+    download_binary, list_binary_capabilities, remove_binary, DownloadProgress,
+    ManagedBinaryCapability, ManagedBinaryId,
+};
 use tauri::{command, ipc::Channel, AppHandle, Manager};
 
-/// Check if llama.cpp binaries are available.
-#[command]
-pub async fn check_llama_binaries(app: AppHandle) -> Result<BinaryStatus, String> {
-    let app_data_dir = app
-        .path()
+fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
         .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    check_binary_status(&app_data_dir, ManagedBinaryId::LlamaCpp).await
+        .map_err(|e| format!("Failed to get app data dir: {}", e))
 }
 
-/// Download llama.cpp binaries from GitHub releases.
+/// List managed runtime capabilities and allowed actions for the current platform.
 #[command]
-pub async fn download_llama_binaries(
+pub async fn list_managed_runtimes(app: AppHandle) -> Result<Vec<ManagedBinaryCapability>, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    list_binary_capabilities(&app_data_dir)
+}
+
+/// Install one managed runtime into the app-owned runtime directory.
+#[command]
+pub async fn install_managed_runtime(
     app: AppHandle,
+    binary_id: ManagedBinaryId,
     channel: Channel<DownloadProgress>,
 ) -> Result<(), String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    download_binary(&app_data_dir, ManagedBinaryId::LlamaCpp, |progress| {
-        channel.send(progress).ok();
+    let app_data_dir = app_data_dir(&app)?;
+    download_binary(&app_data_dir, binary_id, |progress| {
+        let _ = channel.send(progress);
     })
     .await
 }
 
-/// Check if Ollama binary is available in our managed location.
+/// Remove one managed runtime from the app-owned runtime directory.
 #[command]
-pub async fn check_ollama_binary(app: AppHandle) -> Result<BinaryStatus, String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    check_binary_status(&app_data_dir, ManagedBinaryId::Ollama).await
-}
-
-/// Download Ollama binary from GitHub releases.
-#[command]
-pub async fn download_ollama_binary(
+pub async fn remove_managed_runtime(
     app: AppHandle,
-    channel: Channel<DownloadProgress>,
+    binary_id: ManagedBinaryId,
 ) -> Result<(), String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    download_binary(&app_data_dir, ManagedBinaryId::Ollama, |progress| {
-        channel.send(progress).ok();
-    })
-    .await
+    let app_data_dir = app_data_dir(&app)?;
+    remove_binary(&app_data_dir, binary_id).await
 }
