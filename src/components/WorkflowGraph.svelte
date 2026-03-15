@@ -68,6 +68,11 @@
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
+  import {
+    findRenderedEdgePath,
+    isCutModifierPressed,
+    shouldStartCutGesture,
+  } from './cutInteraction';
   import { resolveReconnectSourceAnchor } from './reconnectInteraction';
 
   // Import view store for zoom transitions
@@ -1081,11 +1086,9 @@
   let cutStart = $state<{ x: number; y: number } | null>(null);
   let cutEnd = $state<{ x: number; y: number } | null>(null);
   let ctrlPressed = $state(false);
+  let isFinalizingCut = $state(false);
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Control') {
-      ctrlPressed = true;
-    }
     // Tab transitions to orchestration view when container is selected
     if (e.key === 'Tab') {
       console.log('[WorkflowGraph] Tab pressed, containerSelected:', containerSelected);
@@ -1135,6 +1138,10 @@
   }
 
   function handleWindowKeyDown(e: KeyboardEvent) {
+    if (isCutModifierPressed(e)) {
+      ctrlPressed = true;
+    }
+
     const target = e.target as HTMLElement | null;
     if (
       target &&
@@ -1215,20 +1222,28 @@
   }
 
   function handleKeyUp(e: KeyboardEvent) {
-    if (e.key === 'Control') {
-      ctrlPressed = false;
-      if (isCutting) {
-        finishCut();
-      }
+    if (!isCutModifierPressed(e) && !ctrlPressed) {
+      return;
+    }
+
+    ctrlPressed = e.ctrlKey || e.metaKey;
+    if (!ctrlPressed && isCutting) {
+      void finishCut();
     }
   }
 
   function handlePaneMouseDown(e: MouseEvent) {
-    if (!canEdit || !ctrlPressed) return;
+    ctrlPressed = ctrlPressed || isCutModifierPressed(e);
 
-    // Only start cut if clicking on the pane (not on a node)
-    const target = e.target as HTMLElement;
-    if (target.closest('.svelte-flow__node') || target.closest('.svelte-flow__handle')) return;
+    if (
+      !shouldStartCutGesture({
+        canEdit,
+        modifierPressed: ctrlPressed || isCutModifierPressed(e),
+        target: e.target as HTMLElement | null,
+      })
+    ) {
+      return;
+    }
 
     isCutting = true;
     const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
@@ -1250,41 +1265,50 @@
 
   function handlePaneMouseUp() {
     if (isCutting) {
-      finishCut();
+      void finishCut();
     }
   }
 
   async function finishCut() {
-    if (!cutStart || !cutEnd) {
-      isCutting = false;
-      cutStart = null;
-      cutEnd = null;
+    if (isFinalizingCut) {
       return;
     }
 
-    clearConnectionInteraction();
-
-    // Find edges that intersect with the cut line
-    const edgesToRemove = edges.filter((edge) => {
-      const edgeEl = document.querySelector(`[data-id="${edge.id}"] path`);
-      if (!edgeEl) return false;
-
-      return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
-    });
-
-    // Remove intersecting edges via backend
-    for (const edge of edgesToRemove) {
-      try {
-        const updatedGraph = await workflowService.removeEdge(edge.id);
-        syncEdgesFromBackend(updatedGraph);
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
+    isFinalizingCut = true;
+    try {
+      if (!cutStart || !cutEnd) {
+        isCutting = false;
+        cutStart = null;
+        cutEnd = null;
+        return;
       }
-    }
 
-    isCutting = false;
-    cutStart = null;
-    cutEnd = null;
+      clearConnectionInteraction();
+
+      // Find edges that intersect with the cut line
+      const edgesToRemove = edges.filter((edge) => {
+        const edgeEl = findRenderedEdgePath(document, edge.id);
+        if (!edgeEl) return false;
+
+        return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
+      });
+
+      // Remove intersecting edges via backend
+      for (const edge of edgesToRemove) {
+        try {
+          const updatedGraph = await workflowService.removeEdge(edge.id);
+          syncEdgesFromBackend(updatedGraph);
+        } catch (error) {
+          console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
+        }
+      }
+
+      isCutting = false;
+      cutStart = null;
+      cutEnd = null;
+    } finally {
+      isFinalizingCut = false;
+    }
   }
 
   // Utility function to check if a line intersects an SVG path
