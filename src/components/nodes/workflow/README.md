@@ -12,6 +12,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
+| `ExpandSettingsNode.svelte` | Displays model-derived inference settings while the shared base node renders matching override input/output handles from dynamic port metadata. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
 | `NumberInputNode.svelte` | Renders a metadata-driven numeric editor that adopts downstream default values and range constraints. |
 | `PumaLibNode.svelte` | Presents model-library selection and routes model metadata into the correct downstream inference node type. |
@@ -33,6 +34,9 @@ or requiring the whole workflow view to remount.
   controls must not accidentally trigger graph gestures.
 - Runtime updates arrive through workflow events and store mutations; components
   must react to those updates declaratively instead of polling.
+- Model-derived port metadata arrives from backend-owned graph state, so
+  workflow node components must render additive handles from `data.definition`
+  rather than inventing their own durable port lists.
 - Audio playback must support both low-latency stream playback and final-audio
   controls while cleaning up timers and `AudioContext` resources deterministically.
 - Final generated audio may arrive before browser metadata resolves, so the UI
@@ -54,6 +58,9 @@ Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
 also owns the UI-side routing hints that send diffusion models to
 `diffusion-inference` and reranker models to the dedicated reranker node
 instead of the text-only PyTorch or llama.cpp generation nodes.
+`ExpandSettingsNode.svelte` stays presentation-only: it shows schema details,
+while override-capable handles come from the shared node definition supplied by
+the workflow stores.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -75,6 +82,9 @@ instead of the text-only PyTorch or llama.cpp generation nodes.
   lags in the browser.
 - Specialized node components must mirror canonical backend-owned port names so
   template graphs and execution bindings do not depend on UI-local aliases.
+- `ExpandSettingsNode.svelte` must not hardcode durable override handles; it
+  renders whatever additive inputs/outputs arrive in the backend-owned node
+  definition.
 
 ## Revisit Triggers
 - Another output node needs the same rerun-reset pattern and the logic starts to

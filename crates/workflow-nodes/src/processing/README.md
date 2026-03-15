@@ -15,7 +15,7 @@ adapters such as the Python runtime.
 | `audio_generation.rs` | Declares the Stable Audio generation node contract. |
 | `reranker.rs` | Declares the GGUF reranker node contract used to rank candidate documents via llama.cpp. |
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
-| `expand_settings.rs` | Turns inference-setting schemas into graph-visible override ports. |
+| `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
 | `vision_analysis.rs` | Declares image-to-text style vision analysis contracts. |
 
@@ -39,7 +39,10 @@ declare an optional `environment_ref` input so dependency-environment workflows
 can express the handoff explicitly instead of relying on hidden runtime fields.
 The reranker node follows the same pattern: the graph sees explicit query,
 candidate-document, and ranked-result contracts while the host owns the
-runtime-specific llama.cpp execution details.
+runtime-specific llama.cpp execution details. `expand_settings.rs` follows the
+same contract-first rule: model-specific settings stay graph-visible as
+matching optional input/output ports while the schema itself still passes
+through unchanged for downstream inference merging.
 
 ## Alternatives Rejected
 - Leave dependency environment handoff as an undocumented runtime-only input.
@@ -52,6 +55,9 @@ runtime-specific llama.cpp execution details.
 - Python-backed node contracts must stay additive across releases.
 - Dependency environment handoff, when used, is represented as structured JSON
   rather than opaque string flags.
+- Expand-settings contracts must preserve the static `inference_settings`
+  passthrough while keeping per-setting override ports additive and keyed by the
+  source schema.
 - Reranker outputs must preserve stable ranked-result fields so saved workflows
   and templates can consume them without endpoint-specific parsing logic.
 
@@ -84,3 +90,6 @@ assert!(meta.inputs.iter().any(|p| p.id == "environment_ref"));
   registries, graph validation, and frontend node renderers.
 - New ports may be added additively; existing port IDs and meanings must remain
   stable for saved workflows.
+- `expand-settings` publishes `inference_settings` as the authoritative schema
+  payload and may add per-setting ports keyed exactly by the upstream schema
+  `key` values.

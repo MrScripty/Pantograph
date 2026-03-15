@@ -13,6 +13,7 @@ process-backed task execution.
 | `commands.rs` | Tauri command registration for workflow editing and execution APIs. |
 | `workflow_execution_commands.rs` | Thin Tauri wrappers that delegate graph edits to core and execute runtime snapshots for desktop event streaming. |
 | `connection_intent.rs` | Legacy local connection-intent implementation retained during migration; core now owns the canonical policy. |
+| `effective_definition.rs` | Applies additive per-node `data.definition` overlays before legacy validation or candidate lookup reads port metadata. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
 | `validation.rs` | Legacy local validation helpers retained during migration; core validation is authoritative for new editing surfaces. |
 | `task_executor.rs` | Runtime execution path for workflow node execution once editing commits are accepted. |
@@ -32,6 +33,9 @@ while still handling desktop runtime execution concerns.
 - Expected incompatibility must not be reported as transport failure.
 - Existing public facades such as `validate_connection` must keep working during
   the migration.
+- Persisted graphs may contain additive `node.data.definition` port overlays for
+  dynamic inference settings; the legacy Tauri path must interpret those the
+  same way as core during the migration window.
 
 ## Decision
 Delegate workflow graph editing, connection intent, undo/redo, and persistence
@@ -40,7 +44,10 @@ into core requests, return core graph snapshots to the GUI, and keep only the
 desktop-specific runtime execution path here. Execution still owns
 dependency-aware, process-backed Python execution for nodes such as
 `pytorch-inference`, `diffusion-inference`, `audio-generation`, and
-`onnx-inference`.
+`onnx-inference`. Where legacy local validation or candidate lookup still
+exists, `effective_definition.rs` merges registry metadata with additive
+per-node `inputs`/`outputs` overlays so dynamic expand-setting ports behave the
+same way as the core service.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -63,6 +70,9 @@ dependency-aware, process-backed Python execution for nodes such as
 - Session-scoped candidate and insert commands must log enough request/rejection
   context to diagnose release-only interaction failures without relying on
   browser-console access.
+- Legacy local validation must treat `node.data.definition` as an additive
+  overlay on top of registry metadata, not as an unchecked replacement for the
+  node type contract.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas
@@ -127,6 +137,8 @@ let snapshot = workflow_service
 - Rejection enums are stable snake_case labels shared with TypeScript.
 - Graph fingerprints and returned graph snapshots come from core; Tauri must not
   invent or persist adapter-owned edit metadata.
+- `node.data.definition.inputs` and `node.data.definition.outputs` are additive
+  port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle
   assets it must carry the Pumas execution descriptor `entry_path` so runtime
   consumers receive the executable root instead of the library stub directory.

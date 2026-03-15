@@ -21,6 +21,9 @@ The graph editor needs a shared state boundary that can serve both UI rendering
 and transport payload generation. Interactive connection guidance adds another
 cross-cutting concern: the UI needs backend-derived target eligibility while the
 stores still need a current graph revision snapshot to validate a commit.
+Model-derived inference settings add a second contract problem: the stores must
+shape additive per-node ports consistently so `expand-settings`, primitive
+inputs, and inference nodes all see the same override handles.
 
 ## Constraints
 - Derived graph fingerprints must stay synchronized with node and edge edits or
@@ -59,6 +62,9 @@ per-node `definition.inputs` and `definition.outputs` overlays.
   workflow load, workflow clear, and default-graph load.
 - Runtime cleanup helpers must continue to touch only explicitly requested
   transient keys.
+- Dynamic inference-setting ports must be derived from backend-owned schema and
+  written back into `node.data.definition`; ad hoc component-local copies are
+  not authoritative.
 
 ## Revisit Triggers
 - Multiple simultaneous connection intents need independent store partitions.
@@ -113,3 +119,6 @@ stores.setConnectionIntent({
   invalid once `workflowGraph.derived_graph.graph_fingerprint` changes.
 - Missing `connectionIntent` means “no active connect/reconnect interaction,”
   not “no compatible targets exist.”
+- Dynamic inference-setting ports are additive overlays on `node.data.definition`;
+  saved graphs may persist them, but the authoritative shape is regenerated from
+  schema sync when model metadata changes.
