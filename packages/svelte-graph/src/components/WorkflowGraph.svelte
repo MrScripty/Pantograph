@@ -1008,7 +1008,7 @@
     updateDragCursorFromMouseEvent(e);
     cutToolRef?.onPaneMouseMove(e);
   }}
-  onmouseup={() => cutToolRef?.onPaneMouseUp()}
+  onmouseup={(e) => cutToolRef?.onPaneMouseUp(e)}
   role="application"
 >
 

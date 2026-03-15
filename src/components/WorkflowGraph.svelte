@@ -1236,12 +1236,13 @@
   }
 
   function handlePaneMouseDown(e: MouseEvent) {
-    ctrlPressed = ctrlPressed || isCutModifierPressed(e);
+    const modifierPressedAtStart = isCutModifierPressed(e);
+    ctrlPressed = modifierPressedAtStart;
 
     if (
       !shouldStartCutGesture({
         canEdit,
-        modifierPressed: ctrlPressed || isCutModifierPressed(e),
+        modifierPressed: modifierPressedAtStart,
         target: e.target as HTMLElement | null,
       })
     ) {
@@ -1268,7 +1269,8 @@
     cutEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  function handlePaneMouseUp() {
+  function handlePaneMouseUp(e: MouseEvent) {
+    ctrlPressed = isCutModifierPressed(e);
     if (isCutting) {
       void finishCut();
     }

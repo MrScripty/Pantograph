@@ -49,11 +49,12 @@
 
   /** Call from parent's mousedown handler on the graph container */
   export function onPaneMouseDown(e: MouseEvent) {
-    ctrlPressed = ctrlPressed || isCutModifierPressed(e);
+    const modifierPressedAtStart = isCutModifierPressed(e);
+    ctrlPressed = modifierPressedAtStart;
     if (
       !shouldStartCutGesture({
         enabled,
-        modifierPressed: ctrlPressed || isCutModifierPressed(e),
+        modifierPressed: modifierPressedAtStart,
         target: e.target as HTMLElement | null,
       })
     ) {
@@ -81,7 +82,8 @@
   }
 
   /** Call from parent's mouseup handler on the graph container */
-  export function onPaneMouseUp() {
+  export function onPaneMouseUp(e: MouseEvent) {
+    ctrlPressed = isCutModifierPressed(e);
     if (isCutting) {
       void finishCut();
     }
