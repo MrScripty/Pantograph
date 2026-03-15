@@ -14,12 +14,13 @@ use node_engine::{
 /// Expand Settings Task
 ///
 /// Receives an `inference_settings` JSON array (from puma-lib or model-provider)
-/// and exposes each parameter as an individual output port with its default value.
+/// and exposes each parameter as a matching optional input/output port pair.
 /// The schema is also passed through unchanged so downstream inference nodes can
-/// use `build_extra_settings()` to merge overrides.
+/// consume the authoritative schema while override-capable graph wiring stays
+/// visible.
 ///
-/// Dynamic per-parameter output ports are added by the frontend's
-/// `syncExpandPorts()` when the upstream model selection changes.
+/// Dynamic per-parameter ports are added by the frontend's `syncExpandPorts()`
+/// when the upstream model selection changes.
 #[derive(Clone)]
 pub struct ExpandSettingsTask {
     /// Unique identifier for this task instance
@@ -57,7 +58,8 @@ impl TaskDescriptor for ExpandSettingsTask {
                     "Inference Settings",
                     PortDataType::Json,
                 ),
-                // Dynamic per-parameter outputs added by frontend syncExpandPorts()
+                // Dynamic per-parameter inputs/outputs added by frontend
+                // syncExpandPorts()
             ],
             execution_mode: ExecutionMode::Reactive,
         }

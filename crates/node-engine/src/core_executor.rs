@@ -883,7 +883,8 @@ async fn execute_write_file(
 /// Expand inference settings schema into individual per-parameter outputs.
 ///
 /// Reads the `inference_settings` JSON array, passes it through unchanged,
-/// and emits each parameter's default value on a port keyed by `param.key`.
+/// and emits each parameter's resolved override-or-default value on a port
+/// keyed by `param.key`.
 fn execute_expand_settings(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
@@ -900,12 +901,14 @@ fn execute_expand_settings(
     if let Some(schema) = settings_value.as_array() {
         for param in schema {
             if let Some(key) = param.get("key").and_then(|k| k.as_str()) {
-                if let Some(default) = param.get("default") {
-                    let default_value =
-                        resolve_inference_setting_runtime_value(param, default.clone());
-                    if !default_value.is_null() {
-                        outputs.insert(key.to_string(), default_value);
-                    }
+                let value = read_optional_input_value(inputs, key).unwrap_or_else(|| {
+                    param.get("default")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null)
+                });
+                let runtime_value = resolve_inference_setting_runtime_value(param, value);
+                if !runtime_value.is_null() {
+                    outputs.insert(key.to_string(), runtime_value);
                 }
             }
         }
@@ -3935,6 +3938,51 @@ mod tests {
         assert_eq!(result["denoising_steps"], 8);
         assert_eq!(result["block_length"], 16);
         // Schema is passed through unchanged
+        assert!(result["inference_settings"].is_array());
+    }
+
+    #[test]
+    fn test_execute_expand_settings_uses_connected_numeric_override() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {"key": "denoising_steps", "label": "Denoising Steps", "param_type": "Integer", "default": 8}
+            ]),
+        );
+        inputs.insert("denoising_steps".to_string(), serde_json::json!(12));
+
+        let result = execute_expand_settings(&inputs).unwrap();
+
+        assert_eq!(result["denoising_steps"], 12);
+        assert!(result["inference_settings"].is_array());
+    }
+
+    #[test]
+    fn test_execute_expand_settings_uses_connected_label_override_runtime_value() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "inference_settings".to_string(),
+            serde_json::json!([
+                {
+                    "key": "voice",
+                    "label": "Voice",
+                    "param_type": "String",
+                    "default": "Leo",
+                    "constraints": {
+                        "allowed_values": [
+                            {"label": "Leo", "value": "expr-voice-5-m"},
+                            {"label": "Sage", "value": "expr-voice-7-f"}
+                        ]
+                    }
+                }
+            ]),
+        );
+        inputs.insert("voice".to_string(), serde_json::json!("Sage"));
+
+        let result = execute_expand_settings(&inputs).unwrap();
+
+        assert_eq!(result["voice"], "expr-voice-7-f");
         assert!(result["inference_settings"].is_array());
     }
 
