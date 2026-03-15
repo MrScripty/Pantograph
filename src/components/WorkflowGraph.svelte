@@ -68,6 +68,7 @@
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
+  import { resolveReconnectSourceAnchor } from './reconnectInteraction';
 
   // Import view store for zoom transitions
   import {
@@ -997,11 +998,9 @@
     handleType: 'source' | 'target'
   ) {
     if (!canEdit) return;
-    if (handleType === 'target' && edge.sourceHandle) {
-      const sourceAnchor = {
-        node_id: edge.source,
-        port_id: edge.sourceHandle,
-      };
+    const sourceAnchor = resolveReconnectSourceAnchor(edge, handleType);
+
+    if (sourceAnchor) {
       connectionDragState = startReconnectDrag(edge.id, sourceAnchor);
       applyHorseshoeSession(startHorseshoeDrag(getEventPointerPosition(_event)));
       await loadConnectionIntent(sourceAnchor);
