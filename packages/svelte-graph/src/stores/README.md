@@ -12,6 +12,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `createWorkflowStores.ts` | Owns workflow nodes, edges, derived graph metadata, execution state, and connection intent for the active editor. |
 | `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
 | `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
+| `canonicalizeWorkflowGraph.ts` | Canonicalizes loaded graphs by reconciling legacy node types, stale inference-setting overlays, and missing expand-setting passthrough edges before a session starts. |
 | `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
 | `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
 | `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
@@ -40,6 +41,10 @@ intent from one place whenever nodes, edges, or workflow loads change.
 `createSessionStores.ts` now binds the active edit-session id into
 `createWorkflowStores.ts`, and structural graph edits flow through the backend
 session before the stores replace local graph state from the returned snapshot.
+Loaded graphs are canonicalized before the edit session is created and again
+before the local node array is materialized, so legacy saved workflows are
+reconciled into the current dynamic-port contract instead of remaining as stale
+snapshots until a manual reconnect happens.
 Inference-setting port shaping now lives in `inferenceSettingsPorts.ts` so the
 same additive port contract is reused when syncing expand-setting passthrough
 nodes and downstream inference consumers. That helper now merges upstream
@@ -128,3 +133,6 @@ stores.setConnectionIntent({
 - When an inference node is synchronized from an `inference_settings` source,
   settings promoted into that shared schema surface must not remain duplicated
   as direct static inputs in the node-visible definition.
+- Graph load canonicalization must be idempotent: reloading an already current
+  graph must not keep appending edges or reshaping definitions beyond the
+  current contract.

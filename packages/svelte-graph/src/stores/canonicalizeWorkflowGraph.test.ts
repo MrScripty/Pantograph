@@ -183,3 +183,58 @@ test('canonicalizeWorkflowGraph migrates system-prompt graphs before reconciliat
   assert.equal(canonicalGraph.nodes[0]?.data.text, 'hello');
   assert.equal(canonicalGraph.nodes[0]?.data.prompt, undefined);
 });
+
+test('canonicalizeWorkflowGraph is idempotent for already-reconciled expand-setting graphs', () => {
+  const graph: WorkflowGraph = {
+    nodes: [
+      {
+        id: 'puma-1',
+        node_type: 'puma-lib',
+        position: { x: 0, y: 0 },
+        data: {
+          inference_settings: [
+            {
+              key: 'temperature',
+              label: 'Temperature',
+              param_type: 'Number',
+              default: 0.8,
+            },
+          ],
+        },
+      },
+      {
+        id: 'expand-1',
+        node_type: 'expand-settings',
+        position: { x: 200, y: 0 },
+        data: {},
+      },
+      {
+        id: 'llama-1',
+        node_type: 'llamacpp-inference',
+        position: { x: 400, y: 0 },
+        data: {},
+      },
+    ],
+    edges: [
+      {
+        id: 'puma-expand-settings',
+        source: 'puma-1',
+        source_handle: 'inference_settings',
+        target: 'expand-1',
+        target_handle: 'inference_settings',
+      },
+      {
+        id: 'expand-llama-settings',
+        source: 'expand-1',
+        source_handle: 'inference_settings',
+        target: 'llama-1',
+        target_handle: 'inference_settings',
+      },
+    ],
+  };
+
+  const once = canonicalizeWorkflowGraph(graph, definitions);
+  const twice = canonicalizeWorkflowGraph(once, definitions);
+
+  assert.deepEqual(twice, once);
+});

@@ -8,6 +8,7 @@ import type { WorkflowMetadata } from '../types/workflow.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import type { WorkflowStores } from './createWorkflowStores.js';
 import type { ViewStores } from './createViewStores.js';
+import { canonicalizeWorkflowGraph } from './canonicalizeWorkflowGraph.ts';
 
 // --- Types ---
 
@@ -100,12 +101,16 @@ export function createSessionStores(
 
       const path = `.pantograph/workflows/${name}.json`;
       const file = await backend.loadWorkflow(path);
+      const canonicalGraph = canonicalizeWorkflowGraph(
+        file.graph,
+        get(workflowStores.nodeDefinitions),
+      );
 
-      const sessionId = await backend.createSession(file.graph);
+      const sessionId = await backend.createSession(canonicalGraph);
       currentSessionId.set(sessionId);
       workflowStores.setActiveSessionId(sessionId);
 
-      workflowStores.loadWorkflow(file.graph, file.metadata);
+      workflowStores.loadWorkflow(canonicalGraph, file.metadata);
 
       // Call optional hook for consumer-specific post-load behavior
       if (options?.onWorkflowLoaded && file.metadata) {

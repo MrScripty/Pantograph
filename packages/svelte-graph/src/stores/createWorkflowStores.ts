@@ -20,6 +20,7 @@ import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import { removeNodeDataKeys } from './runtimeData.js';
 import { buildDerivedGraph } from '../graphRevision.js';
+import { canonicalizeWorkflowGraph } from './canonicalizeWorkflowGraph.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 import {
   buildExpandSettingsSchema,
@@ -165,20 +166,11 @@ export function createWorkflowStores(
 
   function materializeWorkflowGraph(graph: WorkflowGraph) {
     const definitions = get(nodeDefinitions);
-    const migratedNodeIds = new Set<string>();
+    const canonicalGraph = canonicalizeWorkflowGraph(graph, definitions);
 
-    const graphNodes: Node[] = graph.nodes.map((n) => {
-      let nodeType = n.node_type;
+    const graphNodes: Node[] = canonicalGraph.nodes.map((n) => {
+      const nodeType = n.node_type;
       const nodeData = { ...n.data };
-
-      if (nodeType === 'system-prompt') {
-        nodeType = 'text-input';
-        migratedNodeIds.add(n.id);
-        if ('prompt' in nodeData && !('text' in nodeData)) {
-          nodeData.text = nodeData.prompt;
-          delete nodeData.prompt;
-        }
-      }
 
       const definition = resolveNodeDefinitionOverlay(nodeType, nodeData, definitions);
       return {
@@ -189,21 +181,17 @@ export function createWorkflowStores(
       };
     });
 
-    const graphEdges: Edge[] = graph.edges.map((e) => {
-      let sourceHandle = e.source_handle;
-      let targetHandle = e.target_handle;
-      if (migratedNodeIds.has(e.source) && sourceHandle === 'prompt') sourceHandle = 'text';
-      if (migratedNodeIds.has(e.target) && targetHandle === 'prompt') targetHandle = 'text';
+    const graphEdges: Edge[] = canonicalGraph.edges.map((e) => {
       return {
         id: e.id,
         source: e.source,
-        sourceHandle,
+        sourceHandle: e.source_handle,
         target: e.target,
-        targetHandle,
+        targetHandle: e.target_handle,
       };
     });
 
-    return { graphNodes, graphEdges };
+    return { graphNodes, graphEdges, canonicalGraph };
   }
 
   function applyWorkflowGraph(
@@ -213,14 +201,14 @@ export function createWorkflowStores(
       markDirty?: boolean;
     },
   ) {
-    const { graphNodes, graphEdges } = materializeWorkflowGraph(graph);
+    const { graphNodes, graphEdges, canonicalGraph } = materializeWorkflowGraph(graph);
     nodes.set(graphNodes);
     edges.set(graphEdges);
     if (typeof options?.metadata !== 'undefined') {
       workflowMetadata.set(options.metadata);
     }
     connectionIntent.set(null);
-    derivedGraph.set(graph.derived_graph ?? buildDerivedGraph(graph));
+    derivedGraph.set(buildDerivedGraph(canonicalGraph));
     isDirty.set(options?.markDirty ?? true);
   }
 
