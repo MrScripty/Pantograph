@@ -2,6 +2,10 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import type { NodeDefinition } from '../types/workflow.js';
   import { useGraphContext } from '../context/useGraphContext.js';
+  import {
+    dispatchWorkflowPaletteDragEnd,
+    dispatchWorkflowPaletteDragStart,
+  } from '../paletteDragState.js';
 
   const { stores } = useGraphContext();
   const nodeDefinitionsByCategory = stores.workflow.nodeDefinitionsByCategory;
@@ -39,6 +43,11 @@
   function handleDragStart(event: DragEvent, definition: NodeDefinition) {
     event.dataTransfer?.setData('application/json', JSON.stringify(definition));
     event.dataTransfer!.effectAllowed = 'copy';
+    dispatchWorkflowPaletteDragStart(window);
+  }
+
+  function handleDragEnd() {
+    dispatchWorkflowPaletteDragEnd(window);
   }
 
   function handleDoubleClick(definition: NodeDefinition) {
@@ -89,6 +98,7 @@
                 class="node-item"
                 draggable="true"
                 ondragstart={(e) => handleDragStart(e, definition)}
+                ondragend={handleDragEnd}
                 ondblclick={() => handleDoubleClick(definition)}
                 title={definition.description}
                 role="button"

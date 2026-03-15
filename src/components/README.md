@@ -48,7 +48,12 @@ and turns pointer movement into menu selection input instead of menu
 repositioning. Insert confirmation now waits for the backend outcome before the
 UI tears the interaction down; rejected inserts keep the horseshoe visible,
 show the rejection message in-context, and refresh candidates against the
-backend-returned graph revision.
+backend-returned graph revision. Palette-originated HTML drag sessions now
+broadcast explicit start/end events so the graph can disable xyflow pan, drag,
+selection, and reconnect affordances until the external drag completes. The app
+also treats `selectedNodeIds` as the stable selection source across backend
+graph snapshots so node placement and later graph syncs do not silently wipe
+selection state.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -76,6 +81,10 @@ backend-returned graph revision.
   selection rather than the anchored menu position.
 - Rejected insert attempts must remain visible to the user and preserve retry
   context instead of failing only through hidden console output.
+- External palette drags must temporarily disable graph gestures so native drag
+  and xyflow pointer ownership never overlap.
+- Backend-driven graph resync must preserve the authoritative selected-node id
+  set instead of clearing node selection as a side effect.
 - Node registration must stay consistent with bundled templates so shipped
   starter workflows render without fallback-node surprises.
 
@@ -114,6 +123,9 @@ backend-returned graph revision.
 - The app graph follows the package horseshoe contract: first `Space` opens,
   open-state `Space` or `Enter` confirms, and menu-open pointer motion selects
   candidates without moving the menu anchor.
+- `NodePalette.svelte` must emit palette-drag lifecycle events and
+  `WorkflowGraph.svelte` must honor them by suppressing graph interactions until
+  drag end.
 - The app graph must preserve horseshoe state through pending/rejected inserts
   so release-mode users can see and retry backend rejections.
 - Rejection handling for failed connection and insert commits is currently

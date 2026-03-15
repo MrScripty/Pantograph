@@ -45,6 +45,10 @@ Loaded graphs are canonicalized before the edit session is created and again
 before the local node array is materialized, so legacy saved workflows are
 reconciled into the current dynamic-port contract instead of remaining as stale
 snapshots until a manual reconnect happens.
+The same store now owns selected-node persistence: `selectedNodeIds` is updated
+from graph selection events, applied back onto freshly materialized node
+snapshots, and reset when workflows or sessions are cleared so backend graph
+replacements do not silently drop the current selection.
 Inference-setting port shaping now lives in `inferenceSettingsPorts.ts` so the
 same additive port contract is reused when syncing expand-setting passthrough
 nodes and downstream inference consumers. That helper now merges upstream
@@ -68,6 +72,8 @@ include per-node `definition.inputs` and `definition.outputs` overlays.
   fingerprint after every applied graph snapshot.
 - `connectionIntent` is not persisted; it must reset on graph mutation,
   workflow load, workflow clear, and default-graph load.
+- `selectedNodeIds` is transient UI state; graph rematerialization must project
+  it back onto node snapshots until the user or consumer clears the selection.
 - Runtime cleanup helpers must continue to touch only explicitly requested
   transient keys.
 - Dynamic inference-setting ports must be derived from backend-owned schema and
@@ -113,6 +119,9 @@ stores.setConnectionIntent({
   trigger backend-owned edits.
 - `setConnectionIntent` accepts either a fully derived UI intent object or
   `null`; `clearConnectionIntent` is the preferred cancellation path.
+- Store consumers that own graph selection must update `selectedNodeIds`
+  whenever the rendered graph selection changes, or backend snapshot refreshes
+  will intentionally reapply the last known ids.
 - Session/view stores depend on workflow stores being created first and passed
   into `createSessionStores`.
 - Compatibility policy is additive: store fields may grow, but existing graph

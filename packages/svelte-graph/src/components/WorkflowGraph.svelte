@@ -62,6 +62,10 @@
     supportsInsertFromConnectionDrag,
     type ConnectionDragState,
   } from '../connectionDragState.js';
+  import {
+    WORKFLOW_PALETTE_DRAG_END_EVENT,
+    WORKFLOW_PALETTE_DRAG_START_EVENT,
+  } from '../paletteDragState.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
@@ -86,6 +90,7 @@
   const {
     isEditing,
     nodeDefinitions: nodeDefsStore,
+    selectedNodeIds: selectedNodeIdsStore,
     workflowGraph: workflowGraphStore,
     workflowMetadata: workflowMetadataStore,
   } =
@@ -124,6 +129,7 @@
     $state<HorseshoeInsertFeedbackState>(createHorseshoeInsertFeedbackState());
   let horseshoeSelectedIndex = $state(0);
   let horseshoeQuery = $state('');
+  let externalPaletteDragActive = $state(false);
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
@@ -170,12 +176,18 @@
   // Initialize node definitions on mount
   onMount(async () => {
     window.addEventListener('keydown', handleWindowKeyDown, true);
+    window.addEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
+    window.addEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
+    window.addEventListener('blur', handleWorkflowPaletteDragEnd);
 
     const definitions = await backend.getNodeDefinitions();
     nodeDefsStore.set(definitions);
 
     return () => {
       window.removeEventListener('keydown', handleWindowKeyDown, true);
+      window.removeEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
+      window.removeEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
+      window.removeEventListener('blur', handleWorkflowPaletteDragEnd);
     };
   });
 
@@ -252,6 +264,19 @@
   function clearConnectionInteraction() {
     clearConnectionDragTracking();
     stores.workflow.clearConnectionIntent();
+  }
+
+  function handleWorkflowPaletteDragStart() {
+    externalPaletteDragActive = true;
+    clearConnectionInteraction();
+  }
+
+  function handleWorkflowPaletteDragEnd() {
+    externalPaletteDragActive = false;
+  }
+
+  function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {
+    selectedNodeIdsStore.set(selectedNodes.map((node) => node.id));
   }
 
   function applyHorseshoeSession(nextSession: HorseshoeDragSessionState) {
@@ -1018,19 +1043,20 @@
     {nodeTypes}
     {edgeTypes}
     fitViewOptions={{ maxZoom: 1 }}
-    nodesConnectable={canEdit}
-    elementsSelectable={true}
-    nodesDraggable={canEdit}
-    panOnDrag={!ctrlPressed}
+    nodesConnectable={canEdit && !externalPaletteDragActive}
+    elementsSelectable={!externalPaletteDragActive}
+    nodesDraggable={canEdit && !externalPaletteDragActive}
+    panOnDrag={!ctrlPressed && !externalPaletteDragActive}
     panActivationKey={null}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
     deleteKey={canEdit ? 'Delete' : null}
-    edgesReconnectable={canEdit}
+    edgesReconnectable={canEdit && !externalPaletteDragActive}
     isValidConnection={checkValidConnection}
     onnodedragstop={onNodeDragStop}
     onnodeclick={onNodeClick}
+    onselectionchange={handleSelectionChange}
     onconnectstart={handleConnectStart}
     onclickconnectstart={handleConnectStart}
     onconnectend={handleConnectEnd}

@@ -53,6 +53,11 @@ motion free to change the highlighted item against a fixed menu anchor. Insert
 confirmation now keeps the horseshoe state alive until the backend responds; if
 the insert is rejected, the selector stays visible, shows the rejection
 message, and refreshes candidates from the returned graph revision for retry.
+Palette-driven HTML drag sessions now emit explicit start/end signals so the
+graph can disable pan, drag, selection, and reconnect behavior until the
+external drag completes. Selection persistence also moved into the shared store
+contract so backend graph snapshots reapply the current selected-node ids
+instead of dropping selection metadata on every sync.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -83,6 +88,10 @@ message, and refreshes candidates from the returned graph revision for retry.
   interaction ends.
 - Reconnect flows that temporarily remove an edge must restore the original edge
   if the replacement commit is rejected.
+- External palette drags must not overlap with xyflow-owned pan, node drag,
+  selection, or reconnect gestures.
+- Store-backed graph rematerialization must preserve the selected node ids that
+  the consumer last acknowledged through selection change events.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.
@@ -117,6 +126,9 @@ message, and refreshes candidates from the returned graph revision for retry.
 - `WorkflowGraph.svelte` consumes workflow, view, and session stores from that
   context and assumes `workflowGraph.derived_graph.graph_fingerprint` is kept
   current.
+- `NodePalette.svelte` must emit palette drag lifecycle events before and after
+  native HTML drag sessions so `WorkflowGraph.svelte` can suppress conflicting
+  graph gestures during external drops.
 - `WorkflowGraph.svelte` binds `Space` to the horseshoe selector through
   drag-scoped window listeners and the shared drag-session controller; failed
   opens remain visible through pending/blocked selector states plus internal
