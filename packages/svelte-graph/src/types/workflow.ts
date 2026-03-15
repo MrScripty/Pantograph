@@ -107,13 +107,15 @@ export type ConnectionRejectionReason =
   | 'stale_revision'
   | 'unknown_source_anchor'
   | 'unknown_target_anchor'
+  | 'unknown_edge'
   | 'duplicate_connection'
   | 'target_capacity_reached'
   | 'self_connection'
   | 'cycle_detected'
   | 'incompatible_types'
   | 'unknown_insert_node_type'
-  | 'no_compatible_insert_input';
+  | 'no_compatible_insert_input'
+  | 'no_compatible_insert_path';
 
 export interface ConnectionRejection {
   reason: ConnectionRejectionReason;
@@ -131,6 +133,27 @@ export interface InsertNodeConnectionResponse {
   accepted: boolean;
   graph_revision: string;
   inserted_node_id?: string;
+  graph?: WorkflowGraph;
+  rejection?: ConnectionRejection;
+}
+
+export interface EdgeInsertionBridge {
+  input_port_id: string;
+  output_port_id: string;
+}
+
+export interface EdgeInsertionPreviewResponse {
+  accepted: boolean;
+  graph_revision: string;
+  bridge?: EdgeInsertionBridge;
+  rejection?: ConnectionRejection;
+}
+
+export interface InsertNodeOnEdgeResponse {
+  accepted: boolean;
+  graph_revision: string;
+  inserted_node_id?: string;
+  bridge?: EdgeInsertionBridge;
   graph?: WorkflowGraph;
   rejection?: ConnectionRejection;
 }

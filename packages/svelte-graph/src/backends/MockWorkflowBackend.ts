@@ -10,7 +10,9 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  EdgeInsertionPreviewResponse,
   InsertNodeConnectionResponse,
+  InsertNodeOnEdgeResponse,
   InsertNodePositionHint,
   NodeDefinition,
   PortDataType,
@@ -92,6 +94,13 @@ function mockValidateConnection(sourceType: string, targetType: string): boolean
   );
 }
 
+function cloneGraphWithoutEdge(graph: WorkflowGraph, edgeId: string): WorkflowGraph {
+  return {
+    ...structuredClone(graph),
+    edges: graph.edges.filter((edge) => edge.id !== edgeId),
+  };
+}
+
 export class MockWorkflowBackend implements WorkflowBackend {
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
   private savedWorkflows: Map<string, { graph: WorkflowGraph; metadata: WorkflowMetadata }> = new Map();
@@ -107,6 +116,107 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   async validateConnection(sourceType: string, targetType: string): Promise<boolean> {
     return mockValidateConnection(sourceType, targetType);
+  }
+
+  private findDefinition(nodeType: string | undefined): NodeDefinition | undefined {
+    return this.nodeDefinitions.find((definition) => definition.node_type === nodeType);
+  }
+
+  private resolveEdgeInsertBridge(
+    graph: WorkflowGraph,
+    edgeId: string,
+    nodeType: string,
+  ): EdgeInsertionPreviewResponse {
+    const currentRevision = computeGraphFingerprint(graph);
+    const edge = graph.edges.find((candidate) => candidate.id === edgeId);
+    if (!edge) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_edge',
+          message: `edge '${edgeId}' was not found`,
+        },
+      };
+    }
+
+    const sourceNode = graph.nodes.find((node) => node.id === edge.source);
+    const targetNode = graph.nodes.find((node) => node.id === edge.target);
+    const sourceDef = this.findDefinition(sourceNode?.node_type);
+    const targetDef = this.findDefinition(targetNode?.node_type);
+    const insertDef = this.findDefinition(nodeType);
+    const sourcePort = sourceDef?.outputs.find((port) => port.id === edge.source_handle);
+    const targetPort = targetDef?.inputs.find((port) => port.id === edge.target_handle);
+
+    if (!sourcePort) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_source_anchor',
+          message: `source anchor '${edge.source}.${edge.source_handle}' was not found`,
+        },
+      };
+    }
+    if (!targetPort) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_target_anchor',
+          message: `target anchor '${edge.target}.${edge.target_handle}' was not found`,
+        },
+      };
+    }
+    if (!insertDef) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_insert_node_type',
+          message: `insertable node type '${nodeType}' is unknown`,
+        },
+      };
+    }
+
+    const graphWithoutEdge = cloneGraphWithoutEdge(graph, edgeId);
+    for (const inputPort of insertDef.inputs) {
+      if (!isPortTypeCompatible(sourcePort.data_type, inputPort.data_type)) {
+        continue;
+      }
+
+      for (const outputPort of insertDef.outputs) {
+        if (!isPortTypeCompatible(outputPort.data_type, targetPort.data_type)) {
+          continue;
+        }
+
+        const targetOccupied = graphWithoutEdge.edges.some(
+          (candidate) =>
+            candidate.target === edge.target && candidate.target_handle === edge.target_handle,
+        );
+        if (!targetPort.multiple && targetOccupied) {
+          continue;
+        }
+
+        return {
+          accepted: true,
+          graph_revision: currentRevision,
+          bridge: {
+            input_port_id: inputPort.id,
+            output_port_id: outputPort.id,
+          },
+        };
+      }
+    }
+
+    return {
+      accepted: false,
+      graph_revision: currentRevision,
+      rejection: {
+        reason: 'no_compatible_insert_path',
+        message: `node type '${nodeType}' has no valid path between edge '${edgeId}'`,
+      },
+    };
   }
 
   async createSession(graph: WorkflowGraph): Promise<string> {
@@ -399,6 +509,121 @@ export class MockWorkflowBackend implements WorkflowBackend {
       accepted: true,
       graph_revision: graph.derived_graph.graph_fingerprint,
       inserted_node_id: insertedNodeId,
+      graph: structuredClone(graph),
+    };
+  }
+
+  async previewNodeInsertOnEdge(
+    edgeId: string,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+  ): Promise<EdgeInsertionPreviewResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+
+    const currentRevision = computeGraphFingerprint(graph);
+    if (graphRevision !== currentRevision) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'stale_revision',
+          message: `graph revision '${graphRevision}' is stale`,
+        },
+      };
+    }
+
+    return this.resolveEdgeInsertBridge(graph, edgeId, nodeType);
+  }
+
+  async insertNodeOnEdge(
+    edgeId: string,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+  ): Promise<InsertNodeOnEdgeResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+
+    const currentRevision = computeGraphFingerprint(graph);
+    if (graphRevision !== currentRevision) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'stale_revision',
+          message: `graph revision '${graphRevision}' is stale`,
+        },
+      };
+    }
+
+    const preview = this.resolveEdgeInsertBridge(graph, edgeId, nodeType);
+    if (!preview.accepted || !preview.bridge) {
+      return {
+        accepted: false,
+        graph_revision: preview.graph_revision,
+        rejection: preview.rejection,
+      };
+    }
+
+    const edge = graph.edges.find((candidate) => candidate.id === edgeId);
+    if (!edge) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_edge',
+          message: `edge '${edgeId}' was not found`,
+        },
+      };
+    }
+
+    const insertDef = this.findDefinition(nodeType);
+    if (!insertDef) {
+      return {
+        accepted: false,
+        graph_revision: currentRevision,
+        rejection: {
+          reason: 'unknown_insert_node_type',
+          message: `insertable node type '${nodeType}' is unknown`,
+        },
+      };
+    }
+
+    const insertedNodeId = `${nodeType}-${Date.now()}`;
+    graph.edges = graph.edges.filter((candidate) => candidate.id !== edgeId);
+    graph.nodes.push({
+      id: insertedNodeId,
+      node_type: nodeType,
+      position: positionHint.position,
+      data: {
+        label: insertDef.label,
+        ...Object.fromEntries(insertDef.inputs.map((input) => [input.id, null])),
+      },
+    });
+    graph.edges.push({
+      id: `${edge.source}-${edge.source_handle}-${insertedNodeId}-${preview.bridge.input_port_id}`,
+      source: edge.source,
+      source_handle: edge.source_handle,
+      target: insertedNodeId,
+      target_handle: preview.bridge.input_port_id,
+    });
+    graph.edges.push({
+      id: `${insertedNodeId}-${preview.bridge.output_port_id}-${edge.target}-${edge.target_handle}`,
+      source: insertedNodeId,
+      source_handle: preview.bridge.output_port_id,
+      target: edge.target,
+      target_handle: edge.target_handle,
+    });
+    graph.derived_graph = buildDerivedGraph(graph);
+
+    return {
+      accepted: true,
+      graph_revision: graph.derived_graph.graph_fingerprint,
+      inserted_node_id: insertedNodeId,
+      bridge: preview.bridge,
       graph: structuredClone(graph),
     };
   }

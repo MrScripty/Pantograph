@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import {
   normalizeConnectionCandidatesResponse,
   normalizeConnectionCommitResponse,
+  normalizeEdgeInsertionPreviewResponse,
   normalizeInsertNodeConnectionResponse,
+  normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
 } from './tauriConnectionIntentWire.ts';
 
@@ -112,6 +114,53 @@ test('normalizeInsertNodeConnectionResponse converts camelCase payloads', () => 
       accepted: true,
       graph_revision: 'rev-3',
       inserted_node_id: 'new-node',
+      graph: undefined,
+      rejection: undefined,
+    },
+  );
+});
+
+test('normalizeEdgeInsertionPreviewResponse converts camelCase payloads', () => {
+  assert.deepEqual(
+    normalizeEdgeInsertionPreviewResponse({
+      accepted: true,
+      graphRevision: 'rev-4',
+      bridge: {
+        inputPortId: 'prompt',
+        outputPortId: 'response',
+      },
+    }),
+    {
+      accepted: true,
+      graph_revision: 'rev-4',
+      bridge: {
+        input_port_id: 'prompt',
+        output_port_id: 'response',
+      },
+      rejection: undefined,
+    },
+  );
+});
+
+test('normalizeInsertNodeOnEdgeResponse converts camelCase payloads', () => {
+  assert.deepEqual(
+    normalizeInsertNodeOnEdgeResponse({
+      accepted: true,
+      graphRevision: 'rev-5',
+      insertedNodeId: 'inserted-node',
+      bridge: {
+        inputPortId: 'prompt',
+        outputPortId: 'response',
+      },
+    }),
+    {
+      accepted: true,
+      graph_revision: 'rev-5',
+      inserted_node_id: 'inserted-node',
+      bridge: {
+        input_port_id: 'prompt',
+        output_port_id: 'response',
+      },
       graph: undefined,
       rejection: undefined,
     },

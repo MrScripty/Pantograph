@@ -18,8 +18,10 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  EdgeInsertionPreviewResponse,
   InsertNodePositionHint,
   InsertNodeConnectionResponse,
+  InsertNodeOnEdgeResponse,
   NodeGroup,
   PortMapping,
   CreateGroupResult,
@@ -27,7 +29,9 @@ import type {
 import {
   normalizeConnectionCandidatesResponse,
   normalizeConnectionCommitResponse,
+  normalizeEdgeInsertionPreviewResponse,
   normalizeInsertNodeConnectionResponse,
+  normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
 } from '../lib/tauriConnectionIntentWire';
 
@@ -144,6 +148,44 @@ export class TauriWorkflowBackend implements WorkflowBackend {
       }
     );
     return normalizeInsertNodeConnectionResponse(response) as InsertNodeConnectionResponse;
+  }
+
+  async previewNodeInsertOnEdge(
+    edgeId: string,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+  ): Promise<EdgeInsertionPreviewResponse> {
+    const response = await invoke<Parameters<typeof normalizeEdgeInsertionPreviewResponse>[0]>(
+      'preview_node_insert_on_edge_in_execution',
+      {
+        executionId: sessionId,
+        edgeId,
+        nodeType,
+        graphRevision,
+      },
+    );
+    return normalizeEdgeInsertionPreviewResponse(response) as EdgeInsertionPreviewResponse;
+  }
+
+  async insertNodeOnEdge(
+    edgeId: string,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+  ): Promise<InsertNodeOnEdgeResponse> {
+    const response = await invoke<Parameters<typeof normalizeInsertNodeOnEdgeResponse>[0]>(
+      'insert_node_on_edge_in_execution',
+      {
+        executionId: sessionId,
+        edgeId,
+        nodeType,
+        graphRevision,
+        positionHint,
+      },
+    );
+    return normalizeInsertNodeOnEdgeResponse(response) as InsertNodeOnEdgeResponse;
   }
 
   async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph> {

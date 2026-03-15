@@ -10,8 +10,10 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  EdgeInsertionPreviewResponse,
   InsertNodePositionHint,
   InsertNodeConnectionResponse,
+  InsertNodeOnEdgeResponse,
 } from './types';
 import {
   MOCK_NODE_DEFINITIONS,
@@ -21,7 +23,9 @@ import {
 import {
   normalizeConnectionCandidatesResponse,
   normalizeConnectionCommitResponse,
+  normalizeEdgeInsertionPreviewResponse,
   normalizeInsertNodeConnectionResponse,
+  normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
 } from '../../lib/tauriConnectionIntentWire';
 
@@ -434,6 +438,76 @@ export class WorkflowService {
       }
     );
     return normalizeInsertNodeConnectionResponse(response);
+  }
+
+  async previewNodeInsertOnEdge(
+    edgeId: string,
+    nodeType: string,
+    graphRevision: string,
+    executionId?: string
+  ): Promise<EdgeInsertionPreviewResponse> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_MOCKS) {
+      return {
+        accepted: false,
+        graph_revision: graphRevision,
+        rejection: {
+          reason: 'unknown_edge',
+          message: 'Mock mode does not implement edge insertion preview',
+        },
+      };
+    }
+
+    const response = await invoke<Parameters<typeof normalizeEdgeInsertionPreviewResponse>[0]>(
+      'preview_node_insert_on_edge_in_execution',
+      {
+        executionId: id,
+        edgeId,
+        nodeType,
+        graphRevision,
+      }
+    );
+    return normalizeEdgeInsertionPreviewResponse(response);
+  }
+
+  async insertNodeOnEdge(
+    edgeId: string,
+    nodeType: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+    executionId?: string
+  ): Promise<InsertNodeOnEdgeResponse> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_MOCKS) {
+      return {
+        accepted: false,
+        graph_revision: graphRevision,
+        rejection: {
+          reason: 'unknown_edge',
+          message: 'Mock mode does not implement edge insertion',
+        },
+      };
+    }
+
+    const response = await invoke<Parameters<typeof normalizeInsertNodeOnEdgeResponse>[0]>(
+      'insert_node_on_edge_in_execution',
+      {
+        executionId: id,
+        edgeId,
+        nodeType,
+        graphRevision,
+        positionHint,
+      }
+    );
+    return normalizeInsertNodeOnEdgeResponse(response);
   }
 
   /**

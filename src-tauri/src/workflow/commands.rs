@@ -14,9 +14,9 @@ use crate::llm::{SharedAppConfig, SharedGateway};
 use super::events::WorkflowEvent;
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    FileSystemWorkflowGraphStore, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodePositionHint, NodeDefinition, PortDataType, Position, UndoRedoState, WorkflowFile,
-    WorkflowGraph, WorkflowGraphMetadata,
+    EdgeInsertionPreviewResponse, FileSystemWorkflowGraphStore, GraphEdge, GraphNode,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, NodeDefinition,
+    PortDataType, Position, UndoRedoState, WorkflowFile, WorkflowGraph, WorkflowGraphMetadata,
 };
 
 /// Shared node-engine registry with port options providers.
@@ -441,6 +441,44 @@ pub async fn insert_node_and_connect_in_execution(
         graph_revision,
         position_hint,
         preferred_input_port_id,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn preview_node_insert_on_edge_in_execution(
+    execution_id: String,
+    edge_id: String,
+    node_type: String,
+    graph_revision: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<EdgeInsertionPreviewResponse, String> {
+    super::workflow_execution_commands::preview_node_insert_on_edge_in_execution(
+        execution_id,
+        edge_id,
+        node_type,
+        graph_revision,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn insert_node_on_edge_in_execution(
+    execution_id: String,
+    edge_id: String,
+    node_type: String,
+    graph_revision: String,
+    position_hint: InsertNodePositionHint,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<InsertNodeOnEdgeResponse, String> {
+    super::workflow_execution_commands::insert_node_on_edge_in_execution(
+        execution_id,
+        edge_id,
+        node_type,
+        graph_revision,
+        position_hint,
         workflow_service,
     )
     .await

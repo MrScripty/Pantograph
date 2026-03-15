@@ -338,6 +338,8 @@ pub enum ConnectionRejectionReason {
     UnknownSourceAnchor,
     /// The target anchor does not exist or is not an input.
     UnknownTargetAnchor,
+    /// The referenced edge does not exist in the session graph.
+    UnknownEdge,
     /// The same edge already exists.
     DuplicateConnection,
     /// The target input is already occupied and does not accept multiple edges.
@@ -352,6 +354,8 @@ pub enum ConnectionRejectionReason {
     UnknownInsertNodeType,
     /// The requested node type has no compatible input for the source anchor.
     NoCompatibleInsertInput,
+    /// The requested node type cannot bridge both sides of the replaced edge.
+    NoCompatibleInsertPath,
 }
 
 /// Structured rejection payload returned when a connection commit is denied.
@@ -391,6 +395,54 @@ pub struct InsertNodeConnectionResponse {
     /// Inserted node id when the operation succeeds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inserted_node_id: Option<String>,
+    /// Updated graph when the insert succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<WorkflowGraph>,
+    /// Structured rejection when the insert is denied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection: Option<ConnectionRejection>,
+}
+
+/// Chosen bridge ports for inserting a node onto an existing edge.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeInsertionBridge {
+    /// Input port on the inserted node that accepts the original source edge.
+    pub input_port_id: String,
+    /// Output port on the inserted node that feeds the original target edge.
+    pub output_port_id: String,
+}
+
+/// Result of previewing whether a node type can replace an existing edge.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeInsertionPreviewResponse {
+    /// True when a valid bridge exists for the requested edge and node type.
+    pub accepted: bool,
+    /// Current graph revision after evaluating the request.
+    pub graph_revision: String,
+    /// Chosen bridge when the preview succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bridge: Option<EdgeInsertionBridge>,
+    /// Structured rejection when preview fails.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection: Option<ConnectionRejection>,
+}
+
+/// Result of inserting a node onto an existing edge and replacing that edge.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertNodeOnEdgeResponse {
+    /// True when the original edge was replaced with two new edges.
+    pub accepted: bool,
+    /// Current graph revision after evaluating the request.
+    pub graph_revision: String,
+    /// Inserted node id when the operation succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inserted_node_id: Option<String>,
+    /// Chosen bridge when the insert succeeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bridge: Option<EdgeInsertionBridge>,
     /// Updated graph when the insert succeeds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<WorkflowGraph>,

@@ -3,14 +3,18 @@ import type {
   ConnectionCandidatesResponse as AppConnectionCandidatesResponse,
   ConnectionCommitResponse as AppConnectionCommitResponse,
   ConnectionRejection as AppConnectionRejection,
+  EdgeInsertionPreviewResponse as AppEdgeInsertionPreviewResponse,
   InsertNodeConnectionResponse as AppInsertNodeConnectionResponse,
+  InsertNodeOnEdgeResponse as AppInsertNodeOnEdgeResponse,
 } from '../services/workflow/types';
 import type {
   ConnectionAnchor as PackageConnectionAnchor,
   ConnectionCandidatesResponse as PackageConnectionCandidatesResponse,
   ConnectionCommitResponse as PackageConnectionCommitResponse,
   ConnectionRejection as PackageConnectionRejection,
+  EdgeInsertionPreviewResponse as PackageEdgeInsertionPreviewResponse,
   InsertNodeConnectionResponse as PackageInsertNodeConnectionResponse,
+  InsertNodeOnEdgeResponse as PackageInsertNodeOnEdgeResponse,
 } from '@pantograph/svelte-graph';
 
 type AnyConnectionAnchor = AppConnectionAnchor | PackageConnectionAnchor;
@@ -18,8 +22,21 @@ type AnyCandidatesResponse =
   | AppConnectionCandidatesResponse
   | PackageConnectionCandidatesResponse;
 type AnyCommitResponse = AppConnectionCommitResponse | PackageConnectionCommitResponse;
+type AnyEdgeInsertionPreviewResponse =
+  | AppEdgeInsertionPreviewResponse
+  | PackageEdgeInsertionPreviewResponse;
 type AnyInsertResponse = AppInsertNodeConnectionResponse | PackageInsertNodeConnectionResponse;
+type AnyInsertNodeOnEdgeResponse =
+  | AppInsertNodeOnEdgeResponse
+  | PackageInsertNodeOnEdgeResponse;
 type AnyConnectionRejection = AppConnectionRejection | PackageConnectionRejection;
+
+interface WireEdgeInsertionBridge {
+  inputPortId?: string;
+  input_port_id?: string;
+  outputPortId?: string;
+  output_port_id?: string;
+}
 
 interface WireConnectionAnchor {
   nodeId: string;
@@ -93,6 +110,25 @@ interface WireInsertNodeConnectionResponse {
   rejection?: WireConnectionRejection;
 }
 
+interface WireEdgeInsertionPreviewResponse {
+  accepted: boolean;
+  graphRevision?: string;
+  graph_revision?: string;
+  bridge?: WireEdgeInsertionBridge;
+  rejection?: WireConnectionRejection;
+}
+
+interface WireInsertNodeOnEdgeResponse {
+  accepted: boolean;
+  graphRevision?: string;
+  graph_revision?: string;
+  insertedNodeId?: string;
+  inserted_node_id?: string;
+  bridge?: WireEdgeInsertionBridge;
+  graph?: AnyInsertNodeOnEdgeResponse['graph'];
+  rejection?: WireConnectionRejection;
+}
+
 function readString(value: string | undefined, fallback = ''): string {
   return value ?? fallback;
 }
@@ -107,6 +143,17 @@ function normalizeConnectionRejection(
   return {
     reason: rejection.reason as AnyConnectionRejection['reason'],
     message: rejection.message,
+  };
+}
+
+function normalizeEdgeInsertionBridge(bridge: WireEdgeInsertionBridge | undefined) {
+  if (!bridge) {
+    return undefined;
+  }
+
+  return {
+    input_port_id: readString(bridge.input_port_id ?? bridge.inputPortId),
+    output_port_id: readString(bridge.output_port_id ?? bridge.outputPortId),
   };
 }
 
@@ -172,6 +219,30 @@ export function normalizeInsertNodeConnectionResponse(
     accepted: response.accepted,
     graph_revision: readString(response.graph_revision ?? response.graphRevision),
     inserted_node_id: response.inserted_node_id ?? response.insertedNodeId,
+    graph: response.graph,
+    rejection: normalizeConnectionRejection(response.rejection),
+  };
+}
+
+export function normalizeEdgeInsertionPreviewResponse(
+  response: WireEdgeInsertionPreviewResponse,
+): AnyEdgeInsertionPreviewResponse {
+  return {
+    accepted: response.accepted,
+    graph_revision: readString(response.graph_revision ?? response.graphRevision),
+    bridge: normalizeEdgeInsertionBridge(response.bridge),
+    rejection: normalizeConnectionRejection(response.rejection),
+  };
+}
+
+export function normalizeInsertNodeOnEdgeResponse(
+  response: WireInsertNodeOnEdgeResponse,
+): AnyInsertNodeOnEdgeResponse {
+  return {
+    accepted: response.accepted,
+    graph_revision: readString(response.graph_revision ?? response.graphRevision),
+    inserted_node_id: response.inserted_node_id ?? response.insertedNodeId,
+    bridge: normalizeEdgeInsertionBridge(response.bridge),
     graph: response.graph,
     rejection: normalizeConnectionRejection(response.rejection),
   };

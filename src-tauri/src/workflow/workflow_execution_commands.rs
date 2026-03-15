@@ -6,17 +6,18 @@ use crate::llm::commands::resolve_embedding_model_path;
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 use pantograph_workflow_service::{
-    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
-    ConnectionCommitResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodePositionHint, Position, UndoRedoState, WorkflowGraph, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState, WorkflowGraph,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphUpdateNodePositionRequest, convert_graph_to_node_engine,
 };
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, ipc::Channel};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::event_adapter::TauriEventAdapter;
@@ -704,6 +705,44 @@ pub async fn insert_node_and_connect_in_execution(
             graph_revision,
             position_hint,
             preferred_input_port_id,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn preview_node_insert_on_edge_in_execution(
+    execution_id: String,
+    edge_id: String,
+    node_type: String,
+    graph_revision: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<EdgeInsertionPreviewResponse, String> {
+    workflow_service
+        .workflow_graph_preview_node_insert_on_edge(WorkflowGraphPreviewNodeInsertOnEdgeRequest {
+            session_id: execution_id,
+            edge_id,
+            node_type,
+            graph_revision,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn insert_node_on_edge_in_execution(
+    execution_id: String,
+    edge_id: String,
+    node_type: String,
+    graph_revision: String,
+    position_hint: InsertNodePositionHint,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<InsertNodeOnEdgeResponse, String> {
+    workflow_service
+        .workflow_graph_insert_node_on_edge(WorkflowGraphInsertNodeOnEdgeRequest {
+            session_id: execution_id,
+            edge_id,
+            node_type,
+            graph_revision,
+            position_hint,
         })
         .await
         .map_err(|e| e.to_envelope_json())

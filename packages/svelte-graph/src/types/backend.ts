@@ -12,8 +12,10 @@ import type {
   ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
+  EdgeInsertionPreviewResponse,
   InsertNodePositionHint,
   InsertNodeConnectionResponse,
+  InsertNodeOnEdgeResponse,
 } from './workflow.js';
 import type { NodeGroup, PortMapping, CreateGroupResult } from './groups.js';
 
@@ -113,6 +115,23 @@ export interface WorkflowBackend {
     positionHint: InsertNodePositionHint,
     preferredInputPortId?: string,
   ): Promise<InsertNodeConnectionResponse>;
+
+  /** Preview whether a dragged node type can replace an existing edge with two valid edges. */
+  previewNodeInsertOnEdge(
+    edgeId: string,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+  ): Promise<EdgeInsertionPreviewResponse>;
+
+  /** Atomically replace an existing edge by inserting a node type between its endpoints. */
+  insertNodeOnEdge(
+    edgeId: string,
+    nodeType: string,
+    sessionId: string,
+    graphRevision: string,
+    positionHint: InsertNodePositionHint,
+  ): Promise<InsertNodeOnEdgeResponse>;
 
   /** Remove an edge. Returns the updated graph for frontend sync. */
   removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph>;
