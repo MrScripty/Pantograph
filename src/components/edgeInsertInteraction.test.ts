@@ -8,6 +8,7 @@ import {
   findEdgeInsertHitTarget,
   sampleClosestEdgeDistance,
   setEdgeInsertHoverTarget,
+  updateEdgeInsertHitPoint,
   setEdgeInsertPreviewPending,
   setEdgeInsertPreviewRejected,
   setEdgeInsertPreviewResolved,
@@ -85,7 +86,11 @@ test('edge insert preview state tracks hover, pending, success, and rejection', 
     output_port_id: 'document',
   });
 
-  const rejectedState = setEdgeInsertPreviewRejected(resolvedState, {
+  const movedState = updateEdgeInsertHitPoint(resolvedState, { x: 132, y: 42 });
+  assert.deepEqual(movedState.hitPoint, { x: 132, y: 42 });
+  assert.deepEqual(movedState.bridge, resolvedState.bridge);
+
+  const rejectedState = setEdgeInsertPreviewRejected(movedState, {
     reason: 'no_compatible_insert_path',
     message: 'No compatible bridge',
   });

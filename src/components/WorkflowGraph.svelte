@@ -78,6 +78,18 @@
     shouldStartCutGesture,
     toContainerRelativePoint,
   } from './cutInteraction';
+  import {
+    clearEdgeInsertPreviewState,
+    createEdgeInsertPreviewState,
+    findEdgeInsertHitTarget,
+    setEdgeInsertHoverTarget,
+    setEdgeInsertPreviewPending,
+    setEdgeInsertPreviewRejected,
+    setEdgeInsertPreviewResolved,
+    shouldRefreshEdgeInsertPreview,
+    updateEdgeInsertHitPoint,
+    type EdgeInsertPreviewState,
+  } from './edgeInsertInteraction.ts';
   import { resolveReconnectSourceAnchor } from './reconnectInteraction';
 
   // Import view store for zoom transitions
@@ -223,6 +235,9 @@
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
+  let edgeInsertPreview = $state<EdgeInsertPreviewState>(createEdgeInsertPreviewState());
+  let edgeInsertPreviewRequestId = $state(0);
+  let currentGraphRevision = $derived($workflowGraph.derived_graph?.graph_fingerprint ?? '');
 
   // Track previous store references so we only push genuine changes to SvelteFlow.
   // SvelteFlow enriches node/edge objects with internal metadata (measured, internals).
@@ -331,6 +346,7 @@
 
   function handleWorkflowPaletteDragEnd() {
     externalPaletteDragActive = false;
+    clearEdgeInsertPreview();
   }
 
   function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {
@@ -486,8 +502,14 @@
   }
 
   function clearConnectionInteraction() {
+    clearEdgeInsertPreview();
     clearConnectionDragTracking();
     clearConnectionIntent();
+  }
+
+  function clearEdgeInsertPreview() {
+    edgeInsertPreviewRequestId += 1;
+    edgeInsertPreview = clearEdgeInsertPreviewState();
   }
 
   function applyHorseshoeSession(nextSession: HorseshoeDragSessionState) {
@@ -552,6 +574,157 @@
     return getRelativePointerPosition(event.clientX, event.clientY);
   }
 
+  function isWorkflowPaletteEdgeInsertEnabled() {
+    return !($currentGraphType === 'system' && $currentGraphId === 'app-architecture');
+  }
+
+  function getPaletteDragDefinition(event: DragEvent): NodeDefinition | null {
+    const data = event.dataTransfer?.getData('application/json');
+    if (!data) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data) as NodeDefinition;
+    } catch (error) {
+      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
+      return null;
+    }
+  }
+
+  function getDropPosition(clientX: number, clientY: number) {
+    const pointerPosition = getRelativePointerPosition(clientX, clientY);
+    if (!pointerPosition) {
+      return null;
+    }
+
+    const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
+    return {
+      x: (pointerPosition.x - viewport.x) / viewport.zoom - 100,
+      y: (pointerPosition.y - viewport.y) / viewport.zoom - 50,
+    };
+  }
+
+  async function refreshEdgeInsertPreview(event: DragEvent, definition: NodeDefinition) {
+    if (!externalPaletteDragActive || !isWorkflowPaletteEdgeInsertEnabled()) {
+      clearEdgeInsertPreview();
+      return;
+    }
+
+    const hitPoint = getRelativePointerPosition(event.clientX, event.clientY);
+    const flowRoot = containerElement?.querySelector('.svelte-flow');
+    const graphRevision = getGraphRevision();
+    if (!hitPoint || !flowRoot || !graphRevision) {
+      clearEdgeInsertPreview();
+      return;
+    }
+
+    const hitTarget = findEdgeInsertHitTarget({
+      root: flowRoot,
+      hitPoint,
+      containerRect: flowRoot.getBoundingClientRect(),
+    });
+    if (!hitTarget) {
+      clearEdgeInsertPreview();
+      return;
+    }
+
+    if (
+      !shouldRefreshEdgeInsertPreview(
+        edgeInsertPreview,
+        hitTarget.edgeId,
+        definition.node_type,
+        graphRevision,
+      )
+    ) {
+      edgeInsertPreview = updateEdgeInsertHitPoint(edgeInsertPreview, hitTarget.hitPoint);
+      return;
+    }
+
+    edgeInsertPreview = setEdgeInsertPreviewPending(
+      setEdgeInsertHoverTarget(
+        edgeInsertPreview,
+        hitTarget,
+        definition.node_type,
+        graphRevision,
+      ),
+    );
+
+    const requestId = ++edgeInsertPreviewRequestId;
+    try {
+      const response = await workflowService.previewNodeInsertOnEdge(
+        hitTarget.edgeId,
+        definition.node_type,
+        graphRevision,
+      );
+
+      if (
+        requestId !== edgeInsertPreviewRequestId ||
+        edgeInsertPreview.edgeId !== hitTarget.edgeId ||
+        edgeInsertPreview.nodeType !== definition.node_type ||
+        edgeInsertPreview.graphRevision !== graphRevision
+      ) {
+        return;
+      }
+
+      if (response.accepted && response.bridge) {
+        edgeInsertPreview = setEdgeInsertPreviewResolved(edgeInsertPreview, response.bridge);
+        return;
+      }
+
+      edgeInsertPreview = setEdgeInsertPreviewRejected(edgeInsertPreview, response.rejection);
+    } catch (error) {
+      if (
+        requestId === edgeInsertPreviewRequestId &&
+        edgeInsertPreview.edgeId === hitTarget.edgeId &&
+        edgeInsertPreview.nodeType === definition.node_type &&
+        edgeInsertPreview.graphRevision === graphRevision
+      ) {
+        edgeInsertPreview = setEdgeInsertPreviewRejected(edgeInsertPreview);
+      }
+      console.error('[WorkflowGraph] Failed to preview edge insertion:', error);
+    }
+  }
+
+  async function commitEdgeInsertDrop(
+    definition: NodeDefinition,
+    position: { x: number; y: number },
+    preview: EdgeInsertPreviewState,
+  ) {
+    if (!preview.edgeId || !preview.graphRevision || !preview.bridge) {
+      return false;
+    }
+
+    try {
+      const response = await workflowService.insertNodeOnEdge(
+        preview.edgeId,
+        definition.node_type,
+        preview.graphRevision,
+        { position },
+      );
+
+      if (response.accepted && response.graph) {
+        loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
+        return true;
+      }
+
+      try {
+        const backendGraph = await workflowService.getExecutionGraph();
+        syncEdgesFromBackend(backendGraph);
+      } catch (refreshError) {
+        console.warn('[WorkflowGraph] Failed to refresh graph after rejected edge insertion:', refreshError);
+      }
+
+      if (response.rejection) {
+        console.warn('[WorkflowGraph] Edge insertion rejected:', response.rejection.message);
+      }
+    } catch (error) {
+      console.error('[WorkflowGraph] Failed to insert node on edge:', error);
+    }
+
+    return false;
+  }
+
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
     const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
     if (!nextPosition) return;
@@ -574,6 +747,53 @@
 
     applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
   }
+
+  $effect(() => {
+    if (!edgeInsertPreview.edgeId) {
+      return;
+    }
+
+    if (
+      !isWorkflowPaletteEdgeInsertEnabled() ||
+      !externalPaletteDragActive ||
+      !currentGraphRevision ||
+      edgeInsertPreview.graphRevision !== currentGraphRevision
+    ) {
+      clearEdgeInsertPreview();
+    }
+  });
+
+  $effect(() => {
+    const previewEdgeId = edgeInsertPreview.bridge ? edgeInsertPreview.edgeId : null;
+    let changed = false;
+
+    const nextEdges = edges.map((edge) => {
+      const edgeData = (edge.data ?? {}) as Record<string, unknown>;
+      const isPreviewActive = edge.id === previewEdgeId;
+      const hasPreviewFlag = edgeData.edgeInsertPreviewActive === true;
+
+      if (isPreviewActive === hasPreviewFlag) {
+        return edge;
+      }
+
+      changed = true;
+      const nextData = { ...edgeData };
+      if (isPreviewActive) {
+        nextData.edgeInsertPreviewActive = true;
+      } else {
+        delete nextData.edgeInsertPreviewActive;
+      }
+
+      return {
+        ...edge,
+        data: nextData,
+      };
+    });
+
+    if (changed) {
+      edges = nextEdges;
+    }
+  });
 
   function scheduleHorseshoeQueryReset() {
     if (horseshoeQueryResetTimer) {
@@ -767,7 +987,7 @@
   }
 
   function getGraphRevision(): string {
-    return get(workflowGraph).derived_graph?.graph_fingerprint ?? '';
+    return currentGraphRevision;
   }
 
   function edgeToGraphEdge(edge: Edge): GraphEdge {
@@ -994,35 +1214,51 @@
   }
 
   // Handle drop from palette
-  function handleDrop(event: DragEvent) {
+  async function handleDrop(event: DragEvent) {
     event.preventDefault();
 
     if (!canEdit) return;
+
+    const definition = getPaletteDragDefinition(event);
+    if (!definition) {
+      clearConnectionInteraction();
+      return;
+    }
+
+    const position = getDropPosition(event.clientX, event.clientY);
+    const activeEdgeInsertPreview =
+      edgeInsertPreview.edgeId &&
+      edgeInsertPreview.nodeType === definition.node_type &&
+      edgeInsertPreview.graphRevision &&
+      edgeInsertPreview.bridge
+        ? { ...edgeInsertPreview }
+        : null;
+
     clearConnectionInteraction();
+    if (!position) {
+      return;
+    }
 
-    const data = event.dataTransfer?.getData('application/json');
-    if (!data) return;
-
-    const definition: NodeDefinition = JSON.parse(data);
-
-    // Get the SvelteFlow container bounds
-    const container = event.currentTarget as HTMLElement;
-    const bounds = container.getBoundingClientRect();
-
-    // Convert screen coordinates to approximate flow coordinates
-    // Note: This is simplified - in production you'd use the flow's project() function
-    const position = {
-      x: event.clientX - bounds.left - 100, // Offset for node width
-      y: event.clientY - bounds.top - 50, // Offset for node height
-    };
+    if (activeEdgeInsertPreview) {
+      await commitEdgeInsertDrop(definition, position, activeEdgeInsertPreview);
+      return;
+    }
 
     addNode(definition, position);
   }
 
-  function handleDragOver(event: DragEvent) {
+  async function handleDragOver(event: DragEvent) {
     event.preventDefault();
     if (!canEdit) return;
     event.dataTransfer!.dropEffect = 'copy';
+
+    const definition = getPaletteDragDefinition(event);
+    if (!definition) {
+      clearEdgeInsertPreview();
+      return;
+    }
+
+    await refreshEdgeInsertPreview(event, definition);
   }
 
   // --- Edge Reconnection (drag-off-anchor to disconnect) ---
@@ -1649,6 +1885,19 @@
     ></div>
   {/if}
 
+  {#if edgeInsertPreview.bridge && edgeInsertPreview.hitPoint}
+    <div
+      class="edge-insert-preview-marker"
+      style="
+        left: {edgeInsertPreview.hitPoint.x}px;
+        top: {edgeInsertPreview.hitPoint.y}px;
+      "
+      aria-hidden="true"
+    >
+      <div class="edge-insert-preview-marker-core"></div>
+    </div>
+  {/if}
+
   <HorseshoeInsertSelector
     displayState={horseshoeSession.displayState}
     anchorPosition={horseshoeSession.anchorPosition}
@@ -1766,6 +2015,36 @@
 
   .workflow-graph-container.cutting {
     cursor: crosshair;
+  }
+
+  .edge-insert-preview-marker {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    margin-left: -11px;
+    margin-top: -11px;
+    border: 1px solid rgba(186, 230, 253, 0.9);
+    border-radius: 999px;
+    background:
+      radial-gradient(circle, rgba(125, 211, 252, 0.24) 0%, rgba(125, 211, 252, 0.08) 58%, transparent 72%);
+    box-shadow:
+      0 0 0 1px rgba(14, 116, 144, 0.35),
+      0 0 16px rgba(125, 211, 252, 0.28);
+    pointer-events: none;
+    z-index: 1200;
+  }
+
+  .edge-insert-preview-marker-core {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    margin-top: -4px;
+    margin-left: -4px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    box-shadow: 0 0 10px rgba(224, 242, 254, 0.8);
   }
 
   .horseshoe-debug {

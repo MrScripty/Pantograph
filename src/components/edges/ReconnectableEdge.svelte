@@ -10,6 +10,7 @@
 
   let {
     id,
+    data,
     source,
     target,
     sourceHandleId,
@@ -100,6 +101,9 @@
       'target',
     )
   );
+  const edgeInsertPreviewActive = $derived(
+    (data as Record<string, unknown> | undefined)?.edgeInsertPreviewActive === true,
+  );
 </script>
 
 <!-- Custom SVG with gradient - colored only at the ends, white in the middle -->
@@ -123,12 +127,22 @@
 </svg>
 
 <!-- Main edge path with gradient stroke and glow filter -->
+{#if edgeInsertPreviewActive}
+  <path
+    d={path}
+    stroke="rgba(125, 211, 252, 0.45)"
+    stroke-width={selected ? 9 : 7}
+    fill="none"
+    stroke-linecap="round"
+  />
+{/if}
+
 <path
   {id}
   class="react-flow__edge-path"
   d={path}
   stroke="url(#{gradientId})"
-  stroke-width={selected ? 1.5 : 1}
+  stroke-width={edgeInsertPreviewActive ? (selected ? 3 : 2.5) : (selected ? 1.5 : 1)}
   fill="none"
   stroke-linecap="round"
   filter="url(#{gradientId}-glow)"

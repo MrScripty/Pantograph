@@ -95,6 +95,20 @@ export function setEdgeInsertHoverTarget(
   };
 }
 
+export function updateEdgeInsertHitPoint(
+  state: EdgeInsertPreviewState,
+  hitPoint: Point,
+): EdgeInsertPreviewState {
+  if (!state.edgeId) {
+    return state;
+  }
+
+  return {
+    ...state,
+    hitPoint,
+  };
+}
+
 export function setEdgeInsertPreviewPending(
   state: EdgeInsertPreviewState,
 ): EdgeInsertPreviewState {
