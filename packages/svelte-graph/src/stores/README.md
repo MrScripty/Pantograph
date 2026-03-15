@@ -12,6 +12,8 @@ metadata, execution overlays, and transient connection-intent state.
 | `createWorkflowStores.ts` | Owns workflow nodes, edges, derived graph metadata, execution state, and connection intent for the active editor. |
 | `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
 | `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
+| `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
+| `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions so dynamic model metadata is shaped consistently before it reaches graph nodes. |
 | `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
 
 ## Problem
@@ -35,6 +37,11 @@ intent from one place whenever nodes, edges, or workflow loads change.
 `createSessionStores.ts` now binds the active edit-session id into
 `createWorkflowStores.ts`, and structural graph edits flow through the backend
 session before the stores replace local graph state from the returned snapshot.
+Inference-setting port shaping now lives in `inferenceSettingsPorts.ts` so the
+same additive port contract is reused when syncing expand-setting passthrough
+nodes and downstream inference consumers. `definitionOverlay.ts` ensures those
+dynamic ports survive graph rehydration when backend snapshots already include
+per-node `definition.inputs` and `definition.outputs` overlays.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.

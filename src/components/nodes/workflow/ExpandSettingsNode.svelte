@@ -86,7 +86,7 @@
         </div>
       {:else}
         <div class="text-xs text-neutral-500 italic">
-          Connect inference settings to expand
+          Connect settings schema to expose override ports
         </div>
       {/if}
   </BaseNode>

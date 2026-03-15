@@ -13,8 +13,6 @@ import type {
   NodeExecutionInfo,
   ConnectionIntentState,
   NodeDefinition,
-  PortDefinition,
-  PortDataType,
   GraphNode,
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping } from '../types/groups.js';
@@ -22,6 +20,12 @@ import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import { removeNodeDataKeys } from './runtimeData.js';
 import { buildDerivedGraph } from '../graphRevision.js';
+import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
+import {
+  buildDynamicExpandDefinition,
+  buildDynamicInferenceDefinition,
+  type InferenceParamSchema,
+} from './inferenceSettingsPorts.js';
 
 export interface WorkflowStores {
   // Writable stores
@@ -91,19 +95,7 @@ export interface WorkflowStores {
   collapseGroup: () => void;
 }
 
-/** Schema for a model-specific inference parameter (from pumas-library). */
-export interface InferenceParamSchema {
-  key: string;
-  label: string;
-  param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
-  default: unknown;
-  description?: string;
-  constraints?: {
-    min?: number;
-    max?: number;
-    allowed_values?: unknown[];
-  };
-}
+export type { InferenceParamSchema } from './inferenceSettingsPorts.js';
 
 /**
  * Create per-instance workflow stores.
@@ -186,7 +178,7 @@ export function createWorkflowStores(
         }
       }
 
-      const definition = definitions.find((d) => d.node_type === nodeType);
+      const definition = resolveNodeDefinitionOverlay(nodeType, nodeData, definitions);
       return {
         id: n.id,
         type: nodeType,
@@ -508,42 +500,6 @@ export function createWorkflowStores(
   // --- Inference settings actions ---
 
   /**
-   * Map a pumas-library param_type string to a Pantograph PortDataType.
-   */
-  function paramTypeToPortDataType(paramType: string): PortDataType {
-    switch (paramType) {
-      case 'Number':
-      case 'Integer':
-        return 'number';
-      case 'String':
-        return 'string';
-      case 'Boolean':
-        return 'boolean';
-      default:
-        return 'any';
-    }
-  }
-
-  function inferenceParamToPortDefinition(param: InferenceParamSchema): PortDefinition {
-    return {
-      id: param.key,
-      label: param.label,
-      data_type: paramTypeToPortDataType(param.param_type),
-      required: false,
-      multiple: false,
-      description: param.description,
-      default_value: param.default,
-      constraints: param.constraints
-        ? {
-            min: param.constraints.min,
-            max: param.constraints.max,
-            allowed_values: param.constraints.allowed_values,
-          }
-        : undefined,
-    };
-  }
-
-  /**
    * Find downstream target node IDs connected via a specific source handle.
    */
   function findConnectedTargets(sourceId: string, sourceHandle: string): string[] {
@@ -584,24 +540,8 @@ export function createWorkflowStores(
       const baseDef = defs.find((d) => d.node_type === nodeDef.node_type);
       if (!baseDef) continue;
 
-      // Convert inference_settings schema to PortDefinitions
-      const modelPortMap = new Map<string, PortDefinition>();
-      for (const s of inferenceSettings) {
-        modelPortMap.set(s.key, inferenceParamToPortDefinition(s));
-      }
-
-      // Build deduplicated port list: base ports first (excluding those
-      // overridden by model ports), then model-derived ports
-      const staticPorts = baseDef.inputs.filter(
-        (p) => !modelPortMap.has(p.id)
-      );
-
-      // Update definition with static + model-derived ports (unique by ID)
       updateNodeData(nodeId, {
-        definition: {
-          ...nodeDef,
-          inputs: [...staticPorts, ...modelPortMap.values()],
-        },
+        definition: buildDynamicInferenceDefinition(nodeDef, baseDef, inferenceSettings),
       });
     }
   }
@@ -619,11 +559,6 @@ export function createWorkflowStores(
     const baseDef = defs.find((d) => d.node_type === 'expand-settings');
     if (!baseDef) return;
 
-    const modelPortMap = new Map<string, PortDefinition>();
-    for (const s of inferenceSettings) {
-      modelPortMap.set(s.key, inferenceParamToPortDefinition(s));
-    }
-
     for (const expandId of expandIds) {
       const node = getNodeById(expandId);
       if (!node?.data?.definition) continue;
@@ -632,13 +567,8 @@ export function createWorkflowStores(
       // Only operate on expand-settings nodes
       if (nodeDef.node_type !== 'expand-settings') continue;
 
-      // Use base definition outputs (not persisted nodeDef which may have duplicates)
-      const staticPorts = baseDef.outputs.filter(
-        (p) => !modelPortMap.has(p.id)
-      );
-
       updateNodeData(expandId, {
-        definition: { ...nodeDef, outputs: [...staticPorts, ...modelPortMap.values()] },
+        definition: buildDynamicExpandDefinition(nodeDef, baseDef, inferenceSettings),
         inference_settings: inferenceSettings,
       });
 
