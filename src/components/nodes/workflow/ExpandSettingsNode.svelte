@@ -1,7 +1,8 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
-  import { nodeExecutionStates } from '../../../stores/workflowStore';
+  import { edges, nodeExecutionStates, nodes } from '../../../stores/workflowStore';
+  import { resolveEffectiveSettingValue } from './expandSettingsDisplay';
 
   interface ParamSchema {
     key: string;
@@ -56,6 +57,10 @@
     if (param.constraints.max !== undefined) parts.push(`max: ${param.constraints.max}`);
     return parts.join(', ');
   }
+
+  function getEffectiveValue(param: ParamSchema): unknown {
+    return resolveEffectiveSettingValue(id, data, param, $nodes, $edges);
+  }
 </script>
 
 <div class="expand-settings-wrapper">
@@ -77,7 +82,7 @@
           {#each settings as param (param.key)}
             <div class="setting-row" title={param.description || ''}>
               <span class="setting-label">{param.label}</span>
-              <span class="setting-value">{formatValue(param.default)}</span>
+              <span class="setting-value">{formatValue(getEffectiveValue(param))}</span>
             </div>
             {#if formatConstraints(param)}
               <div class="setting-constraint">{formatConstraints(param)}</div>
