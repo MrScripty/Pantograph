@@ -26,11 +26,12 @@ would depend directly on invoke command names and payload conventions.
 ## Decision
 Use `TauriWorkflowBackend.ts` as the only app-layer implementation of
 `WorkflowBackend`. It now forwards `getConnectionCandidates`,
-`connectAnchors`, and `insertNodeAndConnect` alongside the existing session
-editing calls so the package graph can use revision-aware connection guidance
-and drag-time insert flows unchanged inside the app. Structural graph edits now
-return authoritative graph snapshots from the backend, which the shared stores
-apply directly instead of reconstructing local state first.
+`connectAnchors`, `insertNodeAndConnect`, `previewNodeInsertOnEdge`, and
+`insertNodeOnEdge` alongside the existing session editing calls so the package
+graph can use revision-aware connection guidance, drag-time insert flows, and
+cursor-hit edge replacement unchanged inside the app. Structural graph edits
+now return authoritative graph snapshots from the backend, which the shared
+stores apply directly instead of reconstructing local state first.
 
 ## Alternatives Rejected
 - Call Tauri `invoke` directly from `WorkflowGraph.svelte`.
@@ -48,6 +49,8 @@ apply directly instead of reconstructing local state first.
 - Graph revisions are treated as opaque values and echoed unchanged to Rust.
 - Insert commands must remain atomic at the adapter boundary; the adapter should
   not split insert and connect into separate invokes.
+- Edge-insert preview must remain non-mutating and must not synthesize client
+  fallback state when Rust rejects the candidate bridge.
 
 ## Revisit Triggers
 - A non-Tauri production transport is introduced for the app.
@@ -78,8 +81,9 @@ const sessionId = await backend.createSession({ nodes: [], edges: [] });
 - App code consuming this adapter should use package-level backend methods, not
   hardcoded invoke names.
 - `getConnectionCandidates` accepts a source anchor, session id, and optional
-  graph revision; `connectAnchors` and `insertNodeAndConnect` require a
-  revision and return structured rejection data when a commit is denied.
+  graph revision; `connectAnchors`, `insertNodeAndConnect`,
+  `previewNodeInsertOnEdge`, and `insertNodeOnEdge` require a revision and
+  return structured rejection data when a preview or commit is denied.
 - `addNode`, `removeNode`, `updateNodeData`, `updateNodePosition`, `addEdge`,
   and `removeEdge` return updated graphs for store synchronization.
 - Session lifecycle ordering remains: create/load session before graph mutation,

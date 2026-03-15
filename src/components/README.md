@@ -53,7 +53,10 @@ broadcast explicit start/end events so the graph can disable xyflow pan, drag,
 selection, and reconnect affordances until the external drag completes. The app
 also treats `selectedNodeIds` as the stable selection source across backend
 graph snapshots so node placement and later graph syncs do not silently wipe
-selection state.
+selection state. While a palette drag is active, the app graph also treats the
+cursor as the only edge-insert hit point and previews replacement of an
+existing workflow edge only after backend validation confirms the dragged node
+type can bridge both endpoints.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -85,6 +88,9 @@ selection state.
   and xyflow pointer ownership never overlap.
 - Backend-driven graph resync must preserve the authoritative selected-node id
   set instead of clearing node selection as a side effect.
+- Palette edge insertion must use cursor hit-testing plus backend preview and
+  commit APIs before replacing an existing edge; node overlap alone must not
+  trigger insertion.
 - Node registration must stay consistent with bundled templates so shipped
   starter workflows render without fallback-node surprises.
 
@@ -126,6 +132,9 @@ selection state.
 - `NodePalette.svelte` must emit palette-drag lifecycle events and
   `WorkflowGraph.svelte` must honor them by suppressing graph interactions until
   drag end.
+- Workflow palette drags may replace an existing workflow edge only when the
+  cursor is within the edge hit threshold and `workflowService` confirms a
+  valid bridge through the dragged node type.
 - The app graph must preserve horseshoe state through pending/rejected inserts
   so release-mode users can see and retry backend rejections.
 - Rejection handling for failed connection and insert commits is currently
