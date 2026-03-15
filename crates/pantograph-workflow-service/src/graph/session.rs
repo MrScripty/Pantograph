@@ -8,13 +8,15 @@ use uuid::Uuid;
 use crate::workflow::WorkflowServiceError;
 
 use super::connection_intent::{
-    commit_connection, connection_candidates, insert_node_and_connect, rejected_commit_response,
-    rejected_insert_response,
+    commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
+    preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
+    rejected_insert_on_edge_response, rejected_insert_response,
 };
 use super::registry::NodeRegistry;
 use super::types::{
-    ConnectionCandidatesResponse, ConnectionCommitResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, Position, WorkflowGraph,
+    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
+    GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, Position,
+    WorkflowGraph,
 };
 use super::{ConnectionAnchor, InsertNodePositionHint};
 
@@ -153,6 +155,25 @@ pub struct WorkflowGraphInsertNodeAndConnectRequest {
     pub position_hint: InsertNodePositionHint,
     #[serde(default)]
     pub preferred_input_port_id: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphPreviewNodeInsertOnEdgeRequest {
+    pub session_id: String,
+    pub edge_id: String,
+    pub node_type: String,
+    pub graph_revision: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphInsertNodeOnEdgeRequest {
+    pub session_id: String,
+    pub edge_id: String,
+    pub node_type: String,
+    pub graph_revision: String,
+    pub position_hint: InsertNodePositionHint,
 }
 
 #[derive(Debug, Clone)]
@@ -563,6 +584,74 @@ impl GraphSessionStore {
         })
     }
 
+    pub async fn preview_node_insert_on_edge(
+        &self,
+        request: WorkflowGraphPreviewNodeInsertOnEdgeRequest,
+    ) -> Result<EdgeInsertionPreviewResponse, WorkflowServiceError> {
+        let handle = self.get_session_handle(&request.session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        let registry = NodeRegistry::new();
+
+        match preview_node_insert_on_edge(
+            &state.graph,
+            &registry,
+            &request.graph_revision,
+            &request.edge_id,
+            &request.node_type,
+        ) {
+            Ok(bridge) => Ok(EdgeInsertionPreviewResponse {
+                accepted: true,
+                graph_revision: state.graph.compute_fingerprint(),
+                bridge: Some(bridge),
+                rejection: None,
+            }),
+            Err(rejection) => Ok(rejected_edge_insert_preview_response(
+                &state.graph,
+                rejection,
+            )),
+        }
+    }
+
+    pub async fn insert_node_on_edge(
+        &self,
+        request: WorkflowGraphInsertNodeOnEdgeRequest,
+    ) -> Result<InsertNodeOnEdgeResponse, WorkflowServiceError> {
+        let handle = self.get_session_handle(&request.session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        let registry = NodeRegistry::new();
+
+        let (inserted_node, incoming_edge, outgoing_edge, bridge) = match insert_node_on_edge(
+            &state.graph,
+            &registry,
+            &request.graph_revision,
+            &request.edge_id,
+            &request.node_type,
+            &request.position_hint,
+        ) {
+            Ok(result) => result,
+            Err(rejection) => return Ok(rejected_insert_on_edge_response(&state.graph, rejection)),
+        };
+
+        state.push_undo_snapshot();
+        state.graph.edges.retain(|edge| edge.id != request.edge_id);
+        state.graph.nodes.push(inserted_node.clone());
+        state.graph.edges.push(incoming_edge);
+        state.graph.edges.push(outgoing_edge);
+        sync_embedding_emit_metadata_flags(&mut state.graph);
+        state.graph.refresh_derived_graph();
+
+        Ok(InsertNodeOnEdgeResponse {
+            accepted: true,
+            graph_revision: state.graph.compute_fingerprint(),
+            inserted_node_id: Some(inserted_node.id),
+            bridge: Some(bridge),
+            graph: Some(state.graph.clone()),
+            rejection: None,
+        })
+    }
+
     pub async fn cleanup_stale(&self) -> usize {
         let handles: Vec<(String, GraphSessionHandle)> = {
             let sessions = self.sessions.read().await;
@@ -778,5 +867,36 @@ mod tests {
 
         assert!(response.graph.find_node("text-output").is_none());
         assert!(response.graph.edges.is_empty());
+    }
+
+    #[tokio::test]
+    async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(sample_graph()).await;
+
+        let response = store
+            .insert_node_on_edge(WorkflowGraphInsertNodeOnEdgeRequest {
+                session_id: session.session_id,
+                edge_id: "text-input-text-text-output-text".to_string(),
+                node_type: "llm-inference".to_string(),
+                graph_revision: session.graph_revision,
+                position_hint: InsertNodePositionHint {
+                    position: Position { x: 80.0, y: 24.0 },
+                },
+            })
+            .await
+            .expect("insert node on edge");
+
+        assert!(response.accepted);
+        let graph = response.graph.expect("updated graph");
+        assert_eq!(graph.edges.len(), 2);
+        assert!(
+            graph
+                .edges
+                .iter()
+                .all(|edge| edge.id != "text-input-text-text-output-text")
+        );
+        let inserted_node_id = response.inserted_node_id.expect("inserted node id");
+        assert!(graph.find_node(&inserted_node_id).is_some());
     }
 }

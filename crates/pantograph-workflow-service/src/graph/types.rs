@@ -191,6 +191,7 @@ pub enum ConnectionRejectionReason {
     StaleRevision,
     UnknownSourceAnchor,
     UnknownTargetAnchor,
+    UnknownEdge,
     DuplicateConnection,
     TargetCapacityReached,
     SelfConnection,
@@ -198,6 +199,7 @@ pub enum ConnectionRejectionReason {
     IncompatibleTypes,
     UnknownInsertNodeType,
     NoCompatibleInsertInput,
+    NoCompatibleInsertPath,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -225,6 +227,39 @@ pub struct InsertNodeConnectionResponse {
     pub graph_revision: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inserted_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<WorkflowGraph>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection: Option<ConnectionRejection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeInsertionBridge {
+    pub input_port_id: String,
+    pub output_port_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeInsertionPreviewResponse {
+    pub accepted: bool,
+    pub graph_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bridge: Option<EdgeInsertionBridge>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection: Option<ConnectionRejection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertNodeOnEdgeResponse {
+    pub accepted: bool,
+    pub graph_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inserted_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bridge: Option<EdgeInsertionBridge>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<WorkflowGraph>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -13,11 +13,12 @@ use crate::graph::{
     WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
     WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
-    WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
+    WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -2057,6 +2058,22 @@ impl WorkflowService {
         self.graph_session_store
             .insert_node_and_connect(request)
             .await
+    }
+
+    pub async fn workflow_graph_preview_node_insert_on_edge(
+        &self,
+        request: WorkflowGraphPreviewNodeInsertOnEdgeRequest,
+    ) -> Result<crate::graph::EdgeInsertionPreviewResponse, WorkflowServiceError> {
+        self.graph_session_store
+            .preview_node_insert_on_edge(request)
+            .await
+    }
+
+    pub async fn workflow_graph_insert_node_on_edge(
+        &self,
+        request: WorkflowGraphInsertNodeOnEdgeRequest,
+    ) -> Result<crate::graph::InsertNodeOnEdgeResponse, WorkflowServiceError> {
+        self.graph_session_store.insert_node_on_edge(request).await
     }
 
     pub fn workflow_graph_save<S: WorkflowGraphStore>(
