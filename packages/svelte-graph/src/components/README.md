@@ -15,7 +15,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
 | `HorseshoeInsertSelector.svelte` | Cursor-anchored horseshoe selector used to browse compatible insertable node types during an active connection intent. |
 | `nodes/` | Shared node shells and reusable package node components, including connection-intent highlighting. |
-| `edges/` | Edge renderers and reconnect affordances used by `WorkflowGraph.svelte`; reconnect can start from either rendered edge endpoint while keeping occupied output handles available for fan-out drags. |
+| `edges/` | Edge renderers and reconnect affordances used by `WorkflowGraph.svelte`; reconnect can start from either occupied edge endpoint so drag-off disconnect works directly from connected ports. |
 
 ## Problem
 Package consumers need a graph editor that can enforce backend-owned connection
@@ -45,9 +45,9 @@ then read the same store to dim incompatible targets and highlight eligible
 anchors. The canvas now tracks explicit drag mode as part of that shared
 interaction contract: normal output-handle drags are connect/fan-out flows,
 while explicit reconnect drags can start from either rendered edge endpoint.
-Reconnect anchors are inset slightly from the actual node ports so occupied
-output handles remain available for multi-edge fan-out. Once the horseshoe is
-open, the first `Space` has already been consumed; pressing `Space` again confirms the current
+Reconnect anchors now sit directly on occupied edge endpoints so drag-off
+disconnect works from the same inputs/outputs users see as connected. Once the
+horseshoe is open, the first `Space` has already been consumed; pressing `Space` again confirms the current
 highlighted insert candidate, clears drag state immediately, and leaves pointer
 motion free to change the highlighted item against a fixed menu anchor. Insert
 confirmation now keeps the horseshoe state alive until the backend responds; if
@@ -77,8 +77,8 @@ message, and refreshes candidates from the returned graph revision for retry.
   silently clearing the interaction.
 - Reconnect cleanup must only remove the original edge for unfinished reconnect
   drags; normal connect/horseshoe flows must never inherit reconnect cleanup.
-- Reconnect affordances must not fully block occupied output handles from
-  starting a normal fan-out connection drag.
+- Dragging from an occupied edge endpoint must start reconnect/disconnect rather
+  than silently spawning a duplicate edge.
 - Connection-intent highlighting must clear when the graph changes or the drag
   interaction ends.
 - Reconnect flows that temporarily remove an edge must restore the original edge

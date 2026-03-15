@@ -40,9 +40,9 @@ graph before committing through revision-aware anchor and insert APIs. Pending
 and blocked horseshoe states remain visible instead of failing silently. The
 app graph also consumes the shared connection-drag helper contract so reconnect
 cleanup cannot bleed into ordinary insert flows. Reconnect affordances are
-available from both rendered edge endpoints, but those drag handles stay inset
-from the actual node ports so occupied outputs remain usable for normal fan-out
-drags. Once the horseshoe is open, repeated `Space`
+available directly on occupied edge endpoints so dragging off connected inputs
+and outputs starts a reconnect/disconnect gesture instead of a fresh edge
+creation. Once the horseshoe is open, repeated `Space`
 confirms the highlighted insert candidate, clears drag ownership immediately,
 and turns pointer movement into menu selection input instead of menu
 repositioning. Insert confirmation now waits for the backend outcome before the
@@ -64,9 +64,8 @@ backend-returned graph revision.
   creating parallel graph state.
 - Connection-intent cleanup must happen on cancel, pane click, escape, and graph
   mutation paths.
-- Occupied output handles must remain available for multiple outgoing edges even
-  when an edge is already present at that output; reconnect hit targets must
-  not fully cover the output port.
+- Dragging from an occupied edge endpoint must start reconnect/disconnect rather
+  than silently creating a duplicate edge.
 - Horseshoe selection must route through `workflowService.insertNodeAndConnect`
   so the app never creates orphan nodes on stale or incompatible inserts.
 - Horseshoe open failures should be diagnosable through the shared blocked
@@ -111,8 +110,7 @@ backend-returned graph revision.
   shared workflow store exports; callers should not instantiate it outside the
   app shell without recreating those dependencies.
 - The app graph allows reconnect and disconnect drags from either rendered edge
-  endpoint while keeping the actual output handle available for normal fan-out
-  gestures.
+  endpoint rather than treating occupied ports as fresh-connection starts.
 - The app graph follows the package horseshoe contract: first `Space` opens,
   open-state `Space` or `Enter` confirms, and menu-open pointer motion selects
   candidates without moving the menu anchor.

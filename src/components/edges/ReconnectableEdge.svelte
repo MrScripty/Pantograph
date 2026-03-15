@@ -143,5 +143,5 @@
   class="react-flow__edge-interaction"
 />
 
-<EdgeReconnectAnchor type="source" position={sourceAnchorPosition} size={18} />
-<EdgeReconnectAnchor type="target" position={targetAnchorPosition} size={18} />
+<EdgeReconnectAnchor type="source" position={sourceAnchorPosition} size={12} />
+<EdgeReconnectAnchor type="target" position={targetAnchorPosition} size={12} />

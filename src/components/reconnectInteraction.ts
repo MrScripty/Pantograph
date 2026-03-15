@@ -1,6 +1,6 @@
 import type { ConnectionAnchor } from '../services/workflow/types';
 
-export const RECONNECT_ANCHOR_INSET_PX = 14;
+export const RECONNECT_ANCHOR_INSET_PX = 0;
 
 type ReconnectHandleType = 'source' | 'target';
 

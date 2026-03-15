@@ -36,7 +36,7 @@ test('resolveReconnectSourceAnchor returns null when the edge has no source hand
   );
 });
 
-test('insetReconnectAnchorPosition offsets source and target anchors inward', () => {
+test('insetReconnectAnchorPosition defaults to the actual edge endpoints', () => {
   const edge = {
     source: 'src',
     sourceHandle: 'out',
