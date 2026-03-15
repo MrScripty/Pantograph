@@ -22,8 +22,10 @@ import { removeNodeDataKeys } from './runtimeData.js';
 import { buildDerivedGraph } from '../graphRevision.js';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 import {
+  buildExpandSettingsSchema,
   buildDynamicExpandDefinition,
   buildDynamicInferenceDefinition,
+  buildMergedInferenceSettings,
   type InferenceParamSchema,
 } from './inferenceSettingsPorts.js';
 
@@ -539,9 +541,10 @@ export function createWorkflowStores(
       // Get the base definition for this node type (static ports only)
       const baseDef = defs.find((d) => d.node_type === nodeDef.node_type);
       if (!baseDef) continue;
+      const mergedSettings = buildMergedInferenceSettings(baseDef, inferenceSettings);
 
       updateNodeData(nodeId, {
-        definition: buildDynamicInferenceDefinition(nodeDef, baseDef, inferenceSettings),
+        definition: buildDynamicInferenceDefinition(nodeDef, baseDef, mergedSettings),
       });
     }
   }
@@ -566,16 +569,29 @@ export function createWorkflowStores(
       const nodeDef = node.data.definition as NodeDefinition;
       // Only operate on expand-settings nodes
       if (nodeDef.node_type !== 'expand-settings') continue;
+      const downstreamInferenceDefs = findConnectedTargets(expandId, 'inference_settings')
+        .map((nodeId) => {
+          const targetNode = getNodeById(nodeId);
+          const targetNodeType =
+            (targetNode?.data?.definition as NodeDefinition | undefined)?.node_type ??
+            targetNode?.type;
+          return defs.find((definition) => definition.node_type === targetNodeType);
+        })
+        .filter((definition): definition is NodeDefinition => definition !== undefined);
+      const mergedSettings = buildExpandSettingsSchema(
+        downstreamInferenceDefs,
+        inferenceSettings,
+      );
 
       updateNodeData(expandId, {
-        definition: buildDynamicExpandDefinition(nodeDef, baseDef, inferenceSettings),
-        inference_settings: inferenceSettings,
+        definition: buildDynamicExpandDefinition(nodeDef, baseDef, mergedSettings),
+        inference_settings: mergedSettings,
       });
 
       // Also sync inference ports on nodes downstream of this expand node,
       // and auto-connect the expand outputs to their inputs
       syncInferencePorts(expandId, inferenceSettings);
-      autoConnectExpandToInference(expandId, inferenceSettings);
+      autoConnectExpandToInference(expandId, mergedSettings);
     }
   }
 

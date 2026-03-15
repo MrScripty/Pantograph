@@ -13,7 +13,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
 | `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
 | `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
-| `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions so dynamic model metadata is shaped consistently before it reaches graph nodes. |
+| `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
 | `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
 
 ## Problem
@@ -42,9 +42,12 @@ intent from one place whenever nodes, edges, or workflow loads change.
 session before the stores replace local graph state from the returned snapshot.
 Inference-setting port shaping now lives in `inferenceSettingsPorts.ts` so the
 same additive port contract is reused when syncing expand-setting passthrough
-nodes and downstream inference consumers. `definitionOverlay.ts` ensures those
-dynamic ports survive graph rehydration when backend snapshots already include
-per-node `definition.inputs` and `definition.outputs` overlays.
+nodes and downstream inference consumers. That helper now merges upstream
+schema with promoted inference-node defaults, strips duplicate direct inference
+ports from the node-visible definition, and keeps expand-setting schemas stable
+when multiple inference consumers are attached. `definitionOverlay.ts` ensures
+those dynamic ports survive graph rehydration when backend snapshots already
+include per-node `definition.inputs` and `definition.outputs` overlays.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -122,3 +125,6 @@ stores.setConnectionIntent({
 - Dynamic inference-setting ports are additive overlays on `node.data.definition`;
   saved graphs may persist them, but the authoritative shape is regenerated from
   schema sync when model metadata changes.
+- When an inference node is synchronized from an `inference_settings` source,
+  settings promoted into that shared schema surface must not remain duplicated
+  as direct static inputs in the node-visible definition.

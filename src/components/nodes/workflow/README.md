@@ -12,7 +12,8 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
-| `ExpandSettingsNode.svelte` | Displays model-derived inference settings while the shared base node renders matching override input/output handles from dynamic port metadata. |
+| `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
+| `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
 | `NumberInputNode.svelte` | Renders a metadata-driven numeric editor that adopts downstream default values and range constraints. |
 | `PumaLibNode.svelte` | Presents model-library selection and routes model metadata into the correct downstream inference node type. |
@@ -58,9 +59,10 @@ Audio final renders from ONNX-backed live chunk playback. `PumaLibNode.svelte`
 also owns the UI-side routing hints that send diffusion models to
 `diffusion-inference` and reranker models to the dedicated reranker node
 instead of the text-only PyTorch or llama.cpp generation nodes.
-`ExpandSettingsNode.svelte` stays presentation-only: it shows schema details,
-while override-capable handles come from the shared node definition supplied by
-the workflow stores.
+`ExpandSettingsNode.svelte` stays presentation-only: it shows schema details and
+the effective value currently flowing through each setting, while
+override-capable handles come from the shared node definition supplied by the
+workflow stores.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -85,6 +87,8 @@ the workflow stores.
 - `ExpandSettingsNode.svelte` must not hardcode durable override handles; it
   renders whatever additive inputs/outputs arrive in the backend-owned node
   definition.
+- `ExpandSettingsNode.svelte` must display the connected override value when one
+  is available, otherwise the last runtime passthrough value or schema default.
 
 ## Revisit Triggers
 - Another output node needs the same rerun-reset pattern and the logic starts to
