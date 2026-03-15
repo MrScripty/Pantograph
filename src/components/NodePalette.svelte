@@ -1,5 +1,9 @@
 <script lang="ts">
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import {
+    dispatchWorkflowPaletteDragEnd,
+    dispatchWorkflowPaletteDragStart,
+  } from '@pantograph/svelte-graph';
   import { nodeDefinitionsByCategory, addNode } from '../stores/workflowStore';
   import type { NodeDefinition } from '../services/workflow/types';
 
@@ -37,6 +41,11 @@
   function handleDragStart(event: DragEvent, definition: NodeDefinition) {
     event.dataTransfer?.setData('application/json', JSON.stringify(definition));
     event.dataTransfer!.effectAllowed = 'copy';
+    dispatchWorkflowPaletteDragStart(window);
+  }
+
+  function handleDragEnd() {
+    dispatchWorkflowPaletteDragEnd(window);
   }
 
   function handleDoubleClick(definition: NodeDefinition) {
@@ -96,6 +105,7 @@
                 class="node-item px-4 py-2 cursor-grab flex justify-between items-center text-sm text-neutral-300 hover:bg-neutral-800 transition-colors"
                 draggable="true"
                 ondragstart={(e) => handleDragStart(e, definition)}
+                ondragend={handleDragEnd}
                 ondblclick={() => handleDoubleClick(definition)}
                 title={definition.description}
                 role="button"

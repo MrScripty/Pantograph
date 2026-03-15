@@ -155,6 +155,16 @@ export type {
   HorseshoeDragSessionState,
 } from './horseshoeDragSession.js';
 export { isPortTypeCompatible } from './portTypeCompatibility.js';
+export {
+  applySelectedNodeIds,
+  collectSelectedNodeIds,
+} from './workflowSelection.js';
+export {
+  WORKFLOW_PALETTE_DRAG_END_EVENT,
+  WORKFLOW_PALETTE_DRAG_START_EVENT,
+  dispatchWorkflowPaletteDragEnd,
+  dispatchWorkflowPaletteDragStart,
+} from './paletteDragState.js';
 
 // --- Components ---
 export { default as WorkflowGraphEditor } from './components/WorkflowGraph.svelte';

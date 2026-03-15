@@ -30,6 +30,8 @@
     supportsInsertFromConnectionDrag,
     syncHorseshoeDisplay,
     updateHorseshoeAnchor,
+    WORKFLOW_PALETTE_DRAG_END_EVENT,
+    WORKFLOW_PALETTE_DRAG_START_EVENT,
     type ConnectionDragState,
     type HorseshoeBlockedReason,
     type HorseshoeInsertFeedbackState,
@@ -55,6 +57,7 @@
     setConnectionIntent,
     clearConnectionIntent,
     loadWorkflow,
+    selectedNodeIds,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
   import type {
@@ -216,6 +219,7 @@
     $state<HorseshoeInsertFeedbackState>(createHorseshoeInsertFeedbackState());
   let horseshoeSelectedIndex = $state(0);
   let horseshoeQuery = $state('');
+  let externalPaletteDragActive = $state(false);
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
@@ -319,6 +323,24 @@
     }
   });
 
+  function handleWorkflowPaletteDragStart() {
+    externalPaletteDragActive = true;
+    containerSelected = false;
+    clearConnectionInteraction();
+  }
+
+  function handleWorkflowPaletteDragEnd() {
+    externalPaletteDragActive = false;
+  }
+
+  function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {
+    selectedNodeIds.set(selectedNodes.map((node) => node.id));
+
+    if (selectedNodes.length > 0) {
+      containerSelected = false;
+    }
+  }
+
   // Handle container border click to select/deselect
   function handleContainerClick(event: MouseEvent) {
     event.stopPropagation();
@@ -378,12 +400,18 @@
   // Initialize node definitions on mount
   onMount(async () => {
     window.addEventListener('keydown', handleWindowKeyDown, true);
+    window.addEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
+    window.addEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
+    window.addEventListener('blur', handleWorkflowPaletteDragEnd);
 
     const definitions = await workflowService.getNodeDefinitions();
     nodeDefinitions.set(definitions);
 
     return () => {
       window.removeEventListener('keydown', handleWindowKeyDown, true);
+      window.removeEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
+      window.removeEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
+      window.removeEventListener('blur', handleWorkflowPaletteDragEnd);
     };
   });
 
@@ -1236,6 +1264,10 @@
   }
 
   function handlePaneMouseDown(e: MouseEvent) {
+    if (externalPaletteDragActive) {
+      return;
+    }
+
     const modifierPressedAtStart = isCutModifierPressed(e);
     ctrlPressed = modifierPressedAtStart;
 
@@ -1260,6 +1292,10 @@
 
   function handlePaneMouseMove(e: MouseEvent) {
     updateDragCursorFromMouseEvent(e);
+    if (externalPaletteDragActive) {
+      return;
+    }
+
     if (!isCutting || !cutStart) return;
 
     const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
@@ -1270,6 +1306,10 @@
   }
 
   function handlePaneMouseUp(e: MouseEvent) {
+    if (externalPaletteDragActive) {
+      return;
+    }
+
     ctrlPressed = isCutModifierPressed(e);
     if (isCutting) {
       void finishCut();
@@ -1401,19 +1441,20 @@
     {nodeTypes}
     {edgeTypes}
     fitViewOptions={{ maxZoom: 1 }}
-    nodesConnectable={canEdit}
-    elementsSelectable={true}
-    nodesDraggable={canEdit}
-    panOnDrag={!ctrlPressed}
+    nodesConnectable={canEdit && !externalPaletteDragActive}
+    elementsSelectable={!externalPaletteDragActive}
+    nodesDraggable={canEdit && !externalPaletteDragActive}
+    panOnDrag={!ctrlPressed && !externalPaletteDragActive}
     panActivationKey={null}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
     deleteKey={canEdit ? 'Delete' : null}
-    edgesReconnectable={canEdit}
+    edgesReconnectable={canEdit && !externalPaletteDragActive}
     isValidConnection={checkValidConnection}
     onnodedragstop={onNodeDragStop}
     onnodeclick={onNodeClick}
+    onselectionchange={handleSelectionChange}
     onconnectstart={handleConnectStart}
     onclickconnectstart={handleConnectStart}
     onconnectend={handleConnectEnd}

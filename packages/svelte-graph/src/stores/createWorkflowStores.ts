@@ -22,6 +22,7 @@ import { removeNodeDataKeys } from './runtimeData.js';
 import { buildDerivedGraph } from '../graphRevision.js';
 import { canonicalizeWorkflowGraph } from './canonicalizeWorkflowGraph.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
+import { applySelectedNodeIds } from '../workflowSelection.js';
 import {
   buildExpandSettingsSchema,
   buildDynamicExpandDefinition,
@@ -167,19 +168,23 @@ export function createWorkflowStores(
   function materializeWorkflowGraph(graph: WorkflowGraph) {
     const definitions = get(nodeDefinitions);
     const canonicalGraph = canonicalizeWorkflowGraph(graph, definitions);
+    const selectedIds = get(selectedNodeIds);
 
-    const graphNodes: Node[] = canonicalGraph.nodes.map((n) => {
-      const nodeType = n.node_type;
-      const nodeData = { ...n.data };
+    const graphNodes = applySelectedNodeIds(
+      canonicalGraph.nodes.map((n) => {
+        const nodeType = n.node_type;
+        const nodeData = { ...n.data };
 
-      const definition = resolveNodeDefinitionOverlay(nodeType, nodeData, definitions);
-      return {
-        id: n.id,
-        type: nodeType,
-        position: n.position,
-        data: { ...nodeData, definition },
-      };
-    });
+        const definition = resolveNodeDefinitionOverlay(nodeType, nodeData, definitions);
+        return {
+          id: n.id,
+          type: nodeType,
+          position: n.position,
+          data: { ...nodeData, definition },
+        };
+      }),
+      selectedIds,
+    );
 
     const graphEdges: Edge[] = canonicalGraph.edges.map((e) => {
       return {
@@ -266,10 +271,12 @@ export function createWorkflowStores(
         ...Object.fromEntries(definition.inputs.map((input) => [input.id, null])),
       },
     };
+    selectedNodeIds.set([id]);
     syncGraphMutationFromBackend('add node', (sessionId) => backend.addNode(newNode, sessionId));
   }
 
   function removeNode(nodeId: string) {
+    selectedNodeIds.update((ids) => ids.filter((id) => id !== nodeId));
     syncGraphMutationFromBackend('remove node', (sessionId) => backend.removeNode(nodeId, sessionId));
   }
 
@@ -423,6 +430,7 @@ export function createWorkflowStores(
   // --- Workflow actions ---
 
   function loadWorkflowFn(graph: WorkflowGraph, metadata?: WorkflowMetadata) {
+    selectedNodeIds.set([]);
     applyWorkflowGraph(graph, {
       metadata: metadata || null,
       markDirty: false,
@@ -433,6 +441,7 @@ export function createWorkflowStores(
     nodes.set([]);
     edges.set([]);
     workflowMetadata.set(null);
+    selectedNodeIds.set([]);
     connectionIntent.set(null);
     derivedGraph.set(
       buildDerivedGraph({
@@ -445,6 +454,7 @@ export function createWorkflowStores(
   }
 
   function loadDefaultWorkflow(definitions: NodeDefinition[]) {
+    selectedNodeIds.set([]);
     const textInputDef = definitions.find((d) => d.node_type === 'text-input');
     const llmDef = definitions.find((d) => d.node_type === 'llm-inference');
     const outputDef = definitions.find((d) => d.node_type === 'text-output');
