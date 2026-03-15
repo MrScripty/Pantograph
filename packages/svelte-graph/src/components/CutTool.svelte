@@ -2,9 +2,11 @@
   import type { Edge } from '@xyflow/svelte';
   import { linesIntersect } from '../utils/geometry.js';
   import {
+    applyMatrixToPoint,
     findRenderedEdgePath,
     isCutModifierPressed,
     shouldStartCutGesture,
+    toContainerRelativePoint,
   } from '../cutInteraction.js';
 
   interface Props {
@@ -25,6 +27,7 @@
 
   let cutStart = $state<{ x: number; y: number } | null>(null);
   let cutEnd = $state<{ x: number; y: number } | null>(null);
+  let cutContainerRect = $state<DOMRect | null>(null);
   let isFinalizingCut = $state(false);
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -61,6 +64,7 @@
     const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
     if (!container) return;
     const rect = container.getBoundingClientRect();
+    cutContainerRect = rect;
     cutStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     cutEnd = cutStart;
   }
@@ -72,6 +76,7 @@
     const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
     if (!container) return;
     const rect = container.getBoundingClientRect();
+    cutContainerRect = rect;
     cutEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
@@ -86,7 +91,13 @@
     p1: { x: number; y: number },
     p2: { x: number; y: number },
     path: SVGPathElement,
+    containerRect: DOMRect | null,
   ): boolean {
+    const screenMatrix = path.getScreenCTM();
+    if (!screenMatrix || !containerRect) {
+      return false;
+    }
+
     const pathLength = path.getTotalLength();
     const samples = 20;
 
@@ -96,8 +107,16 @@
 
       const point1 = path.getPointAtLength(t1);
       const point2 = path.getPointAtLength(t2);
+      const containerPoint1 = toContainerRelativePoint(
+        applyMatrixToPoint(point1, screenMatrix),
+        containerRect,
+      );
+      const containerPoint2 = toContainerRelativePoint(
+        applyMatrixToPoint(point2, screenMatrix),
+        containerRect,
+      );
 
-      if (linesIntersect(p1, p2, { x: point1.x, y: point1.y }, { x: point2.x, y: point2.y })) {
+      if (linesIntersect(p1, p2, containerPoint1, containerPoint2)) {
         return true;
       }
     }
@@ -115,13 +134,14 @@
         isCutting = false;
         cutStart = null;
         cutEnd = null;
+        cutContainerRect = null;
         return;
       }
 
       const edgesToRemove = edges.filter((edge) => {
         const edgeEl = findRenderedEdgePath(document, edge.id);
         if (!edgeEl) return false;
-        return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
+        return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement, cutContainerRect);
       });
 
       if (edgesToRemove.length > 0 && onEdgesCut) {
@@ -131,6 +151,7 @@
       isCutting = false;
       cutStart = null;
       cutEnd = null;
+      cutContainerRect = null;
     } finally {
       isFinalizingCut = false;
     }

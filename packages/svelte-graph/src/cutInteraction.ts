@@ -19,6 +19,20 @@ type EdgePathLookupRoot = {
   querySelectorAll(selector: string): Iterable<EdgePathLookupElement>;
 };
 
+type Point = {
+  x: number;
+  y: number;
+};
+
+type Matrix2D = {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+};
+
 export function isCutModifierPressed(event: ModifierEvent): boolean {
   return event.ctrlKey === true || event.metaKey === true || event.key === 'Control' || event.key === 'Meta';
 }
@@ -48,4 +62,21 @@ export function findRenderedEdgePath(
   }
 
   return null;
+}
+
+export function applyMatrixToPoint(point: Point, matrix: Matrix2D): Point {
+  return {
+    x: matrix.a * point.x + matrix.c * point.y + matrix.e,
+    y: matrix.b * point.x + matrix.d * point.y + matrix.f,
+  };
+}
+
+export function toContainerRelativePoint(
+  point: Point,
+  containerRect: Pick<DOMRect, 'left' | 'top'>,
+): Point {
+  return {
+    x: point.x - containerRect.left,
+    y: point.y - containerRect.top,
+  };
 }

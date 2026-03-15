@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  applyMatrixToPoint,
   findRenderedEdgePath,
   isCutModifierPressed,
   shouldStartCutGesture,
+  toContainerRelativePoint,
 } from './cutInteraction.ts';
 
 test('isCutModifierPressed accepts ctrl and meta shortcuts', () => {
@@ -79,4 +81,24 @@ test('findRenderedEdgePath matches by data-id without relying on selector escapi
 
   assert.equal(findRenderedEdgePath(root, 'edge:1/output->target'), matchingPath);
   assert.equal(findRenderedEdgePath(root, 'missing-edge'), null);
+});
+
+test('applyMatrixToPoint handles viewport scale and translation', () => {
+  assert.deepEqual(
+    applyMatrixToPoint(
+      { x: 10, y: 20 },
+      { a: 2, b: 0, c: 0, d: 2, e: 100, f: 50 },
+    ),
+    { x: 120, y: 90 },
+  );
+});
+
+test('toContainerRelativePoint converts screen points into container space', () => {
+  assert.deepEqual(
+    toContainerRelativePoint(
+      { x: 320, y: 180 },
+      { left: 20, top: 30 },
+    ),
+    { x: 300, y: 150 },
+  );
 });
