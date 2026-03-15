@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
 use super::registry::NodeRegistry;
 use super::types::{PortDataType, WorkflowGraph};
 
@@ -143,10 +144,12 @@ impl<'a> WorkflowValidator<'a> {
             .collect();
 
         for node in &graph.nodes {
-            let definition = self
-                .registry
-                .get_definition(&node.node_type)
-                .ok_or_else(|| ValidationError::UnknownNodeType(node.node_type.clone()))?;
+            let definition =
+                effective_node_definition(node, self.registry).map_err(|error| match error {
+                    EffectiveDefinitionError::UnknownNodeType(node_type) => {
+                        ValidationError::UnknownNodeType(node_type)
+                    }
+                })?;
 
             for input in &definition.inputs {
                 if input.required
@@ -183,15 +186,19 @@ impl<'a> WorkflowValidator<'a> {
                 .find_node(&edge.target)
                 .ok_or_else(|| ValidationError::NodeNotFound(edge.target.clone()))?;
 
-            let source_def = self
-                .registry
-                .get_definition(&source_node.node_type)
-                .ok_or_else(|| ValidationError::UnknownNodeType(source_node.node_type.clone()))?;
+            let source_def =
+                effective_node_definition(source_node, self.registry).map_err(|error| match error {
+                    EffectiveDefinitionError::UnknownNodeType(node_type) => {
+                        ValidationError::UnknownNodeType(node_type)
+                    }
+                })?;
 
-            let target_def = self
-                .registry
-                .get_definition(&target_node.node_type)
-                .ok_or_else(|| ValidationError::UnknownNodeType(target_node.node_type.clone()))?;
+            let target_def =
+                effective_node_definition(target_node, self.registry).map_err(|error| match error {
+                    EffectiveDefinitionError::UnknownNodeType(node_type) => {
+                        ValidationError::UnknownNodeType(node_type)
+                    }
+                })?;
 
             let source_port = source_def
                 .outputs
@@ -349,5 +356,49 @@ mod tests {
             &PortDataType::Number,
             &PortDataType::Image
         ));
+    }
+
+    #[test]
+    fn test_validate_edge_types_accepts_dynamic_expand_setting_ports() {
+        let registry = create_test_registry();
+        let validator = WorkflowValidator::new(&registry);
+        let graph = WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "number".into(),
+                    node_type: "number-input".into(),
+                    position: Position::default(),
+                    data: serde_json::json!({"label": "Number Input"}),
+                },
+                GraphNode {
+                    id: "expand".into(),
+                    node_type: "expand-settings".into(),
+                    position: Position::default(),
+                    data: serde_json::json!({
+                        "definition": {
+                            "node_type": "expand-settings",
+                            "inputs": [
+                                {"id": "inference_settings", "label": "Inference Settings", "data_type": "json", "required": true, "multiple": false},
+                                {"id": "temperature", "label": "Temperature", "data_type": "number", "required": false, "multiple": false}
+                            ],
+                            "outputs": [
+                                {"id": "inference_settings", "label": "Inference Settings", "data_type": "json", "required": true, "multiple": false},
+                                {"id": "temperature", "label": "Temperature", "data_type": "number", "required": false, "multiple": false}
+                            ]
+                        }
+                    }),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "number-value-expand-temperature".into(),
+                source: "number".into(),
+                source_handle: "value".into(),
+                target: "expand".into(),
+                target_handle: "temperature".into(),
+            }],
+            derived_graph: None,
+        };
+
+        assert!(validator.validate_edge_types(&graph).is_ok());
     }
 }

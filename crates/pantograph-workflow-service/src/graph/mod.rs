@@ -1,4 +1,5 @@
 mod connection_intent;
+mod effective_definition;
 mod persistence;
 mod registry;
 mod session;

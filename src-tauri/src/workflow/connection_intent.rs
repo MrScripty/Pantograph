@@ -8,6 +8,7 @@ use std::collections::{HashSet, VecDeque};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
+use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
 use super::registry::NodeRegistry;
 use super::types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
@@ -19,12 +20,12 @@ use super::validation::validate_connection;
 
 struct ResolvedOutputAnchor<'a> {
     node: &'a GraphNode,
-    port: &'a PortDefinition,
+    port: PortDefinition,
 }
 
 struct ResolvedInputAnchor<'a> {
     node: &'a GraphNode,
-    port: &'a PortDefinition,
+    port: PortDefinition,
 }
 
 fn node_label(node: &GraphNode, definition: &NodeDefinition) -> String {
@@ -48,17 +49,17 @@ fn resolve_output_anchor<'a>(
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
             message: format!("source node '{}' was not found", anchor.node_id),
         })?;
-    let definition =
-        registry
-            .get_definition(&node.node_type)
-            .ok_or_else(|| ConnectionRejection {
-                reason: ConnectionRejectionReason::UnknownSourceAnchor,
-                message: format!("source node type '{}' is unknown", node.node_type),
-            })?;
+    let definition = effective_node_definition(node, registry).map_err(|error| match error {
+        EffectiveDefinitionError::UnknownNodeType(node_type) => ConnectionRejection {
+            reason: ConnectionRejectionReason::UnknownSourceAnchor,
+            message: format!("source node type '{}' is unknown", node_type),
+        },
+    })?;
     let port = definition
         .outputs
         .iter()
         .find(|port| port.id == anchor.port_id)
+        .cloned()
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
             message: format!(
@@ -81,17 +82,17 @@ fn resolve_input_anchor<'a>(
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
             message: format!("target node '{}' was not found", anchor.node_id),
         })?;
-    let definition =
-        registry
-            .get_definition(&node.node_type)
-            .ok_or_else(|| ConnectionRejection {
-                reason: ConnectionRejectionReason::UnknownTargetAnchor,
-                message: format!("target node type '{}' is unknown", node.node_type),
-            })?;
+    let definition = effective_node_definition(node, registry).map_err(|error| match error {
+        EffectiveDefinitionError::UnknownNodeType(node_type) => ConnectionRejection {
+            reason: ConnectionRejectionReason::UnknownTargetAnchor,
+            message: format!("target node type '{}' is unknown", node_type),
+        },
+    })?;
     let port = definition
         .inputs
         .iter()
         .find(|port| port.id == anchor.port_id)
+        .cloned()
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
             message: format!(
@@ -209,7 +210,7 @@ pub fn connection_candidates(
             continue;
         }
 
-        let Some(definition) = registry.get_definition(&node.node_type) else {
+        let Ok(definition) = effective_node_definition(node, registry) else {
             continue;
         };
 
@@ -234,7 +235,7 @@ pub fn connection_candidates(
             compatible_nodes.push(ConnectionTargetNodeCandidate {
                 node_id: node.id.clone(),
                 node_type: node.node_type.clone(),
-                node_label: node_label(node, definition),
+                node_label: node_label(node, &definition),
                 position: node.position.clone(),
                 anchors,
             });
@@ -398,7 +399,7 @@ pub fn insert_node_and_connect(
     let source = resolve_output_anchor(graph, registry, source_anchor)?;
     let definition = resolve_insert_definition(registry, node_type)?;
     let target_port_id =
-        resolve_insert_target_anchor(source.port, definition, preferred_input_port_id)?;
+        resolve_insert_target_anchor(&source.port, definition, preferred_input_port_id)?;
 
     let inserted_node = GraphNode {
         id: format!("{}-{}", definition.node_type, Uuid::new_v4()),
@@ -458,6 +459,40 @@ mod tests {
                     node_type: "llm-inference".into(),
                     position: Position { x: 200.0, y: 0.0 },
                     data: serde_json::json!({}),
+                },
+            ],
+            edges: Vec::new(),
+            derived_graph: None,
+        }
+    }
+
+    fn expand_target_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "number".into(),
+                    node_type: "number-input".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({"label": "Number Input"}),
+                },
+                GraphNode {
+                    id: "expand".into(),
+                    node_type: "expand-settings".into(),
+                    position: Position { x: 160.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "label": "Expand Settings",
+                        "definition": {
+                            "node_type": "expand-settings",
+                            "inputs": [
+                                {"id": "inference_settings", "label": "Inference Settings", "data_type": "json", "required": true, "multiple": false},
+                                {"id": "temperature", "label": "Temperature", "data_type": "number", "required": false, "multiple": false}
+                            ],
+                            "outputs": [
+                                {"id": "inference_settings", "label": "Inference Settings", "data_type": "json", "required": true, "multiple": false},
+                                {"id": "temperature", "label": "Temperature", "data_type": "number", "required": false, "multiple": false}
+                            ]
+                        }
+                    }),
                 },
             ],
             edges: Vec::new(),
@@ -588,6 +623,52 @@ mod tests {
         .expect_err("cycle should be rejected");
 
         assert_eq!(rejection.reason, ConnectionRejectionReason::CycleDetected);
+    }
+
+    #[test]
+    fn connection_candidates_include_dynamic_expand_setting_inputs() {
+        let registry = NodeRegistry::new();
+        let response = connection_candidates(
+            &expand_target_graph(),
+            &registry,
+            ConnectionAnchor {
+                node_id: "number".into(),
+                port_id: "value".into(),
+            },
+            None,
+        )
+        .expect("candidate query should succeed");
+
+        assert!(response.compatible_nodes.iter().any(|node| {
+            node.node_id == "expand"
+                && node
+                    .anchors
+                    .iter()
+                    .any(|port| port.port_id == "temperature")
+        }));
+    }
+
+    #[test]
+    fn commit_connection_accepts_dynamic_expand_setting_inputs() {
+        let registry = NodeRegistry::new();
+        let graph = expand_target_graph();
+        let revision = graph.compute_fingerprint();
+
+        let result = commit_connection(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "number".into(),
+                port_id: "value".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "expand".into(),
+                port_id: "temperature".into(),
+            },
+        );
+
+        assert!(result.is_ok(), "dynamic expand input should accept number output");
     }
 
     #[test]
