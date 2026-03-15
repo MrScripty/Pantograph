@@ -62,6 +62,7 @@
     supportsInsertFromConnectionDrag,
     type ConnectionDragState,
   } from '../connectionDragState.js';
+  import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
@@ -864,12 +865,8 @@
     handleType: 'source' | 'target',
   ) {
     if (!canEdit) return;
-
-    if (handleType === 'target' && edge.sourceHandle) {
-      const sourceAnchor = {
-        node_id: edge.source,
-        port_id: edge.sourceHandle,
-      };
+    const sourceAnchor = resolveReconnectSourceAnchor(edge, handleType);
+    if (sourceAnchor) {
       connectionDragState = startReconnectDrag(edge.id, sourceAnchor);
       applyHorseshoeSession(startHorseshoeDrag(getEventPointerPosition(_event)));
       await loadConnectionIntent(sourceAnchor);

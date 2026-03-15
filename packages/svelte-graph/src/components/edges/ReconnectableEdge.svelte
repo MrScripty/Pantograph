@@ -6,6 +6,7 @@
   } from '@xyflow/svelte';
   import { useGraphContext } from '../../context/useGraphContext.js';
   import type { NodeDefinition } from '../../types/workflow.js';
+  import { insetReconnectAnchorPosition } from '../../reconnectInteraction.js';
 
   const { stores } = useGraphContext();
   const nodesStore = stores.workflow.nodes;
@@ -76,6 +77,32 @@
 
   // Unique gradient ID for this edge
   const gradientId = $derived(`edge-gradient-${id}`);
+  const sourceAnchorPosition = $derived(
+    insetReconnectAnchorPosition(
+      {
+        source,
+        sourceHandle: sourceHandleId,
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+      },
+      'source',
+    )
+  );
+  const targetAnchorPosition = $derived(
+    insetReconnectAnchorPosition(
+      {
+        source,
+        sourceHandle: sourceHandleId,
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+      },
+      'target',
+    )
+  );
 </script>
 
 <!-- Custom SVG with gradient - colored only at the ends, white in the middle -->
@@ -119,4 +146,5 @@
   class="react-flow__edge-interaction"
 />
 
-<EdgeReconnectAnchor type="target" position={{ x: targetX, y: targetY }} />
+<EdgeReconnectAnchor type="source" position={sourceAnchorPosition} size={18} />
+<EdgeReconnectAnchor type="target" position={targetAnchorPosition} size={18} />

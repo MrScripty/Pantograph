@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { Edge } from '@xyflow/svelte';
   import { linesIntersect } from '../utils/geometry.js';
+  import {
+    findRenderedEdgePath,
+    isCutModifierPressed,
+    shouldStartCutGesture,
+  } from '../cutInteraction.js';
 
   interface Props {
     edges: Edge[];
@@ -20,28 +25,37 @@
 
   let cutStart = $state<{ x: number; y: number } | null>(null);
   let cutEnd = $state<{ x: number; y: number } | null>(null);
+  let isFinalizingCut = $state(false);
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Control') {
+    if (isCutModifierPressed(e)) {
       ctrlPressed = true;
     }
   }
 
   function handleKeyUp(e: KeyboardEvent) {
-    if (e.key === 'Control') {
-      ctrlPressed = false;
-      if (isCutting) {
-        finishCut();
-      }
+    if (!isCutModifierPressed(e) && !ctrlPressed) {
+      return;
+    }
+
+    ctrlPressed = e.ctrlKey || e.metaKey;
+    if (!ctrlPressed && isCutting) {
+      void finishCut();
     }
   }
 
   /** Call from parent's mousedown handler on the graph container */
   export function onPaneMouseDown(e: MouseEvent) {
-    if (!enabled || !ctrlPressed) return;
-
-    const target = e.target as HTMLElement;
-    if (target.closest('.svelte-flow__node') || target.closest('.svelte-flow__handle')) return;
+    ctrlPressed = ctrlPressed || isCutModifierPressed(e);
+    if (
+      !shouldStartCutGesture({
+        enabled,
+        modifierPressed: ctrlPressed || isCutModifierPressed(e),
+        target: e.target as HTMLElement | null,
+      })
+    ) {
+      return;
+    }
 
     isCutting = true;
     const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
@@ -64,7 +78,7 @@
   /** Call from parent's mouseup handler on the graph container */
   export function onPaneMouseUp() {
     if (isCutting) {
-      finishCut();
+      void finishCut();
     }
   }
 
@@ -91,26 +105,35 @@
   }
 
   async function finishCut() {
-    if (!cutStart || !cutEnd) {
-      isCutting = false;
-      cutStart = null;
-      cutEnd = null;
+    if (isFinalizingCut) {
       return;
     }
 
-    const edgesToRemove = edges.filter((edge) => {
-      const edgeEl = document.querySelector(`[data-id="${edge.id}"] path`);
-      if (!edgeEl) return false;
-      return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
-    });
+    isFinalizingCut = true;
+    try {
+      if (!cutStart || !cutEnd) {
+        isCutting = false;
+        cutStart = null;
+        cutEnd = null;
+        return;
+      }
 
-    if (edgesToRemove.length > 0 && onEdgesCut) {
-      await onEdgesCut(edgesToRemove.map((e) => e.id));
+      const edgesToRemove = edges.filter((edge) => {
+        const edgeEl = findRenderedEdgePath(document, edge.id);
+        if (!edgeEl) return false;
+        return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement);
+      });
+
+      if (edgesToRemove.length > 0 && onEdgesCut) {
+        await onEdgesCut(edgesToRemove.map((e) => e.id));
+      }
+
+      isCutting = false;
+      cutStart = null;
+      cutEnd = null;
+    } finally {
+      isFinalizingCut = false;
     }
-
-    isCutting = false;
-    cutStart = null;
-    cutEnd = null;
   }
 </script>
 

@@ -38,9 +38,11 @@ for validation/highlighting, and route horseshoe invocation through the same
 shared drag-session controller and drag-scoped window input used by the package
 graph before committing through revision-aware anchor and insert APIs. Pending
 and blocked horseshoe states remain visible instead of failing silently. The
-app graph also consumes the shared connection-drag helper contract so occupied
-output handles stay in normal fan-out mode and reconnect cleanup cannot bleed
-into ordinary insert flows. Once the horseshoe is open, repeated `Space`
+app graph also consumes the shared connection-drag helper contract so reconnect
+cleanup cannot bleed into ordinary insert flows. Reconnect affordances are
+available from both rendered edge endpoints, but those drag handles stay inset
+from the actual node ports so occupied outputs remain usable for normal fan-out
+drags. Once the horseshoe is open, repeated `Space`
 confirms the highlighted insert candidate, clears drag ownership immediately,
 and turns pointer movement into menu selection input instead of menu
 repositioning. Insert confirmation now waits for the backend outcome before the
@@ -63,7 +65,8 @@ backend-returned graph revision.
 - Connection-intent cleanup must happen on cancel, pane click, escape, and graph
   mutation paths.
 - Occupied output handles must remain available for multiple outgoing edges even
-  when an edge is already present at that output.
+  when an edge is already present at that output; reconnect hit targets must
+  not fully cover the output port.
 - Horseshoe selection must route through `workflowService.insertNodeAndConnect`
   so the app never creates orphan nodes on stale or incompatible inserts.
 - Horseshoe open failures should be diagnosable through the shared blocked
@@ -107,9 +110,9 @@ backend-returned graph revision.
 - `WorkflowGraph.svelte` relies on `workflowService` session state and the
   shared workflow store exports; callers should not instantiate it outside the
   app shell without recreating those dependencies.
-- The app graph follows the package contract that only explicit target-end edge
-  drags are reconnect flows; starting from an output handle is always a
-  connection/fan-out gesture.
+- The app graph allows reconnect and disconnect drags from either rendered edge
+  endpoint while keeping the actual output handle available for normal fan-out
+  gestures.
 - The app graph follows the package horseshoe contract: first `Space` opens,
   open-state `Space` or `Enter` confirms, and menu-open pointer motion selects
   candidates without moving the menu anchor.
