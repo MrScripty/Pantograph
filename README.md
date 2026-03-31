@@ -158,6 +158,21 @@ Reference docs:
 - Service boundary ADR: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - Implementation notes: `docs/headless-embedding-implementation-notes.md`
 
+## Current Milestone
+
+Current focus is making edge insertion feel complete in the desktop workflow editor.
+
+Done for this milestone means:
+
+- A user can insert a palette node onto an existing edge in the desktop app.
+- The inserted node lands on the intended edge without breaking surrounding graph state.
+- The resulting graph persists correctly through save and reload.
+- The interaction path is documented well enough to demo without explaining internal graph rules first.
+
+Current known limitation:
+
+- The workflow graph contract is moving faster than the user-facing demo narrative, so technical progress can be hard to evaluate from the outside.
+
 ## Project Structure
 
 | Path | Description |
