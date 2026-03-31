@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 
@@ -77,6 +78,17 @@ def _resolve_bundle_paths(model_path: str) -> Tuple[Path, Path]:
     return model_file, voices_file
 
 
+def _load_bundle_config(model_file: Path) -> Dict[str, Any]:
+    config_path = model_file.with_name("config.json")
+    if not config_path.exists():
+        return {}
+
+    try:
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def _to_wav_base64(audio: np.ndarray, sample_rate: int) -> Tuple[str, float]:
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim > 1:
@@ -112,7 +124,8 @@ def _load_model(model_path: str):
     global _loaded, _loaded_key
 
     model_file, voices_file = _resolve_bundle_paths(model_path)
-    key = f"{model_file}:{voices_file}"
+    config = _load_bundle_config(model_file)
+    key = f"{model_file}:{voices_file}:{json.dumps(config, sort_keys=True)}"
     if _loaded is not None and _loaded_key == key:
         return _loaded
 
@@ -130,6 +143,8 @@ def _load_model(model_path: str):
         _loaded = KittenTTS_1_Onnx(
             model_path=str(model_file),
             voices_path=str(voices_file),
+            speed_priors=config.get("speed_priors", {}) or {},
+            voice_aliases=config.get("voice_aliases", {}) or {},
         )
     except Exception as exc:
         hint = _runtime_hint_for_exception(exc)
@@ -171,19 +186,33 @@ def _iter_chunks(
 
 
 def _available_voice_names(tts_model: Any) -> List[str]:
+    names: List[str] = []
     available = getattr(tts_model, "available_voices", None)
     if isinstance(available, (list, tuple)):
-        names = [str(name) for name in available if str(name).strip()]
-        if names:
-            return names
+        names.extend(str(name) for name in available if str(name).strip())
+
+    aliases = getattr(tts_model, "voice_aliases", None)
+    if isinstance(aliases, dict):
+        names.extend(str(name) for name in aliases.keys() if str(name).strip())
+
+    all_voice_names = getattr(tts_model, "all_voice_names", None)
+    if isinstance(all_voice_names, (list, tuple)):
+        names.extend(str(name) for name in all_voice_names if str(name).strip())
 
     voices = getattr(tts_model, "voices", None)
     if isinstance(voices, dict):
-        names = [str(name) for name in voices.keys() if str(name).strip()]
-        if names:
-            return names
+        names.extend(str(name) for name in voices.keys() if str(name).strip())
 
-    return []
+    deduped: List[str] = []
+    seen = set()
+    for name in names:
+        normalized = name.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(name)
+
+    return deduped
 
 
 def _resolve_voice(requested_voice: str, available_voices: List[str]) -> str:
