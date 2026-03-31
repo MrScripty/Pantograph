@@ -1,17 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::project_root::resolve_project_root;
 use node_engine::resolve_path_within_root;
 
 use super::types::{WorkflowFile, WorkflowGraph, WorkflowMetadata};
 
 fn get_workflows_dir() -> Result<PathBuf, String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let project_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
-
+    let project_root = resolve_project_root()?;
     let workflows_dir = project_root.join(".pantograph").join("workflows");
     fs::create_dir_all(&workflows_dir)
         .map_err(|e| format!("Failed to create workflows directory: {}", e))?;
@@ -59,12 +55,7 @@ pub fn save_workflow(name: String, graph: WorkflowGraph) -> Result<String, Strin
 }
 
 pub fn load_workflow(path: String) -> Result<WorkflowFile, String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let project_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
-
+    let project_root = resolve_project_root()?;
     let full_path = resolve_path_within_root(&path, &project_root)
         .map_err(|e| format!("Invalid workflow path '{}': {}", path, e))?;
 
@@ -119,11 +110,7 @@ mod tests {
     use uuid::Uuid;
 
     fn project_root() -> PathBuf {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        std::path::Path::new(manifest_dir)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."))
+        resolve_project_root().expect("resolve project root")
     }
 
     #[test]

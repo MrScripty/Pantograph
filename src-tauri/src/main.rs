@@ -8,6 +8,7 @@ mod config;
 mod constants;
 mod hotload_sandbox;
 mod llm;
+mod project_root;
 mod workflow;
 
 use agent::create_rag_manager;
@@ -32,6 +33,7 @@ use llm::{
     start_sidecar_llm, stop_health_monitor, stop_llm, switch_backend, trigger_recovery,
     undo_component_change, update_svelte_docs, validate_component,
 };
+use project_root::resolve_project_root;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
@@ -52,15 +54,12 @@ fn main() {
     let workflow_service: workflow::commands::SharedWorkflowService =
         Arc::new(pantograph_workflow_service::WorkflowService::new());
 
-    // Create the orchestration store with file persistence
-    // Use CARGO_MANIFEST_DIR to get project root (same pattern as project_data_dir below)
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let project_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .expect("Failed to get project root from CARGO_MANIFEST_DIR");
+    // Resolve the real repo root at runtime so saved workflows survive source tree moves.
+    let project_root =
+        resolve_project_root().expect("Failed to resolve Pantograph project root at runtime");
     let orchestrations_path = project_root.join(".pantograph/orchestrations");
     let workflow_graph_store: workflow::commands::SharedWorkflowGraphStore = Arc::new(
-        pantograph_workflow_service::FileSystemWorkflowGraphStore::new(project_root.to_path_buf()),
+        pantograph_workflow_service::FileSystemWorkflowGraphStore::new(project_root.clone()),
     );
 
     let mut orchestration_store =
@@ -97,7 +96,7 @@ fn main() {
     let model_dependency_resolver: SharedModelDependencyResolver = Arc::new(
         workflow::model_dependencies::TauriModelDependencyResolver::new(
             shared_extensions.clone(),
-            project_root.to_path_buf(),
+            project_root.clone(),
         ),
     );
 
@@ -135,14 +134,8 @@ fn main() {
                 let _ = dependency_event_app.emit("dependency-activity", &event);
             }));
 
-            // Get project data directory for docs and RAG storage
-            // Use CARGO_MANIFEST_DIR (src-tauri/) and go up one level to get project root.
-            // This ensures data is stored at project root regardless of the current working
-            // directory (which can vary during `tauri dev`).
-            let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            let project_root = std::path::Path::new(manifest_dir)
-                .parent()
-                .expect("Failed to get project root from CARGO_MANIFEST_DIR");
+            let project_root =
+                resolve_project_root().expect("Failed to resolve Pantograph project root");
             let project_data_dir = project_root.join(DATA_DIR);
 
             // Create the data directory if it doesn't exist
