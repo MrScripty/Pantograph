@@ -306,8 +306,11 @@
 
   function inferBackendKeyFromTask(taskTypePrimary?: string): string {
     const task = (taskTypePrimary ?? '').toLowerCase();
-    if (task === 'text-to-audio' || task === 'audio-to-text') {
+    if (task === 'text-to-audio') {
       return 'stable_audio';
+    }
+    if (task === 'audio-to-text') {
+      return 'pytorch';
     }
     if (task === 'text-to-image' || task === 'image-to-image') {
       return 'pytorch';

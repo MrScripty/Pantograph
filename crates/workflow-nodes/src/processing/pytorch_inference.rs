@@ -13,6 +13,7 @@ use node_engine::{
 
 const PORT_MODEL_PATH: &str = "model_path";
 const PORT_PROMPT: &str = "prompt";
+const PORT_AUDIO: &str = "audio";
 const PORT_SYSTEM_PROMPT: &str = "system_prompt";
 const PORT_TEMPERATURE: &str = "temperature";
 const PORT_MAX_TOKENS: &str = "max_tokens";
@@ -48,11 +49,12 @@ impl TaskDescriptor for PyTorchInferenceTask {
             category: NodeCategory::Processing,
             label: "PyTorch Inference".to_string(),
             description:
-                "Run inference via PyTorch (dLLM, Sherry, HF models; supports masked prompts)"
+                "Run inference via PyTorch (text generation, ASR, and HF-backed pipelines)"
                     .to_string(),
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
-                PortMetadata::required(PORT_PROMPT, "Prompt", PortDataType::Prompt),
+                PortMetadata::optional(PORT_PROMPT, "Prompt", PortDataType::Prompt),
+                PortMetadata::optional(PORT_AUDIO, "Audio", PortDataType::Audio),
                 PortMetadata::optional(PORT_SYSTEM_PROMPT, "System Prompt", PortDataType::String),
                 PortMetadata::optional(PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
@@ -104,11 +106,12 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = PyTorchInferenceTask::descriptor();
 
-        // 9 inputs: model_path, prompt, system_prompt, temperature, max_tokens, device,
+        // 10 inputs: model_path, prompt, audio, system_prompt, temperature, max_tokens, device,
         // model_type, inference_settings, environment_ref
-        assert_eq!(meta.inputs.len(), 9);
+        assert_eq!(meta.inputs.len(), 10);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
+        assert!(meta.inputs.iter().any(|p| p.id == "audio"));
         assert!(meta.inputs.iter().any(|p| p.id == "system_prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "temperature"));
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));

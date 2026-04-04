@@ -230,6 +230,30 @@ impl TauriTaskExecutor {
         }
     }
 
+    fn promote_runtime_metadata(inputs: &mut HashMap<String, serde_json::Value>) {
+        for key in ["task_type_primary", "model_type", "backend_key"] {
+            let nested = inputs.get("_data").and_then(|data| data.get(key)).cloned();
+            let Some(value) = nested.or_else(|| Self::read_optional_input_value(inputs, key)) else {
+                continue;
+            };
+            if value.is_null() {
+                continue;
+            }
+
+            let should_override = match inputs.get(key) {
+                None => true,
+                Some(existing) if existing.is_null() => true,
+                Some(existing) if existing.as_str() == Some("unknown") => true,
+                Some(existing) if existing.as_str() == Some("") => true,
+                _ => false,
+            };
+
+            if should_override {
+                inputs.insert(key.to_string(), value);
+            }
+        }
+    }
+
     fn resolve_inference_setting_runtime_value(
         parameter: &serde_json::Value,
         value: serde_json::Value,
@@ -991,6 +1015,7 @@ impl TauriTaskExecutor {
     ) -> Result<HashMap<String, serde_json::Value>> {
         let mut runtime_inputs = inputs.clone();
         Self::apply_inference_setting_defaults(&mut runtime_inputs);
+        Self::promote_runtime_metadata(&mut runtime_inputs);
         if let Some(model_ref) = self
             .enforce_dependency_preflight(node_type, inputs, extensions)
             .await?

@@ -1,0 +1,289 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "name": "Whisper STT",
+    "created": "2026-04-01T00:00:00Z",
+    "modified": "2026-04-01T00:00:00Z"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "audio-input-whisper",
+        "node_type": "audio-input",
+        "position": {
+          "x": -760.0,
+          "y": 120.0
+        },
+        "data": {
+          "label": "Audio Input",
+          "definition": {
+            "category": "input",
+            "description": "Load audio files into the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "audio",
+                "id": "audio_data",
+                "label": "Audio Data",
+                "multiple": false,
+                "required": true
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Audio Input",
+            "node_type": "audio-input",
+            "outputs": [
+              {
+                "data_type": "audio",
+                "id": "audio",
+                "label": "Audio",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "puma-lib-whisper-stt",
+        "node_type": "puma-lib",
+        "position": {
+          "x": -760.0,
+          "y": -120.0
+        },
+        "data": {
+          "label": "Puma-Lib",
+          "selectionMode": "library",
+          "modelName": "whisper-large-v3-turbo",
+          "modelPath": "/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/shared-resources/models/unknown/openai/whisper-large-v3-turbo",
+          "model_id": "unknown/openai/whisper-large-v3-turbo",
+          "model_type": "audio",
+          "task_type_primary": "audio-to-text",
+          "backend_key": "pytorch",
+          "definition": {
+            "category": "input",
+            "description": "Provides AI model file path",
+            "execution_mode": "reactive",
+            "inputs": [],
+            "io_binding_origin": "integrated",
+            "label": "Puma-Lib",
+            "node_type": "puma-lib",
+            "outputs": [
+              {
+                "data_type": "string",
+                "id": "model_path",
+                "label": "Model Path",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "inference_settings",
+                "label": "Inference Settings",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "dependency_requirements",
+                "label": "Dependency Requirements",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "pytorch-inference-whisper-stt",
+        "node_type": "pytorch-inference",
+        "position": {
+          "x": -180.0,
+          "y": 0.0
+        },
+        "data": {
+          "label": "PyTorch Inference",
+          "task_type_primary": "audio-to-text",
+          "backend_key": "pytorch",
+          "definition": {
+            "category": "processing",
+            "description": "Run inference via PyTorch (text generation, ASR, and HF-backed pipelines)",
+            "execution_mode": "stream",
+            "inputs": [
+              {
+                "data_type": "string",
+                "id": "model_path",
+                "label": "Model Path",
+                "multiple": false,
+                "required": true
+              },
+              {
+                "data_type": "prompt",
+                "id": "prompt",
+                "label": "Prompt",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "audio",
+                "id": "audio",
+                "label": "Audio",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "system_prompt",
+                "label": "System Prompt",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "number",
+                "id": "temperature",
+                "label": "Temperature",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "number",
+                "id": "max_tokens",
+                "label": "Max Tokens",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "device",
+                "label": "Device",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "string",
+                "id": "model_type",
+                "label": "Model Type",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "inference_settings",
+                "label": "Inference Settings",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "json",
+                "id": "environment_ref",
+                "label": "Environment Ref",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "integrated",
+            "label": "PyTorch Inference",
+            "node_type": "pytorch-inference",
+            "outputs": [
+              {
+                "data_type": "string",
+                "id": "response",
+                "label": "Response",
+                "multiple": false,
+                "required": true
+              },
+              {
+                "data_type": "json",
+                "id": "model_ref",
+                "label": "Model Reference",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "stream",
+                "id": "stream",
+                "label": "Stream",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "text-output-whisper-transcript",
+        "node_type": "text-output",
+        "position": {
+          "x": 320.0,
+          "y": 0.0
+        },
+        "data": {
+          "label": "Transcript",
+          "definition": {
+            "category": "output",
+            "description": "Displays text output from the workflow",
+            "execution_mode": "reactive",
+            "inputs": [
+              {
+                "data_type": "string",
+                "id": "text",
+                "label": "Text",
+                "multiple": false,
+                "required": false
+              },
+              {
+                "data_type": "stream",
+                "id": "stream",
+                "label": "Stream",
+                "multiple": false,
+                "required": false
+              }
+            ],
+            "io_binding_origin": "client_session",
+            "label": "Text Output",
+            "node_type": "text-output",
+            "outputs": [
+              {
+                "data_type": "string",
+                "id": "text",
+                "label": "Text",
+                "multiple": false,
+                "required": false
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "audio-input-whisper-audio-pytorch-inference-whisper-stt-audio",
+        "source": "audio-input-whisper",
+        "source_handle": "audio",
+        "target": "pytorch-inference-whisper-stt",
+        "target_handle": "audio"
+      },
+      {
+        "id": "puma-lib-whisper-stt-model_path-pytorch-inference-whisper-stt-model_path",
+        "source": "puma-lib-whisper-stt",
+        "source_handle": "model_path",
+        "target": "pytorch-inference-whisper-stt",
+        "target_handle": "model_path"
+      },
+      {
+        "id": "puma-lib-whisper-stt-inference_settings-pytorch-inference-whisper-stt-inference_settings",
+        "source": "puma-lib-whisper-stt",
+        "source_handle": "inference_settings",
+        "target": "pytorch-inference-whisper-stt",
+        "target_handle": "inference_settings"
+      },
+      {
+        "id": "pytorch-inference-whisper-stt-response-text-output-whisper-transcript-text",
+        "source": "pytorch-inference-whisper-stt",
+        "source_handle": "response",
+        "target": "text-output-whisper-transcript",
+        "target_handle": "text"
+      }
+    ]
+  }
+}

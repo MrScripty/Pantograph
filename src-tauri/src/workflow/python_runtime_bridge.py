@@ -110,6 +110,15 @@ def _coalesce_setting(inputs: Dict[str, Any], extra: Dict[str, Any], *keys: str)
     return None
 
 
+def _input_or_data(inputs: Dict[str, Any], key: str) -> Any:
+    if key in inputs and inputs.get(key) is not None:
+        return inputs.get(key)
+    data = inputs.get("_data")
+    if isinstance(data, dict):
+        return data.get(key)
+    return None
+
+
 def _as_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
@@ -142,6 +151,55 @@ def _fallback_model_ref(engine: str, model_path: str, task_type_primary: str) ->
 
 def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, Any]:
     worker = _load_module("pantograph_torch_worker_process", torch_worker_path)
+
+    task_type_primary = _input_or_data(inputs, "task_type_primary")
+    if not isinstance(task_type_primary, str) or not task_type_primary.strip():
+        task_type_primary = "text-generation"
+    task_type_primary = task_type_primary.strip()
+
+    if task_type_primary == "audio-to-text":
+        model_path = inputs.get("model_path")
+        if not isinstance(model_path, str) or not model_path.strip():
+            raise RuntimeError("Missing model_path input. Connect a Puma-Lib node.")
+        model_path = model_path.strip()
+
+        audio = inputs.get("audio")
+        if not isinstance(audio, str) or not audio.strip():
+            raise RuntimeError("Missing audio input. Connect an audio-input node.")
+
+        kwargs: Dict[str, Any] = {"audio_base64": audio.strip()}
+        language = inputs.get("language")
+        if isinstance(language, str) and language.strip():
+            kwargs["language"] = language.strip()
+        prompt = inputs.get("prompt")
+        if isinstance(prompt, str) and prompt.strip():
+            kwargs["prompt"] = prompt.strip()
+
+        extra = _build_extra_settings(inputs)
+        if "language" in extra and "language" not in kwargs:
+            kwargs["language"] = extra["language"]
+        if "task" in extra:
+            kwargs["task"] = extra["task"]
+        if "chunk_length_s" in extra:
+            kwargs["chunk_length_s"] = extra["chunk_length_s"]
+
+        result = worker.transcribe_audio(
+            model_path=model_path,
+            device=str(inputs.get("device", "auto") or "auto"),
+            **kwargs,
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("PyTorch ASR worker returned unexpected payload shape")
+
+        outputs: Dict[str, Any] = {
+            "response": result.get("text", ""),
+            "language": result.get("language"),
+            "duration_seconds": result.get("duration_seconds"),
+        }
+        outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(
+            "pytorch", model_path, task_type_primary
+        )
+        return outputs
 
     prompt_value = inputs.get("prompt")
     masked_prompt_json = None
@@ -187,10 +245,6 @@ def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, An
 
     response = worker.generate(**kwargs)
     response_text = response if isinstance(response, str) else str(response)
-
-    task_type_primary = inputs.get("task_type_primary")
-    if not isinstance(task_type_primary, str) or not task_type_primary.strip():
-        task_type_primary = "text-generation"
 
     outputs: Dict[str, Any] = {"response": response_text}
     outputs["model_ref"] = _input_model_ref(inputs) or _fallback_model_ref(

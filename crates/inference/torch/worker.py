@@ -18,6 +18,8 @@ import logging
 import sys
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 import torch
 
 # When loaded from the filesystem, ensure sibling modules are importable.
@@ -55,6 +57,18 @@ _diffusion_pipeline = None
 _diffusion_device = None
 _diffusion_model_path = None
 _diffusion_dtype = None
+
+_asr_pipeline = None
+_asr_device = None
+_asr_model_path = None
+
+
+def _resolve_model_directory(model_path):
+    """Return the containing model directory for a resolved model artifact path."""
+    path = Path(model_path)
+    if path.is_file():
+        return path.parent
+    return path
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
@@ -125,6 +139,16 @@ def get_loaded_diffusion_info():
         "model_path": str(_diffusion_model_path) if _diffusion_model_path else None,
         "device": str(_diffusion_device) if _diffusion_device is not None else None,
         "torch_dtype": _dtype_name(_diffusion_dtype),
+    }
+
+
+def get_loaded_asr_info():
+    """Return metadata about the currently loaded ASR pipeline, or None."""
+    if _asr_pipeline is None:
+        return None
+    return {
+        "model_path": str(_asr_model_path) if _asr_model_path else None,
+        "device": str(_asr_device) if _asr_device is not None else None,
     }
 
 
@@ -306,7 +330,7 @@ def load_model(model_path, device="auto", model_type=None):
 
     path = Path(model_path)
     if not path.exists():
-        raise FileNotFoundError(f"Model path does not exist: {model_path}")
+        raise FileNotFoundError(f"Model path does not exist: {path}")
 
     resolved_device = _resolve_device(device)
     detected_type = model_type or _detect_model_type(path)
@@ -396,6 +420,26 @@ def unload_diffusion_model():
         logger.info("Diffusion pipeline unloaded: %s", name)
 
 
+def unload_asr_model():
+    """Unload the current ASR pipeline and free GPU memory."""
+    global _asr_pipeline, _asr_device, _asr_model_path
+
+    if _asr_pipeline is not None:
+        name = _asr_model_path.name if _asr_model_path else "unknown"
+        del _asr_pipeline
+        _asr_pipeline = None
+        _asr_device = None
+        _asr_model_path = None
+
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+        logger.info("ASR pipeline unloaded: %s", name)
+
+
 def load_diffusion_model(
     model_path,
     device="auto",
@@ -474,6 +518,122 @@ def load_diffusion_model(
     _diffusion_dtype = resolved_dtype
 
     return get_loaded_diffusion_info()
+
+
+def load_asr_model(model_path, device="auto", chunk_length_s=None):
+    """Load a speech-to-text pipeline into module globals for process-backed use."""
+    global _asr_pipeline, _asr_device, _asr_model_path
+
+    path = _resolve_model_directory(model_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Model path does not exist: {path}")
+
+    if _asr_pipeline is not None and _asr_model_path == path:
+        return get_loaded_asr_info()
+
+    if _asr_pipeline is not None:
+        unload_asr_model()
+
+    try:
+        from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to import transformers ASR runtime. Ensure the selected dependency environment "
+            "includes `transformers`, `torch`, `numpy`, and `soundfile`."
+        ) from exc
+
+    resolved_device = _resolve_device(device)
+    torch_dtype = torch.float16 if resolved_device.type == "cuda" else torch.float32
+
+    logger.info("Loading ASR pipeline from %s onto %s", path, resolved_device)
+
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(
+        str(path),
+        torch_dtype=torch_dtype,
+        low_cpu_mem_usage=True,
+        use_safetensors=True,
+    )
+    processor = AutoProcessor.from_pretrained(str(path))
+
+    if resolved_device.type != "cpu":
+        model.to(resolved_device)
+
+    pipeline_device = 0 if resolved_device.type == "cuda" else -1
+    pipe_kwargs = {
+        "task": "automatic-speech-recognition",
+        "model": model,
+        "tokenizer": processor.tokenizer,
+        "feature_extractor": processor.feature_extractor,
+        "device": pipeline_device,
+    }
+    if chunk_length_s is not None:
+        pipe_kwargs["chunk_length_s"] = float(chunk_length_s)
+
+    _asr_pipeline = pipeline(**pipe_kwargs)
+    _asr_device = resolved_device
+    _asr_model_path = path
+    return get_loaded_asr_info()
+
+
+def transcribe_audio(
+    model_path,
+    audio_base64,
+    device="auto",
+    language=None,
+    prompt=None,
+    task=None,
+    chunk_length_s=None,
+):
+    """Transcribe an in-memory WAV payload with the loaded ASR pipeline."""
+    if not isinstance(audio_base64, str) or not audio_base64.strip():
+        raise RuntimeError("Missing audio_base64 input")
+
+    load_asr_model(model_path, device=device, chunk_length_s=chunk_length_s)
+    if _asr_pipeline is None:
+        raise RuntimeError("No ASR pipeline loaded. Call load_asr_model() first.")
+
+    try:
+        raw_bytes = base64.b64decode(audio_base64)
+    except Exception as exc:
+        raise RuntimeError("Failed to decode base64 audio payload") from exc
+
+    try:
+        audio, sample_rate = sf.read(io.BytesIO(raw_bytes), dtype="float32")
+    except Exception as exc:
+        raise RuntimeError("Failed to decode audio payload as WAV") from exc
+
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=1, dtype=np.float32)
+
+    duration_seconds = float(audio.shape[0]) / float(sample_rate) if sample_rate else 0.0
+
+    generate_kwargs = {}
+    if isinstance(language, str) and language.strip():
+        generate_kwargs["language"] = language.strip()
+    if isinstance(prompt, str) and prompt.strip():
+        generate_kwargs["prompt"] = prompt.strip()
+    if isinstance(task, str) and task.strip():
+        generate_kwargs["task"] = task.strip()
+
+    result = _asr_pipeline(
+        {"array": audio, "sampling_rate": int(sample_rate)},
+        generate_kwargs=generate_kwargs or None,
+    )
+
+    if isinstance(result, dict):
+        text = result.get("text", "")
+        chunks = result.get("chunks")
+    else:
+        text = str(result)
+        chunks = None
+
+    return {
+        "text": text.strip(),
+        "language": language.strip() if isinstance(language, str) and language.strip() else None,
+        "duration_seconds": duration_seconds,
+        "chunks": chunks,
+    }
 
 
 def generate_image(
