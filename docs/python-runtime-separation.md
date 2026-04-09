@@ -80,7 +80,8 @@ For local diffusion worker verification against an imported model bundle, use:
 For direct C#/UniFFI/embedded-runtime diffusion verification against the same
 kind of bundle, use:
 ```bash
-PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/tiny-sd-turbo \
+PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/tiny-sd-turbo \
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
   PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
   ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```

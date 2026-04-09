@@ -405,8 +405,9 @@ Update during implementation:
   `scripts/check-uniffi-csharp-diffusion-smoke.sh`. It reuses the generated-C#
   smoke harness in diffusion mode and runs prompt-to-image through
   C# -> UniFFI -> `pantograph-embedded-runtime` -> process Python adapter ->
-  torch/diffusers worker when `PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH` and a
-  suitable Python executable are supplied.
+  torch/diffusers worker when a Puma-Lib model selection
+  (`PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH`) and a suitable Python
+  executable are supplied.
 
 ## Commit Cadence Notes
 
@@ -491,7 +492,7 @@ Update during implementation:
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `./scripts/check-uniffi-embedded-runtime-surface.sh`
 - `./scripts/check-uniffi-csharp-smoke.sh`
-- `PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/model PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python ./scripts/check-uniffi-csharp-diffusion-smoke.sh`
+- `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/model PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python ./scripts/check-uniffi-csharp-diffusion-smoke.sh`
 
 ### Traceability Links
 

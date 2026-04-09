@@ -63,7 +63,7 @@ Tracked plan:
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `./scripts/check-uniffi-embedded-runtime-surface.sh`
 - `./scripts/check-uniffi-csharp-smoke.sh`
-- `PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/model PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python ./scripts/check-uniffi-csharp-diffusion-smoke.sh`
+- `PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/model PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python ./scripts/check-uniffi-csharp-diffusion-smoke.sh`
 - `cargo check -p pantograph_rustler --no-default-features`
 - `cargo check -p pantograph_rustler --features frontend-http`
 

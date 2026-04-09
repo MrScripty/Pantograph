@@ -87,12 +87,14 @@ public static class Program
 
     private static async Task RunDiffusionSmoke(FfiPantographRuntime runtime, string projectRoot)
     {
-        string modelPath = RequireEnv("PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH");
+        string modelPath = RequireEnv("PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH");
+        string modelId = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID")
+            ?? "diffusion/smoke/imported-model";
         string prompt = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_PROMPT")
             ?? "paper lantern in the rain";
         string outputPath = Environment.GetEnvironmentVariable("PANTOGRAPH_DIFFUSION_SMOKE_OUTPUT") ?? "";
 
-        WriteDiffusionWorkflow(projectRoot, DiffusionWorkflowId, modelPath);
+        WriteDiffusionWorkflow(projectRoot, DiffusionWorkflowId, modelPath, modelId);
 
         string response = await runtime.WorkflowRun(DiffusionRunRequest(prompt));
         string imageValue = ReadString(response, "outputs", "0", "value");
@@ -329,7 +331,11 @@ public static class Program
             """);
     }
 
-    private static void WriteDiffusionWorkflow(string projectRoot, string workflowId, string modelPath)
+    private static void WriteDiffusionWorkflow(
+        string projectRoot,
+        string workflowId,
+        string modelPath,
+        string modelId)
     {
         string workflowPath = PrepareWorkflowPath(projectRoot, workflowId);
         string workflowJson = $$"""
@@ -342,6 +348,35 @@ public static class Program
           },
           "graph": {
             "nodes": [
+              {
+                "id": "puma-lib-model",
+                "node_type": "puma-lib",
+                "data": {
+                  "label": "Puma-Lib Model",
+                  "selectionMode": "library",
+                  "modelPath": {{JsonSerializer.Serialize(modelPath)}},
+                  "model_id": {{JsonSerializer.Serialize(modelId)}},
+                  "model_type": "diffusion",
+                  "task_type_primary": "text-to-image",
+                  "recommended_backend": "diffusers",
+                  "runtime_engine_hints": ["diffusers", "pytorch"],
+                  "selected_binding_ids": [],
+                  "dependency_bindings": [],
+                  "dependency_requirements": {
+                    "model_id": {{JsonSerializer.Serialize(modelId)}},
+                    "platform_key": "smoke",
+                    "backend_key": "pytorch",
+                    "dependency_contract_version": 1,
+                    "validation_state": "resolved",
+                    "validation_errors": [],
+                    "bindings": [],
+                    "selected_binding_ids": []
+                  },
+                  "dependency_requirements_id": {{JsonSerializer.Serialize(modelId)}},
+                  "inference_settings": []
+                },
+                "position": { "x": 240.0, "y": -160.0 }
+              },
               {
                 "id": "text-input-1",
                 "node_type": "text-input",
@@ -362,7 +397,6 @@ public static class Program
                 "id": "diffusion-inference-1",
                 "node_type": "diffusion-inference",
                 "data": {
-                  "model_path": {{JsonSerializer.Serialize(modelPath)}},
                   "model_type": "diffusion",
                   "steps": 2,
                   "guidance_scale": 0.0,
@@ -393,6 +427,20 @@ public static class Program
               }
             ],
             "edges": [
+              {
+                "id": "e-model-path",
+                "source": "puma-lib-model",
+                "source_handle": "model_path",
+                "target": "diffusion-inference-1",
+                "target_handle": "model_path"
+              },
+              {
+                "id": "e-model-settings",
+                "source": "puma-lib-model",
+                "source_handle": "inference_settings",
+                "target": "diffusion-inference-1",
+                "target_handle": "inference_settings"
+              },
               {
                 "id": "e-prompt",
                 "source": "text-input-1",

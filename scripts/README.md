@@ -65,7 +65,8 @@ python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-uniffi-embedded-runtime-surface.sh
 ./scripts/check-uniffi-csharp-smoke.sh
-PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/tiny-sd-turbo \
+PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/tiny-sd-turbo \
+  PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_ID=diffusion/cc-nms/tiny-sd-turbo \
   PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
   ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```
