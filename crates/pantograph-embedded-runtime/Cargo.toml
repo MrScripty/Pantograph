@@ -1,0 +1,55 @@
+[package]
+name = "pantograph-embedded-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Backend-owned embedded runtime for direct Pantograph workflow execution"
+
+[features]
+default = ["backend-llamacpp", "backend-ollama", "backend-candle"]
+backend-llamacpp = ["inference/backend-llamacpp"]
+backend-ollama = ["inference/backend-ollama"]
+backend-pytorch = ["inference/backend-pytorch", "node-engine/pytorch-nodes"]
+backend-audio = ["node-engine/audio-nodes"]
+backend-candle = [
+    "inference/backend-candle",
+    "dep:candle-core",
+    "dep:candle-nn",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:tokio-stream",
+    "dep:tower-http",
+]
+standalone = ["inference/std-process"]
+
+[dependencies]
+inference = { path = "../inference", default-features = false }
+node-engine = { path = "../node-engine", features = ["inference-nodes"] }
+workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
+pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+log.workspace = true
+futures-util.workspace = true
+reqwest.workspace = true
+which.workspace = true
+uuid.workspace = true
+once_cell.workspace = true
+pumas-library.workspace = true
+
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"

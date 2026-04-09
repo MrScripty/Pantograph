@@ -7214,6 +7214,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-embedded-runtime",
  "pantograph-workflow-service",
  "pumas-library",
  "regex",
@@ -7236,6 +7237,37 @@ dependencies = [
  "workflow-nodes",
  "zip 2.4.2",
  "zstd",
+]
+
+[[package]]
+name = "pantograph-embedded-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
+ "chrono",
+ "dirs 6.0.0",
+ "futures-util",
+ "inference",
+ "log",
+ "node-engine",
+ "once_cell",
+ "pantograph-workflow-service",
+ "pumas-library",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokenizers",
+ "tokio",
+ "tokio-stream",
+ "tower-http 0.5.2",
+ "uuid",
+ "which",
+ "workflow-nodes",
 ]
 
 [[package]]

@@ -10,12 +10,13 @@ default-run = "pantograph"
 default = ["backend-llamacpp", "backend-ollama", "backend-candle"]
 
 # Inference backends - at least one must be enabled
-backend-llamacpp = ["inference/backend-llamacpp"]
-backend-ollama = ["inference/backend-ollama"]
-backend-pytorch = ["inference/backend-pytorch", "node-engine/pytorch-nodes"]
-backend-audio = ["node-engine/audio-nodes"]
+backend-llamacpp = ["inference/backend-llamacpp", "pantograph-embedded-runtime/backend-llamacpp"]
+backend-ollama = ["inference/backend-ollama", "pantograph-embedded-runtime/backend-ollama"]
+backend-pytorch = ["inference/backend-pytorch", "node-engine/pytorch-nodes", "pantograph-embedded-runtime/backend-pytorch"]
+backend-audio = ["node-engine/audio-nodes", "pantograph-embedded-runtime/backend-audio"]
 backend-candle = [
     "inference/backend-candle",
+    "pantograph-embedded-runtime/backend-candle",
     "dep:candle-core",
     "dep:candle-nn",
     "dep:candle-transformers",
@@ -33,6 +34,7 @@ inference = { path = "../crates/inference", default-features = false }
 node-engine = { path = "../crates/node-engine", features = ["inference-nodes"] }
 workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library"] }
 pantograph-workflow-service = { path = "../crates/pantograph-workflow-service" }
+pantograph-embedded-runtime = { path = "../crates/pantograph-embedded-runtime", default-features = false, features = ["backend-llamacpp", "backend-ollama", "backend-candle"] }
 
 # Workspace dependencies
 serde.workspace = true
