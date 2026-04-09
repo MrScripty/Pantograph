@@ -7289,7 +7289,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "graph-flow",
+ "inference",
  "node-engine",
+ "pantograph-embedded-runtime",
  "pantograph-frontend-http-adapter",
  "pantograph-workflow-service",
  "pumas-library",

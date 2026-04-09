@@ -31,6 +31,11 @@ use node_engine::{
 };
 use tokio::sync::RwLock;
 
+#[cfg(feature = "embedded-runtime")]
+mod runtime;
+#[cfg(feature = "embedded-runtime")]
+pub use runtime::{FfiEmbeddedRuntimeConfig, FfiPantographRuntime};
+
 #[cfg(feature = "frontend-http")]
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 #[cfg(feature = "frontend-http")]
@@ -1264,6 +1269,7 @@ mod tests {
                         "data": {
                             "definition": {
                                 "category": "input",
+                                "io_binding_origin": "client_session",
                                 "inputs": [
                                     {
                                         "id": "text",
@@ -1282,6 +1288,7 @@ mod tests {
                         "data": {
                             "definition": {
                                 "category": "output",
+                                "io_binding_origin": "client_session",
                                 "outputs": [
                                     {
                                         "id": "vector",

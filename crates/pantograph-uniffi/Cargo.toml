@@ -13,7 +13,9 @@ name = "pantograph_uniffi"
 # Core workflow engine
 node-engine = { path = "../node-engine" }
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+pantograph-embedded-runtime = { path = "../pantograph-embedded-runtime", default-features = false, optional = true }
 pantograph-frontend-http-adapter = { path = "../pantograph-frontend-http-adapter", optional = true }
+inference = { path = "../inference", default-features = false, optional = true }
 
 # UniFFI runtime (tokio feature for async method export)
 uniffi = { version = "0.28", features = ["tokio"] }
@@ -47,6 +49,32 @@ uniffi = { version = "0.28", features = ["build"] }
 uniffi = { version = "0.28", features = ["bindgen-tests"] }
 
 [features]
-default = []
+default = ["embedded-runtime", "backend-ollama", "backend-candle"]
 cli = ["uniffi/cli"]
+runtime-deps = ["dep:pantograph-embedded-runtime", "dep:inference"]
+embedded-runtime = ["backend-llamacpp"]
+backend-llamacpp = [
+    "runtime-deps",
+    "pantograph-embedded-runtime/backend-llamacpp",
+    "inference/backend-llamacpp",
+]
+backend-ollama = [
+    "embedded-runtime",
+    "pantograph-embedded-runtime/backend-ollama",
+    "inference/backend-ollama",
+]
+backend-pytorch = [
+    "embedded-runtime",
+    "pantograph-embedded-runtime/backend-pytorch",
+    "inference/backend-pytorch",
+]
+backend-audio = [
+    "embedded-runtime",
+    "pantograph-embedded-runtime/backend-audio",
+]
+backend-candle = [
+    "embedded-runtime",
+    "pantograph-embedded-runtime/backend-candle",
+    "inference/backend-candle",
+]
 frontend-http = ["dep:pantograph-frontend-http-adapter"]
