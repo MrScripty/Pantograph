@@ -6,13 +6,22 @@ Runtime smoke coverage for generated Pantograph C# UniFFI bindings.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs a direct `FfiPantographRuntime` workflow/session round trip. |
+| `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs direct `FfiPantographRuntime` workflow/session smokes. |
 
 ## Usage
 Run the repository-level smoke script:
 
 ```bash
 ./scripts/check-uniffi-csharp-smoke.sh
+```
+
+To run the opt-in diffusion path through generated C#, the embedded Rust
+runtime, the process Python adapter, and the real torch/diffusers worker:
+
+```bash
+PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/tiny-sd-turbo \
+  PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
+  ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```
 
 The script builds the Rust UniFFI library, generates
@@ -27,5 +36,6 @@ native library on the dynamic-linker path.
 - Keep application/product C# code out of this smoke harness.
 - Keep the smoke compile offline: this directory must not need NuGet packages
   to prove that the generated binding names are present.
-- Keep runtime smoke workflows small and model-free. Real-model image
-  acceptance belongs in a separate model/runtime test.
+- Keep the default runtime smoke model-free.
+- Keep real-model image acceptance opt-in and explicitly configured with a
+  caller-supplied model path and Python executable.

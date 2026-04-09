@@ -77,6 +77,14 @@ For local diffusion worker verification against an imported model bundle, use:
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
 ```
 
+For direct C#/UniFFI/embedded-runtime diffusion verification against the same
+kind of bundle, use:
+```bash
+PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/tiny-sd-turbo \
+  PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
+  ./scripts/check-uniffi-csharp-diffusion-smoke.sh
+```
+
 ## Verification Guard
 
 The separation guard is implemented in:

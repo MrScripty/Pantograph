@@ -19,6 +19,9 @@ The headless workflow plan is implemented with generic workflow I/O:
   methods without `base_url`.
 - C# UniFFI generation, offline compile, and runtime smoke for the direct
   `FfiPantographRuntime` surface.
+- Opt-in generated-C# diffusion smoke script that runs through UniFFI,
+  `pantograph-embedded-runtime`, the process Python adapter, and the real
+  torch/diffusers worker when supplied with a local model bundle.
 - Contract tests plus CI contract gate.
 - Rust host example and migration guide.
 
@@ -28,8 +31,8 @@ The backend-owned runtime, Rust/UniFFI direct facade, generated-C# compile
 surface, and model-free generated-C# runtime smoke are implemented. Remaining
 acceptance work:
 
-- Add one full-path image-generation acceptance check through the direct
-  embedded runtime.
+- Run and record the opt-in full-path image-generation smoke for the target
+  release/platform/model bundle.
 - Optionally expand the C# runtime smoke from a model-free text workflow to a
   Pixapillars-style fixture once stable sample assets/models are available.
 - Decide whether generated C# should be packaged as an artifact or distributed
@@ -60,6 +63,7 @@ Tracked plan:
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `./scripts/check-uniffi-embedded-runtime-surface.sh`
 - `./scripts/check-uniffi-csharp-smoke.sh`
+- `PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/model PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python ./scripts/check-uniffi-csharp-diffusion-smoke.sh`
 - `cargo check -p pantograph_rustler --no-default-features`
 - `cargo check -p pantograph_rustler --features frontend-http`
 

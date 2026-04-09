@@ -9,6 +9,7 @@ main app entrypoint.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
+| `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime diffusion smoke; requires a local diffusers model directory and Python environment. |
 | `check-uniffi-csharp-smoke.sh` | Builds `pantograph-uniffi`, generates C# UniFFI bindings into `target/`, compiles a small C# smoke harness, and runs that harness against the direct embedded runtime. |
 | `check-uniffi-embedded-runtime-surface.sh` | Builds `pantograph-uniffi`, extracts UniFFI metadata, and verifies the direct embedded runtime object plus workflow/session methods are exported. |
 | `diffusion_cli_smoketest.py` | Loads the Pantograph diffusion worker directly against a local diffusers bundle such as tiny-sd-turbo. |
@@ -64,6 +65,9 @@ python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-uniffi-embedded-runtime-surface.sh
 ./scripts/check-uniffi-csharp-smoke.sh
+PANTOGRAPH_DIFFUSION_SMOKE_MODEL_PATH=/path/to/tiny-sd-turbo \
+  PANTOGRAPH_PYTHON_EXECUTABLE=.venv/bin/python \
+  ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```
 
 ## API Consumer Contract
