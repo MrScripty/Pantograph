@@ -407,6 +407,39 @@ impl EmbeddedWorkflowHost {
         }
     }
 
+    fn python_runtime_capability(
+        executable_probe: Result<PathBuf, String>,
+    ) -> WorkflowRuntimeCapability {
+        let (available, unavailable_reason) = match executable_probe {
+            Ok(_) => (true, None),
+            Err(reason) => (false, Some(reason)),
+        };
+
+        WorkflowRuntimeCapability {
+            runtime_id: "python-sidecar".to_string(),
+            display_name: "Python sidecar".to_string(),
+            install_state: if available {
+                WorkflowRuntimeInstallState::SystemProvided
+            } else {
+                WorkflowRuntimeInstallState::Missing
+            },
+            available,
+            configured: available,
+            can_install: false,
+            can_remove: false,
+            backend_keys: vec![
+                "pytorch".to_string(),
+                "torch".to_string(),
+                "diffusers".to_string(),
+                "onnx-runtime".to_string(),
+                "onnxruntime".to_string(),
+                "stable_audio".to_string(),
+            ],
+            missing_files: Vec::new(),
+            unavailable_reason,
+        }
+    }
+
     fn apply_input_bindings(
         graph: &mut WorkflowGraph,
         inputs: &[WorkflowPortBinding],
@@ -617,6 +650,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
                 unavailable_reason: runtime.unavailable_reason,
             })
             .collect::<Vec<_>>();
+        runtimes.push(Self::python_runtime_capability(
+            python_runtime::resolve_python_executable_for_env_ids(&[]),
+        ));
         runtimes.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
         Ok(runtimes)
     }
@@ -1082,6 +1118,38 @@ mod tests {
         assert_eq!(
             requests[0].inputs.get("prompt"),
             Some(&serde_json::json!("a tiny painted robot"))
+        );
+    }
+
+    #[test]
+    fn python_sidecar_runtime_capability_reports_python_backed_engines() {
+        let capability =
+            EmbeddedWorkflowHost::python_runtime_capability(Ok(PathBuf::from("/usr/bin/python3")));
+
+        assert_eq!(capability.runtime_id, "python-sidecar");
+        assert!(capability.available);
+        assert!(capability.configured);
+        assert!(capability.backend_keys.contains(&"pytorch".to_string()));
+        assert!(capability.backend_keys.contains(&"diffusers".to_string()));
+        assert!(
+            capability
+                .backend_keys
+                .contains(&"onnx-runtime".to_string())
+        );
+    }
+
+    #[test]
+    fn python_sidecar_runtime_capability_keeps_unavailable_reason() {
+        let capability = EmbeddedWorkflowHost::python_runtime_capability(Err(
+            "python executable is not configured".to_string(),
+        ));
+
+        assert_eq!(capability.runtime_id, "python-sidecar");
+        assert!(!capability.available);
+        assert!(!capability.configured);
+        assert_eq!(
+            capability.unavailable_reason.as_deref(),
+            Some("python executable is not configured")
         );
     }
 }
