@@ -4,15 +4,23 @@ use std::sync::Arc;
 use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowIoRequest,
-    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
-    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
+    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphLoadRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest, WorkflowPreflightRequest,
+    WorkflowRunRequest, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
     WorkflowSessionStatusRequest,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 use crate::{FfiError, FfiPumasApi};
@@ -231,6 +239,258 @@ impl FfiPantographRuntime {
         let response = self
             .runtime
             .workflow_set_session_keep_alive(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Save a workflow graph to the runtime project and return WorkflowGraphSaveResponse JSON.
+    pub fn workflow_graph_save(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphSaveRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_save(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Load a workflow graph file and return WorkflowFile JSON.
+    pub fn workflow_graph_load(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphLoadRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_load(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// List persisted project workflows and return WorkflowGraphListResponse JSON.
+    pub fn workflow_graph_list(&self) -> Result<String, FfiError> {
+        let response = self
+            .runtime
+            .workflow_graph_list()
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Start an in-memory graph edit session and return WorkflowGraphEditSessionCreateResponse JSON.
+    pub async fn workflow_graph_create_edit_session(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphEditSessionCreateRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_create_edit_session(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Close a graph edit session and return WorkflowGraphEditSessionCloseResponse JSON.
+    pub async fn workflow_graph_close_edit_session(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphEditSessionCloseRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_close_edit_session(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return the current graph edit-session snapshot as WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_get_edit_session_graph(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphEditSessionGraphRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_get_edit_session_graph(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return WorkflowGraphUndoRedoStateResponse JSON for a graph edit session.
+    pub async fn workflow_graph_get_undo_redo_state(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphUndoRedoStateRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_get_undo_redo_state(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Merge node data in a graph edit session and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_update_node_data(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphUpdateNodeDataRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_update_node_data(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Update node position in a graph edit session and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_update_node_position(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphUpdateNodePositionRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_update_node_position(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Add a node to a graph edit session and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_add_node(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphAddNodeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_add_node(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Remove a node from a graph edit session and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_remove_node(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphRemoveNodeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_remove_node(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Add an edge to a graph edit session and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_add_edge(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphAddEdgeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_add_edge(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Remove an edge from a graph edit session and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_remove_edge(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphRemoveEdgeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_remove_edge(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Undo a graph edit and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_undo(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphEditSessionGraphRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_undo(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Redo a graph edit and return WorkflowGraphEditSessionGraphResponse JSON.
+    pub async fn workflow_graph_redo(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphEditSessionGraphRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_redo(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return ConnectionCandidatesResponse JSON for a graph edit session anchor.
+    pub async fn workflow_graph_get_connection_candidates(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphGetConnectionCandidatesRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_get_connection_candidates(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Connect two compatible anchors and return ConnectionCommitResponse JSON.
+    pub async fn workflow_graph_connect(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowGraphConnectRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_connect(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Insert a node and connect it from an anchor; returns InsertNodeConnectionResponse JSON.
+    pub async fn workflow_graph_insert_node_and_connect(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphInsertNodeAndConnectRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_insert_node_and_connect(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Preview node insertion on an edge and return EdgeInsertionPreviewResponse JSON.
+    pub async fn workflow_graph_preview_node_insert_on_edge(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphPreviewNodeInsertOnEdgeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_preview_node_insert_on_edge(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Insert a node on an edge and return InsertNodeOnEdgeResponse JSON.
+    pub async fn workflow_graph_insert_node_on_edge(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowGraphInsertNodeOnEdgeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_graph_insert_node_on_edge(request)
             .await
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)
@@ -523,6 +783,122 @@ mod tests {
             .workflow_close_session(serde_json::json!({ "session_id": session_id }).to_string())
             .await
             .expect("close session");
+        runtime.shutdown().await;
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
+        let root = create_temp_root("uniffi-runtime-unused");
+        let runtime = FfiPantographRuntime::new(
+            FfiEmbeddedRuntimeConfig {
+                app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+                project_root: root.to_string_lossy().into_owned(),
+                workflow_roots: Vec::new(),
+            },
+            None,
+        )
+        .await
+        .expect("runtime");
+
+        let graph = serde_json::json!({
+            "nodes": [{
+                "id": "text-input-1",
+                "node_type": "text-input",
+                "position": { "x": 0.0, "y": 0.0 },
+                "data": { "text": "draft" }
+            }],
+            "edges": []
+        });
+        let save_response_json = runtime
+            .workflow_graph_save(
+                serde_json::json!({
+                    "name": "Native Edited Workflow",
+                    "graph": graph
+                })
+                .to_string(),
+            )
+            .expect("save workflow graph");
+        let save_response: serde_json::Value =
+            serde_json::from_str(&save_response_json).expect("parse save response");
+        let path = save_response["path"].as_str().expect("saved path");
+
+        let list_response_json = runtime.workflow_graph_list().expect("list workflow graphs");
+        let list_response: serde_json::Value =
+            serde_json::from_str(&list_response_json).expect("parse list response");
+        assert!(
+            list_response["workflows"]
+                .as_array()
+                .expect("workflows")
+                .iter()
+                .any(|metadata| metadata["id"] == "Native Edited Workflow")
+        );
+
+        let load_response_json = runtime
+            .workflow_graph_load(serde_json::json!({ "path": path }).to_string())
+            .expect("load workflow graph");
+        let load_response: serde_json::Value =
+            serde_json::from_str(&load_response_json).expect("parse load response");
+        assert_eq!(load_response["metadata"]["name"], "Native Edited Workflow");
+
+        let create_response_json = runtime
+            .workflow_graph_create_edit_session(
+                serde_json::json!({
+                    "graph": load_response["graph"]
+                })
+                .to_string(),
+            )
+            .await
+            .expect("create graph edit session");
+        let create_response: serde_json::Value =
+            serde_json::from_str(&create_response_json).expect("parse create response");
+        let edit_session_id = create_response["session_id"]
+            .as_str()
+            .expect("edit session id");
+
+        let update_response_json = runtime
+            .workflow_graph_update_node_data(
+                serde_json::json!({
+                    "session_id": edit_session_id,
+                    "node_id": "text-input-1",
+                    "data": { "text": "native edit" }
+                })
+                .to_string(),
+            )
+            .await
+            .expect("update node data");
+        let update_response: serde_json::Value =
+            serde_json::from_str(&update_response_json).expect("parse update response");
+        assert_eq!(
+            update_response["graph"]["nodes"][0]["data"]["text"],
+            "native edit"
+        );
+
+        let undo_state_json = runtime
+            .workflow_graph_get_undo_redo_state(
+                serde_json::json!({ "session_id": edit_session_id }).to_string(),
+            )
+            .await
+            .expect("undo-redo state");
+        let undo_state: serde_json::Value =
+            serde_json::from_str(&undo_state_json).expect("parse undo-redo state");
+        assert_eq!(undo_state["can_undo"], true);
+
+        let undo_response_json = runtime
+            .workflow_graph_undo(serde_json::json!({ "session_id": edit_session_id }).to_string())
+            .await
+            .expect("undo graph edit");
+        let undo_response: serde_json::Value =
+            serde_json::from_str(&undo_response_json).expect("parse undo response");
+        assert_eq!(undo_response["graph"]["nodes"][0]["data"]["text"], "draft");
+
+        runtime
+            .workflow_graph_close_edit_session(
+                serde_json::json!({ "session_id": edit_session_id }).to_string(),
+            )
+            .await
+            .expect("close graph edit session");
         runtime.shutdown().await;
 
         let _ = std::fs::remove_dir_all(root);
