@@ -66,7 +66,17 @@ but they must not implement or fork graph-edit business logic.
 
 ## Implementation Status
 
-Implemented.
+Partially implemented.
+
+The service-boundary extraction described in this ADR is implemented, but the
+canonical backend-owned embedded runtime is not yet fully extracted from the
+optional GUI layer. Direct execution support still exists in Tauri-owned
+modules, which means Pantograph is not yet exposing a backend-owned native
+runtime facade for UniFFI/C# embedding.
+
+Follow-up plan:
+
+- `docs/embedded-runtime-extraction-plan.md`
 
 Delivered artifacts:
 
@@ -84,3 +94,12 @@ Delivered artifacts:
   feature flag gates frontend HTTP (`frontend-http`).
 - Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
 - CI guardrail: `.github/workflows/headless-embedding-contract.yml`
+
+Remaining work to satisfy the full architectural intent:
+
+- Extract direct workflow host/runtime wiring from `src-tauri` into a backend
+  crate owned by Pantograph.
+- Make Tauri consume that backend runtime instead of owning direct execution
+  logic.
+- Add a direct UniFFI runtime facade so native clients use Pantograph directly
+  instead of going through the optional frontend HTTP adapter.

@@ -13,6 +13,17 @@ The headless workflow plan is implemented with generic workflow I/O:
 - Contract tests plus CI contract gate.
 - Rust host example and migration guide.
 
+## Pending Extraction
+
+The backend/service boundary is in place, but the backend-owned embedded
+runtime is still pending extraction. Direct workflow execution used by the
+optional GUI currently lives in `src-tauri`, so UniFFI does not yet expose a
+canonical native runtime facade for C# embedding.
+
+Tracked plan:
+
+- `docs/embedded-runtime-extraction-plan.md`
+
 ## Key Design Outcomes
 
 1. Service logic is centralized in `pantograph-workflow-service`.
