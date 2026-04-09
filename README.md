@@ -154,6 +154,7 @@ Integration boundary:
 Reference docs:
 
 - Contract: `docs/headless-embedding-api-v1.md`
+- Native bindings: `docs/headless-native-bindings.md`
 - Migration guide: `docs/headless-embedding-migration.md`
 - Service boundary ADR: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - Implementation notes: `docs/headless-embedding-implementation-notes.md`

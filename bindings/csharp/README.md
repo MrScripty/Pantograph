@@ -7,6 +7,8 @@ Runtime smoke coverage for generated Pantograph C# UniFFI bindings.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs direct `FfiPantographRuntime` session-create/session-run/session-close smokes. |
+| `Pantograph.DirectRuntimeQuickstart/` | Artifact-ready quickstart showing native save/list/load/edit-session/workflow-session usage from C#. |
+| `PACKAGE-README.md` | README copied to the generated C# binding artifact. |
 
 ## Usage
 Run the repository-level smoke script:
@@ -29,6 +31,24 @@ The script builds the Rust UniFFI library, generates
 `target/uniffi/csharp/pantograph_uniffi.cs` with `uniffi-bindgen-cs`, compiles
 the smoke harness against that generated file, and runs the harness with the
 native library on the dynamic-linker path.
+
+To create local zip artifacts matching CI:
+
+```bash
+./scripts/package-uniffi-csharp-artifacts.sh
+```
+
+The packaging script writes:
+
+- `target/bindings-package/artifacts/pantograph-csharp-bindings.zip`
+- `target/bindings-package/artifacts/pantograph-native-runtime-<platform>.zip`
+
+To compile the artifact-ready quickstart against the packaged generated C#
+without NuGet/network restore:
+
+```bash
+./scripts/check-packaged-csharp-quickstart.sh
+```
 
 ## Constraints
 - Do not hand-edit generated C# bindings.

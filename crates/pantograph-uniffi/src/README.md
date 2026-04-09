@@ -35,6 +35,26 @@ Default:
 - `workflow_cancel_session_queue_item(request_json) -> response_json`
 - `workflow_reprioritize_session_queue_item(request_json) -> response_json`
 - `workflow_set_session_keep_alive(request_json) -> response_json`
+- `workflow_graph_save(request_json) -> response_json`
+- `workflow_graph_load(request_json) -> response_json`
+- `workflow_graph_list() -> response_json`
+- `workflow_graph_create_edit_session(request_json) -> response_json`
+- `workflow_graph_close_edit_session(request_json) -> response_json`
+- `workflow_graph_get_edit_session_graph(request_json) -> response_json`
+- `workflow_graph_get_undo_redo_state(request_json) -> response_json`
+- `workflow_graph_update_node_data(request_json) -> response_json`
+- `workflow_graph_update_node_position(request_json) -> response_json`
+- `workflow_graph_add_node(request_json) -> response_json`
+- `workflow_graph_remove_node(request_json) -> response_json`
+- `workflow_graph_add_edge(request_json) -> response_json`
+- `workflow_graph_remove_edge(request_json) -> response_json`
+- `workflow_graph_undo(request_json) -> response_json`
+- `workflow_graph_redo(request_json) -> response_json`
+- `workflow_graph_get_connection_candidates(request_json) -> response_json`
+- `workflow_graph_connect(request_json) -> response_json`
+- `workflow_graph_insert_node_and_connect(request_json) -> response_json`
+- `workflow_graph_preview_node_insert_on_edge(request_json) -> response_json`
+- `workflow_graph_insert_node_on_edge(request_json) -> response_json`
 
 `frontend-http` feature:
 - `frontend_http_workflow_run(base_url, request_json, pumas_api?) -> response_json`
@@ -57,5 +77,11 @@ Default:
 - `scripts/check-uniffi-csharp-smoke.sh` uses `uniffi-bindgen-cs` to generate
   C# into `target/uniffi/csharp/`, compile it, and run a direct-runtime C#
   workflow/session smoke harness.
+- `scripts/package-uniffi-csharp-artifacts.sh` builds the release native
+  library, generates C# from that library, and creates CI-ready C# and native
+  runtime zip artifacts under `target/bindings-package/artifacts/`.
+- `scripts/check-packaged-csharp-quickstart.sh` compiles the packaged C#
+  quickstart against the packaged generated binding without restoring NuGet
+  packages.
 - The checked-in bindgen helper currently supports the official UniFFI 0.28
   generator set. Use the separate `uniffi-bindgen-cs` CLI for C# generation.
