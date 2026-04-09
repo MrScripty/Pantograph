@@ -390,10 +390,10 @@ public static class Program
                 "node_type": "diffusion-inference",
                 "data": {
                   "model_type": "diffusion",
-                  "steps": 2,
+                  "steps": 1,
                   "guidance_scale": 0.0,
-                  "width": 512,
-                  "height": 512,
+                  "width": 64,
+                  "height": 64,
                   "seed": 42,
                   "environment_ref": {
                     "state": "ready",

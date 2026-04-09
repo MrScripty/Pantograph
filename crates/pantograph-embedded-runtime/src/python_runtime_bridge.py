@@ -63,7 +63,7 @@ def _resolve_setting_runtime_value(item: Dict[str, Any], value: Any) -> Any:
 
 def _build_extra_settings(inputs: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
-    schema = inputs.get("inference_settings")
+    schema = _input_or_data(inputs, "inference_settings")
     if not isinstance(schema, list):
         return out
 
@@ -76,7 +76,9 @@ def _build_extra_settings(inputs: Dict[str, Any]) -> Dict[str, Any]:
         key = key.strip()
         if not key:
             continue
-        value = inputs.get(key, item.get("default"))
+        value = _input_or_data(inputs, key)
+        if value is None:
+            value = item.get("default")
         value = _resolve_setting_runtime_value(item, value)
         if value is not None:
             out[key] = value
@@ -103,8 +105,9 @@ def _extract_prompt(inputs: Dict[str, Any]) -> str:
 
 def _coalesce_setting(inputs: Dict[str, Any], extra: Dict[str, Any], *keys: str) -> Any:
     for key in keys:
-        if key in inputs and inputs.get(key) is not None:
-            return inputs.get(key)
+        value = _input_or_data(inputs, key)
+        if value is not None:
+            return value
         if key in extra and extra.get(key) is not None:
             return extra.get(key)
     return None
