@@ -331,6 +331,9 @@ Rust/UniFFI status:
 Remaining binding closure:
 - Generate C# bindings from the new UniFFI object in packaging automation.
 - Add a host-language C# compile/smoke check.
+- Add or vendor a C# binding generator. The checked-in UniFFI 0.28 bindgen
+  helper currently accepts Kotlin, Swift, Python, and Ruby; it rejects
+  `--language csharp`.
 
 ### Milestone 6: End-to-End Binding, Image Workflow, and Documentation Closure
 
@@ -363,8 +366,8 @@ path and lock in the architecture.
 - C# smoke or integration test passes
 - One full-path image-generation acceptance check passes
 
-**Status:** Not started; reduced to generated-binding, C# smoke, CI/package,
-and real image-workflow acceptance after the Rust/UniFFI direct facade landed.
+**Status:** In progress; direct UniFFI metadata is CI-guarded. Remaining work
+is generated-C# packaging/smoke and real image-workflow acceptance.
 
 ## Execution Notes
 
@@ -377,6 +380,12 @@ Update during implementation:
 - 2026-04-08: Added default UniFFI `FfiPantographRuntime` object over the
   embedded runtime. The native workflow/session binding path no longer uses
   `base_url`; frontend HTTP functions remain optional compatibility exports.
+- 2026-04-08: Added `scripts/check-uniffi-embedded-runtime-surface.sh` and a CI
+  workflow step that validates `FfiPantographRuntime` plus direct
+  workflow/session methods are present in UniFFI cdylib metadata.
+- 2026-04-08: Verified the repo's current `pantograph-uniffi-bindgen` binary
+  does not support `--language csharp`. C# smoke coverage requires adding an
+  explicit C# generator/tooling path instead of using the existing helper.
 
 ## Commit Cadence Notes
 
@@ -442,6 +451,8 @@ Update during implementation:
 ### Follow-Ups
 
 - Add generated C# binding package/smoke project for `FfiPantographRuntime`.
+- Add or select the C# UniFFI generator/tooling; the current official bindgen
+  helper in this repo does not generate C#.
 - Add one full-path diffusion/image-generation acceptance path through the
   direct embedded runtime.
 - Add CI automation for UniFFI generation and C# smoke compilation.
@@ -458,12 +469,14 @@ Update during implementation:
 - `cargo test -p pantograph-uniffi`
 - `cargo check -p pantograph-uniffi --features frontend-http`
 - `cargo test -p pantograph-uniffi --features frontend-http`
+- `./scripts/check-uniffi-embedded-runtime-surface.sh`
 
 ### Traceability Links
 
 - Module README updated: `crates/pantograph-uniffi/src/README.md`
 - ADR updated: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - Runtime plan: `docs/embedded-runtime-extraction-plan.md`
+- Metadata smoke: `scripts/check-uniffi-embedded-runtime-surface.sh`
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: pending
 
 ## Brevity Note

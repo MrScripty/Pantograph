@@ -27,6 +27,8 @@ remaining work is packaging and acceptance proof for foreign hosts:
 
 - Generate/package C# bindings from the `FfiPantographRuntime` object.
 - Add a C# compile/smoke harness.
+- Add/select C# generator tooling. The current `pantograph-uniffi-bindgen`
+  helper rejects `--language csharp`.
 - Add one full-path image-generation acceptance check through the direct
   embedded runtime.
 
@@ -53,6 +55,7 @@ Tracked plan:
 - `cargo check -p pantograph-uniffi --features frontend-http`
 - `cargo test -p pantograph-uniffi`
 - `cargo test -p pantograph-uniffi --features frontend-http`
+- `./scripts/check-uniffi-embedded-runtime-surface.sh`
 - `cargo check -p pantograph_rustler --no-default-features`
 - `cargo check -p pantograph_rustler --features frontend-http`
 

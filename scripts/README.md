@@ -9,6 +9,7 @@ main app entrypoint.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
+| `check-uniffi-embedded-runtime-surface.sh` | Builds `pantograph-uniffi`, extracts UniFFI metadata, and verifies the direct embedded runtime object plus workflow/session methods are exported. |
 | `diffusion_cli_smoketest.py` | Loads the Pantograph diffusion worker directly against a local diffusers bundle such as tiny-sd-turbo. |
 | `trado_cli_smoketest.py` | Exercises the local TraDo/dLLM path outside the app runtime. |
 | `validate-lint.mjs` | Runs or scopes lint validation helpers. |
@@ -60,6 +61,7 @@ specific script being executed.
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
 ./scripts/check-no-python-linkage.sh
+./scripts/check-uniffi-embedded-runtime-surface.sh
 ```
 
 ## API Consumer Contract

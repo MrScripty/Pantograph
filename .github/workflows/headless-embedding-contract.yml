@@ -32,6 +32,9 @@ jobs:
           cargo test -p pantograph-uniffi --no-default-features
           cargo test -p pantograph-uniffi --features frontend-http
 
+      - name: Verify direct UniFFI runtime metadata
+        run: ./scripts/check-uniffi-embedded-runtime-surface.sh
+
       - name: Check Rustler adapter modes
         run: |
           cargo check -p pantograph_rustler --tests --no-default-features

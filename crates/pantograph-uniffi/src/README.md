@@ -52,3 +52,8 @@ Default:
 
 - Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.
 - Native embedding behavior is isolated in `pantograph-embedded-runtime`.
+- `scripts/check-uniffi-embedded-runtime-surface.sh` verifies that the direct
+  runtime object is present in the compiled UniFFI metadata.
+- The checked-in bindgen helper currently supports the official UniFFI 0.28
+  generator set. It does not currently generate C#; add an explicit C#
+  generator/tooling path before claiming a generated C# package.
