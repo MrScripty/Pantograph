@@ -386,6 +386,10 @@ Update during implementation:
 - 2026-04-08: Verified the repo's current `pantograph-uniffi-bindgen` binary
   does not support `--language csharp`. C# smoke coverage requires adding an
   explicit C# generator/tooling path instead of using the existing helper.
+- 2026-04-08: Added an embedded-runtime mocked diffusion acceptance test. It
+  proves a workflow run can demand an `image-output`, traverse
+  `diffusion-inference`, and route through the injected `PythonRuntimeAdapter`.
+  Real-model image generation remains separate hardware/model acceptance.
 
 ## Commit Cadence Notes
 
@@ -455,6 +459,9 @@ Update during implementation:
   helper in this repo does not generate C#.
 - Add one full-path diffusion/image-generation acceptance path through the
   direct embedded runtime.
+- Add a real-model image-generation acceptance variant. Current coverage proves
+  embedded-runtime orchestration reaches the Python runtime adapter with a
+  mocked image response.
 - Add CI automation for UniFFI generation and C# smoke compilation.
 - Consider typed UniFFI `Record` wrappers once the JSON service-contract facade
   has shipped and host-language call sites are stable.

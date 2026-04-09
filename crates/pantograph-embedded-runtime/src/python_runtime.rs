@@ -265,12 +265,15 @@ impl ProcessPythonRuntimeAdapter {
 
     fn resolve_worker_paths() -> Result<BridgeWorkerPaths, String> {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_root = manifest_dir.parent().and_then(|path| path.parent()).ok_or_else(|| {
-            format!(
-                "Unable to resolve repository root from CARGO_MANIFEST_DIR '{}'",
-                manifest_dir.display()
-            )
-        })?;
+        let repo_root = manifest_dir
+            .parent()
+            .and_then(|path| path.parent())
+            .ok_or_else(|| {
+                format!(
+                    "Unable to resolve repository root from CARGO_MANIFEST_DIR '{}'",
+                    manifest_dir.display()
+                )
+            })?;
 
         let torch_worker = repo_root
             .join("crates")

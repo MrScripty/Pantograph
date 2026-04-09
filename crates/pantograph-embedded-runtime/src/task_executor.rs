@@ -6,16 +6,15 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
-    core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
-    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
-    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
-    WorkflowEvent,
+    Context, DependencyState, EventSink, ExecutorExtensions, ModelDependencyRequest,
+    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
+    Result, TaskExecutor, WorkflowEvent, core_executor::resolve_node_type, extension_keys,
 };
 
 use crate::python_runtime::{
@@ -236,7 +235,8 @@ impl TauriTaskExecutor {
     fn promote_runtime_metadata(inputs: &mut HashMap<String, serde_json::Value>) {
         for key in ["task_type_primary", "model_type", "backend_key"] {
             let nested = inputs.get("_data").and_then(|data| data.get(key)).cloned();
-            let Some(value) = nested.or_else(|| Self::read_optional_input_value(inputs, key)) else {
+            let Some(value) = nested.or_else(|| Self::read_optional_input_value(inputs, key))
+            else {
                 continue;
             };
             if value.is_null() {
@@ -1155,10 +1155,10 @@ mod tests {
     use std::sync::Mutex;
 
     use node_engine::{
-        extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
-        ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
-        ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
-        ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
+        DependencyState, DependencyValidationState, ExecutorExtensions, ModelDependencyBinding,
+        ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
+        ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+        VecEventSink, WorkflowEvent, extension_keys,
     };
 
     #[derive(Clone)]

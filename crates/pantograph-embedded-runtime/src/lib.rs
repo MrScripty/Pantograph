@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_engine::{CoreTaskExecutor, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph};
+use node_engine::{
+    CoreTaskExecutor, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
+};
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowHost,
@@ -33,7 +35,7 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
-pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
+pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
@@ -200,11 +202,9 @@ impl EmbeddedRuntime {
 
         let workflow_service = Arc::new(WorkflowService::new());
         let extensions: SharedExtensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
-        let dependency_resolver: Arc<dyn node_engine::ModelDependencyResolver> =
-            Arc::new(TauriModelDependencyResolver::new(
-                extensions.clone(),
-                config.project_root.clone(),
-            ));
+        let dependency_resolver: Arc<dyn node_engine::ModelDependencyResolver> = Arc::new(
+            TauriModelDependencyResolver::new(extensions.clone(), config.project_root.clone()),
+        );
 
         {
             let mut guard = extensions.write().await;
@@ -275,7 +275,9 @@ impl EmbeddedRuntime {
         &self,
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_run(&self.host(), request).await
+        self.workflow_service
+            .workflow_run(&self.host(), request)
+            .await
     }
 
     pub async fn workflow_get_capabilities(
@@ -291,7 +293,9 @@ impl EmbeddedRuntime {
         &self,
         request: WorkflowIoRequest,
     ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_get_io(&self.host(), request).await
+        self.workflow_service
+            .workflow_get_io(&self.host(), request)
+            .await
     }
 
     pub async fn workflow_preflight(
@@ -334,14 +338,18 @@ impl EmbeddedRuntime {
         &self,
         request: WorkflowSessionStatusRequest,
     ) -> Result<WorkflowSessionStatusResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_get_session_status(request).await
+        self.workflow_service
+            .workflow_get_session_status(request)
+            .await
     }
 
     pub async fn workflow_list_session_queue(
         &self,
         request: WorkflowSessionQueueListRequest,
     ) -> Result<WorkflowSessionQueueListResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_list_session_queue(request).await
+        self.workflow_service
+            .workflow_list_session_queue(request)
+            .await
     }
 
     pub async fn workflow_cancel_session_queue_item(
@@ -641,14 +649,14 @@ impl WorkflowHost for EmbeddedWorkflowHost {
                 .with_gateway(self.gateway.clone())
                 .with_execution_id(execution_id.clone()),
         );
-        let host = Arc::new(
-            task_executor::TauriTaskExecutor::with_python_runtime(
-                self.rag_backend.clone(),
-                self.python_runtime.clone(),
-            ),
+        let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
+            self.rag_backend.clone(),
+            self.python_runtime.clone(),
+        ));
+        let task_executor = node_engine::CompositeTaskExecutor::new(
+            Some(host as Arc<dyn node_engine::TaskExecutor>),
+            core,
         );
-        let task_executor =
-            node_engine::CompositeTaskExecutor::new(Some(host as Arc<dyn node_engine::TaskExecutor>), core);
 
         let mut executor = WorkflowExecutor::new(execution_id, graph, Arc::new(NullEventSink));
         apply_runtime_extensions(&mut executor, &runtime_ext);
@@ -675,7 +683,26 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 mod tests {
     use super::*;
     use std::path::Path;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    struct MockImagePythonRuntime {
+        requests: Mutex<Vec<PythonNodeExecutionRequest>>,
+    }
+
+    #[async_trait::async_trait]
+    impl PythonRuntimeAdapter for MockImagePythonRuntime {
+        async fn execute_node(
+            &self,
+            request: PythonNodeExecutionRequest,
+        ) -> Result<HashMap<String, serde_json::Value>, String> {
+            self.requests.lock().expect("requests lock").push(request);
+            Ok(HashMap::from([(
+                "image".to_string(),
+                serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ=="),
+            )]))
+        }
+    }
 
     fn install_fake_default_runtime(app_data_dir: &Path) {
         let runtime_dir = app_data_dir.join("runtimes").join("llama-cpp");
@@ -824,6 +851,98 @@ mod tests {
         .expect("write workflow");
     }
 
+    fn workflow_port_definition(id: &str, label: &str, data_type: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "label": label,
+            "data_type": data_type,
+            "required": false,
+            "multiple": false
+        })
+    }
+
+    fn write_mock_diffusion_workflow(root: &Path, workflow_id: &str) {
+        let workflows_dir = root.join(".pantograph").join("workflows");
+        std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+        let workflow_json = serde_json::json!({
+            "version": "1.0",
+            "metadata": {
+                "name": "Mock Diffusion Workflow",
+                "created": "2026-01-01T00:00:00Z",
+                "modified": "2026-01-01T00:00:00Z"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "text-input-1",
+                        "node_type": "text-input",
+                        "data": {
+                            "definition": {
+                                "category": "input",
+                                "io_binding_origin": "client_session",
+                                "label": "Prompt",
+                                "description": "Prompt supplied by the caller",
+                                "inputs": [workflow_port_definition("text", "Text", "string")],
+                                "outputs": [workflow_port_definition("text", "Text", "string")]
+                            },
+                            "text": "a tiny painted robot"
+                        },
+                        "position": { "x": 0.0, "y": 0.0 }
+                    },
+                    {
+                        "id": "diffusion-inference-1",
+                        "node_type": "diffusion-inference",
+                        "data": {
+                            "model_path": "/tmp/mock-diffusion-model",
+                            "model_type": "diffusion",
+                            "environment_ref": {
+                                "state": "ready",
+                                "env_ids": ["mock-python-env"]
+                            }
+                        },
+                        "position": { "x": 240.0, "y": 0.0 }
+                    },
+                    {
+                        "id": "image-output-1",
+                        "node_type": "image-output",
+                        "data": {
+                            "definition": {
+                                "category": "output",
+                                "io_binding_origin": "client_session",
+                                "label": "Generated Image",
+                                "description": "Generated image output",
+                                "inputs": [workflow_port_definition("image", "Image", "image")],
+                                "outputs": [workflow_port_definition("image", "Image", "image")]
+                            }
+                        },
+                        "position": { "x": 520.0, "y": 0.0 }
+                    }
+                ],
+                "edges": [
+                    {
+                        "id": "e-prompt",
+                        "source": "text-input-1",
+                        "source_handle": "text",
+                        "target": "diffusion-inference-1",
+                        "target_handle": "prompt"
+                    },
+                    {
+                        "id": "e-image",
+                        "source": "diffusion-inference-1",
+                        "source_handle": "image",
+                        "target": "image-output-1",
+                        "target_handle": "image"
+                    }
+                ]
+            }
+        });
+        std::fs::write(
+            workflows_dir.join(format!("{workflow_id}.json")),
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+    }
+
     #[tokio::test]
     async fn test_runtime_run_and_session_execution() {
         let temp = TempDir::new().expect("temp dir");
@@ -893,7 +1012,10 @@ mod tests {
             .await
             .expect("run session");
         assert_eq!(session_response.outputs.len(), 1);
-        assert_eq!(session_response.outputs[0].value, serde_json::json!("world"));
+        assert_eq!(
+            session_response.outputs[0].value,
+            serde_json::json!("world")
+        );
 
         runtime
             .close_workflow_session(WorkflowSessionCloseRequest {
@@ -901,5 +1023,65 @@ mod tests {
             })
             .await
             .expect("close session");
+    }
+
+    #[tokio::test]
+    async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
+        let temp = TempDir::new().expect("temp dir");
+        write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let python_runtime = Arc::new(MockImagePythonRuntime {
+            requests: Mutex::new(Vec::new()),
+        });
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            python_runtime.clone(),
+        );
+
+        let response = runtime
+            .workflow_run(WorkflowRunRequest {
+                workflow_id: "runtime-diffusion".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("a tiny painted robot"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "image-output-1".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                timeout_ms: None,
+                run_id: Some("diffusion-run-1".to_string()),
+            })
+            .await
+            .expect("workflow run");
+
+        assert_eq!(response.outputs.len(), 1);
+        assert_eq!(response.outputs[0].node_id, "image-output-1");
+        assert_eq!(response.outputs[0].port_id, "image");
+        assert_eq!(
+            response.outputs[0].value,
+            serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ==")
+        );
+
+        let requests = python_runtime.requests.lock().expect("requests lock");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].node_type, "diffusion-inference");
+        assert_eq!(
+            requests[0].inputs.get("prompt"),
+            Some(&serde_json::json!("a tiny painted robot"))
+        );
     }
 }
