@@ -86,7 +86,10 @@ if [[ -z "$ref_dir" || ! -d "$ref_dir" ]]; then
 fi
 
 compile_dir="target/csharp-smoke"
+runtime_smoke_root="$repo_root/target/csharp-runtime-smoke"
 mkdir -p "$compile_dir"
+rm -rf "$runtime_smoke_root"
+mkdir -p "$runtime_smoke_root"
 
 references=()
 for reference in "$ref_dir"/*.dll; do
@@ -104,4 +107,33 @@ dotnet "$csc_path" \
   "$generated_binding" \
   bindings/csharp/Pantograph.NativeSmoke/Program.cs
 
-echo "Verified generated C# UniFFI compile smoke: $generated_binding"
+runtime_version="$(
+  dotnet --list-runtimes \
+  | awk '/^Microsoft\.NETCore\.App / {print $2}' \
+  | sort -V \
+  | tail -n 1
+)"
+
+if [[ -z "$runtime_version" ]]; then
+  echo "Could not find an installed Microsoft.NETCore.App runtime." >&2
+  exit 1
+fi
+
+cat > "$compile_dir/Pantograph.NativeSmoke.runtimeconfig.json" <<EOF
+{
+  "runtimeOptions": {
+    "tfm": "net${runtime_version%%.*}.0",
+    "framework": {
+      "name": "Microsoft.NETCore.App",
+      "version": "$runtime_version"
+    }
+  }
+}
+EOF
+
+env \
+  "PANTOGRAPH_CSHARP_SMOKE_ROOT=$runtime_smoke_root" \
+  "LD_LIBRARY_PATH=$repo_root/target/debug${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  dotnet "$compile_dir/Pantograph.NativeSmoke.dll"
+
+echo "Verified generated C# UniFFI runtime smoke: $generated_binding"

@@ -335,8 +335,8 @@ Binding closure:
 - `scripts/check-uniffi-csharp-smoke.sh` generates C# under
   `target/uniffi/csharp/` and compiles it against the direct-runtime smoke
   harness in `bindings/csharp/`.
-- Runtime execution from C# remains a follow-up; the current smoke is a compile
-  contract.
+- The same smoke script also runs the generated C# harness against the compiled
+  native library and executes a model-free workflow/session round trip.
 
 ### Milestone 6: End-to-End Binding, Image Workflow, and Documentation Closure
 
@@ -369,9 +369,9 @@ path and lock in the architecture.
 - C# smoke or integration test passes
 - One full-path image-generation acceptance check passes
 
-**Status:** In progress; direct UniFFI metadata and generated-C# compile are
-CI-guarded. Remaining work is C# runtime execution, generated-C# packaging
-policy, and real image-workflow acceptance.
+**Status:** In progress; direct UniFFI metadata, generated-C# compile, and
+model-free C# runtime execution are CI-guarded. Remaining work is
+generated-C# packaging policy and real image-workflow acceptance.
 
 ## Execution Notes
 
@@ -396,8 +396,9 @@ Update during implementation:
   Real-model image generation remains separate hardware/model acceptance.
 - 2026-04-08: Added `scripts/check-uniffi-csharp-smoke.sh` and
   `bindings/csharp/`. The script builds `pantograph-uniffi`, generates C# with
-  `uniffi-bindgen-cs` into `target/uniffi/csharp/`, and compiles an offline
-  C# harness against the direct `FfiPantographRuntime` API.
+  `uniffi-bindgen-cs` into `target/uniffi/csharp/`, compiles an offline
+  C# harness against the direct `FfiPantographRuntime` API, and runs a
+  model-free C# workflow/session smoke through the native library.
 
 ## Commit Cadence Notes
 
@@ -462,8 +463,6 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Add one full-path C# runtime smoke that loads the native library, constructs
-  `FfiPantographRuntime`, and executes a minimal workflow/session path.
 - Add a real-model image-generation acceptance variant. Current coverage proves
   embedded-runtime orchestration reaches the Python runtime adapter with a
   mocked image response.

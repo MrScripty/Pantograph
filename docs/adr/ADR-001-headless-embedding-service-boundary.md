@@ -72,9 +72,9 @@ facade.
 The service-boundary extraction described in this ADR is implemented, and the
 direct runtime host is now owned by `pantograph-embedded-runtime` instead of
 `src-tauri`. The UniFFI wrapper now exposes a native embedded runtime object
-for workflow/session methods. Generated C# binding compilation is smoke-tested;
-full-path C# runtime execution and full-path image workflow acceptance remain
-follow-up verification items.
+for workflow/session methods. Generated C# binding compilation and a
+model-free C# runtime round trip are smoke-tested; full-path image workflow
+acceptance remains a follow-up verification item.
 
 Follow-up plan:
 
@@ -102,8 +102,5 @@ Delivered artifacts:
 
 Remaining work to satisfy packaging/acceptance closure:
 
-- Add a C# runtime smoke that loads the generated binding and native library,
-  constructs `FfiPantographRuntime`, and executes a minimal workflow/session
-  request.
 - Add one full-path image-generation acceptance check through the backend-owned
   embedded runtime and UniFFI-native configuration path.
