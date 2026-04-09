@@ -9,8 +9,8 @@ main app entrypoint.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
-| `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime diffusion smoke; requires a local diffusers model directory and Python environment. |
-| `check-uniffi-csharp-smoke.sh` | Builds `pantograph-uniffi`, generates C# UniFFI bindings into `target/`, compiles a small C# smoke harness, and runs that harness against the direct embedded runtime. |
+| `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime session diffusion smoke; requires a local diffusers model directory and Python environment. |
+| `check-uniffi-csharp-smoke.sh` | Builds `pantograph-uniffi`, generates C# UniFFI bindings into `target/`, compiles a small C# smoke harness, and runs a session-first harness against the direct embedded runtime. |
 | `check-uniffi-embedded-runtime-surface.sh` | Builds `pantograph-uniffi`, extracts UniFFI metadata, and verifies the direct embedded runtime object plus workflow/session methods are exported. |
 | `diffusion_cli_smoketest.py` | Loads the Pantograph diffusion worker directly against a local diffusers bundle such as tiny-sd-turbo. |
 | `trado_cli_smoketest.py` | Exercises the local TraDo/dLLM path outside the app runtime. |
@@ -45,6 +45,7 @@ can be debugged without the full app UI in the loop.
 - Scripts run relative to the repository root.
 - Smoke tests target real Pantograph worker/runtime modules, not forks of that
   logic.
+- C# runtime execution smokes create workflow sessions before submitting runs.
 - Validation scripts remain developer tools, not product runtime entrypoints.
 
 ## Revisit Triggers

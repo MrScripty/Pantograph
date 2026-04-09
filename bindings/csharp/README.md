@@ -6,7 +6,7 @@ Runtime smoke coverage for generated Pantograph C# UniFFI bindings.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs direct `FfiPantographRuntime` workflow/session smokes. |
+| `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs direct `FfiPantographRuntime` session-create/session-run/session-close smokes. |
 
 ## Usage
 Run the repository-level smoke script:
@@ -40,3 +40,5 @@ native library on the dynamic-linker path.
 - Keep the default runtime smoke model-free.
 - Keep real-model image acceptance opt-in and explicitly configured with a
   caller-supplied Puma-Lib node selection and Python executable.
+- Keep runtime execution smokes session-first: create a workflow session before
+  submitting workflow runs.

@@ -17,11 +17,12 @@ The headless workflow plan is implemented with generic workflow I/O:
   of owning the direct host implementation.
 - Default UniFFI `FfiPantographRuntime` object for direct workflow/session
   methods without `base_url`.
-- C# UniFFI generation, offline compile, and runtime smoke for the direct
-  `FfiPantographRuntime` surface.
-- Opt-in generated-C# diffusion smoke script that runs through UniFFI,
-  `pantograph-embedded-runtime`, the process Python adapter, and the real
-  torch/diffusers worker when supplied with a local model bundle.
+- C# UniFFI generation, offline compile, and session-first runtime smoke for
+  the direct `FfiPantographRuntime` surface.
+- Opt-in generated-C# diffusion smoke script that creates a workflow session,
+  runs that session through UniFFI, `pantograph-embedded-runtime`, the process
+  Python adapter, and the real torch/diffusers worker when supplied with a
+  local model bundle.
 - Contract tests plus CI contract gate.
 - Rust host example and migration guide.
 

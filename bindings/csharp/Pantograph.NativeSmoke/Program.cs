@@ -46,9 +46,6 @@ public static class Program
     {
         WriteTextWorkflow(projectRoot, TextWorkflowId);
 
-        string runResponse = await runtime.WorkflowRun(TextRunRequest("direct run", "csharp-run-1"));
-        AssertFirstOutputValue(runResponse, "direct run");
-
         string createResponse = await runtime.WorkflowCreateSession(
             $$"""{"workflow_id":"{{TextWorkflowId}}","keep_alive":true}""");
         string sessionId = ReadString(createResponse, "session_id");
@@ -96,7 +93,19 @@ public static class Program
 
         WriteDiffusionWorkflow(projectRoot, DiffusionWorkflowId, modelPath, modelId);
 
-        string response = await runtime.WorkflowRun(DiffusionRunRequest(prompt));
+        string createResponse = await runtime.WorkflowCreateSession(
+            $$"""{"workflow_id":"{{DiffusionWorkflowId}}","keep_alive":true}""");
+        string sessionId = ReadString(createResponse, "session_id");
+
+        string response = await runtime.WorkflowRunSession(DiffusionSessionRunRequest(sessionId, prompt));
+
+        string closeResponse = await runtime.WorkflowCloseSession(
+            $$"""{"session_id":"{{sessionId}}"}""");
+        if (!ReadBool(closeResponse, "ok"))
+        {
+            throw new InvalidOperationException($"Expected close ok=true: {closeResponse}");
+        }
+
         string imageValue = ReadString(response, "outputs", "0", "value");
         byte[] imageBytes = DecodeImageValue(imageValue);
         if (imageBytes.Length == 0)
@@ -119,27 +128,10 @@ public static class Program
             $"Pantograph C# UniFFI diffusion smoke passed: {imageBytes.Length} image bytes.");
     }
 
-    private static string TextRunRequest(string value, string runId) =>
+    private static string DiffusionSessionRunRequest(string sessionId, string prompt) =>
         $$"""
         {
-          "workflow_id": "{{TextWorkflowId}}",
-          "inputs": [{
-            "node_id": "text-input-1",
-            "port_id": "text",
-            "value": {{JsonSerializer.Serialize(value)}}
-          }],
-          "output_targets": [{
-            "node_id": "text-output-1",
-            "port_id": "text"
-          }],
-          "run_id": "{{runId}}"
-        }
-        """;
-
-    private static string DiffusionRunRequest(string prompt) =>
-        $$"""
-        {
-          "workflow_id": "{{DiffusionWorkflowId}}",
+          "session_id": "{{sessionId}}",
           "inputs": [{
             "node_id": "text-input-1",
             "port_id": "text",
@@ -149,7 +141,7 @@ public static class Program
             "node_id": "image-output-1",
             "port_id": "image"
           }],
-          "run_id": "csharp-diffusion-run-1",
+          "run_id": "csharp-diffusion-session-run-1",
           "timeout_ms": 120000
         }
         """;
