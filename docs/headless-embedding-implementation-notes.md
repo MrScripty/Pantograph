@@ -17,20 +17,23 @@ The headless workflow plan is implemented with generic workflow I/O:
   of owning the direct host implementation.
 - Default UniFFI `FfiPantographRuntime` object for direct workflow/session
   methods without `base_url`.
+- C# UniFFI generation and offline compile smoke for the direct
+  `FfiPantographRuntime` surface.
 - Contract tests plus CI contract gate.
 - Rust host example and migration guide.
 
 ## Remaining Binding/Acceptance Closure
 
-The backend-owned runtime and Rust/UniFFI direct facade are implemented. The
-remaining work is packaging and acceptance proof for foreign hosts:
+The backend-owned runtime, Rust/UniFFI direct facade, and generated-C# compile
+surface are implemented. The remaining work is runtime acceptance proof for a
+foreign host:
 
-- Generate/package C# bindings from the `FfiPantographRuntime` object.
-- Add a C# compile/smoke harness.
-- Add/select C# generator tooling. The current `pantograph-uniffi-bindgen`
-  helper rejects `--language csharp`.
 - Add one full-path image-generation acceptance check through the direct
   embedded runtime.
+- Add an end-to-end C# runtime smoke that loads the native library and executes
+  a minimal workflow/session request.
+- Decide whether generated C# should be packaged as an artifact or distributed
+  by downstream applications during their build.
 
 Tracked plan:
 
@@ -56,6 +59,7 @@ Tracked plan:
 - `cargo test -p pantograph-uniffi`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `./scripts/check-uniffi-embedded-runtime-surface.sh`
+- `./scripts/check-uniffi-csharp-smoke.sh`
 - `cargo check -p pantograph_rustler --no-default-features`
 - `cargo check -p pantograph_rustler --features frontend-http`
 

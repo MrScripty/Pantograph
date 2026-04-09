@@ -54,6 +54,8 @@ Default:
 - Native embedding behavior is isolated in `pantograph-embedded-runtime`.
 - `scripts/check-uniffi-embedded-runtime-surface.sh` verifies that the direct
   runtime object is present in the compiled UniFFI metadata.
+- `scripts/check-uniffi-csharp-smoke.sh` uses `uniffi-bindgen-cs` to generate
+  C# into `target/uniffi/csharp/` and compile it against a direct-runtime C#
+  smoke harness.
 - The checked-in bindgen helper currently supports the official UniFFI 0.28
-  generator set. It does not currently generate C#; add an explicit C#
-  generator/tooling path before claiming a generated C# package.
+  generator set. Use the separate `uniffi-bindgen-cs` CLI for C# generation.
