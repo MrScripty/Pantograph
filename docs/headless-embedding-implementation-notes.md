@@ -10,15 +10,25 @@ The headless workflow plan is implemented with generic workflow I/O:
 - Dedicated frontend HTTP adapter crate (`pantograph-frontend-http-adapter`).
 - Feature-gated frontend HTTP binding exports (`frontend-http`) so default
   bindings do not imply HTTP/Tauri-based headless integration.
+- Backend-owned embedded runtime crate (`pantograph-embedded-runtime`) that owns
+  the direct workflow host, host task executor, Python runtime adapter,
+  Python worker bridge asset, and model dependency resolver plumbing.
+- Tauri workflow/session commands delegating through `EmbeddedRuntime` instead
+  of owning the direct host implementation.
+- Default UniFFI `FfiPantographRuntime` object for direct workflow/session
+  methods without `base_url`.
 - Contract tests plus CI contract gate.
 - Rust host example and migration guide.
 
-## Pending Extraction
+## Remaining Binding/Acceptance Closure
 
-The backend/service boundary is in place, but the backend-owned embedded
-runtime is still pending extraction. Direct workflow execution used by the
-optional GUI currently lives in `src-tauri`, so UniFFI does not yet expose a
-canonical native runtime facade for C# embedding.
+The backend-owned runtime and Rust/UniFFI direct facade are implemented. The
+remaining work is packaging and acceptance proof for foreign hosts:
+
+- Generate/package C# bindings from the `FfiPantographRuntime` object.
+- Add a C# compile/smoke harness.
+- Add one full-path image-generation acceptance check through the direct
+  embedded runtime.
 
 Tracked plan:
 
@@ -41,6 +51,8 @@ Tracked plan:
 - `cargo test -p pantograph-frontend-http-adapter`
 - `cargo check -p pantograph-uniffi --no-default-features`
 - `cargo check -p pantograph-uniffi --features frontend-http`
+- `cargo test -p pantograph-uniffi`
+- `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check -p pantograph_rustler --no-default-features`
 - `cargo check -p pantograph_rustler --features frontend-http`
 

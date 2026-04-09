@@ -206,7 +206,7 @@ re-couple runtime ownership to adapters.
   - `LANGUAGE-BINDINGS-STANDARDS.md` three-layer architecture rules
 - No code movement yet; decision traceability captured in docs
 
-**Status:** Not started
+**Status:** Completed in commits `bcdf714`, `aaa847b`, and `23ddd93`.
 
 ### Milestone 2: Extract Reusable Host Execution Modules Out of Tauri
 
@@ -234,7 +234,7 @@ not depend on Tauri.
 - Targeted unit tests for extracted helper modules
 - No dependency from extracted backend modules back into `src-tauri`
 
-**Status:** Not started
+**Status:** Completed in commit `aaa847b`.
 
 ### Milestone 3: Introduce the Embedded Runtime Composition Root
 
@@ -268,7 +268,7 @@ embedding entrypoint.
   - close session
 - Shutdown test confirming resources are disposed cleanly
 
-**Status:** Not started
+**Status:** Completed in commit `aaa847b`.
 
 ### Milestone 4: Rebase Tauri Onto the Embedded Runtime
 
@@ -290,7 +290,7 @@ direct execution logic.
 - At least one Tauri integration path verifies it delegates through the new
   runtime instead of local duplicate host logic
 
-**Status:** Not started
+**Status:** Completed in commit `aaa847b`.
 
 ### Milestone 5: Add Direct UniFFI Runtime Facade for C#
 
@@ -318,7 +318,19 @@ HTTP adapter.
 - Conversion tests for every new `Ffi*` wrapper and FFI error mapping
 - Generated C# binding compile check against the new direct runtime object
 
-**Status:** Not started
+**Status:** Partially completed in commit `23ddd93`.
+
+Rust/UniFFI status:
+- `FfiPantographRuntime` now wraps `pantograph-embedded-runtime`.
+- Workflow/session methods are direct object methods and do not accept
+  `base_url`.
+- The staged binding surface keeps workflow/session DTOs as JSON strings.
+- Existing `frontend_http_workflow_*` exports remain feature-gated
+  compatibility APIs.
+
+Remaining binding closure:
+- Generate C# bindings from the new UniFFI object in packaging automation.
+- Add a host-language C# compile/smoke check.
 
 ### Milestone 6: End-to-End Binding, Image Workflow, and Documentation Closure
 
@@ -351,13 +363,20 @@ path and lock in the architecture.
 - C# smoke or integration test passes
 - One full-path image-generation acceptance check passes
 
-**Status:** Not started
+**Status:** Not started; reduced to generated-binding, C# smoke, CI/package,
+and real image-workflow acceptance after the Rust/UniFFI direct facade landed.
 
 ## Execution Notes
 
 Update during implementation:
 - 2026-04-08: Plan created to extract Pantograph's direct runtime out of Tauri
   and make direct UniFFI/C# embedding the canonical native binding path.
+- 2026-04-08: Added `pantograph-embedded-runtime`, moved direct host/task
+  executor/Python runtime/model dependency modules out of `src-tauri`, and
+  rebased Tauri workflow commands onto the backend runtime facade.
+- 2026-04-08: Added default UniFFI `FfiPantographRuntime` object over the
+  embedded runtime. The native workflow/session binding path no longer uses
+  `base_url`; frontend HTTP functions remain optional compatibility exports.
 
 ## Commit Cadence Notes
 
@@ -400,25 +419,51 @@ Update during implementation:
 
 ### Completed
 
-- N/A; planning only
+- Runtime boundary/ADR freeze.
+- Backend-owned `crates/pantograph-embedded-runtime` crate.
+- Reusable Python runtime adapter and Python bridge asset moved out of
+  `src-tauri`.
+- Reusable host task executor and RAG abstraction moved out of `src-tauri`.
+- Reusable model dependency resolver module moved out of `src-tauri`.
+- Tauri workflow/session commands rebased onto `EmbeddedRuntime`.
+- Direct `FfiPantographRuntime` UniFFI object with workflow/session JSON
+  service-contract methods.
+- UniFFI docs updated to present native embedded runtime as the default
+  workflow/session binding path.
 
 ### Deviations
 
-- None yet
+- The first UniFFI direct facade intentionally uses JSON request/response
+  strings to preserve service DTOs and keep the C#-binding migration additive.
+  Typed UniFFI request/response records remain a follow-up.
+- Generated C# bindings are not checked into this repo today; generated-binding
+  compile/smoke verification remains a packaging follow-up.
 
 ### Follow-Ups
 
-- Execute milestones in dependency order
-- Decide direct UniFFI surface shape during Milestone 1
+- Add generated C# binding package/smoke project for `FfiPantographRuntime`.
+- Add one full-path diffusion/image-generation acceptance path through the
+  direct embedded runtime.
+- Add CI automation for UniFFI generation and C# smoke compilation.
+- Consider typed UniFFI `Record` wrappers once the JSON service-contract facade
+  has shipped and host-language call sites are stable.
 
 ### Verification Summary
 
-- N/A; planning only
+- `cargo check -p pantograph-embedded-runtime`
+- `cargo test -p pantograph-embedded-runtime`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo check -p pantograph-uniffi --no-default-features`
+- `cargo check -p pantograph-uniffi`
+- `cargo test -p pantograph-uniffi`
+- `cargo check -p pantograph-uniffi --features frontend-http`
+- `cargo test -p pantograph-uniffi --features frontend-http`
 
 ### Traceability Links
 
-- Module README updated: pending during implementation
-- ADR added/updated: pending during Milestone 1 / Milestone 6
+- Module README updated: `crates/pantograph-uniffi/src/README.md`
+- ADR updated: `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- Runtime plan: `docs/embedded-runtime-extraction-plan.md`
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: pending
 
 ## Brevity Note

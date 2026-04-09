@@ -66,13 +66,14 @@ but they must not implement or fork graph-edit business logic.
 
 ## Implementation Status
 
-Partially implemented.
+Implemented for the Rust backend boundary and UniFFI-native JSON contract
+facade.
 
-The service-boundary extraction described in this ADR is implemented, but the
-canonical backend-owned embedded runtime is not yet fully extracted from the
-optional GUI layer. Direct execution support still exists in Tauri-owned
-modules, which means Pantograph is not yet exposing a backend-owned native
-runtime facade for UniFFI/C# embedding.
+The service-boundary extraction described in this ADR is implemented, and the
+direct runtime host is now owned by `pantograph-embedded-runtime` instead of
+`src-tauri`. The UniFFI wrapper now exposes a native embedded runtime object
+for workflow/session methods. Generated C# packaging/smoke coverage and
+full-path image workflow acceptance remain follow-up verification items.
 
 Follow-up plan:
 
@@ -88,18 +89,19 @@ Delivered artifacts:
 - Session lifecycle and scheduler admission in service layer:
   `crates/pantograph-workflow-service/src/workflow.rs`
 - Tauri thin adapter commands: `src-tauri/src/workflow/headless_workflow_commands.rs`
-- UniFFI adapter exports: `crates/pantograph-uniffi/src/lib.rs`
+- Backend-owned embedded runtime: `crates/pantograph-embedded-runtime/src/lib.rs`
+- UniFFI adapter exports:
+  - `crates/pantograph-uniffi/src/runtime.rs`
+  - `crates/pantograph-uniffi/src/lib.rs`
 - Rustler adapter NIFs: `crates/pantograph-rustler/src/lib.rs`
 - UniFFI/Rustler default mode excludes frontend HTTP workflow exports; optional
   feature flag gates frontend HTTP (`frontend-http`).
 - Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
 - CI guardrail: `.github/workflows/headless-embedding-contract.yml`
 
-Remaining work to satisfy the full architectural intent:
+Remaining work to satisfy packaging/acceptance closure:
 
-- Extract direct workflow host/runtime wiring from `src-tauri` into a backend
-  crate owned by Pantograph.
-- Make Tauri consume that backend runtime instead of owning direct execution
-  logic.
-- Add a direct UniFFI runtime facade so native clients use Pantograph directly
-  instead of going through the optional frontend HTTP adapter.
+- Generate and compile C# bindings for the direct `FfiPantographRuntime`
+  facade.
+- Add one full-path image-generation acceptance check through the backend-owned
+  embedded runtime and UniFFI-native configuration path.
