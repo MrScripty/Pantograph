@@ -17,7 +17,7 @@
 //!
 //! # Generate Python bindings
 //! pantograph-uniffi-bindgen generate --library --language python \
-//!     --out-dir ./bindings/python target/release/libpantograph_uniffi.so
+//!     --out-dir ./bindings/python target/release/libpantograph_headless.so
 //! ```
 
 use std::collections::HashMap;
@@ -241,7 +241,7 @@ impl TaskExecutor for NoopTaskExecutor {
 // Free functions
 // ============================================================================
 
-/// Get the version of the pantograph-uniffi bindings.
+/// Get the version of the Pantograph headless binding surface.
 #[uniffi::export]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()

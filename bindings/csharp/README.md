@@ -1,7 +1,7 @@
 # bindings/csharp
 
 ## Purpose
-Runtime smoke coverage for generated Pantograph C# UniFFI bindings.
+Runtime smoke coverage for generated Pantograph C# bindings.
 
 ## Contents
 | File/Folder | Description |
@@ -27,8 +27,8 @@ PANTOGRAPH_DIFFUSION_SMOKE_PUMAS_MODEL_PATH=/path/to/tiny-sd-turbo \
   ./scripts/check-uniffi-csharp-diffusion-smoke.sh
 ```
 
-The script builds the Rust UniFFI library, generates
-`target/uniffi/csharp/pantograph_uniffi.cs` with `uniffi-bindgen-cs`, compiles
+The script builds the Pantograph headless native library, generates
+`target/uniffi/csharp/pantograph_headless.cs` with `uniffi-bindgen-cs`, compiles
 the smoke harness against that generated file, and runs the harness with the
 native library on the dynamic-linker path.
 
@@ -41,10 +41,11 @@ To create local zip artifacts matching CI:
 The packaging script writes:
 
 - `target/bindings-package/artifacts/pantograph-csharp-bindings.zip`
-- `target/bindings-package/artifacts/pantograph-native-runtime-<platform>.zip`
+- `target/bindings-package/artifacts/pantograph-headless-native-<platform>.zip`
+- `target/bindings-package/artifacts/checksums-sha256.txt`
 
-To compile the artifact-ready quickstart against the packaged generated C#
-without NuGet/network restore:
+To compile the artifact-ready quickstart against the packaged generated C# and
+run it against the packaged native library without NuGet/network restore:
 
 ```bash
 ./scripts/check-packaged-csharp-quickstart.sh

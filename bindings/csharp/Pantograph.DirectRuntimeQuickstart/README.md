@@ -4,7 +4,7 @@ This example is copied into the C# binding artifact. It demonstrates the
 direct native path:
 
 ```text
-C# application -> generated UniFFI C# -> pantograph_uniffi native library -> embedded Rust runtime
+C# application -> generated C# binding -> Pantograph headless native library -> embedded Rust runtime
 ```
 
 It does not call HTTP or Tauri.
@@ -12,7 +12,7 @@ It does not call HTTP or Tauri.
 ## Run From An Artifact
 
 1. Extract the C# binding artifact.
-2. Extract the native runtime artifact for your platform.
+2. Extract the Pantograph headless native artifact for your platform.
 3. Copy the native library next to your application executable, or put the
    native library directory on the dynamic-linker path.
 4. Run:

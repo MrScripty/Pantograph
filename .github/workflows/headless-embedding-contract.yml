@@ -40,16 +40,16 @@ jobs:
           cargo test -p pantograph-uniffi --no-default-features
           cargo test -p pantograph-uniffi --features frontend-http
 
-      - name: Verify direct UniFFI runtime metadata
+      - name: Verify direct native runtime metadata
         run: ./scripts/check-uniffi-embedded-runtime-surface.sh
 
       - name: Verify generated C# direct runtime binding
         run: ./scripts/check-uniffi-csharp-smoke.sh
 
-      - name: Package native runtime and C# binding artifacts
+      - name: Package native library and C# binding artifacts
         run: ./scripts/package-uniffi-csharp-artifacts.sh
 
-      - name: Compile packaged C# quickstart
+      - name: Compile and run packaged C# quickstart
         run: ./scripts/check-packaged-csharp-quickstart.sh
 
       - name: Upload generated C# binding artifact
@@ -59,11 +59,18 @@ jobs:
           path: target/bindings-package/artifacts/pantograph-csharp-bindings.zip
           if-no-files-found: error
 
-      - name: Upload native runtime artifact
+      - name: Upload Pantograph headless native artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pantograph-native-runtime-linux-x64
-          path: target/bindings-package/artifacts/pantograph-native-runtime-linux-x64.zip
+          name: pantograph-headless-native-linux-x64
+          path: target/bindings-package/artifacts/pantograph-headless-native-linux-x64.zip
+          if-no-files-found: error
+
+      - name: Upload package checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: pantograph-headless-checksums
+          path: target/bindings-package/artifacts/checksums-sha256.txt
           if-no-files-found: error
 
       - name: Check Rustler adapter modes

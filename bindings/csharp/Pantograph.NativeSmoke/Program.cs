@@ -5,7 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
-using uniffi.pantograph_uniffi;
+using uniffi.pantograph_headless;
 
 namespace Pantograph.NativeSmoke;
 
@@ -79,7 +79,7 @@ public static class Program
             throw new InvalidOperationException($"Expected close ok=true: {closeResponse}");
         }
 
-        Console.WriteLine("Pantograph C# UniFFI runtime smoke passed.");
+        Console.WriteLine("Pantograph C# native binding runtime smoke passed.");
     }
 
     private static async Task RunDiffusionSmoke(FfiPantographRuntime runtime, string projectRoot)
@@ -125,7 +125,7 @@ public static class Program
         }
 
         Console.WriteLine(
-            $"Pantograph C# UniFFI diffusion smoke passed: {imageBytes.Length} image bytes.");
+            $"Pantograph C# native binding diffusion smoke passed: {imageBytes.Length} image bytes.");
     }
 
     private static string DiffusionSessionRunRequest(string sessionId, string prompt) =>

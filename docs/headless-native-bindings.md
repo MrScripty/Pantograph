@@ -1,16 +1,16 @@
 # Headless Native Bindings
 
-Pantograph ships a headless native binding surface through the
-`pantograph-uniffi` shared library. C# consumers use generated UniFFI C# plus
-the native library; they do not call the Pantograph Tauri GUI and do not need a
+Pantograph ships a headless native binding surface through the Pantograph
+headless shared library. C# consumers use the generated binding file plus the
+native library; they do not call the Pantograph Tauri GUI and do not need a
 Pantograph HTTP server.
 
 ## Architecture
 
 ```text
 Host app
-  -> generated UniFFI binding
-    -> pantograph_uniffi native library
+  -> generated host-language binding
+    -> pantograph_headless native library
       -> pantograph-embedded-runtime
         -> pantograph-workflow-service
 ```
@@ -56,7 +56,7 @@ Create both deliberately; do not use one ID where the other is expected.
 The CI C# artifact contains:
 
 ```text
-bindings/csharp/pantograph_uniffi.cs
+bindings/csharp/pantograph_headless.cs
 docs/headless-native-bindings.md
 examples/csharp/Pantograph.DirectRuntimeQuickstart/
 README.md
@@ -66,14 +66,14 @@ manifest.json
 The generated C# file is an artifact, not a checked-in source file. Regenerate
 it from the same native library that the host app will load.
 
-## Native Runtime Artifact Layout
+## Native Library Artifact Layout
 
-The CI native runtime artifact contains:
+The CI native library artifact contains:
 
 ```text
-native/<platform>/libpantograph_uniffi.so
-native/<platform>/pantograph_uniffi.dll
-native/<platform>/libpantograph_uniffi.dylib
+native/<platform>/libpantograph_headless.so
+native/<platform>/pantograph_headless.dll
+native/<platform>/libpantograph_headless.dylib
 docs/headless-native-bindings.md
 examples/csharp/Pantograph.DirectRuntimeQuickstart/
 README.md
@@ -84,8 +84,8 @@ Only one native library is present per platform package.
 
 ## C# Loading
 
-Generated UniFFI C# resolves the `pantograph_uniffi` native library using the
-.NET runtime's normal native-library resolution. For development, the simplest
+Generated C# resolves the `pantograph_headless` native library using the .NET
+runtime's normal native-library resolution. For development, the simplest
 options are:
 
 ```bash
@@ -104,7 +104,7 @@ directory.
 
 ## Runtime Dependencies
 
-The native `pantograph_uniffi` library is the Pantograph binding/runtime
+The native `pantograph_headless` library is the Pantograph headless runtime
 facade. It is not a model bundle and it is not the managed llama.cpp/Ollama
 runtime bundle.
 
@@ -127,5 +127,24 @@ invent an application-local model path setting.
 ## Compatibility
 
 Keep the generated C# binding and the native library from the same CI run or
-release. UniFFI method metadata is part of the native artifact; mismatching
-generated code and native binaries can fail at load time or call time.
+release. Binding metadata is part of the native artifact; mismatching generated
+code and native binaries can fail at load time or call time.
+
+### Migration From Pre-Refactor Artifacts
+
+Earlier headless binding artifacts used the internal `pantograph_uniffi`
+identity in generated namespaces, generated file names, native library names,
+and native zip names. Current artifacts use the product-facing
+`pantograph_headless` identity instead.
+
+For C# consumers:
+
+1. Replace `using uniffi.pantograph_uniffi;` with
+   `using uniffi.pantograph_headless;`.
+2. Replace `pantograph_uniffi.cs` with the generated
+   `pantograph_headless.cs` file from the same Pantograph build.
+3. Replace `libpantograph_uniffi.so`, `pantograph_uniffi.dll`, or
+   `libpantograph_uniffi.dylib` with the matching `pantograph_headless` native
+   library for the platform.
+4. Download `pantograph-headless-native-<platform>.zip` instead of the older
+   native runtime zip name.

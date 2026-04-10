@@ -8,6 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../../bindings/csharp/pantograph_uniffi.cs" Link="Pantograph/pantograph_uniffi.cs" />
+    <Compile Include="../../../bindings/csharp/pantograph_headless.cs" Link="Pantograph/pantograph_headless.cs" />
   </ItemGroup>
 </Project>

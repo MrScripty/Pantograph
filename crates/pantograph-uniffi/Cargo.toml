@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "pantograph_uniffi"
+name = "pantograph_headless"
 
 [dependencies]
 # Core workflow engine

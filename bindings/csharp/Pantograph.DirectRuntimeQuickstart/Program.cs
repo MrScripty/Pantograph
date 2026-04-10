@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
-using uniffi.pantograph_uniffi;
+using uniffi.pantograph_headless;
 
 string projectRoot = RequireArgument(args, "--project-root");
 string appDataDir = RequireArgument(args, "--app-data-dir");

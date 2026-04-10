@@ -13,6 +13,7 @@ UniFFI adapter surface for Pantograph workflow APIs.
 ## Workflow Export Modes
 
 Default:
+- Builds the Pantograph headless native shared library.
 - Exports `FfiPantographRuntime`.
 - `FfiPantographRuntime` wraps `pantograph-embedded-runtime` and calls the Rust workflow service directly.
 - No URL/HTTP workflow exports.
@@ -76,7 +77,7 @@ Default:
   runtime object is present in the compiled UniFFI metadata.
 - `scripts/check-uniffi-csharp-smoke.sh` uses `uniffi-bindgen-cs` to generate
   C# into `target/uniffi/csharp/`, compile it, and run a direct-runtime C#
-  workflow/session smoke harness.
+  workflow/session smoke harness against the Pantograph headless native library.
 - `scripts/package-uniffi-csharp-artifacts.sh` builds the release native
   library, generates C# from that library, and creates CI-ready C# and native
   runtime zip artifacts under `target/bindings-package/artifacts/`.

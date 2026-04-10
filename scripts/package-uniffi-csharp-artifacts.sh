@@ -27,21 +27,21 @@ fi
 case "$(uname -s)" in
   Darwin)
     platform="${PANTOGRAPH_PACKAGE_PLATFORM:-osx}"
-    library_name="libpantograph_uniffi.dylib"
+    library_name="libpantograph_headless.dylib"
     ;;
   MINGW*|MSYS*|CYGWIN*)
     platform="${PANTOGRAPH_PACKAGE_PLATFORM:-win-x64}"
-    library_name="pantograph_uniffi.dll"
+    library_name="pantograph_headless.dll"
     ;;
   *)
     platform="${PANTOGRAPH_PACKAGE_PLATFORM:-linux-x64}"
-    library_name="libpantograph_uniffi.so"
+    library_name="libpantograph_headless.so"
     ;;
 esac
 
 library_path="$cargo_profile_dir/$library_name"
 if [[ ! -f "$library_path" ]]; then
-  echo "Expected UniFFI native library at '$library_path'" >&2
+  echo "Expected Pantograph headless native library at '$library_path'" >&2
   exit 1
 fi
 
@@ -49,18 +49,18 @@ package_root="target/bindings-package"
 artifact_dir="$package_root/artifacts"
 generated_dir="$package_root/generated/csharp"
 csharp_package="$package_root/pantograph-csharp-bindings"
-native_package="$package_root/pantograph-native-runtime-$platform"
+native_package="$package_root/pantograph-headless-native-$platform"
 
 rm -rf "$package_root"
 mkdir -p "$artifact_dir" "$generated_dir"
 
 uniffi-bindgen-cs \
   --library \
-  --crate pantograph_uniffi \
+  --crate pantograph_headless \
   --out-dir "$generated_dir" \
   "$library_path"
 
-generated_binding="$generated_dir/pantograph_uniffi.cs"
+generated_binding="$generated_dir/pantograph_headless.cs"
 if [[ ! -f "$generated_binding" ]]; then
   echo "Expected generated C# binding at '$generated_binding'" >&2
   exit 1
@@ -78,17 +78,32 @@ install_docs_and_examples() {
     "$destination/examples/csharp/"
 }
 
-write_manifest() {
+write_csharp_manifest() {
   local destination="$1"
-  local kind="$2"
   cat > "$destination/manifest.json" <<EOF
 {
-  "package": "$kind",
-  "uniffi_crate": "pantograph_uniffi",
+  "package": "pantograph-csharp-bindings",
+  "native_module": "pantograph_headless",
+  "required_native_library": "$library_name",
+  "platform": "$platform",
+  "cargo_profile": "$profile",
+  "generated_csharp": "bindings/csharp/pantograph_headless.cs",
+  "docs": "docs/headless-native-bindings.md",
+  "example": "examples/csharp/Pantograph.DirectRuntimeQuickstart",
+  "native_package": "pantograph-headless-native-$platform.zip"
+}
+EOF
+}
+
+write_native_manifest() {
+  local destination="$1"
+  cat > "$destination/manifest.json" <<EOF
+{
+  "package": "pantograph-headless-native",
+  "native_module": "pantograph_headless",
   "native_library": "$library_name",
   "platform": "$platform",
   "cargo_profile": "$profile",
-  "generated_csharp": "bindings/csharp/pantograph_uniffi.cs",
   "docs": "docs/headless-native-bindings.md",
   "example": "examples/csharp/Pantograph.DirectRuntimeQuickstart"
 }
@@ -97,21 +112,40 @@ EOF
 
 mkdir -p "$csharp_package/bindings/csharp"
 install_docs_and_examples "$csharp_package"
-cp "$generated_binding" "$csharp_package/bindings/csharp/pantograph_uniffi.cs"
+cp "$generated_binding" "$csharp_package/bindings/csharp/pantograph_headless.cs"
 cp bindings/csharp/PACKAGE-README.md "$csharp_package/README.md"
-write_manifest "$csharp_package" "pantograph-csharp-bindings"
+write_csharp_manifest "$csharp_package"
 
 mkdir -p "$native_package/native/$platform"
 install_docs_and_examples "$native_package"
 cp "$library_path" "$native_package/native/$platform/$library_name"
 cp docs/headless-native-bindings.md "$native_package/README.md"
-write_manifest "$native_package" "pantograph-native-runtime"
+write_native_manifest "$native_package"
 
 (
   cd "$package_root"
   zip -qr "artifacts/pantograph-csharp-bindings.zip" "pantograph-csharp-bindings"
-  zip -qr "artifacts/pantograph-native-runtime-$platform.zip" "pantograph-native-runtime-$platform"
+  zip -qr "artifacts/pantograph-headless-native-$platform.zip" "pantograph-headless-native-$platform"
+)
+
+(
+  cd "$artifact_dir"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum \
+      "pantograph-csharp-bindings.zip" \
+      "pantograph-headless-native-$platform.zip" \
+      > checksums-sha256.txt
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 \
+      "pantograph-csharp-bindings.zip" \
+      "pantograph-headless-native-$platform.zip" \
+      > checksums-sha256.txt
+  else
+    echo "Missing required checksum tool: sha256sum or shasum" >&2
+    exit 1
+  fi
 )
 
 echo "Packaged C# bindings: $artifact_dir/pantograph-csharp-bindings.zip"
-echo "Packaged native runtime: $artifact_dir/pantograph-native-runtime-$platform.zip"
+echo "Packaged native Pantograph library: $artifact_dir/pantograph-headless-native-$platform.zip"
+echo "Packaged checksums: $artifact_dir/checksums-sha256.txt"

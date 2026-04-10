@@ -19,13 +19,13 @@ cargo build -p pantograph-uniffi
 
 case "$(uname -s)" in
   Darwin)
-    library_path="target/debug/libpantograph_uniffi.dylib"
+    library_path="target/debug/libpantograph_headless.dylib"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    library_path="target/debug/pantograph_uniffi.dll"
+    library_path="target/debug/pantograph_headless.dll"
     ;;
   *)
-    library_path="target/debug/libpantograph_uniffi.so"
+    library_path="target/debug/libpantograph_headless.so"
     ;;
 esac
 
@@ -35,12 +35,12 @@ if [[ ! -f "$library_path" ]]; then
 fi
 
 generated_dir="target/uniffi/csharp"
-generated_binding="$generated_dir/pantograph_uniffi.cs"
+generated_binding="$generated_dir/pantograph_headless.cs"
 mkdir -p "$generated_dir"
 
 uniffi-bindgen-cs \
   --library \
-  --crate pantograph_uniffi \
+  --crate pantograph_headless \
   --out-dir "$generated_dir" \
   "$library_path"
 
@@ -60,6 +60,7 @@ require_generated_text() {
 
 require_generated_text 'public class FfiPantographRuntime'
 require_generated_text 'public record FfiEmbeddedRuntimeConfig'
+require_generated_text 'namespace uniffi.pantograph_headless;'
 require_generated_text 'Task<String> WorkflowRun(String @requestJson)'
 require_generated_text 'Task<String> WorkflowCreateSession(String @requestJson)'
 
@@ -136,4 +137,4 @@ env \
   "LD_LIBRARY_PATH=$repo_root/target/debug${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   dotnet "$compile_dir/Pantograph.NativeSmoke.dll"
 
-echo "Verified generated C# UniFFI runtime smoke: $generated_binding"
+echo "Verified generated C# Pantograph headless smoke: $generated_binding"

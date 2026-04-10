@@ -9,12 +9,12 @@ main app entrypoint.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
-| `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies; does not restore NuGet packages. |
+| `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies, then runs the authoring path against the packaged native library; does not restore NuGet packages. |
 | `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime session diffusion smoke; requires a local diffusers model directory and Python environment. |
-| `check-uniffi-csharp-smoke.sh` | Builds `pantograph-uniffi`, generates C# UniFFI bindings into `target/`, compiles a small C# smoke harness, and runs a session-first harness against the direct embedded runtime. |
+| `check-uniffi-csharp-smoke.sh` | Builds the Pantograph headless native library via `pantograph-uniffi`, generates C# into `target/`, compiles a small C# smoke harness, and runs a session-first harness against the direct embedded runtime. |
 | `check-uniffi-embedded-runtime-surface.sh` | Builds `pantograph-uniffi`, extracts UniFFI metadata, and verifies the direct embedded runtime object plus workflow/session methods are exported. |
 | `diffusion_cli_smoketest.py` | Loads the Pantograph diffusion worker directly against a local diffusers bundle such as tiny-sd-turbo. |
-| `package-uniffi-csharp-artifacts.sh` | Builds a Pantograph UniFFI native library, generates C#, stages docs/examples, and writes C# and native-runtime zip artifacts under `target/bindings-package/artifacts/`. |
+| `package-uniffi-csharp-artifacts.sh` | Builds the Pantograph headless native library, generates C#, stages docs/examples, and writes separate C# binding and native-library zip artifacts under `target/bindings-package/artifacts/`. |
 | `trado_cli_smoketest.py` | Exercises the local TraDo/dLLM path outside the app runtime. |
 | `validate-lint.mjs` | Runs or scopes lint validation helpers. |
 | `validate-svelte.mjs` | Checks Svelte-specific build and validation expectations. |

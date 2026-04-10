@@ -8,13 +8,13 @@ cargo build -p pantograph-uniffi
 
 case "$(uname -s)" in
   Darwin)
-    library_path="target/debug/libpantograph_uniffi.dylib"
+    library_path="target/debug/libpantograph_headless.dylib"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    library_path="target/debug/pantograph_uniffi.dll"
+    library_path="target/debug/pantograph_headless.dll"
     ;;
   *)
-    library_path="target/debug/libpantograph_uniffi.so"
+    library_path="target/debug/libpantograph_headless.so"
     ;;
 esac
 
@@ -24,7 +24,7 @@ if [[ ! -f "$library_path" ]]; then
 fi
 
 repr_dir="target/uniffi"
-repr_path="$repr_dir/pantograph-uniffi.repr.txt"
+repr_path="$repr_dir/pantograph-headless.repr.txt"
 mkdir -p "$repr_dir"
 
 cargo run -p pantograph-uniffi --bin pantograph-uniffi-bindgen --features cli -- \
@@ -55,4 +55,4 @@ require_metadata 'name: "workflow_reprioritize_session_queue_item"'
 require_metadata 'name: "workflow_set_session_keep_alive"'
 require_metadata 'name: "shutdown"'
 
-echo "Verified embedded runtime surface in UniFFI metadata: $repr_path"
+echo "Verified Pantograph headless runtime surface in UniFFI metadata: $repr_path"
