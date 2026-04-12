@@ -22,6 +22,8 @@ pub enum WorkflowEvent {
         workflow_id: String,
         /// Total number of nodes to execute
         node_count: usize,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// A node has begun executing
@@ -30,6 +32,8 @@ pub enum WorkflowEvent {
         node_id: String,
         /// Type of the node (for UI display)
         node_type: String,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// Progress update from a node (for long-running operations)
@@ -40,6 +44,8 @@ pub enum WorkflowEvent {
         progress: f32,
         /// Optional status message
         message: Option<String>,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// Streaming content from a node (for LLM output, etc.)
@@ -50,6 +56,8 @@ pub enum WorkflowEvent {
         port: String,
         /// Chunk of streaming data
         chunk: serde_json::Value,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// A node has completed successfully
@@ -58,6 +66,8 @@ pub enum WorkflowEvent {
         node_id: String,
         /// Output values produced by the node
         outputs: HashMap<String, PortValue>,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// A node has failed
@@ -66,41 +76,89 @@ pub enum WorkflowEvent {
         node_id: String,
         /// Error message
         error: String,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// Workflow has completed successfully
     Completed {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
         /// All outputs from all nodes
         outputs: HashMap<String, HashMap<String, PortValue>>,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// Workflow has failed
     Failed {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
         /// Error message describing the failure
         error: String,
+        /// Unique identifier for this execution
+        execution_id: String,
     },
 
     /// Graph was modified (edge/node added/removed)
     GraphModified {
-        /// The updated graph
-        graph: super::types::WorkflowGraph,
+        /// Workflow identifier associated with this run
+        workflow_id: String,
+        /// Unique identifier for this execution
+        execution_id: String,
+        /// The updated graph when a full snapshot is available
+        graph: Option<super::types::WorkflowGraph>,
+        /// Nodes invalidated by the graph change
+        dirty_tasks: Vec<String>,
+    },
+
+    /// Workflow execution is waiting for input before it can continue
+    WaitingForInput {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
+        /// Unique identifier for this execution
+        execution_id: String,
+        /// Node or task waiting for input
+        node_id: String,
+        /// Optional prompt shown to the user
+        message: Option<String>,
+    },
+
+    /// Incremental execution has started for a subset of tasks
+    IncrementalExecutionStarted {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
+        /// Unique identifier for this execution
+        execution_id: String,
+        /// Task ids that are being re-executed
+        task_ids: Vec<String>,
     },
 }
 
 impl WorkflowEvent {
     /// Create a Started event
-    pub fn started(workflow_id: impl Into<String>, node_count: usize) -> Self {
+    pub fn started(
+        workflow_id: impl Into<String>,
+        node_count: usize,
+        execution_id: impl Into<String>,
+    ) -> Self {
         Self::Started {
             workflow_id: workflow_id.into(),
             node_count,
+            execution_id: execution_id.into(),
         }
     }
 
     /// Create a NodeStarted event
-    pub fn node_started(node_id: impl Into<String>, node_type: impl Into<String>) -> Self {
+    pub fn node_started(
+        node_id: impl Into<String>,
+        node_type: impl Into<String>,
+        execution_id: impl Into<String>,
+    ) -> Self {
         Self::NodeStarted {
             node_id: node_id.into(),
             node_type: node_type.into(),
+            execution_id: execution_id.into(),
         }
     }
 
@@ -109,11 +167,13 @@ impl WorkflowEvent {
         node_id: impl Into<String>,
         progress: f32,
         message: Option<String>,
+        execution_id: impl Into<String>,
     ) -> Self {
         Self::NodeProgress {
             node_id: node_id.into(),
             progress,
             message,
+            execution_id: execution_id.into(),
         }
     }
 
@@ -122,39 +182,65 @@ impl WorkflowEvent {
         node_id: impl Into<String>,
         port: impl Into<String>,
         chunk: serde_json::Value,
+        execution_id: impl Into<String>,
     ) -> Self {
         Self::NodeStream {
             node_id: node_id.into(),
             port: port.into(),
             chunk,
+            execution_id: execution_id.into(),
         }
     }
 
     /// Create a NodeCompleted event
-    pub fn node_completed(node_id: impl Into<String>, outputs: HashMap<String, PortValue>) -> Self {
+    pub fn node_completed(
+        node_id: impl Into<String>,
+        outputs: HashMap<String, PortValue>,
+        execution_id: impl Into<String>,
+    ) -> Self {
         Self::NodeCompleted {
             node_id: node_id.into(),
             outputs,
+            execution_id: execution_id.into(),
         }
     }
 
     /// Create a NodeError event
-    pub fn node_error(node_id: impl Into<String>, error: impl Into<String>) -> Self {
+    pub fn node_error(
+        node_id: impl Into<String>,
+        error: impl Into<String>,
+        execution_id: impl Into<String>,
+    ) -> Self {
         Self::NodeError {
             node_id: node_id.into(),
             error: error.into(),
+            execution_id: execution_id.into(),
         }
     }
 
     /// Create a Completed event
-    pub fn completed(outputs: HashMap<String, HashMap<String, PortValue>>) -> Self {
-        Self::Completed { outputs }
+    pub fn completed(
+        workflow_id: impl Into<String>,
+        outputs: HashMap<String, HashMap<String, PortValue>>,
+        execution_id: impl Into<String>,
+    ) -> Self {
+        Self::Completed {
+            workflow_id: workflow_id.into(),
+            outputs,
+            execution_id: execution_id.into(),
+        }
     }
 
     /// Create a Failed event
-    pub fn failed(error: impl Into<String>) -> Self {
+    pub fn failed(
+        workflow_id: impl Into<String>,
+        error: impl Into<String>,
+        execution_id: impl Into<String>,
+    ) -> Self {
         Self::Failed {
+            workflow_id: workflow_id.into(),
             error: error.into(),
+            execution_id: execution_id.into(),
         }
     }
 }
@@ -165,19 +251,25 @@ mod tests {
 
     #[test]
     fn test_event_serialization() {
-        let event = WorkflowEvent::started("test-123", 5);
+        let event = WorkflowEvent::started("test-123", 5, "exec-123");
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("Started"));
         assert!(json.contains("test-123"));
         assert!(json.contains("5"));
+        assert!(json.contains("exec-123"));
     }
 
     #[test]
     fn test_node_stream_event() {
-        let event =
-            WorkflowEvent::node_stream("node1", "output", serde_json::json!({"text": "hello"}));
+        let event = WorkflowEvent::node_stream(
+            "node1",
+            "output",
+            serde_json::json!({"text": "hello"}),
+            "exec-123",
+        );
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("NodeStream"));
         assert!(json.contains("hello"));
+        assert!(json.contains("exec-123"));
     }
 }

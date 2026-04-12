@@ -39,24 +39,32 @@ impl EventSink for TauriEventAdapter {
                 TauriWorkflowEvent::Started {
                     workflow_id: self.workflow_id.clone(),
                     node_count: 0,
+                    execution_id: self.workflow_id.clone(),
                 }
             }
 
             node_engine::WorkflowEvent::WorkflowCompleted { .. } => {
                 // For now, send empty outputs - the actual outputs are retrieved separately
                 TauriWorkflowEvent::Completed {
+                    workflow_id: self.workflow_id.clone(),
                     outputs: HashMap::new(),
+                    execution_id: self.workflow_id.clone(),
                 }
             }
 
             node_engine::WorkflowEvent::WorkflowFailed { error, .. } => {
-                TauriWorkflowEvent::Failed { error }
+                TauriWorkflowEvent::Failed {
+                    workflow_id: self.workflow_id.clone(),
+                    error,
+                    execution_id: self.workflow_id.clone(),
+                }
             }
 
             node_engine::WorkflowEvent::TaskStarted { task_id, .. } => {
                 TauriWorkflowEvent::NodeStarted {
                     node_id: task_id.clone(),
                     node_type: String::new(), // We don't have the type here
+                    execution_id: self.workflow_id.clone(),
                 }
             }
 
@@ -72,6 +80,7 @@ impl EventSink for TauriEventAdapter {
                 TauriWorkflowEvent::NodeCompleted {
                     node_id: task_id,
                     outputs,
+                    execution_id: self.workflow_id.clone(),
                 }
             }
 
@@ -79,6 +88,7 @@ impl EventSink for TauriEventAdapter {
                 TauriWorkflowEvent::NodeError {
                     node_id: task_id,
                     error,
+                    execution_id: self.workflow_id.clone(),
                 }
             }
 
@@ -91,6 +101,7 @@ impl EventSink for TauriEventAdapter {
                 node_id: task_id,
                 progress,
                 message,
+                execution_id: self.workflow_id.clone(),
             },
 
             node_engine::WorkflowEvent::TaskStream {
@@ -102,31 +113,31 @@ impl EventSink for TauriEventAdapter {
                 node_id: task_id,
                 port,
                 chunk: data,
+                execution_id: self.workflow_id.clone(),
             },
 
             node_engine::WorkflowEvent::WaitingForInput {
                 task_id, prompt, ..
-            } => {
-                // Map to NodeProgress with a special message for now
-                // TODO: Add proper WaitingForInput event to Tauri events
-                TauriWorkflowEvent::NodeProgress {
-                    node_id: task_id,
-                    progress: 0.0,
-                    message: Some(prompt.unwrap_or_else(|| "Waiting for input...".to_string())),
-                }
-            }
+            } => TauriWorkflowEvent::WaitingForInput {
+                workflow_id: self.workflow_id.clone(),
+                execution_id: self.workflow_id.clone(),
+                node_id: task_id,
+                message: prompt,
+            },
 
-            node_engine::WorkflowEvent::GraphModified { dirty_tasks, .. } => {
-                // Map to a progress event for now
-                // TODO: Add proper GraphModified event to frontend
-                log::debug!("Graph modified, dirty tasks: {:?}", dirty_tasks);
-                return Ok(()); // Don't send this event to frontend yet
-            }
+            node_engine::WorkflowEvent::GraphModified { dirty_tasks, .. } => TauriWorkflowEvent::GraphModified {
+                workflow_id: self.workflow_id.clone(),
+                execution_id: self.workflow_id.clone(),
+                graph: None,
+                dirty_tasks,
+            },
 
             node_engine::WorkflowEvent::IncrementalExecutionStarted { tasks, .. } => {
-                // Log but don't send to frontend
-                log::debug!("Incremental execution started for tasks: {:?}", tasks);
-                return Ok(());
+                TauriWorkflowEvent::IncrementalExecutionStarted {
+                    workflow_id: self.workflow_id.clone(),
+                    execution_id: self.workflow_id.clone(),
+                    task_ids: tasks,
+                }
             }
         };
 

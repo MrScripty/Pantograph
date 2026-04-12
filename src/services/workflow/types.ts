@@ -209,18 +209,40 @@ export type WorkflowEventType =
   | 'NodeError'
   | 'Completed'
   | 'Failed'
-  | 'GraphModified';
+  | 'GraphModified'
+  | 'WaitingForInput'
+  | 'IncrementalExecutionStarted';
 
 export interface WorkflowEventData {
-  Started: { workflow_id: string; node_count: number };
-  NodeStarted: { node_id: string; node_type: string };
-  NodeProgress: { node_id: string; progress: number; message: string };
-  NodeStream: { node_id: string; port: string; chunk: unknown };
-  NodeCompleted: { node_id: string; outputs: Record<string, unknown> };
-  NodeError: { node_id: string; error: string };
-  Completed: { outputs: Record<string, unknown> };
-  Failed: { error: string };
-  GraphModified: { graph: WorkflowGraph };
+  Started: { workflow_id: string; node_count: number; execution_id?: string };
+  NodeStarted: { node_id: string; node_type: string; execution_id?: string };
+  NodeProgress: { node_id: string; progress: number; message?: string; execution_id?: string };
+  NodeStream: { node_id: string; port: string; chunk: unknown; execution_id?: string };
+  NodeCompleted: { node_id: string; outputs: Record<string, unknown>; execution_id?: string };
+  NodeError: { node_id: string; error: string; execution_id?: string };
+  Completed: {
+    workflow_id?: string;
+    outputs: Record<string, unknown>;
+    execution_id?: string;
+  };
+  Failed: { workflow_id?: string; error: string; execution_id?: string };
+  GraphModified: {
+    workflow_id?: string;
+    execution_id?: string;
+    graph?: WorkflowGraph | null;
+    dirty_tasks?: string[];
+  };
+  WaitingForInput: {
+    workflow_id?: string;
+    execution_id?: string;
+    node_id: string;
+    message?: string | null;
+  };
+  IncrementalExecutionStarted: {
+    workflow_id?: string;
+    execution_id?: string;
+    task_ids: string[];
+  };
 }
 
 export interface WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> {
