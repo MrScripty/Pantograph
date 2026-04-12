@@ -25,21 +25,27 @@ routing without hardcoding runtime choices into the UI or executor.
 - Input descriptors must stay host-agnostic.
 - Host-owned nodes such as `puma-lib` still need discoverable metadata for the
   frontend and dependency preflight.
+- Runtime-executable model facts must come from the Pumas execution descriptor
+  when a model can resolve one.
 - Model metadata fallbacks must stay additive so older Pumas records continue to
-  resolve.
+  resolve when descriptor lookup is unavailable.
 
 ## Decision
 Keep input nodes as descriptor-first modules. `puma_lib.rs` emits model path,
 `task_type_primary`, backend hints, dependency requirements, and inference
-settings so downstream routing can distinguish text, audio, and diffusion flows.
-For bundle-shaped assets such as imported diffusers directories, `model_path`
-now follows the Pumas execution descriptor `entry_path` while the graph-facing
-field name stays unchanged.
+settings so downstream routing can distinguish text, audio, and diffusion
+flows. For `puma-lib`, Pantograph preserves the graph-facing `model_path`,
+`model_type`, and `task_type_primary` facade, but it should source those values
+from Pumas `ModelExecutionDescriptor` whenever a `model_id` is available and
+descriptor resolution succeeds. Record metadata remains a display/fallback
+contract only, not the runtime source of truth.
 
 ## Invariants
 - Input nodes do not own runtime execution side effects.
 - `puma-lib` metadata is the primary workflow-facing bridge from Pumas-Library
   into Pantograph routing.
+- Pantograph must not infer Pumas runtime bundle semantics from projected
+  metadata when an execution descriptor is available.
 - Fallback task inference must remain conservative and deterministic.
 
 ## Revisit Triggers
@@ -57,8 +63,10 @@ field name stays unchanged.
   execution APIs.
 - `puma-lib` outputs are append-only workflow metadata contracts.
 - `puma-lib` preserves the `model_path` facade, but hosts may source that value
-  from Pumas execution descriptors for bundle-capable assets instead of raw
-  library record paths.
+  from Pumas execution descriptors instead of raw library record paths.
+- Consumers must not assume Pantograph inferred runtime-executable paths from
+  `metadata.json`; the host may rebind the same facade from the upstream
+  execution descriptor contract.
 
 ## Structured Producer Contract
 - `puma-lib` emits `model_path`, `model_id`, `model_type`,
@@ -66,7 +74,12 @@ field name stays unchanged.
   `selected_binding_ids`, `dependency_bindings`,
   `dependency_requirements_id`, `inference_settings`, and
   `dependency_requirements`.
-- For external diffusers bundles, `model_path` must be the executable bundle
-  root (`entry_path`), not the library stub directory that stores metadata.
+- When `ModelExecutionDescriptor` resolution succeeds, `model_path` must be the
+  executable `entry_path`, `model_type` should prefer the descriptor model
+  type, and `task_type_primary` should prefer descriptor task data unless more
+  explicit task metadata is present.
+- Metadata fields such as `bundle_format`, `storage_kind`, and `entry_path` are
+  compatibility fallbacks only. They are not the authoritative runtime contract
+  for executable model selection.
 - Diffusion models should resolve to `text-to-image` when explicit metadata is
   missing but `model_type == diffusion`.
