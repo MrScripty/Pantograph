@@ -69,7 +69,9 @@ export interface WorkflowBackend {
   /** Create an editing session (enables undo/redo). Returns session ID. */
   createSession(graph: WorkflowGraph): Promise<string>;
 
-  /** Run an existing session by demanding outputs from terminal nodes */
+  /** Run an existing session by demanding outputs from terminal nodes.
+   *  Consumers should prefer this over executeWorkflow when an active edit
+   *  session already owns the graph being rendered. */
   runSession(sessionId: string): Promise<void>;
 
   /** Clean up a session when done */
@@ -77,7 +79,8 @@ export interface WorkflowBackend {
 
   // --- Execution ---
 
-  /** Execute a workflow (fire-and-forget, results come via events) */
+  /** Execute a workflow from a raw graph snapshot (fire-and-forget, results
+   *  come via events). Prefer runSession for normal editor flows. */
   executeWorkflow(graph: WorkflowGraph): Promise<void>;
 
   // --- Graph Mutation (session-scoped) ---

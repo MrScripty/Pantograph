@@ -84,6 +84,9 @@ const candidates = await backend.getConnectionCandidates(
 ## API Consumer Contract (Host-Facing Modules)
 - `WorkflowBackend` consumers must create a session before calling graph
   mutation or connection-intent methods.
+- `WorkflowBackend` consumers should also prefer `runSession(sessionId)` for
+  normal editor execution once a session exists; `executeWorkflow(graph)` is the
+  fallback path for raw graph snapshots without an active session owner.
 - `getConnectionCandidates` accepts a source anchor plus optional graph revision
   and returns compatible existing targets plus insertable node types.
 - `connectAnchors` requires a graph revision and returns either

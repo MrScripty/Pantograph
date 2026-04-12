@@ -87,7 +87,8 @@ const sessionId = await backend.createSession({ nodes: [], edges: [] });
 - `addNode`, `removeNode`, `updateNodeData`, `updateNodePosition`, `addEdge`,
   and `removeEdge` return updated graphs for store synchronization.
 - Session lifecycle ordering remains: create/load session before graph mutation,
-  remove session when the consumer is done.
+  use `runSession()` as the preferred execution path for an active editor
+  session, and remove the session when the consumer is done.
 - Compatibility policy is additive: new invoke-backed methods should extend the
   adapter without silently changing existing method semantics.
 
