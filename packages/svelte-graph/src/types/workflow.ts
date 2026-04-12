@@ -196,6 +196,74 @@ export interface WorkflowFile {
   linkMappings?: unknown[];
 }
 
+export interface WorkflowRuntimeRequirements {
+  estimated_peak_vram_mb?: number | null;
+  estimated_peak_ram_mb?: number | null;
+  estimated_min_vram_mb?: number | null;
+  estimated_min_ram_mb?: number | null;
+  estimation_confidence: string;
+  required_models: string[];
+  required_backends: string[];
+  required_extensions: string[];
+}
+
+export type WorkflowRuntimeInstallState =
+  | 'installed'
+  | 'system_provided'
+  | 'missing'
+  | 'unsupported';
+
+export interface WorkflowRuntimeCapability {
+  runtime_id: string;
+  display_name: string;
+  install_state: WorkflowRuntimeInstallState;
+  available: boolean;
+  configured: boolean;
+  can_install: boolean;
+  can_remove: boolean;
+  backend_keys: string[];
+  missing_files: string[];
+  unavailable_reason?: string | null;
+}
+
+export interface WorkflowCapabilityModel {
+  model_id: string;
+  model_revision_or_hash?: string | null;
+  model_type?: string | null;
+  node_ids: string[];
+  roles: string[];
+}
+
+export interface WorkflowCapabilitiesResponse {
+  max_input_bindings: number;
+  max_output_targets: number;
+  max_value_bytes: number;
+  runtime_requirements: WorkflowRuntimeRequirements;
+  models: WorkflowCapabilityModel[];
+  runtime_capabilities: WorkflowRuntimeCapability[];
+}
+
+export type WorkflowSessionState = 'idle_loaded' | 'idle_unloaded' | 'running';
+
+export interface WorkflowSessionSummary {
+  session_id: string;
+  workflow_id: string;
+  usage_profile?: string | null;
+  keep_alive: boolean;
+  state: WorkflowSessionState;
+  queued_runs: number;
+  run_count: number;
+}
+
+export type WorkflowSessionQueueItemStatus = 'pending' | 'running';
+
+export interface WorkflowSessionQueueItem {
+  queue_id: string;
+  run_id?: string | null;
+  priority: number;
+  status: WorkflowSessionQueueItemStatus;
+}
+
 // --- Event Types ---
 
 export type WorkflowEventType =
@@ -209,7 +277,9 @@ export type WorkflowEventType =
   | 'Failed'
   | 'GraphModified'
   | 'WaitingForInput'
-  | 'IncrementalExecutionStarted';
+  | 'IncrementalExecutionStarted'
+  | 'RuntimeSnapshot'
+  | 'SchedulerSnapshot';
 
 export interface WorkflowEventData {
   Started: { workflow_id: string; node_count: number; execution_id?: string };
@@ -240,6 +310,22 @@ export interface WorkflowEventData {
     workflow_id?: string;
     execution_id?: string;
     task_ids: string[];
+  };
+  RuntimeSnapshot: {
+    workflow_id?: string;
+    execution_id?: string;
+    captured_at_ms: number;
+    capabilities?: WorkflowCapabilitiesResponse | null;
+    error?: string | null;
+  };
+  SchedulerSnapshot: {
+    workflow_id?: string;
+    execution_id?: string;
+    session_id: string;
+    captured_at_ms: number;
+    session?: WorkflowSessionSummary | null;
+    items: WorkflowSessionQueueItem[];
+    error?: string | null;
   };
 }
 
