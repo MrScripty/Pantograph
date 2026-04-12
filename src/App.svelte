@@ -13,6 +13,7 @@
   import WorkflowGraph from './components/WorkflowGraph.svelte';
   import NodePalette from './components/NodePalette.svelte';
   import WorkflowToolbar from './components/WorkflowToolbar.svelte';
+  import DiagnosticsPanel from './components/diagnostics/DiagnosticsPanel.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Logger } from './services/Logger';
   import { engine } from './services/DrawingEngine';
@@ -23,6 +24,7 @@
   import { undoStore } from './stores/undoStore';
   import { loadLastGraph, isReadOnly } from './stores/graphSessionStore';
   import { linkModeActive, cancelLinkMode } from './stores/linkStore';
+  import { startDiagnosticsStore, stopDiagnosticsStore } from './stores/diagnosticsStore';
 
   // Set up the @pantograph/svelte-graph context so package components
   // (GenericNode, ReconnectableEdge, etc.) can access stores via useGraphContext().
@@ -59,6 +61,7 @@
 
   onMount(() => {
     Logger.log('APP_MOUNTED', { version: '1.0.0-alpha' });
+    startDiagnosticsStore();
 
     // Load previously generated components from disk
     loadWorkspace().then((count) => {
@@ -130,6 +133,7 @@
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      stopDiagnosticsStore();
     };
   });
 </script>
@@ -149,12 +153,15 @@
   {:else if $viewMode === 'workflow'}
     <div class="absolute inset-0 flex flex-col" transition:fade={{ duration: 200 }}>
       <WorkflowToolbar />
-      <div class="flex-1 flex overflow-hidden">
+      <div class="flex-1 flex overflow-hidden min-h-0">
         {#if !$isReadOnly}
           <NodePalette />
         {/if}
-        <div class="flex-1">
-          <WorkflowGraph />
+        <div class="flex-1 flex flex-col min-h-0">
+          <div class="flex-1 min-h-0">
+            <WorkflowGraph />
+          </div>
+          <DiagnosticsPanel />
         </div>
       </div>
     </div>

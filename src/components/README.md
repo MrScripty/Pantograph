@@ -14,6 +14,7 @@ architecture views on top of the shared editor.
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
 | `WorkflowToolbar.svelte` | Toolbar actions for workflow graph editing. |
+| `diagnostics/` | Workflow diagnostics panel, tab views, and presentation helpers for retained execution traces. |
 | `nodes/` | Pantograph-specific node renderers and the shared app node shell. |
 
 ## Problem
@@ -29,6 +30,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
   is incremental.
 - Built-in node UI must stay aligned with backend-owned node contracts and
   starter workflow templates.
+- Diagnostics rendering should stay inside the workflow workspace without
+  becoming a parallel app shell.
 
 ## Decision
 Keep the app `WorkflowGraph.svelte` as a composition layer over package store
@@ -56,7 +59,10 @@ graph snapshots so node placement and later graph syncs do not silently wipe
 selection state. While a palette drag is active, the app graph also treats the
 cursor as the only edge-insert hit point and previews replacement of an
 existing workflow edge only after backend validation confirms the dragged node
-type can bridge both endpoints.
+type can bridge both endpoints. The workflow workspace now also includes a
+bottom diagnostics panel that renders retained execution traces from the
+diagnostics store without moving transport or event-normalization logic into
+Svelte components.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -70,6 +76,8 @@ type can bridge both endpoints.
   workflow graph modes.
 - App components should consume shared workflow store instances instead of
   creating parallel graph state.
+- Diagnostics components render store snapshots and must not subscribe directly
+  to workflow events.
 - Connection-intent cleanup must happen on cancel, pane click, escape, and graph
   mutation paths.
 - Dragging from an occupied edge endpoint must start reconnect/disconnect rather
@@ -139,6 +147,8 @@ type can bridge both endpoints.
   so release-mode users can see and retry backend rejections.
 - Rejection handling for failed connection and insert commits is currently
   store/console based, not event-emitter based.
+- Diagnostics panel tabs should treat Scheduler, Runtime, and Graph as
+  explicitly planned surfaces until those roadmap items ship.
 - Horseshoe invocation is drag-session-scoped and uses shared package helpers;
   app code should not reintroduce container-focus-only keyboard assumptions.
 
