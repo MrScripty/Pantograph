@@ -26,6 +26,11 @@ let latestSessionId: string | null = null;
 let runtimeRefreshToken = 0;
 let schedulerRefreshToken = 0;
 
+interface WorkflowErrorEnvelope {
+  code?: string;
+  message?: string;
+}
+
 function normalizeError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -34,6 +39,23 @@ function normalizeError(error: unknown): string {
     return error;
   }
   return String(error);
+}
+
+function parseWorkflowErrorEnvelope(error: unknown): WorkflowErrorEnvelope | null {
+  const message = normalizeError(error);
+  try {
+    const parsed = JSON.parse(message) as WorkflowErrorEnvelope;
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function isSessionLookupMiss(error: unknown): boolean {
+  return parseWorkflowErrorEnvelope(error)?.code === 'session_not_found';
 }
 
 async function refreshRuntimeSnapshot(): Promise<void> {
@@ -96,6 +118,10 @@ async function refreshSchedulerSnapshot(): Promise<void> {
     if (refreshToken !== schedulerRefreshToken) {
       return;
     }
+    if (isSessionLookupMiss(error)) {
+      diagnosticsService.ensureSchedulerSession(workflowId, sessionId, capturedAtMs);
+      return;
+    }
     diagnosticsService.updateSchedulerSnapshot(
       workflowId,
       sessionId,
@@ -141,6 +167,11 @@ function bindDiagnosticsStore(): void {
       case 'Failed':
       case 'WaitingForInput':
       case 'IncrementalExecutionStarted':
+        diagnosticsService.applySchedulerEvent(
+          latestWorkflowId,
+          latestSessionId ?? event.data.execution_id ?? null,
+          event,
+        );
         void refreshSchedulerSnapshot();
         break;
       default:
@@ -166,6 +197,7 @@ function bindDiagnosticsStore(): void {
   sessionIdUnsubscribe = sessionStores.currentSessionId.subscribe((sessionId) => {
     latestSessionId = sessionId;
     diagnosticsService.setCurrentSessionId(sessionId);
+    diagnosticsService.ensureSchedulerSession(latestWorkflowId, sessionId);
     void refreshSchedulerSnapshot();
   });
 }

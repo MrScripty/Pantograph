@@ -103,3 +103,33 @@ test('runtime and scheduler snapshots retain workflow and session diagnostics', 
   assert.equal(snapshot.state.scheduler.session?.state, 'running');
   assert.equal(snapshot.state.scheduler.items[0]?.queue_id, 'queue-1');
 });
+
+test('scheduler fallback state can be synthesized for edit-session execution events', () => {
+  const service = new DiagnosticsService();
+
+  service.ensureSchedulerSession('wf-edit', 'edit-session-1', 7_000);
+  service.applySchedulerEvent('wf-edit', 'edit-session-1', {
+    type: 'Started',
+    data: {
+      workflow_id: 'edit-session-1',
+      node_count: 2,
+      execution_id: 'edit-session-1',
+    },
+  }, 7_010);
+  service.applySchedulerEvent('wf-edit', 'edit-session-1', {
+    type: 'Failed',
+    data: {
+      workflow_id: 'edit-session-1',
+      error: 'boom',
+      execution_id: 'edit-session-1',
+    },
+  }, 7_050);
+
+  const snapshot = service.getSnapshot();
+  assert.equal(snapshot.state.scheduler.workflowId, 'wf-edit');
+  assert.equal(snapshot.state.scheduler.sessionId, 'edit-session-1');
+  assert.equal(snapshot.state.scheduler.session?.state, 'idle_loaded');
+  assert.equal(snapshot.state.scheduler.session?.run_count, 1);
+  assert.equal(snapshot.state.scheduler.items.length, 0);
+  assert.equal(snapshot.state.scheduler.lastError, null);
+});

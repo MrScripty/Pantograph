@@ -5,7 +5,9 @@ import {
   createDiagnosticsSnapshot,
   createWorkflowDiagnosticsContext,
   createWorkflowDiagnosticsState,
+  ensureDiagnosticsStateSchedulerSession,
   recordWorkflowEvent,
+  updateDiagnosticsStateSchedulerFromEvent,
   updateDiagnosticsStateRuntimeSnapshot,
   updateDiagnosticsStateSchedulerSnapshot,
   updateDiagnosticsStateWorkflowContext,
@@ -316,4 +318,58 @@ test('diagnostics state captures runtime scheduler and graph summaries', () => {
   assert.equal(state.runtime.runtimeRequirements?.required_backends[0], 'onnx-runtime');
   assert.equal(state.scheduler.session?.queued_runs, 2);
   assert.equal(state.scheduler.items[0]?.queue_id, 'queue-6');
+});
+
+test('ensureDiagnosticsStateSchedulerSession creates an idle fallback session without an error', () => {
+  const state = ensureDiagnosticsStateSchedulerSession(
+    createWorkflowDiagnosticsState(),
+    'wf-8',
+    'session-8',
+    8_000,
+  );
+
+  assert.equal(state.scheduler.workflowId, 'wf-8');
+  assert.equal(state.scheduler.sessionId, 'session-8');
+  assert.equal(state.scheduler.capturedAtMs, 8_000);
+  assert.equal(state.scheduler.session?.state, 'idle_loaded');
+  assert.equal(state.scheduler.session?.queued_runs, 0);
+  assert.equal(state.scheduler.session?.run_count, 0);
+  assert.equal(state.scheduler.lastError, null);
+});
+
+test('updateDiagnosticsStateSchedulerFromEvent tracks synthetic session lifecycle', () => {
+  let state = ensureDiagnosticsStateSchedulerSession(
+    createWorkflowDiagnosticsState(),
+    'wf-9',
+    'session-9',
+    9_000,
+  );
+
+  state = updateDiagnosticsStateSchedulerFromEvent(state, 'wf-9', 'session-9', {
+    type: 'Started',
+    data: {
+      workflow_id: 'wf-9',
+      node_count: 1,
+      execution_id: 'session-9',
+    },
+  }, 9_010);
+
+  assert.equal(state.scheduler.session?.state, 'running');
+  assert.equal(state.scheduler.session?.queued_runs, 1);
+  assert.equal(state.scheduler.items[0]?.status, 'running');
+
+  state = updateDiagnosticsStateSchedulerFromEvent(state, 'wf-9', 'session-9', {
+    type: 'Completed',
+    data: {
+      workflow_id: 'wf-9',
+      outputs: {},
+      execution_id: 'session-9',
+    },
+  }, 9_050);
+
+  assert.equal(state.scheduler.session?.state, 'idle_loaded');
+  assert.equal(state.scheduler.session?.queued_runs, 0);
+  assert.equal(state.scheduler.session?.run_count, 1);
+  assert.equal(state.scheduler.items.length, 0);
+  assert.equal(state.scheduler.lastError, null);
 });

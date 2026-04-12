@@ -2,7 +2,9 @@ import type {
   WorkflowCapabilitiesResponse,
   WorkflowEvent,
   WorkflowGraph,
+  WorkflowSessionQueueItem,
   WorkflowSessionQueueListResponse,
+  WorkflowSessionSummary,
   WorkflowSessionStatusResponse,
 } from '../workflow/types';
 import type {
@@ -528,6 +530,122 @@ export function updateDiagnosticsStateSchedulerSnapshot(
       lastError,
     },
   };
+}
+
+function createSyntheticSchedulerSession(
+  workflowId: string | null,
+  sessionId: string,
+  current: WorkflowSessionSummary | null,
+): WorkflowSessionSummary {
+  return {
+    session_id: sessionId,
+    workflow_id: workflowId ?? current?.workflow_id ?? sessionId,
+    usage_profile: current?.usage_profile ?? null,
+    keep_alive: current?.keep_alive ?? false,
+    state: current?.state ?? 'idle_loaded',
+    queued_runs: current?.queued_runs ?? 0,
+    run_count: current?.run_count ?? 0,
+  };
+}
+
+function createSyntheticRunningQueueItem(executionId: string): WorkflowSessionQueueItem {
+  return {
+    queue_id: executionId,
+    run_id: executionId,
+    priority: 0,
+    status: 'running',
+  };
+}
+
+export function ensureDiagnosticsStateSchedulerSession(
+  state: WorkflowDiagnosticsState,
+  workflowId: string | null,
+  sessionId: string | null,
+  capturedAtMs: number,
+): WorkflowDiagnosticsState {
+  if (!sessionId) {
+    return {
+      ...state,
+      scheduler: createEmptyDiagnosticsSchedulerSnapshot(),
+    };
+  }
+
+  const currentSession = state.scheduler.sessionId === sessionId
+    ? state.scheduler.session
+    : null;
+  const items = state.scheduler.sessionId === sessionId
+    ? state.scheduler.items
+    : [];
+
+  return {
+    ...state,
+    scheduler: {
+      workflowId: workflowId ?? state.scheduler.workflowId ?? state.currentWorkflowId,
+      sessionId,
+      capturedAtMs,
+      session: createSyntheticSchedulerSession(workflowId, sessionId, currentSession),
+      items,
+      lastError: null,
+    },
+  };
+}
+
+export function updateDiagnosticsStateSchedulerFromEvent(
+  state: WorkflowDiagnosticsState,
+  workflowId: string | null,
+  sessionId: string | null,
+  event: WorkflowEvent,
+  capturedAtMs: number,
+): WorkflowDiagnosticsState {
+  const effectiveSessionId = sessionId ?? toExecutionId(event);
+  if (!effectiveSessionId) {
+    return state;
+  }
+
+  const next = ensureDiagnosticsStateSchedulerSession(
+    state,
+    workflowId,
+    effectiveSessionId,
+    capturedAtMs,
+  );
+  const session = next.scheduler.session;
+  if (!session) {
+    return next;
+  }
+
+  const executionId = toExecutionId(event) ?? effectiveSessionId;
+  const hasRunningItem = next.scheduler.items.some(item => item.status === 'running');
+
+  switch (event.type) {
+    case 'Started':
+      session.state = 'running';
+      session.queued_runs = 1;
+      next.scheduler.items = [createSyntheticRunningQueueItem(executionId)];
+      break;
+    case 'WaitingForInput':
+    case 'IncrementalExecutionStarted':
+      session.state = 'running';
+      session.queued_runs = Math.max(next.scheduler.items.length, 1);
+      if (!hasRunningItem) {
+        next.scheduler.items = [createSyntheticRunningQueueItem(executionId)];
+      }
+      break;
+    case 'Completed':
+    case 'Failed':
+      if (session.state === 'running' || hasRunningItem) {
+        session.run_count += 1;
+      }
+      session.state = 'idle_loaded';
+      session.queued_runs = 0;
+      next.scheduler.items = [];
+      break;
+    default:
+      return next;
+  }
+
+  next.scheduler.capturedAtMs = capturedAtMs;
+  next.scheduler.lastError = null;
+  return next;
 }
 
 export function clearDiagnosticsHistory(
