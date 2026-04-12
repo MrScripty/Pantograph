@@ -1,4 +1,14 @@
-import type { WorkflowEvent, WorkflowEventData, WorkflowEventType, WorkflowGraph } from '../workflow/types';
+import type {
+  WorkflowCapabilityModel,
+  WorkflowEvent,
+  WorkflowEventData,
+  WorkflowEventType,
+  WorkflowGraph,
+  WorkflowRuntimeCapability,
+  WorkflowRuntimeRequirements,
+  WorkflowSessionQueueItem,
+  WorkflowSessionSummary,
+} from '../workflow/types';
 
 export const DIAGNOSTICS_TABS = [
   'overview',
@@ -69,16 +79,42 @@ export interface DiagnosticsRunTrace {
   events: DiagnosticsEventRecord[];
 }
 
+export interface DiagnosticsRuntimeSnapshot {
+  workflowId: string | null;
+  capturedAtMs: number | null;
+  maxInputBindings: number | null;
+  maxOutputTargets: number | null;
+  maxValueBytes: number | null;
+  runtimeRequirements: WorkflowRuntimeRequirements | null;
+  runtimeCapabilities: WorkflowRuntimeCapability[];
+  models: WorkflowCapabilityModel[];
+  lastError: string | null;
+}
+
+export interface DiagnosticsSchedulerSnapshot {
+  workflowId: string | null;
+  sessionId: string | null;
+  capturedAtMs: number | null;
+  session: WorkflowSessionSummary | null;
+  items: WorkflowSessionQueueItem[];
+  lastError: string | null;
+}
+
 export interface WorkflowDiagnosticsState {
   panelOpen: boolean;
   activeTab: DiagnosticsTab;
   selectedRunId: string | null;
   selectedNodeId: string | null;
+  currentSessionId: string | null;
   currentWorkflowId: string | null;
   currentWorkflowName: string | null;
   currentGraphFingerprint: string | null;
+  currentGraphNodeCount: number;
+  currentGraphEdgeCount: number;
   runsById: Record<string, DiagnosticsRunTrace>;
   runOrder: string[];
+  runtime: DiagnosticsRuntimeSnapshot;
+  scheduler: DiagnosticsSchedulerSnapshot;
   retainedEventLimit: number;
 }
 

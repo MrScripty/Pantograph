@@ -6,6 +6,9 @@ import {
   createWorkflowDiagnosticsContext,
   createWorkflowDiagnosticsState,
   recordWorkflowEvent,
+  updateDiagnosticsStateRuntimeSnapshot,
+  updateDiagnosticsStateSchedulerSnapshot,
+  updateDiagnosticsStateWorkflowContext,
   updateWorkflowContext,
 } from './traceAccumulator.ts';
 import type { WorkflowEvent, WorkflowGraph } from '../workflow/types.ts';
@@ -210,4 +213,68 @@ test('updateWorkflowContext preserves unspecified fields and clears explicit nul
   assert.equal(cleared.workflowName, null);
   assert.equal(cleared.graph, null);
   assert.equal(cleared.graphFingerprint, 'graph-444');
+});
+
+test('diagnostics state captures runtime scheduler and graph summaries', () => {
+  const context = updateWorkflowContext(createWorkflowDiagnosticsContext(), {
+    workflowId: 'wf-6',
+    workflowName: 'Workflow Six',
+    graph: createGraph(),
+    graphFingerprint: 'graph-666',
+    nodeTypesById: {
+      'llm-1': 'llm-inference',
+    },
+  });
+
+  let state = createWorkflowDiagnosticsState();
+  state = updateDiagnosticsStateWorkflowContext(state, context);
+  state = updateDiagnosticsStateRuntimeSnapshot(state, 'wf-6', {
+    max_input_bindings: 8,
+    max_output_targets: 4,
+    max_value_bytes: 1000,
+    runtime_requirements: {
+      estimation_confidence: 'medium',
+      required_models: ['model-1'],
+      required_backends: ['onnx-runtime'],
+      required_extensions: [],
+    },
+    models: [],
+    runtime_capabilities: [{
+      runtime_id: 'onnx-runtime',
+      display_name: 'ONNX Runtime',
+      install_state: 'installed',
+      available: true,
+      configured: true,
+      can_install: false,
+      can_remove: false,
+      backend_keys: ['onnx-runtime'],
+      missing_files: [],
+    }],
+  }, 1_000, null);
+  state = updateDiagnosticsStateSchedulerSnapshot(state, 'wf-6', 'session-6', {
+    session: {
+      session_id: 'session-6',
+      workflow_id: 'wf-6',
+      keep_alive: false,
+      state: 'idle_loaded',
+      queued_runs: 2,
+      run_count: 5,
+    },
+  }, {
+    session_id: 'session-6',
+    items: [{
+      queue_id: 'queue-6',
+      run_id: 'run-6',
+      priority: 4,
+      status: 'pending',
+    }],
+  }, 2_000, null);
+
+  assert.equal(state.currentGraphFingerprint, 'graph-666');
+  assert.equal(state.currentGraphNodeCount, 1);
+  assert.equal(state.currentGraphEdgeCount, 0);
+  assert.equal(state.runtime.maxInputBindings, 8);
+  assert.equal(state.runtime.runtimeRequirements?.required_backends[0], 'onnx-runtime');
+  assert.equal(state.scheduler.session?.queued_runs, 2);
+  assert.equal(state.scheduler.items[0]?.queue_id, 'queue-6');
 });

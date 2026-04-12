@@ -1,4 +1,10 @@
-import type { WorkflowEvent, WorkflowGraph } from '../workflow/types';
+import type {
+  WorkflowCapabilitiesResponse,
+  WorkflowEvent,
+  WorkflowGraph,
+  WorkflowSessionQueueListResponse,
+  WorkflowSessionStatusResponse,
+} from '../workflow/types';
 import {
   clearDiagnosticsHistory,
   createDiagnosticsSnapshot,
@@ -8,8 +14,11 @@ import {
   recordWorkflowEvent,
   selectDiagnosticsNode,
   selectDiagnosticsRun,
+  setDiagnosticsCurrentSessionId,
   setDiagnosticsPanelOpen,
   setDiagnosticsTab,
+  updateDiagnosticsStateRuntimeSnapshot,
+  updateDiagnosticsStateSchedulerSnapshot,
   updateDiagnosticsStateWorkflowContext,
   updateWorkflowContext,
 } from './traceAccumulator.ts';
@@ -69,6 +78,11 @@ export class DiagnosticsService {
     this.emit();
   }
 
+  setCurrentSessionId(sessionId: string | null): void {
+    this.state = setDiagnosticsCurrentSessionId(this.state, sessionId);
+    this.emit();
+  }
+
   updateWorkflowMetadata(update: WorkflowMetadataUpdate): void {
     this.context = updateWorkflowContext(this.context, update);
     this.state = updateDiagnosticsStateWorkflowContext(this.state, this.context);
@@ -87,6 +101,42 @@ export class DiagnosticsService {
 
   recordWorkflowEvent(event: WorkflowEvent, timestampMs = Date.now()): void {
     recordWorkflowEvent(this.state, this.context, event, timestampMs);
+    this.emit();
+  }
+
+  updateRuntimeSnapshot(
+    workflowId: string | null,
+    capabilities: WorkflowCapabilitiesResponse | null,
+    lastError: string | null,
+    capturedAtMs = Date.now(),
+  ): void {
+    this.state = updateDiagnosticsStateRuntimeSnapshot(
+      this.state,
+      workflowId,
+      capabilities,
+      capturedAtMs,
+      lastError,
+    );
+    this.emit();
+  }
+
+  updateSchedulerSnapshot(
+    workflowId: string | null,
+    sessionId: string | null,
+    sessionStatus: WorkflowSessionStatusResponse | null,
+    sessionQueue: WorkflowSessionQueueListResponse | null,
+    lastError: string | null,
+    capturedAtMs = Date.now(),
+  ): void {
+    this.state = updateDiagnosticsStateSchedulerSnapshot(
+      this.state,
+      workflowId,
+      sessionId,
+      sessionStatus,
+      sessionQueue,
+      capturedAtMs,
+      lastError,
+    );
     this.emit();
   }
 

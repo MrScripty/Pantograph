@@ -26,14 +26,18 @@ spread across toolbar handlers, global stores, and view code.
   components consume snapshots but do not own trace business logic.
 - Trace accumulation must tolerate additive event contracts and partial event
   availability from the backend.
+- Workflow-service-backed capability and scheduler snapshots must coexist with
+  event-derived run traces without introducing a second source of truth for run
+  execution state.
 - Retained history must stay bounded so long sessions do not grow without
   limit.
 
 ## Decision
 Use `DiagnosticsService.ts` as the single owner of diagnostics state and keep
 event normalization in `traceAccumulator.ts`. The service accepts workflow
-metadata, graph snapshots, and execution events, then emits derived snapshots
-for the frontend store to expose declaratively.
+metadata, graph snapshots, execution events, runtime capability snapshots, and
+session queue snapshots, then emits derived state for the frontend store to
+expose declaratively.
 
 ## Alternatives Rejected
 - Accumulate diagnostics directly inside `WorkflowToolbar.svelte`.
@@ -49,6 +53,8 @@ for the frontend store to expose declaratively.
 - Trace accumulation stays deterministic for the same ordered event stream.
 - Missing optional workflow metadata must degrade cleanly to `null`, not throw.
 - Per-run retained event history is bounded by the configured limit.
+- Runtime and scheduler snapshots may refresh independently, but they must land
+  in the same diagnostics state owner as run traces.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.
@@ -102,3 +108,5 @@ service.recordWorkflowEvent({
   oldest end when the configured event limit is exceeded.
 - `graphFingerprintAtStart` captures the graph fingerprint known when the run is
   first observed; later graph changes do not rewrite that field.
+- Runtime and scheduler snapshots are last-write-wins views over workflow
+  service responses keyed by current workflow and current session identity.

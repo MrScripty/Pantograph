@@ -39,8 +39,9 @@ relevant workflow store handles through `workflowStore.ts`. The new
 follow that pattern so app nodes and the app graph consume the same transient
 eligibility state as package components. `diagnosticsStore.ts` follows the same
 pattern for workflow diagnostics: it subscribes once to workflow events,
-workflow graph snapshots, and graph-session metadata, then exposes immutable
-diagnostics snapshots to the GUI.
+workflow graph snapshots, graph-session metadata, and the current workflow
+session id, then hydrates immutable diagnostics snapshots with both event
+history and workflow-service-backed runtime or scheduler views.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -57,6 +58,9 @@ diagnostics snapshots to the GUI.
 - `diagnosticsStore.ts` owns diagnostics subscriptions and retained trace
   history for the app runtime; components must not create parallel diagnostics
   listeners lightly.
+- Workflow-service refreshes for runtime capabilities and session queue state
+  should be triggered from this store boundary, not from diagnostics
+  components.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.
@@ -105,6 +109,8 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
 - Diagnostics consumers should read `diagnosticsSnapshot` and use exported
   commands for selection or visibility changes instead of mutating trace data
   directly.
+- Runtime and scheduler diagnostics are refreshed here in response to workflow
+  id, session id, and execution lifecycle changes rather than by polling loops.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - `workflowGraph` remains the graph projection consumed by backend/service

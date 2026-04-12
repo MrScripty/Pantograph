@@ -1,8 +1,16 @@
-import type { WorkflowEvent, WorkflowGraph } from '../workflow/types';
+import type {
+  WorkflowCapabilitiesResponse,
+  WorkflowEvent,
+  WorkflowGraph,
+  WorkflowSessionQueueListResponse,
+  WorkflowSessionStatusResponse,
+} from '../workflow/types';
 import type {
   DiagnosticsEventRecord,
   DiagnosticsNodeTrace,
   DiagnosticsRunTrace,
+  DiagnosticsRuntimeSnapshot,
+  DiagnosticsSchedulerSnapshot,
   DiagnosticsSnapshot,
   DiagnosticsTab,
   DiagnosticsWorkflowContext,
@@ -11,6 +19,31 @@ import type {
 
 export const DEFAULT_DIAGNOSTICS_EVENT_LIMIT = 200;
 export const DEFAULT_DIAGNOSTICS_TAB: DiagnosticsTab = 'overview';
+
+export function createEmptyDiagnosticsRuntimeSnapshot(): DiagnosticsRuntimeSnapshot {
+  return {
+    workflowId: null,
+    capturedAtMs: null,
+    maxInputBindings: null,
+    maxOutputTargets: null,
+    maxValueBytes: null,
+    runtimeRequirements: null,
+    runtimeCapabilities: [],
+    models: [],
+    lastError: null,
+  };
+}
+
+export function createEmptyDiagnosticsSchedulerSnapshot(): DiagnosticsSchedulerSnapshot {
+  return {
+    workflowId: null,
+    sessionId: null,
+    capturedAtMs: null,
+    session: null,
+    items: [],
+    lastError: null,
+  };
+}
 
 function toExecutionId(event: WorkflowEvent): string | null {
   return event.data.execution_id ?? null;
@@ -261,11 +294,16 @@ export function createWorkflowDiagnosticsState(
     activeTab: DEFAULT_DIAGNOSTICS_TAB,
     selectedRunId: null,
     selectedNodeId: null,
+    currentSessionId: null,
     currentWorkflowId: null,
     currentWorkflowName: null,
     currentGraphFingerprint: null,
+    currentGraphNodeCount: 0,
+    currentGraphEdgeCount: 0,
     runsById: {},
     runOrder: [],
+    runtime: createEmptyDiagnosticsRuntimeSnapshot(),
+    scheduler: createEmptyDiagnosticsSchedulerSnapshot(),
     retainedEventLimit,
   };
 }
@@ -370,6 +408,16 @@ export function setDiagnosticsPanelOpen(
   };
 }
 
+export function setDiagnosticsCurrentSessionId(
+  state: WorkflowDiagnosticsState,
+  sessionId: string | null,
+): WorkflowDiagnosticsState {
+  return {
+    ...state,
+    currentSessionId: sessionId,
+  };
+}
+
 export function setDiagnosticsTab(
   state: WorkflowDiagnosticsState,
   activeTab: DiagnosticsTab,
@@ -410,6 +458,67 @@ export function updateDiagnosticsStateWorkflowContext(
     currentWorkflowId: context.workflowId,
     currentWorkflowName: context.workflowName,
     currentGraphFingerprint: context.graphFingerprint,
+    currentGraphNodeCount: context.graph?.nodes.length ?? 0,
+    currentGraphEdgeCount: context.graph?.edges.length ?? 0,
+  };
+}
+
+export function updateDiagnosticsStateRuntimeSnapshot(
+  state: WorkflowDiagnosticsState,
+  workflowId: string | null,
+  capabilities: WorkflowCapabilitiesResponse | null,
+  capturedAtMs: number,
+  lastError: string | null,
+): WorkflowDiagnosticsState {
+  if (!workflowId) {
+    return {
+      ...state,
+      runtime: createEmptyDiagnosticsRuntimeSnapshot(),
+    };
+  }
+
+  return {
+    ...state,
+    runtime: {
+      workflowId,
+      capturedAtMs,
+      maxInputBindings: capabilities?.max_input_bindings ?? null,
+      maxOutputTargets: capabilities?.max_output_targets ?? null,
+      maxValueBytes: capabilities?.max_value_bytes ?? null,
+      runtimeRequirements: capabilities?.runtime_requirements ?? null,
+      runtimeCapabilities: capabilities?.runtime_capabilities ?? [],
+      models: capabilities?.models ?? [],
+      lastError,
+    },
+  };
+}
+
+export function updateDiagnosticsStateSchedulerSnapshot(
+  state: WorkflowDiagnosticsState,
+  workflowId: string | null,
+  sessionId: string | null,
+  sessionStatus: WorkflowSessionStatusResponse | null,
+  sessionQueue: WorkflowSessionQueueListResponse | null,
+  capturedAtMs: number,
+  lastError: string | null,
+): WorkflowDiagnosticsState {
+  if (!sessionId) {
+    return {
+      ...state,
+      scheduler: createEmptyDiagnosticsSchedulerSnapshot(),
+    };
+  }
+
+  return {
+    ...state,
+    scheduler: {
+      workflowId,
+      sessionId,
+      capturedAtMs,
+      session: sessionStatus?.session ?? null,
+      items: sessionQueue?.items ?? [],
+      lastError,
+    },
   };
 }
 

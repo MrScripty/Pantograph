@@ -9,6 +9,7 @@ import type { WorkflowGraph } from '../services/workflow/types';
 import { workflowGraph } from './workflowStore';
 import { currentGraphId, currentGraphName } from './graphSessionStore';
 import { workflowService } from '../services/workflow/WorkflowService';
+import { sessionStores } from './storeInstances';
 
 const diagnosticsService = new DiagnosticsService();
 const diagnosticsSnapshotStore = writable<DiagnosticsSnapshot>(diagnosticsService.getSnapshot());
@@ -18,7 +19,93 @@ let workflowEventUnsubscribe: (() => void) | null = null;
 let workflowGraphUnsubscribe: (() => void) | null = null;
 let workflowIdUnsubscribe: (() => void) | null = null;
 let workflowNameUnsubscribe: (() => void) | null = null;
+let sessionIdUnsubscribe: (() => void) | null = null;
 let diagnosticsStarted = false;
+let latestWorkflowId: string | null = null;
+let latestSessionId: string | null = null;
+let runtimeRefreshToken = 0;
+let schedulerRefreshToken = 0;
+
+function normalizeError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+  return String(error);
+}
+
+async function refreshRuntimeSnapshot(): Promise<void> {
+  const workflowId = latestWorkflowId;
+  const refreshToken = ++runtimeRefreshToken;
+  const capturedAtMs = Date.now();
+
+  if (!workflowId) {
+    diagnosticsService.updateRuntimeSnapshot(null, null, null, capturedAtMs);
+    return;
+  }
+
+  try {
+    const capabilities = await workflowService.getWorkflowCapabilities(workflowId);
+    if (refreshToken !== runtimeRefreshToken) {
+      return;
+    }
+    diagnosticsService.updateRuntimeSnapshot(workflowId, capabilities, null, capturedAtMs);
+  } catch (error) {
+    if (refreshToken !== runtimeRefreshToken) {
+      return;
+    }
+    diagnosticsService.updateRuntimeSnapshot(
+      workflowId,
+      null,
+      normalizeError(error),
+      capturedAtMs,
+    );
+  }
+}
+
+async function refreshSchedulerSnapshot(): Promise<void> {
+  const sessionId = latestSessionId;
+  const workflowId = latestWorkflowId;
+  const refreshToken = ++schedulerRefreshToken;
+  const capturedAtMs = Date.now();
+
+  if (!sessionId) {
+    diagnosticsService.updateSchedulerSnapshot(workflowId, null, null, null, null, capturedAtMs);
+    return;
+  }
+
+  try {
+    const [sessionStatus, sessionQueue] = await Promise.all([
+      workflowService.getSessionStatus(sessionId),
+      workflowService.listSessionQueue(sessionId),
+    ]);
+    if (refreshToken !== schedulerRefreshToken) {
+      return;
+    }
+    diagnosticsService.updateSchedulerSnapshot(
+      workflowId,
+      sessionId,
+      sessionStatus,
+      sessionQueue,
+      null,
+      capturedAtMs,
+    );
+  } catch (error) {
+    if (refreshToken !== schedulerRefreshToken) {
+      return;
+    }
+    diagnosticsService.updateSchedulerSnapshot(
+      workflowId,
+      sessionId,
+      null,
+      null,
+      normalizeError(error),
+      capturedAtMs,
+    );
+  }
+}
 
 function bindDiagnosticsStore(): void {
   diagnosticsUnsubscribe = diagnosticsService.subscribe((snapshot) => {
@@ -27,6 +114,17 @@ function bindDiagnosticsStore(): void {
 
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
     diagnosticsService.recordWorkflowEvent(event);
+    switch (event.type) {
+      case 'Started':
+      case 'Completed':
+      case 'Failed':
+      case 'WaitingForInput':
+      case 'IncrementalExecutionStarted':
+        void refreshSchedulerSnapshot();
+        break;
+      default:
+        break;
+    }
   });
 
   workflowGraphUnsubscribe = workflowGraph.subscribe((graph) => {
@@ -34,11 +132,20 @@ function bindDiagnosticsStore(): void {
   });
 
   workflowIdUnsubscribe = currentGraphId.subscribe((workflowId) => {
+    latestWorkflowId = workflowId;
     diagnosticsService.updateWorkflowMetadata({ workflowId });
+    void refreshRuntimeSnapshot();
+    void refreshSchedulerSnapshot();
   });
 
   workflowNameUnsubscribe = currentGraphName.subscribe((workflowName) => {
     diagnosticsService.updateWorkflowMetadata({ workflowName });
+  });
+
+  sessionIdUnsubscribe = sessionStores.currentSessionId.subscribe((sessionId) => {
+    latestSessionId = sessionId;
+    diagnosticsService.setCurrentSessionId(sessionId);
+    void refreshSchedulerSnapshot();
   });
 }
 
@@ -48,12 +155,14 @@ function unbindDiagnosticsStore(): void {
   workflowGraphUnsubscribe?.();
   workflowIdUnsubscribe?.();
   workflowNameUnsubscribe?.();
+  sessionIdUnsubscribe?.();
 
   diagnosticsUnsubscribe = null;
   workflowEventUnsubscribe = null;
   workflowGraphUnsubscribe = null;
   workflowIdUnsubscribe = null;
   workflowNameUnsubscribe = null;
+  sessionIdUnsubscribe = null;
 }
 
 export function startDiagnosticsStore(): void {

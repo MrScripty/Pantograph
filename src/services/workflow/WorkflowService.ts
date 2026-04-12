@@ -1,10 +1,13 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import type {
   NodeDefinition,
+  WorkflowCapabilitiesResponse,
   WorkflowEvent,
   WorkflowGraph,
   WorkflowFile,
   WorkflowMetadata,
+  WorkflowSessionQueueListResponse,
+  WorkflowSessionStatusResponse,
   GraphNode,
   GraphEdge,
   ConnectionAnchor,
@@ -37,6 +40,18 @@ export interface UndoRedoState {
   canUndo: boolean;
   canRedo: boolean;
   undoCount: number;
+}
+
+interface WorkflowCapabilitiesRequest {
+  workflow_id: string;
+}
+
+interface WorkflowSessionStatusRequest {
+  session_id: string;
+}
+
+interface WorkflowSessionQueueListRequest {
+  session_id: string;
 }
 
 export class WorkflowService {
@@ -187,6 +202,76 @@ export class WorkflowService {
     await invoke('run_workflow_session', {
       sessionId: id,
       channel: this.channel,
+    });
+  }
+
+  async getWorkflowCapabilities(workflowId: string): Promise<WorkflowCapabilitiesResponse> {
+    if (USE_MOCKS) {
+      return {
+        max_input_bindings: 8,
+        max_output_targets: 8,
+        max_value_bytes: 10_000_000,
+        runtime_requirements: {
+          estimation_confidence: 'unknown',
+          required_models: [],
+          required_backends: [],
+          required_extensions: [],
+        },
+        models: [],
+        runtime_capabilities: [],
+      };
+    }
+
+    return invoke<WorkflowCapabilitiesResponse>('workflow_get_capabilities', {
+      request: {
+        workflow_id: workflowId,
+      } satisfies WorkflowCapabilitiesRequest,
+    });
+  }
+
+  async getSessionStatus(sessionId?: string): Promise<WorkflowSessionStatusResponse | null> {
+    const id = sessionId ?? this.currentExecutionId;
+    if (!id) {
+      return null;
+    }
+
+    if (USE_MOCKS) {
+      return {
+        session: {
+          session_id: id,
+          workflow_id: 'mock-workflow',
+          keep_alive: true,
+          state: 'idle_loaded',
+          queued_runs: 0,
+          run_count: 0,
+        },
+      };
+    }
+
+    return invoke<WorkflowSessionStatusResponse>('workflow_get_session_status', {
+      request: {
+        session_id: id,
+      } satisfies WorkflowSessionStatusRequest,
+    });
+  }
+
+  async listSessionQueue(sessionId?: string): Promise<WorkflowSessionQueueListResponse | null> {
+    const id = sessionId ?? this.currentExecutionId;
+    if (!id) {
+      return null;
+    }
+
+    if (USE_MOCKS) {
+      return {
+        session_id: id,
+        items: [],
+      };
+    }
+
+    return invoke<WorkflowSessionQueueListResponse>('workflow_list_session_queue', {
+      request: {
+        session_id: id,
+      } satisfies WorkflowSessionQueueListRequest,
     });
   }
 
