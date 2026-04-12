@@ -288,7 +288,9 @@ export type WorkflowEventType =
   | 'Failed'
   | 'GraphModified'
   | 'WaitingForInput'
-  | 'IncrementalExecutionStarted';
+  | 'IncrementalExecutionStarted'
+  | 'RuntimeSnapshot'
+  | 'SchedulerSnapshot';
 
 export interface WorkflowEventData {
   Started: { workflow_id: string; node_count: number; execution_id?: string };
@@ -319,6 +321,22 @@ export interface WorkflowEventData {
     workflow_id?: string;
     execution_id?: string;
     task_ids: string[];
+  };
+  RuntimeSnapshot: {
+    workflow_id?: string;
+    execution_id?: string;
+    captured_at_ms: number;
+    capabilities?: WorkflowCapabilitiesResponse | null;
+    error?: string | null;
+  };
+  SchedulerSnapshot: {
+    workflow_id?: string;
+    execution_id?: string;
+    session_id: string;
+    captured_at_ms: number;
+    session?: WorkflowSessionSummary | null;
+    items: WorkflowSessionQueueItem[];
+    error?: string | null;
   };
 }
 

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
@@ -8,14 +9,16 @@ use node_engine::EventSink;
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState, WorkflowGraph,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
+    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
     WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, convert_graph_to_node_engine,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionQueueListRequest,
+    WorkflowSessionStatusRequest, convert_graph_to_node_engine,
 };
 use tauri::{AppHandle, State, ipc::Channel};
 
@@ -401,13 +404,124 @@ async fn restore_runtime_if_needed(
     }
 }
 
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
+async fn emit_diagnostics_snapshots(
+    app: &AppHandle,
+    session_id: &str,
+    gateway: &SharedGateway,
+    extensions: &SharedExtensions,
+    workflow_service: &SharedWorkflowService,
+    channel: &Channel<WorkflowEvent>,
+) {
+    let session_status = match workflow_service
+        .workflow_get_session_status(WorkflowSessionStatusRequest {
+            session_id: session_id.to_string(),
+        })
+        .await
+    {
+        Ok(status) => status,
+        Err(error) => {
+            log::debug!(
+                "Skipping diagnostics snapshots for session '{}' because session status is unavailable: {}",
+                session_id,
+                error
+            );
+            return;
+        }
+    };
+
+    let workflow_id = session_status.session.workflow_id.clone();
+    let captured_at_ms = unix_timestamp_ms();
+
+    let (queue_items, scheduler_error) = match workflow_service
+        .workflow_list_session_queue(WorkflowSessionQueueListRequest {
+            session_id: session_id.to_string(),
+        })
+        .await
+    {
+        Ok(response) => (response.items, None),
+        Err(error) => {
+            log::warn!(
+                "Failed to collect scheduler snapshot for session '{}': {}",
+                session_id,
+                error
+            );
+            (Vec::new(), Some(error.to_envelope_json()))
+        }
+    };
+
+    let _ = channel.send(WorkflowEvent::scheduler_snapshot(
+        workflow_id.clone(),
+        session_id.to_string(),
+        session_id.to_string(),
+        captured_at_ms,
+        Some(session_status.session.clone()),
+        queue_items,
+        scheduler_error,
+    ));
+
+    let runtime = match super::headless_workflow_commands::build_runtime(
+        app,
+        gateway,
+        extensions,
+        workflow_service,
+        None,
+    ) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            let _ = channel.send(WorkflowEvent::runtime_snapshot(
+                workflow_id,
+                session_id.to_string(),
+                captured_at_ms,
+                None,
+                Some(error),
+            ));
+            return;
+        }
+    };
+
+    let (capabilities, runtime_error) = match runtime
+        .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+            workflow_id: workflow_id.clone(),
+        })
+        .await
+    {
+        Ok(response) => (Some(response), None),
+        Err(error) => {
+            log::warn!(
+                "Failed to collect runtime snapshot for workflow '{}' in session '{}': {}",
+                workflow_id,
+                session_id,
+                error
+            );
+            (None, Some(error.to_envelope_json()))
+        }
+    };
+
+    let _ = channel.send(WorkflowEvent::runtime_snapshot(
+        workflow_id,
+        session_id.to_string(),
+        captured_at_ms,
+        capabilities,
+        runtime_error,
+    ));
+}
+
 async fn run_session_graph_snapshot(
+    app: AppHandle,
     session_id: String,
     session_graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -415,6 +529,17 @@ async fn run_session_graph_snapshot(
         .parent()
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
+    let diagnostics_channel = channel.clone();
+
+    emit_diagnostics_snapshots(
+        &app,
+        &session_id,
+        gateway.inner(),
+        extensions.inner(),
+        workflow_service.inner(),
+        &diagnostics_channel,
+    )
+    .await;
 
     let event_adapter = Arc::new(TauriEventAdapter::new(channel, &session_id));
     let runtime_ext = {
@@ -497,11 +622,20 @@ async fn run_session_graph_snapshot(
     }
 
     restore_runtime_if_needed(gateway.inner(), restore_config).await;
+    emit_diagnostics_snapshots(
+        &app,
+        &session_id,
+        gateway.inner(),
+        extensions.inner(),
+        workflow_service.inner(),
+        &diagnostics_channel,
+    )
+    .await;
     workflow_result
 }
 
 pub async fn execute_workflow_v2(
-    _app: AppHandle,
+    app: AppHandle,
     graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
@@ -520,12 +654,14 @@ pub async fn execute_workflow_v2(
         .await
         .map_err(|e| e.to_envelope_json())?;
     run_session_graph_snapshot(
+        app,
         execution_id.clone(),
         session_graph,
         gateway,
         config,
         rag_manager,
         extensions,
+        workflow_service,
         channel,
     )
     .await?;
@@ -788,7 +924,7 @@ pub async fn create_workflow_session(
 }
 
 pub async fn run_workflow_session(
-    _app: AppHandle,
+    app: AppHandle,
     session_id: String,
     gateway: State<'_, SharedGateway>,
     config: State<'_, SharedAppConfig>,
@@ -802,12 +938,14 @@ pub async fn run_workflow_session(
         .await
         .map_err(|e| e.to_envelope_json())?;
     run_session_graph_snapshot(
+        app,
         session_id,
         session_graph,
         gateway,
         config,
         rag_manager,
         extensions,
+        workflow_service,
         channel,
     )
     .await

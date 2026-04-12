@@ -115,6 +115,27 @@ function bindDiagnosticsStore(): void {
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
     diagnosticsService.recordWorkflowEvent(event);
     switch (event.type) {
+      case 'RuntimeSnapshot':
+        diagnosticsService.updateRuntimeSnapshot(
+          event.data.workflow_id ?? latestWorkflowId,
+          event.data.capabilities ?? null,
+          event.data.error ?? null,
+          event.data.captured_at_ms,
+        );
+        break;
+      case 'SchedulerSnapshot':
+        diagnosticsService.updateSchedulerSnapshot(
+          event.data.workflow_id ?? latestWorkflowId,
+          event.data.session_id,
+          event.data.session ? { session: event.data.session } : null,
+          {
+            session_id: event.data.session_id,
+            items: event.data.items,
+          },
+          event.data.error ?? null,
+          event.data.captured_at_ms,
+        );
+        break;
       case 'Started':
       case 'Completed':
       case 'Failed':

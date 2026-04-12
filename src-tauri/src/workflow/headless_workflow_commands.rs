@@ -11,15 +11,15 @@ use pantograph_embedded_runtime::{
     EmbeddedRuntime, EmbeddedRuntimeConfig, RagBackend, RagDocument,
 };
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest, WorkflowIoResponse,
-    WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest, WorkflowRunResponse,
-    WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
-    WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowServiceError,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
+    WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
+    WorkflowRunResponse, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRunRequest, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -64,7 +64,7 @@ impl RagBackend for TauriRagBackend {
     }
 }
 
-fn build_runtime(
+pub(super) fn build_runtime(
     app: &AppHandle,
     gateway: &SharedGateway,
     extensions: &SharedExtensions,
@@ -72,9 +72,11 @@ fn build_runtime(
     rag_manager: Option<&SharedRagManager>,
 ) -> Result<EmbeddedRuntime, String> {
     let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
-    let rag_backend = rag_manager
-        .cloned()
-        .map(|manager| Arc::new(TauriRagBackend { rag_manager: manager }) as Arc<dyn RagBackend>);
+    let rag_backend = rag_manager.cloned().map(|manager| {
+        Arc::new(TauriRagBackend {
+            rag_manager: manager,
+        }) as Arc<dyn RagBackend>
+    });
     Ok(EmbeddedRuntime::with_default_python_runtime(
         config,
         gateway.inner_arc(),
@@ -99,7 +101,10 @@ pub async fn workflow_run(
         workflow_service.inner(),
         Some(rag_manager.inner()),
     )?;
-    runtime.workflow_run(request).await.map_err(workflow_error_json)
+    runtime
+        .workflow_run(request)
+        .await
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_get_capabilities(
@@ -136,7 +141,10 @@ pub async fn workflow_get_io(
         workflow_service.inner(),
         None,
     )?;
-    runtime.workflow_get_io(request).await.map_err(workflow_error_json)
+    runtime
+        .workflow_get_io(request)
+        .await
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_preflight(

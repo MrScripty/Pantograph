@@ -91,6 +91,14 @@ function summarizeEvent(event: WorkflowEvent): string {
       return event.data.task_ids.length
         ? `Incremental execution for ${event.data.task_ids.join(', ')}`
         : 'Incremental execution started';
+    case 'RuntimeSnapshot':
+      return event.data.error?.trim()
+        ? `Runtime snapshot failed: ${event.data.error}`
+        : 'Runtime snapshot captured';
+    case 'SchedulerSnapshot':
+      return event.data.error?.trim()
+        ? `Scheduler snapshot failed: ${event.data.error}`
+        : `Scheduler snapshot captured (${event.data.items.length} queue items)`;
   }
 }
 

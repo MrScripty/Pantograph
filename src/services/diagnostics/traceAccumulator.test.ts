@@ -185,6 +185,45 @@ test('recordWorkflowEvent enforces the retained event limit per run', () => {
   assert.deepEqual(run.events.map(event => event.type), ['GraphModified', 'Completed']);
 });
 
+test('recordWorkflowEvent records runtime and scheduler snapshot events', () => {
+  const state = createWorkflowDiagnosticsState();
+  let context = createWorkflowDiagnosticsContext();
+  context = updateWorkflowContext(context, {
+    workflowId: 'wf-7',
+  });
+
+  recordWorkflowEvent(state, context, {
+    type: 'RuntimeSnapshot',
+    data: {
+      workflow_id: 'wf-7',
+      execution_id: 'exec-7',
+      captured_at_ms: 70,
+      capabilities: null,
+      error: 'runtime probe failed',
+    },
+  }, 70);
+
+  recordWorkflowEvent(state, context, {
+    type: 'SchedulerSnapshot',
+    data: {
+      workflow_id: 'wf-7',
+      execution_id: 'exec-7',
+      session_id: 'session-7',
+      captured_at_ms: 75,
+      session: null,
+      items: [],
+      error: null,
+    },
+  }, 75);
+
+  const snapshot = createDiagnosticsSnapshot(state);
+  const run = snapshot.selectedRun;
+  assert.ok(run);
+  assert.deepEqual(run.events.map(event => event.type), ['RuntimeSnapshot', 'SchedulerSnapshot']);
+  assert.equal(run.events[0]?.summary, 'Runtime snapshot failed: runtime probe failed');
+  assert.equal(run.events[1]?.summary, 'Scheduler snapshot captured (0 queue items)');
+});
+
 test('updateWorkflowContext preserves unspecified fields and clears explicit nulls', () => {
   const initial = updateWorkflowContext(createWorkflowDiagnosticsContext(), {
     workflowId: 'wf-4',

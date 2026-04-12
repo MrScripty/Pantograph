@@ -6,6 +6,10 @@
 use serde::Serialize;
 use std::collections::HashMap;
 
+use pantograph_workflow_service::{
+    WorkflowCapabilitiesResponse, WorkflowSessionQueueItem, WorkflowSessionSummary,
+};
+
 /// A value that flows through a port (alias for serde_json::Value)
 pub type PortValue = serde_json::Value;
 
@@ -133,6 +137,38 @@ pub enum WorkflowEvent {
         /// Task ids that are being re-executed
         task_ids: Vec<String>,
     },
+
+    /// Runtime capabilities snapshot captured during execution
+    RuntimeSnapshot {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
+        /// Unique identifier for this execution
+        execution_id: String,
+        /// Millisecond unix timestamp for when the snapshot was captured
+        captured_at_ms: u64,
+        /// Runtime capabilities and requirements when available
+        capabilities: Option<WorkflowCapabilitiesResponse>,
+        /// Error encountered while collecting the runtime snapshot
+        error: Option<String>,
+    },
+
+    /// Scheduler/session snapshot captured during execution
+    SchedulerSnapshot {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
+        /// Unique identifier for this execution
+        execution_id: String,
+        /// Session identifier the snapshot belongs to
+        session_id: String,
+        /// Millisecond unix timestamp for when the snapshot was captured
+        captured_at_ms: u64,
+        /// Session summary when available
+        session: Option<WorkflowSessionSummary>,
+        /// Queue items visible at capture time
+        items: Vec<WorkflowSessionQueueItem>,
+        /// Error encountered while collecting the scheduler snapshot
+        error: Option<String>,
+    },
 }
 
 impl WorkflowEvent {
@@ -243,6 +279,44 @@ impl WorkflowEvent {
             execution_id: execution_id.into(),
         }
     }
+
+    /// Create a RuntimeSnapshot event
+    pub fn runtime_snapshot(
+        workflow_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        captured_at_ms: u64,
+        capabilities: Option<WorkflowCapabilitiesResponse>,
+        error: Option<String>,
+    ) -> Self {
+        Self::RuntimeSnapshot {
+            workflow_id: workflow_id.into(),
+            execution_id: execution_id.into(),
+            captured_at_ms,
+            capabilities,
+            error,
+        }
+    }
+
+    /// Create a SchedulerSnapshot event
+    pub fn scheduler_snapshot(
+        workflow_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        session_id: impl Into<String>,
+        captured_at_ms: u64,
+        session: Option<WorkflowSessionSummary>,
+        items: Vec<WorkflowSessionQueueItem>,
+        error: Option<String>,
+    ) -> Self {
+        Self::SchedulerSnapshot {
+            workflow_id: workflow_id.into(),
+            execution_id: execution_id.into(),
+            session_id: session_id.into(),
+            captured_at_ms,
+            session,
+            items,
+            error,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -271,5 +345,21 @@ mod tests {
         assert!(json.contains("NodeStream"));
         assert!(json.contains("hello"));
         assert!(json.contains("exec-123"));
+    }
+
+    #[test]
+    fn test_runtime_snapshot_event() {
+        let event = WorkflowEvent::runtime_snapshot(
+            "workflow-123",
+            "exec-123",
+            1234,
+            None,
+            Some("capability unavailable".to_string()),
+        );
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("RuntimeSnapshot"));
+        assert!(json.contains("workflow-123"));
+        assert!(json.contains("1234"));
+        assert!(json.contains("capability unavailable"));
     }
 }
