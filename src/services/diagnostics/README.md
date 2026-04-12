@@ -29,6 +29,9 @@ spread across toolbar handlers, global stores, and view code.
 - Workflow-service-backed capability and scheduler snapshots must coexist with
   event-derived run traces without introducing a second source of truth for run
   execution state.
+- GUI edit-session runs may not have workflow-service scheduler state, so the
+  service must also support a deterministic synthetic scheduler view derived
+  from execution lifecycle events until authoritative snapshots arrive.
 - Retained history must stay bounded so long sessions do not grow without
   limit.
 
@@ -37,7 +40,11 @@ Use `DiagnosticsService.ts` as the single owner of diagnostics state and keep
 event normalization in `traceAccumulator.ts`. The service accepts workflow
 metadata, graph snapshots, execution events, runtime capability snapshots, and
 session queue snapshots, then emits derived state for the frontend store to
-expose declaratively.
+expose declaratively. Runtime and scheduler tabs now consume additive
+`RuntimeSnapshot` and `SchedulerSnapshot` workflow events when the backend emits
+them, while the service can synthesize a minimal scheduler session lifecycle
+for edit-session runs that do not resolve through workflow-service session
+APIs.
 
 ## Alternatives Rejected
 - Accumulate diagnostics directly inside `WorkflowToolbar.svelte`.
@@ -55,6 +62,8 @@ expose declaratively.
 - Per-run retained event history is bounded by the configured limit.
 - Runtime and scheduler snapshots may refresh independently, but they must land
   in the same diagnostics state owner as run traces.
+- Synthetic scheduler fallback must clear when authoritative scheduler snapshot
+  data for the same session arrives.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.
@@ -110,3 +119,6 @@ service.recordWorkflowEvent({
   first observed; later graph changes do not rewrite that field.
 - Runtime and scheduler snapshots are last-write-wins views over workflow
   service responses keyed by current workflow and current session identity.
+- Scheduler state may also be synthesized from execution lifecycle events for
+  edit-session GUI runs; that fallback remains additive and is superseded by
+  streamed or fetched workflow-service snapshots when available.

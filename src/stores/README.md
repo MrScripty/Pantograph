@@ -41,7 +41,11 @@ eligibility state as package components. `diagnosticsStore.ts` follows the same
 pattern for workflow diagnostics: it subscribes once to workflow events,
 workflow graph snapshots, graph-session metadata, and the current workflow
 session id, then hydrates immutable diagnostics snapshots with both event
-history and workflow-service-backed runtime or scheduler views.
+history and workflow-service-backed runtime or scheduler views. When the active
+session id is a graph edit session instead of a workflow-service session,
+`diagnosticsStore.ts` now keeps a synthetic scheduler session summary in sync
+with execution lifecycle events and suppresses expected `session_not_found`
+noise from the scheduler panel.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -61,6 +65,8 @@ history and workflow-service-backed runtime or scheduler views.
 - Workflow-service refreshes for runtime capabilities and session queue state
   should be triggered from this store boundary, not from diagnostics
   components.
+- Expected edit-session scheduler misses must degrade to synthetic scheduler
+  state here instead of surfacing as persistent user-facing errors.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.
@@ -111,6 +117,9 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   directly.
 - Runtime and scheduler diagnostics are refreshed here in response to workflow
   id, session id, and execution lifecycle changes rather than by polling loops.
+- Workflow-event-driven scheduler fallback and backend-sourced scheduler
+  snapshots share this store boundary; components should not attempt to
+  distinguish the producer path themselves.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - `workflowGraph` remains the graph projection consumed by backend/service

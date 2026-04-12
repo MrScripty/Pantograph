@@ -30,6 +30,9 @@ second owner of workflow transport state.
 - Scheduler, runtime, and graph tabs should render workflow-service-backed or
   diagnostics-store-backed state instead of inventing component-local shadow
   models.
+- Scheduler rendering must tolerate both authoritative workflow-service
+  snapshots and the synthetic edit-session fallback state produced by the
+  diagnostics store.
 - Components may format diagnostics data for readability, but they must not
   mutate trace state directly.
 
@@ -53,6 +56,9 @@ files mostly express layout and interaction.
 - Tab switching and node/run selection use exported diagnostics store commands.
 - Runtime and scheduler rendering should stay read-only over store snapshots,
   not call workflow commands directly from the component tree.
+- Scheduler copy and layout should remain valid when queue ordering is
+  synthesized for single-run edit sessions rather than backed by a real
+  workflow-service queue.
 
 ## Revisit Triggers
 - Diagnostics needs detached windows or a second layout mode.
