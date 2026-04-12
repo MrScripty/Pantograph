@@ -245,10 +245,13 @@ export interface WorkflowEventData {
   };
 }
 
-export interface WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> {
-  type: T;
-  data: WorkflowEventData[T];
-}
+export type WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> =
+  T extends WorkflowEventType
+    ? {
+      type: T;
+      data: WorkflowEventData[T];
+    }
+    : never;
 
 export type NodeExecutionState = 'idle' | 'running' | 'success' | 'error';
 
