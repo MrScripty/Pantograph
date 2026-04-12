@@ -2,7 +2,7 @@ import type { ArchitectureGraph } from '../services/architecture/types';
 
 export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
   metadata: {
-    generatedAt: '2026-01-17',
+    generatedAt: '2026-04-12',
     version: '1.0.0'
   },
   nodes: [
@@ -33,7 +33,14 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       category: 'component',
       label: 'WorkflowToolbar',
       filePath: 'src/components/WorkflowToolbar.svelte',
-      description: 'Workflow actions: Run, Save, Load, Clear'
+      description: 'Workflow actions and diagnostics panel toggle'
+    },
+    {
+      id: 'component:DiagnosticsPanel',
+      category: 'component',
+      label: 'DiagnosticsPanel',
+      filePath: 'src/components/diagnostics/DiagnosticsPanel.svelte',
+      description: 'Bottom-panel workflow diagnostics view with run selection and tabs'
     },
     {
       id: 'component:NodePalette',
@@ -136,6 +143,13 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       description: 'Workflow execution and persistence via Tauri'
     },
     {
+      id: 'service:DiagnosticsService',
+      category: 'service',
+      label: 'DiagnosticsService',
+      filePath: 'src/services/diagnostics/DiagnosticsService.ts',
+      description: 'Workflow diagnostics trace accumulation and snapshot emission'
+    },
+    {
       id: 'service:RuntimeCompiler',
       category: 'service',
       label: 'RuntimeCompiler',
@@ -185,6 +199,13 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       label: 'workflowStore',
       filePath: 'src/stores/workflowStore.ts',
       description: 'Workflow nodes, edges, and execution state'
+    },
+    {
+      id: 'store:diagnosticsStore',
+      category: 'store',
+      label: 'diagnosticsStore',
+      filePath: 'src/stores/diagnosticsStore.ts',
+      description: 'Single diagnostics subscription owner and GUI snapshot facade'
     },
     {
       id: 'store:canvasStore',
@@ -341,6 +362,7 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c7', source: 'component:App', target: 'component:WorkflowToolbar', connectionType: 'import' },
     { id: 'c8', source: 'component:App', target: 'component:NodePalette', connectionType: 'import' },
     { id: 'c9', source: 'component:App', target: 'component:HotLoadContainer', connectionType: 'import' },
+    { id: 'c9a', source: 'component:App', target: 'component:DiagnosticsPanel', connectionType: 'import' },
 
     // ==================== Component → Store subscriptions ====================
     { id: 'c10', source: 'component:App', target: 'store:viewModeStore', connectionType: 'subscription' },
@@ -351,6 +373,8 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c16', source: 'component:ChunkPreview', target: 'store:chunkPreviewStore', connectionType: 'subscription' },
     { id: 'c17', source: 'component:WorkflowToolbar', target: 'store:workflowStore', connectionType: 'subscription' },
     { id: 'c18', source: 'component:NodePalette', target: 'store:workflowStore', connectionType: 'subscription' },
+    { id: 'c18a', source: 'component:WorkflowToolbar', target: 'store:diagnosticsStore', connectionType: 'subscription' },
+    { id: 'c18b', source: 'component:DiagnosticsPanel', target: 'store:diagnosticsStore', connectionType: 'subscription' },
 
     // ==================== Component → Service imports ====================
     { id: 'c20', source: 'component:Canvas', target: 'service:DrawingEngine', connectionType: 'import' },
@@ -359,6 +383,9 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c23', source: 'component:SidePanel', target: 'service:RagService', connectionType: 'import' },
     { id: 'c24', source: 'component:HotLoadContainer', target: 'service:HotLoadRegistry', connectionType: 'import' },
     { id: 'c25', source: 'component:WorkflowToolbar', target: 'service:WorkflowService', connectionType: 'import' },
+    { id: 'c25a', source: 'store:diagnosticsStore', target: 'service:DiagnosticsService', connectionType: 'import' },
+    { id: 'c25b', source: 'store:diagnosticsStore', target: 'service:WorkflowService', connectionType: 'subscription' },
+    { id: 'c25c', source: 'store:diagnosticsStore', target: 'store:workflowStore', connectionType: 'subscription' },
 
     // ==================== Service → Tauri commands ====================
     { id: 'c30', source: 'service:WorkflowService', target: 'command:execute_workflow', connectionType: 'command' },
