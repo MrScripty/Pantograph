@@ -169,21 +169,11 @@ mod options_provider {
             .find_map(|k| obj.get(*k).and_then(|v| v.as_str()).map(|s| s.to_string()))
     }
 
-    pub(crate) fn should_use_execution_descriptor(record: &pumas_library::ModelRecord) -> bool {
-        matches!(
-            metadata_string(record, &["bundle_format", "bundleFormat"]).as_deref(),
-            Some("diffusers_directory")
-        ) || matches!(
-            metadata_string(record, &["storage_kind", "storageKind"]).as_deref(),
-            Some("external_reference")
-        )
-    }
-
     pub(crate) async fn resolve_execution_descriptor(
         api: &Arc<pumas_library::PumasApi>,
         record: &pumas_library::ModelRecord,
     ) -> Option<ModelExecutionDescriptor> {
-        if !should_use_execution_descriptor(record) {
+        if record.id.trim().is_empty() {
             return None;
         }
 
@@ -232,8 +222,9 @@ mod options_provider {
 
             let mut options = Vec::with_capacity(records.len());
             for m in &records {
-                // Use the execution descriptor only for bundle-shaped assets so
-                // file-based models keep their existing path semantics.
+                // Prefer the Pumas execution descriptor whenever the record can
+                // resolve one so runtime-facing paths come from the executable
+                // contract rather than projected metadata.
                 let execution_descriptor = resolve_execution_descriptor(&api, m).await;
                 let inference_settings = api
                     .get_inference_settings(&m.id)
@@ -428,7 +419,7 @@ mod tests {
 
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
-    use super::options_provider::{resolve_execution_descriptor, should_use_execution_descriptor};
+    use super::options_provider::resolve_execution_descriptor;
     use pumas_library::PumasApi;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -501,6 +492,37 @@ mod model_library_tests {
         .unwrap();
     }
 
+    fn write_library_owned_file_model(
+        model_dir: &std::path::Path,
+        file_name: &str,
+        file_size_bytes: usize,
+    ) -> std::path::PathBuf {
+        std::fs::create_dir_all(model_dir).unwrap();
+        let model_file = model_dir.join(file_name);
+        std::fs::write(&model_file, vec![0_u8; file_size_bytes]).unwrap();
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::json!({
+                "schema_version": 2,
+                "model_id": "llm/imported/test-gguf",
+                "family": "imported",
+                "model_type": "llm",
+                "official_name": "test-gguf",
+                "cleaned_name": "test-gguf",
+                "source_path": model_dir.display().to_string(),
+                "storage_kind": "library_owned",
+                "import_state": "ready",
+                "validation_state": "valid",
+                "task_type_primary": "text-generation",
+                "recommended_backend": "llamacpp",
+                "runtime_engine_hints": ["llamacpp"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        model_file
+    }
+
     #[tokio::test]
     async fn test_bundle_models_resolve_execution_descriptor_entry_path() {
         let temp_dir = create_test_env();
@@ -520,12 +542,35 @@ mod model_library_tests {
             .await
             .unwrap()
             .expect("model record should exist");
-        assert!(should_use_execution_descriptor(&record));
 
         let descriptor = resolve_execution_descriptor(&Arc::new(api), &record)
             .await
             .expect("execution descriptor should resolve");
         assert_eq!(descriptor.entry_path, bundle_root.display().to_string());
         assert_eq!(descriptor.task_type_primary, "text-to-image");
+    }
+
+    #[tokio::test]
+    async fn test_file_models_resolve_execution_descriptor_primary_file_path() {
+        let temp_dir = create_test_env();
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/llm/imported/test-gguf");
+        let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+
+        let api = PumasApi::builder(temp_dir.path()).build().await.unwrap();
+        api.rebuild_model_index().await.unwrap();
+
+        let record = api
+            .get_model("llm/imported/test-gguf")
+            .await
+            .unwrap()
+            .expect("model record should exist");
+
+        let descriptor = resolve_execution_descriptor(&Arc::new(api), &record)
+            .await
+            .expect("execution descriptor should resolve");
+        assert_eq!(descriptor.entry_path, model_file.display().to_string());
+        assert_eq!(descriptor.task_type_primary, "text-generation");
     }
 }
