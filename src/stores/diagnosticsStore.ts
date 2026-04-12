@@ -20,9 +20,11 @@ let workflowGraphUnsubscribe: (() => void) | null = null;
 let workflowIdUnsubscribe: (() => void) | null = null;
 let workflowNameUnsubscribe: (() => void) | null = null;
 let sessionIdUnsubscribe: (() => void) | null = null;
+let sessionKindUnsubscribe: (() => void) | null = null;
 let diagnosticsStarted = false;
 let latestWorkflowId: string | null = null;
 let latestSessionId: string | null = null;
+let latestSessionKind: 'edit' | 'workflow' | null = null;
 let runtimeRefreshToken = 0;
 let schedulerRefreshToken = 0;
 
@@ -95,6 +97,11 @@ async function refreshSchedulerSnapshot(): Promise<void> {
 
   if (!sessionId) {
     diagnosticsService.updateSchedulerSnapshot(workflowId, null, null, null, null, capturedAtMs);
+    return;
+  }
+
+  if (latestSessionKind === 'edit') {
+    diagnosticsService.ensureSchedulerSession(workflowId, sessionId, capturedAtMs);
     return;
   }
 
@@ -200,6 +207,11 @@ function bindDiagnosticsStore(): void {
     diagnosticsService.ensureSchedulerSession(latestWorkflowId, sessionId);
     void refreshSchedulerSnapshot();
   });
+
+  sessionKindUnsubscribe = sessionStores.currentSessionKind.subscribe((sessionKind) => {
+    latestSessionKind = sessionKind;
+    void refreshSchedulerSnapshot();
+  });
 }
 
 function unbindDiagnosticsStore(): void {
@@ -209,6 +221,7 @@ function unbindDiagnosticsStore(): void {
   workflowIdUnsubscribe?.();
   workflowNameUnsubscribe?.();
   sessionIdUnsubscribe?.();
+  sessionKindUnsubscribe?.();
 
   diagnosticsUnsubscribe = null;
   workflowEventUnsubscribe = null;
@@ -216,6 +229,7 @@ function unbindDiagnosticsStore(): void {
   workflowIdUnsubscribe = null;
   workflowNameUnsubscribe = null;
   sessionIdUnsubscribe = null;
+  sessionKindUnsubscribe = null;
 }
 
 export function startDiagnosticsStore(): void {

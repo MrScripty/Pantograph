@@ -7,7 +7,7 @@
 import { sessionStores, backend, workflowStores } from './storeInstances';
 
 // Re-export types
-export type { GraphType, GraphInfo } from '@pantograph/svelte-graph';
+export type { GraphType, GraphInfo, SessionKind } from '@pantograph/svelte-graph';
 
 // --- Re-export writable stores ---
 export const currentGraphId = sessionStores.currentGraphId;
@@ -15,6 +15,7 @@ export const currentGraphType = sessionStores.currentGraphType;
 export const currentGraphName = sessionStores.currentGraphName;
 export const availableWorkflows = sessionStores.availableWorkflows;
 export const currentSessionId = sessionStores.currentSessionId;
+export const currentSessionKind = sessionStores.currentSessionKind;
 
 // --- Re-export derived stores ---
 export const isReadOnly = sessionStores.isReadOnly;
@@ -52,6 +53,8 @@ export function loadSystemGraph(graphId: string): boolean {
   currentGraphId.set(graphId);
   currentGraphType.set('system');
   currentGraphName.set(systemGraph.name);
+  currentSessionKind.set(null);
+  currentSessionId.set(null);
 
   saveLastGraph(graphId, 'system');
   return true;

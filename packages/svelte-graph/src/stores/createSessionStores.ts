@@ -13,6 +13,7 @@ import { canonicalizeWorkflowGraph } from './canonicalizeWorkflowGraph.ts';
 // --- Types ---
 
 export type GraphType = 'workflow' | 'system';
+export type SessionKind = 'edit' | 'workflow';
 
 export interface GraphInfo {
   id: string;
@@ -38,6 +39,7 @@ export interface SessionStores {
   currentGraphName: ReturnType<typeof writable<string>>;
   availableWorkflows: ReturnType<typeof writable<WorkflowMetadata[]>>;
   currentSessionId: ReturnType<typeof writable<string | null>>;
+  currentSessionKind: ReturnType<typeof writable<SessionKind | null>>;
 
   // Derived stores
   isReadOnly: ReturnType<typeof derived>;
@@ -67,6 +69,7 @@ export function createSessionStores(
   const currentGraphName = writable<string>('Untitled');
   const availableWorkflows = writable<WorkflowMetadata[]>([]);
   const currentSessionId = writable<string | null>(null);
+  const currentSessionKind = writable<SessionKind | null>(null);
 
   // --- Derived ---
   const isReadOnly = derived(currentGraphType, ($type) => $type === 'system');
@@ -107,6 +110,7 @@ export function createSessionStores(
       );
 
       const sessionId = await backend.createSession(canonicalGraph);
+      currentSessionKind.set('edit');
       currentSessionId.set(sessionId);
       workflowStores.setActiveSessionId(sessionId);
 
@@ -136,6 +140,7 @@ export function createSessionStores(
   async function createNewWorkflow(): Promise<void> {
     const emptyGraph = { nodes: [], edges: [] };
     const sessionId = await backend.createSession(emptyGraph);
+    currentSessionKind.set('edit');
     currentSessionId.set(sessionId);
     workflowStores.setActiveSessionId(sessionId);
 
@@ -200,7 +205,7 @@ export function createSessionStores(
   }
 
   return {
-    currentGraphId, currentGraphType, currentGraphName, availableWorkflows, currentSessionId,
+    currentGraphId, currentGraphType, currentGraphName, availableWorkflows, currentSessionId, currentSessionKind,
     isReadOnly, currentGraphInfo,
     refreshWorkflowList, loadWorkflowByName, createNewWorkflow,
     saveLastGraph, loadLastGraph, switchGraph,

@@ -81,7 +81,7 @@ export { createViewStores } from './stores/createViewStores.js';
 export type { ViewStores, ViewStoreOptions } from './stores/createViewStores.js';
 
 export { createSessionStores } from './stores/createSessionStores.js';
-export type { SessionStores, SessionStoreOptions, GraphType, GraphInfo } from './stores/createSessionStores.js';
+export type { SessionStores, SessionStoreOptions, GraphType, GraphInfo, SessionKind } from './stores/createSessionStores.js';
 
 // --- Context ---
 export { createGraphContext, createGraphContextFromStores } from './context/createGraphContext.js';
