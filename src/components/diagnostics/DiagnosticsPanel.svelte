@@ -2,7 +2,10 @@
   import type { DiagnosticsTab } from '../../services/diagnostics/types';
   import { diagnosticsSnapshot, clearDiagnosticsHistory, selectDiagnosticsNode, selectDiagnosticsRun, setDiagnosticsPanelOpen, setDiagnosticsTab } from '../../stores/diagnosticsStore';
   import DiagnosticsEvents from './DiagnosticsEvents.svelte';
+  import DiagnosticsGraph from './DiagnosticsGraph.svelte';
   import DiagnosticsOverview from './DiagnosticsOverview.svelte';
+  import DiagnosticsRuntime from './DiagnosticsRuntime.svelte';
+  import DiagnosticsScheduler from './DiagnosticsScheduler.svelte';
   import DiagnosticsTimeline from './DiagnosticsTimeline.svelte';
   import {
     formatDiagnosticsDuration,
@@ -14,9 +17,9 @@
     { id: 'overview', label: 'Overview', available: true },
     { id: 'timeline', label: 'Timeline', available: true },
     { id: 'events', label: 'Events', available: true },
-    { id: 'scheduler', label: 'Scheduler', available: false },
-    { id: 'runtime', label: 'Runtime', available: false },
-    { id: 'graph', label: 'Graph', available: false },
+    { id: 'scheduler', label: 'Scheduler', available: true },
+    { id: 'runtime', label: 'Runtime', available: true },
+    { id: 'graph', label: 'Graph', available: true },
   ];
 
   let snapshot = $derived($diagnosticsSnapshot);
@@ -35,18 +38,6 @@
     selectDiagnosticsNode(nodeId);
   }
 
-  function renderPlannedTabCopy(tab: DiagnosticsTab): string {
-    switch (tab) {
-      case 'scheduler':
-        return 'Scheduler V2 traces will land here once queue ownership, fairness, and admission decisions are emitted as first-class diagnostics records.';
-      case 'runtime':
-        return 'Runtime adapter unification and KV-cache lifecycle metrics will surface here after the runtime roadmap items start publishing stable host-facing state.';
-      case 'graph':
-        return 'Incremental graph execution and graph invalidation traces will expand this tab beyond the current dirty-task summary cards.';
-      default:
-        return 'This tab is not part of the initial diagnostics slice.';
-    }
-  }
 </script>
 
 {#if snapshot.state.panelOpen}
@@ -146,7 +137,13 @@
         </div>
 
         <div class="min-h-0 flex-1">
-          {#if !snapshot.selectedRun}
+          {#if snapshot.state.activeTab === 'runtime'}
+            <DiagnosticsRuntime runtime={snapshot.state.runtime} />
+          {:else if snapshot.state.activeTab === 'scheduler'}
+            <DiagnosticsScheduler scheduler={snapshot.state.scheduler} />
+          {:else if snapshot.state.activeTab === 'graph'}
+            <DiagnosticsGraph state={snapshot.state} selectedRun={snapshot.selectedRun} />
+          {:else if !snapshot.selectedRun}
             <div class="flex h-full items-center justify-center px-6 text-center text-sm text-neutral-500">
               Select a retained run to inspect its overview, timeline, and raw event stream.
             </div>
@@ -169,20 +166,6 @@
               selectedNodeId={snapshot.state.selectedNodeId}
               onSelectNode={handleSelectNode}
             />
-          {:else}
-            <div class="flex h-full items-center justify-center px-6">
-              <div class="max-w-2xl rounded-2xl border border-dashed border-neutral-800 bg-neutral-950/70 px-6 py-8 text-center">
-                <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">
-                  Planned Surface
-                </div>
-                <div class="mt-3 text-lg font-medium text-neutral-100">
-                  {tabDefinitions.find((tab) => tab.id === snapshot.state.activeTab)?.label}
-                </div>
-                <div class="mt-3 text-sm leading-6 text-neutral-400">
-                  {renderPlannedTabCopy(snapshot.state.activeTab)}
-                </div>
-              </div>
-            </div>
           {/if}
         </div>
       </div>

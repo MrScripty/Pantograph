@@ -9,10 +9,13 @@ logic.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `DiagnosticsPanel.svelte` | Shell component that renders the bottom diagnostics panel, retained run list, tab controls, and placeholder tabs for later roadmap work. |
+| `DiagnosticsPanel.svelte` | Shell component that renders the bottom diagnostics panel, retained run list, and all diagnostics tabs. |
 | `DiagnosticsOverview.svelte` | Overview tab with run-level summary cards and node detail panels. |
 | `DiagnosticsTimeline.svelte` | Timeline tab that visualizes relative node spans inside a selected run. |
 | `DiagnosticsEvents.svelte` | Events tab that shows retained workflow events and raw payload details. |
+| `DiagnosticsScheduler.svelte` | Scheduler tab that renders session state and queue ordering from workflow service diagnostics snapshots. |
+| `DiagnosticsRuntime.svelte` | Runtime tab that renders workflow capabilities, runtime requirements, and runtime install state. |
+| `DiagnosticsGraph.svelte` | Graph tab that renders current graph metadata and graph-related diagnostics events. |
 | `presenters.ts` | Presentation helpers for durations, timestamps, status badges, and overview counts. |
 
 ## Problem
@@ -24,9 +27,9 @@ second owner of workflow transport state.
 - Components in this directory must consume diagnostics snapshots declaratively.
 - The panel must fit inside the existing workflow editor rather than introducing
   a parallel top-level screen.
-- Initial implementation covers `Overview`, `Timeline`, and `Events`, while
-  `Scheduler`, `Runtime`, and `Graph` remain visible placeholders for roadmap
-  continuity.
+- Scheduler, runtime, and graph tabs should render workflow-service-backed or
+  diagnostics-store-backed state instead of inventing component-local shadow
+  models.
 - Components may format diagnostics data for readability, but they must not
   mutate trace state directly.
 
@@ -48,15 +51,15 @@ files mostly express layout and interaction.
 - Components render diagnostics state supplied by the store and do not subscribe
   to workflow events directly.
 - Tab switching and node/run selection use exported diagnostics store commands.
-- Planned tabs must be clearly marked so unfinished roadmap work is visible but
-  not confused with shipped functionality.
+- Runtime and scheduler rendering should stay read-only over store snapshots,
+  not call workflow commands directly from the component tree.
 
 ## Revisit Triggers
 - Diagnostics needs detached windows or a second layout mode.
 - The panel grows enough that tab content should move behind route-level code
   splitting.
 - Runtime and scheduler traces become dense enough to require specialized
-  visualizations beyond the current placeholders.
+  visualizations beyond the current table and card layouts.
 
 ## Dependencies
 **Internal:** `src/stores/diagnosticsStore.ts`,

@@ -2,10 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  formatDiagnosticsBytes,
   formatDiagnosticsDuration,
   formatDiagnosticsPercent,
   getDiagnosticsStatusClasses,
+  getRuntimeInstallStateClasses,
   getRunNodeStatusCounts,
+  getSchedulerStateClasses,
 } from './presenters.ts';
 import type { DiagnosticsRunTrace } from '../../services/diagnostics/types.ts';
 
@@ -97,6 +100,14 @@ test('formatDiagnosticsPercent and status classes expose stable labels', () => {
   assert.equal(formatDiagnosticsPercent(null), 'No progress');
   assert.equal(formatDiagnosticsPercent(0.523), '52%');
   assert.match(getDiagnosticsStatusClasses('waiting'), /amber/);
+});
+
+test('byte and runtime or scheduler label helpers expose readable labels', () => {
+  assert.equal(formatDiagnosticsBytes(512), '512 B');
+  assert.equal(formatDiagnosticsBytes(2048), '2.0 KiB');
+  assert.match(getSchedulerStateClasses('idle_loaded'), /emerald/);
+  assert.match(getRuntimeInstallStateClasses('missing', false), /amber/);
+  assert.match(getRuntimeInstallStateClasses('installed', true), /emerald/);
 });
 
 test('getRunNodeStatusCounts groups node states for overview summaries', () => {
