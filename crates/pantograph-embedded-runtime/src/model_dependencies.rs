@@ -346,14 +346,30 @@ impl TauriModelDependencyResolver {
             .filter(|path| !path.trim().is_empty())
     }
 
-    fn record_uses_execution_descriptor(record: &pumas_library::ModelRecord) -> bool {
+    fn descriptor_lookup_fallback_allowed(error: &pumas_library::PumasError) -> bool {
         matches!(
-            Self::record_metadata_string(record, &["bundle_format", "bundleFormat"]).as_deref(),
-            Some("diffusers_directory")
-        ) || matches!(
-            Self::record_metadata_string(record, &["storage_kind", "storageKind"]).as_deref(),
-            Some("external_reference")
+            error,
+            pumas_library::PumasError::ModelNotFound { .. }
+                | pumas_library::PumasError::NotFound { .. }
         )
+    }
+
+    async fn resolve_execution_descriptor_with_api(
+        api: &Arc<pumas_library::PumasApi>,
+        record: &pumas_library::ModelRecord,
+    ) -> Result<Option<pumas_library::models::ModelExecutionDescriptor>, String> {
+        if record.id.trim().is_empty() {
+            return Ok(None);
+        }
+
+        match api.resolve_model_execution_descriptor(&record.id).await {
+            Ok(descriptor) => Ok(Some(descriptor)),
+            Err(error) if Self::descriptor_lookup_fallback_allowed(&error) => Ok(None),
+            Err(error) => Err(format!(
+                "Failed to resolve execution descriptor for '{}': {}",
+                record.id, error
+            )),
+        }
     }
 
     fn normalized_backend_key(value: &Option<String>) -> Option<String> {
@@ -850,20 +866,7 @@ impl TauriModelDependencyResolver {
             return Ok(None);
         };
 
-        let execution_descriptor = if Self::record_uses_execution_descriptor(&record) {
-            Some(
-                api.resolve_model_execution_descriptor(&record.id)
-                    .await
-                    .map_err(|e| {
-                        format!(
-                            "Failed to resolve execution descriptor for '{}': {}",
-                            record.id, e
-                        )
-                    })?,
-            )
-        } else {
-            None
-        };
+        let execution_descriptor = Self::resolve_execution_descriptor_with_api(api, &record).await?;
 
         Ok(Some(ResolvedPumasModel {
             record,
@@ -2062,6 +2065,37 @@ mod tests {
         .unwrap();
     }
 
+    fn write_library_owned_file_model(
+        model_dir: &std::path::Path,
+        file_name: &str,
+        file_size_bytes: usize,
+    ) -> std::path::PathBuf {
+        std::fs::create_dir_all(model_dir).unwrap();
+        let model_file = model_dir.join(file_name);
+        std::fs::write(&model_file, vec![0_u8; file_size_bytes]).unwrap();
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::json!({
+                "schema_version": 2,
+                "model_id": "llm/imported/test-gguf",
+                "family": "imported",
+                "model_type": "llm",
+                "official_name": "test-gguf",
+                "cleaned_name": "test-gguf",
+                "source_path": model_dir.display().to_string(),
+                "storage_kind": "library_owned",
+                "import_state": "ready",
+                "validation_state": "valid",
+                "task_type_primary": "text-generation",
+                "recommended_backend": "llamacpp",
+                "runtime_engine_hints": ["llamacpp"]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        model_file
+    }
+
     async fn test_resolver_with_pumas(
         temp_dir: &TempDir,
     ) -> (TauriModelDependencyResolver, Arc<PumasApi>) {
@@ -2279,6 +2313,62 @@ mod tests {
         assert_eq!(descriptor.task_type_primary, "text-to-image");
         assert_eq!(descriptor.model_type.as_deref(), Some("diffusion"));
         assert!(descriptor.model_id_resolved);
+    }
+
+    #[tokio::test]
+    async fn resolve_descriptor_uses_primary_file_for_library_owned_file_model() {
+        let temp_dir = create_test_env();
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/llm/imported/test-gguf");
+        let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+
+        let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
+        let request = ModelDependencyRequest {
+            node_type: "pytorch-inference".to_string(),
+            model_path: model_dir.display().to_string(),
+            model_id: Some("llm/imported/test-gguf".to_string()),
+            model_type: Some("llm".to_string()),
+            task_type_primary: Some("text-generation".to_string()),
+            backend_key: Some("llamacpp".to_string()),
+            platform_context: Some(serde_json::json!({
+                "os": "linux",
+                "arch": "x86_64"
+            })),
+            selected_binding_ids: Vec::new(),
+            dependency_override_patches: Vec::new(),
+        };
+
+        let descriptor = resolver
+            .resolve_descriptor(&request, Some(&api))
+            .await
+            .expect("descriptor should resolve");
+
+        assert_eq!(descriptor.model_id, "llm/imported/test-gguf");
+        assert_eq!(descriptor.model_path, model_file.display().to_string());
+        assert_eq!(descriptor.task_type_primary, "text-generation");
+        assert_eq!(descriptor.model_type.as_deref(), Some("llm"));
+        assert!(descriptor.model_id_resolved);
+    }
+
+    #[test]
+    fn descriptor_lookup_fallback_is_allowed_only_for_missing_descriptor_cases() {
+        assert!(TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
+            &pumas_library::PumasError::ModelNotFound {
+                model_id: "missing".to_string()
+            }
+        ));
+        assert!(TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
+            &pumas_library::PumasError::NotFound {
+                resource: "resolve_model_execution_descriptor".to_string()
+            }
+        ));
+        assert!(!TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
+            &pumas_library::PumasError::Validation {
+                field: "validation_state".to_string(),
+                message: "invalid".to_string()
+            }
+        ));
     }
 
     #[test]
