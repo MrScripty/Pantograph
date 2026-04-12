@@ -157,7 +157,7 @@ before changing code.
 - Documentation review of touched directories against
   `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/DOCUMENTATION-STANDARDS.md`
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 2: Make `puma-lib` Descriptor-First
 
@@ -180,7 +180,7 @@ resolution.
   `TESTING-STANDARDS.md`
 - `cargo check --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 3: Make Embedded Runtime Descriptor-First
 
@@ -203,7 +203,7 @@ runtime contract.
   file-backed model regressions
 - `cargo check --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 4: Add Cross-Layer Contract Coverage
 
@@ -224,7 +224,7 @@ descriptor contract once both call sites change.
 - Confirm no isolated unit-only verification is standing in for the required
   cross-layer acceptance path
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 5: Traceability And Cleanup
 
@@ -247,7 +247,7 @@ descriptor contract once both call sites change.
 - `cargo check --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
 - Final targeted test rerun for all touched packages
 
-**Status:** Not started
+**Status:** Complete
 
 ## Execution Notes
 
@@ -255,6 +255,15 @@ Update during implementation:
 - 2026-04-12: Plan created after reviewing Pantograph's two Pumas integration
   points against the current Pumas `ModelExecutionDescriptor` contract and the
   recent library-owned diffusers path fix in Pumas-Library.
+- 2026-04-12: Milestone 1 completed by recording the descriptor-first boundary
+  in the implementation plan and module READMEs.
+- 2026-04-12: Milestone 2 completed by updating `workflow-nodes` `puma-lib` to
+  resolve execution descriptors for any record with a model id and adding
+  bundle/file-backed tests.
+- 2026-04-12: Milestones 3-5 completed by updating the embedded runtime
+  resolver, adding cross-layer acceptance coverage against the real `puma-lib`
+  options provider, and keeping README traceability aligned with the contract
+  change.
 
 ## Commit Cadence Notes
 
@@ -303,16 +312,24 @@ Update during implementation:
 
 ### Completed
 
-- None yet. Implementation has not started.
+- Milestone 1: Descriptor-first integration boundary recorded in the plan and
+  module READMEs.
+- Milestone 2: `workflow-nodes` `puma-lib` now resolves executable model paths
+  from `ModelExecutionDescriptor` whenever a record has a model id.
+- Milestone 3: `pantograph-embedded-runtime` now resolves execution descriptors
+  by model id and only falls back for missing-descriptor responses.
+- Milestone 4: Added a cross-layer acceptance test that feeds the real
+  `puma-lib` option value into the embedded dependency resolver.
+- Milestone 5: README traceability for the Pantograph/Pumas boundary is in
+  place; no ADR was required for this scope.
 
 ### Deviations
 
-- None yet.
+- None.
 
 ### Follow-Ups
 
-- Begin implementation from Milestone 1 and create atomic commits as each
-  verified slice completes.
+- None required for this descriptor-first compatibility slice.
 
 ### Verification Summary
 
@@ -322,12 +339,21 @@ Update during implementation:
   - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/COMMIT-STANDARDS.md`
   - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/TESTING-STANDARDS.md`
   - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/DOCUMENTATION-STANDARDS.md`
+- Implementation verification:
+  - `cargo test -p workflow-nodes --features model-library test_bundle_models_resolve_execution_descriptor_entry_path --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
+  - `cargo test -p workflow-nodes --features model-library test_file_models_resolve_execution_descriptor_primary_file_path --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
+  - `cargo test -p pantograph-embedded-runtime resolve_descriptor_uses_entry_path_for_external_diffusers_bundle --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
+  - `cargo test -p pantograph-embedded-runtime resolve_descriptor_uses_primary_file_for_library_owned_file_model --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
+  - `cargo test -p pantograph-embedded-runtime descriptor_lookup_fallback_is_allowed_only_for_missing_descriptor_cases --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
+  - `cargo test -p pantograph-embedded-runtime puma_lib_option_and_dependency_resolver_agree_on_primary_file_path --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
+  - `cargo check --manifest-path /media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pantograph/Cargo.toml`
 
 ### Traceability Links
 
-- Module README updated: Not yet; implementation has not started
-- ADR added/updated: N/A unless milestone 5 determines README coverage is
-  insufficient
+- Module README updated:
+  - `crates/workflow-nodes/src/input/README.md`
+  - `crates/pantograph-embedded-runtime/src/README.md`
+- ADR added/updated: N/A; README coverage was sufficient for this scope
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A
 
 ## Brevity Note

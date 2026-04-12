@@ -2351,6 +2351,89 @@ mod tests {
         assert!(descriptor.model_id_resolved);
     }
 
+    #[tokio::test]
+    async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
+        let temp_dir = create_test_env();
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/llm/imported/test-gguf");
+        let model_file = write_library_owned_file_model(&model_dir, "model.gguf", 256);
+
+        let (resolver, api) = test_resolver_with_pumas(&temp_dir).await;
+
+        let registry = node_engine::NodeRegistry::with_builtins();
+        let mut extensions = node_engine::ExecutorExtensions::default();
+        extensions.set(extension_keys::PUMAS_API, api.clone());
+        let query = node_engine::PortOptionsQuery {
+            search: Some("test-gguf".to_string()),
+            limit: Some(10),
+            offset: Some(0),
+        };
+
+        let options = registry
+            .query_port_options("puma-lib", "model_path", &query, &extensions)
+            .await
+            .expect("puma-lib options should resolve");
+        let option = options
+            .options
+            .into_iter()
+            .find(|candidate| {
+                candidate
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.get("id"))
+                    .and_then(|value| value.as_str())
+                    == Some("llm/imported/test-gguf")
+            })
+            .expect("test option should be present");
+        let option_model_path = option
+            .value
+            .as_str()
+            .expect("option value should be a string path")
+            .to_string();
+
+        assert_eq!(option_model_path, model_file.display().to_string());
+
+        let request = ModelDependencyRequest {
+            node_type: "pytorch-inference".to_string(),
+            model_path: option_model_path.clone(),
+            model_id: option
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("id"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            model_type: option
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("model_type"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            task_type_primary: option
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("task_type_primary"))
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            backend_key: Some("llamacpp".to_string()),
+            platform_context: Some(serde_json::json!({
+                "os": "linux",
+                "arch": "x86_64"
+            })),
+            selected_binding_ids: Vec::new(),
+            dependency_override_patches: Vec::new(),
+        };
+
+        let descriptor = resolver
+            .resolve_descriptor(&request, Some(&api))
+            .await
+            .expect("descriptor should resolve");
+
+        assert_eq!(descriptor.model_id, "llm/imported/test-gguf");
+        assert_eq!(descriptor.model_path, option_model_path);
+        assert_eq!(descriptor.model_path, model_file.display().to_string());
+    }
+
     #[test]
     fn descriptor_lookup_fallback_is_allowed_only_for_missing_descriptor_cases() {
         assert!(TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
