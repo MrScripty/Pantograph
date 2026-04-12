@@ -17,6 +17,7 @@
     isReadOnly,
     currentGraphId,
     currentGraphName,
+    currentSessionId,
     createNewWorkflow,
     saveLastGraph,
     refreshWorkflowList,
@@ -117,7 +118,11 @@
     currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
 
     try {
-      await workflowService.executeWorkflow($workflowGraph);
+      if ($currentSessionId) {
+        await workflowService.runSession($currentSessionId);
+      } else {
+        await workflowService.executeWorkflow($workflowGraph);
+      }
       // Don't unsubscribe here - wait for Completed/Failed events
     } catch (error) {
       console.error('Workflow execution failed:', error);

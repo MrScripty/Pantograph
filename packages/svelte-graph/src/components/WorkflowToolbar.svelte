@@ -13,7 +13,7 @@
   let { children }: Props = $props();
 
   const { workflowGraph, isDirty, isExecuting, edges: edgesStore } = stores.workflow;
-  const { isReadOnly, currentGraphId, currentGraphName } = stores.session;
+  const { isReadOnly, currentGraphId, currentGraphName, currentSessionId } = stores.session;
 
   let workflowName = $derived($currentGraphName || 'Untitled Workflow');
 
@@ -28,7 +28,11 @@
     currentUnsubscribe = backend.subscribeEvents(handleWorkflowEvent);
 
     try {
-      await backend.executeWorkflow(get(workflowGraph));
+      if ($currentSessionId) {
+        await backend.runSession($currentSessionId);
+      } else {
+        await backend.executeWorkflow(get(workflowGraph));
+      }
     } catch (error) {
       console.error('Workflow execution failed:', error);
       isExecuting.set(false);
