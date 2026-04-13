@@ -17,9 +17,8 @@ The accurate status is:
 - runtime-registry Milestone 2, Runtime Registry Foundation: in progress
 - runtime-registry milestones 3-6: not started
 - current next milestone: continue Milestone 2 by integrating registry-backed
-  lifecycle observation into the remaining lifecycle-mutating callers beyond
-  the main backend/server command paths without moving policy out of the app
-  layer
+  lifecycle observation into the remaining headless workflow runtime paths
+  without moving policy out of the app layer
 - stop rule remains active: Milestone 2 work must preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
 
@@ -90,12 +89,14 @@ The following Milestone 2 foundation slices have now landed in code:
 - backend/server command synchronization that refreshes registry state after
   backend switches, runtime starts, runtime stops, external attachment, and
   status reads
+- health-monitor and manual-recovery synchronization that refreshes registry
+  state from host-owned runtime health observation paths
 
 ### What has not landed yet
 
 - no registry-driven warmup, retention, or eviction policy exists yet
-- no registry synchronization for the remaining lifecycle-mutating callers such
-  as health/recovery flows or headless workflow runtime paths exists yet
+- no registry synchronization for the remaining headless workflow runtime paths
+  exists yet
 - no registry-driven cleanup or recovery policy exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
@@ -386,8 +387,10 @@ runtime callers.
   file-size/responsibility thresholds
 - [x] Integrate registry-backed lifecycle observation into the main backend and
   server command callers without moving policy into command handlers
-- [ ] Extend registry synchronization to the remaining lifecycle-mutating
-  callers, especially health/recovery and headless runtime flows
+- [x] Extend registry synchronization into host-owned health and manual
+  recovery flows
+- [ ] Extend registry synchronization into the remaining headless workflow
+  runtime flows
 
 **Verification:**
 - `cargo check --workspace`
