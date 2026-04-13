@@ -7,19 +7,19 @@ Last updated: 2026-04-13
 
 ## Current Source-of-Truth Summary
 
-This plan is no longer "planning only." Milestone 2 has now started, but the
-registry is still only at the foundation stage.
+This plan is no longer "planning only." Milestone 2 is now complete and the
+next work moves to admission, warmup, retention, and eviction.
 
 The accurate status is:
 
 - prerequisite runtime-contract and diagnostics groundwork: completed
 - runtime-registry Milestone 1, Freeze Boundaries And Ownership: completed
-- runtime-registry Milestone 2, Runtime Registry Foundation: in progress
-- runtime-registry milestones 3-6: not started
-- current next milestone: continue Milestone 2 by integrating registry-backed
-  lifecycle observation into the remaining headless workflow runtime paths
-  without moving policy out of the app layer
-- stop rule remains active: Milestone 2 work must preserve ADR-002 and the
+- runtime-registry Milestone 2, Runtime Registry Foundation: completed
+- runtime-registry Milestones 3-6: not started
+- current next milestone: Milestone 3, Admission, Warmup, Retention, And
+  Eviction
+- stop rule remains active for later milestones: runtime-registry work must
+  preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
 
 ## Objective
@@ -91,12 +91,12 @@ The following Milestone 2 foundation slices have now landed in code:
   status reads
 - health-monitor and manual-recovery synchronization that refreshes registry
   state from host-owned runtime health observation paths
+- headless workflow adapter synchronization that refreshes registry state
+  before embedded-runtime capability and diagnostics snapshot reads
 
 ### What has not landed yet
 
 - no registry-driven warmup, retention, or eviction policy exists yet
-- no registry synchronization for the remaining headless workflow runtime paths
-  exists yet
 - no registry-driven cleanup or recovery policy exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
@@ -389,7 +389,7 @@ runtime callers.
   server command callers without moving policy into command handlers
 - [x] Extend registry synchronization into host-owned health and manual
   recovery flows
-- [ ] Extend registry synchronization into the remaining headless workflow
+- [x] Extend registry synchronization into the remaining headless workflow
   runtime flows
 
 **Verification:**
@@ -398,7 +398,7 @@ runtime callers.
 - compile review confirms existing gateway callers still depend on preserved
   facades
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 3: Admission, Warmup, Retention, And Eviction
 
