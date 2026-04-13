@@ -11,6 +11,7 @@ runtime contracts exposed by `crates/inference`.
 | ----------- | ----------- |
 | `gateway.rs` | Tauri-facing wrapper around `inference::InferenceGateway` that adapts app-state wiring and startup helpers without replacing the backend facade. |
 | `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, and runtime-status queries. |
+| `runtime_registry/` | App-layer runtime registry foundation for residency state, reservation bookkeeping, and future admission/retention policy. |
 | `health_monitor.rs` | App-owned health polling loop for the currently configured runtime connection paths. |
 | `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
 | `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
