@@ -82,7 +82,11 @@ export type { ViewStores, ViewStoreOptions } from './stores/createViewStores.js'
 
 export { createSessionStores } from './stores/createSessionStores.js';
 export type { SessionStores, SessionStoreOptions, GraphType, GraphInfo, SessionKind } from './stores/createSessionStores.js';
-export { isWorkflowEventRelevantToExecution } from './workflowEventOwnership.js';
+export {
+  claimWorkflowExecutionIdFromEvent,
+  getWorkflowEventExecutionId,
+  isWorkflowEventRelevantToExecution,
+} from './workflowEventOwnership.js';
 export type { ExecutionScopedWorkflowEvent } from './workflowEventOwnership.js';
 
 // --- Context ---

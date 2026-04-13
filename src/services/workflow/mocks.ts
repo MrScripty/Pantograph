@@ -338,16 +338,17 @@ export async function mockExecuteWorkflow(
   graph: WorkflowGraph,
   onEvent: (event: WorkflowEvent) => void
 ): Promise<void> {
+  const executionId = `mock-run-${Date.now()}`;
   onEvent({
     type: 'Started',
-    data: { workflow_id: `mock-${Date.now()}`, node_count: graph.nodes.length },
+    data: { workflow_id: executionId, node_count: graph.nodes.length, execution_id: executionId },
   });
 
   // Sort nodes topologically (simplified - just process in order for mock)
   for (const node of graph.nodes) {
     onEvent({
       type: 'NodeStarted',
-      data: { node_id: node.id, node_type: node.node_type },
+      data: { node_id: node.id, node_type: node.node_type, execution_id: executionId },
     });
 
     // Simulate processing time
@@ -359,7 +360,12 @@ export async function mockExecuteWorkflow(
       for (const chunk of chunks) {
         onEvent({
           type: 'NodeStream',
-          data: { node_id: node.id, port: 'stream', chunk: { type: 'text', content: chunk } },
+          data: {
+            node_id: node.id,
+            port: 'stream',
+            chunk: { type: 'text', content: chunk },
+            execution_id: executionId,
+          },
         });
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
@@ -367,11 +373,15 @@ export async function mockExecuteWorkflow(
 
     onEvent({
       type: 'NodeCompleted',
-      data: { node_id: node.id, outputs: { response: 'Hello, this is a mock response!' } },
+      data: {
+        node_id: node.id,
+        outputs: { response: 'Hello, this is a mock response!' },
+        execution_id: executionId,
+      },
     });
   }
 
-  onEvent({ type: 'Completed', data: { outputs: {} } });
+  onEvent({ type: 'Completed', data: { outputs: {}, execution_id: executionId } });
 }
 
 export function mockValidateConnection(sourceType: string, targetType: string): boolean {

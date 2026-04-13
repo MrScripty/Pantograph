@@ -796,15 +796,37 @@ export class MockWorkflowBackend implements WorkflowBackend {
   // --- Internal ---
 
   private async simulateExecution(graph: WorkflowGraph): Promise<void> {
-    this.emit({ type: 'Started', data: { workflow_id: `mock-${Date.now()}`, node_count: graph.nodes.length } });
+    const executionId = `mock-run-${Date.now()}`;
+    this.emit({
+      type: 'Started',
+      data: {
+        workflow_id: executionId,
+        node_count: graph.nodes.length,
+        execution_id: executionId,
+      },
+    });
 
     for (const node of graph.nodes) {
-      this.emit({ type: 'NodeStarted', data: { node_id: node.id, node_type: node.node_type } });
+      this.emit({
+        type: 'NodeStarted',
+        data: {
+          node_id: node.id,
+          node_type: node.node_type,
+          execution_id: executionId,
+        },
+      });
       await sleep(300);
-      this.emit({ type: 'NodeCompleted', data: { node_id: node.id, outputs: {} } });
+      this.emit({
+        type: 'NodeCompleted',
+        data: {
+          node_id: node.id,
+          outputs: {},
+          execution_id: executionId,
+        },
+      });
     }
 
-    this.emit({ type: 'Completed', data: { outputs: {} } });
+    this.emit({ type: 'Completed', data: { outputs: {}, execution_id: executionId } });
   }
 
   private emit(event: WorkflowEvent): void {

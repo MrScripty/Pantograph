@@ -38,7 +38,10 @@ eligibility model, the horseshoe insert flow, cursor-hit edge insertion, and
 built-in workflow bootstraps without forcing every existing caller to migrate
 to package-level backends immediately. Session-scoped graph mutation methods
 now also return the updated graph snapshot from core so legacy callers can stay
-aligned with backend-owned state.
+aligned with backend-owned state. The service also refreshes
+`currentExecutionId` from the first `Started` event on transient no-session
+runs after clearing any stale prior id, so diagnostics and legacy consumers can
+track ad hoc executions without inheriting the previous run's identity.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -61,6 +64,8 @@ aligned with backend-owned state.
   is only allowed through `insertNodeOnEdge`.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
+- Starting a transient `executeWorkflow()` run must clear any stale prior
+  execution id before the next `Started` event claims the active run identity.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

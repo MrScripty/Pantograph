@@ -28,7 +28,10 @@
     AUDIO_RUNTIME_DATA_KEYS,
     buildAudioRuntimeDataFromCompletedOutputs,
   } from './nodes/workflow/audioOutputState';
-  import { isWorkflowEventRelevantToExecution } from '@pantograph/svelte-graph';
+  import {
+    claimWorkflowExecutionIdFromEvent,
+    isWorkflowEventRelevantToExecution,
+  } from '@pantograph/svelte-graph';
   import { get } from 'svelte/store';
   import GraphSelector from './GraphSelector.svelte';
   import { diagnosticsSnapshot, toggleDiagnosticsPanel } from '../stores/diagnosticsStore';
@@ -150,6 +153,7 @@
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
+    activeExecutionId = claimWorkflowExecutionIdFromEvent(event, activeExecutionId);
     if (!isWorkflowEventRelevantToExecution(event, activeExecutionId)) {
       return;
     }

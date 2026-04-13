@@ -23,6 +23,7 @@ import {
   mockExecuteWorkflow,
   mockValidateConnection,
 } from './mocks';
+import { getWorkflowEventExecutionId } from '@pantograph/svelte-graph';
 import {
   normalizeConnectionCandidatesResponse,
   normalizeConnectionCommitResponse,
@@ -58,6 +59,13 @@ export class WorkflowService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
   private currentExecutionId: string | null = null;
+
+  private publishEvent(event: WorkflowEvent): void {
+    if (event.type === 'Started') {
+      this.currentExecutionId = getWorkflowEventExecutionId(event);
+    }
+    this.eventListeners.forEach((listener) => listener(event));
+  }
 
   // --- Node Definitions ---
 
@@ -96,15 +104,17 @@ export class WorkflowService {
    */
   async executeWorkflow(graph: WorkflowGraph): Promise<void> {
     if (USE_MOCKS) {
+      this.currentExecutionId = null;
       return mockExecuteWorkflow(graph, (event) => {
-        this.eventListeners.forEach((listener) => listener(event));
+        this.publishEvent(event);
       });
     }
 
+    this.currentExecutionId = null;
     this.channel = new Channel<WorkflowEvent>();
 
     this.channel.onmessage = (event) => {
-      this.eventListeners.forEach((listener) => listener(event));
+      this.publishEvent(event);
     };
 
     // Use execute_workflow_v2 (the node-engine based command)
@@ -124,16 +134,16 @@ export class WorkflowService {
     if (USE_MOCKS) {
       // For mocks, fall back to legacy execution and return a fake ID
       await mockExecuteWorkflow(graph, (event) => {
-        this.eventListeners.forEach((listener) => listener(event));
+        this.publishEvent(event);
       });
-      this.currentExecutionId = 'mock-execution-id';
+      this.currentExecutionId ??= 'mock-execution-id';
       return this.currentExecutionId;
     }
 
     this.channel = new Channel<WorkflowEvent>();
 
     this.channel.onmessage = (event) => {
-      this.eventListeners.forEach((listener) => listener(event));
+      this.publishEvent(event);
     };
 
     const executionId = await invoke<string>('execute_workflow_v2', {
@@ -196,7 +206,7 @@ export class WorkflowService {
     this.channel = new Channel<WorkflowEvent>();
 
     this.channel.onmessage = (event) => {
-      this.eventListeners.forEach((listener) => listener(event));
+      this.publishEvent(event);
     };
 
     await invoke('run_workflow_session', {

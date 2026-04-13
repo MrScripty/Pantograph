@@ -2,7 +2,10 @@
   import { get } from 'svelte/store';
   import { useGraphContext } from '../context/useGraphContext.js';
   import type { WorkflowEvent } from '../types/workflow.js';
-  import { isWorkflowEventRelevantToExecution } from '../workflowEventOwnership.js';
+  import {
+    claimWorkflowExecutionIdFromEvent,
+    isWorkflowEventRelevantToExecution,
+  } from '../workflowEventOwnership.js';
 
   const { backend, stores } = useGraphContext();
 
@@ -57,6 +60,7 @@
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
+    activeExecutionId = claimWorkflowExecutionIdFromEvent(event, activeExecutionId);
     if (!isWorkflowEventRelevantToExecution(event, activeExecutionId)) {
       return;
     }

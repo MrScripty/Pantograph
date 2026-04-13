@@ -1,5 +1,8 @@
 import { writable, type Readable } from 'svelte/store';
-import { isWorkflowEventRelevantToExecution } from '@pantograph/svelte-graph';
+import {
+  claimWorkflowExecutionIdFromEvent,
+  isWorkflowEventRelevantToExecution,
+} from '@pantograph/svelte-graph';
 
 import { DiagnosticsService } from '../services/diagnostics/DiagnosticsService';
 import type {
@@ -147,7 +150,10 @@ function bindDiagnosticsStore(): void {
   });
 
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
-    const expectedExecutionId = latestSessionKind === 'edit' ? latestSessionId : null;
+    const currentExecutionId = latestSessionKind === 'edit'
+      ? latestSessionId
+      : workflowService.getCurrentExecutionId();
+    const expectedExecutionId = claimWorkflowExecutionIdFromEvent(event, currentExecutionId);
     if (!isWorkflowEventRelevantToExecution(event, expectedExecutionId)) {
       return;
     }

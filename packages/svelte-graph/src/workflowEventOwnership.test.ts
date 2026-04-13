@@ -1,7 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isWorkflowEventRelevantToExecution } from './workflowEventOwnership.ts';
+import {
+  claimWorkflowExecutionIdFromEvent,
+  getWorkflowEventExecutionId,
+  isWorkflowEventRelevantToExecution,
+} from './workflowEventOwnership.ts';
+
+test('getWorkflowEventExecutionId returns the event execution id when present', () => {
+  assert.equal(
+    getWorkflowEventExecutionId({
+      data: {
+        execution_id: 'run-1',
+      },
+    }),
+    'run-1',
+  );
+});
 
 test('isWorkflowEventRelevantToExecution accepts all events when no execution is pinned', () => {
   assert.equal(
@@ -54,5 +69,35 @@ test('isWorkflowEventRelevantToExecution keeps events without execution ids', ()
       'session-1',
     ),
     true,
+  );
+});
+
+test('claimWorkflowExecutionIdFromEvent pins the started execution id for transient runs', () => {
+  assert.equal(
+    claimWorkflowExecutionIdFromEvent(
+      {
+        type: 'Started',
+        data: {
+          execution_id: 'run-9',
+        },
+      },
+      null,
+    ),
+    'run-9',
+  );
+});
+
+test('claimWorkflowExecutionIdFromEvent does not replace an existing execution id', () => {
+  assert.equal(
+    claimWorkflowExecutionIdFromEvent(
+      {
+        type: 'Started',
+        data: {
+          execution_id: 'run-9',
+        },
+      },
+      'run-8',
+    ),
+    'run-8',
   );
 });
