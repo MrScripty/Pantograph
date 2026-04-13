@@ -298,6 +298,7 @@ fn workflow_trace_contract_snapshot() {
             runtime: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:13b".to_string()),
                 warmup_started_at_ms: Some(95),
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(4),
@@ -345,6 +346,7 @@ fn workflow_trace_contract_snapshot() {
             "runtime": {
                 "runtime_id": "llama_cpp",
                 "runtime_instance_id": "runtime-1",
+                "model_target": "llava:13b",
                 "warmup_started_at_ms": 95,
                 "warmup_completed_at_ms": 99,
                 "warmup_duration_ms": 4,

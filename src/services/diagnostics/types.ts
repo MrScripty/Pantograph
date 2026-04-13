@@ -70,12 +70,24 @@ export interface DiagnosticsRunTrace {
   lastUpdatedAtMs: number;
   error: string | null;
   waitingForInput: boolean;
+  runtime: DiagnosticsTraceRuntimeMetrics;
   eventCount: number;
   streamEventCount: number;
   lastDirtyTasks: string[];
   lastIncrementalTaskIds: string[];
   nodes: Record<string, DiagnosticsNodeTrace>;
   events: DiagnosticsEventRecord[];
+}
+
+export interface DiagnosticsTraceRuntimeMetrics {
+  runtimeId: string | null;
+  runtimeInstanceId: string | null;
+  modelTarget: string | null;
+  warmupStartedAtMs: number | null;
+  warmupCompletedAtMs: number | null;
+  warmupDurationMs: number | null;
+  runtimeReused: boolean | null;
+  lifecycleDecisionReason: string | null;
 }
 
 export interface DiagnosticsRuntimeSnapshot {
@@ -148,6 +160,7 @@ export interface WorkflowTraceQueueMetrics {
 export interface WorkflowTraceRuntimeMetrics {
   runtime_id?: string | null;
   runtime_instance_id?: string | null;
+  model_target?: string | null;
   warmup_started_at_ms?: number | null;
   warmup_completed_at_ms?: number | null;
   warmup_duration_ms?: number | null;

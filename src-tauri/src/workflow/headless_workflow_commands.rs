@@ -575,8 +575,15 @@ pub async fn workflow_get_diagnostics_snapshot(
     ) {
         metrics
     } else {
+        let runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
+        let mode_info = gateway.mode_info().await;
         super::workflow_execution_commands::trace_runtime_metrics(
-            &gateway.runtime_lifecycle_snapshot().await,
+            &runtime_snapshot,
+            super::workflow_execution_commands::resolve_runtime_model_target(
+                &mode_info,
+                &runtime_snapshot,
+            )
+            .as_deref(),
         )
     };
     let active_runtime_snapshot = Some(gateway.runtime_lifecycle_snapshot().await);
@@ -767,6 +774,7 @@ mod tests {
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:13b".to_string()),
                 warmup_started_at_ms: Some(100),
                 warmup_completed_at_ms: Some(110),
                 warmup_duration_ms: Some(10),
@@ -796,6 +804,7 @@ mod tests {
             trace.runtime.runtime_instance_id.as_deref(),
             Some("runtime-1")
         );
+        assert_eq!(trace.runtime.model_target.as_deref(), Some("llava:13b"));
         assert_eq!(
             trace.runtime.lifecycle_decision_reason.as_deref(),
             Some("runtime_ready")
@@ -865,6 +874,7 @@ mod tests {
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:34b".to_string()),
                 warmup_started_at_ms: Some(90),
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(9),
@@ -898,6 +908,7 @@ mod tests {
             trace.runtime.runtime_instance_id.as_deref(),
             Some("runtime-1")
         );
+        assert_eq!(trace.runtime.model_target.as_deref(), Some("llava:34b"));
         assert_eq!(
             trace.runtime.lifecycle_decision_reason.as_deref(),
             Some("runtime_reused")
@@ -1088,6 +1099,7 @@ mod tests {
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:34b".to_string()),
                 warmup_started_at_ms: Some(90),
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(9),
@@ -1137,6 +1149,7 @@ mod tests {
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama.cpp.embedding".to_string()),
                 runtime_instance_id: Some("embed-7".to_string()),
+                model_target: Some("/models/embed.gguf".to_string()),
                 warmup_started_at_ms: Some(90),
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(9),
@@ -1154,6 +1167,7 @@ mod tests {
 
         assert_eq!(metrics.runtime_id.as_deref(), Some("llama.cpp.embedding"));
         assert_eq!(metrics.runtime_instance_id.as_deref(), Some("embed-7"));
+        assert_eq!(metrics.model_target.as_deref(), Some("/models/embed.gguf"));
         assert_eq!(metrics.runtime_reused, Some(true));
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
@@ -1236,6 +1250,7 @@ mod tests {
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:34b".to_string()),
                 warmup_started_at_ms: Some(90),
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(9),

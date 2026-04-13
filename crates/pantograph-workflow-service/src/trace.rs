@@ -57,6 +57,8 @@ pub struct WorkflowTraceRuntimeMetrics {
     #[serde(default)]
     pub runtime_instance_id: Option<String>,
     #[serde(default)]
+    pub model_target: Option<String>,
+    #[serde(default)]
     pub warmup_started_at_ms: Option<u64>,
     #[serde(default)]
     pub warmup_completed_at_ms: Option<u64>,
@@ -925,6 +927,9 @@ fn merge_runtime_metrics(
     if let Some(runtime_instance_id) = source.runtime_instance_id.clone() {
         target.runtime_instance_id = Some(runtime_instance_id);
     }
+    if let Some(model_target) = source.model_target.clone() {
+        target.model_target = Some(model_target);
+    }
     if let Some(warmup_started_at_ms) = source.warmup_started_at_ms {
         target.warmup_started_at_ms = Some(warmup_started_at_ms);
     }
@@ -1167,6 +1172,7 @@ mod tests {
             runtime: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:13b".to_string()),
                 warmup_started_at_ms: Some(90),
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(9),
@@ -1211,6 +1217,7 @@ mod tests {
             "runtime": {
                 "runtime_id": "llama_cpp",
                 "runtime_instance_id": "runtime-1",
+                "model_target": "llava:13b",
                 "warmup_started_at_ms": 90,
                 "warmup_completed_at_ms": 99,
                 "warmup_duration_ms": 9,
@@ -1524,6 +1531,7 @@ mod tests {
                 runtime: WorkflowTraceRuntimeMetrics {
                     runtime_id: Some("llama_cpp".to_string()),
                     runtime_instance_id: Some("llama_cpp-1".to_string()),
+                    model_target: Some("/models/demo.gguf".to_string()),
                     warmup_started_at_ms: Some(100),
                     warmup_completed_at_ms: Some(110),
                     warmup_duration_ms: Some(10),
@@ -1605,6 +1613,10 @@ mod tests {
             trace.runtime.runtime_instance_id.as_deref(),
             Some("llama_cpp-1")
         );
+        assert_eq!(
+            trace.runtime.model_target.as_deref(),
+            Some("/models/demo.gguf")
+        );
         assert_eq!(trace.runtime.warmup_started_at_ms, Some(100));
         assert_eq!(trace.runtime.warmup_completed_at_ms, Some(110));
         assert_eq!(trace.runtime.warmup_duration_ms, Some(10));
@@ -1667,6 +1679,7 @@ mod tests {
                 runtime: WorkflowTraceRuntimeMetrics {
                     runtime_id: Some("llama_cpp".to_string()),
                     runtime_instance_id: Some("runtime-1".to_string()),
+                    model_target: Some("/models/restarted.gguf".to_string()),
                     warmup_started_at_ms: Some(101),
                     warmup_completed_at_ms: Some(109),
                     warmup_duration_ms: Some(8),

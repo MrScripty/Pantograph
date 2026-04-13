@@ -417,10 +417,12 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
 
 pub(crate) fn trace_runtime_metrics(
     snapshot: &inference::RuntimeLifecycleSnapshot,
+    model_target: Option<&str>,
 ) -> WorkflowTraceRuntimeMetrics {
     WorkflowTraceRuntimeMetrics {
         runtime_id: snapshot.runtime_id.clone(),
         runtime_instance_id: snapshot.runtime_instance_id.clone(),
+        model_target: model_target.map(ToOwned::to_owned),
         warmup_started_at_ms: snapshot.warmup_started_at_ms,
         warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
         warmup_duration_ms: snapshot.warmup_duration_ms,
@@ -443,8 +445,13 @@ pub(crate) fn trace_runtime_metrics(
 fn diagnostics_runtime_trace_metrics(
     runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
     gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+    runtime_model_target_override: Option<&str>,
+    gateway_runtime_model_target: Option<&str>,
 ) -> WorkflowTraceRuntimeMetrics {
-    trace_runtime_metrics(runtime_snapshot_override.unwrap_or(gateway_snapshot))
+    trace_runtime_metrics(
+        runtime_snapshot_override.unwrap_or(gateway_snapshot),
+        runtime_model_target_override.or(gateway_runtime_model_target),
+    )
 }
 
 fn diagnostics_active_runtime_snapshot(
@@ -454,6 +461,16 @@ fn diagnostics_active_runtime_snapshot(
     runtime_snapshot_override
         .cloned()
         .unwrap_or_else(|| gateway_snapshot.clone())
+}
+
+pub(crate) fn resolve_runtime_model_target(
+    mode_info: &crate::config::ServerModeInfo,
+    snapshot: &inference::RuntimeLifecycleSnapshot,
+) -> Option<String> {
+    if snapshot.runtime_id.as_deref() == Some("llama.cpp.embedding") {
+        return mode_info.embedding_model_target.clone();
+    }
+    mode_info.active_model_target.clone()
 }
 
 fn send_diagnostics_projection(
@@ -476,6 +493,7 @@ async fn emit_diagnostics_snapshots(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     channel: &Channel<WorkflowEvent>,
     runtime_snapshot_override: Option<inference::RuntimeLifecycleSnapshot>,
+    runtime_model_target_override: Option<String>,
 ) {
     let scheduler_snapshot = match workflow_service
         .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
@@ -517,6 +535,11 @@ async fn emit_diagnostics_snapshots(
     let _ = channel.send(scheduler_event);
     send_diagnostics_projection(channel, diagnostics_store, session_id);
 
+    let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
+    let gateway_mode_info = gateway.mode_info().await;
+    let gateway_runtime_model_target =
+        resolve_runtime_model_target(&gateway_mode_info, &gateway_snapshot);
+
     let runtime = match super::headless_workflow_commands::build_runtime(
         app,
         gateway,
@@ -526,15 +549,23 @@ async fn emit_diagnostics_snapshots(
     ) {
         Ok(runtime) => runtime,
         Err(error) => {
-            let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
             let active_runtime_snapshot = diagnostics_active_runtime_snapshot(
                 runtime_snapshot_override.as_ref(),
                 &gateway_snapshot,
             );
             let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
+            let runtime_model_target_override =
+                runtime_snapshot_override.as_ref().and_then(|snapshot| {
+                    runtime_model_target_override
+                        .as_deref()
+                        .map(ToOwned::to_owned)
+                        .or_else(|| resolve_runtime_model_target(&gateway_mode_info, snapshot))
+                });
             let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
                 runtime_snapshot_override.as_ref(),
                 &gateway_snapshot,
+                runtime_model_target_override.as_deref(),
+                gateway_runtime_model_target.as_deref(),
             );
             let runtime_event = WorkflowEvent::runtime_snapshot(
                 runtime_workflow_id.clone(),
@@ -570,12 +601,21 @@ async fn emit_diagnostics_snapshots(
             (None, Some(error.to_envelope_json()))
         }
     };
-    let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let active_runtime_snapshot =
         diagnostics_active_runtime_snapshot(runtime_snapshot_override.as_ref(), &gateway_snapshot);
     let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-    let runtime_trace_metrics =
-        diagnostics_runtime_trace_metrics(runtime_snapshot_override.as_ref(), &gateway_snapshot);
+    let runtime_model_target_override = runtime_snapshot_override.as_ref().and_then(|snapshot| {
+        runtime_model_target_override
+            .as_deref()
+            .map(ToOwned::to_owned)
+            .or_else(|| resolve_runtime_model_target(&gateway_mode_info, snapshot))
+    });
+    let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
+        runtime_snapshot_override.as_ref(),
+        &gateway_snapshot,
+        runtime_model_target_override.as_deref(),
+        gateway_runtime_model_target.as_deref(),
+    );
 
     let runtime_event = WorkflowEvent::runtime_snapshot(
         runtime_workflow_id,
@@ -619,6 +659,7 @@ async fn run_session_graph_snapshot(
         workflow_service.inner(),
         diagnostics_store.inner(),
         &diagnostics_channel,
+        None,
         None,
     )
     .await;
@@ -721,6 +762,9 @@ async fn run_session_graph_snapshot(
     }
 
     let execution_runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
+    let execution_mode_info = gateway.mode_info().await;
+    let execution_runtime_model_target =
+        resolve_runtime_model_target(&execution_mode_info, &execution_runtime_snapshot);
     restore_runtime_if_needed(gateway.inner(), restore_config).await;
     emit_diagnostics_snapshots(
         &app,
@@ -731,6 +775,7 @@ async fn run_session_graph_snapshot(
         diagnostics_store.inner(),
         &diagnostics_channel,
         Some(execution_runtime_snapshot),
+        execution_runtime_model_target,
     )
     .await;
     workflow_result
@@ -742,22 +787,26 @@ mod tests {
 
     #[test]
     fn trace_runtime_metrics_prefers_backend_lifecycle_reason() {
-        let metrics = trace_runtime_metrics(&inference::RuntimeLifecycleSnapshot {
-            runtime_id: Some("pytorch".to_string()),
-            runtime_instance_id: Some("pytorch-1".to_string()),
-            warmup_started_at_ms: Some(10),
-            warmup_completed_at_ms: Some(20),
-            warmup_duration_ms: Some(10),
-            runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("reused_loaded_pytorch_model".to_string()),
-            active: true,
-            last_error: None,
-        });
+        let metrics = trace_runtime_metrics(
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("pytorch".to_string()),
+                runtime_instance_id: Some("pytorch-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("reused_loaded_pytorch_model".to_string()),
+                active: true,
+                last_error: None,
+            },
+            Some("/models/demo"),
+        );
 
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
             Some("reused_loaded_pytorch_model")
         );
+        assert_eq!(metrics.model_target.as_deref(), Some("/models/demo"));
     }
 
     #[test]
@@ -788,6 +837,8 @@ mod tests {
         let metrics = diagnostics_runtime_trace_metrics(
             Some(&execution_snapshot),
             &restored_gateway_snapshot,
+            Some("/models/embed.gguf"),
+            Some("/models/restore.gguf"),
         );
 
         assert_eq!(metrics.runtime_id.as_deref(), Some("llama.cpp.embedding"));
@@ -796,6 +847,7 @@ mod tests {
             Some("llama-cpp-embedding-2")
         );
         assert_eq!(metrics.runtime_reused, Some(true));
+        assert_eq!(metrics.model_target.as_deref(), Some("/models/embed.gguf"));
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
             Some("reused_embedding_runtime")

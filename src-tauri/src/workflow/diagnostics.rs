@@ -102,12 +102,49 @@ pub struct DiagnosticsRunTrace {
     #[serde(default)]
     pub error: Option<String>,
     pub waiting_for_input: bool,
+    pub runtime: DiagnosticsTraceRuntimeMetrics,
     pub event_count: usize,
     pub stream_event_count: usize,
     pub last_dirty_tasks: Vec<String>,
     pub last_incremental_task_ids: Vec<String>,
     pub nodes: BTreeMap<String, DiagnosticsNodeTrace>,
     pub events: Vec<DiagnosticsEventRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsTraceRuntimeMetrics {
+    #[serde(default)]
+    pub runtime_id: Option<String>,
+    #[serde(default)]
+    pub runtime_instance_id: Option<String>,
+    #[serde(default)]
+    pub model_target: Option<String>,
+    #[serde(default)]
+    pub warmup_started_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_completed_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub runtime_reused: Option<bool>,
+    #[serde(default)]
+    pub lifecycle_decision_reason: Option<String>,
+}
+
+impl From<&WorkflowTraceRuntimeMetrics> for DiagnosticsTraceRuntimeMetrics {
+    fn from(metrics: &WorkflowTraceRuntimeMetrics) -> Self {
+        Self {
+            runtime_id: metrics.runtime_id.clone(),
+            runtime_instance_id: metrics.runtime_instance_id.clone(),
+            model_target: metrics.model_target.clone(),
+            warmup_started_at_ms: metrics.warmup_started_at_ms,
+            warmup_completed_at_ms: metrics.warmup_completed_at_ms,
+            warmup_duration_ms: metrics.warmup_duration_ms,
+            runtime_reused: metrics.runtime_reused,
+            lifecycle_decision_reason: metrics.lifecycle_decision_reason.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -625,6 +662,7 @@ fn diagnostics_run_trace(
             .max(trace.ended_at_ms.unwrap_or(trace.started_at_ms)),
         error: trace.last_error.clone(),
         waiting_for_input: trace.waiting_for_input,
+        runtime: DiagnosticsTraceRuntimeMetrics::from(&trace.runtime),
         event_count: trace.event_count,
         stream_event_count: trace.stream_event_count,
         last_dirty_tasks,
@@ -1244,6 +1282,7 @@ mod tests {
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-cpp-1".to_string()),
+                model_target: Some("/models/main.gguf".to_string()),
                 warmup_started_at_ms: Some(4_900),
                 warmup_completed_at_ms: Some(5_000),
                 warmup_duration_ms: Some(100),
@@ -1293,6 +1332,10 @@ mod tests {
             trace.runtime.runtime_instance_id.as_deref(),
             Some("llama-cpp-1")
         );
+        assert_eq!(
+            trace.runtime.model_target.as_deref(),
+            Some("/models/main.gguf")
+        );
         assert_eq!(trace.runtime.warmup_started_at_ms, Some(4_900));
         assert_eq!(trace.runtime.warmup_completed_at_ms, Some(5_000));
         assert_eq!(trace.runtime.warmup_duration_ms, Some(100));
@@ -1300,6 +1343,13 @@ mod tests {
         assert_eq!(
             trace.runtime.lifecycle_decision_reason.as_deref(),
             Some("runtime_ready")
+        );
+        assert_eq!(
+            snapshot
+                .runs_by_id
+                .get("exec-runtime")
+                .and_then(|run| run.runtime.model_target.as_deref()),
+            Some("/models/main.gguf")
         );
         assert_eq!(
             snapshot

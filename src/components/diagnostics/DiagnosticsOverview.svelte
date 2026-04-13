@@ -72,6 +72,14 @@
     <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
       <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Runtime Signals</div>
       <div class="mt-3 space-y-2 text-sm text-neutral-300">
+        <div class="flex items-center justify-between gap-3">
+          <span>Runtime</span>
+          <span class="truncate text-neutral-400">{run.runtime.runtimeId ?? 'unreported'}</span>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span>Instance</span>
+          <span class="truncate text-neutral-400">{run.runtime.runtimeInstanceId ?? 'unreported'}</span>
+        </div>
         <div class="flex items-center justify-between">
           <span>Events</span>
           <span>{run.eventCount}</span>
@@ -85,6 +93,20 @@
           <span>{run.waitingForInput ? 'Yes' : 'No'}</span>
         </div>
       </div>
+      {#if run.runtime.modelTarget}
+        <div class="mt-3 break-all text-xs text-neutral-500">
+          Target {run.runtime.modelTarget}
+        </div>
+      {/if}
+      <div class="mt-2 text-xs text-neutral-500">
+        Warmup {formatDiagnosticsDuration(run.runtime.warmupDurationMs)}
+        • Reused {run.runtime.runtimeReused === null ? 'unknown' : run.runtime.runtimeReused ? 'yes' : 'no'}
+      </div>
+      {#if run.runtime.lifecycleDecisionReason}
+        <div class="mt-1 text-xs text-neutral-600">
+          {run.runtime.lifecycleDecisionReason}
+        </div>
+      {/if}
       {#if run.error}
         <div class="mt-3 rounded-lg border border-red-900/80 bg-red-950/40 px-3 py-2 text-xs text-red-200">
           {run.error}
