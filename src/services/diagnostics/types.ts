@@ -161,6 +161,7 @@ export interface WorkflowTraceQueueMetrics {
 
 export interface WorkflowTraceRuntimeMetrics {
   runtime_id?: string | null;
+  observed_runtime_ids?: string[];
   runtime_instance_id?: string | null;
   model_target?: string | null;
   warmup_started_at_ms?: number | null;

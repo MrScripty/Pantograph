@@ -416,6 +416,7 @@ pub(crate) fn trace_runtime_metrics(
 ) -> WorkflowTraceRuntimeMetrics {
     WorkflowTraceRuntimeMetrics {
         runtime_id: snapshot.runtime_id.clone(),
+        observed_runtime_ids: snapshot.runtime_id.clone().into_iter().collect(),
         runtime_instance_id: snapshot.runtime_instance_id.clone(),
         model_target: model_target.map(ToOwned::to_owned),
         warmup_started_at_ms: snapshot.warmup_started_at_ms,
@@ -868,6 +869,10 @@ mod tests {
         );
 
         assert_eq!(metrics.runtime_id.as_deref(), Some("llama.cpp.embedding"));
+        assert_eq!(
+            metrics.observed_runtime_ids,
+            vec!["llama.cpp.embedding".to_string()]
+        );
         assert_eq!(
             metrics.runtime_instance_id.as_deref(),
             Some("llama-cpp-embedding-2")

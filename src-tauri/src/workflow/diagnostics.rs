@@ -117,6 +117,8 @@ pub struct DiagnosticsTraceRuntimeMetrics {
     #[serde(default)]
     pub runtime_id: Option<String>,
     #[serde(default)]
+    pub observed_runtime_ids: Vec<String>,
+    #[serde(default)]
     pub runtime_instance_id: Option<String>,
     #[serde(default)]
     pub model_target: Option<String>,
@@ -136,6 +138,7 @@ impl From<&WorkflowTraceRuntimeMetrics> for DiagnosticsTraceRuntimeMetrics {
     fn from(metrics: &WorkflowTraceRuntimeMetrics) -> Self {
         Self {
             runtime_id: metrics.runtime_id.clone(),
+            observed_runtime_ids: metrics.observed_runtime_ids.clone(),
             runtime_instance_id: metrics.runtime_instance_id.clone(),
             model_target: metrics.model_target.clone(),
             warmup_started_at_ms: metrics.warmup_started_at_ms,
@@ -1546,6 +1549,7 @@ mod tests {
             None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama.cpp".to_string()),
+                observed_runtime_ids: vec!["llama.cpp".to_string()],
                 runtime_instance_id: Some("llama-cpp-1".to_string()),
                 model_target: Some("/models/main.gguf".to_string()),
                 warmup_started_at_ms: Some(4_900),
@@ -1595,6 +1599,10 @@ mod tests {
             .expect("runtime trace");
 
         assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama.cpp"));
+        assert_eq!(
+            trace.runtime.observed_runtime_ids,
+            vec!["llama.cpp".to_string()]
+        );
         assert_eq!(
             trace.runtime.runtime_instance_id.as_deref(),
             Some("llama-cpp-1")

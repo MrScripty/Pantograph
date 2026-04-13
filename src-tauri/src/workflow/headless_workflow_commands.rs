@@ -886,6 +886,7 @@ mod tests {
             Ok(capability_response()),
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
                 runtime_instance_id: Some("runtime-1".to_string()),
                 model_target: Some("llava:13b".to_string()),
                 warmup_started_at_ms: Some(100),
@@ -1007,6 +1008,7 @@ mod tests {
             Ok(capability_response()),
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
                 runtime_instance_id: Some("runtime-1".to_string()),
                 model_target: Some("llava:34b".to_string()),
                 warmup_started_at_ms: Some(90),
@@ -1265,6 +1267,7 @@ mod tests {
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
                 runtime_instance_id: Some("runtime-1".to_string()),
                 model_target: Some("llava:34b".to_string()),
                 warmup_started_at_ms: Some(90),
@@ -1317,6 +1320,7 @@ mod tests {
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama.cpp.embedding".to_string()),
+                observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
                 runtime_instance_id: Some("embed-7".to_string()),
                 model_target: Some("/models/embed.gguf".to_string()),
                 warmup_started_at_ms: Some(90),
@@ -1365,6 +1369,7 @@ mod tests {
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("onnx-runtime".to_string()),
+                observed_runtime_ids: vec!["onnx-runtime".to_string()],
                 runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
                 model_target: Some("/tmp/model.onnx".to_string()),
                 warmup_started_at_ms: None,
@@ -1409,6 +1414,48 @@ mod tests {
             Some("python-runtime:onnx-runtime:venv_onnx")
         );
         assert!(embedding_runtime.is_none());
+    }
+
+    #[test]
+    fn workflow_diagnostics_snapshot_projection_preserves_observed_runtime_ids() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        let projection = workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("onnx-runtime".to_string()),
+                observed_runtime_ids: vec!["pytorch".to_string(), "onnx-runtime".to_string()],
+                runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                model_target: Some("/tmp/model.onnx".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: None,
+                lifecycle_decision_reason: Some("python_runtime_executed".to_string()),
+            },
+            Some("llava:34b".to_string()),
+            Some("/models/embed.gguf".to_string()),
+            None,
+            None,
+            120,
+        );
+
+        let trace = projection.runs_by_id.get("run-1").expect("joined trace");
+        assert_eq!(
+            trace.runtime.observed_runtime_ids,
+            vec!["pytorch".to_string(), "onnx-runtime".to_string()]
+        );
     }
 
     #[test]
@@ -1489,6 +1536,7 @@ mod tests {
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
                 runtime_instance_id: Some("runtime-1".to_string()),
                 model_target: Some("llava:34b".to_string()),
                 warmup_started_at_ms: Some(90),

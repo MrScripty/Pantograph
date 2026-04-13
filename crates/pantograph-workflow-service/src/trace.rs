@@ -55,6 +55,8 @@ pub struct WorkflowTraceRuntimeMetrics {
     #[serde(default)]
     pub runtime_id: Option<String>,
     #[serde(default)]
+    pub observed_runtime_ids: Vec<String>,
+    #[serde(default)]
     pub runtime_instance_id: Option<String>,
     #[serde(default)]
     pub model_target: Option<String>,
@@ -921,7 +923,13 @@ fn merge_runtime_metrics(
     target: &mut WorkflowTraceRuntimeMetrics,
     source: &WorkflowTraceRuntimeMetrics,
 ) {
+    for runtime_id in &source.observed_runtime_ids {
+        push_observed_runtime_id(&mut target.observed_runtime_ids, runtime_id);
+    }
     if let Some(runtime_id) = source.runtime_id.clone() {
+        if source.observed_runtime_ids.is_empty() {
+            push_observed_runtime_id(&mut target.observed_runtime_ids, &runtime_id);
+        }
         target.runtime_id = Some(runtime_id);
     }
     if let Some(runtime_instance_id) = source.runtime_instance_id.clone() {
@@ -945,6 +953,19 @@ fn merge_runtime_metrics(
     if let Some(lifecycle_decision_reason) = source.lifecycle_decision_reason.clone() {
         target.lifecycle_decision_reason = Some(lifecycle_decision_reason);
     }
+}
+
+fn push_observed_runtime_id(observed_runtime_ids: &mut Vec<String>, runtime_id: &str) {
+    let runtime_id = runtime_id.trim();
+    if runtime_id.is_empty()
+        || observed_runtime_ids
+            .iter()
+            .any(|existing| existing == runtime_id)
+    {
+        return;
+    }
+
+    observed_runtime_ids.push(runtime_id.to_string());
 }
 
 fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<String> {
@@ -1260,6 +1281,7 @@ mod tests {
             },
             runtime: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
                 runtime_instance_id: Some("runtime-1".to_string()),
                 model_target: Some("llava:13b".to_string()),
                 warmup_started_at_ms: Some(90),
@@ -1724,6 +1746,7 @@ mod tests {
                 captured_at_ms: 110,
                 runtime: WorkflowTraceRuntimeMetrics {
                     runtime_id: Some("llama_cpp".to_string()),
+                    observed_runtime_ids: vec!["llama_cpp".to_string()],
                     runtime_instance_id: Some("llama_cpp-1".to_string()),
                     model_target: Some("/models/demo.gguf".to_string()),
                     warmup_started_at_ms: Some(100),
@@ -1875,6 +1898,7 @@ mod tests {
                 captured_at_ms: 125,
                 runtime: WorkflowTraceRuntimeMetrics {
                     runtime_id: Some("llama_cpp".to_string()),
+                    observed_runtime_ids: vec!["llama_cpp".to_string()],
                     runtime_instance_id: Some("runtime-1".to_string()),
                     model_target: Some("/models/restarted.gguf".to_string()),
                     warmup_started_at_ms: Some(101),
@@ -1958,6 +1982,85 @@ mod tests {
         assert_eq!(trace.nodes.len(), 1);
         assert_eq!(trace.nodes[0].node_id, "node-2");
         assert_eq!(trace.nodes[0].status, WorkflowTraceNodeStatus::Running);
+    }
+
+    #[test]
+    fn workflow_trace_store_tracks_observed_runtime_ids_across_runtime_snapshots() {
+        let store = WorkflowTraceStore::new(10);
+        store.set_execution_metadata(
+            "exec-mixed",
+            Some("wf-mixed".to_string()),
+            Some("Workflow".to_string()),
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-mixed".to_string(),
+                workflow_id: Some("wf-mixed".to_string()),
+                node_count: 0,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RuntimeSnapshotCaptured {
+                execution_id: "exec-mixed".to_string(),
+                workflow_id: Some("wf-mixed".to_string()),
+                captured_at_ms: 110,
+                runtime: WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("pytorch".to_string()),
+                    observed_runtime_ids: vec!["pytorch".to_string()],
+                    runtime_instance_id: Some("python-runtime:pytorch:venv_a".to_string()),
+                    model_target: Some("/models/a".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: None,
+                    lifecycle_decision_reason: Some("python_runtime_executed".to_string()),
+                },
+                capabilities: None,
+                error: None,
+            },
+            110,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RuntimeSnapshotCaptured {
+                execution_id: "exec-mixed".to_string(),
+                workflow_id: Some("wf-mixed".to_string()),
+                captured_at_ms: 120,
+                runtime: WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("onnx-runtime".to_string()),
+                    observed_runtime_ids: vec!["onnx-runtime".to_string()],
+                    runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                    model_target: Some("/models/b".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: None,
+                    lifecycle_decision_reason: Some("python_runtime_executed".to_string()),
+                },
+                capabilities: None,
+                error: None,
+            },
+            120,
+        );
+
+        let trace = store
+            .snapshot(&crate::trace::WorkflowTraceSnapshotRequest {
+                execution_id: Some("exec-mixed".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: Some(true),
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("mixed trace");
+
+        assert_eq!(trace.runtime.runtime_id.as_deref(), Some("onnx-runtime"));
+        assert_eq!(
+            trace.runtime.observed_runtime_ids,
+            vec!["pytorch".to_string(), "onnx-runtime".to_string()]
+        );
     }
 
     #[test]

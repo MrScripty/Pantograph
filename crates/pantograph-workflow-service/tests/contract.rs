@@ -303,6 +303,7 @@ fn workflow_trace_contract_snapshot() {
             },
             runtime: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
                 runtime_instance_id: Some("runtime-1".to_string()),
                 model_target: Some("llava:13b".to_string()),
                 warmup_started_at_ms: Some(95),
