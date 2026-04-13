@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
-use crate::llm::{SharedAppConfig, SharedGateway};
+use crate::llm::{EmbeddingStartRequest, SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
@@ -375,13 +375,16 @@ async fn prepare_embedding_runtime(
     let device = guard.device.clone();
     drop(guard);
 
-    let embedding_config = inference::BackendConfig {
-        model_path: Some(resolved_embedding_model_path),
-        device: Some(device.device),
-        gpu_layers: Some(device.gpu_layers),
-        embedding_mode: true,
-        ..Default::default()
-    };
+    let embedding_config = gateway
+        .build_embedding_start_config(EmbeddingStartRequest {
+            gguf_model_path: Some(resolved_embedding_model_path),
+            candle_model_path: None,
+            ollama_model_name: Some("nomic-embed-text".to_string()),
+            device: Some(device.device),
+            gpu_layers: Some(device.gpu_layers),
+        })
+        .await
+        .map_err(|e| e.to_string())?;
 
     gateway
         .start(&embedding_config)
