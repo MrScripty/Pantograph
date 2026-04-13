@@ -957,6 +957,12 @@ fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<Strin
     }
 
     if capabilities.runtime_requirements.required_backends.len() == 1 {
+        if let Some(runtime_id) = find_runtime_id_for_required_backend(
+            capabilities,
+            &capabilities.runtime_requirements.required_backends[0],
+        ) {
+            return Some(runtime_id);
+        }
         return capabilities
             .runtime_requirements
             .required_backends
@@ -974,6 +980,53 @@ fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<Strin
     None
 }
 
+fn find_runtime_id_for_required_backend(
+    capabilities: &WorkflowCapabilitiesResponse,
+    required_backend_key: &str,
+) -> Option<String> {
+    let required_backend_key = normalize_runtime_key(required_backend_key);
+    capabilities
+        .runtime_capabilities
+        .iter()
+        .filter(|capability| runtime_capability_matches_backend(capability, &required_backend_key))
+        .max_by(|left, right| {
+            runtime_capability_match_rank(left)
+                .cmp(&runtime_capability_match_rank(right))
+                .then_with(|| left.runtime_id.cmp(&right.runtime_id))
+        })
+        .map(|capability| capability.runtime_id.clone())
+}
+
+fn runtime_capability_matches_backend(
+    capability: &crate::workflow::WorkflowRuntimeCapability,
+    required_backend_key: &str,
+) -> bool {
+    normalize_runtime_key(&capability.runtime_id) == required_backend_key
+        || capability
+            .backend_keys
+            .iter()
+            .any(|backend_key| normalize_runtime_key(backend_key) == required_backend_key)
+}
+
+fn runtime_capability_match_rank(
+    capability: &crate::workflow::WorkflowRuntimeCapability,
+) -> (bool, bool, bool) {
+    (
+        capability.selected,
+        capability.available && capability.configured,
+        capability.available,
+    )
+}
+
+fn normalize_runtime_key(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
 fn runtime_lifecycle_reason(capabilities: &WorkflowCapabilitiesResponse) -> &'static str {
     if capabilities
         .runtime_capabilities
@@ -981,6 +1034,14 @@ fn runtime_lifecycle_reason(capabilities: &WorkflowCapabilitiesResponse) -> &'st
         .any(|capability| capability.selected)
     {
         "selected_runtime_reported"
+    } else if capabilities.runtime_requirements.required_backends.len() == 1
+        && find_runtime_id_for_required_backend(
+            capabilities,
+            &capabilities.runtime_requirements.required_backends[0],
+        )
+        .is_some()
+    {
+        "required_runtime_reported"
     } else if capabilities
         .runtime_capabilities
         .iter()
@@ -1297,8 +1358,8 @@ mod tests {
                     unavailable_reason: None,
                 },
                 crate::workflow::WorkflowRuntimeCapability {
-                    runtime_id: "python-sidecar".to_string(),
-                    display_name: "Python sidecar".to_string(),
+                    runtime_id: "pytorch".to_string(),
+                    display_name: "PyTorch (Python sidecar)".to_string(),
                     install_state: crate::workflow::WorkflowRuntimeInstallState::SystemProvided,
                     available: true,
                     configured: true,
@@ -1307,16 +1368,47 @@ mod tests {
                     source_kind: crate::workflow::WorkflowRuntimeSourceKind::System,
                     selected: true,
                     supports_external_connection: false,
-                    backend_keys: vec!["pytorch".to_string()],
+                    backend_keys: vec!["pytorch".to_string(), "torch".to_string()],
                     missing_files: Vec::new(),
                     unavailable_reason: None,
                 },
             ],
         );
 
+        assert_eq!(infer_runtime_id(&capabilities).as_deref(), Some("pytorch"));
+    }
+
+    #[test]
+    fn infer_runtime_id_matches_single_required_backend_alias_to_runtime_capability() {
+        let capabilities = workflow_capabilities_with_runtimes(
+            crate::workflow::WorkflowRuntimeRequirements {
+                required_backends: vec!["onnxruntime".to_string()],
+                ..crate::workflow::WorkflowRuntimeRequirements::default()
+            },
+            vec![crate::workflow::WorkflowRuntimeCapability {
+                runtime_id: "onnx-runtime".to_string(),
+                display_name: "ONNX Runtime (Python sidecar)".to_string(),
+                install_state: crate::workflow::WorkflowRuntimeInstallState::SystemProvided,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                source_kind: crate::workflow::WorkflowRuntimeSourceKind::System,
+                selected: false,
+                supports_external_connection: false,
+                backend_keys: vec!["ONNX Runtime".to_string(), "onnx-runtime".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+        );
+
         assert_eq!(
             infer_runtime_id(&capabilities).as_deref(),
-            Some("python-sidecar")
+            Some("onnx-runtime")
+        );
+        assert_eq!(
+            runtime_lifecycle_reason(&capabilities),
+            "required_runtime_reported"
         );
     }
 

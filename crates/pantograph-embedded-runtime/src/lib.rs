@@ -653,42 +653,54 @@ impl EmbeddedWorkflowHost {
         })
     }
 
-    fn python_runtime_capability(
+    fn python_runtime_backend_keys(display_name: &str, runtime_id: &str) -> Vec<String> {
+        let mut backend_keys = backend_key_aliases(display_name, runtime_id);
+        if runtime_id == "pytorch" {
+            backend_keys.push("torch".to_string());
+            backend_keys.sort();
+            backend_keys.dedup();
+        }
+        backend_keys
+    }
+
+    fn python_runtime_capabilities(
         executable_probe: Result<PathBuf, String>,
         selected_backend_key: &str,
-    ) -> WorkflowRuntimeCapability {
+    ) -> Vec<WorkflowRuntimeCapability> {
         let (available, unavailable_reason) = match executable_probe {
             Ok(_) => (true, None),
             Err(reason) => (false, Some(reason)),
         };
-        let backend_keys = vec![
-            "pytorch".to_string(),
-            "torch".to_string(),
-            "diffusers".to_string(),
-            "onnx-runtime".to_string(),
-            "onnxruntime".to_string(),
-            "stable_audio".to_string(),
-        ];
-
-        WorkflowRuntimeCapability {
-            runtime_id: "python-sidecar".to_string(),
-            display_name: "Python sidecar".to_string(),
-            install_state: if available {
-                WorkflowRuntimeInstallState::SystemProvided
-            } else {
-                WorkflowRuntimeInstallState::Missing
-            },
-            available,
-            configured: available,
-            can_install: false,
-            can_remove: false,
-            source_kind: WorkflowRuntimeSourceKind::System,
-            selected: Self::runtime_matches_backend(&backend_keys, selected_backend_key),
-            supports_external_connection: false,
-            backend_keys,
-            missing_files: Vec::new(),
-            unavailable_reason,
-        }
+        [
+            ("PyTorch (Python sidecar)", "pytorch"),
+            ("Diffusers (Python sidecar)", "diffusers"),
+            ("ONNX Runtime (Python sidecar)", "onnx-runtime"),
+            ("Stable Audio (Python sidecar)", "stable_audio"),
+        ]
+        .into_iter()
+        .map(|(display_name, runtime_id)| {
+            let backend_keys = Self::python_runtime_backend_keys(display_name, runtime_id);
+            WorkflowRuntimeCapability {
+                runtime_id: runtime_id.to_string(),
+                display_name: display_name.to_string(),
+                install_state: if available {
+                    WorkflowRuntimeInstallState::SystemProvided
+                } else {
+                    WorkflowRuntimeInstallState::Missing
+                },
+                available,
+                configured: available,
+                can_install: false,
+                can_remove: false,
+                source_kind: WorkflowRuntimeSourceKind::System,
+                selected: Self::runtime_matches_backend(&backend_keys, selected_backend_key),
+                supports_external_connection: false,
+                backend_keys,
+                missing_files: Vec::new(),
+                unavailable_reason: unavailable_reason.clone(),
+            }
+        })
+        .collect()
     }
 
     fn apply_input_bindings(
@@ -920,7 +932,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
                 Self::host_runtime_capability(backend, &selected_backend_key)
             }),
         );
-        runtimes.push(Self::python_runtime_capability(
+        runtimes.extend(Self::python_runtime_capabilities(
             python_runtime::resolve_python_executable_for_env_ids(&[]),
             &selected_backend_key,
         ));
@@ -1394,41 +1406,65 @@ mod tests {
     }
 
     #[test]
-    fn python_sidecar_runtime_capability_reports_python_backed_engines() {
-        let capability = EmbeddedWorkflowHost::python_runtime_capability(
+    fn python_runtime_capabilities_report_python_backed_engines() {
+        let capabilities = EmbeddedWorkflowHost::python_runtime_capabilities(
             Ok(PathBuf::from("/usr/bin/python3")),
             "pytorch",
         );
 
-        assert_eq!(capability.runtime_id, "python-sidecar");
-        assert!(capability.available);
-        assert!(capability.configured);
-        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::System);
-        assert!(capability.selected);
-        assert!(!capability.supports_external_connection);
-        assert!(capability.backend_keys.contains(&"pytorch".to_string()));
-        assert!(capability.backend_keys.contains(&"diffusers".to_string()));
-        assert!(capability
+        assert_eq!(capabilities.len(), 4);
+
+        let pytorch = capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "pytorch")
+            .expect("pytorch capability");
+        assert!(pytorch.available);
+        assert!(pytorch.configured);
+        assert_eq!(pytorch.source_kind, WorkflowRuntimeSourceKind::System);
+        assert!(pytorch.selected);
+        assert!(!pytorch.supports_external_connection);
+        assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
+        assert!(pytorch.backend_keys.contains(&"torch".to_string()));
+
+        let diffusion = capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "diffusers")
+            .expect("diffusers capability");
+        assert!(diffusion.backend_keys.contains(&"diffusers".to_string()));
+
+        let onnx = capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "onnx-runtime")
+            .expect("onnx capability");
+        assert!(onnx.backend_keys.contains(&"onnx-runtime".to_string()));
+
+        let stable_audio = capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "stable_audio")
+            .expect("stable audio capability");
+        assert!(stable_audio
             .backend_keys
-            .contains(&"onnx-runtime".to_string()));
+            .contains(&"stable_audio".to_string()));
     }
 
     #[test]
-    fn python_sidecar_runtime_capability_keeps_unavailable_reason() {
-        let capability = EmbeddedWorkflowHost::python_runtime_capability(
+    fn python_runtime_capabilities_keep_unavailable_reason() {
+        let capabilities = EmbeddedWorkflowHost::python_runtime_capabilities(
             Err("python executable is not configured".to_string()),
             "llama_cpp",
         );
 
-        assert_eq!(capability.runtime_id, "python-sidecar");
-        assert!(!capability.available);
-        assert!(!capability.configured);
-        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::System);
-        assert!(!capability.selected);
-        assert_eq!(
-            capability.unavailable_reason.as_deref(),
-            Some("python executable is not configured")
-        );
+        assert_eq!(capabilities.len(), 4);
+        for capability in capabilities {
+            assert!(!capability.available);
+            assert!(!capability.configured);
+            assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::System);
+            assert!(!capability.selected);
+            assert_eq!(
+                capability.unavailable_reason.as_deref(),
+                Some("python executable is not configured")
+            );
+        }
     }
 
     #[test]

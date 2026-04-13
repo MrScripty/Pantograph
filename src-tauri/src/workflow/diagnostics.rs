@@ -186,13 +186,66 @@ impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleS
     }
 }
 
-fn selected_runtime_lifecycle_snapshot(
+fn normalize_runtime_key(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+fn runtime_capability_matches_required_backend(
+    capability: &pantograph_workflow_service::WorkflowRuntimeCapability,
+    required_backend_key: &str,
+) -> bool {
+    let required_backend_key = normalize_runtime_key(required_backend_key);
+    normalize_runtime_key(&capability.runtime_id) == required_backend_key
+        || capability
+            .backend_keys
+            .iter()
+            .any(|backend_key| normalize_runtime_key(backend_key) == required_backend_key)
+}
+
+fn capability_runtime_lifecycle_snapshot(
     capabilities: Option<&WorkflowCapabilitiesResponse>,
 ) -> Option<DiagnosticsRuntimeLifecycleSnapshot> {
-    let selected_runtime = capabilities?
+    let capabilities = capabilities?;
+    let selected_runtime = capabilities
         .runtime_capabilities
         .iter()
-        .find(|capability| capability.selected)?;
+        .find(|capability| capability.selected)
+        .or_else(|| {
+            if capabilities.runtime_requirements.required_backends.len() != 1 {
+                return None;
+            }
+
+            let required_backend_key = &capabilities.runtime_requirements.required_backends[0];
+            capabilities
+                .runtime_capabilities
+                .iter()
+                .filter(|capability| {
+                    runtime_capability_matches_required_backend(capability, required_backend_key)
+                })
+                .max_by(|left, right| {
+                    (
+                        left.available && left.configured,
+                        left.available,
+                        left.configured,
+                    )
+                        .cmp(&(
+                            right.available && right.configured,
+                            right.available,
+                            right.configured,
+                        ))
+                        .then_with(|| left.runtime_id.cmp(&right.runtime_id))
+                })
+        })?;
+    let lifecycle_decision_reason = if selected_runtime.selected {
+        "selected_runtime_reported"
+    } else {
+        "required_runtime_reported"
+    };
 
     Some(DiagnosticsRuntimeLifecycleSnapshot {
         runtime_id: Some(selected_runtime.runtime_id.clone()),
@@ -201,7 +254,7 @@ fn selected_runtime_lifecycle_snapshot(
         warmup_completed_at_ms: None,
         warmup_duration_ms: None,
         runtime_reused: None,
-        lifecycle_decision_reason: Some("selected_runtime_reported".to_string()),
+        lifecycle_decision_reason: Some(lifecycle_decision_reason.to_string()),
         active: false,
         last_error: selected_runtime
             .unavailable_reason
@@ -540,7 +593,7 @@ impl WorkflowDiagnosticsStore {
                 active_runtime: active_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from)
-                    .or_else(|| selected_runtime_lifecycle_snapshot(capabilities.as_ref())),
+                    .or_else(|| capability_runtime_lifecycle_snapshot(capabilities.as_ref())),
                 embedding_runtime: embedding_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from),
@@ -956,7 +1009,7 @@ fn apply_runtime_event(
             embedding_model_target: embedding_model_target.clone(),
             active_runtime: active_runtime_snapshot
                 .clone()
-                .or_else(|| selected_runtime_lifecycle_snapshot(capabilities.as_ref())),
+                .or_else(|| capability_runtime_lifecycle_snapshot(capabilities.as_ref())),
             embedding_runtime: embedding_runtime_snapshot.clone(),
         };
     }
@@ -1350,8 +1403,8 @@ mod tests {
                     models: Vec::new(),
                     runtime_capabilities:
                         vec![pantograph_workflow_service::WorkflowRuntimeCapability {
-                    runtime_id: "python-sidecar".to_string(),
-                    display_name: "Python sidecar".to_string(),
+                    runtime_id: "pytorch".to_string(),
+                    display_name: "PyTorch (Python sidecar)".to_string(),
                     install_state:
                         pantograph_workflow_service::WorkflowRuntimeInstallState::SystemProvided,
                     available: true,
@@ -1361,7 +1414,7 @@ mod tests {
                     source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
                     selected: true,
                     supports_external_connection: false,
-                    backend_keys: vec!["pytorch".to_string()],
+                    backend_keys: vec!["pytorch".to_string(), "torch".to_string()],
                     missing_files: Vec::new(),
                     unavailable_reason: None,
                 }],
@@ -1381,7 +1434,7 @@ mod tests {
                 .active_runtime
                 .as_ref()
                 .and_then(|runtime| runtime.runtime_id.as_deref()),
-            Some("python-sidecar")
+            Some("pytorch")
         );
         assert_eq!(
             snapshot
@@ -1398,6 +1451,72 @@ mod tests {
                 .as_ref()
                 .map(|runtime| runtime.active),
             Some(false)
+        );
+    }
+
+    #[test]
+    fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_absent() {
+        let store = WorkflowDiagnosticsStore::default();
+        let snapshot =
+            store.update_runtime_snapshot(
+                Some("wf-onnx".to_string()),
+                Some(WorkflowCapabilitiesResponse {
+                    max_input_bindings: 4,
+                    max_output_targets: 2,
+                    max_value_bytes: 1000,
+                    runtime_requirements:
+                        pantograph_workflow_service::WorkflowRuntimeRequirements {
+                            estimated_peak_vram_mb: None,
+                            estimated_peak_ram_mb: None,
+                            estimated_min_vram_mb: None,
+                            estimated_min_ram_mb: None,
+                            estimation_confidence: "high".to_string(),
+                            required_models: vec!["model-a".to_string()],
+                            required_backends: vec!["onnxruntime".to_string()],
+                            required_extensions: Vec::new(),
+                        },
+                    models: Vec::new(),
+                    runtime_capabilities:
+                        vec![pantograph_workflow_service::WorkflowRuntimeCapability {
+                runtime_id: "onnx-runtime".to_string(),
+                display_name: "ONNX Runtime (Python sidecar)".to_string(),
+                install_state:
+                    pantograph_workflow_service::WorkflowRuntimeInstallState::SystemProvided,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
+                selected: false,
+                supports_external_connection: false,
+                backend_keys: vec!["ONNX Runtime".to_string(), "onnx-runtime".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+                }),
+                None,
+                Some("kitten-tts".to_string()),
+                None,
+                None,
+                None,
+                5_000,
+            );
+
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_id.as_deref()),
+            Some("onnx-runtime")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.lifecycle_decision_reason.as_deref()),
+            Some("required_runtime_reported")
         );
     }
 

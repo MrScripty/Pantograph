@@ -29,7 +29,7 @@ pub struct PythonNodeExecutionRequest {
     pub env_ids: Vec<String>,
 }
 
-/// Callback invoked for each streamed python-sidecar chunk.
+/// Callback invoked for each streamed python-backed runtime chunk.
 pub type PythonStreamHandler = Arc<dyn Fn(serde_json::Value) + Send + Sync>;
 
 /// Host adapter interface for Python-backed node execution.
