@@ -1,4 +1,5 @@
 import { writable, type Readable } from 'svelte/store';
+import { isWorkflowEventRelevantToExecution } from '@pantograph/svelte-graph';
 
 import { DiagnosticsService } from '../services/diagnostics/DiagnosticsService';
 import type {
@@ -146,6 +147,11 @@ function bindDiagnosticsStore(): void {
   });
 
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
+    const expectedExecutionId = latestSessionKind === 'edit' ? latestSessionId : null;
+    if (!isWorkflowEventRelevantToExecution(event, expectedExecutionId)) {
+      return;
+    }
+
     diagnosticsService.recordWorkflowEvent(event);
     switch (event.type) {
       case 'RuntimeSnapshot':

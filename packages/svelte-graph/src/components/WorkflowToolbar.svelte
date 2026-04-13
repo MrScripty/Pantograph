@@ -2,6 +2,7 @@
   import { get } from 'svelte/store';
   import { useGraphContext } from '../context/useGraphContext.js';
   import type { WorkflowEvent } from '../types/workflow.js';
+  import { isWorkflowEventRelevantToExecution } from '../workflowEventOwnership.js';
 
   const { backend, stores } = useGraphContext();
 
@@ -18,12 +19,14 @@
   let workflowName = $derived($currentGraphName || 'Untitled Workflow');
 
   let currentUnsubscribe: (() => void) | null = null;
+  let activeExecutionId: string | null = null;
 
   async function handleRun() {
     if ($isExecuting) return;
 
     isExecuting.set(true);
     stores.workflow.resetExecutionStates();
+    activeExecutionId = $currentSessionId;
 
     currentUnsubscribe = backend.subscribeEvents(handleWorkflowEvent);
 
@@ -40,6 +43,7 @@
         currentUnsubscribe();
         currentUnsubscribe = null;
       }
+      activeExecutionId = null;
     }
   }
 
@@ -49,9 +53,14 @@
       currentUnsubscribe();
       currentUnsubscribe = null;
     }
+    activeExecutionId = null;
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
+    if (!isWorkflowEventRelevantToExecution(event, activeExecutionId)) {
+      return;
+    }
+
     console.log('Workflow event:', event.type, event.data);
 
     switch (event.type) {

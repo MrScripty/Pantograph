@@ -57,7 +57,10 @@ Palette-driven HTML drag sessions now emit explicit start/end signals so the
 graph can disable pan, drag, selection, and reconnect behavior until the
 external drag completes. Selection persistence also moved into the shared store
 contract so backend graph snapshots reapply the current selected-node ids
-instead of dropping selection metadata on every sync.
+instead of dropping selection metadata on every sync. Toolbar event consumers
+now also scope node-state updates to the execution id that was active when a
+session-owned run started so stale events from an older edit session do not
+overwrite the current graph state after session switches.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -92,6 +95,8 @@ instead of dropping selection metadata on every sync.
   selection, or reconnect gestures.
 - Store-backed graph rematerialization must preserve the selected node ids that
   the consumer last acknowledged through selection change events.
+- Session-owned execution UI must ignore workflow events whose `execution_id`
+  no longer matches the run that owns the active toolbar subscription.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

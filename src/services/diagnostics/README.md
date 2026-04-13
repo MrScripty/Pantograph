@@ -44,7 +44,9 @@ expose declaratively. Runtime and scheduler tabs now consume additive
 `RuntimeSnapshot` and `SchedulerSnapshot` workflow events when the backend emits
 them, while the service can synthesize a minimal scheduler session lifecycle
 for edit-session runs that do not resolve through workflow-service session
-APIs.
+APIs. The frontend store also rejects event updates from older edit-session
+execution ids before they reach the diagnostics service so switching sessions
+does not splice stale run events into the current workflow view.
 
 ## Alternatives Rejected
 - Accumulate diagnostics directly inside `WorkflowToolbar.svelte`.
@@ -64,6 +66,8 @@ APIs.
   in the same diagnostics state owner as run traces.
 - Synthetic scheduler fallback must clear when authoritative scheduler snapshot
   data for the same session arrives.
+- Edit-session diagnostics consumers must ignore workflow events whose
+  `execution_id` no longer matches the active session id.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

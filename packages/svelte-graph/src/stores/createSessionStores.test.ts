@@ -10,6 +10,7 @@ import type {
   WorkflowGraph,
   WorkflowMetadata,
 } from '../index.ts';
+import type { ViewStores } from './createViewStores.ts';
 import type { WorkflowStores } from './createWorkflowStores.ts';
 
 function createBackendStub(): WorkflowBackend {
@@ -116,7 +117,7 @@ test('createSessionStores tracks edit session kind for editor-owned sessions', a
   const viewStores = {
     groupStack: writable<string[]>([]),
     async tabOutOfGroup() {},
-  };
+  } as Pick<ViewStores, 'groupStack' | 'tabOutOfGroup'> as ViewStores;
   const sessionStores = createSessionStores(backend, workflowStores, viewStores);
 
   assert.equal(get(sessionStores.currentSessionKind), null);

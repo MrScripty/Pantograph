@@ -28,6 +28,7 @@
     AUDIO_RUNTIME_DATA_KEYS,
     buildAudioRuntimeDataFromCompletedOutputs,
   } from './nodes/workflow/audioOutputState';
+  import { isWorkflowEventRelevantToExecution } from '@pantograph/svelte-graph';
   import { get } from 'svelte/store';
   import GraphSelector from './GraphSelector.svelte';
   import { diagnosticsSnapshot, toggleDiagnosticsPanel } from '../stores/diagnosticsStore';
@@ -40,6 +41,7 @@
 
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
+  let activeExecutionId: string | null = null;
 
   function normalizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim().length > 0) {
@@ -113,6 +115,7 @@
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
+    activeExecutionId = $currentSessionId;
 
     // Subscribe to events - will be cleaned up in handleWorkflowEvent on completion/failure
     currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
@@ -133,6 +136,7 @@
         currentUnsubscribe();
         currentUnsubscribe = null;
       }
+      activeExecutionId = null;
     }
   }
 
@@ -142,9 +146,14 @@
       currentUnsubscribe();
       currentUnsubscribe = null;
     }
+    activeExecutionId = null;
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
+    if (!isWorkflowEventRelevantToExecution(event, activeExecutionId)) {
+      return;
+    }
+
     console.log('Workflow event:', event.type, event.data);
 
     switch (event.type) {
