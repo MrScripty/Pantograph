@@ -487,6 +487,11 @@ Update during implementation:
   `src-tauri/src/workflow/event_adapter.rs` so node-engine event transport is
   covered through a pure Rust translation helper that preserves producer
   execution identity and emits backend-owned diagnostics snapshot events
+- Twenty-seventh implementation slice added in
+  `crates/pantograph-workflow-service/src/trace.rs` so a restarted
+  `RunStarted` on the same execution id resets prior attempt-specific node,
+  queue, and runtime state after terminal failure without erasing in-flight
+  duplicate-start state
 
 ### Deviations
 
@@ -508,6 +513,9 @@ Update during implementation:
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
+- Add explicit cancelled-run contracts once workflow producers can emit
+  machine-readable cancellation outcomes instead of relying on generic failure
+  strings.
 - Decide whether later detailed metrics inspection belongs in the existing
   diagnostics command surface or a dedicated trace/metrics module.
 - Extend snapshot-path acceptance coverage beyond current diagnostics-store
