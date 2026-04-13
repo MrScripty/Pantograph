@@ -236,6 +236,16 @@ impl InferenceBackend for LlamaCppBackend {
                 BackendError::Config("model_path required for embedding mode".to_string())
             })?;
 
+            if self
+                .server
+                .matches_embedding_runtime(&model_path.to_string_lossy(), &device_config)
+            {
+                return Ok(BackendStartOutcome {
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("reused_llamacpp_embedding".to_string()),
+                });
+            }
+
             self.server
                 .start_sidecar_embedding(spawner, &model_path.to_string_lossy(), &device_config)
                 .await
@@ -256,6 +266,16 @@ impl InferenceBackend for LlamaCppBackend {
             let model_path = config.model_path.as_ref().ok_or_else(|| {
                 BackendError::Config("model_path required for reranking mode".to_string())
             })?;
+
+            if self
+                .server
+                .matches_reranking_runtime(&model_path.to_string_lossy(), &device_config)
+            {
+                return Ok(BackendStartOutcome {
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("reused_llamacpp_reranking".to_string()),
+                });
+            }
 
             self.server
                 .start_sidecar_reranking(spawner, &model_path.to_string_lossy(), &device_config)
@@ -285,6 +305,17 @@ impl InferenceBackend for LlamaCppBackend {
                 .mmproj_path
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string());
+
+            if self.server.matches_inference_runtime(
+                &model_path.to_string_lossy(),
+                mmproj_path.as_deref(),
+                &device_config,
+            ) {
+                return Ok(BackendStartOutcome {
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("reused_llamacpp_inference".to_string()),
+                });
+            }
 
             self.server
                 .start_sidecar_inference(
@@ -482,6 +513,32 @@ impl InferenceBackend for LlamaCppBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use tokio::sync::mpsc;
+
+    use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use crate::server::ServerMode;
+
+    struct NoopProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for NoopProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+            Err("spawn_sidecar should not be called for reuse checks".to_string())
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(std::env::temp_dir())
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(std::env::temp_dir())
+        }
+    }
 
     #[test]
     fn test_backend_name() {
@@ -505,5 +562,77 @@ mod tests {
         let backend = LlamaCppBackend::new();
         assert!(!backend.is_ready());
         assert!(backend.base_url().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_reuses_matching_inference_runtime() {
+        let mut backend = LlamaCppBackend::new();
+        backend.server.set_test_runtime_state(
+            ServerMode::SidecarInference {
+                port: 11434,
+                model_path: "/models/main.gguf".to_string(),
+                mmproj_path: Some("/models/vision.mmproj".to_string()),
+                device: DeviceConfig {
+                    device: "Vulkan0".to_string(),
+                    gpu_layers: 40,
+                },
+            },
+            true,
+        );
+
+        let outcome = backend
+            .start(
+                &BackendConfig {
+                    model_path: Some(PathBuf::from("/models/main.gguf")),
+                    mmproj_path: Some(PathBuf::from("/models/vision.mmproj")),
+                    device: Some("Vulkan0".to_string()),
+                    gpu_layers: Some(40),
+                    ..BackendConfig::default()
+                },
+                Arc::new(NoopProcessSpawner),
+            )
+            .await
+            .expect("matching runtime should be reused");
+
+        assert_eq!(outcome.runtime_reused, Some(true));
+        assert_eq!(
+            outcome.lifecycle_decision_reason.as_deref(),
+            Some("reused_llamacpp_inference")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_does_not_reuse_inference_runtime_when_device_differs() {
+        let mut backend = LlamaCppBackend::new();
+        backend.server.set_test_runtime_state(
+            ServerMode::SidecarInference {
+                port: 11434,
+                model_path: "/models/main.gguf".to_string(),
+                mmproj_path: None,
+                device: DeviceConfig {
+                    device: "Vulkan0".to_string(),
+                    gpu_layers: 40,
+                },
+            },
+            true,
+        );
+
+        let error = backend
+            .start(
+                &BackendConfig {
+                    model_path: Some(PathBuf::from("/models/main.gguf")),
+                    device: Some("Vulkan1".to_string()),
+                    gpu_layers: Some(40),
+                    ..BackendConfig::default()
+                },
+                Arc::new(NoopProcessSpawner),
+            )
+            .await
+            .expect_err("mismatched runtime should not be reused");
+
+        assert!(
+            matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            "unexpected error: {error:?}"
+        );
     }
 }

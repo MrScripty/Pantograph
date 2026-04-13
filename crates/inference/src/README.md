@@ -63,6 +63,9 @@ completion variant.
   change is approved.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
+- Matching llama.cpp sidecar starts should be reused when the requested mode,
+  model, multimodal projection, and device config already match the live
+  runtime so lifecycle metrics stay backend-owned and authoritative.
 
 ## Revisit Triggers
 

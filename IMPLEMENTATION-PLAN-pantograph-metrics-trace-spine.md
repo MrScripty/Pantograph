@@ -408,6 +408,9 @@ Update during implementation:
 - 2026-04-13: Thirty-second implementation slice added direct Tauri channel
   transport coverage for workflow event emission so the adapter `send()` path
   is exercised with a real IPC channel instead of only translation helpers.
+- 2026-04-13: Thirty-third implementation slice added backend-owned llama.cpp
+  runtime reuse detection so identical sidecar mode/model/device starts return
+  structured reuse outcomes instead of forcing a fresh runtime start.
 
 ## Commit Cadence Notes
 
@@ -527,6 +530,10 @@ Update during implementation:
   `src-tauri/src/workflow/event_adapter.rs` so workflow event transport is
   covered through the real `tauri::ipc::Channel` send path instead of only the
   lower-level translation helper
+- Thirty-third implementation slice added across `crates/inference/src/server.rs`,
+  `crates/inference/src/backend/llamacpp.rs`, and `crates/inference/src/README.md`
+  so matching llama.cpp sidecar starts now reuse the active runtime with
+  structured lifecycle reasons and direct backend tests
 
 ### Deviations
 

@@ -81,11 +81,20 @@ pub enum ServerMode {
         port: u16,
         model_path: String,
         mmproj_path: Option<String>,
+        device: DeviceConfig,
     },
     /// Sidecar running in embedding mode (for RAG indexing)
-    SidecarEmbedding { port: u16, model_path: String },
+    SidecarEmbedding {
+        port: u16,
+        model_path: String,
+        device: DeviceConfig,
+    },
     /// Sidecar running in reranking mode
-    SidecarReranking { port: u16, model_path: String },
+    SidecarReranking {
+        port: u16,
+        model_path: String,
+        device: DeviceConfig,
+    },
 }
 
 /// Information about current server mode for frontend
@@ -257,6 +266,7 @@ impl LlamaServer {
             port,
             model_path: model_path.to_string(),
             mmproj_path: mmproj_path.map(|s| s.to_string()),
+            device: device.clone(),
         };
 
         self.wait_for_ready(rx).await
@@ -321,6 +331,7 @@ impl LlamaServer {
         self.mode = ServerMode::SidecarEmbedding {
             port,
             model_path: model_path.to_string(),
+            device: device.clone(),
         };
 
         self.wait_for_ready(rx).await
@@ -378,6 +389,7 @@ impl LlamaServer {
         self.mode = ServerMode::SidecarReranking {
             port,
             model_path: model_path.to_string(),
+            device: device.clone(),
         };
 
         self.wait_for_ready(rx).await
@@ -565,9 +577,59 @@ impl LlamaServer {
         matches!(self.mode, ServerMode::SidecarReranking { .. })
     }
 
+    pub fn matches_inference_runtime(
+        &self,
+        model_path: &str,
+        mmproj_path: Option<&str>,
+        device: &DeviceConfig,
+    ) -> bool {
+        self.ready
+            && matches!(
+                &self.mode,
+                ServerMode::SidecarInference {
+                    model_path: active_model_path,
+                    mmproj_path: active_mmproj_path,
+                    device: active_device,
+                    ..
+                } if active_model_path == model_path
+                    && active_mmproj_path.as_deref() == mmproj_path
+                    && active_device == device
+            )
+    }
+
+    pub fn matches_embedding_runtime(&self, model_path: &str, device: &DeviceConfig) -> bool {
+        self.ready
+            && matches!(
+                &self.mode,
+                ServerMode::SidecarEmbedding {
+                    model_path: active_model_path,
+                    device: active_device,
+                    ..
+                } if active_model_path == model_path && active_device == device
+            )
+    }
+
+    pub fn matches_reranking_runtime(&self, model_path: &str, device: &DeviceConfig) -> bool {
+        self.ready
+            && matches!(
+                &self.mode,
+                ServerMode::SidecarReranking {
+                    model_path: active_model_path,
+                    device: active_device,
+                    ..
+                } if active_model_path == model_path && active_device == device
+            )
+    }
+
     /// Get the current mode
     pub fn current_mode(&self) -> &ServerMode {
         &self.mode
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_test_runtime_state(&mut self, mode: ServerMode, ready: bool) {
+        self.mode = mode;
+        self.ready = ready;
     }
 
     pub fn status(&self) -> LLMStatus {

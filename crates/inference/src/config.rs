@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::constants::defaults;
 
 /// Device configuration for inference
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeviceConfig {
     /// Device identifier (e.g., "Vulkan0", "Vulkan1", "none" for CPU-only)
     pub device: String,
