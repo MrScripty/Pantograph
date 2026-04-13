@@ -468,7 +468,13 @@ pub(crate) fn resolve_runtime_model_target(
     mode_info: &crate::config::ServerModeInfo,
     snapshot: &inference::RuntimeLifecycleSnapshot,
 ) -> Option<String> {
-    if snapshot.runtime_id.as_deref() == Some("llama.cpp.embedding") {
+    if snapshot
+        .runtime_id
+        .as_deref()
+        .map(canonical_runtime_id)
+        .as_deref()
+        == Some("llama.cpp.embedding")
+    {
         return mode_info.embedding_model_target.clone();
     }
     mode_info.active_model_target.clone()
@@ -806,7 +812,8 @@ async fn run_session_graph_snapshot(
 #[cfg(test)]
 mod tests {
     use super::{
-        diagnostics_runtime_trace_metrics, is_llamacpp_backend_name, trace_runtime_metrics,
+        diagnostics_runtime_trace_metrics, is_llamacpp_backend_name, resolve_runtime_model_target,
+        trace_runtime_metrics,
     };
 
     #[test]
@@ -908,6 +915,39 @@ mod tests {
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
             Some("reused_embedding_runtime")
+        );
+    }
+
+    #[test]
+    fn resolve_runtime_model_target_prefers_embedding_target_for_embedding_alias() {
+        let mode_info = crate::config::ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: None,
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: None,
+            embedding_runtime: None,
+        };
+        let snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama_cpp_embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
+            warmup_started_at_ms: None,
+            warmup_completed_at_ms: None,
+            warmup_duration_ms: None,
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            active: true,
+            last_error: None,
+        };
+
+        assert_eq!(
+            resolve_runtime_model_target(&mode_info, &snapshot).as_deref(),
+            Some("/models/embed.gguf")
         );
     }
 }
