@@ -1,12 +1,15 @@
 use async_trait::async_trait;
+use pantograph_workflow_service::graph::WorkflowSessionKind;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
-    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowSchedulerSnapshotResponse,
+    WorkflowService, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -364,6 +367,60 @@ fn workflow_trace_contract_snapshot() {
             }]
         }],
         "retained_trace_limit": 200
+    });
+
+    assert_eq!(value, expected);
+}
+
+#[test]
+fn workflow_scheduler_snapshot_response_contract_snapshot() {
+    let response = WorkflowSchedulerSnapshotResponse {
+        workflow_id: Some("wf-1".to_string()),
+        session_id: "session-1".to_string(),
+        trace_execution_id: Some("run-1".to_string()),
+        session: WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-1".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 2,
+        },
+        items: vec![WorkflowSessionQueueItem {
+            queue_id: "queue-1".to_string(),
+            run_id: Some("run-1".to_string()),
+            enqueued_at_ms: Some(100),
+            dequeued_at_ms: Some(110),
+            priority: 5,
+            status: WorkflowSessionQueueItemStatus::Running,
+        }],
+    };
+
+    let value = serde_json::to_value(response).expect("serialize scheduler snapshot");
+    let expected = serde_json::json!({
+        "workflow_id": "wf-1",
+        "session_id": "session-1",
+        "trace_execution_id": "run-1",
+        "session": {
+            "session_id": "session-1",
+            "workflow_id": "wf-1",
+            "session_kind": "workflow",
+            "usage_profile": "interactive",
+            "keep_alive": true,
+            "state": "running",
+            "queued_runs": 1,
+            "run_count": 2
+        },
+        "items": [{
+            "queue_id": "queue-1",
+            "run_id": "run-1",
+            "enqueued_at_ms": 100,
+            "dequeued_at_ms": 110,
+            "priority": 5,
+            "status": "running"
+        }]
     });
 
     assert_eq!(value, expected);

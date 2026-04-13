@@ -4745,6 +4745,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pending_queue() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            for run_id in ["queued-run-1", "queued-run-2"] {
+                store
+                    .enqueue_run(
+                        &created.session_id,
+                        &WorkflowSessionRunRequest {
+                            session_id: created.session_id.clone(),
+                            inputs: Vec::new(),
+                            output_targets: None,
+                            timeout_ms: None,
+                            run_id: Some(run_id.to_string()),
+                            priority: None,
+                        },
+                    )
+                    .expect("enqueue run");
+            }
+        }
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("scheduler snapshot");
+
+        assert_eq!(snapshot.trace_execution_id, None);
+        assert_eq!(snapshot.items.len(), 2);
+        assert!(
+            snapshot
+                .items
+                .iter()
+                .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+        );
+    }
+
+    #[tokio::test]
     async fn workflow_session_queue_items_include_authoritative_timestamps() {
         let host = MockWorkflowHost::new(8, 1024);
         let service = WorkflowService::new();
