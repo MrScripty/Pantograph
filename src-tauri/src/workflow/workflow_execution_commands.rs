@@ -11,10 +11,10 @@ use crate::llm::startup::{
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 use pantograph_workflow_service::{
-    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
-    ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, Position,
-    UndoRedoState, WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
+    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
@@ -22,9 +22,9 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowTraceRuntimeMetrics,
+    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
 };
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, ipc::Channel};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -326,7 +326,7 @@ async fn prepare_embedding_runtime(
     }
 
     let backend_name = gateway.current_backend_name().await;
-    if backend_name != "llama.cpp" {
+    if !is_llamacpp_backend_name(&backend_name) {
         return Err(format!(
             "Embedding nodes currently require the `llama.cpp` backend, but active backend is '{}'",
             backend_name
@@ -391,6 +391,10 @@ async fn prepare_embedding_runtime(
         .map_err(|e| format!("Failed to start llama.cpp in embedding mode: {}", e))?;
 
     Ok(restore_config)
+}
+
+fn is_llamacpp_backend_name(backend_name: &str) -> bool {
+    inference::backend::canonical_backend_key(backend_name) == "llama_cpp"
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {
@@ -777,7 +781,17 @@ async fn run_session_graph_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::{diagnostics_runtime_trace_metrics, trace_runtime_metrics};
+    use super::{
+        diagnostics_runtime_trace_metrics, is_llamacpp_backend_name, trace_runtime_metrics,
+    };
+
+    #[test]
+    fn llama_cpp_backend_gate_accepts_stable_aliases() {
+        assert!(is_llamacpp_backend_name("llama.cpp"));
+        assert!(is_llamacpp_backend_name("llama_cpp"));
+        assert!(is_llamacpp_backend_name("llamacpp"));
+        assert!(!is_llamacpp_backend_name("ollama"));
+    }
 
     #[test]
     fn trace_runtime_metrics_prefers_backend_lifecycle_reason() {

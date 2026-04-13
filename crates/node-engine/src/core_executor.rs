@@ -16,7 +16,7 @@ use inference::InferenceGateway;
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
-use crate::extensions::{extension_keys, ExecutorExtensions};
+use crate::extensions::{ExecutorExtensions, extension_keys};
 use crate::model_dependencies::{
     DependencyState, ModelDependencyBinding, ModelDependencyRequest, ModelDependencyResolver,
     ModelRefV2,
@@ -902,7 +902,8 @@ fn execute_expand_settings(
         for param in schema {
             if let Some(key) = param.get("key").and_then(|k| k.as_str()) {
                 let value = read_optional_input_value(inputs, key).unwrap_or_else(|| {
-                    param.get("default")
+                    param
+                        .get("default")
                         .cloned()
                         .unwrap_or(serde_json::Value::Null)
                 });
@@ -1197,7 +1198,7 @@ fn canonical_backend_key(value: Option<&str>) -> Option<String> {
         .map(|v| v.trim().to_lowercase())
         .filter(|v| !v.is_empty())?;
     match normalized.as_str() {
-        "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+        "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
         "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
         "torch" | "pytorch" => Some("pytorch".to_string()),
         "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
@@ -1569,9 +1570,7 @@ impl TaskExecutor for CoreTaskExecutor {
                 .await
             }
             #[cfg(feature = "inference-nodes")]
-            "reranker" => {
-                execute_reranker(self.gateway.as_ref(), &inputs).await
-            }
+            "reranker" => execute_reranker(self.gateway.as_ref(), &inputs).await,
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
@@ -1728,7 +1727,10 @@ fn parse_reranker_documents_input(
         return parse_reranker_documents(value);
     }
 
-    if let Some(raw) = inputs.get("documents_json").and_then(|value| value.as_str()) {
+    if let Some(raw) = inputs
+        .get("documents_json")
+        .and_then(|value| value.as_str())
+    {
         let parsed: serde_json::Value = serde_json::from_str(raw).map_err(|e| {
             NodeEngineError::ExecutionFailed(format!(
                 "Reranker documents_json must be valid JSON: {}",
@@ -2008,7 +2010,10 @@ async fn execute_reranker(
     if let Some(v) = extra_settings.get("gpu_layers").and_then(|v| v.as_i64()) {
         config.gpu_layers = Some(v as i32);
     }
-    if let Some(v) = extra_settings.get("context_length").and_then(|v| v.as_i64()) {
+    if let Some(v) = extra_settings
+        .get("context_length")
+        .and_then(|v| v.as_i64())
+    {
         config.context_size = Some(v as u32);
     }
     extra_settings.remove("gpu_layers");
@@ -2044,9 +2049,7 @@ async fn execute_reranker(
             extra_options: serde_json::Value::Object(extra_settings.into_iter().collect()),
         })
         .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!("Reranker request failed: {}", e))
-        })?;
+        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Reranker request failed: {}", e)))?;
 
     let scores = response
         .results
@@ -2065,7 +2068,10 @@ async fn execute_reranker(
         serde_json::to_value(&response.results).unwrap_or(serde_json::Value::Null),
     );
     outputs.insert("scores".to_string(), serde_json::json!(scores));
-    outputs.insert("model_path".to_string(), serde_json::json!(model_path.clone()));
+    outputs.insert(
+        "model_path".to_string(),
+        serde_json::json!(model_path.clone()),
+    );
     outputs.insert(
         "model_ref".to_string(),
         serde_json::json!({
@@ -2109,7 +2115,7 @@ async fn execute_embedding(
     }
 
     let backend_name = gw.current_backend_name().await;
-    if backend_name != "llama.cpp" {
+    if !is_llamacpp_backend_name(&backend_name) {
         return Err(NodeEngineError::ExecutionFailed(format!(
             "LlamaCpp Embedding blocked execution: active backend '{}' is not supported",
             backend_name
@@ -2183,6 +2189,11 @@ async fn execute_embedding(
     }
 
     Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+fn is_llamacpp_backend_name(backend_name: &str) -> bool {
+    canonical_backend_key(Some(backend_name)).as_deref() == Some("llamacpp")
 }
 
 /// Parse a llama.cpp `/completion` SSE data line into a content token.
@@ -2858,30 +2869,31 @@ async fn execute_pytorch_inference(
                     match item {
                         Ok(token_obj) => {
                             // Try dict first: {"mode": "append"|"replace", "text": "..."}
-                            let result =
-                                if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
-                                    let mode = dict
-                                        .get_item("mode")
-                                        .ok()
-                                        .flatten()
-                                        .and_then(|v| v.extract::<String>().ok())
-                                        .unwrap_or_else(|| "append".to_string());
-                                    let text = dict
-                                        .get_item("text")
-                                        .ok()
-                                        .flatten()
-                                        .and_then(|v| v.extract::<String>().ok())
-                                        .unwrap_or_default();
-                                    Ok((mode, text))
-                                } else if let Ok(text) = token_obj.extract::<String>() {
-                                    // Backwards compat: plain string → append
-                                    Ok(("append".to_string(), text))
-                                } else {
-                                    Err(format!(
+                            let result = if let Ok(dict) =
+                                token_obj.downcast::<pyo3::types::PyDict>()
+                            {
+                                let mode = dict
+                                    .get_item("mode")
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.extract::<String>().ok())
+                                    .unwrap_or_else(|| "append".to_string());
+                                let text = dict
+                                    .get_item("text")
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|v| v.extract::<String>().ok())
+                                    .unwrap_or_default();
+                                Ok((mode, text))
+                            } else if let Ok(text) = token_obj.extract::<String>() {
+                                // Backwards compat: plain string → append
+                                Ok(("append".to_string(), text))
+                            } else {
+                                Err(format!(
                                     "Token extraction failed: expected dict or string, got {:?}",
                                     token_obj.get_type().name()
                                 ))
-                                };
+                            };
                             if tx.blocking_send(result).is_err() {
                                 return;
                             }
@@ -4153,6 +4165,10 @@ mod tests {
             Some("llamacpp".to_string())
         );
         assert_eq!(
+            canonical_backend_key(Some("llama_cpp")),
+            Some("llamacpp".to_string())
+        );
+        assert_eq!(
             canonical_backend_key(Some("torch")),
             Some("pytorch".to_string())
         );
@@ -4160,6 +4176,15 @@ mod tests {
             canonical_backend_key(Some("stable-audio")),
             Some("stable_audio".to_string())
         );
+    }
+
+    #[cfg(feature = "inference-nodes")]
+    #[test]
+    fn test_is_llamacpp_backend_name_accepts_aliases() {
+        assert!(is_llamacpp_backend_name("llama.cpp"));
+        assert!(is_llamacpp_backend_name("llama_cpp"));
+        assert!(is_llamacpp_backend_name("llamacpp"));
+        assert!(!is_llamacpp_backend_name("pytorch"));
     }
 
     #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
