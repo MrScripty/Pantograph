@@ -536,7 +536,9 @@ async fn emit_diagnostics_snapshots(
         extensions,
         workflow_service,
         None,
-    ) {
+    )
+    .await
+    {
         Ok(runtime) => runtime,
         Err(error) => {
             let active_runtime_snapshot = diagnostics_active_runtime_snapshot(

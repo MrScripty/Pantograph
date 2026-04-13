@@ -10,10 +10,12 @@ use async_trait::async_trait;
 use pantograph_embedded_runtime::{
     EmbeddedRuntime, EmbeddedRuntimeConfig, RagBackend, RagDocument,
 };
+use pantograph_runtime_identity::backend_key_aliases;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
     WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
     WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
     WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
@@ -69,7 +71,34 @@ impl RagBackend for TauriRagBackend {
     }
 }
 
-pub(super) fn build_runtime(
+fn embedding_runtime_capabilities_from_snapshot(
+    snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+) -> Vec<WorkflowRuntimeCapability> {
+    let Some(snapshot) = snapshot else {
+        return Vec::new();
+    };
+
+    vec![WorkflowRuntimeCapability {
+        runtime_id: snapshot
+            .runtime_id
+            .clone()
+            .unwrap_or_else(|| "llama.cpp.embedding".to_string()),
+        display_name: "Dedicated embedding runtime".to_string(),
+        install_state: WorkflowRuntimeInstallState::Installed,
+        available: snapshot.active,
+        configured: snapshot.active,
+        can_install: false,
+        can_remove: false,
+        source_kind: WorkflowRuntimeSourceKind::Host,
+        selected: false,
+        supports_external_connection: false,
+        backend_keys: backend_key_aliases("llama.cpp", "llama_cpp"),
+        missing_files: Vec::new(),
+        unavailable_reason: snapshot.last_error,
+    }]
+}
+
+pub(super) async fn build_runtime(
     app: &AppHandle,
     gateway: &SharedGateway,
     extensions: &SharedExtensions,
@@ -77,6 +106,9 @@ pub(super) fn build_runtime(
     rag_manager: Option<&SharedRagManager>,
 ) -> Result<EmbeddedRuntime, String> {
     let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
+    let additional_runtime_capabilities = embedding_runtime_capabilities_from_snapshot(
+        gateway.embedding_runtime_lifecycle_snapshot().await,
+    );
     let rag_backend = rag_manager.cloned().map(|manager| {
         Arc::new(TauriRagBackend {
             rag_manager: manager,
@@ -88,7 +120,8 @@ pub(super) fn build_runtime(
         extensions.clone(),
         workflow_service.clone(),
         rag_backend,
-    ))
+    )
+    .with_additional_runtime_capabilities(additional_runtime_capabilities))
 }
 
 fn record_headless_scheduler_snapshot(
@@ -355,7 +388,8 @@ pub async fn workflow_run(
         extensions.inner(),
         workflow_service.inner(),
         Some(rag_manager.inner()),
-    )?;
+    )
+    .await?;
     runtime
         .workflow_run(request)
         .await
@@ -375,7 +409,8 @@ pub async fn workflow_get_capabilities(
         extensions.inner(),
         workflow_service.inner(),
         None,
-    )?;
+    )
+    .await?;
     runtime
         .workflow_get_capabilities(request)
         .await
@@ -395,7 +430,8 @@ pub async fn workflow_get_io(
         extensions.inner(),
         workflow_service.inner(),
         None,
-    )?;
+    )
+    .await?;
     runtime
         .workflow_get_io(request)
         .await
@@ -415,7 +451,8 @@ pub async fn workflow_preflight(
         extensions.inner(),
         workflow_service.inner(),
         None,
-    )?;
+    )
+    .await?;
     runtime
         .workflow_preflight(request)
         .await
@@ -435,7 +472,8 @@ pub async fn workflow_create_session(
         extensions.inner(),
         workflow_service.inner(),
         None,
-    )?;
+    )
+    .await?;
     runtime
         .create_workflow_session(request)
         .await
@@ -456,7 +494,8 @@ pub async fn workflow_run_session(
         extensions.inner(),
         workflow_service.inner(),
         Some(rag_manager.inner()),
-    )?;
+    )
+    .await?;
     runtime
         .run_workflow_session(request)
         .await
@@ -476,7 +515,8 @@ pub async fn workflow_close_session(
         extensions.inner(),
         workflow_service.inner(),
         None,
-    )?;
+    )
+    .await?;
     runtime
         .close_workflow_session(request)
         .await
@@ -543,7 +583,8 @@ pub async fn workflow_set_session_keep_alive(
         extensions.inner(),
         workflow_service.inner(),
         None,
-    )?;
+    )
+    .await?;
     runtime
         .workflow_set_session_keep_alive(request)
         .await
@@ -580,7 +621,8 @@ pub async fn workflow_get_diagnostics_snapshot(
             extensions.inner(),
             workflow_service.inner(),
             None,
-        )?;
+        )
+        .await?;
         Some(
             runtime
                 .workflow_get_capabilities(WorkflowCapabilitiesRequest {
@@ -649,10 +691,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
-        stored_runtime_trace_metrics, workflow_clear_diagnostics_history_response,
-        workflow_diagnostics_snapshot_projection, workflow_scheduler_snapshot_response,
-        workflow_trace_snapshot_response,
+        embedding_runtime_capabilities_from_snapshot, record_headless_runtime_snapshot,
+        record_headless_scheduler_snapshot, stored_runtime_trace_metrics,
+        workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
+        workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
     };
     use crate::workflow::diagnostics::{
         WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
@@ -661,10 +703,10 @@ mod tests {
     use pantograph_workflow_service::{
         WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowGraph,
         WorkflowGraphEditSessionCreateRequest, WorkflowRuntimeRequirements,
-        WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
-        WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-        WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
-        WorkflowTraceSnapshotRequest,
+        WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotRequest,
+        WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
+        WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     };
 
     fn running_session_summary() -> WorkflowSessionSummary {
@@ -983,6 +1025,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn embedding_runtime_capability_helper_reports_dedicated_runtime() {
+        let capabilities = embedding_runtime_capabilities_from_snapshot(Some(
+            inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-9".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_embedding_runtime".to_string()),
+                active: true,
+                last_error: None,
+            },
+        ));
+
+        assert_eq!(capabilities.len(), 1);
+        let capability = &capabilities[0];
+        assert_eq!(capability.runtime_id, "llama.cpp.embedding");
+        assert_eq!(capability.display_name, "Dedicated embedding runtime");
+        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Host);
+        assert!(capability.available);
+        assert!(capability.configured);
+        assert!(!capability.selected);
+        assert!(capability.backend_keys.contains(&"llama_cpp".to_string()));
+        assert!(capability.backend_keys.contains(&"llamacpp".to_string()));
+    }
+
+    #[test]
+    fn embedding_runtime_capability_helper_omits_missing_snapshot() {
+        assert!(embedding_runtime_capabilities_from_snapshot(None).is_empty());
+    }
+
     #[tokio::test]
     async fn workflow_scheduler_snapshot_response_reads_backend_owned_service_snapshot() {
         let workflow_service = Arc::new(WorkflowService::new());
@@ -1115,10 +1190,8 @@ mod tests {
         .expect_err("blank execution id should be rejected");
 
         assert!(error.contains("\"code\":\"invalid_request\""));
-        assert!(
-            error
-                .contains("workflow trace snapshot request field 'execution_id' must not be blank")
-        );
+        assert!(error
+            .contains("workflow trace snapshot request field 'execution_id' must not be blank"));
     }
 
     #[test]

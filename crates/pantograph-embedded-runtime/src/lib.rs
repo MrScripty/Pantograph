@@ -163,6 +163,7 @@ pub struct EmbeddedRuntime {
     workflow_service: SharedWorkflowService,
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
+    additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }
 
 impl EmbeddedRuntime {
@@ -181,6 +182,7 @@ impl EmbeddedRuntime {
             workflow_service,
             rag_backend,
             python_runtime,
+            additional_runtime_capabilities: Vec::new(),
         }
     }
 
@@ -256,6 +258,14 @@ impl EmbeddedRuntime {
         &self.config
     }
 
+    pub fn with_additional_runtime_capabilities(
+        mut self,
+        capabilities: Vec<WorkflowRuntimeCapability>,
+    ) -> Self {
+        self.additional_runtime_capabilities = capabilities;
+        self
+    }
+
     pub fn workflow_service(&self) -> &SharedWorkflowService {
         &self.workflow_service
     }
@@ -281,6 +291,7 @@ impl EmbeddedRuntime {
             extensions: self.extensions.clone(),
             rag_backend: self.rag_backend.clone(),
             python_runtime: self.python_runtime.clone(),
+            additional_runtime_capabilities: self.additional_runtime_capabilities.clone(),
         }
     }
 
@@ -569,6 +580,7 @@ struct EmbeddedWorkflowHost {
     extensions: SharedExtensions,
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
+    additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }
 
 impl EmbeddedWorkflowHost {
@@ -912,6 +924,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             python_runtime::resolve_python_executable_for_env_ids(&[]),
             &selected_backend_key,
         ));
+        runtimes.extend(self.additional_runtime_capabilities.clone());
         runtimes.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
         Ok(runtimes)
     }
@@ -1504,5 +1517,61 @@ mod tests {
             .expect("candle capability");
         assert_eq!(candle.source_kind, WorkflowRuntimeSourceKind::Host);
         assert!(candle.selected);
+    }
+
+    #[tokio::test]
+    async fn workflow_capabilities_include_injected_runtime_capabilities() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_additional_runtime_capabilities(vec![WorkflowRuntimeCapability {
+            runtime_id: "llama.cpp.embedding".to_string(),
+            display_name: "Dedicated embedding runtime".to_string(),
+            install_state: WorkflowRuntimeInstallState::Installed,
+            available: true,
+            configured: true,
+            can_install: false,
+            can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::Host,
+            selected: false,
+            supports_external_connection: false,
+            backend_keys: vec!["llama_cpp".to_string(), "llamacpp".to_string()],
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        }]);
+
+        let capabilities = runtime
+            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                workflow_id: "runtime-text".to_string(),
+            })
+            .await
+            .expect("workflow capabilities");
+
+        let embedding_runtime = capabilities
+            .runtime_capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "llama.cpp.embedding")
+            .expect("dedicated embedding capability");
+        assert_eq!(
+            embedding_runtime.source_kind,
+            WorkflowRuntimeSourceKind::Host
+        );
+        assert!(!embedding_runtime.selected);
+        assert!(embedding_runtime.available);
     }
 }
