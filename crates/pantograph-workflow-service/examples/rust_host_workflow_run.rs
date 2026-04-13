@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use pantograph_workflow_service::{
     WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
+    WorkflowService, WorkflowServiceError,
 };
 
 struct ExampleHost;
@@ -52,6 +52,9 @@ impl WorkflowHost for ExampleHost {
                 configured: true,
                 can_install: false,
                 can_remove: false,
+                source_kind: WorkflowRuntimeSourceKind::Host,
+                selected: true,
+                supports_external_connection: false,
                 backend_keys: vec!["example-backend".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: None,

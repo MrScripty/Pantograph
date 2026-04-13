@@ -11,7 +11,8 @@ use async_trait::async_trait;
 use pantograph_workflow_service::{
     WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost, WorkflowHostModelDescriptor,
     WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowServiceError, capabilities,
+    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
+    WorkflowServiceError, capabilities,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -150,6 +151,9 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             configured: true,
             can_install: false,
             can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::Host,
+            selected: true,
+            supports_external_connection: false,
             backend_keys: vec![self.backend_name.clone()],
             missing_files: Vec::new(),
             unavailable_reason: None,

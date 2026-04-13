@@ -197,6 +197,8 @@ export type WorkflowRuntimeInstallState =
   | 'missing'
   | 'unsupported';
 
+export type WorkflowRuntimeSourceKind = 'unknown' | 'managed' | 'system' | 'host';
+
 export interface WorkflowRuntimeCapability {
   runtime_id: string;
   display_name: string;
@@ -205,6 +207,9 @@ export interface WorkflowRuntimeCapability {
   configured: boolean;
   can_install: boolean;
   can_remove: boolean;
+  source_kind: WorkflowRuntimeSourceKind;
+  selected: boolean;
+  supports_external_connection: boolean;
   backend_keys: string[];
   missing_files: string[];
   unavailable_reason?: string | null;

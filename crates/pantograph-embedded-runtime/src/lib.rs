@@ -24,7 +24,7 @@ use pantograph_workflow_service::{
     WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunOptions,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowService, WorkflowServiceError,
+    WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind, WorkflowService, WorkflowServiceError,
     WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
     WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
     WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
@@ -581,19 +581,53 @@ impl EmbeddedWorkflowHost {
     fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
         match binary_id {
             inference::ManagedBinaryId::LlamaCpp => {
-                vec!["llama.cpp".to_string(), "llamacpp".to_string()]
+                vec![
+                    "llama_cpp".to_string(),
+                    "llama.cpp".to_string(),
+                    "llamacpp".to_string(),
+                ]
             }
             inference::ManagedBinaryId::Ollama => vec!["ollama".to_string()],
         }
     }
 
+    fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) -> bool {
+        backend_keys.iter().any(|backend_key| {
+            inference::backend::canonical_backend_key(backend_key) == selected_backend_key
+        })
+    }
+
+    fn runtime_supports_external_connection(
+        available_backends: &[inference::BackendInfo],
+        backend_keys: &[String],
+    ) -> bool {
+        let normalized_backend_keys = backend_keys
+            .iter()
+            .map(|backend_key| inference::backend::canonical_backend_key(backend_key))
+            .collect::<HashSet<_>>();
+
+        available_backends.iter().any(|backend| {
+            normalized_backend_keys.contains(&backend.backend_key)
+                && backend.capabilities.external_connection
+        })
+    }
+
     fn python_runtime_capability(
         executable_probe: Result<PathBuf, String>,
+        selected_backend_key: &str,
     ) -> WorkflowRuntimeCapability {
         let (available, unavailable_reason) = match executable_probe {
             Ok(_) => (true, None),
             Err(reason) => (false, Some(reason)),
         };
+        let backend_keys = vec![
+            "pytorch".to_string(),
+            "torch".to_string(),
+            "diffusers".to_string(),
+            "onnx-runtime".to_string(),
+            "onnxruntime".to_string(),
+            "stable_audio".to_string(),
+        ];
 
         WorkflowRuntimeCapability {
             runtime_id: "python-sidecar".to_string(),
@@ -607,14 +641,10 @@ impl EmbeddedWorkflowHost {
             configured: available,
             can_install: false,
             can_remove: false,
-            backend_keys: vec![
-                "pytorch".to_string(),
-                "torch".to_string(),
-                "diffusers".to_string(),
-                "onnx-runtime".to_string(),
-                "onnxruntime".to_string(),
-                "stable_audio".to_string(),
-            ],
+            source_kind: WorkflowRuntimeSourceKind::System,
+            selected: Self::runtime_matches_backend(&backend_keys, selected_backend_key),
+            supports_external_connection: false,
+            backend_keys,
             missing_files: Vec::new(),
             unavailable_reason,
         }
@@ -801,37 +831,50 @@ impl WorkflowHost for EmbeddedWorkflowHost {
     async fn runtime_capabilities(
         &self,
     ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        let selected_backend_key =
+            inference::backend::canonical_backend_key(&self.gateway.current_backend_name().await);
+        let available_backends = self.gateway.available_backends();
         let mut runtimes = inference::list_binary_capabilities(&self.app_data_dir)
             .map_err(WorkflowServiceError::RuntimeNotReady)?
             .into_iter()
-            .map(|runtime| WorkflowRuntimeCapability {
-                runtime_id: runtime.id.key().to_string(),
-                display_name: runtime.display_name,
-                install_state: match runtime.install_state {
-                    inference::ManagedBinaryInstallState::Installed => {
-                        WorkflowRuntimeInstallState::Installed
-                    }
-                    inference::ManagedBinaryInstallState::SystemProvided => {
-                        WorkflowRuntimeInstallState::SystemProvided
-                    }
-                    inference::ManagedBinaryInstallState::Missing => {
-                        WorkflowRuntimeInstallState::Missing
-                    }
-                    inference::ManagedBinaryInstallState::Unsupported => {
-                        WorkflowRuntimeInstallState::Unsupported
-                    }
-                },
-                available: runtime.available,
-                configured: runtime.available,
-                can_install: runtime.can_install,
-                can_remove: runtime.can_remove,
-                backend_keys: Self::runtime_backend_keys(runtime.id),
-                missing_files: runtime.missing_files,
-                unavailable_reason: runtime.unavailable_reason,
+            .map(|runtime| {
+                let backend_keys = Self::runtime_backend_keys(runtime.id);
+                WorkflowRuntimeCapability {
+                    runtime_id: runtime.id.key().to_string(),
+                    display_name: runtime.display_name,
+                    install_state: match runtime.install_state {
+                        inference::ManagedBinaryInstallState::Installed => {
+                            WorkflowRuntimeInstallState::Installed
+                        }
+                        inference::ManagedBinaryInstallState::SystemProvided => {
+                            WorkflowRuntimeInstallState::SystemProvided
+                        }
+                        inference::ManagedBinaryInstallState::Missing => {
+                            WorkflowRuntimeInstallState::Missing
+                        }
+                        inference::ManagedBinaryInstallState::Unsupported => {
+                            WorkflowRuntimeInstallState::Unsupported
+                        }
+                    },
+                    available: runtime.available,
+                    configured: runtime.available,
+                    can_install: runtime.can_install,
+                    can_remove: runtime.can_remove,
+                    source_kind: WorkflowRuntimeSourceKind::Managed,
+                    selected: Self::runtime_matches_backend(&backend_keys, &selected_backend_key),
+                    supports_external_connection: Self::runtime_supports_external_connection(
+                        &available_backends,
+                        &backend_keys,
+                    ),
+                    backend_keys,
+                    missing_files: runtime.missing_files,
+                    unavailable_reason: runtime.unavailable_reason,
+                }
             })
             .collect::<Vec<_>>();
         runtimes.push(Self::python_runtime_capability(
             python_runtime::resolve_python_executable_for_env_ids(&[]),
+            &selected_backend_key,
         ));
         runtimes.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
         Ok(runtimes)
@@ -1303,12 +1346,17 @@ mod tests {
 
     #[test]
     fn python_sidecar_runtime_capability_reports_python_backed_engines() {
-        let capability =
-            EmbeddedWorkflowHost::python_runtime_capability(Ok(PathBuf::from("/usr/bin/python3")));
+        let capability = EmbeddedWorkflowHost::python_runtime_capability(
+            Ok(PathBuf::from("/usr/bin/python3")),
+            "pytorch",
+        );
 
         assert_eq!(capability.runtime_id, "python-sidecar");
         assert!(capability.available);
         assert!(capability.configured);
+        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::System);
+        assert!(capability.selected);
+        assert!(!capability.supports_external_connection);
         assert!(capability.backend_keys.contains(&"pytorch".to_string()));
         assert!(capability.backend_keys.contains(&"diffusers".to_string()));
         assert!(
@@ -1320,13 +1368,16 @@ mod tests {
 
     #[test]
     fn python_sidecar_runtime_capability_keeps_unavailable_reason() {
-        let capability = EmbeddedWorkflowHost::python_runtime_capability(Err(
-            "python executable is not configured".to_string(),
-        ));
+        let capability = EmbeddedWorkflowHost::python_runtime_capability(
+            Err("python executable is not configured".to_string()),
+            "llama_cpp",
+        );
 
         assert_eq!(capability.runtime_id, "python-sidecar");
         assert!(!capability.available);
         assert!(!capability.configured);
+        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::System);
+        assert!(!capability.selected);
         assert_eq!(
             capability.unavailable_reason.as_deref(),
             Some("python executable is not configured")

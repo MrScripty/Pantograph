@@ -135,6 +135,16 @@ pub enum WorkflowRuntimeInstallState {
     Unsupported,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRuntimeSourceKind {
+    #[default]
+    Unknown,
+    Managed,
+    System,
+    Host,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRuntimeCapability {
@@ -145,6 +155,12 @@ pub struct WorkflowRuntimeCapability {
     pub configured: bool,
     pub can_install: bool,
     pub can_remove: bool,
+    #[serde(default)]
+    pub source_kind: WorkflowRuntimeSourceKind,
+    #[serde(default)]
+    pub selected: bool,
+    #[serde(default)]
+    pub supports_external_connection: bool,
     #[serde(default)]
     pub backend_keys: Vec<String>,
     #[serde(default)]
@@ -2939,6 +2955,9 @@ mod tests {
             configured: true,
             can_install: false,
             can_remove: true,
+            source_kind: WorkflowRuntimeSourceKind::Managed,
+            selected: true,
+            supports_external_connection: true,
             backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
             missing_files: Vec::new(),
             unavailable_reason: None,

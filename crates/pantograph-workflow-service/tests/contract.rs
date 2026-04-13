@@ -4,12 +4,12 @@ use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowSchedulerSnapshotResponse,
-    WorkflowService, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
-    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
+    WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
+    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+    WorkflowSessionSummary, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
+    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -53,6 +53,9 @@ impl WorkflowHost for ContractHost {
                 configured: true,
                 can_install: false,
                 can_remove: true,
+                source_kind: WorkflowRuntimeSourceKind::Managed,
+                selected: true,
+                supports_external_connection: true,
                 backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
                 missing_files: Vec::new(),
                 unavailable_reason: None,
@@ -217,6 +220,9 @@ async fn workflow_capabilities_contract_snapshot() {
             "configured": true,
             "can_install": false,
             "can_remove": true,
+            "source_kind": "managed",
+            "selected": true,
+            "supports_external_connection": true,
             "backend_keys": ["llamacpp", "llama.cpp"],
             "missing_files": [],
             "unavailable_reason": null

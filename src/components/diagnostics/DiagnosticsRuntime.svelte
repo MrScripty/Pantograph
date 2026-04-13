@@ -232,6 +232,15 @@
                   <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
                     Remove: {capability.can_remove ? 'allowed' : 'blocked'}
                   </div>
+                  <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+                    Source: {capability.source_kind}
+                  </div>
+                  <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+                    Selected: {capability.selected ? 'yes' : 'no'}
+                  </div>
+                  <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+                    External Attach: {capability.supports_external_connection ? 'supported' : 'not supported'}
+                  </div>
                 </div>
 
                 {#if capability.backend_keys.length > 0}
