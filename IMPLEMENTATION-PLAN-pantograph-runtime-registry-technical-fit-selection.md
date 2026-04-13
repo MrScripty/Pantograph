@@ -434,6 +434,10 @@ runtime callers.
 - 2026-04-13: `crates/pantograph-runtime-registry` now owns initial admission
   budget primitives plus RAM/VRAM rejection reasons and tested safety-margin
   checks for reservation requests.
+- 2026-04-13: The live embedded-runtime reservation path now forwards workflow
+  memory estimates into registry reservation requests, and repeated runtime
+  registration preserves any previously configured admission budget instead of
+  wiping it.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -536,15 +540,12 @@ refactor lands.
 
 1. Start Milestone 3 by adding backend-owned admission, warmup, retention, and
    eviction policy on top of the completed runtime-registry foundation.
-2. Wire workflow/session runtime requirement facts into registry reservation
-   requests so the new backend admission checks participate in live
-   end-to-end execution paths.
-3. Add warmup/reuse plus retention-hint policy inside the registry boundary
+2. Add warmup/reuse plus retention-hint policy inside the registry boundary
    without moving those decisions into gateway or adapter layers.
-4. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+3. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
    backend-owned registry refactor.
-5. Re-plan immediately if Milestone 3 implementation pressures any of the
+4. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
 
@@ -585,6 +586,9 @@ Update during implementation:
 - 2026-04-13: Milestone 3 started with backend-owned reservation lifecycle
   translation in the embedded host and backend-owned admission budget/rejection
   primitives in `crates/pantograph-runtime-registry`.
+- 2026-04-13: Milestone 3 live reservation wiring now forwards workflow memory
+  estimates into registry requests, and repeated registration no longer clears
+  a preconfigured admission budget.
 
 ## Commit Cadence Notes
 

@@ -110,10 +110,19 @@ impl RuntimeRegistry {
             RuntimeRegistryRecord::new(&runtime_id, &registration.display_name, now_ms)
         });
 
-        record.display_name = registration.display_name.trim().to_string();
-        record.set_backend_keys(registration.backend_keys);
+        let RuntimeRegistration {
+            runtime_id: _,
+            display_name,
+            backend_keys,
+            admission_budget,
+        } = registration;
+
+        record.display_name = display_name.trim().to_string();
+        record.set_backend_keys(backend_keys);
         record.runtime_id = runtime_id.clone();
-        record.admission_budget = registration.admission_budget;
+        if let Some(admission_budget) = admission_budget {
+            record.admission_budget = Some(admission_budget);
+        }
         runtime_snapshot(record)
     }
 
@@ -580,6 +589,61 @@ mod tests {
         let released = registry.snapshot();
         assert!(released.runtimes[0].active_reservation_ids.is_empty());
         assert!(released.reservations.is_empty());
+    }
+
+    #[test]
+    fn register_runtime_without_new_budget_preserves_existing_budget() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(
+            RuntimeRegistration::new("llama.cpp", "llama.cpp").with_admission_budget(
+                RuntimeAdmissionBudget::new(Some(4096), Some(8192))
+                    .with_safety_margin_ram_mb(256)
+                    .with_safety_margin_vram_mb(1024),
+            ),
+        );
+
+        registry.register_runtime(
+            RuntimeRegistration::new("llama.cpp", "llama.cpp")
+                .with_backend_keys(vec!["llama_cpp".to_string()]),
+        );
+        registry
+            .transition_runtime(
+                "llama.cpp",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                },
+            )
+            .expect("ready transition");
+
+        let err = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "llama.cpp".to_string(),
+                workflow_id: "wf-budget".to_string(),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: Some(7200),
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: Some(4096),
+                    estimated_min_ram_mb: None,
+                }),
+            })
+            .expect_err("preserved vram budget should still reject oversized request");
+
+        assert_eq!(
+            err,
+            RuntimeRegistryError::AdmissionRejected {
+                runtime_id: "llama_cpp".to_string(),
+                failure: RuntimeAdmissionFailure::InsufficientVram {
+                    requested_mb: 7200,
+                    available_mb: 7168,
+                    reserved_mb: 0,
+                    total_mb: 8192,
+                    safety_margin_mb: 1024,
+                },
+            }
+        );
     }
 
     #[test]

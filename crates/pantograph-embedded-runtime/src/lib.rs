@@ -8,7 +8,8 @@ use node_engine::{
 };
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
-    RuntimeRegistration, RuntimeReservationRequest, SharedRuntimeRegistry,
+    RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
+    SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -28,14 +29,14 @@ use pantograph_workflow_service::{
     WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunOptions,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind, WorkflowService, WorkflowServiceError,
-    WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
-    WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
+    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRunRequest, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -726,6 +727,27 @@ impl EmbeddedWorkflowHost {
             .map(ToOwned::to_owned)
     }
 
+    fn reservation_requirements(
+        runtime_requirements: &WorkflowRuntimeRequirements,
+    ) -> Option<RuntimeReservationRequirements> {
+        let requirements = RuntimeReservationRequirements {
+            estimated_peak_vram_mb: runtime_requirements.estimated_peak_vram_mb,
+            estimated_peak_ram_mb: runtime_requirements.estimated_peak_ram_mb,
+            estimated_min_vram_mb: runtime_requirements.estimated_min_vram_mb,
+            estimated_min_ram_mb: runtime_requirements.estimated_min_ram_mb,
+        };
+
+        if requirements.estimated_peak_vram_mb.is_none()
+            && requirements.estimated_peak_ram_mb.is_none()
+            && requirements.estimated_min_vram_mb.is_none()
+            && requirements.estimated_min_ram_mb.is_none()
+        {
+            return None;
+        }
+
+        Some(requirements)
+    }
+
     async fn reserve_loaded_session_runtime(
         &self,
         session_id: &str,
@@ -759,6 +781,11 @@ impl EmbeddedWorkflowHost {
             .backend_name
             .clone()
             .unwrap_or_else(|| runtime_id.clone());
+        let requirements = Self::reservation_requirements(
+            &WorkflowHost::workflow_capabilities(self, workflow_id)
+                .await?
+                .runtime_requirements,
+        );
 
         runtime_registry.register_runtime(
             RuntimeRegistration::new(runtime_id.clone(), display_name)
@@ -772,7 +799,7 @@ impl EmbeddedWorkflowHost {
                 usage_profile: Self::trimmed_optional(usage_profile),
                 model_id: mode_info.active_model_target.clone(),
                 pin_runtime: false,
-                requirements: None,
+                requirements,
             })
             .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
 
@@ -1865,5 +1892,34 @@ mod tests {
         );
         assert!(!embedding_runtime.selected);
         assert!(embedding_runtime.available);
+    }
+
+    #[test]
+    fn reservation_requirements_returns_none_when_workflow_estimate_is_unknown() {
+        assert_eq!(
+            EmbeddedWorkflowHost::reservation_requirements(&WorkflowRuntimeRequirements::default()),
+            None
+        );
+    }
+
+    #[test]
+    fn reservation_requirements_maps_workflow_memory_estimates() {
+        let requirements =
+            EmbeddedWorkflowHost::reservation_requirements(&WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(2048),
+                estimated_peak_ram_mb: Some(1024),
+                estimated_min_vram_mb: Some(1536),
+                estimated_min_ram_mb: Some(768),
+                estimation_confidence: "estimated_from_model_sizes".to_string(),
+                required_models: vec!["model-a".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            })
+            .expect("requirements should be forwarded when estimates exist");
+
+        assert_eq!(requirements.estimated_peak_vram_mb, Some(2048));
+        assert_eq!(requirements.estimated_peak_ram_mb, Some(1024));
+        assert_eq!(requirements.estimated_min_vram_mb, Some(1536));
+        assert_eq!(requirements.estimated_min_ram_mb, Some(768));
     }
 }
