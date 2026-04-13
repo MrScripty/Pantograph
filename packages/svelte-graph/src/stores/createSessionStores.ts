@@ -4,7 +4,11 @@
  * Manages which graph is currently loaded, backend sessions, and workflow list.
  */
 import { writable, derived, get } from 'svelte/store';
-import type { WorkflowMetadata } from '../types/workflow.js';
+import type {
+  WorkflowMetadata,
+  WorkflowSessionHandle,
+  WorkflowSessionKind,
+} from '../types/workflow.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import type { WorkflowStores } from './createWorkflowStores.js';
 import type { ViewStores } from './createViewStores.js';
@@ -13,7 +17,7 @@ import { canonicalizeWorkflowGraph } from './canonicalizeWorkflowGraph.ts';
 // --- Types ---
 
 export type GraphType = 'workflow' | 'system';
-export type SessionKind = 'edit' | 'workflow';
+export type SessionKind = WorkflowSessionKind;
 
 export interface GraphInfo {
   id: string;
@@ -109,10 +113,8 @@ export function createSessionStores(
         get(workflowStores.nodeDefinitions),
       );
 
-      const sessionId = await backend.createSession(canonicalGraph);
-      currentSessionKind.set('edit');
-      currentSessionId.set(sessionId);
-      workflowStores.setActiveSessionId(sessionId);
+      const session = await backend.createSession(canonicalGraph);
+      applySessionHandle(session);
 
       workflowStores.loadWorkflow(canonicalGraph, file.metadata);
 
@@ -139,10 +141,8 @@ export function createSessionStores(
 
   async function createNewWorkflow(): Promise<void> {
     const emptyGraph = { nodes: [], edges: [] };
-    const sessionId = await backend.createSession(emptyGraph);
-    currentSessionKind.set('edit');
-    currentSessionId.set(sessionId);
-    workflowStores.setActiveSessionId(sessionId);
+    const session = await backend.createSession(emptyGraph);
+    applySessionHandle(session);
 
     workflowStores.clearWorkflow();
 
@@ -202,6 +202,12 @@ export function createSessionStores(
     }
     // System graphs are consumer-specific — return false
     return false;
+  }
+
+  function applySessionHandle(session: WorkflowSessionHandle): void {
+    currentSessionKind.set(session.session_kind);
+    currentSessionId.set(session.session_id);
+    workflowStores.setActiveSessionId(session.session_id);
   }
 
   return {

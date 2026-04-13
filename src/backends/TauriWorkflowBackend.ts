@@ -13,6 +13,7 @@ import type {
   WorkflowFile,
   WorkflowMetadata,
   WorkflowEvent,
+  WorkflowSessionHandle,
   GraphNode,
   GraphEdge,
   ConnectionAnchor,
@@ -51,8 +52,8 @@ export class TauriWorkflowBackend implements WorkflowBackend {
 
   // --- Session Management ---
 
-  async createSession(graph: WorkflowGraph): Promise<string> {
-    return invoke<string>('create_workflow_session', { graph });
+  async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
+    return invoke<WorkflowSessionHandle>('create_workflow_session', { graph });
   }
 
   async runSession(sessionId: string): Promise<void> {

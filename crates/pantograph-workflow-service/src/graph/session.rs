@@ -38,8 +38,16 @@ pub struct WorkflowGraphEditSessionCreateRequest {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum WorkflowSessionKind {
+    Edit,
+    Workflow,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphEditSessionCreateResponse {
     pub session_id: String,
+    pub session_kind: WorkflowSessionKind,
     pub graph_revision: String,
 }
 
@@ -300,6 +308,7 @@ impl GraphSessionStore {
             .insert(session_id.clone(), session);
         WorkflowGraphEditSessionCreateResponse {
             session_id,
+            session_kind: WorkflowSessionKind::Edit,
             graph_revision,
         }
     }
@@ -802,6 +811,17 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+
+    #[tokio::test]
+    async fn create_session_returns_backend_owned_edit_kind() {
+        let store = GraphSessionStore::new();
+
+        let session = store.create_session(sample_graph()).await;
+
+        assert_eq!(session.session_kind, WorkflowSessionKind::Edit);
+        assert!(!session.session_id.is_empty());
+        assert!(!session.graph_revision.is_empty());
     }
 
     #[tokio::test]

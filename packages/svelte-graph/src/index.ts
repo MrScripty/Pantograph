@@ -31,6 +31,8 @@ export type {
   WorkflowRuntimeCapability,
   WorkflowCapabilityModel,
   WorkflowCapabilitiesResponse,
+  WorkflowSessionHandle,
+  WorkflowSessionKind,
   WorkflowSessionState,
   WorkflowSessionSummary,
   WorkflowSessionQueueItemStatus,

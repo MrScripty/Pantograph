@@ -9,6 +9,7 @@ import type {
   WorkflowBackend,
   WorkflowGraph,
   WorkflowMetadata,
+  WorkflowSessionHandle,
 } from '../index.ts';
 import type { ViewStores } from './createViewStores.ts';
 import type { WorkflowStores } from './createWorkflowStores.ts';
@@ -26,7 +27,10 @@ function createBackendStub(): WorkflowBackend {
     },
     async createSession(_graph: WorkflowGraph) {
       sessionCounter += 1;
-      return `stub-session-${sessionCounter}`;
+      return {
+        session_id: `stub-session-${sessionCounter}`,
+        session_kind: 'edit',
+      } satisfies WorkflowSessionHandle;
     },
     async runSession() {},
     async removeSession() {},

@@ -243,6 +243,13 @@ export interface WorkflowCapabilitiesResponse {
   runtime_capabilities: WorkflowRuntimeCapability[];
 }
 
+export type WorkflowSessionKind = 'edit' | 'workflow';
+
+export interface WorkflowSessionHandle {
+  session_id: string;
+  session_kind: WorkflowSessionKind;
+}
+
 export type WorkflowSessionState = 'idle_loaded' | 'idle_unloaded' | 'running';
 
 export interface WorkflowSessionSummary {

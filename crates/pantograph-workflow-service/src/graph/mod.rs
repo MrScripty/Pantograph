@@ -26,7 +26,7 @@ pub use session::{
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, convert_graph_to_node_engine,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind, convert_graph_to_node_engine,
 };
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,

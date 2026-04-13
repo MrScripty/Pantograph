@@ -915,11 +915,10 @@ pub async fn get_execution_graph(
 pub async fn create_workflow_session(
     graph: WorkflowGraph,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<String, String> {
+) -> Result<pantograph_workflow_service::WorkflowGraphEditSessionCreateResponse, String> {
     workflow_service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest { graph })
         .await
-        .map(|response| response.session_id)
         .map_err(|e| e.to_envelope_json())
 }
 

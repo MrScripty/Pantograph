@@ -74,7 +74,7 @@ stores apply directly instead of reconstructing local state first.
 import { TauriWorkflowBackend } from '../backends/TauriWorkflowBackend';
 
 const backend = new TauriWorkflowBackend();
-const sessionId = await backend.createSession({ nodes: [], edges: [] });
+const session = await backend.createSession({ nodes: [], edges: [] });
 ```
 
 ## API Consumer Contract (Host-Facing Modules)
@@ -87,6 +87,8 @@ const sessionId = await backend.createSession({ nodes: [], edges: [] });
 - `addNode`, `removeNode`, `updateNodeData`, `updateNodePosition`, `addEdge`,
   and `removeEdge` return updated graphs for store synchronization.
 - Session lifecycle ordering remains: create/load session before graph mutation,
+  consume the returned backend session handle instead of hardcoding local
+  session classification,
   use `runSession()` as the preferred execution path for an active editor
   session, and remove the session when the consumer is done.
 - Compatibility policy is additive: new invoke-backed methods should extend the

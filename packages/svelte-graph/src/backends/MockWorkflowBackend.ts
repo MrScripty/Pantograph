@@ -20,6 +20,7 @@ import type {
   WorkflowFile,
   WorkflowMetadata,
   WorkflowEvent,
+  WorkflowSessionHandle,
   GraphNode,
   GraphEdge,
 } from '../types/workflow.js';
@@ -219,10 +220,13 @@ export class MockWorkflowBackend implements WorkflowBackend {
     };
   }
 
-  async createSession(graph: WorkflowGraph): Promise<string> {
+  async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
     const sessionId = `mock-session-${++this.sessionCounter}`;
     this.sessions.set(sessionId, { ...structuredClone(graph), derived_graph: buildDerivedGraph(graph) });
-    return sessionId;
+    return {
+      session_id: sessionId,
+      session_kind: 'edit',
+    };
   }
 
   async runSession(sessionId: string): Promise<void> {

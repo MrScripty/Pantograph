@@ -5,6 +5,7 @@ import type {
   WorkflowEvent,
   WorkflowGraph,
   WorkflowFile,
+  WorkflowSessionHandle,
   WorkflowMetadata,
   WorkflowSessionQueueListResponse,
   WorkflowSessionStatusResponse,
@@ -177,15 +178,18 @@ export class WorkflowService {
    * This enables editing the graph with undo/redo support before running.
    * Returns the session ID which can be used for graph modifications.
    */
-  async createSession(graph: WorkflowGraph): Promise<string> {
+  async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
     if (USE_MOCKS) {
       this.currentExecutionId = 'mock-session-id';
-      return this.currentExecutionId;
+      return {
+        session_id: this.currentExecutionId,
+        session_kind: 'edit',
+      };
     }
 
-    const sessionId = await invoke<string>('create_workflow_session', { graph });
-    this.currentExecutionId = sessionId;
-    return sessionId;
+    const session = await invoke<WorkflowSessionHandle>('create_workflow_session', { graph });
+    this.currentExecutionId = session.session_id;
+    return session;
   }
 
   /**

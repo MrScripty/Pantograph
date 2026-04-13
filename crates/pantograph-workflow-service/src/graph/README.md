@@ -85,6 +85,9 @@ let response = service
 
 ## API Consumer Contract
 - Create an edit session before calling mutation commands.
+- Treat the returned edit-session response as the canonical source for session
+  identity and session kind; transport adapters must not hardcode that
+  classification locally.
 - Treat `graph_revision` as an opaque concurrency token.
 - Expect structured rejection for stale revisions or incompatible connections.
 - Persist graphs explicitly through a `WorkflowGraphStore`; mutations do not autosave.

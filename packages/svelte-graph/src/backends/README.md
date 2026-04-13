@@ -74,16 +74,18 @@ backend implementation.
 import { MockWorkflowBackend } from '@pantograph/svelte-graph';
 
 const backend = new MockWorkflowBackend();
-const sessionId = await backend.createSession({ nodes: [], edges: [] });
+const session = await backend.createSession({ nodes: [], edges: [] });
 const candidates = await backend.getConnectionCandidates(
   { node_id: 'source-node', port_id: 'text' },
-  sessionId,
+  session.session_id,
 );
 ```
 
 ## API Consumer Contract (Host-Facing Modules)
 - `WorkflowBackend` consumers must create a session before calling graph
   mutation or connection-intent methods.
+- `createSession()` returns a backend-owned session handle so consumers do not
+  invent local session classification rules.
 - `WorkflowBackend` consumers should also prefer `runSession(sessionId)` for
   normal editor execution once a session exists; `executeWorkflow(graph)` is the
   fallback path for raw graph snapshots without an active session owner.
