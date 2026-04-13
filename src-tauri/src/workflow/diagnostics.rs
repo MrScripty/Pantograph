@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
-    WorkflowTraceNodeStatus, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
+    WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
 };
 use serde::{Deserialize, Serialize};
 
@@ -330,6 +330,48 @@ impl WorkflowDiagnosticsStore {
     pub fn set_execution_graph(&self, execution_id: &str, graph: &WorkflowGraph) {
         self.trace_store
             .set_execution_graph_context(execution_id, &graph_trace_context(graph));
+    }
+
+    pub fn record_runtime_snapshot(
+        &self,
+        workflow_id: String,
+        execution_id: String,
+        captured_at_ms: u64,
+        capabilities: Option<WorkflowCapabilitiesResponse>,
+        trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        error: Option<String>,
+    ) -> WorkflowDiagnosticsProjection {
+        let event = WorkflowEvent::runtime_snapshot(
+            workflow_id,
+            execution_id,
+            captured_at_ms,
+            capabilities,
+            trace_runtime_metrics,
+            error,
+        );
+        self.record_workflow_event(&event, captured_at_ms)
+    }
+
+    pub fn record_scheduler_snapshot(
+        &self,
+        workflow_id: Option<String>,
+        execution_id: String,
+        session_id: String,
+        captured_at_ms: u64,
+        session: Option<WorkflowSessionSummary>,
+        items: Vec<WorkflowSessionQueueItem>,
+        error: Option<String>,
+    ) -> WorkflowDiagnosticsProjection {
+        let event = WorkflowEvent::scheduler_snapshot(
+            workflow_id,
+            execution_id,
+            session_id,
+            captured_at_ms,
+            session,
+            items,
+            error,
+        );
+        self.record_workflow_event(&event, captured_at_ms)
     }
 
     pub fn update_runtime_snapshot(
@@ -1072,24 +1114,21 @@ mod tests {
     #[test]
     fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
         let store = WorkflowDiagnosticsStore::default();
-        store.record_workflow_event(
-            &WorkflowEvent::RuntimeSnapshot {
-                workflow_id: "wf-runtime".to_string(),
-                execution_id: "exec-runtime".to_string(),
-                captured_at_ms: 5_000,
-                capabilities: None,
-                trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
-                    runtime_id: Some("llama.cpp".to_string()),
-                    runtime_instance_id: Some("llama-cpp-1".to_string()),
-                    warmup_started_at_ms: Some(4_900),
-                    warmup_completed_at_ms: Some(5_000),
-                    warmup_duration_ms: Some(100),
-                    runtime_reused: Some(false),
-                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
-                },
-                error: None,
-            },
+        store.record_runtime_snapshot(
+            "wf-runtime".to_string(),
+            "exec-runtime".to_string(),
             5_000,
+            None,
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: Some(4_900),
+                warmup_completed_at_ms: Some(5_000),
+                warmup_duration_ms: Some(100),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            None,
         );
 
         let trace = store
@@ -1123,33 +1162,30 @@ mod tests {
     #[test]
     fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store() {
         let store = WorkflowDiagnosticsStore::default();
-        store.record_workflow_event(
-            &WorkflowEvent::SchedulerSnapshot {
-                workflow_id: None,
-                execution_id: "edit-session-1".to_string(),
-                session_id: "edit-session-1".to_string(),
-                captured_at_ms: 5_000,
-                session: Some(WorkflowSessionSummary {
-                    session_id: "edit-session-1".to_string(),
-                    workflow_id: "edit-session-1".to_string(),
-                    session_kind: WorkflowSessionKind::Edit,
-                    usage_profile: None,
-                    keep_alive: false,
-                    state: pantograph_workflow_service::WorkflowSessionState::Running,
-                    queued_runs: 1,
-                    run_count: 2,
-                }),
-                items: vec![WorkflowSessionQueueItem {
-                    queue_id: "edit-session-1".to_string(),
-                    run_id: Some("edit-session-1".to_string()),
-                    enqueued_at_ms: Some(4_750),
-                    dequeued_at_ms: Some(4_750),
-                    priority: 0,
-                    status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
-                }],
-                error: None,
-            },
+        store.record_scheduler_snapshot(
+            None,
+            "edit-session-1".to_string(),
+            "edit-session-1".to_string(),
             5_000,
+            Some(WorkflowSessionSummary {
+                session_id: "edit-session-1".to_string(),
+                workflow_id: "edit-session-1".to_string(),
+                session_kind: WorkflowSessionKind::Edit,
+                usage_profile: None,
+                keep_alive: false,
+                state: pantograph_workflow_service::WorkflowSessionState::Running,
+                queued_runs: 1,
+                run_count: 2,
+            }),
+            vec![WorkflowSessionQueueItem {
+                queue_id: "edit-session-1".to_string(),
+                run_id: Some("edit-session-1".to_string()),
+                enqueued_at_ms: Some(4_750),
+                dequeued_at_ms: Some(4_750),
+                priority: 0,
+                status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+            }],
+            None,
         );
 
         let trace = store

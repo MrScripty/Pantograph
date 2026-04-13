@@ -362,6 +362,11 @@ Update during implementation:
   already `Running`, and added diagnostics acceptance coverage so backend-owned
   queue timestamps are verified through the Tauri diagnostics adapter into the
   canonical trace store.
+- 2026-04-12: Eleventh implementation slice added diagnostics-store helpers for
+  runtime and scheduler snapshot events, then moved headless snapshot capture
+  and the interactive runtime-error path onto those helpers so overlay updates
+  cannot diverge from canonical trace recording when execution identity is
+  available.
 
 ## Commit Cadence Notes
 
@@ -417,6 +422,7 @@ Update during implementation:
   `pantograph-workflow-service`, `src-tauri`, and TypeScript contract mirrors
 - Ninth Milestone 1 slice implemented in `pantograph-workflow-service`
 - Tenth implementation slice added in `src-tauri/src/workflow`
+- Eleventh implementation slice added in `src-tauri/src/workflow`
 
 ### Deviations
 
@@ -436,6 +442,8 @@ Update during implementation:
   identity surfaces are available from producers.
 - Decide whether later detailed metrics inspection belongs in the existing
   diagnostics command surface or a dedicated trace/metrics module.
+- Extend snapshot-path acceptance coverage beyond current diagnostics-store
+  helper tests so headless command adapters are exercised directly.
 
 ### Verification Summary
 

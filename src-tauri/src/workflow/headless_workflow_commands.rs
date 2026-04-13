@@ -343,23 +343,25 @@ pub async fn workflow_get_diagnostics_snapshot(
             .await
         {
             Ok(snapshot) => {
-                diagnostics_store.update_scheduler_snapshot(
+                diagnostics_store.record_scheduler_snapshot(
                     snapshot.workflow_id,
-                    Some(snapshot.session_id),
+                    session_id.to_string(),
+                    snapshot.session_id,
+                    captured_at_ms,
                     Some(snapshot.session),
                     snapshot.items,
                     None,
-                    captured_at_ms,
                 );
             }
             Err(error) => {
-                diagnostics_store.update_scheduler_snapshot(
+                diagnostics_store.record_scheduler_snapshot(
                     workflow_id.clone(),
-                    Some(session_id.to_string()),
+                    session_id.to_string(),
+                    session_id.to_string(),
+                    captured_at_ms,
                     None,
                     Vec::new(),
                     Some(error.to_envelope_json()),
-                    captured_at_ms,
                 );
             }
         }
@@ -382,6 +384,9 @@ pub async fn workflow_get_diagnostics_snapshot(
             workflow_service.inner(),
             None,
         )?;
+        let runtime_trace_metrics = super::workflow_execution_commands::trace_runtime_metrics(
+            &gateway.runtime_lifecycle_snapshot().await,
+        );
 
         match runtime
             .workflow_get_capabilities(WorkflowCapabilitiesRequest {
@@ -390,20 +395,42 @@ pub async fn workflow_get_diagnostics_snapshot(
             .await
         {
             Ok(capabilities) => {
-                diagnostics_store.update_runtime_snapshot(
-                    Some(workflow_id),
-                    Some(capabilities),
-                    None,
-                    captured_at_ms,
-                );
+                if let Some(session_id) = session_id.as_deref() {
+                    diagnostics_store.record_runtime_snapshot(
+                        workflow_id,
+                        session_id.to_string(),
+                        captured_at_ms,
+                        Some(capabilities),
+                        runtime_trace_metrics,
+                        None,
+                    );
+                } else {
+                    diagnostics_store.update_runtime_snapshot(
+                        Some(workflow_id),
+                        Some(capabilities),
+                        None,
+                        captured_at_ms,
+                    );
+                }
             }
             Err(error) => {
-                diagnostics_store.update_runtime_snapshot(
-                    Some(workflow_id),
-                    None,
-                    Some(error.to_envelope_json()),
-                    captured_at_ms,
-                );
+                if let Some(session_id) = session_id.as_deref() {
+                    diagnostics_store.record_runtime_snapshot(
+                        workflow_id,
+                        session_id.to_string(),
+                        captured_at_ms,
+                        None,
+                        runtime_trace_metrics,
+                        Some(error.to_envelope_json()),
+                    );
+                } else {
+                    diagnostics_store.update_runtime_snapshot(
+                        Some(workflow_id),
+                        None,
+                        Some(error.to_envelope_json()),
+                        captured_at_ms,
+                    );
+                }
             }
         }
     } else {

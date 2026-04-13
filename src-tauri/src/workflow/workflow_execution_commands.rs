@@ -412,7 +412,7 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn trace_runtime_metrics(
+pub(crate) fn trace_runtime_metrics(
     snapshot: &inference::RuntimeLifecycleSnapshot,
 ) -> WorkflowTraceRuntimeMetrics {
     WorkflowTraceRuntimeMetrics {
@@ -502,20 +502,16 @@ async fn emit_diagnostics_snapshots(
         Err(error) => {
             let runtime_trace_metrics =
                 trace_runtime_metrics(&gateway.runtime_lifecycle_snapshot().await);
-            let _ = channel.send(WorkflowEvent::runtime_snapshot(
+            let runtime_event = WorkflowEvent::runtime_snapshot(
                 runtime_workflow_id.clone(),
                 session_id.to_string(),
                 captured_at_ms,
                 None,
                 runtime_trace_metrics,
                 Some(error.clone()),
-            ));
-            diagnostics_store.update_runtime_snapshot(
-                Some(runtime_workflow_id),
-                None,
-                Some(error),
-                captured_at_ms,
             );
+            diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);
+            let _ = channel.send(runtime_event);
             send_diagnostics_projection(channel, diagnostics_store, session_id);
             return;
         }
