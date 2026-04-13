@@ -117,6 +117,8 @@ pub struct BackendInfo {
 /// Configuration for starting a backend
 #[derive(Debug, Clone, Default)]
 pub struct BackendConfig {
+    /// External OpenAI-compatible base URL (for remote or already-running hosts)
+    pub external_url: Option<String>,
     /// Model file path (for llama.cpp GGUF files)
     pub model_path: Option<std::path::PathBuf>,
     /// Vision projection file path (for llama.cpp mmproj)

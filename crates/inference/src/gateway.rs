@@ -81,6 +81,8 @@ pub struct InferenceGateway {
     embedding_mode: Arc<RwLock<bool>>,
     /// Whether running in reranking mode
     reranking_mode: Arc<RwLock<bool>>,
+    /// Whether the active runtime is an external host connection.
+    external_mode: Arc<RwLock<bool>>,
     /// Last used inference config (for mode switching)
     last_inference_config: Arc<RwLock<Option<BackendConfig>>>,
     /// Current embedding memory mode
@@ -103,6 +105,7 @@ impl InferenceGateway {
             current_backend_name: Arc::new(RwLock::new("llama.cpp".to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
             reranking_mode: Arc::new(RwLock::new(false)),
+            external_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
@@ -122,6 +125,7 @@ impl InferenceGateway {
             current_backend_name: Arc::new(RwLock::new(name.to_string())),
             embedding_mode: Arc::new(RwLock::new(false)),
             reranking_mode: Arc::new(RwLock::new(false)),
+            external_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
@@ -183,6 +187,10 @@ impl InferenceGateway {
                 ..RuntimeLifecycleSnapshot::default()
             };
         }
+        {
+            let mut mode = self.external_mode.write().await;
+            *mode = false;
+        }
 
         log::info!("Switched to backend: {}", name);
         Ok(())
@@ -211,6 +219,10 @@ impl InferenceGateway {
         {
             let mut mode = self.reranking_mode.write().await;
             *mode = config.reranking_mode;
+        }
+        {
+            let mut mode = self.external_mode.write().await;
+            *mode = config.external_url.is_some();
         }
 
         // Store inference config for mode restoration
@@ -317,6 +329,8 @@ impl InferenceGateway {
         *mode = false;
         let mut reranking_mode = self.reranking_mode.write().await;
         *reranking_mode = false;
+        let mut external_mode = self.external_mode.write().await;
+        *external_mode = false;
         let mut lifecycle = self.runtime_lifecycle.write().await;
         lifecycle.active = false;
     }
@@ -336,6 +350,11 @@ impl InferenceGateway {
         *self.reranking_mode.read().await
     }
 
+    /// Check if currently connected to an external runtime host.
+    pub async fn is_external_mode(&self) -> bool {
+        *self.external_mode.read().await
+    }
+
     /// Get the last inference config (for restoring after embedding mode)
     pub async fn last_inference_config(&self) -> Option<BackendConfig> {
         self.last_inference_config.read().await.clone()
@@ -346,11 +365,14 @@ impl InferenceGateway {
         let ready = self.is_ready().await;
         let is_embedding = self.is_embedding_mode().await;
         let is_reranking = self.is_reranking_mode().await;
+        let is_external = self.is_external_mode().await;
         let url = self.base_url().await;
 
         ServerModeInfo {
             mode: if !ready {
                 "none".to_string()
+            } else if is_external {
+                "external".to_string()
             } else if is_embedding {
                 "sidecar_embedding".to_string()
             } else if is_reranking {
@@ -821,5 +843,23 @@ mod tests {
             second.lifecycle_decision_reason.as_deref(),
             Some("reused_mock_runtime")
         );
+    }
+
+    #[tokio::test]
+    async fn test_mode_info_reports_external_runtime_from_start_config() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig {
+                external_url: Some("http://127.0.0.1:1234".to_string()),
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start");
+
+        let mode = gateway.mode_info().await;
+        assert_eq!(mode.mode, "external");
+        assert!(!mode.is_embedding_mode);
     }
 }

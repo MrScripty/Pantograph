@@ -7,6 +7,7 @@ use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::BackendConfig;
 use crate::llm::gateway::SharedGateway;
 use crate::llm::types::LLMStatus;
+use reqwest::Url;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State, command};
 
@@ -154,14 +155,62 @@ pub(crate) fn resolve_embedding_model_path(model_path: &str) -> Result<PathBuf, 
     }
 }
 
+fn validate_external_server_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("External server URL is required".to_string());
+    }
+
+    let parsed = Url::parse(trimmed)
+        .map_err(|e| format!("Invalid external server URL '{}': {}", trimmed, e))?;
+    match parsed.scheme() {
+        "http" | "https" => Ok(trimmed.trim_end_matches('/').to_string()),
+        other => Err(format!(
+            "Unsupported external server URL scheme '{}'. Use http or https.",
+            other
+        )),
+    }
+}
+
+fn llm_status_from_mode_info(info: ServerModeInfo) -> LLMStatus {
+    let mode = match info.mode.as_str() {
+        "none" => "none",
+        "external" => "external",
+        _ => "sidecar",
+    };
+
+    LLMStatus {
+        ready: info.ready,
+        mode: mode.to_string(),
+        url: info.url,
+    }
+}
+
 #[command]
 pub async fn connect_to_server(
-    _gateway: State<'_, SharedGateway>,
-    _url: String,
+    gateway: State<'_, SharedGateway>,
+    url: String,
 ) -> Result<LLMStatus, String> {
-    // TODO: Implement connect_external through gateway interface
-    // For now, this feature is disabled during the gateway migration
-    Err("External server connection not yet supported through gateway".to_string())
+    let external_url = validate_external_server_url(&url)?;
+
+    if gateway.current_backend_name().await != "llama.cpp" {
+        gateway
+            .switch_backend("llama.cpp")
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let backend_config = BackendConfig {
+        external_url: Some(external_url),
+        ..Default::default()
+    };
+
+    gateway
+        .start(&backend_config)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(llm_status_from_mode_info(gateway.mode_info().await))
 }
 
 #[command]
@@ -190,28 +239,12 @@ pub async fn start_sidecar_llm(
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(LLMStatus {
-        ready: gateway.is_ready().await,
-        mode: "sidecar_inference".to_string(),
-        url: gateway.base_url().await,
-    })
+    Ok(llm_status_from_mode_info(gateway.mode_info().await))
 }
 
 #[command]
 pub async fn get_llm_status(gateway: State<'_, SharedGateway>) -> Result<LLMStatus, String> {
-    let ready = gateway.is_ready().await;
-    let url = gateway.base_url().await;
-    let backend_name = gateway.current_backend_name().await;
-
-    Ok(LLMStatus {
-        ready,
-        mode: if ready {
-            format!("sidecar_{}", backend_name)
-        } else {
-            "none".to_string()
-        },
-        url,
-    })
+    Ok(llm_status_from_mode_info(gateway.mode_info().await))
 }
 
 #[command]
@@ -367,4 +400,35 @@ pub async fn start_sidecar_embedding(
 
     log::info!("Started sidecar in embedding mode");
     Ok(gateway.mode_info().await)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{llm_status_from_mode_info, validate_external_server_url};
+    use crate::config::ServerModeInfo;
+
+    #[test]
+    fn validates_external_server_urls() {
+        assert_eq!(
+            validate_external_server_url(" http://127.0.0.1:1234/ ").as_deref(),
+            Ok("http://127.0.0.1:1234")
+        );
+        assert!(validate_external_server_url("").is_err());
+        assert!(validate_external_server_url("ftp://127.0.0.1").is_err());
+    }
+
+    #[test]
+    fn maps_external_mode_info_to_legacy_llm_status() {
+        let status = llm_status_from_mode_info(ServerModeInfo {
+            mode: "external".to_string(),
+            ready: true,
+            url: Some("http://127.0.0.1:1234".to_string()),
+            model_path: None,
+            is_embedding_mode: false,
+        });
+
+        assert!(status.ready);
+        assert_eq!(status.mode, "external");
+        assert_eq!(status.url.as_deref(), Some("http://127.0.0.1:1234"));
+    }
 }

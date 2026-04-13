@@ -18,6 +18,10 @@ use crate::types::LLMStatus;
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
 
+fn normalize_server_url(url: &str) -> String {
+    url.trim_end_matches('/').to_string()
+}
+
 fn is_oom_line(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     if lower.contains("out of memory") {
@@ -162,26 +166,27 @@ impl LlamaServer {
     pub async fn connect_external(&mut self, url: &str) -> Result<(), String> {
         // Stop any existing sidecar
         self.stop();
+        let normalized_url = normalize_server_url(url);
 
         // Validate the URL by making a simple request
         let client = reqwest::Client::new();
-        let health_url = format!("{}/health", url.trim_end_matches('/'));
+        let health_url = format!("{}/health", normalized_url);
 
         match client.get(&health_url).send().await {
             Ok(resp) if resp.status().is_success() => {
                 self.mode = ServerMode::External {
-                    url: url.to_string(),
+                    url: normalized_url,
                 };
                 self.ready = true;
                 Ok(())
             }
             Ok(resp) => {
                 // Some servers don't have /health, try /v1/models instead
-                let models_url = format!("{}/v1/models", url.trim_end_matches('/'));
+                let models_url = format!("{}/v1/models", normalize_server_url(url));
                 match client.get(&models_url).send().await {
                     Ok(resp2) if resp2.status().is_success() => {
                         self.mode = ServerMode::External {
-                            url: url.to_string(),
+                            url: normalize_server_url(url),
                         };
                         self.ready = true;
                         Ok(())
@@ -618,6 +623,15 @@ impl LlamaServer {
                     device: active_device,
                     ..
                 } if active_model_path == model_path && active_device == device
+            )
+    }
+
+    pub fn matches_external_runtime(&self, url: &str) -> bool {
+        let normalized_url = normalize_server_url(url);
+        self.ready
+            && matches!(
+                &self.mode,
+                ServerMode::External { url: active_url } if active_url == &normalized_url
             )
     }
 

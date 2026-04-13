@@ -82,6 +82,10 @@ let spawner = StdProcessSpawner::new(
 - When a backend knows why a runtime was reused or started, it should emit a
   structured lifecycle decision reason rather than leaving adapters to infer a
   generic label.
+- `BackendConfig` may also describe external producer attachment for
+  OpenAI-compatible hosts. When `llama.cpp` is given `external_url`, the
+  backend owns connection validation, external-host reuse detection, and
+  lifecycle reasoning instead of pushing those decisions into Tauri/UI code.
 
 ## Feature Flags
 

@@ -224,6 +224,30 @@ impl InferenceBackend for LlamaCppBackend {
         // Store spawner for later use
         self.spawner = Some(spawner.clone());
 
+        if let Some(external_url) = config.external_url.as_deref() {
+            if config.embedding_mode || config.reranking_mode {
+                return Err(BackendError::Config(
+                    "external_url is only supported for inference mode".to_string(),
+                ));
+            }
+
+            if self.server.matches_external_runtime(external_url) {
+                return Ok(BackendStartOutcome {
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("reused_external_llamacpp_server".to_string()),
+                });
+            }
+
+            self.server
+                .connect_external(external_url)
+                .await
+                .map_err(BackendError::StartupFailed)?;
+            return Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("connected_external_llamacpp_server".to_string()),
+            });
+        }
+
         // Build device config from BackendConfig
         let device_config = DeviceConfig {
             device: config.device.clone().unwrap_or_else(|| "auto".to_string()),
@@ -632,6 +656,56 @@ mod tests {
 
         assert!(
             matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_reuses_matching_external_runtime() {
+        let mut backend = LlamaCppBackend::new();
+        backend.server.set_test_runtime_state(
+            ServerMode::External {
+                url: "http://127.0.0.1:1234".to_string(),
+            },
+            true,
+        );
+
+        let outcome = backend
+            .start(
+                &BackendConfig {
+                    external_url: Some("http://127.0.0.1:1234/".to_string()),
+                    ..BackendConfig::default()
+                },
+                Arc::new(NoopProcessSpawner),
+            )
+            .await
+            .expect("matching external runtime should be reused");
+
+        assert_eq!(outcome.runtime_reused, Some(true));
+        assert_eq!(
+            outcome.lifecycle_decision_reason.as_deref(),
+            Some("reused_external_llamacpp_server")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rejects_external_runtime_for_embedding_mode() {
+        let mut backend = LlamaCppBackend::new();
+
+        let error = backend
+            .start(
+                &BackendConfig {
+                    external_url: Some("http://127.0.0.1:1234".to_string()),
+                    embedding_mode: true,
+                    ..BackendConfig::default()
+                },
+                Arc::new(NoopProcessSpawner),
+            )
+            .await
+            .expect_err("external runtime should be rejected for embedding mode");
+
+        assert!(
+            matches!(error, BackendError::Config(ref message) if message.contains("inference mode")),
             "unexpected error: {error:?}"
         );
     }
