@@ -357,6 +357,11 @@ Update during implementation:
 - 2026-04-12: Ninth implementation slice extended authoritative queue timing
   to graph edit sessions so direct edit-run scheduler snapshots emit concrete
   start timestamps instead of placeholder `None` values.
+- 2026-04-12: Tenth implementation slice taught the trace store to preserve
+  authoritative enqueue timestamps when the first scheduler observation is
+  already `Running`, and added diagnostics acceptance coverage so backend-owned
+  queue timestamps are verified through the Tauri diagnostics adapter into the
+  canonical trace store.
 
 ## Commit Cadence Notes
 
@@ -411,6 +416,7 @@ Update during implementation:
 - Eighth Milestone 1 slice implemented across
   `pantograph-workflow-service`, `src-tauri`, and TypeScript contract mirrors
 - Ninth Milestone 1 slice implemented in `pantograph-workflow-service`
+- Tenth implementation slice added in `src-tauri/src/workflow`
 
 ### Deviations
 
@@ -428,8 +434,6 @@ Update during implementation:
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
-- Extend diagnostics and trace inspection tests once runtime/queue producers
-  emit richer lifecycle payloads.
 - Decide whether later detailed metrics inspection belongs in the existing
   diagnostics command surface or a dedicated trace/metrics module.
 

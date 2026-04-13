@@ -1121,6 +1121,61 @@ mod tests {
     }
 
     #[test]
+    fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store() {
+        let store = WorkflowDiagnosticsStore::default();
+        store.record_workflow_event(
+            &WorkflowEvent::SchedulerSnapshot {
+                workflow_id: None,
+                execution_id: "edit-session-1".to_string(),
+                session_id: "edit-session-1".to_string(),
+                captured_at_ms: 5_000,
+                session: Some(WorkflowSessionSummary {
+                    session_id: "edit-session-1".to_string(),
+                    workflow_id: "edit-session-1".to_string(),
+                    session_kind: WorkflowSessionKind::Edit,
+                    usage_profile: None,
+                    keep_alive: false,
+                    state: pantograph_workflow_service::WorkflowSessionState::Running,
+                    queued_runs: 1,
+                    run_count: 2,
+                }),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "edit-session-1".to_string(),
+                    run_id: Some("edit-session-1".to_string()),
+                    enqueued_at_ms: Some(4_750),
+                    dequeued_at_ms: Some(4_750),
+                    priority: 0,
+                    status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+                }],
+                error: None,
+            },
+            5_000,
+        );
+
+        let trace = store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("edit-session-1".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("scheduler trace");
+
+        assert_eq!(trace.status, WorkflowTraceStatus::Running);
+        assert_eq!(trace.queue.enqueued_at_ms, Some(4_750));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(4_750));
+        assert_eq!(trace.queue.queue_wait_ms, Some(0));
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("matched_running_item")
+        );
+    }
+
+    #[test]
     fn clear_history_preserves_runtime_and_scheduler_snapshots() {
         let store = WorkflowDiagnosticsStore::default();
         store.record_workflow_event(

@@ -956,6 +956,9 @@ fn apply_scheduler_snapshot(
     }
 
     if running_visible {
+        if let Some(enqueued_at_ms) = matched_item.and_then(|item| item.enqueued_at_ms) {
+            trace.queue.enqueued_at_ms.get_or_insert(enqueued_at_ms);
+        }
         if let Some(dequeued_at_ms) = matched_item.and_then(|item| item.dequeued_at_ms) {
             trace.queue.dequeued_at_ms.get_or_insert(dequeued_at_ms);
         } else {
@@ -1525,6 +1528,49 @@ mod tests {
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_pending_item")
+        );
+    }
+
+    #[test]
+    fn workflow_trace_store_preserves_enqueue_time_when_first_snapshot_is_running() {
+        let store = WorkflowTraceStore::new(10);
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+                execution_id: "edit-session-1".to_string(),
+                workflow_id: None,
+                session_id: "edit-session-1".to_string(),
+                captured_at_ms: 5_000,
+                session: Some(WorkflowSessionSummary {
+                    session_id: "edit-session-1".to_string(),
+                    workflow_id: "edit-session-1".to_string(),
+                    session_kind: crate::graph::WorkflowSessionKind::Edit,
+                    usage_profile: None,
+                    keep_alive: false,
+                    state: WorkflowSessionState::Running,
+                    queued_runs: 1,
+                    run_count: 2,
+                }),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "edit-session-1".to_string(),
+                    run_id: Some("edit-session-1".to_string()),
+                    enqueued_at_ms: Some(4_750),
+                    dequeued_at_ms: Some(4_750),
+                    priority: 0,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+                error: None,
+            },
+            5_000,
+        );
+
+        let trace = snapshot.traces.first().expect("trace summary");
+        assert_eq!(trace.status, WorkflowTraceStatus::Running);
+        assert_eq!(trace.queue.enqueued_at_ms, Some(4_750));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(4_750));
+        assert_eq!(trace.queue.queue_wait_ms, Some(0));
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("matched_running_item")
         );
     }
 }
