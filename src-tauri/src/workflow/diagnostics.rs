@@ -186,6 +186,30 @@ impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleS
     }
 }
 
+fn selected_runtime_lifecycle_snapshot(
+    capabilities: Option<&WorkflowCapabilitiesResponse>,
+) -> Option<DiagnosticsRuntimeLifecycleSnapshot> {
+    let selected_runtime = capabilities?
+        .runtime_capabilities
+        .iter()
+        .find(|capability| capability.selected)?;
+
+    Some(DiagnosticsRuntimeLifecycleSnapshot {
+        runtime_id: Some(selected_runtime.runtime_id.clone()),
+        runtime_instance_id: None,
+        warmup_started_at_ms: None,
+        warmup_completed_at_ms: None,
+        warmup_duration_ms: None,
+        runtime_reused: None,
+        lifecycle_decision_reason: Some("selected_runtime_reported".to_string()),
+        active: false,
+        last_error: selected_runtime
+            .unavailable_reason
+            .clone()
+            .filter(|reason| !reason.trim().is_empty()),
+    })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticsRuntimeSnapshot {
@@ -515,7 +539,8 @@ impl WorkflowDiagnosticsStore {
                 embedding_model_target,
                 active_runtime: active_runtime_snapshot
                     .as_ref()
-                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                    .map(DiagnosticsRuntimeLifecycleSnapshot::from)
+                    .or_else(|| selected_runtime_lifecycle_snapshot(capabilities.as_ref())),
                 embedding_runtime: embedding_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from),
@@ -929,7 +954,9 @@ fn apply_runtime_event(
             last_error: error.clone(),
             active_model_target: active_model_target.clone(),
             embedding_model_target: embedding_model_target.clone(),
-            active_runtime: active_runtime_snapshot.clone(),
+            active_runtime: active_runtime_snapshot
+                .clone()
+                .or_else(|| selected_runtime_lifecycle_snapshot(capabilities.as_ref())),
             embedding_runtime: embedding_runtime_snapshot.clone(),
         };
     }
@@ -1300,6 +1327,81 @@ mod tests {
     }
 
     #[test]
+    fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent() {
+        let store = WorkflowDiagnosticsStore::default();
+        let snapshot =
+            store.update_runtime_snapshot(
+                Some("wf-runtime".to_string()),
+                Some(WorkflowCapabilitiesResponse {
+                    max_input_bindings: 4,
+                    max_output_targets: 2,
+                    max_value_bytes: 1000,
+                    runtime_requirements:
+                        pantograph_workflow_service::WorkflowRuntimeRequirements {
+                            estimated_peak_vram_mb: None,
+                            estimated_peak_ram_mb: None,
+                            estimated_min_vram_mb: None,
+                            estimated_min_ram_mb: None,
+                            estimation_confidence: "high".to_string(),
+                            required_models: vec!["model-a".to_string()],
+                            required_backends: vec!["pytorch".to_string()],
+                            required_extensions: Vec::new(),
+                        },
+                    models: Vec::new(),
+                    runtime_capabilities:
+                        vec![pantograph_workflow_service::WorkflowRuntimeCapability {
+                    runtime_id: "python-sidecar".to_string(),
+                    display_name: "Python sidecar".to_string(),
+                    install_state:
+                        pantograph_workflow_service::WorkflowRuntimeInstallState::SystemProvided,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: false,
+                    source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
+                    selected: true,
+                    supports_external_connection: false,
+                    backend_keys: vec!["pytorch".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                }],
+                }),
+                None,
+                Some("black-forest-labs/flux.1-schnell".to_string()),
+                None,
+                None,
+                None,
+                5_000,
+            );
+
+        assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-runtime"));
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_id.as_deref()),
+            Some("python-sidecar")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.lifecycle_decision_reason.as_deref()),
+            Some("selected_runtime_reported")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .map(|runtime| runtime.active),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
         let store = WorkflowDiagnosticsStore::default();
         let snapshot = store.record_runtime_snapshot(
@@ -1382,17 +1484,11 @@ mod tests {
             Some("/models/main.gguf")
         );
         assert_eq!(
-            snapshot
-                .runtime
-                .active_model_target
-                .as_deref(),
+            snapshot.runtime.active_model_target.as_deref(),
             Some("/models/main.gguf")
         );
         assert_eq!(
-            snapshot
-                .runtime
-                .embedding_model_target
-                .as_deref(),
+            snapshot.runtime.embedding_model_target.as_deref(),
             Some("/models/embed.gguf")
         );
         assert_eq!(
