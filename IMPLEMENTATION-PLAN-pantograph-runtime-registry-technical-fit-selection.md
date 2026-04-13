@@ -17,8 +17,9 @@ The accurate status is:
 - runtime-registry Milestone 2, Runtime Registry Foundation: in progress
 - runtime-registry milestones 3-6: not started
 - current next milestone: continue Milestone 2 by integrating registry-backed
-  lifecycle observation into existing runtime callers without moving policy out
-  of the app layer
+  lifecycle observation into the remaining lifecycle-mutating callers beyond
+  the main backend/server command paths without moving policy out of the app
+  layer
 - stop rule remains active: Milestone 2 work must preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
 
@@ -84,12 +85,18 @@ The following Milestone 2 foundation slices have now landed in code:
   lifecycle, and reservation rejection while stopping
 - Tauri composition-root creation and shared app-state management for the
   registry in `src-tauri/src/main.rs`
+- backend-owned `ServerModeInfo` reconciliation into registry state for active
+  and embedding runtimes
+- backend/server command synchronization that refreshes registry state after
+  backend switches, runtime starts, runtime stops, external attachment, and
+  status reads
 
 ### What has not landed yet
 
 - no registry-driven warmup, retention, or eviction policy exists yet
-- no registry integration with runtime producer observation, recovery cleanup,
-  or workflow execution decisions exists yet
+- no registry synchronization for the remaining lifecycle-mutating callers such
+  as health/recovery flows or headless workflow runtime paths exists yet
+- no registry-driven cleanup or recovery policy exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
 ## Inputs
@@ -377,8 +384,10 @@ runtime callers.
   stop, and recovery-ready status changes
 - [x] Perform decomposition review on any touched files approaching
   file-size/responsibility thresholds
-- [ ] Integrate registry-backed lifecycle observation with existing runtime
-  callers so cleanup and recovery paths stop relying on ad hoc local state
+- [x] Integrate registry-backed lifecycle observation into the main backend and
+  server command callers without moving policy into command handlers
+- [ ] Extend registry synchronization to the remaining lifecycle-mutating
+  callers, especially health/recovery and headless runtime flows
 
 **Verification:**
 - `cargo check --workspace`
