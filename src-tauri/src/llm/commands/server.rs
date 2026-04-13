@@ -4,11 +4,11 @@ use super::config::list_devices;
 use super::shared::SharedAppConfig;
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
+use crate::llm::BackendConfig;
 use crate::llm::gateway::SharedGateway;
 use crate::llm::types::LLMStatus;
-use crate::llm::BackendConfig;
 use std::path::{Path, PathBuf};
-use tauri::{command, AppHandle, State};
+use tauri::{AppHandle, State, command};
 
 fn derive_models_root(path: &Path) -> Option<PathBuf> {
     let mut current = Some(path);

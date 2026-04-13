@@ -2,8 +2,8 @@
 
 use crate::llm::backend::BackendInfo;
 use crate::llm::gateway::SharedGateway;
-use inference::{binary_capability, ManagedBinaryInstallState};
-use tauri::{command, AppHandle, Manager, State};
+use inference::{ManagedBinaryInstallState, binary_capability};
+use tauri::{AppHandle, Manager, State, command};
 
 /// List all available inference backends
 #[command]

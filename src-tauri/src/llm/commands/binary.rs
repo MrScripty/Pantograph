@@ -1,10 +1,10 @@
 //! Runtime download and management commands.
 
 use inference::{
-    download_binary, list_binary_capabilities, remove_binary, DownloadProgress,
-    ManagedBinaryCapability, ManagedBinaryId,
+    DownloadProgress, ManagedBinaryCapability, ManagedBinaryId, download_binary,
+    list_binary_capabilities, remove_binary,
 };
-use tauri::{command, ipc::Channel, AppHandle, Manager};
+use tauri::{AppHandle, Manager, command, ipc::Channel};
 
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()

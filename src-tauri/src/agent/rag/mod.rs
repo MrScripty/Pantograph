@@ -12,4 +12,4 @@ mod types;
 pub use types::{DatabaseInfo, IndexingProgress, RagStatus, SvelteDoc};
 
 // Re-export manager
-pub use manager::{create_rag_manager, RagManager, SharedRagManager};
+pub use manager::{RagManager, SharedRagManager, create_rag_manager};

@@ -4,8 +4,8 @@ use super::shared::get_project_data_dir;
 use crate::agent::docs::DocsStatus;
 use crate::agent::docs_index::SearchIndex;
 use crate::agent::types::{ChunkPreview, DocInfo};
-use crate::agent::{preview_chunks, ChunkConfig, DocsManager};
-use tauri::{command, AppHandle, Manager};
+use crate::agent::{ChunkConfig, DocsManager, preview_chunks};
+use tauri::{AppHandle, Manager, command};
 
 #[command]
 pub async fn get_svelte_docs_status(_app: AppHandle) -> Result<DocsStatus, String> {

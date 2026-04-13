@@ -2,8 +2,8 @@
 
 use super::shared::SharedAppConfig;
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig};
-use inference::{resolve_binary_command, ManagedBinaryId};
-use tauri::{command, AppHandle, Manager, State};
+use inference::{ManagedBinaryId, resolve_binary_command};
+use tauri::{AppHandle, Manager, State, command};
 use tokio::process::Command;
 
 #[command]

@@ -3,7 +3,7 @@ use crate::config::{ImportValidationMode, SandboxConfig};
 use std::path::Path;
 
 use crate::agent::tools::validation::{
-    capitalize_first, MATHML_ELEMENTS, STANDARD_HTML_ELEMENTS, SVG_ELEMENTS,
+    MATHML_ELEMENTS, STANDARD_HTML_ELEMENTS, SVG_ELEMENTS, capitalize_first,
 };
 
 /// Extract template content from Svelte file (excludes script and style blocks).

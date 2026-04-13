@@ -3,7 +3,7 @@
 use super::shared::SharedAppConfig;
 use crate::config::EmbeddingMemoryMode;
 use crate::llm::gateway::SharedGateway;
-use tauri::{command, AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, command};
 
 /// Get the current embedding memory mode
 #[command]

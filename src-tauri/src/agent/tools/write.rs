@@ -307,7 +307,10 @@ impl Tool for WriteGuiFileTool {
             Err(e) => {
                 // Node command failed to run - fall back to allowing the file
                 // (validation script might not be available)
-                log::warn!("Svelte validation script failed to run: {}. Proceeding without compiler validation.", e);
+                log::warn!(
+                    "Svelte validation script failed to run: {}. Proceeding without compiler validation.",
+                    e
+                );
                 let _ = tokio::fs::remove_file(&temp_path).await;
                 tokio::fs::write(&full_path, &args.content)
                     .await

@@ -1,12 +1,12 @@
 //! RAG (Retrieval Augmented Generation) commands.
 
 use super::resolve_embedding_model_path;
-use super::shared::{get_project_data_dir, SharedAppConfig};
-use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
+use super::shared::{SharedAppConfig, get_project_data_dir};
 use crate::agent::DocsManager;
-use crate::llm::gateway::SharedGateway;
+use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::llm::BackendConfig;
-use tauri::{command, ipc::Channel, AppHandle, State};
+use crate::llm::gateway::SharedGateway;
+use tauri::{AppHandle, State, command, ipc::Channel};
 
 /// Event sent during document indexing
 #[derive(Clone, serde::Serialize)]

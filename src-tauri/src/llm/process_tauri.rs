@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
-use inference::{managed_runtime_dir, resolve_binary_command, ManagedBinaryId};
+use inference::{ManagedBinaryId, managed_runtime_dir, resolve_binary_command};
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
@@ -119,7 +119,11 @@ impl ProcessSpawner for TauriProcessSpawner {
                 let reader = BufReader::new(stdout);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    if tx.send(ProcessEvent::Stdout(line.into_bytes())).await.is_err() {
+                    if tx
+                        .send(ProcessEvent::Stdout(line.into_bytes()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -132,7 +136,11 @@ impl ProcessSpawner for TauriProcessSpawner {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    if tx.send(ProcessEvent::Stderr(line.into_bytes())).await.is_err() {
+                    if tx
+                        .send(ProcessEvent::Stderr(line.into_bytes()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }

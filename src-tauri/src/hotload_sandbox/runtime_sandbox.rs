@@ -7,8 +7,8 @@
 use boa_engine::{Context, Source};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;

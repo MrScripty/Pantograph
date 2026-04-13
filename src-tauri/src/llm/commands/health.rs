@@ -3,13 +3,13 @@
 //! Commands for health checking and recovery management.
 
 use std::sync::Arc;
-use tauri::{command, AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, command};
 
+use crate::llm::SharedGateway;
 use crate::llm::health_monitor::{
     HealthCheckResult, HealthMonitor, HealthMonitorConfig, SharedHealthMonitor,
 };
 use crate::llm::recovery::{RecoveryConfig, RecoveryError, RecoveryManager, SharedRecoveryManager};
-use crate::llm::SharedGateway;
 
 /// Start health monitoring
 #[command]

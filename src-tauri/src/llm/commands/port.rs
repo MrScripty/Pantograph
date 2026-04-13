@@ -6,8 +6,8 @@ use tauri::command;
 
 use crate::constants::ports;
 use crate::llm::port_manager::{
-    check_port_available, find_available_port, resolve_port_conflict, PortConflictAction,
-    PortStatus,
+    PortConflictAction, PortStatus, check_port_available, find_available_port,
+    resolve_port_conflict,
 };
 
 /// Check if a port is available and get info about blocking process
