@@ -367,6 +367,10 @@ Update during implementation:
   and the interactive runtime-error path onto those helpers so overlay updates
   cannot diverge from canonical trace recording when execution identity is
   available.
+- 2026-04-12: Twelfth implementation slice added a backend-owned
+  `trace_execution_id` to scheduler snapshots so adapters can attribute
+  snapshot observations to the active or uniquely-visible queued run without
+  guessing from `session_id`.
 
 ## Commit Cadence Notes
 
@@ -423,6 +427,8 @@ Update during implementation:
 - Ninth Milestone 1 slice implemented in `pantograph-workflow-service`
 - Tenth implementation slice added in `src-tauri/src/workflow`
 - Eleventh implementation slice added in `src-tauri/src/workflow`
+- Twelfth implementation slice added across `pantograph-workflow-service`,
+  `src-tauri`, and TypeScript workflow contract mirrors
 
 ### Deviations
 

@@ -476,11 +476,15 @@ async fn emit_diagnostics_snapshots(
     let runtime_workflow_id = workflow_id
         .clone()
         .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
+    let trace_execution_id = scheduler_snapshot
+        .trace_execution_id
+        .clone()
+        .unwrap_or_else(|| session_id.to_string());
     let captured_at_ms = unix_timestamp_ms();
 
     let scheduler_event = WorkflowEvent::scheduler_snapshot(
         workflow_id,
-        session_id.to_string(),
+        trace_execution_id.clone(),
         session_id.to_string(),
         captured_at_ms,
         Some(scheduler_snapshot.session.clone()),
@@ -504,7 +508,7 @@ async fn emit_diagnostics_snapshots(
                 trace_runtime_metrics(&gateway.runtime_lifecycle_snapshot().await);
             let runtime_event = WorkflowEvent::runtime_snapshot(
                 runtime_workflow_id.clone(),
-                session_id.to_string(),
+                trace_execution_id.clone(),
                 captured_at_ms,
                 None,
                 runtime_trace_metrics,
@@ -538,7 +542,7 @@ async fn emit_diagnostics_snapshots(
 
     let runtime_event = WorkflowEvent::runtime_snapshot(
         runtime_workflow_id,
-        session_id.to_string(),
+        trace_execution_id,
         captured_at_ms,
         capabilities,
         runtime_trace_metrics,

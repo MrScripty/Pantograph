@@ -270,6 +270,7 @@ export interface WorkflowSessionQueueListResponse {
 export interface WorkflowSchedulerSnapshotResponse {
   workflow_id?: string | null;
   session_id: string;
+  trace_execution_id?: string | null;
   session: WorkflowSessionSummary;
   items: WorkflowSessionQueueItem[];
 }

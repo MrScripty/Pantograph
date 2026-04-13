@@ -328,6 +328,7 @@ pub async fn workflow_get_diagnostics_snapshot(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
+    let mut trace_execution_id = session_id.clone();
 
     if let Some(session_id) = session_id.as_deref() {
         diagnostics_store.set_execution_metadata(
@@ -343,15 +344,27 @@ pub async fn workflow_get_diagnostics_snapshot(
             .await
         {
             Ok(snapshot) => {
+                let observed_execution_id = snapshot
+                    .trace_execution_id
+                    .clone()
+                    .unwrap_or_else(|| session_id.to_string());
+                if observed_execution_id != session_id {
+                    diagnostics_store.set_execution_metadata(
+                        &observed_execution_id,
+                        workflow_id.clone(),
+                        workflow_name.clone(),
+                    );
+                }
                 diagnostics_store.record_scheduler_snapshot(
                     snapshot.workflow_id,
-                    session_id.to_string(),
+                    observed_execution_id.clone(),
                     snapshot.session_id,
                     captured_at_ms,
                     Some(snapshot.session),
                     snapshot.items,
                     None,
                 );
+                trace_execution_id = Some(observed_execution_id);
             }
             Err(error) => {
                 diagnostics_store.record_scheduler_snapshot(
@@ -363,6 +376,7 @@ pub async fn workflow_get_diagnostics_snapshot(
                     Vec::new(),
                     Some(error.to_envelope_json()),
                 );
+                trace_execution_id = Some(session_id.to_string());
             }
         }
     } else {
@@ -395,10 +409,10 @@ pub async fn workflow_get_diagnostics_snapshot(
             .await
         {
             Ok(capabilities) => {
-                if let Some(session_id) = session_id.as_deref() {
+                if let Some(trace_execution_id) = trace_execution_id.as_deref() {
                     diagnostics_store.record_runtime_snapshot(
                         workflow_id,
-                        session_id.to_string(),
+                        trace_execution_id.to_string(),
                         captured_at_ms,
                         Some(capabilities),
                         runtime_trace_metrics,
@@ -414,10 +428,10 @@ pub async fn workflow_get_diagnostics_snapshot(
                 }
             }
             Err(error) => {
-                if let Some(session_id) = session_id.as_deref() {
+                if let Some(trace_execution_id) = trace_execution_id.as_deref() {
                     diagnostics_store.record_runtime_snapshot(
                         workflow_id,
-                        session_id.to_string(),
+                        trace_execution_id.to_string(),
                         captured_at_ms,
                         None,
                         runtime_trace_metrics,

@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::workflow::{
     WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+    scheduler_snapshot_trace_execution_id,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -452,11 +453,13 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let items = state.queue_items();
         Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: None,
             session_id: session_id.to_string(),
+            trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
             session: state.session_summary(session_id),
-            items: state.queue_items(),
+            items,
         })
     }
 

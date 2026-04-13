@@ -416,9 +416,29 @@ pub struct WorkflowSchedulerSnapshotResponse {
     #[serde(default)]
     pub workflow_id: Option<String>,
     pub session_id: String,
+    #[serde(default)]
+    pub trace_execution_id: Option<String>,
     pub session: WorkflowSessionSummary,
     #[serde(default)]
     pub items: Vec<WorkflowSessionQueueItem>,
+}
+
+pub(crate) fn scheduler_snapshot_trace_execution_id(
+    items: &[WorkflowSessionQueueItem],
+) -> Option<String> {
+    items
+        .iter()
+        .find(|item| item.status == WorkflowSessionQueueItemStatus::Running)
+        .or_else(|| {
+            let mut pending = items
+                .iter()
+                .filter(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+            match (pending.next(), pending.next()) {
+                (Some(item), None) => Some(item),
+                _ => None,
+            }
+        })
+        .map(|item| item.run_id.clone().unwrap_or_else(|| item.queue_id.clone()))
 }
 
 /// Session queue cancellation request.
@@ -1642,6 +1662,7 @@ impl WorkflowService {
                     return Ok(WorkflowSchedulerSnapshotResponse {
                         workflow_id: Some(session.workflow_id.clone()),
                         session_id: session_id.to_string(),
+                        trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
                         session,
                         items,
                     });
@@ -4576,6 +4597,7 @@ mod tests {
             snapshot.session.usage_profile.as_deref(),
             Some("interactive")
         );
+        assert_eq!(snapshot.trace_execution_id, None);
         assert!(snapshot.items.is_empty());
     }
 
@@ -4606,6 +4628,7 @@ mod tests {
         );
         assert_eq!(idle_snapshot.session.queued_runs, 0);
         assert_eq!(idle_snapshot.session.run_count, 0);
+        assert_eq!(idle_snapshot.trace_execution_id, None);
         assert!(idle_snapshot.items.is_empty());
 
         service
@@ -4644,6 +4667,10 @@ mod tests {
             running_snapshot.items[0].run_id.as_deref(),
             Some(created.session_id.as_str())
         );
+        assert_eq!(
+            running_snapshot.trace_execution_id.as_deref(),
+            Some(created.session_id.as_str())
+        );
 
         service
             .workflow_graph_mark_edit_session_finished(&created.session_id)
@@ -4662,7 +4689,59 @@ mod tests {
         );
         assert_eq!(completed_snapshot.session.queued_runs, 0);
         assert_eq!(completed_snapshot.session.run_count, 1);
+        assert_eq!(completed_snapshot.trace_execution_id, None);
         assert!(completed_snapshot.items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_trace_execution() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: None,
+                    },
+                )
+                .expect("enqueue run");
+        }
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("scheduler snapshot");
+
+        assert_eq!(snapshot.trace_execution_id.as_deref(), Some("queued-run-1"));
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(
+            snapshot.items[0].status,
+            WorkflowSessionQueueItemStatus::Pending
+        );
     }
 
     #[tokio::test]

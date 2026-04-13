@@ -306,6 +306,7 @@ export class WorkflowService {
       return {
         workflow_id: 'mock-workflow',
         session_id: id,
+        trace_execution_id: id,
         session: {
           session_id: id,
           workflow_id: 'mock-workflow',
