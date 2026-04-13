@@ -483,6 +483,10 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` so diagnostics
   projection refresh logic is exercised directly against backend-owned
   scheduler snapshots, capability responses, and runtime lifecycle metrics
+- Twenty-sixth implementation slice added in
+  `src-tauri/src/workflow/event_adapter.rs` so node-engine event transport is
+  covered through a pure Rust translation helper that preserves producer
+  execution identity and emits backend-owned diagnostics snapshot events
 
 ### Deviations
 
@@ -499,8 +503,8 @@ Update during implementation:
   `WorkflowTraceRuntimeMetrics` fields.
 - Extend direct command-path acceptance coverage beyond the current embedding
   runtime, scheduler, trace snapshot, and diagnostics projection refresh paths
-  so the remaining read-only diagnostics readers are also exercised at the
-  adapter boundary.
+  so the remaining diagnostics reader and transport paths are also exercised at
+  the adapter boundary.
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
