@@ -215,6 +215,9 @@ pub struct ServerModeInfo {
     /// Backend identifier that owns the active runtime selection.
     #[serde(default)]
     pub backend_name: Option<String>,
+    /// Stable backend key for automation and UI selection state.
+    #[serde(default)]
+    pub backend_key: Option<String>,
     /// Current mode type
     pub mode: String,
     /// Whether the server is ready

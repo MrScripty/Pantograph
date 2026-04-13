@@ -27,6 +27,7 @@ class LLMServiceClass {
   private state: LLMState = {
     status: {
       backend_name: null,
+      backend_key: null,
       mode: 'none',
       ready: false,
       url: null,

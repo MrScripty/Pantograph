@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 
 use crate::backend::{
     BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry, ChatChunk,
-    EmbeddingResult, InferenceBackend,
+    EmbeddingResult, InferenceBackend, canonical_backend_key,
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::process::ProcessSpawner;
@@ -518,9 +518,11 @@ impl InferenceGateway {
             .await
             .as_ref()
             .and_then(config_model_target);
+        let backend_key = canonical_backend_key(&backend_name);
 
         ServerModeInfo {
             backend_name: Some(backend_name),
+            backend_key: Some(backend_key),
             mode: if !ready {
                 "none".to_string()
             } else if is_external {
@@ -1050,6 +1052,7 @@ mod tests {
 
         let mode = gateway.mode_info().await;
         assert_eq!(mode.backend_name.as_deref(), Some("mock"));
+        assert_eq!(mode.backend_key.as_deref(), Some("mock"));
         assert_eq!(mode.mode, "external");
         assert!(!mode.is_embedding_mode);
         assert_eq!(
@@ -1081,6 +1084,7 @@ mod tests {
         let mode = gateway.mode_info().await;
 
         assert_eq!(mode.backend_name.as_deref(), Some("mock"));
+        assert_eq!(mode.backend_key.as_deref(), Some("mock"));
         assert!(mode.active_runtime.is_some());
     }
 
@@ -1099,6 +1103,8 @@ mod tests {
 
         let mode = gateway.mode_info().await;
 
+        assert_eq!(mode.backend_name.as_deref(), Some("Ollama"));
+        assert_eq!(mode.backend_key.as_deref(), Some("ollama"));
         assert_eq!(mode.active_model_target.as_deref(), Some("llava:13b"));
         assert_eq!(mode.embedding_model_target, None);
     }

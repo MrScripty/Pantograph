@@ -635,6 +635,7 @@ impl LlamaServer {
     pub fn mode_info(&self) -> ServerModeInfo {
         ServerModeInfo {
             backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
             mode: match &self.mode {
                 ServerMode::None => "none".to_string(),
                 ServerMode::External { .. } => "external".to_string(),

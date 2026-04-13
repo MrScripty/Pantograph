@@ -43,6 +43,7 @@ impl BackendFactory for LlamaCppFactory {
     fn info(&self) -> BackendInfo {
         BackendInfo {
             name: "llama.cpp".to_string(),
+            backend_key: "llama_cpp".to_string(),
             description: "Local llama.cpp server with GGUF model support".to_string(),
             capabilities: LlamaCppBackend::static_capabilities(),
             active: false,
@@ -68,6 +69,7 @@ impl BackendFactory for OllamaFactory {
         let (available, unavailable_reason) = OllamaBackend::check_availability();
         BackendInfo {
             name: "Ollama".to_string(),
+            backend_key: "ollama".to_string(),
             description: "Ollama daemon with automatic model management".to_string(),
             capabilities: OllamaBackend::static_capabilities(),
             active: false,
@@ -93,6 +95,7 @@ impl BackendFactory for CandleFactory {
         let (available, unavailable_reason) = CandleBackend::check_availability();
         BackendInfo {
             name: "Candle".to_string(),
+            backend_key: "candle".to_string(),
             description: if available {
                 "In-process Candle inference (CUDA)".to_string()
             } else {
@@ -122,6 +125,7 @@ impl BackendFactory for PyTorchFactory {
         let (available, unavailable_reason) = PyTorchBackend::check_availability();
         BackendInfo {
             name: "PyTorch".to_string(),
+            backend_key: "pytorch".to_string(),
             description: "In-process PyTorch inference for dLLM, Sherry, and HuggingFace models"
                 .to_string(),
             capabilities: PyTorchBackend::static_capabilities(),
@@ -148,6 +152,16 @@ fn normalize_backend_lookup_key(name: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(|ch| ch.to_lowercase())
         .collect()
+}
+
+pub fn canonical_backend_key(name: &str) -> String {
+    match normalize_backend_lookup_key(name).as_str() {
+        "llamacpp" => "llama_cpp".to_string(),
+        "ollama" => "ollama".to_string(),
+        "candle" => "candle".to_string(),
+        "pytorch" => "pytorch".to_string(),
+        other => other.to_string(),
+    }
 }
 
 impl BackendRegistry {

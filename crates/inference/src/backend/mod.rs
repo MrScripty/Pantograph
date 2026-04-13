@@ -41,7 +41,7 @@ pub use candle::CandleBackend;
 #[cfg(feature = "backend-pytorch")]
 pub use pytorch::PyTorchBackend;
 
-pub use registry::{BackendFactory, BackendRegistry};
+pub use registry::{BackendFactory, BackendRegistry, canonical_backend_key};
 
 /// Error types for backend operations
 #[derive(Debug, thiserror::Error)]
@@ -97,6 +97,8 @@ pub struct BackendCapabilities {
 pub struct BackendInfo {
     /// Backend identifier (e.g., "llama.cpp", "Ollama", "Candle")
     pub name: String,
+    /// Stable backend key for contracts and selection state.
+    pub backend_key: String,
     /// Human-readable description
     pub description: String,
     /// Backend capabilities

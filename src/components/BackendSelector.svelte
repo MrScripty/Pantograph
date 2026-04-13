@@ -16,6 +16,7 @@
 
   interface BackendInfo {
     name: string;
+    backend_key: string;
     description: string;
     capabilities: BackendCapabilities;
     active: boolean;
@@ -46,13 +47,13 @@
 
   // Download sizes for confirmation dialog
   const DOWNLOAD_SIZES: Record<string, string> = {
-    'llama.cpp': '~60 MB',
-    Ollama: '~1.6 GB',
+    llama_cpp: '~60 MB',
+    ollama: '~1.6 GB',
   };
 
   let backends: BackendInfo[] = $state([]);
   let runtimes: ManagedRuntimeCapability[] = $state([]);
-  let currentBackend: string = $state('');
+  let currentBackendKey: string = $state('');
   let isLoading = $state(false);
   let isSwitching = $state(false);
   let error: string | null = $state(null);
@@ -75,7 +76,7 @@
       backends = await invoke<BackendInfo[]>('list_backends');
       runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
       const status = await LLMService.refreshStatus();
-      currentBackend = status.backend_name || '';
+      currentBackendKey = status.backend_key || '';
     } catch (e) {
       error = String(e);
       console.error('Failed to load backends:', e);
@@ -84,19 +85,19 @@
     }
   };
 
-  const switchBackend = async (name: string) => {
-    if (name === currentBackend || isSwitching) return;
+  const switchBackend = async (backendKey: string) => {
+    if (backendKey === currentBackendKey || isSwitching) return;
 
     isSwitching = true;
     error = null;
     try {
-      const status = await invoke<ServerModeInfo>('switch_backend', { backendName: name });
-      currentBackend = status.backend_name || name;
+      const status = await invoke<ServerModeInfo>('switch_backend', { backendName: backendKey });
+      currentBackendKey = status.backend_key || backendKey;
 
       // Auto-start the LLM after switching backends
       try {
         const started = await ConfigService.startInferenceMode();
-        currentBackend = started.backend_name || currentBackend;
+        currentBackendKey = started.backend_key || currentBackendKey;
         await LLMService.refreshStatus();
       } catch (e) {
         // Show error to user instead of silently swallowing it
@@ -119,7 +120,7 @@
     error = null;
     try {
       const status = await LLMService.stop();
-      currentBackend = status.backend_name || '';
+      currentBackendKey = status.backend_key || '';
     } catch (e) {
       error = String(e);
       console.error('Failed to stop server:', e);
@@ -195,11 +196,11 @@
   };
 
   const handleBackendClick = (backend: BackendInfo) => {
-    if (backend.name === currentBackend && serverRunning) {
+    if (backend.backend_key === currentBackendKey && serverRunning) {
       // Toggle off - stop the server
       stopServer();
     } else if (backend.available) {
-      switchBackend(backend.name);
+      switchBackend(backend.backend_key);
     } else if (backend.can_install) {
       promptDownload(backend);
     }
@@ -232,7 +233,7 @@
 
   // Get the active backend info
   // Only show backend as active if server is actually running
-  let activeBackend = $derived(serverRunning ? backends.find((b) => b.name === currentBackend) : null);
+  let activeBackend = $derived(serverRunning ? backends.find((b) => b.backend_key === currentBackendKey) : null);
 </script>
 
 <!-- Confirmation Dialog -->
@@ -241,7 +242,7 @@
     <p class="text-neutral-300">
       Download <strong>{confirmDownload.name}</strong> backend?
     </p>
-    <p class="text-sm text-neutral-500 mt-2">Size: {DOWNLOAD_SIZES[confirmDownload.name] || 'Unknown'}</p>
+    <p class="text-sm text-neutral-500 mt-2">Size: {DOWNLOAD_SIZES[confirmDownload.backend_key] || 'Unknown'}</p>
   {/if}
   {#snippet footer()}
     <button type="button" onclick={cancelDownload} class="px-4 py-2 text-sm text-neutral-400 hover:text-white">
@@ -279,8 +280,8 @@
             <div class="flex flex-col">
               <div class="flex items-center gap-1.5">
                 <button type="button"
-                  class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.name ===
-                    currentBackend && serverRunning
+                  class="px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1.5 {backend.backend_key ===
+                    currentBackendKey && serverRunning
                     ? 'bg-blue-600 text-white'
                     : backend.available
                       ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
@@ -294,10 +295,10 @@
                   title={backend.available
                     ? backend.description
                     : backend.can_install
-                      ? `Click to download (${DOWNLOAD_SIZES[backend.name] || 'Unknown size'})`
+                      ? `Click to download (${DOWNLOAD_SIZES[backend.backend_key] || 'Unknown size'})`
                       : backend.unavailable_reason || 'Not available'}
                 >
-                  {#if isSwitching && backend.name === currentBackend}
+                  {#if isSwitching && backend.backend_key === currentBackendKey}
                     <span
                       class="inline-block w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"
                     ></span>
