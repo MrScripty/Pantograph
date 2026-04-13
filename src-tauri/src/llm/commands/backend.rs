@@ -1,5 +1,6 @@
 //! Backend switching and capabilities commands.
 
+use crate::config::ServerModeInfo;
 use crate::llm::backend::BackendInfo;
 use crate::llm::gateway::SharedGateway;
 use inference::{ManagedBinaryInstallState, binary_capability};
@@ -52,14 +53,14 @@ pub async fn get_current_backend(gateway: State<'_, SharedGateway>) -> Result<St
 pub async fn switch_backend(
     gateway: State<'_, SharedGateway>,
     backend_name: String,
-) -> Result<(), String> {
+) -> Result<ServerModeInfo, String> {
     gateway
         .switch_backend(&backend_name)
         .await
         .map_err(|e| e.to_string())?;
 
     log::info!("Switched to backend: {}", backend_name);
-    Ok(())
+    Ok(gateway.mode_info().await)
 }
 
 /// Get capabilities of the current backend

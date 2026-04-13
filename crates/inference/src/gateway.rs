@@ -984,6 +984,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_mode_info_preserves_selected_backend_after_stop() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+        gateway.stop().await;
+
+        let mode = gateway.mode_info().await;
+
+        assert_eq!(mode.backend_name.as_deref(), Some("mock"));
+        assert!(mode.active_runtime.is_some());
+    }
+
+    #[tokio::test]
     async fn test_build_inference_start_config_for_ollama_uses_model_name() {
         let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Ollama");
 

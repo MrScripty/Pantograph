@@ -191,24 +191,17 @@ class LLMServiceClass {
     this.notify();
   }
 
-  public async stop(): Promise<void> {
+  public async stop(): Promise<ServerModeInfo> {
     try {
-      await invoke('stop_llm');
-      this.state.status = {
-        backend_name: null,
-        mode: 'none',
-        ready: false,
-        url: null,
-        model_path: null,
-        is_embedding_mode: false,
-        active_runtime: null,
-        embedding_runtime: null,
-      };
+      const status = await invoke<ServerModeInfo>('stop_llm');
+      this.state.status = status;
       this.state.isGenerating = false;
       Logger.log('LLM_STOPPED', {});
       this.notify();
+      return status;
     } catch (error) {
       Logger.log('LLM_STOP_ERROR', { error: String(error) }, 'error');
+      throw error;
     }
   }
 }

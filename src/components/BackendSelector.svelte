@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { invoke, Channel } from '@tauri-apps/api/core';
   import Modal from '../templates/Modal.svelte';
-  import { ConfigService } from '../services/ConfigService';
+  import { ConfigService, type ServerModeInfo } from '../services/ConfigService';
   import { LLMService } from '../services/LLMService';
 
   interface BackendCapabilities {
@@ -75,7 +75,7 @@
       backends = await invoke<BackendInfo[]>('list_backends');
       runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
       const status = await LLMService.refreshStatus();
-      currentBackend = status.ready ? status.backend_name || '' : '';
+      currentBackend = status.backend_name || '';
     } catch (e) {
       error = String(e);
       console.error('Failed to load backends:', e);
@@ -90,12 +90,13 @@
     isSwitching = true;
     error = null;
     try {
-      await invoke('switch_backend', { backendName: name });
-      currentBackend = name;
+      const status = await invoke<ServerModeInfo>('switch_backend', { backendName: name });
+      currentBackend = status.backend_name || name;
 
       // Auto-start the LLM after switching backends
       try {
-        await ConfigService.startInferenceMode();
+        const started = await ConfigService.startInferenceMode();
+        currentBackend = started.backend_name || currentBackend;
         await LLMService.refreshStatus();
       } catch (e) {
         // Show error to user instead of silently swallowing it
@@ -117,8 +118,8 @@
     isSwitching = true;
     error = null;
     try {
-      await LLMService.stop();
-      currentBackend = '';
+      const status = await LLMService.stop();
+      currentBackend = status.backend_name || '';
     } catch (e) {
       error = String(e);
       console.error('Failed to stop server:', e);

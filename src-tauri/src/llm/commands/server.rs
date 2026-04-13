@@ -247,9 +247,9 @@ pub async fn get_llm_status(gateway: State<'_, SharedGateway>) -> Result<ServerM
 }
 
 #[command]
-pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<(), String> {
+pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<ServerModeInfo, String> {
     gateway.stop().await;
-    Ok(())
+    Ok(gateway.mode_info().await)
 }
 
 #[command]
