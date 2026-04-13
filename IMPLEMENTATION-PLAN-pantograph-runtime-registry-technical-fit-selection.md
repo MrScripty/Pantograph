@@ -117,7 +117,7 @@ ownership of long-lived runtime state.
 - preserve the current public runtime facade unless an explicit API break is
   approved
 - keep gateway/backends as execution infrastructure, not policy owners
-- keep runtime lifecycle ownership in one Pantograph module
+- keep runtime lifecycle ownership in one Pantograph-owned boundary
 - use technical-fit factors grounded in verifiable facts only
 - follow directory README, ADR traceability, testing, and concurrency
   standards
@@ -129,7 +129,7 @@ ownership of long-lived runtime state.
 - Pumas will expose ranked feasible execution candidates from durable facts
 - Pantograph remains the owner of live runtime admission, reuse, and eviction
   policy
-- milestone one can use conservative estimated RAM/VRAM data with explicit
+- milestone three can use conservative estimated RAM/VRAM data with explicit
   headroom rules
 - manual `model_id` / `backend_key` selections remain supported as explicit
   overrides
@@ -153,7 +153,7 @@ ownership of long-lived runtime state.
 
 ### Affected Persisted Artifacts
 
-- none required in milestone one
+- none required in milestone three unless later justified
 - `config.json` only if rollout toggles or runtime-policy defaults are added
   later
 - documentation/ADR artifacts under `docs/`
@@ -284,32 +284,32 @@ preservation, and documentation traceability.
 **Ordered Work Packages:**
 
 1. Boundary inventory and evidence capture
-- [ ] inventory the current ownership seams across `crates/inference`,
+- [x] inventory the current ownership seams across `crates/inference`,
   `crates/pantograph-embedded-runtime`, `src-tauri/src/llm`, and
   `src-tauri/src/workflow`
-- [ ] map which modules currently start runtimes, stop runtimes, track active
+- [x] map which modules currently start runtimes, stop runtimes, track active
   state, expose capabilities, and surface diagnostics
-- [ ] capture the current producer/consumer contract surfaces that the registry
+- [x] capture the current producer/consumer contract surfaces that the registry
   must preserve or coordinate
 
 2. Architecture decision draft
-- [ ] draft `ADR-002-runtime-registry-ownership-and-lifecycle.md` using the ADR
+- [x] draft `ADR-002-runtime-registry-ownership-and-lifecycle.md` using the ADR
   format from the documentation standards
-- [ ] record the chosen architectural role for `RuntimeRegistry` using the
+- [x] record the chosen architectural role for `RuntimeRegistry` using the
   layered and monorepo package-role guidance from `ARCHITECTURE-PATTERNS.md`
-- [ ] record rejected alternatives with reasons, including at minimum:
+- [x] record rejected alternatives with reasons, including at minimum:
   - gateway-owned runtime policy
   - workflow-service-owned runtime residency
   - adapter-owned runtime policy in Tauri host layers
 
 3. Lifecycle and reservation freeze
-- [ ] define the registry lifecycle note in concrete terms:
+- [x] define the registry lifecycle note in concrete terms:
   - who creates it
   - who starts background work
   - who stops background work
   - how cancellation/cleanup happens
   - how overlap and restart races are prevented
-- [ ] define the registry state-machine outline for milestone-2 implementation:
+- [x] define the registry state-machine outline for milestone-2 implementation:
   - stopped
   - warming
   - ready
@@ -317,27 +317,27 @@ preservation, and documentation traceability.
   - unhealthy
   - stopping
   - failed
-- [ ] define the reservation/admission contract at the architecture level:
+- [x] define the reservation/admission contract at the architecture level:
   - reservation creation point
   - release point
   - failure semantics
   - exclusion rules for eviction
 
 4. Documentation traceability updates
-- [ ] add `docs/adr/README.md` with an ADR index entry for ADR-001 and the new
+- [x] add `docs/adr/README.md` with an ADR index entry for ADR-001 and the new
   ADR-002
-- [ ] update the affected directory READMEs listed above so each one records the
+- [x] update the affected directory READMEs listed above so each one records the
   runtime-registry boundary impact using the required sections from
   `DOCUMENTATION-STANDARDS.md`
-- [ ] ensure the touched READMEs include explicit `Related ADRs` references to
+- [x] ensure the touched READMEs include explicit `Related ADRs` references to
   the runtime-registry ADR or an explicit `None` statement only where allowed
 
 5. Freeze review and milestone close
-- [ ] review the milestone outputs against `PLAN-STANDARDS.md`,
+- [x] review the milestone outputs against `PLAN-STANDARDS.md`,
   `ARCHITECTURE-PATTERNS.md`, `DOCUMENTATION-STANDARDS.md`, and
   `CONCURRENCY-STANDARDS.md`
-- [ ] update this plan's Milestone 1 status and completion notes
-- [ ] record any re-plan result immediately if the architecture review changes
+- [x] update this plan's Milestone 1 status and completion notes
+- [x] record any re-plan result immediately if the architecture review changes
   milestone 2 sequencing or scope
 
 **Milestone-Specific Risks:**
@@ -407,23 +407,40 @@ runtime callers.
 **Goal:** Make runtime placement budget-aware and concurrency-safe.
 
 **Tasks:**
+- [ ] Keep admission, retention, and eviction policy in
+  `crates/pantograph-runtime-registry`; adapters and gateway callers may invoke
+  explicit registry operations but must not become policy owners
 - [ ] Add admission checks using estimated RAM/VRAM with explicit safety margins
   and failure reasons
-- [ ] Add warmup/reuse paths for session create/run and explicit release paths
-  after execution
+- [ ] Add warmup/reuse orchestration for session create/run through explicit
+  registry-owned decisions plus explicit release paths after execution,
+  cancellation, and failure
 - [ ] Extend `keep_alive` into a retention hint interpreted by registry policy
   rather than raw direct ownership
 - [ ] Implement eviction v1 with active/reserved/pinned exclusion and
   deterministic candidate ordering
-- [ ] Ensure no async path holds a lock across blocking work or long-running
-  awaits contrary to concurrency standards
+- [ ] Keep async paths non-blocking: do not hold synchronous locks across
+  blocking work or long-running awaits; if policy coordination becomes
+  long-lived or await-heavy, introduce an explicit async owner/message path
+  instead of stretching the current synchronous critical section model
+- [ ] Bound and document any new admission, retention, or cleanup queues/timers
+  before they are introduced so ownership, cancellation, and overflow behavior
+  stay explicit
 
 **Verification:**
-- unit tests for admission acceptance/rejection, warmup reuse, and eviction
-  ordering
-- integration tests for overlapping session runs, restart/recovery, and
-  keep-alive transitions
+- `cargo test -p pantograph-runtime-registry`
+- unit tests for admission acceptance/rejection, warmup reuse, release-on-
+  completion/cancellation/failure, and eviction ordering
+- cross-layer acceptance check from workflow/session request through registry
+  reservation/admission, runtime warmup or reuse, execution completion, and
+  release
+- integration tests for overlapping session runs, restart/recovery, duplicate
+  release/idempotency behavior, and keep-alive transitions
+- compile review confirms Tauri/workflow adapters remain transport wrappers and
+  do not absorb registry business logic
 - concurrency review against `CONCURRENCY-STANDARDS.md`
+- README/ADR update review for any newly introduced directory boundary or
+  machine-consumed contract changes per `DOCUMENTATION-STANDARDS.md`
 
 **Status:** Not started
 
@@ -509,12 +526,14 @@ refactor lands.
 
 ### What must happen next
 
-1. Start Milestone 2 by introducing focused runtime-registry modules and
-   composition-root wiring that preserve ADR-002.
+1. Start Milestone 3 by adding backend-owned admission, warmup, retention, and
+   eviction policy on top of the completed runtime-registry foundation.
 2. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
-   aligned with the README and ADR boundary decisions landed in Milestone 1.
-3. Re-plan immediately if Milestone 2 implementation pressures any of the
-   frozen ownership decisions.
+   aligned with the README and ADR boundary decisions now reflected in the
+   backend-owned registry refactor.
+3. Re-plan immediately if Milestone 3 implementation pressures any of the
+   frozen ownership decisions, requires a different async ownership model, or
+   forces contract changes larger than assumed.
 
 ### What should not happen next
 
@@ -522,6 +541,8 @@ refactor lands.
 - Do not start admission/eviction policy inside adapters.
 - Do not let workflow execution paths mutate long-lived runtime residency state
   ad hoc.
+- Do not move budget, retention, or eviction logic back into `src-tauri` now
+  that the backend crate boundary has been restored.
 
 ## Execution Notes
 
@@ -533,9 +554,9 @@ Update during implementation:
 - 2026-03-21: Plan updated to avoid “best model” language and align all
   recommendation semantics to feasible-candidate input plus host-owned
   technical-fit selection.
-- 2026-04-13: Plan updated to reflect reality: runtime-registry implementation
-  has not started, but prerequisite runtime-contract convergence and
-  diagnostics groundwork is already complete in code.
+- 2026-04-13: Plan updated to reflect reality: prerequisite runtime-contract
+  convergence and diagnostics groundwork were already complete in code before
+  the runtime-registry implementation wave.
 - 2026-04-13: Milestone 1 completed with ADR-002, ADR index creation, and
   runtime-boundary README updates for `src-tauri/src/llm`,
   `src-tauri/src/workflow`, `crates/inference/src`, and
@@ -544,6 +565,10 @@ Update during implementation:
   runtime-registry state machine out of `src-tauri` into
   `crates/pantograph-runtime-registry`, leaving Tauri as composition and
   observation-translation only.
+- 2026-04-13: Milestone 3 reviewed against architecture, concurrency,
+  documentation, testing, and plan standards; tasks and verification were
+  tightened so the next implementation slice preserves the backend-owned
+  registry boundary.
 
 ## Commit Cadence Notes
 
@@ -581,14 +606,11 @@ Update during implementation:
 
 - Milestone 0 prerequisite runtime-contract groundwork
 - Milestone 1 architecture/documentation freeze for runtime-registry ownership
+- Milestone 2 runtime-registry foundation
 
 ### In Progress
 
 - Runtime producer-convergence hardening outside the runtime-registry plan
-
-### Completed
-
-- Milestone 2 runtime-registry foundation
 
 ### Not Started
 

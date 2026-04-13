@@ -226,8 +226,9 @@ session scheduler that makes better admission and reuse decisions.
 
 **Dependency note:**
 
-- Do not start Scheduler V2 implementation until runtime-registry ownership,
-  lifecycle, and composition boundaries are explicitly documented and frozen.
+- Do not start Scheduler V2 implementation until the remaining runtime-producer
+  convergence work is closed and the metrics/trace spine is strong enough to
+  make scheduler policy observable.
 
 ### Phase 5: Real Workflow Event Contract
 
