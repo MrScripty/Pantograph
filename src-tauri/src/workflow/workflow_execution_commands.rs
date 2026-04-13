@@ -440,6 +440,13 @@ pub(crate) fn trace_runtime_metrics(
     }
 }
 
+fn diagnostics_runtime_trace_metrics(
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+) -> WorkflowTraceRuntimeMetrics {
+    trace_runtime_metrics(runtime_snapshot_override.unwrap_or(gateway_snapshot))
+}
+
 fn send_diagnostics_projection(
     channel: &Channel<WorkflowEvent>,
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
@@ -459,6 +466,7 @@ async fn emit_diagnostics_snapshots(
     workflow_service: &SharedWorkflowService,
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     channel: &Channel<WorkflowEvent>,
+    runtime_snapshot_override: Option<inference::RuntimeLifecycleSnapshot>,
 ) {
     let scheduler_snapshot = match workflow_service
         .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
@@ -509,8 +517,11 @@ async fn emit_diagnostics_snapshots(
     ) {
         Ok(runtime) => runtime,
         Err(error) => {
-            let runtime_trace_metrics =
-                trace_runtime_metrics(&gateway.runtime_lifecycle_snapshot().await);
+            let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
+            let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
+                runtime_snapshot_override.as_ref(),
+                &gateway_snapshot,
+            );
             let runtime_event = WorkflowEvent::runtime_snapshot(
                 runtime_workflow_id.clone(),
                 trace_execution_id.clone(),
@@ -543,7 +554,9 @@ async fn emit_diagnostics_snapshots(
             (None, Some(error.to_envelope_json()))
         }
     };
-    let runtime_trace_metrics = trace_runtime_metrics(&gateway.runtime_lifecycle_snapshot().await);
+    let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
+    let runtime_trace_metrics =
+        diagnostics_runtime_trace_metrics(runtime_snapshot_override.as_ref(), &gateway_snapshot);
 
     let runtime_event = WorkflowEvent::runtime_snapshot(
         runtime_workflow_id,
@@ -585,6 +598,7 @@ async fn run_session_graph_snapshot(
         workflow_service.inner(),
         diagnostics_store.inner(),
         &diagnostics_channel,
+        None,
     )
     .await;
 
@@ -685,6 +699,7 @@ async fn run_session_graph_snapshot(
         });
     }
 
+    let execution_runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
     restore_runtime_if_needed(gateway.inner(), restore_config).await;
     emit_diagnostics_snapshots(
         &app,
@@ -694,6 +709,7 @@ async fn run_session_graph_snapshot(
         workflow_service.inner(),
         diagnostics_store.inner(),
         &diagnostics_channel,
+        Some(execution_runtime_snapshot),
     )
     .await;
     workflow_result
@@ -701,7 +717,7 @@ async fn run_session_graph_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::trace_runtime_metrics;
+    use super::{diagnostics_runtime_trace_metrics, trace_runtime_metrics};
 
     #[test]
     fn trace_runtime_metrics_prefers_backend_lifecycle_reason() {
@@ -720,6 +736,48 @@ mod tests {
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
             Some("reused_loaded_pytorch_model")
+        );
+    }
+
+    #[test]
+    fn diagnostics_runtime_trace_metrics_prefers_execution_snapshot_override() {
+        let execution_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
+            warmup_started_at_ms: Some(100),
+            warmup_completed_at_ms: Some(110),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            active: true,
+            last_error: None,
+        };
+        let restored_gateway_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_instance_id: Some("llama-cpp-restore-9".to_string()),
+            warmup_started_at_ms: Some(200),
+            warmup_completed_at_ms: Some(240),
+            warmup_duration_ms: Some(40),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("started_llamacpp_inference".to_string()),
+            active: true,
+            last_error: None,
+        };
+
+        let metrics = diagnostics_runtime_trace_metrics(
+            Some(&execution_snapshot),
+            &restored_gateway_snapshot,
+        );
+
+        assert_eq!(metrics.runtime_id.as_deref(), Some("llama.cpp.embedding"));
+        assert_eq!(
+            metrics.runtime_instance_id.as_deref(),
+            Some("llama-cpp-embedding-2")
+        );
+        assert_eq!(metrics.runtime_reused, Some(true));
+        assert_eq!(
+            metrics.lifecycle_decision_reason.as_deref(),
+            Some("reused_embedding_runtime")
         );
     }
 }
