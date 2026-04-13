@@ -271,11 +271,6 @@ impl InferenceGateway {
         self.inner.is_embedding_mode().await
     }
 
-    /// Check if currently in inference mode (ready and not embedding).
-    pub async fn is_inference_mode(&self) -> bool {
-        self.inner.is_inference_mode().await
-    }
-
     /// Get the last inference config (for restoring after embedding mode).
     pub async fn last_inference_config(&self) -> Option<BackendConfig> {
         self.inner.last_inference_config().await

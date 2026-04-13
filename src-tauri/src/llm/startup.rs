@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use reqwest::Url;
 
 use crate::config::{AppConfig, DeviceConfig};
+use crate::llm::gateway::SharedGateway;
 use crate::llm::{EmbeddingStartRequest, InferenceStartRequest};
 
 fn derive_models_root(path: &Path) -> Option<PathBuf> {
@@ -232,6 +233,40 @@ pub(crate) fn build_configured_embedding_request(
         &config.device,
         None,
     ))
+}
+
+pub(crate) async fn capture_inference_restore_config(
+    gateway: &SharedGateway,
+) -> Option<inference::BackendConfig> {
+    if gateway.is_ready().await && !gateway.is_embedding_mode().await {
+        gateway.last_inference_config().await
+    } else {
+        None
+    }
+}
+
+pub(crate) async fn restore_inference_runtime(
+    gateway: &SharedGateway,
+    restore_config: Option<inference::BackendConfig>,
+    failure_context: &str,
+) -> Result<(), String> {
+    if let Some(config) = restore_config {
+        gateway
+            .start(&config)
+            .await
+            .map_err(|e| format!("{}: {}", failure_context, e))?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn restore_inference_runtime_best_effort(
+    gateway: &SharedGateway,
+    restore_config: Option<inference::BackendConfig>,
+    failure_context: &str,
+) {
+    if let Err(err) = restore_inference_runtime(gateway, restore_config, failure_context).await {
+        log::warn!("{}", err);
+    }
 }
 
 #[cfg(test)]

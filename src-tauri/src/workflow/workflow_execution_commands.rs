@@ -4,7 +4,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
-use crate::llm::startup::build_resolved_embedding_request;
+use crate::llm::startup::{
+    build_resolved_embedding_request, capture_inference_restore_config,
+    restore_inference_runtime_best_effort,
+};
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 use pantograph_workflow_service::{
@@ -334,11 +337,7 @@ async fn prepare_embedding_runtime(
         return Ok(None);
     }
 
-    let restore_config = if gateway.is_ready().await && !gateway.is_embedding_mode().await {
-        gateway.last_inference_config().await
-    } else {
-        None
-    };
+    let restore_config = capture_inference_restore_config(gateway).await;
 
     let model_id = embedding_model_id_from_graph.ok_or_else(|| {
         "Embedding workflows must connect Puma-Lib `model_path` to embedding `model`".to_string()
@@ -392,20 +391,6 @@ async fn prepare_embedding_runtime(
         .map_err(|e| format!("Failed to start llama.cpp in embedding mode: {}", e))?;
 
     Ok(restore_config)
-}
-
-async fn restore_runtime_if_needed(
-    gateway: &SharedGateway,
-    restore_config: Option<inference::BackendConfig>,
-) {
-    if let Some(config) = restore_config {
-        if let Err(err) = gateway.start(&config).await {
-            log::warn!(
-                "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
-                err
-            );
-        }
-    }
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {
@@ -769,7 +754,12 @@ async fn run_session_graph_snapshot(
     let execution_mode_info = gateway.mode_info().await;
     let execution_runtime_model_target =
         resolve_runtime_model_target(&execution_mode_info, &execution_runtime_snapshot);
-    restore_runtime_if_needed(gateway.inner(), restore_config).await;
+    restore_inference_runtime_best_effort(
+        gateway.inner(),
+        restore_config,
+        "Workflow executed in embedding mode but failed to restore previous inference mode",
+    )
+    .await;
     emit_diagnostics_snapshots(
         &app,
         &session_id,

@@ -5,7 +5,10 @@ use super::shared::{get_project_data_dir, SharedAppConfig};
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;
-use crate::llm::startup::build_resolved_embedding_request;
+use crate::llm::startup::{
+    build_resolved_embedding_request, capture_inference_restore_config, restore_inference_runtime,
+    restore_inference_runtime_best_effort,
+};
 use tauri::{command, ipc::Channel, AppHandle, State};
 
 /// Event sent during document indexing
@@ -186,11 +189,9 @@ pub async fn index_docs_with_switch(
     log::info!("Embedding model path: {:?}", embedding_model_path);
 
     // Check if we need to restore VLM mode after
-    let restore_vlm = gateway.is_inference_mode().await;
+    let restore_config = capture_inference_restore_config(&gateway).await;
+    let restore_vlm = restore_config.is_some();
     log::info!("Restore VLM after indexing: {}", restore_vlm);
-
-    // Save the last inference config for potential restoration
-    let last_inference_config = gateway.last_inference_config().await;
     let resolved_embedding_model_path = resolve_embedding_model_path(&embedding_model_path)?;
 
     let device = config_guard.device.clone();
@@ -236,11 +237,12 @@ pub async fn index_docs_with_switch(
         None => {
             // Backend has no HTTP API (e.g., Candle)
             // Restore VLM mode if needed and return error
-            if restore_vlm {
-                if let Some(inference_config) = last_inference_config.clone() {
-                    let _ = gateway.start(&inference_config).await;
-                }
-            }
+            restore_inference_runtime_best_effort(
+                &gateway,
+                restore_config.clone(),
+                "Failed to restore VLM mode after RAG embedding startup fallback",
+            )
+            .await;
             return Err(format!(
                 "The {} backend does not support RAG indexing through the GUI. \
                  It runs in-process without an HTTP API. \
@@ -320,12 +322,12 @@ pub async fn index_docs_with_switch(
                 })
                 .ok();
 
-            // Try to restore VLM mode even on error
-            if restore_vlm {
-                if let Some(inference_config) = last_inference_config.clone() {
-                    let _ = gateway.start(&inference_config).await;
-                }
-            }
+            restore_inference_runtime_best_effort(
+                &gateway,
+                restore_config.clone(),
+                "Failed to restore VLM mode after RAG indexing failure",
+            )
+            .await;
 
             return Err(e.to_string());
         }
@@ -343,12 +345,7 @@ pub async fn index_docs_with_switch(
             })
             .ok();
 
-        if let Some(inference_config) = last_inference_config {
-            gateway
-                .start(&inference_config)
-                .await
-                .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
-        }
+        restore_inference_runtime(&gateway, restore_config, "Failed to restore VLM mode").await?;
     }
 
     channel
