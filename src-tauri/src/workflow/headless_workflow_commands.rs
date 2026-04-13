@@ -153,6 +153,8 @@ fn record_headless_runtime_snapshot(
     trace_execution_id: Option<&str>,
     capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
     trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     captured_at_ms: u64,
 ) {
     match (trace_execution_id, capabilities_result) {
@@ -163,6 +165,8 @@ fn record_headless_runtime_snapshot(
                 captured_at_ms,
                 Some(capabilities),
                 trace_runtime_metrics,
+                active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot.clone(),
                 None,
             );
         }
@@ -173,6 +177,8 @@ fn record_headless_runtime_snapshot(
                 captured_at_ms,
                 None,
                 trace_runtime_metrics,
+                active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot.clone(),
                 Some(error.to_envelope_json()),
             );
         }
@@ -181,6 +187,8 @@ fn record_headless_runtime_snapshot(
                 Some(workflow_id),
                 Some(capabilities),
                 None,
+                active_runtime_snapshot,
+                embedding_runtime_snapshot,
                 captured_at_ms,
             );
         }
@@ -189,6 +197,8 @@ fn record_headless_runtime_snapshot(
                 Some(workflow_id),
                 None,
                 Some(error.to_envelope_json()),
+                active_runtime_snapshot,
+                embedding_runtime_snapshot,
                 captured_at_ms,
             );
         }
@@ -256,6 +266,8 @@ fn workflow_diagnostics_snapshot_projection(
     >,
     capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
     runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
+    active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     captured_at_ms: u64,
 ) -> WorkflowDiagnosticsProjection {
     let mut trace_execution_id = session_id.clone();
@@ -295,10 +307,12 @@ fn workflow_diagnostics_snapshot_projection(
                 ))
             }),
             runtime_trace_metrics,
+            active_runtime_snapshot,
+            embedding_runtime_snapshot,
             captured_at_ms,
         );
     } else {
-        diagnostics_store.update_runtime_snapshot(None, None, None, captured_at_ms);
+        diagnostics_store.update_runtime_snapshot(None, None, None, None, None, captured_at_ms);
     }
 
     diagnostics_store.snapshot()
@@ -565,6 +579,8 @@ pub async fn workflow_get_diagnostics_snapshot(
             &gateway.runtime_lifecycle_snapshot().await,
         )
     };
+    let active_runtime_snapshot = Some(gateway.runtime_lifecycle_snapshot().await);
+    let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store.inner(),
@@ -574,6 +590,8 @@ pub async fn workflow_get_diagnostics_snapshot(
         scheduler_snapshot_result,
         capabilities_result,
         runtime_trace_metrics,
+        active_runtime_snapshot,
+        embedding_runtime_snapshot,
         captured_at_ms,
     ))
 }
@@ -755,6 +773,8 @@ mod tests {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
             },
+            None,
+            None,
             120,
         );
 
@@ -792,6 +812,8 @@ mod tests {
             None,
             Ok(capability_response()),
             WorkflowTraceRuntimeMetrics::default(),
+            None,
+            None,
             120,
         );
 
@@ -849,6 +871,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
+            None,
+            None,
             130,
         );
 
@@ -1070,6 +1094,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
+            None,
+            None,
             120,
         );
 
@@ -1117,6 +1143,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
             },
+            None,
+            None,
             120,
         );
 
@@ -1157,6 +1185,8 @@ mod tests {
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics::default(),
+            None,
+            None,
             120,
         );
 
@@ -1168,6 +1198,8 @@ mod tests {
             None,
             None,
             WorkflowTraceRuntimeMetrics::default(),
+            None,
+            None,
             130,
         );
 
@@ -1210,6 +1242,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
+            None,
+            None,
             120,
         );
 

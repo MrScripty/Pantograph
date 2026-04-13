@@ -227,6 +227,18 @@ export interface WorkflowCapabilitiesResponse {
   runtime_capabilities: WorkflowRuntimeCapability[];
 }
 
+export interface RuntimeLifecycleSnapshot {
+  runtime_id?: string | null;
+  runtime_instance_id?: string | null;
+  warmup_started_at_ms?: number | null;
+  warmup_completed_at_ms?: number | null;
+  warmup_duration_ms?: number | null;
+  runtime_reused?: boolean | null;
+  lifecycle_decision_reason?: string | null;
+  active: boolean;
+  last_error?: string | null;
+}
+
 export type WorkflowSessionKind = 'edit' | 'workflow';
 
 export interface WorkflowSessionHandle {
@@ -348,6 +360,8 @@ export interface WorkflowEventData {
     execution_id?: string;
     captured_at_ms: number;
     capabilities?: WorkflowCapabilitiesResponse | null;
+    active_runtime_snapshot?: RuntimeLifecycleSnapshot | null;
+    embedding_runtime_snapshot?: RuntimeLifecycleSnapshot | null;
     error?: string | null;
   };
   SchedulerSnapshot: {

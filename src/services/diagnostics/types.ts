@@ -88,6 +88,20 @@ export interface DiagnosticsRuntimeSnapshot {
   runtimeCapabilities: WorkflowRuntimeCapability[];
   models: WorkflowCapabilityModel[];
   lastError: string | null;
+  activeRuntime: DiagnosticsRuntimeLifecycleSnapshot | null;
+  embeddingRuntime: DiagnosticsRuntimeLifecycleSnapshot | null;
+}
+
+export interface DiagnosticsRuntimeLifecycleSnapshot {
+  runtimeId: string | null;
+  runtimeInstanceId: string | null;
+  warmupStartedAtMs: number | null;
+  warmupCompletedAtMs: number | null;
+  warmupDurationMs: number | null;
+  runtimeReused: boolean | null;
+  lifecycleDecisionReason: string | null;
+  active: boolean;
+  lastError: string | null;
 }
 
 export interface DiagnosticsSchedulerSnapshot {

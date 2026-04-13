@@ -447,6 +447,15 @@ fn diagnostics_runtime_trace_metrics(
     trace_runtime_metrics(runtime_snapshot_override.unwrap_or(gateway_snapshot))
 }
 
+fn diagnostics_active_runtime_snapshot(
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+) -> inference::RuntimeLifecycleSnapshot {
+    runtime_snapshot_override
+        .cloned()
+        .unwrap_or_else(|| gateway_snapshot.clone())
+}
+
 fn send_diagnostics_projection(
     channel: &Channel<WorkflowEvent>,
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
@@ -518,6 +527,11 @@ async fn emit_diagnostics_snapshots(
         Ok(runtime) => runtime,
         Err(error) => {
             let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
+            let active_runtime_snapshot = diagnostics_active_runtime_snapshot(
+                runtime_snapshot_override.as_ref(),
+                &gateway_snapshot,
+            );
+            let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
             let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
                 runtime_snapshot_override.as_ref(),
                 &gateway_snapshot,
@@ -528,6 +542,8 @@ async fn emit_diagnostics_snapshots(
                 captured_at_ms,
                 None,
                 runtime_trace_metrics,
+                Some(active_runtime_snapshot),
+                embedding_runtime_snapshot,
                 Some(error.clone()),
             );
             diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);
@@ -555,6 +571,9 @@ async fn emit_diagnostics_snapshots(
         }
     };
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
+    let active_runtime_snapshot =
+        diagnostics_active_runtime_snapshot(runtime_snapshot_override.as_ref(), &gateway_snapshot);
+    let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
     let runtime_trace_metrics =
         diagnostics_runtime_trace_metrics(runtime_snapshot_override.as_ref(), &gateway_snapshot);
 
@@ -564,6 +583,8 @@ async fn emit_diagnostics_snapshots(
         captured_at_ms,
         capabilities,
         runtime_trace_metrics,
+        Some(active_runtime_snapshot),
+        embedding_runtime_snapshot,
         runtime_error,
     );
     diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);

@@ -42,6 +42,8 @@ function createEmptyProjection(): WorkflowDiagnosticsProjection {
       runtimeCapabilities: [],
       models: [],
       lastError: null,
+      activeRuntime: null,
+      embeddingRuntime: null,
     },
     scheduler: {
       workflowId: null,

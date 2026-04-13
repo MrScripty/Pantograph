@@ -346,6 +346,8 @@ export class WorkflowService {
           runtimeCapabilities: [],
           models: [],
           lastError: null,
+          activeRuntime: null,
+          embeddingRuntime: null,
         },
         scheduler: {
           workflowId: workflowId ?? null,

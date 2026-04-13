@@ -1,12 +1,26 @@
 <script lang="ts">
-  import type { DiagnosticsRuntimeSnapshot } from '../../services/diagnostics/types';
+  import type {
+    DiagnosticsRuntimeLifecycleSnapshot,
+    DiagnosticsRuntimeSnapshot,
+  } from '../../services/diagnostics/types';
   import {
+    formatDiagnosticsDuration,
     formatDiagnosticsBytes,
     formatDiagnosticsTimestamp,
     getRuntimeInstallStateClasses,
   } from './presenters';
 
   export let runtime: DiagnosticsRuntimeSnapshot;
+
+  function lifecycleStateLabel(snapshot: DiagnosticsRuntimeLifecycleSnapshot | null): string {
+    if (!snapshot) {
+      return 'Unavailable';
+    }
+    if (snapshot.lastError) {
+      return 'Error';
+    }
+    return snapshot.active ? 'Active' : 'Idle';
+  }
 </script>
 
 <div class="h-full overflow-auto px-4 py-4">
@@ -75,6 +89,102 @@
         {runtime.lastError}
       </div>
     {/if}
+
+    <div class="mt-4 grid gap-4 xl:grid-cols-2">
+      <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-sm font-medium text-neutral-100">Active Runtime Lifecycle</div>
+            <div class="text-xs text-neutral-500">
+              Current backend-owned lifecycle snapshot for the active runtime.
+            </div>
+          </div>
+          <span class="rounded-full border border-neutral-700 px-2 py-1 text-[11px] font-medium text-neutral-300">
+            {lifecycleStateLabel(runtime.activeRuntime)}
+          </span>
+        </div>
+
+        {#if runtime.activeRuntime}
+          <div class="mt-3 grid gap-2 text-sm text-neutral-300 md:grid-cols-2">
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Runtime: {runtime.activeRuntime.runtimeId ?? 'unknown'}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Instance: {runtime.activeRuntime.runtimeInstanceId ?? 'unreported'}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Warmup: {formatDiagnosticsDuration(runtime.activeRuntime.warmupDurationMs ?? null)}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Reused: {runtime.activeRuntime.runtimeReused === null ? 'unknown' : runtime.activeRuntime.runtimeReused ? 'yes' : 'no'}
+            </div>
+          </div>
+          <div class="mt-3 text-xs text-neutral-500">
+            Started {formatDiagnosticsTimestamp(runtime.activeRuntime.warmupStartedAtMs ?? null)}
+            • Completed {formatDiagnosticsTimestamp(runtime.activeRuntime.warmupCompletedAtMs ?? null)}
+          </div>
+          <div class="mt-2 text-xs text-neutral-400">
+            Reason: {runtime.activeRuntime.lifecycleDecisionReason ?? 'unreported'}
+          </div>
+          {#if runtime.activeRuntime.lastError}
+            <div class="mt-3 rounded-lg border border-red-900/70 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+              {runtime.activeRuntime.lastError}
+            </div>
+          {/if}
+        {:else}
+          <div class="mt-3 text-sm text-neutral-500">
+            No active runtime lifecycle snapshot has been reported yet.
+          </div>
+        {/if}
+      </article>
+
+      <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-sm font-medium text-neutral-100">Embedding Runtime Lifecycle</div>
+            <div class="text-xs text-neutral-500">
+              Dedicated embedding runtime snapshot when parallel embedding is active.
+            </div>
+          </div>
+          <span class="rounded-full border border-neutral-700 px-2 py-1 text-[11px] font-medium text-neutral-300">
+            {lifecycleStateLabel(runtime.embeddingRuntime)}
+          </span>
+        </div>
+
+        {#if runtime.embeddingRuntime}
+          <div class="mt-3 grid gap-2 text-sm text-neutral-300 md:grid-cols-2">
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Runtime: {runtime.embeddingRuntime.runtimeId ?? 'unknown'}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Instance: {runtime.embeddingRuntime.runtimeInstanceId ?? 'unreported'}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Warmup: {formatDiagnosticsDuration(runtime.embeddingRuntime.warmupDurationMs ?? null)}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
+              Reused: {runtime.embeddingRuntime.runtimeReused === null ? 'unknown' : runtime.embeddingRuntime.runtimeReused ? 'yes' : 'no'}
+            </div>
+          </div>
+          <div class="mt-3 text-xs text-neutral-500">
+            Started {formatDiagnosticsTimestamp(runtime.embeddingRuntime.warmupStartedAtMs ?? null)}
+            • Completed {formatDiagnosticsTimestamp(runtime.embeddingRuntime.warmupCompletedAtMs ?? null)}
+          </div>
+          <div class="mt-2 text-xs text-neutral-400">
+            Reason: {runtime.embeddingRuntime.lifecycleDecisionReason ?? 'unreported'}
+          </div>
+          {#if runtime.embeddingRuntime.lastError}
+            <div class="mt-3 rounded-lg border border-red-900/70 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+              {runtime.embeddingRuntime.lastError}
+            </div>
+          {/if}
+        {:else}
+          <div class="mt-3 text-sm text-neutral-500">
+            No dedicated embedding runtime snapshot has been reported for this workflow context.
+          </div>
+        {/if}
+      </article>
+    </div>
 
     <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
       <section class="rounded-xl border border-neutral-800 bg-neutral-950/80">

@@ -11,7 +11,7 @@ use pantograph_workflow_service::{
     WorkflowTraceRuntimeMetrics,
 };
 
-use super::diagnostics::WorkflowDiagnosticsProjection;
+use super::diagnostics::{DiagnosticsRuntimeLifecycleSnapshot, WorkflowDiagnosticsProjection};
 
 /// A value that flows through a port (alias for serde_json::Value)
 pub type PortValue = serde_json::Value;
@@ -163,6 +163,10 @@ pub enum WorkflowEvent {
         capabilities: Option<WorkflowCapabilitiesResponse>,
         /// Backend-owned runtime lifecycle metrics captured alongside the snapshot
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        /// Backend-owned lifecycle snapshot for the active runtime at capture time
+        active_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+        /// Backend-owned lifecycle snapshot for the dedicated embedding runtime when available
+        embedding_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
         /// Error encountered while collecting the runtime snapshot
         error: Option<String>,
     },
@@ -323,6 +327,8 @@ impl WorkflowEvent {
         captured_at_ms: u64,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+        embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         error: Option<String>,
     ) -> Self {
         Self::RuntimeSnapshot {
@@ -331,6 +337,12 @@ impl WorkflowEvent {
             captured_at_ms,
             capabilities,
             trace_runtime_metrics,
+            active_runtime_snapshot: active_runtime_snapshot
+                .as_ref()
+                .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+            embedding_runtime_snapshot: embedding_runtime_snapshot
+                .as_ref()
+                .map(DiagnosticsRuntimeLifecycleSnapshot::from),
             error,
         }
     }
@@ -409,6 +421,8 @@ mod tests {
             1234,
             None,
             WorkflowTraceRuntimeMetrics::default(),
+            None,
+            None,
             Some("capability unavailable".to_string()),
         );
         let json = serde_json::to_string(&event).unwrap();

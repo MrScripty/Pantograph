@@ -112,6 +112,45 @@ pub struct DiagnosticsRunTrace {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct DiagnosticsRuntimeLifecycleSnapshot {
+    #[serde(default)]
+    pub runtime_id: Option<String>,
+    #[serde(default)]
+    pub runtime_instance_id: Option<String>,
+    #[serde(default)]
+    pub warmup_started_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_completed_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub runtime_reused: Option<bool>,
+    #[serde(default)]
+    pub lifecycle_decision_reason: Option<String>,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleSnapshot {
+    fn from(snapshot: &inference::RuntimeLifecycleSnapshot) -> Self {
+        Self {
+            runtime_id: snapshot.runtime_id.clone(),
+            runtime_instance_id: snapshot.runtime_instance_id.clone(),
+            warmup_started_at_ms: snapshot.warmup_started_at_ms,
+            warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
+            warmup_duration_ms: snapshot.warmup_duration_ms,
+            runtime_reused: snapshot.runtime_reused,
+            lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone(),
+            active: snapshot.active,
+            last_error: snapshot.last_error.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct DiagnosticsRuntimeSnapshot {
     #[serde(default)]
     pub workflow_id: Option<String>,
@@ -131,6 +170,10 @@ pub struct DiagnosticsRuntimeSnapshot {
     pub models: Vec<pantograph_workflow_service::WorkflowCapabilityModel>,
     #[serde(default)]
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub active_runtime: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+    #[serde(default)]
+    pub embedding_runtime: Option<DiagnosticsRuntimeLifecycleSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -221,6 +264,8 @@ impl WorkflowDiagnosticsState {
                 runtime_capabilities: Vec::new(),
                 models: Vec::new(),
                 last_error: None,
+                active_runtime: None,
+                embedding_runtime: None,
             },
             scheduler: DiagnosticsSchedulerSnapshot {
                 workflow_id: None,
@@ -346,6 +391,8 @@ impl WorkflowDiagnosticsStore {
         captured_at_ms: u64,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+        embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         error: Option<String>,
     ) -> WorkflowDiagnosticsProjection {
         let event = WorkflowEvent::runtime_snapshot(
@@ -354,6 +401,8 @@ impl WorkflowDiagnosticsStore {
             captured_at_ms,
             capabilities,
             trace_runtime_metrics,
+            active_runtime_snapshot,
+            embedding_runtime_snapshot,
             error,
         );
         self.record_workflow_event(&event, captured_at_ms)
@@ -386,6 +435,8 @@ impl WorkflowDiagnosticsStore {
         workflow_id: Option<String>,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         last_error: Option<String>,
+        active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+        embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         captured_at_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
         let mut state = self
@@ -411,6 +462,12 @@ impl WorkflowDiagnosticsStore {
                     .map(|value| value.models.clone())
                     .unwrap_or_default(),
                 last_error,
+                active_runtime: active_runtime_snapshot
+                    .as_ref()
+                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                embedding_runtime: embedding_runtime_snapshot
+                    .as_ref()
+                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
             },
             None => WorkflowDiagnosticsState::new(state.retained_event_limit).runtime,
         };
@@ -753,6 +810,7 @@ fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
             capabilities,
             trace_runtime_metrics,
             error,
+            ..
         } => Some(WorkflowTraceEvent::RuntimeSnapshotCaptured {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
@@ -791,6 +849,8 @@ fn apply_runtime_event(
     if let WorkflowEvent::RuntimeSnapshot {
         workflow_id,
         capabilities,
+        active_runtime_snapshot,
+        embedding_runtime_snapshot,
         error,
         ..
     } = event
@@ -813,6 +873,8 @@ fn apply_runtime_event(
                 .map(|value| value.models.clone())
                 .unwrap_or_default(),
             last_error: error.clone(),
+            active_runtime: active_runtime_snapshot.clone(),
+            embedding_runtime: embedding_runtime_snapshot.clone(),
         };
     }
 }
@@ -1092,6 +1154,28 @@ mod tests {
                 runtime_capabilities: Vec::new(),
             }),
             None,
+            Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: Some(4_900),
+                warmup_completed_at_ms: Some(5_000),
+                warmup_duration_ms: Some(100),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
+                warmup_started_at_ms: Some(4_800),
+                warmup_completed_at_ms: Some(4_850),
+                warmup_duration_ms: Some(50),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+                active: true,
+                last_error: None,
+            }),
             5_000,
         );
         let snapshot = store.update_scheduler_snapshot(
@@ -1121,6 +1205,22 @@ mod tests {
 
         assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-runtime"));
         assert_eq!(snapshot.runtime.max_input_bindings, Some(4));
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_id.as_deref()),
+            Some("llama.cpp")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .embedding_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_id.as_deref()),
+            Some("llama.cpp.embedding")
+        );
         assert_eq!(snapshot.scheduler.session_id.as_deref(), Some("session-1"));
         assert_eq!(
             snapshot
@@ -1136,7 +1236,7 @@ mod tests {
     #[test]
     fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
         let store = WorkflowDiagnosticsStore::default();
-        store.record_runtime_snapshot(
+        let snapshot = store.record_runtime_snapshot(
             "wf-runtime".to_string(),
             "exec-runtime".to_string(),
             5_000,
@@ -1150,6 +1250,28 @@ mod tests {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
             },
+            Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: Some(4_900),
+                warmup_completed_at_ms: Some(5_000),
+                warmup_duration_ms: Some(100),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-7".to_string()),
+                warmup_started_at_ms: Some(4_700),
+                warmup_completed_at_ms: Some(4_760),
+                warmup_duration_ms: Some(60),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+                active: true,
+                last_error: None,
+            }),
             None,
         );
 
@@ -1178,6 +1300,22 @@ mod tests {
         assert_eq!(
             trace.runtime.lifecycle_decision_reason.as_deref(),
             Some("runtime_ready")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_instance_id.as_deref()),
+            Some("llama-cpp-1")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .embedding_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_instance_id.as_deref()),
+            Some("llama-cpp-embedding-7")
         );
     }
 
@@ -1291,7 +1429,7 @@ mod tests {
             },
             1_000,
         );
-        store.update_runtime_snapshot(Some("wf-1".to_string()), None, None, 2_000);
+        store.update_runtime_snapshot(Some("wf-1".to_string()), None, None, None, None, 2_000);
         store.update_scheduler_snapshot(
             Some("wf-1".to_string()),
             Some("exec-1".to_string()),
