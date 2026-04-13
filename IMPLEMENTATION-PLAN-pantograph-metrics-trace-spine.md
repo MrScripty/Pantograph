@@ -383,6 +383,10 @@ Update during implementation:
   that freeze the two intended behaviors: identified executions append
   canonical runtime trace events, while execution-less diagnostics reads only
   refresh the overlay snapshot.
+- 2026-04-12: Sixteenth implementation slice updated the workflow-service and
+  Tauri workflow READMEs so the new `trace_execution_id` contract and
+  adapter-side fallback rules are documented at the ownership boundaries where
+  later scheduler/runtime work will build on them.
 
 ## Commit Cadence Notes
 
@@ -444,6 +448,7 @@ Update during implementation:
 - Thirteenth implementation slice added in `pantograph-workflow-service`
 - Fourteenth implementation slice added in `src-tauri/src/workflow`
 - Fifteenth implementation slice added in `src-tauri/src/workflow`
+- Sixteenth implementation slice added in touched README ownership notes
 
 ### Deviations
 

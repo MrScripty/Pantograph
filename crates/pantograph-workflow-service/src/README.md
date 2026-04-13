@@ -105,6 +105,10 @@ Primary contract types:
 - Workflow trace and metrics contract ownership is backend-owned in this crate;
   adapters may project or transport traces but must not invent timing or
   lifecycle state locally.
+- Scheduler snapshots now expose additive `trace_execution_id` attribution when
+  the backend can unambiguously identify the active or uniquely-visible queued
+  run. Adapters must treat an omitted value as "identity ambiguous" rather than
+  guessing from session-local state.
 - Trace snapshot filter validation belongs here with the request DTOs so Tauri
   command handlers can reject malformed interop payloads without duplicating
   request policy in adapter code.

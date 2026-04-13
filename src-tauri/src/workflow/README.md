@@ -143,6 +143,11 @@ let snapshot = workflow_service
 - Canonical run/node lifecycle timing for diagnostics must come from
   `WorkflowTraceStore`; Tauri may only adapt that trace data into the existing
   GUI projection shape and attach additive UI-only overlay fields.
+- When a scheduler snapshot includes backend-owned `trace_execution_id`,
+  adapters must attribute runtime/scheduler snapshot events to that execution
+  instead of falling back to `session_id`. If the field is absent, the adapter
+  may only use the requested session identity or update overlay-only state; it
+  must not infer a concrete run id locally.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle
