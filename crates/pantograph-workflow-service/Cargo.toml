@@ -20,3 +20,4 @@ workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 
 [dev-dependencies]
 tokio.workspace = true
+tempfile = "3"

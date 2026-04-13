@@ -7,6 +7,55 @@ use crate::workflow::WorkflowServiceError;
 
 use super::types::{WorkflowFile, WorkflowGraph, WorkflowGraphMetadata};
 
+const PUMA_LIB_DERIVED_DATA_KEYS: &[&str] = &[
+    "modelPath",
+    "model_path",
+    "model_type",
+    "modelType",
+    "task_type_primary",
+    "taskTypePrimary",
+    "backend_key",
+    "backendKey",
+    "recommended_backend",
+    "recommendedBackend",
+    "runtime_engine_hints",
+    "runtimeEngineHints",
+    "requires_custom_code",
+    "requiresCustomCode",
+    "custom_code_sources",
+    "customCodeSources",
+    "platform_context",
+    "platformContext",
+    "dependency_bindings",
+    "dependencyBindings",
+    "dependency_requirements",
+    "dependencyRequirements",
+    "dependency_requirements_id",
+    "dependencyRequirementsId",
+    "inference_settings",
+    "inferenceSettings",
+    "review_reasons",
+    "reviewReasons",
+];
+
+fn sanitize_puma_lib_node_data(data: &mut serde_json::Value) {
+    let Some(object) = data.as_object_mut() else {
+        return;
+    };
+
+    for key in PUMA_LIB_DERIVED_DATA_KEYS {
+        object.remove(*key);
+    }
+}
+
+fn sanitize_workflow_graph_persistence_state(graph: &mut WorkflowGraph) {
+    for node in &mut graph.nodes {
+        if node.node_type == "puma-lib" {
+            sanitize_puma_lib_node_data(&mut node.data);
+        }
+    }
+}
+
 pub trait WorkflowGraphStore: Send + Sync {
     fn save_workflow(
         &self,
@@ -92,6 +141,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
     ) -> Result<String, WorkflowServiceError> {
         let workflows_dir = self.workflows_dir()?;
         let mut graph = graph;
+        sanitize_workflow_graph_persistence_state(&mut graph);
         graph.refresh_derived_graph();
 
         let safe_name: String = name
@@ -143,9 +193,11 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
             WorkflowServiceError::Internal(format!("Failed to read workflow file: {}", e))
         })?;
 
-        serde_json::from_str(&content).map_err(|e| {
+        let mut workflow: WorkflowFile = serde_json::from_str(&content).map_err(|e| {
             WorkflowServiceError::Internal(format!("Failed to parse workflow file: {}", e))
-        })
+        })?;
+        sanitize_workflow_graph_persistence_state(&mut workflow.graph);
+        Ok(workflow)
     }
 
     fn list_workflows(&self) -> Result<Vec<WorkflowGraphMetadata>, WorkflowServiceError> {
@@ -202,4 +254,113 @@ pub struct WorkflowGraphLoadRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphListResponse {
     pub workflows: Vec<WorkflowGraphMetadata>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::types::{GraphNode, Position};
+    use super::*;
+
+    fn sample_puma_lib_data() -> serde_json::Value {
+        serde_json::json!({
+            "label": "Puma-Lib",
+            "selectionMode": "library",
+            "modelName": "tiny-sd-turbo",
+            "model_id": "diffusion/cc-nms/tiny-sd-turbo",
+            "selected_binding_ids": ["binding-a"],
+            "modelPath": "/old/path/tiny-sd-turbo",
+            "model_type": "diffusion",
+            "task_type_primary": "text-to-image",
+            "backend_key": "pytorch",
+            "recommended_backend": "diffusers",
+            "runtime_engine_hints": ["diffusers", "pytorch"],
+            "platform_context": { "os": "linux", "arch": "x86_64" },
+            "dependency_bindings": [{ "binding_id": "binding-a" }],
+            "dependency_requirements": { "model_id": "diffusion/cc-nms/tiny-sd-turbo" },
+            "dependency_requirements_id": "diffusion/cc-nms/tiny-sd-turbo",
+            "inference_settings": [{ "key": "steps" }],
+            "review_reasons": ["imported"]
+        })
+    }
+
+    #[test]
+    fn save_workflow_strips_puma_lib_derived_data() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+        let graph = WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "puma-1".to_string(),
+                node_type: "puma-lib".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: sample_puma_lib_data(),
+            }],
+            edges: Vec::new(),
+            derived_graph: None,
+        };
+
+        let path = store
+            .save_workflow("Tiny SD Turbo".to_string(), graph)
+            .expect("save workflow");
+        let saved = fs::read_to_string(path).expect("read saved workflow");
+        let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
+        let node = workflow.graph.nodes.first().expect("saved puma-lib node");
+        let data = node.data.as_object().expect("saved puma-lib data object");
+
+        assert_eq!(
+            data.get("model_id").and_then(|value| value.as_str()),
+            Some("diffusion/cc-nms/tiny-sd-turbo")
+        );
+        assert_eq!(
+            data.get("selected_binding_ids")
+                .and_then(|value| value.as_array())
+                .map(|value| value.len()),
+            Some(1)
+        );
+        assert!(!data.contains_key("modelPath"));
+        assert!(!data.contains_key("dependency_requirements"));
+        assert!(!data.contains_key("inference_settings"));
+        assert!(!data.contains_key("recommended_backend"));
+    }
+
+    #[test]
+    fn load_workflow_strips_legacy_puma_lib_derived_data() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+        let workflows_dir = temp.path().join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+        let path = workflows_dir.join("Legacy.json");
+
+        let workflow = WorkflowFile::new(
+            "Legacy".to_string(),
+            WorkflowGraph {
+                nodes: vec![GraphNode {
+                    id: "puma-1".to_string(),
+                    node_type: "puma-lib".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: sample_puma_lib_data(),
+                }],
+                edges: Vec::new(),
+                derived_graph: None,
+            },
+        );
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&workflow).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+
+        let loaded = store
+            .load_workflow(".pantograph/workflows/Legacy.json".to_string())
+            .expect("load workflow");
+        let node = loaded.graph.nodes.first().expect("loaded puma-lib node");
+        let data = node.data.as_object().expect("loaded puma-lib data object");
+
+        assert_eq!(
+            data.get("model_id").and_then(|value| value.as_str()),
+            Some("diffusion/cc-nms/tiny-sd-turbo")
+        );
+        assert!(!data.contains_key("modelPath"));
+        assert!(!data.contains_key("dependency_requirements"));
+        assert!(!data.contains_key("inference_settings"));
+    }
 }
