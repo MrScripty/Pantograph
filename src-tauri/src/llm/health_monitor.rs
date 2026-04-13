@@ -10,7 +10,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
-use crate::llm::SharedGateway;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
 /// Health check result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +138,7 @@ impl HealthMonitor {
                     // No server running, reset state
                     *consecutive_failures.write().await = 0;
                     *last_result.write().await = None;
+                    sync_runtime_registry(&app, &gateway).await;
                     previous_healthy = true;
                     tokio::time::sleep(config.check_interval).await;
                     continue;
@@ -259,6 +260,7 @@ impl HealthMonitor {
 
                 // Update state
                 *last_result.write().await = Some(result);
+                sync_runtime_registry(&app, &gateway).await;
                 previous_healthy = current_healthy;
 
                 tokio::time::sleep(config.check_interval).await;
@@ -338,9 +340,19 @@ impl HealthMonitor {
 
         // Update stored result
         *self.last_result.write().await = Some(result.clone());
+        sync_runtime_registry(app, gateway.inner()).await;
 
         Some(result)
     }
+}
+
+async fn sync_runtime_registry(app: &AppHandle, gateway: &SharedGateway) {
+    let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() else {
+        return;
+    };
+
+    let mode_info = gateway.mode_info().await;
+    runtime_registry.observe_mode_info(&mode_info);
 }
 
 impl Default for HealthMonitor {

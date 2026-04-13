@@ -5,11 +5,12 @@
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State, command};
 
-use crate::llm::SharedGateway;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::llm::health_monitor::{
     HealthCheckResult, HealthMonitor, HealthMonitorConfig, SharedHealthMonitor,
 };
 use crate::llm::recovery::{RecoveryConfig, RecoveryError, RecoveryManager, SharedRecoveryManager};
+use super::shared::sync_runtime_registry_from_gateway;
 
 /// Start health monitoring
 #[command]
@@ -109,6 +110,7 @@ pub fn get_recovery_attempt_count(app: AppHandle) -> u32 {
 pub async fn trigger_recovery(
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
 ) -> Result<u16, String> {
     // Get or create recovery manager
     let manager: Arc<RecoveryManager> = match app.try_state::<SharedRecoveryManager>() {
@@ -120,10 +122,13 @@ pub async fn trigger_recovery(
         }
     };
 
-    manager
+    let result = manager
         .recover(&app, &gateway, "Manual recovery triggered")
         .await
-        .map_err(|e: RecoveryError| e.to_string())
+        .map_err(|e: RecoveryError| e.to_string());
+
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
+    result
 }
 
 /// Reset recovery state (after manual intervention)
