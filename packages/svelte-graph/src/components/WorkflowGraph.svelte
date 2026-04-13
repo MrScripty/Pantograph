@@ -813,28 +813,6 @@
 
     const response = await commitConnection(connection);
     if (!response?.accepted) return;
-
-    if (connection.sourceHandle === 'inference_settings') {
-      const sourceNode = stores.workflow.getNodeById(connection.source!);
-      const settings = sourceNode?.data?.inference_settings as
-        | Array<{
-            key: string;
-            label: string;
-            param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
-            default: unknown;
-            description?: string;
-            constraints?: {
-              min?: number;
-              max?: number;
-              allowed_values?: unknown[];
-            };
-          }>
-        | undefined;
-      if (settings && settings.length > 0) {
-        stores.workflow.syncExpandPorts(connection.source!, settings);
-        stores.workflow.syncInferencePorts(connection.source!, settings);
-      }
-    }
   }
 
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {

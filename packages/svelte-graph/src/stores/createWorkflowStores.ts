@@ -20,16 +20,21 @@ import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import { removeNodeDataKeys } from './runtimeData.js';
 import { buildDerivedGraph } from '../graphRevision.js';
-import { canonicalizeWorkflowGraph } from './canonicalizeWorkflowGraph.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 import { applySelectedNodeIds } from '../workflowSelection.js';
-import {
-  buildExpandSettingsSchema,
-  buildDynamicExpandDefinition,
-  buildDynamicInferenceDefinition,
-  buildMergedInferenceSettings,
-  type InferenceParamSchema,
-} from './inferenceSettingsPorts.js';
+
+interface InferenceParamSchema {
+  key: string;
+  label: string;
+  param_type: 'Number' | 'Integer' | 'String' | 'Boolean';
+  default: unknown;
+  description?: string;
+  constraints?: {
+    min?: number;
+    max?: number;
+    allowed_values?: unknown[];
+  };
+}
 
 export interface WorkflowStores {
   // Writable stores
@@ -86,7 +91,7 @@ export interface WorkflowStores {
   clearConnectionIntent: () => void;
   setActiveSessionId: (sessionId: string | null) => void;
 
-  // Actions — inference settings
+  // Compatibility no-ops while graph canonicalization is backend-owned.
   syncInferencePorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
   syncExpandPorts: (sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
   autoConnectExpandToInference: (expandNodeId: string, inferenceSettings: InferenceParamSchema[]) => void;
@@ -98,8 +103,6 @@ export interface WorkflowStores {
   getGroupById: (groupId: string) => NodeGroup | undefined;
   collapseGroup: () => void;
 }
-
-export type { InferenceParamSchema } from './inferenceSettingsPorts.js';
 
 /**
  * Create per-instance workflow stores.
@@ -167,11 +170,10 @@ export function createWorkflowStores(
 
   function materializeWorkflowGraph(graph: WorkflowGraph) {
     const definitions = get(nodeDefinitions);
-    const canonicalGraph = canonicalizeWorkflowGraph(graph, definitions);
     const selectedIds = get(selectedNodeIds);
 
     const graphNodes = applySelectedNodeIds(
-      canonicalGraph.nodes.map((n) => {
+      graph.nodes.map((n) => {
         const nodeType = n.node_type;
         const nodeData = { ...n.data };
 
@@ -186,7 +188,7 @@ export function createWorkflowStores(
       selectedIds,
     );
 
-    const graphEdges: Edge[] = canonicalGraph.edges.map((e) => {
+    const graphEdges: Edge[] = graph.edges.map((e) => {
       return {
         id: e.id,
         source: e.source,
@@ -196,7 +198,7 @@ export function createWorkflowStores(
       };
     });
 
-    return { graphNodes, graphEdges, canonicalGraph };
+    return { graphNodes, graphEdges, graph };
   }
 
   function applyWorkflowGraph(
@@ -206,14 +208,14 @@ export function createWorkflowStores(
       markDirty?: boolean;
     },
   ) {
-    const { graphNodes, graphEdges, canonicalGraph } = materializeWorkflowGraph(graph);
+    const { graphNodes, graphEdges, graph: nextGraph } = materializeWorkflowGraph(graph);
     nodes.set(graphNodes);
     edges.set(graphEdges);
     if (typeof options?.metadata !== 'undefined') {
       workflowMetadata.set(options.metadata);
     }
     connectionIntent.set(null);
-    derivedGraph.set(buildDerivedGraph(canonicalGraph));
+    derivedGraph.set(buildDerivedGraph(nextGraph));
     isDirty.set(options?.markDirty ?? true);
   }
 
@@ -497,125 +499,25 @@ export function createWorkflowStores(
     connectionIntent.set(null);
   }
 
-  // --- Inference settings actions ---
-
-  /**
-   * Find downstream target node IDs connected via a specific source handle.
-   */
-  function findConnectedTargets(sourceId: string, sourceHandle: string): string[] {
-    return get(edges)
-      .filter((e) => e.source === sourceId && e.sourceHandle === sourceHandle)
-      .map((e) => e.target);
+  function syncInferencePorts(
+    _sourceNodeId: string,
+    _inferenceSettings: InferenceParamSchema[],
+  ) {
+    // Backend-owned graph canonicalization now applies inference port changes.
   }
 
-  /**
-   * Sync model-derived inference ports to downstream inference nodes.
-   *
-   * When a puma-lib or model-provider node's model selection changes,
-   * this function finds connected inference nodes and updates their
-   * definition inputs to include model-specific parameter ports.
-   *
-   * Ports not in the base NodeDefinition are considered model-derived
-   * and are stripped before appending the new set.
-   */
-  function syncInferencePorts(sourceNodeId: string, inferenceSettings: InferenceParamSchema[]) {
-    // Find inference nodes connected downstream via model_path or inference_settings
-    const downstreamIds = new Set([
-      ...findConnectedTargets(sourceNodeId, 'model_path'),
-      ...findConnectedTargets(sourceNodeId, 'inference_settings'),
-    ]);
-
-    const defs = get(nodeDefinitions);
-
-    for (const nodeId of downstreamIds) {
-      const node = getNodeById(nodeId);
-      if (!node?.data?.definition) continue;
-
-      const nodeDef = node.data.definition as NodeDefinition;
-
-      // Skip expand-settings nodes — they only need output port sync, not inputs
-      if (nodeDef.node_type === 'expand-settings') continue;
-
-      // Get the base definition for this node type (static ports only)
-      const baseDef = defs.find((d) => d.node_type === nodeDef.node_type);
-      if (!baseDef) continue;
-      const mergedSettings = buildMergedInferenceSettings(baseDef, inferenceSettings);
-
-      updateNodeData(nodeId, {
-        definition: buildDynamicInferenceDefinition(nodeDef, baseDef, mergedSettings),
-      });
-    }
-  }
-
-  /**
-   * Sync dynamic output ports on downstream expand-settings nodes from inference schema.
-   *
-   * Called with the source node ID (puma-lib / model-provider). Finds connected
-   * expand-settings nodes via the inference_settings handle, strips old dynamic
-   * output ports, and appends new ones from the schema.
-   */
-  function syncExpandPorts(sourceNodeId: string, inferenceSettings: InferenceParamSchema[]): void {
-    const expandIds = findConnectedTargets(sourceNodeId, 'inference_settings');
-    const defs = get(nodeDefinitions);
-    const baseDef = defs.find((d) => d.node_type === 'expand-settings');
-    if (!baseDef) return;
-
-    for (const expandId of expandIds) {
-      const node = getNodeById(expandId);
-      if (!node?.data?.definition) continue;
-
-      const nodeDef = node.data.definition as NodeDefinition;
-      // Only operate on expand-settings nodes
-      if (nodeDef.node_type !== 'expand-settings') continue;
-      const downstreamInferenceDefs = findConnectedTargets(expandId, 'inference_settings')
-        .map((nodeId) => {
-          const targetNode = getNodeById(nodeId);
-          const targetNodeType =
-            (targetNode?.data?.definition as NodeDefinition | undefined)?.node_type ??
-            targetNode?.type;
-          return defs.find((definition) => definition.node_type === targetNodeType);
-        })
-        .filter((definition): definition is NodeDefinition => definition !== undefined);
-      const mergedSettings = buildExpandSettingsSchema(
-        downstreamInferenceDefs,
-        inferenceSettings,
-      );
-
-      updateNodeData(expandId, {
-        definition: buildDynamicExpandDefinition(nodeDef, baseDef, mergedSettings),
-        inference_settings: mergedSettings,
-      });
-
-      // Also sync inference ports on nodes downstream of this expand node,
-      // and auto-connect the expand outputs to their inputs
-      syncInferencePorts(expandId, inferenceSettings);
-      autoConnectExpandToInference(expandId, mergedSettings);
-    }
-  }
-
-  /**
-   * Auto-create edges from expand-settings output ports to downstream inference input ports.
-   *
-   * Finds inference nodes connected via the expand node's inference_settings
-   * output and creates edges for each matching parameter port.
-   */
-  function autoConnectExpandToInference(
-    expandNodeId: string,
-    inferenceSettings: InferenceParamSchema[]
+  function syncExpandPorts(
+    _sourceNodeId: string,
+    _inferenceSettings: InferenceParamSchema[],
   ): void {
-    const downstreamIds = findConnectedTargets(expandNodeId, 'inference_settings');
+    // Backend-owned graph canonicalization now applies expand-settings changes.
+  }
 
-    for (const targetId of downstreamIds) {
-      for (const param of inferenceSettings) {
-        addEdgeFn({
-          id: `${expandNodeId}-${param.key}-${targetId}-${param.key}`,
-          source: expandNodeId,
-          sourceHandle: param.key,
-          target: targetId,
-          targetHandle: param.key,
-        });
-      }
-    }
+  function autoConnectExpandToInference(
+    _expandNodeId: string,
+    _inferenceSettings: InferenceParamSchema[],
+  ): void {
+    // Backend-owned graph canonicalization now applies expand passthrough edges.
   }
 
   // --- Group actions ---
@@ -791,7 +693,7 @@ export function createWorkflowStores(
     // Workflow actions
     loadWorkflow: loadWorkflowFn, clearWorkflow, loadDefaultWorkflow, updateViewport,
     setConnectionIntent, clearConnectionIntent, setActiveSessionId,
-    // Inference settings actions
+    // Compatibility no-ops
     syncInferencePorts, syncExpandPorts, autoConnectExpandToInference,
     // Group actions
     createGroup, ungroupNodes, updateGroupPorts: updateGroupPortsFn,

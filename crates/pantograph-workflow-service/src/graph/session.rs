@@ -10,6 +10,7 @@ use crate::workflow::{
     WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
 };
 
+use super::canonicalization::canonicalize_workflow_graph;
 use super::connection_intent::{
     commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
     preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
@@ -200,16 +201,17 @@ struct GraphEditSession {
 impl GraphEditSession {
     fn new(mut graph: WorkflowGraph) -> Self {
         graph = hydrate_embedding_emit_metadata_flags(graph);
-        graph.refresh_derived_graph();
         let now = Instant::now();
-        Self {
+        let mut session = Self {
             graph,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             active_execution_id: None,
             run_count: 0,
             last_accessed: now,
-        }
+        };
+        session.canonicalize_graph();
+        session
     }
 
     fn touch(&mut self) {
@@ -228,9 +230,15 @@ impl GraphEditSession {
         self.redo_stack.clear();
     }
 
+    fn canonicalize_graph(&mut self) {
+        let graph = std::mem::take(&mut self.graph);
+        self.graph = canonicalize_workflow_graph(graph, &NodeRegistry::new());
+        self.graph.refresh_derived_graph();
+    }
+
     fn snapshot_response(&mut self, session_id: &str) -> WorkflowGraphEditSessionGraphResponse {
         self.touch();
-        self.graph.refresh_derived_graph();
+        self.canonicalize_graph();
         WorkflowGraphEditSessionGraphResponse {
             session_id: session_id.to_string(),
             graph_revision: self.graph.compute_fingerprint(),
@@ -626,7 +634,7 @@ impl GraphSessionStore {
             target_handle: request.target_anchor.port_id,
         });
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        state.graph.refresh_derived_graph();
+        state.canonicalize_graph();
         Ok(ConnectionCommitResponse {
             accepted: true,
             graph_revision: state.graph.compute_fingerprint(),
@@ -660,7 +668,7 @@ impl GraphSessionStore {
         state.graph.nodes.push(inserted_node.clone());
         state.graph.edges.push(inserted_edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        state.graph.refresh_derived_graph();
+        state.canonicalize_graph();
 
         Ok(InsertNodeConnectionResponse {
             accepted: true,
@@ -727,7 +735,7 @@ impl GraphSessionStore {
         state.graph.edges.push(incoming_edge);
         state.graph.edges.push(outgoing_edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        state.graph.refresh_derived_graph();
+        state.canonicalize_graph();
 
         Ok(InsertNodeOnEdgeResponse {
             accepted: true,
