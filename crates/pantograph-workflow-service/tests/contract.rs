@@ -4,7 +4,9 @@ use pantograph_workflow_service::{
     WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError,
+    WorkflowServiceError, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
+    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -269,6 +271,149 @@ async fn workflow_io_contract_snapshot() {
     });
 
     assert_eq!(value, expected);
+}
+
+#[test]
+fn workflow_trace_contract_snapshot() {
+    let response = WorkflowTraceSnapshotResponse {
+        traces: vec![WorkflowTraceSummary {
+            execution_id: "exec-1".to_string(),
+            workflow_id: Some("wf-1".to_string()),
+            workflow_name: Some("Workflow 1".to_string()),
+            graph_fingerprint: Some("graph-1".to_string()),
+            status: WorkflowTraceStatus::Completed,
+            started_at_ms: 100,
+            ended_at_ms: Some(180),
+            duration_ms: Some(80),
+            queue: WorkflowTraceQueueMetrics {
+                enqueued_at_ms: Some(90),
+                dequeued_at_ms: Some(100),
+                queue_wait_ms: Some(10),
+                scheduler_decision_reason: Some("dequeued_fifo".to_string()),
+            },
+            runtime: WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_instance_id: Some("runtime-1".to_string()),
+                warmup_started_at_ms: Some(95),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(4),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("already_ready".to_string()),
+            },
+            node_count_at_start: 2,
+            event_count: 4,
+            stream_event_count: 1,
+            waiting_for_input: false,
+            last_error: None,
+            nodes: vec![WorkflowTraceNodeRecord {
+                node_id: "node-1".to_string(),
+                node_type: Some("llm-inference".to_string()),
+                status: WorkflowTraceNodeStatus::Completed,
+                started_at_ms: Some(101),
+                ended_at_ms: Some(170),
+                duration_ms: Some(69),
+                event_count: 2,
+                stream_event_count: 1,
+                last_error: None,
+            }],
+        }],
+        retained_trace_limit: 200,
+    };
+
+    let value = serde_json::to_value(response).expect("serialize trace response");
+    let expected = serde_json::json!({
+        "traces": [{
+            "execution_id": "exec-1",
+            "workflow_id": "wf-1",
+            "workflow_name": "Workflow 1",
+            "graph_fingerprint": "graph-1",
+            "status": "completed",
+            "started_at_ms": 100,
+            "ended_at_ms": 180,
+            "duration_ms": 80,
+            "queue": {
+                "enqueued_at_ms": 90,
+                "dequeued_at_ms": 100,
+                "queue_wait_ms": 10,
+                "scheduler_decision_reason": "dequeued_fifo"
+            },
+            "runtime": {
+                "runtime_id": "llama_cpp",
+                "runtime_instance_id": "runtime-1",
+                "warmup_started_at_ms": 95,
+                "warmup_completed_at_ms": 99,
+                "warmup_duration_ms": 4,
+                "runtime_reused": true,
+                "lifecycle_decision_reason": "already_ready"
+            },
+            "node_count_at_start": 2,
+            "event_count": 4,
+            "stream_event_count": 1,
+            "waiting_for_input": false,
+            "last_error": null,
+            "nodes": [{
+                "node_id": "node-1",
+                "node_type": "llm-inference",
+                "status": "completed",
+                "started_at_ms": 101,
+                "ended_at_ms": 170,
+                "duration_ms": 69,
+                "event_count": 2,
+                "stream_event_count": 1,
+                "last_error": null
+            }]
+        }],
+        "retained_trace_limit": 200
+    });
+
+    assert_eq!(value, expected);
+}
+
+#[test]
+fn workflow_trace_snapshot_request_contract_snapshot() {
+    let request = WorkflowTraceSnapshotRequest {
+        execution_id: Some("exec-1".to_string()),
+        session_id: Some("session-1".to_string()),
+        workflow_id: Some("wf-1".to_string()),
+        include_completed: Some(true),
+    };
+    request
+        .validate()
+        .expect("trace snapshot request contract should remain valid");
+
+    let value = serde_json::to_value(request).expect("serialize trace request");
+    let expected = serde_json::json!({
+        "execution_id": "exec-1",
+        "session_id": "session-1",
+        "workflow_id": "wf-1",
+        "include_completed": true
+    });
+
+    assert_eq!(value, expected);
+}
+
+#[test]
+fn workflow_trace_snapshot_request_rejects_blank_contract_filter() {
+    let request = WorkflowTraceSnapshotRequest {
+        execution_id: Some(String::new()),
+        session_id: None,
+        workflow_id: None,
+        include_completed: None,
+    };
+
+    let error = request
+        .validate()
+        .expect_err("blank contract filter should be rejected");
+    assert!(
+        matches!(
+            error,
+            WorkflowServiceError::InvalidRequest(ref message)
+                if message
+                    == "workflow trace snapshot request field 'execution_id' must not be blank"
+        ),
+        "unexpected validation error: {:?}",
+        error
+    );
 }
 
 #[tokio::test]

@@ -10,6 +10,7 @@ extern crate workflow_nodes;
 
 pub mod capabilities;
 pub mod graph;
+pub mod trace;
 pub mod workflow;
 
 pub use graph::{
@@ -31,6 +32,11 @@ pub use graph::{
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     convert_graph_to_node_engine, validate_workflow_connection,
+};
+pub use trace::{
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,

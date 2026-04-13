@@ -1,0 +1,402 @@
+# Plan: Pantograph Metrics And Trace Spine
+
+## Objective
+
+Add a backend-owned metrics and trace spine for workflow execution so Pantograph
+can measure node execution, queue wait, runtime lifecycle, and event delivery
+before implementing more aggressive scheduling or incremental execution policy.
+
+## Scope
+
+### In Scope
+
+- Backend-owned execution metrics for `node-engine`, workflow service, and
+  runtime lifecycle
+- Stable trace and metrics contracts consumed by Tauri/UI without frontend-owned
+  business logic
+- First-class inspection/snapshot APIs for workflow runs, queue timing, and
+  runtime residency decisions
+- Event-adapter updates needed to preserve trace semantics across
+  backend-to-frontend transport
+- Contract, unit, and integration coverage for metrics and trace emission
+- README/ADR updates required by touched directories and structured producer
+  contracts
+
+### Out of Scope
+
+- Scheduler V2 policy changes
+- Parallel execution changes in `demand_multiple`
+- KV cache implementation
+- New frontend analytics logic or optimistic metrics derivation
+- Long-term telemetry export, remote observability, or SaaS monitoring
+  infrastructure
+
+## Inputs
+
+### Problem
+
+Pantograph still lacks a canonical, backend-owned spine for answering basic
+execution questions:
+
+- How long did a run wait in queue?
+- Which nodes consumed the most wall time?
+- How much time was spent in runtime warmup versus execution?
+- Which scheduler/runtime decisions were made and why?
+- Which workflow events were emitted, adapted, dropped, or coalesced?
+
+Without that spine, later roadmap steps such as Scheduler V2, incremental graph
+execution, and runtime adapter unification will be harder to validate and
+easier to regress.
+
+### Constraints
+
+- Business logic must stay in Rust backend crates, not TypeScript/Svelte.
+- `src-tauri` must remain an adapter/composition layer, not the owner of
+  workflow policy.
+- Contracts added for metrics/traces should be append-only where practical.
+- Existing workflow/session facades should be preserved unless a deliberate API
+  break is approved.
+- Diagnostics must remain machine-consumable; log scraping is not an acceptable
+  primary interface.
+- New Rust-to-Tauri trace DTOs must freeze serde tag/casing rules before
+  adapter work begins, and matching TypeScript consumer contracts must be
+  updated in the same logical slice when exposed across the boundary.
+- Any new Tauri commands for trace snapshots must validate input at the boundary
+  before delegating to backend services.
+- The implementation must follow `PLAN-STANDARDS.md`,
+  `ARCHITECTURE-PATTERNS.md`, `TESTING-STANDARDS.md`,
+  `DOCUMENTATION-STANDARDS.md`, `INTEROP-STANDARDS.md`, and
+  `TOOLING-STANDARDS.md`.
+
+### Assumptions
+
+- The next roadmap step is `Metrics/trace spine`, based on roadmap dependency
+  order and current repo state.
+- Existing Rust-owned diagnostics/session refactors are the base layer to build
+  on rather than replace.
+- Initial trace retention can be in-memory and bounded; durable persistence is
+  not required for milestone one.
+- Internal inspection APIs may be Tauri/debug-only at first as long as the
+  contracts are backend-owned and versioned explicitly.
+
+### Dependencies
+
+- `crates/node-engine`
+- `crates/pantograph-workflow-service`
+- `crates/pantograph-embedded-runtime`
+- `crates/inference`
+- `src-tauri/src/workflow`
+- Existing diagnostics store and workflow projection paths already moved behind
+  Rust
+- Existing contract tests under
+  `crates/pantograph-workflow-service/tests/contract.rs`
+- README updates in:
+  - `crates/node-engine/src/README.md`
+  - `crates/pantograph-workflow-service/src/README.md`
+  - `crates/pantograph-embedded-runtime/src/README.md`
+  - `src-tauri/src/workflow/README.md`
+- ADR update if the metrics/trace boundary changes become architectural rather
+  than additive
+
+### Affected Structured Contracts
+
+- `WorkflowTraceStatus`
+- `WorkflowTraceNodeStatus`
+- `WorkflowTraceQueueMetrics`
+- `WorkflowTraceRuntimeMetrics`
+- `WorkflowTraceNodeRecord`
+- `WorkflowTraceSummary`
+- `WorkflowTraceSnapshotRequest`
+- `WorkflowTraceSnapshotResponse`
+- Any later additive Tauri command or workflow event payloads that expose these
+  contracts to the existing GUI diagnostics surface
+
+### Affected Persisted Artifacts
+
+- None for Milestone 1; the initial trace spine is contract- and memory-owned
+  only
+- Any later checked-in JSON fixtures or trace snapshot examples must be treated
+  as structured artifacts and validated with the repo tooling required by
+  `TOOLING-STANDARDS.md`
+
+### Concurrency / Race-Risk Review
+
+- Trace aggregation will consume overlapping workflow/session activity, so all
+  producer-facing contracts must carry stable execution or session identifiers.
+- Bounded in-memory trace retention must have a single owner responsible for
+  append, eviction, and cleanup so overlapping runs cannot race retention
+  policy.
+- Replay, cancellation, and retry paths must remain idempotent from the trace
+  reader’s perspective even if upstream event delivery duplicates a producer
+  event.
+
+### Risks
+
+| Risk | Impact | Mitigation |
+| ---- | ------ | ---------- |
+| Metrics logic leaks into Tauri/Svelte adapters | High | Keep contracts and aggregation in Rust crates; adapter only forwards snapshots/events |
+| Event timing becomes nondeterministic under concurrent runs | High | Require execution/session IDs on every metric-bearing event and test concurrent attribution |
+| Trace collection adds lock contention or slows execution | High | Use append-only, bounded, low-contention collectors and benchmark overhead |
+| Contract drift between engine, service, runtime, and UI adapters | High | Freeze serde/tag/casing rules first and update matching TS consumers in the same slice |
+| Oversized diagnostics modules absorb multiple responsibilities | Medium | Perform decomposition review when files exceed size/responsibility thresholds and extract by ownership boundary |
+| Recovery/cancel/retry paths produce inconsistent traces | Medium | Add replay/recovery/idempotency checks and duplicate-event handling verification |
+| JSON fixtures or trace snapshot examples drift from producer contracts | Medium | Add staged validation hooks for any checked-in schema-backed trace artifacts |
+
+## Definition of Done
+
+- Every workflow run has a backend-owned trace summary with total duration,
+  queue wait, per-node timing, and runtime lifecycle timing.
+- Queue wait and runtime warmup are inspectable without log scraping.
+- Trace/event payloads remain attributable under overlapping workflow runs.
+- Tauri/UI consumers read backend snapshots rather than deriving metrics
+  locally.
+- Contract, unit, integration, and cross-layer acceptance coverage exist for
+  trace creation, aggregation, transport adaptation, and recovery/cancel paths.
+- Touched module boundaries have README updates or ADR coverage required by the
+  standards.
+
+## Milestones
+
+### Milestone 1: Freeze Contracts And Ownership
+
+**Goal:** Define the metrics/trace ownership model and DTOs before implementation
+spreads.
+
+**Tasks:**
+- [ ] Define engine-level metric/event DTOs and run-level trace summary
+      contracts.
+- [ ] Define runtime lifecycle metric DTOs and scheduler/queue timing payloads.
+- [ ] Freeze serde tag/casing and field semantics for any Rust-to-Tauri trace
+      DTOs before adapter work starts.
+- [ ] Add request-shape validation helpers for trace snapshot filters so later
+      Tauri commands can validate at the boundary without inventing frontend
+      policy.
+- [ ] Record facade-preservation decision: preserve current workflow/session
+      public facades and extend them additively.
+- [ ] Record lifecycle ownership for trace buffers, retention, and cleanup.
+- [ ] Identify touched directories that require README or ADR updates and record
+      the expected traceability artifacts up front.
+
+**Verification:**
+- Architecture review against `ARCHITECTURE-PATTERNS.md`
+- Interop contract review against `INTEROP-STANDARDS.md`
+- Documentation traceability review against `DOCUMENTATION-STANDARDS.md`
+- Contract serialization tests for new DTO casing/tag behavior
+
+**Status:** In progress
+
+### Milestone 2: Engine Metrics Foundation
+
+**Goal:** Make `node-engine` emit canonical per-node and per-run timing
+records.
+
+**Tasks:**
+- [ ] Add node execution timing capture around task demand/execution paths.
+- [ ] Add per-run aggregation hooks for total wall time, node counts, and
+      failure/cancel completion states.
+- [ ] Ensure engine events include stable execution/task identifiers needed for
+      trace attribution.
+- [ ] Add low-overhead internal metrics structures rather than ad hoc logging.
+- [ ] Perform decomposition review if any new metrics module crosses file-size
+      or responsibility thresholds from `CODING-STANDARDS.md`.
+
+**Verification:**
+- `cargo test -p node-engine`
+- Focused unit tests for node timing emission and failure/cancel paths
+- Overhead review to ensure metrics collection does not materially alter
+  baseline behavior
+
+**Status:** Not started
+
+### Milestone 3: Workflow Service Trace Aggregation
+
+**Goal:** Aggregate engine timing into workflow/session traces with queue and
+scheduling context.
+
+**Tasks:**
+- [ ] Add run/session trace collectors in
+      `crates/pantograph-workflow-service`.
+- [ ] Record queue admission time, dequeue time, execution start, execution
+      finish, and cancel/unload transitions.
+- [ ] Add snapshot/read APIs for recent run traces and queue timing summaries.
+- [ ] Keep aggregation in the service/application layer rather than Tauri
+      transport code.
+- [ ] Add duplicate-event/idempotency safeguards where aggregation consumes
+      repeatable or replayable event streams.
+
+**Verification:**
+- `cargo test -p pantograph-workflow-service`
+- Focused tests for queue-wait timing, run lifecycle aggregation, bounded
+  history retention, and duplicate-event handling
+- Concurrency review against `CONCURRENCY-STANDARDS.md`
+
+**Status:** Not started
+
+### Milestone 4: Runtime Lifecycle Metrics
+
+**Goal:** Measure runtime warmup, readiness, reuse, and teardown in
+backend-owned runtime layers.
+
+**Tasks:**
+- [ ] Add runtime lifecycle timing hooks in
+      `crates/pantograph-embedded-runtime` and `crates/inference`.
+- [ ] Capture warmup/load/reuse/failure/eviction decision reasons as structured
+      records.
+- [ ] Attach runtime lifecycle metrics to the workflow trace summary without
+      moving runtime policy into adapters.
+- [ ] Ensure runtime metrics are attributable to workflow run/session
+      identifiers where applicable.
+- [ ] Perform decomposition review if runtime trace modules exceed size or
+      responsibility thresholds.
+
+**Verification:**
+- `cargo test -p pantograph-embedded-runtime`
+- Targeted tests for runtime warmup/reuse/failure timing paths
+- Contract review confirming runtime decision payloads are machine-consumable
+
+**Status:** Not started
+
+### Milestone 5: Adapter And Diagnostics Integration
+
+**Goal:** Expose backend-owned traces through Tauri without reintroducing
+frontend business logic.
+
+**Tasks:**
+- [ ] Extend `src-tauri/src/workflow/event_adapter.rs` and related commands to
+      forward trace/metrics snapshots.
+- [ ] Preserve event semantics needed for diagnostics views and future scheduler
+      work.
+- [ ] Keep any GUI work read-only: render backend trace state, do not compute
+      or reconcile it in TypeScript.
+- [ ] Update matching TypeScript consumer contracts in the same slice for any
+      new Tauri-exposed DTOs.
+- [ ] Validate any new snapshot/filter request payloads at the Tauri command
+      boundary.
+
+**Verification:**
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- Targeted Tauri contract tests for snapshot/event transport
+- `npm run typecheck` for matching TS consumer contracts
+
+**Status:** Not started
+
+### Milestone 6: Hardening, Docs, And Acceptance Coverage
+
+**Goal:** Close the phase with standards-compliant tests and documentation.
+
+**Tasks:**
+- [ ] Add cross-layer acceptance checks from workflow run start through trace
+      snapshot consumption.
+- [ ] Add cancellation, retry/recovery, and replay/idempotency checks for trace
+      consistency.
+- [ ] Update README files for touched backend directories with ownership and
+      contract notes.
+- [ ] Add or update ADR/docs if metrics ownership or event contracts materially
+      change architecture.
+- [ ] If JSON fixtures or trace snapshot examples are committed, add fast
+      validation per `TOOLING-STANDARDS.md`.
+
+**Verification:**
+- Run all targeted Rust crate tests touched by the slice
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `npm run typecheck` and targeted frontend checks if UI diagnostics readers
+  change
+- Documentation review against `DOCUMENTATION-STANDARDS.md`
+- Artifact validation review against `TOOLING-STANDARDS.md`
+
+**Status:** Not started
+
+## Execution Notes
+
+Update during implementation:
+- 2026-04-12: Plan created for roadmap step 1 after completing Rust ownership
+  refactors for Puma-Lib hydration and dependency-environment actions.
+- 2026-04-12: Plan updated to explicitly freeze interop contracts, documentation
+  deliverables, replay/recovery coverage, decomposition-review checkpoints, and
+  artifact validation expectations before implementation begins.
+- 2026-04-12: The first implementation slice is contracts-and-ownership only in
+  `pantograph-workflow-service`, with README traceability updates before engine
+  or adapter behavior expands.
+- 2026-04-12: Milestone 1 implementation includes request-boundary validation
+  in the Rust contract layer so later Tauri commands do not need to invent
+  validation semantics locally.
+- 2026-04-12: First implementation slice landed in
+  `crates/pantograph-workflow-service` with backend-owned trace DTOs,
+  snake_case contract tests, request-filter validation, and README ownership
+  updates.
+
+## Commit Cadence Notes
+
+- Commit when a logical slice is complete and verified.
+- Keep contract-definition, engine metrics, service aggregation, runtime
+  metrics, and adapter integration in separate atomic commits where practical.
+- Follow commit format/history cleanup rules from `COMMIT-STANDARDS.md`.
+
+## Optional Subagent Assignment
+
+| Owner/Agent | Scope | Output Contract | Handoff Checkpoint |
+| ----------- | ----- | --------------- | ------------------ |
+| None | None | None | Revisit only if engine metrics and docs can proceed independently without boundary risk |
+
+## Re-Plan Triggers
+
+- Metrics collection overhead is high enough to change engine/service
+  sequencing.
+- Existing diagnostics contracts cannot support additive extension.
+- Runtime lifecycle metrics require new ownership boundaries not assumed here.
+- Queue timing or event attribution proves ambiguous under concurrent runs.
+- A documentation/ADR requirement reveals an architectural break rather than an
+  additive change.
+- Checked-in trace fixtures or snapshot payloads require new tooling hooks not
+  covered by current repo validation.
+
+## Recommendations (Only If Better Option Exists)
+
+- Recommendation 1: Land Milestone 1 as a contracts-only commit before any
+  producer implementation. This reduces cross-layer drift and makes later
+  review of metrics semantics much easier.
+- Recommendation 2: Defer any metrics GUI beyond thin read-only diagnostics
+  consumption until backend contracts stabilize. This keeps the roadmap step
+  compliant with backend-owned-data rules and avoids another TS refactor later.
+
+## Completion Summary
+
+### Completed
+
+- Plan updated with standards corrections and Milestone 1 scope
+- First Milestone 1 slice implemented in `pantograph-workflow-service`
+
+### Deviations
+
+- None yet
+
+### Follow-Ups
+
+- Continue Milestone 1 by moving trace production and retention ownership out
+  of `src-tauri/src/workflow/diagnostics.rs` and behind workflow-service
+  readers.
+- Thread the new trace contracts through workflow-service trace readers and
+  Tauri commands without reintroducing adapter-owned aggregation.
+- Decide whether the first inspection surface should live in existing
+  diagnostics commands or a new dedicated trace command module
+
+### Verification Summary
+
+- `cargo test -p pantograph-workflow-service contract`
+- `cargo check -p pantograph-workflow-service`
+- Reviewed `PLAN-STANDARDS.md`, `PLAN-TEMPLATE.md`,
+  `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`,
+  `TESTING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+  `CONCURRENCY-STANDARDS.md`, `TOOLING-STANDARDS.md`,
+  `INTEROP-STANDARDS.md`, and the Pantograph roadmap document
+
+### Traceability Links
+
+- Module README updated: N/A
+- ADR added/updated: N/A
+- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A
+
+## Brevity Note
+
+Keep implementation slices small. Expand only where concurrency risk, contract
+stability, or ownership clarity requires more detail.

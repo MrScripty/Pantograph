@@ -11,6 +11,9 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
 ## Contents
 - `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
 - `capabilities.rs`: shared workflow capability/validation utilities used by all adapters.
+- `trace.rs`: host-agnostic workflow trace and metrics DTOs used to freeze
+  backend-owned diagnostics contracts before adapter-specific projections and
+  to keep trace request validation in the Rust service boundary.
 
 ## Headless Workflow API
 
@@ -81,6 +84,12 @@ Primary contract types:
 - `WorkflowSessionQueueCancelRequest`
 - `WorkflowSessionQueueReprioritizeRequest`
 - `WorkflowSessionKeepAliveRequest`
+- `WorkflowTraceSummary`
+- `WorkflowTraceNodeRecord`
+- `WorkflowTraceQueueMetrics`
+- `WorkflowTraceRuntimeMetrics`
+- `WorkflowTraceSnapshotRequest`
+- `WorkflowTraceSnapshotResponse`
 
 ## Capability Ownership
 
@@ -89,6 +98,12 @@ Primary contract types:
   optional model metadata), not duplicate capability business logic.
 - Graph edit sessions, graph persistence contracts, revision-aware connection
   intent, and undo/redo semantics are backend-owned in this crate.
+- Workflow trace and metrics contract ownership is backend-owned in this crate;
+  adapters may project or transport traces but must not invent timing or
+  lifecycle state locally.
+- Trace snapshot filter validation belongs here with the request DTOs so Tauri
+  command handlers can reject malformed interop payloads without duplicating
+  request policy in adapter code.
 - `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
   optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
   `roles`.
