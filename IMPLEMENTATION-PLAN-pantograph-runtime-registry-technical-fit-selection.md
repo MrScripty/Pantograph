@@ -201,23 +201,145 @@ rely on.
 **Goal:** Lock the architecture and lifecycle boundaries before implementation
 spreads across modules.
 
-**Tasks:**
-- [ ] Define the `RuntimeRegistry` responsibility boundary relative to
-  `InferenceGateway`, workflow service, and Tauri host wiring
-- [ ] Record public facade preservation: `InferenceGateway` remains the
-  execution facade; the registry becomes an upper-layer coordinator
-- [ ] Define the registry state machine, reservation contract, and explicit
-  ownership of background tasks, health checks, and cleanup
-- [ ] Add/update architecture documentation and ADR coverage for the new
-  boundary
-- [ ] Identify touched directories that require README updates under
-  documentation standards
+**Milestone 1 Objective:**
+
+Create the architecture and documentation freeze that allows later registry
+implementation to proceed without boundary drift. Milestone 1 is complete only
+when Pantograph has explicit, reviewable answers for registry ownership,
+composition-root placement, lifecycle control, reservation semantics, facade
+preservation, and documentation traceability.
+
+**Concrete Deliverables:**
+- `docs/adr/README.md`
+  - add the ADR index required by the documentation standards
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+  - record the accepted boundary decision for `RuntimeRegistry` ownership,
+    facade preservation, composition-root placement, and lifecycle control
+- update `src-tauri/src/llm/README.md`
+  - document where runtime-registry ownership will live relative to Tauri app
+    composition and runtime transport wiring
+- update `src-tauri/src/workflow/README.md`
+  - document how workflow/session paths consume registry operations without
+    becoming policy owners
+- update `crates/inference/src/README.md`
+  - document that `InferenceGateway` remains an execution facade and
+    infrastructure boundary rather than the owner of runtime policy
+- update `crates/pantograph-embedded-runtime/src/README.md`
+  - document embedded-runtime responsibilities after registry ownership is
+    introduced
+- update this implementation plan
+  - mark Milestone 1 progress and record any approved boundary decisions or
+    scope corrections that emerge during the doc freeze
+
+**Boundary Decisions That Must Be Frozen In This Milestone:**
+- `RuntimeRegistry` owner
+  - identify the single Pantograph layer/module that owns live runtime
+    residency state
+- composition root
+  - identify where the registry is created, injected, started, and stopped
+- facade preservation
+  - explicitly preserve `InferenceGateway` as the execution facade and forbid
+    moving runtime policy ownership into gateway/backends
+- workflow/service interaction
+  - define how workflow/session paths request registry operations without
+    mutating long-lived runtime state directly
+- embedded-runtime interaction
+  - define whether embedded runtime consumes registry decisions, exposes
+    registry-backed capabilities, or remains a runtime producer only
+- background-task ownership
+  - define who owns health polling, recovery checks, warmup tracking, and
+    cleanup responsibilities
+- reservation contract
+  - freeze the high-level admission/reservation token shape and lifecycle
+    expectations before implementation
+
+**Ordered Work Packages:**
+
+1. Boundary inventory and evidence capture
+- [ ] inventory the current ownership seams across `crates/inference`,
+  `crates/pantograph-embedded-runtime`, `src-tauri/src/llm`, and
+  `src-tauri/src/workflow`
+- [ ] map which modules currently start runtimes, stop runtimes, track active
+  state, expose capabilities, and surface diagnostics
+- [ ] capture the current producer/consumer contract surfaces that the registry
+  must preserve or coordinate
+
+2. Architecture decision draft
+- [ ] draft `ADR-002-runtime-registry-ownership-and-lifecycle.md` using the ADR
+  format from the documentation standards
+- [ ] record the chosen architectural role for `RuntimeRegistry` using the
+  layered and monorepo package-role guidance from `ARCHITECTURE-PATTERNS.md`
+- [ ] record rejected alternatives with reasons, including at minimum:
+  - gateway-owned runtime policy
+  - workflow-service-owned runtime residency
+  - adapter-owned runtime policy in Tauri host layers
+
+3. Lifecycle and reservation freeze
+- [ ] define the registry lifecycle note in concrete terms:
+  - who creates it
+  - who starts background work
+  - who stops background work
+  - how cancellation/cleanup happens
+  - how overlap and restart races are prevented
+- [ ] define the registry state-machine outline for milestone-2 implementation:
+  - stopped
+  - warming
+  - ready
+  - busy
+  - unhealthy
+  - stopping
+  - failed
+- [ ] define the reservation/admission contract at the architecture level:
+  - reservation creation point
+  - release point
+  - failure semantics
+  - exclusion rules for eviction
+
+4. Documentation traceability updates
+- [ ] add `docs/adr/README.md` with an ADR index entry for ADR-001 and the new
+  ADR-002
+- [ ] update the affected directory READMEs listed above so each one records the
+  runtime-registry boundary impact using the required sections from
+  `DOCUMENTATION-STANDARDS.md`
+- [ ] ensure the touched READMEs include explicit `Related ADRs` references to
+  the runtime-registry ADR or an explicit `None` statement only where allowed
+
+5. Freeze review and milestone close
+- [ ] review the milestone outputs against `PLAN-STANDARDS.md`,
+  `ARCHITECTURE-PATTERNS.md`, `DOCUMENTATION-STANDARDS.md`, and
+  `CONCURRENCY-STANDARDS.md`
+- [ ] update this plan's Milestone 1 status and completion notes
+- [ ] record any re-plan result immediately if the architecture review changes
+  milestone 2 sequencing or scope
+
+**Milestone-Specific Risks:**
+
+| Risk | Impact | Mitigation |
+| ---- | ------ | ---------- |
+| The ADR stays too abstract and does not freeze implementable ownership decisions | High | Require explicit decisions for owner, composition root, lifecycle owner, and reservation boundaries before closing the milestone |
+| README updates drift into filler instead of real traceability | Medium | Use the documentation template sections and require project-specific rationale in each touched README |
+| Milestone 2 starts before lifecycle ownership is fully frozen | High | Keep the stop rule explicit in this plan and do not open registry implementation commits before Milestone 1 closeout |
+| The chosen boundary forces a package-role violation | High | Review the ADR against layered separation and monorepo package-role rules before accepting it |
 
 **Verification:**
 - architecture/doc review against `CODING-STANDARDS.md`,
-  `ARCHITECTURE-PATTERNS.md`, and `DOCUMENTATION-STANDARDS.md`
-- review confirms no implementation starts before ownership/lifecycle is
-  explicit
+  `ARCHITECTURE-PATTERNS.md`, `DOCUMENTATION-STANDARDS.md`, and
+  `CONCURRENCY-STANDARDS.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md` exists and
+  includes `Context`, `Decision`, and `Consequences` sections per ADR standards
+- `docs/adr/README.md` exists and indexes both ADR-001 and ADR-002
+- each touched README includes the required reasoning sections and traceability
+  links rather than generic placeholders
+- milestone-close review confirms no runtime-registry code or state-machine
+  implementation began before the ownership/boundary freeze landed
+
+**Milestone 1 Completion Checklist:**
+- [ ] architecture boundary accepted in ADR form
+- [ ] composition root and lifecycle owner named explicitly
+- [ ] facade-preservation decision recorded explicitly
+- [ ] reservation/admission high-level contract frozen
+- [ ] README and ADR traceability updated
+- [ ] plan status updated before Milestone 2 work begins
 
 **Status:** Next
 
