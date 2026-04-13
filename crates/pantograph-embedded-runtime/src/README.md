@@ -33,6 +33,9 @@ Pumas-specific dependency resolution.
   Pantograph re-derives from projected metadata.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
+- App-global runtime residency, admission, retention, and eviction policy must
+  stay outside this crate even though it exposes Pantograph-specific runtime
+  capabilities.
 
 ## Decision
 Keep this crate as the application/infrastructure integration layer for
@@ -42,7 +45,10 @@ mapping workflow dependency requests onto Pumas contracts, and it should prefer
 preserves the existing workflow-facing `model_path`, `model_type`, and
 `task_type_primary` facades, but the values behind those fields may come from
 the descriptor `entry_path` and descriptor task/type data rather than projected
-record metadata.
+record metadata. The planned `RuntimeRegistry` may later consume this crate's
+capability and execution facts, but registry ownership belongs to a higher
+Pantograph application-layer coordinator rather than to this embedded-runtime
+crate.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.
@@ -60,6 +66,9 @@ record metadata.
   paths for the same resolved model.
 - Pantograph must preserve workflow-facing field names even when the underlying
   values come from Pumas execution descriptors.
+- This crate may expose runtime capabilities and execute Pantograph-owned
+  runtime paths, but it must not become the owner of app-global runtime
+  residency or admission policy.
 
 ## Revisit Triggers
 - A second runtime integration path needs the same dependency-resolution policy
@@ -78,11 +87,11 @@ dependency contracts; Python worker scripts executed through the runtime
 adapter.
 
 ## Related ADRs
-- None identified as of 2026-04-12.
-- Reason: The current descriptor-first boundary change is local to this crate
-  and `workflow-nodes` and is documented in their READMEs.
-- Revisit trigger: The Pantograph/Pumas runtime contract expands beyond these
-  two module boundaries or requires a public facade break.
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- Reason: it freezes this crate as a runtime producer/executor rather than the
+  owner of the planned `RuntimeRegistry` policy layer.
+- Revisit trigger: runtime-registry implementation requires this crate to
+  expose a new host-facing facade or changes its ownership boundary.
 
 ## Usage Examples
 ```rust
@@ -129,5 +138,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Dependency-preflight errors must remain machine-consumable with stable codes,
   scopes, and binding association so the host can block execution
   deterministically.
+- Runtime capability payloads emitted here are producer facts for host/runtime
+  consumers; a future `RuntimeRegistry` may compose them with admission or
+  residency state, but this crate must not silently fold policy-level decisions
+  into those producer contracts.
 - If the descriptor contract changes, this directory must regenerate its README
   contract text and add ADR coverage if the compatibility boundary expands.

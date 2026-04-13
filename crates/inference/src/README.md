@@ -26,7 +26,9 @@ Pantograph needs one inference-facing crate that can swap execution engines
 without forcing the rest of the backend to know whether a request is served by a
 local sidecar, a daemon, or an in-process runtime. The same facade now has to
 cover GGUF reranking without pretending rerank requests are text-generation
-prompts.
+prompts. As Pantograph adds runtime residency and admission policy, this crate
+must stay the execution/infrastructure boundary rather than becoming the owner
+of application-level scheduler policy.
 
 ## Constraints
 
@@ -37,6 +39,8 @@ prompts.
   process and language boundaries.
 - New capability areas such as diffusion and reranking must extend the contract
   additively.
+- Runtime-residency, admission, and eviction policy must stay outside this
+  crate even when gateway lifecycle data becomes richer.
 
 ## Decision
 
@@ -45,7 +49,10 @@ Backends implement a common interface, while the gateway owns lifecycle and
 routing. Shared payload types live in `types.rs` so chat, embedding, reranking,
 and image-generation contracts stay explicit and testable. llama.cpp reranking
 is modeled as its own capability and sidecar mode rather than as a chat
-completion variant.
+completion variant. The planned `RuntimeRegistry` sits above this crate as a
+Pantograph application-layer coordinator; `InferenceGateway` remains the
+execution facade and lifecycle fact source that the registry consumes rather
+than replaces.
 
 ## Alternatives Rejected
 
@@ -62,6 +69,8 @@ completion variant.
   future support.
 - Shared request/response types are append-only unless a coordinated breaking
   change is approved.
+- Application-level runtime policy such as admission, reservation, retention,
+  and eviction must not be implemented inside gateway or backend modules.
 - Reranking mode selection must be explicit; callers must not infer reranker
   support from text-generation readiness.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,
@@ -78,6 +87,8 @@ completion variant.
 - Process spawning must support arbitrary commands or per-env interpreter
   selection inside this crate.
 - A backend needs streaming image-generation events as a first-class contract.
+- Runtime policy ownership moves into this crate instead of a higher Pantograph
+  application layer.
 
 ## Dependencies
 
@@ -88,11 +99,11 @@ runtime crates such as Candle or PyO3-backed components.
 
 ## Related ADRs
 
-- None identified as of 2026-03-07.
-- Reason: The gateway/backend split already exists but has not yet been captured
-  in an ADR.
-- Revisit trigger: The PyO3-to-process-runtime migration changes the ownership
-  model for PyTorch backends.
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- Reason: it freezes `InferenceGateway` as the execution facade below the
+  planned `RuntimeRegistry` policy layer.
+- Revisit trigger: a future ADR changes gateway ownership or introduces a
+  breaking facade split.
 
 ## Usage Examples
 
@@ -146,6 +157,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `ServerModeInfo` is the backend-owned runtime status contract for GUI and host
   adapters; hosts should consume it directly instead of deriving reduced local
   status shapes.
+- Gateway lifecycle and capability payloads are backend-owned runtime facts; a
+  higher Pantograph policy layer may interpret them, but this crate must not
+  publish scheduler-policy conclusions as if they were raw backend facts.
 - `ImageGenerationRequest` reserves optional `init_image`, `mask_image`, and
   `strength` for later img2img/inpaint support.
 - `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only
