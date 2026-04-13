@@ -300,6 +300,11 @@
             <div class="mt-1 font-mono text-neutral-300">
               {llmState.status.active_runtime?.runtime_id ?? llmState.status.backend_name ?? 'unknown'}
             </div>
+            {#if llmState.status.active_model_target}
+              <div class="mt-1 break-all text-neutral-500">
+                Target {llmState.status.active_model_target}
+              </div>
+            {/if}
             <div class="mt-1 text-neutral-500">
               Instance {llmState.status.active_runtime?.runtime_instance_id ?? 'unreported'}
             </div>
@@ -322,6 +327,11 @@
             <div class="mt-1 font-mono text-neutral-300">
               {llmState.status.embedding_runtime?.runtime_id ?? 'not active'}
             </div>
+            {#if llmState.status.embedding_model_target}
+              <div class="mt-1 break-all text-neutral-500">
+                Target {llmState.status.embedding_model_target}
+              </div>
+            {/if}
             <div class="mt-1 text-neutral-500">
               Instance {llmState.status.embedding_runtime?.runtime_instance_id ?? 'unreported'}
             </div>

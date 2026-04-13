@@ -44,6 +44,8 @@ export interface ServerModeInfo {
   url: string | null;
   model_path: string | null;
   is_embedding_mode: boolean;
+  active_model_target: string | null;
+  embedding_model_target: string | null;
   active_runtime: RuntimeLifecycleSnapshot | null;
   embedding_runtime: RuntimeLifecycleSnapshot | null;
 }
@@ -91,6 +93,8 @@ const defaultServerMode: ServerModeInfo = {
   url: null,
   model_path: null,
   is_embedding_mode: false,
+  active_model_target: null,
+  embedding_model_target: null,
   active_runtime: null,
   embedding_runtime: null,
 };

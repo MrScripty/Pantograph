@@ -32,6 +32,8 @@ class LLMServiceClass {
       url: null,
       model_path: null,
       is_embedding_mode: false,
+      active_model_target: null,
+      embedding_model_target: null,
       active_runtime: null,
       embedding_runtime: null,
     },

@@ -225,6 +225,12 @@ pub struct ServerModeInfo {
     pub model_path: Option<String>,
     /// Whether in embedding mode (sidecar only)
     pub is_embedding_mode: bool,
+    /// Backend-owned target descriptor for the active runtime model.
+    #[serde(default)]
+    pub active_model_target: Option<String>,
+    /// Backend-owned target descriptor for the dedicated embedding runtime model.
+    #[serde(default)]
+    pub embedding_model_target: Option<String>,
     /// Backend-owned lifecycle snapshot for the active runtime.
     #[serde(default)]
     pub active_runtime: Option<RuntimeLifecycleSnapshot>,

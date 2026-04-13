@@ -284,7 +284,11 @@ impl InferenceGateway {
     /// Get server mode info for the frontend.
     pub async fn mode_info(&self) -> ServerModeInfo {
         let mut mode_info = self.inner.mode_info().await;
-        mode_info.embedding_runtime = self.embedding_runtime_lifecycle_snapshot().await;
+        let embedding_guard = self.embedding_server.read().await;
+        if let Some(server) = embedding_guard.as_ref() {
+            mode_info.embedding_runtime = Some(server.runtime_lifecycle_snapshot());
+            mode_info.embedding_model_target = server.model_target();
+        }
         mode_info
     }
 }
@@ -407,6 +411,10 @@ mod tests {
                 .as_ref()
                 .and_then(|snapshot| snapshot.runtime_instance_id.as_deref()),
             Some("llama-cpp-embedding-1")
+        );
+        assert_eq!(
+            mode.embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
         );
     }
 }

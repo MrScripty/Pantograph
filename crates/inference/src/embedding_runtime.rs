@@ -278,6 +278,11 @@ impl LlamaCppEmbeddingRuntime {
         self.runtime_lifecycle.clone()
     }
 
+    /// Return the current model target for the embedding runtime, when known.
+    pub fn model_target(&self) -> Option<String> {
+        self.model_path.clone()
+    }
+
     /// Return whether the active embedding runtime can satisfy the request.
     pub fn matches_runtime(&self, model_path: &str, mode: EmbeddingMemoryMode) -> bool {
         self.is_ready() && self.mode == mode && self.model_path.as_deref() == Some(model_path)

@@ -83,6 +83,8 @@ pub struct InferenceGateway {
     external_mode: Arc<RwLock<bool>>,
     /// Last used inference config (for mode switching)
     last_inference_config: Arc<RwLock<Option<BackendConfig>>>,
+    /// Current config for the actively loaded runtime.
+    current_runtime_config: Arc<RwLock<Option<BackendConfig>>>,
     /// Current embedding memory mode
     embedding_memory_mode: Arc<RwLock<EmbeddingMemoryMode>>,
     /// Process spawner for starting backends
@@ -91,6 +93,15 @@ pub struct InferenceGateway {
     runtime_lifecycle: Arc<RwLock<RuntimeLifecycleSnapshot>>,
     /// Monotonic instance counter for runtime instance IDs.
     runtime_instance_sequence: Arc<AtomicU64>,
+}
+
+fn config_model_target(config: &BackendConfig) -> Option<String> {
+    config
+        .model_path
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .or_else(|| config.model_name.clone())
+        .or_else(|| config.model_id.clone())
 }
 
 impl InferenceGateway {
@@ -105,6 +116,7 @@ impl InferenceGateway {
             reranking_mode: Arc::new(RwLock::new(false)),
             external_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
+            current_runtime_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
             runtime_lifecycle: Arc::new(RwLock::new(RuntimeLifecycleSnapshot {
@@ -125,6 +137,7 @@ impl InferenceGateway {
             reranking_mode: Arc::new(RwLock::new(false)),
             external_mode: Arc::new(RwLock::new(false)),
             last_inference_config: Arc::new(RwLock::new(None)),
+            current_runtime_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
             runtime_lifecycle: Arc::new(RwLock::new(RuntimeLifecycleSnapshot {
@@ -363,6 +376,8 @@ impl InferenceGateway {
 
         match start_result {
             Ok(start_outcome) => {
+                let mut current_runtime_config = self.current_runtime_config.write().await;
+                *current_runtime_config = Some(config.clone());
                 let warmup_completed_at_ms = unix_timestamp_ms();
                 let runtime_reused = start_outcome
                     .runtime_reused
@@ -433,6 +448,8 @@ impl InferenceGateway {
         *reranking_mode = false;
         let mut external_mode = self.external_mode.write().await;
         *external_mode = false;
+        let mut current_runtime_config = self.current_runtime_config.write().await;
+        *current_runtime_config = None;
         let mut lifecycle = self.runtime_lifecycle.write().await;
         lifecycle.active = false;
     }
@@ -470,6 +487,12 @@ impl InferenceGateway {
         let is_reranking = self.is_reranking_mode().await;
         let is_external = self.is_external_mode().await;
         let url = self.base_url().await;
+        let active_model_target = self
+            .current_runtime_config
+            .read()
+            .await
+            .as_ref()
+            .and_then(config_model_target);
 
         ServerModeInfo {
             backend_name: Some(backend_name),
@@ -488,6 +511,8 @@ impl InferenceGateway {
             url,
             model_path: None,
             is_embedding_mode: is_embedding,
+            active_model_target,
+            embedding_model_target: None,
             active_runtime: Some(self.runtime_lifecycle_snapshot().await),
             embedding_runtime: None,
         }
@@ -998,6 +1023,25 @@ mod tests {
 
         assert_eq!(mode.backend_name.as_deref(), Some("mock"));
         assert!(mode.active_runtime.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mode_info_reports_active_model_target() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Ollama");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig {
+                model_name: Some("llava:13b".to_string()),
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start");
+
+        let mode = gateway.mode_info().await;
+
+        assert_eq!(mode.active_model_target.as_deref(), Some("llava:13b"));
+        assert_eq!(mode.embedding_model_target, None);
     }
 
     #[tokio::test]
