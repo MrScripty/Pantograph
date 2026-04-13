@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -729,7 +730,9 @@ pub trait WorkflowHost: Send + Sync {
         let required_models = capabilities::extract_required_models(stored.nodes());
         let mut required_backends = capabilities::extract_required_backends(stored.nodes());
         if required_backends.is_empty() {
-            required_backends.push(self.default_backend_name().await?);
+            required_backends.push(canonical_runtime_backend_key(
+                &self.default_backend_name().await?,
+            ));
         }
         required_backends.sort();
         required_backends.dedup();
@@ -2522,7 +2525,7 @@ fn find_runtime_capability<'a>(
     required_backend_key: &str,
     runtime_capabilities: &'a [WorkflowRuntimeCapability],
 ) -> Option<&'a WorkflowRuntimeCapability> {
-    let needle = normalize_runtime_key(required_backend_key);
+    let needle = canonical_runtime_backend_key(required_backend_key);
     runtime_capabilities
         .iter()
         .filter(|runtime| runtime_matches_required_backend(runtime, &needle))
@@ -2537,9 +2540,9 @@ fn runtime_matches_required_backend(
     runtime: &WorkflowRuntimeCapability,
     normalized_required_backend_key: &str,
 ) -> bool {
-    normalize_runtime_key(&runtime.runtime_id) == normalized_required_backend_key
+    canonical_runtime_backend_key(&runtime.runtime_id) == normalized_required_backend_key
         || runtime.backend_keys.iter().any(|backend_key| {
-            normalize_runtime_key(backend_key) == normalized_required_backend_key
+            canonical_runtime_backend_key(backend_key) == normalized_required_backend_key
         })
 }
 
@@ -2621,15 +2624,6 @@ fn compute_runtime_capability_fingerprint(
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{:016x}", hash)
-}
-
-fn normalize_runtime_key(value: &str) -> String {
-    value
-        .trim()
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .collect::<String>()
-        .to_ascii_lowercase()
 }
 
 fn validate_requested_outputs_produced(
@@ -2942,7 +2936,7 @@ mod tests {
                         estimated_min_ram_mb: Some(1024),
                         estimation_confidence: "estimated".to_string(),
                         required_models: vec!["model-a".to_string()],
-                        required_backends: vec!["llamacpp".to_string()],
+                        required_backends: vec!["llama_cpp".to_string()],
                         required_extensions: vec!["inference_gateway".to_string()],
                     },
                     models: vec![WorkflowCapabilityModel {
@@ -3140,7 +3134,7 @@ mod tests {
                 max_output_targets: 8,
                 max_value_bytes: 4096,
                 runtime_requirements: WorkflowRuntimeRequirements {
-                    required_backends: vec!["llamacpp".to_string()],
+                    required_backends: vec!["llama_cpp".to_string()],
                     ..WorkflowRuntimeRequirements::default()
                 },
                 models: Vec::new(),
@@ -4424,6 +4418,48 @@ mod tests {
     }
 
     #[test]
+    fn runtime_preflight_matches_legacy_backend_aliases_against_canonical_capabilities() {
+        let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
+            &["llama.cpp".to_string(), "PyTorch".to_string()],
+            &[
+                WorkflowRuntimeCapability {
+                    runtime_id: "llama_cpp".to_string(),
+                    display_name: "llama.cpp".to_string(),
+                    install_state: WorkflowRuntimeInstallState::Installed,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: true,
+                    source_kind: WorkflowRuntimeSourceKind::Managed,
+                    selected: true,
+                    supports_external_connection: true,
+                    backend_keys: vec!["llama_cpp".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                },
+                WorkflowRuntimeCapability {
+                    runtime_id: "pytorch".to_string(),
+                    display_name: "PyTorch".to_string(),
+                    install_state: WorkflowRuntimeInstallState::Installed,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: true,
+                    source_kind: WorkflowRuntimeSourceKind::Managed,
+                    selected: true,
+                    supports_external_connection: true,
+                    backend_keys: vec!["torch".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                },
+            ],
+        );
+
+        assert!(runtime_warnings.is_empty());
+        assert!(blocking_runtime_issues.is_empty());
+    }
+
+    #[test]
     fn workflow_service_error_envelope_roundtrip() {
         let err = WorkflowServiceError::OutputNotProduced(
             "requested output target 'vector-output-1.vector' was not produced".to_string(),
@@ -5075,7 +5111,7 @@ mod tests {
         );
         assert_eq!(
             response.runtime_requirements.required_backends,
-            vec!["llamacpp"]
+            vec!["llama_cpp"]
         );
         assert_eq!(
             response.runtime_requirements.required_extensions,

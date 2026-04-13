@@ -35,7 +35,7 @@ impl WorkflowHost for ContractHost {
                 estimated_min_ram_mb: Some(2048),
                 estimation_confidence: "estimated".to_string(),
                 required_models: vec!["model-a".to_string()],
-                required_backends: vec!["llamacpp".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: vec!["inference_gateway".to_string()],
             },
             models: vec![WorkflowCapabilityModel {
@@ -202,7 +202,7 @@ async fn workflow_capabilities_contract_snapshot() {
             "estimated_min_ram_mb": 2048,
             "estimation_confidence": "estimated",
             "required_models": ["model-a"],
-            "required_backends": ["llamacpp"],
+            "required_backends": ["llama_cpp"],
             "required_extensions": ["inference_gateway"]
         },
         "models": [{

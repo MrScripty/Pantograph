@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::Deserialize;
 
 use crate::workflow::WorkflowServiceError;
@@ -432,9 +433,9 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
                 if key.eq_ignore_ascii_case("backend_key") || key.eq_ignore_ascii_case("backendKey")
                 {
                     if let Some(raw) = child.as_str() {
-                        let trimmed = raw.trim();
-                        if !trimmed.is_empty() {
-                            out.insert(trimmed.to_string());
+                        let canonical_backend_key = canonical_runtime_backend_key(raw);
+                        if !canonical_backend_key.is_empty() {
+                            out.insert(canonical_backend_key);
                         }
                     }
                 }
@@ -550,6 +551,35 @@ mod tests {
         assert_eq!(
             select_preferred_hash(&hashes).as_deref(),
             Some("sha256:aaa")
+        );
+    }
+
+    #[test]
+    fn extract_required_backends_normalizes_known_aliases() {
+        let nodes = vec![
+            StoredGraphNode {
+                id: "n1".to_string(),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"backend_key": "llama.cpp"}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "n2".to_string(),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"settings": {"backendKey": "PyTorch"}}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "n3".to_string(),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"backend_key": "llamacpp"}),
+                position: StoredPosition::default(),
+            },
+        ];
+
+        assert_eq!(
+            extract_required_backends(&nodes),
+            vec!["llama_cpp".to_string(), "pytorch".to_string()]
         );
     }
 }
