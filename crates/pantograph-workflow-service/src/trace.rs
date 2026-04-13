@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
-use pantograph_runtime_identity::canonical_runtime_id;
+use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
@@ -1006,7 +1006,7 @@ fn find_runtime_id_for_required_backend(
     capabilities: &WorkflowCapabilitiesResponse,
     required_backend_key: &str,
 ) -> Option<String> {
-    let required_backend_key = normalize_runtime_key(required_backend_key);
+    let required_backend_key = canonical_runtime_backend_key(required_backend_key);
     capabilities
         .runtime_capabilities
         .iter()
@@ -1032,11 +1032,11 @@ fn runtime_capability_matches_backend(
     capability: &crate::workflow::WorkflowRuntimeCapability,
     required_backend_key: &str,
 ) -> bool {
-    normalize_runtime_key(&capability.runtime_id) == required_backend_key
+    canonical_runtime_backend_key(&capability.runtime_id) == required_backend_key
         || capability
             .backend_keys
             .iter()
-            .any(|backend_key| normalize_runtime_key(backend_key) == required_backend_key)
+            .any(|backend_key| canonical_runtime_backend_key(backend_key) == required_backend_key)
 }
 
 fn runtime_capability_match_rank(
@@ -1047,15 +1047,6 @@ fn runtime_capability_match_rank(
         capability.available && capability.configured,
         capability.available,
     )
-}
-
-fn normalize_runtime_key(value: &str) -> String {
-    value
-        .trim()
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .collect::<String>()
-        .to_ascii_lowercase()
 }
 
 fn runtime_lifecycle_reason(capabilities: &WorkflowCapabilitiesResponse) -> &'static str {

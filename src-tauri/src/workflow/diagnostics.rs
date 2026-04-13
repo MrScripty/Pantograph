@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use pantograph_runtime_identity::canonical_runtime_id;
+use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
@@ -210,25 +210,16 @@ impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleS
     }
 }
 
-fn normalize_runtime_key(value: &str) -> String {
-    value
-        .trim()
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .collect::<String>()
-        .to_ascii_lowercase()
-}
-
 fn runtime_capability_matches_required_backend(
     capability: &pantograph_workflow_service::WorkflowRuntimeCapability,
     required_backend_key: &str,
 ) -> bool {
-    let required_backend_key = normalize_runtime_key(required_backend_key);
-    normalize_runtime_key(&capability.runtime_id) == required_backend_key
+    let required_backend_key = canonical_runtime_backend_key(required_backend_key);
+    canonical_runtime_backend_key(&capability.runtime_id) == required_backend_key
         || capability
             .backend_keys
             .iter()
-            .any(|backend_key| normalize_runtime_key(backend_key) == required_backend_key)
+            .any(|backend_key| canonical_runtime_backend_key(backend_key) == required_backend_key)
 }
 
 fn capability_runtime_lifecycle_snapshot(
