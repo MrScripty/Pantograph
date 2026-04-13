@@ -164,7 +164,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             can_remove: false,
             source_kind: WorkflowRuntimeSourceKind::Host,
             selected: true,
-            supports_external_connection: false,
+            supports_external_connection: true,
             backend_keys: self.backend_keys.clone(),
             missing_files: Vec::new(),
             unavailable_reason: None,
@@ -639,6 +639,7 @@ mod tests {
         assert_eq!(runtime[0].display_name, "llama.cpp");
         assert_eq!(runtime[0].source_kind, WorkflowRuntimeSourceKind::Host);
         assert!(runtime[0].selected);
+        assert!(runtime[0].supports_external_connection);
         assert_eq!(
             runtime[0].backend_keys,
             vec![
