@@ -333,6 +333,7 @@ fn main() {
             workflow::commands::workflow_list_session_queue,
             workflow::commands::workflow_get_scheduler_snapshot,
             workflow::commands::workflow_get_diagnostics_snapshot,
+            workflow::commands::workflow_get_trace_snapshot,
             workflow::commands::workflow_clear_diagnostics_history,
             workflow::commands::workflow_cancel_session_queue_item,
             workflow::commands::workflow_reprioritize_session_queue_item,

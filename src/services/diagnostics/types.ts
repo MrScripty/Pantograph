@@ -96,6 +96,82 @@ export interface WorkflowDiagnosticsProjection {
   retainedEventLimit: number;
 }
 
+export type WorkflowTraceStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type WorkflowTraceNodeStatus =
+  | 'pending'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface WorkflowTraceQueueMetrics {
+  enqueued_at_ms?: number | null;
+  dequeued_at_ms?: number | null;
+  queue_wait_ms?: number | null;
+  scheduler_decision_reason?: string | null;
+}
+
+export interface WorkflowTraceRuntimeMetrics {
+  runtime_id?: string | null;
+  runtime_instance_id?: string | null;
+  warmup_started_at_ms?: number | null;
+  warmup_completed_at_ms?: number | null;
+  warmup_duration_ms?: number | null;
+  runtime_reused?: boolean | null;
+  lifecycle_decision_reason?: string | null;
+}
+
+export interface WorkflowTraceNodeRecord {
+  node_id: string;
+  node_type?: string | null;
+  status: WorkflowTraceNodeStatus;
+  started_at_ms?: number | null;
+  ended_at_ms?: number | null;
+  duration_ms?: number | null;
+  event_count: number;
+  stream_event_count: number;
+  last_error?: string | null;
+}
+
+export interface WorkflowTraceSummary {
+  execution_id: string;
+  workflow_id?: string | null;
+  workflow_name?: string | null;
+  graph_fingerprint?: string | null;
+  status: WorkflowTraceStatus;
+  started_at_ms: number;
+  ended_at_ms?: number | null;
+  duration_ms?: number | null;
+  queue: WorkflowTraceQueueMetrics;
+  runtime: WorkflowTraceRuntimeMetrics;
+  node_count_at_start: number;
+  event_count: number;
+  stream_event_count: number;
+  waiting_for_input: boolean;
+  last_error?: string | null;
+  nodes: WorkflowTraceNodeRecord[];
+}
+
+export interface WorkflowTraceSnapshotRequest {
+  execution_id?: string | null;
+  session_id?: string | null;
+  workflow_id?: string | null;
+  include_completed?: boolean | null;
+}
+
+export interface WorkflowTraceSnapshotResponse {
+  traces: WorkflowTraceSummary[];
+  retained_trace_limit: number;
+}
+
 export interface WorkflowDiagnosticsState extends WorkflowDiagnosticsProjection {
   panelOpen: boolean;
   activeTab: DiagnosticsTab;

@@ -332,6 +332,10 @@ Update during implementation:
   `src-tauri/src/workflow/diagnostics.rs` into a projection/overlay adapter
   over `WorkflowTraceStore`, preserving the existing GUI diagnostics contract
   while removing Tauri ownership of canonical run/node timing state.
+- 2026-04-12: Fourth implementation slice added a direct
+  `workflow_get_trace_snapshot` inspection command plus TypeScript contract
+  mirrors so backend-owned trace reads no longer depend on the diagnostics
+  projection shape.
 
 ## Commit Cadence Notes
 
@@ -375,6 +379,8 @@ Update during implementation:
 - First Milestone 1 slice implemented in `pantograph-workflow-service`
 - Second Milestone 1 slice implemented in `pantograph-workflow-service`
 - Third Milestone 1 slice implemented in `src-tauri/src/workflow`
+- Fourth Milestone 1 slice implemented across `src-tauri` and service contract
+  mirrors
 
 ### Deviations
 
@@ -391,6 +397,8 @@ Update during implementation:
 - Add a direct trace snapshot command/inspection surface that returns
   backend-owned `WorkflowTraceSnapshotResponse` without going through the
   diagnostics projection.
+- Start recording queue timing and runtime lifecycle metrics into the canonical
+  trace store instead of leaving those substructures mostly empty.
 - Thread the new trace contracts through workflow-service trace readers and
   Tauri commands without reintroducing adapter-owned aggregation.
 - Decide whether the first inspection surface should live in existing
@@ -403,6 +411,7 @@ Update during implementation:
 - `cargo check -p pantograph-workflow-service`
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
+- `npm run typecheck`
 - Reviewed `PLAN-STANDARDS.md`, `PLAN-TEMPLATE.md`,
   `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`,
   `TESTING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,

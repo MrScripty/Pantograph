@@ -41,7 +41,10 @@ now also return the updated graph snapshot from core so legacy callers can stay
 aligned with backend-owned state. The service also refreshes
 `currentExecutionId` from the first `Started` event on transient no-session
 runs after clearing any stale prior id, so diagnostics and legacy consumers can
-track ad hoc executions without inheriting the previous run's identity.
+track ad hoc executions without inheriting the previous run's identity. The
+same service boundary now exposes a direct backend-owned trace snapshot read
+for debugging or future metrics surfaces that should not depend on the GUI
+projection shape.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`

@@ -1,5 +1,9 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
-import type { WorkflowDiagnosticsProjection } from '../diagnostics/types';
+import type {
+  WorkflowDiagnosticsProjection,
+  WorkflowTraceSnapshotRequest,
+  WorkflowTraceSnapshotResponse,
+} from '../diagnostics/types';
 import type {
   NodeDefinition,
   WorkflowCapabilitiesResponse,
@@ -360,6 +364,21 @@ export class WorkflowService {
         workflow_name: workflowName ?? null,
         session_id: sessionId ?? null,
       },
+    });
+  }
+
+  async getTraceSnapshot(
+    request: WorkflowTraceSnapshotRequest = {},
+  ): Promise<WorkflowTraceSnapshotResponse> {
+    if (USE_MOCKS) {
+      return {
+        traces: [],
+        retained_trace_limit: 200,
+      };
+    }
+
+    return invoke<WorkflowTraceSnapshotResponse>('workflow_get_trace_snapshot', {
+      request,
     });
   }
 

@@ -20,7 +20,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
     WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -410,6 +411,15 @@ pub async fn workflow_get_diagnostics_snapshot(
     }
 
     Ok(diagnostics_store.snapshot())
+}
+
+pub async fn workflow_get_trace_snapshot(
+    request: WorkflowTraceSnapshotRequest,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+) -> Result<WorkflowTraceSnapshotResponse, String> {
+    diagnostics_store
+        .trace_snapshot(request)
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_clear_diagnostics_history(

@@ -8,10 +8,10 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSessionQueueItem, WorkflowSessionSummary,
-    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
-    WorkflowTraceNodeStatus, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
-    WorkflowTraceStore, WorkflowTraceSummary,
+    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
+    WorkflowTraceNodeStatus, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
 };
 use serde::{Deserialize, Serialize};
 
@@ -298,6 +298,13 @@ impl WorkflowDiagnosticsStore {
             .expect("workflow diagnostics lock poisoned");
         state.prune_overlays(&traces);
         state.snapshot(&traces)
+    }
+
+    pub fn trace_snapshot(
+        &self,
+        request: WorkflowTraceSnapshotRequest,
+    ) -> Result<WorkflowTraceSnapshotResponse, WorkflowServiceError> {
+        self.trace_store.snapshot(&request)
     }
 
     pub fn clear_history(&self) -> WorkflowDiagnosticsProjection {
@@ -895,6 +902,8 @@ fn summarize_event(event: &WorkflowEvent) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use pantograph_workflow_service::graph::WorkflowDerivedGraph;
     use pantograph_workflow_service::graph::WorkflowSessionKind;
@@ -1068,5 +1077,47 @@ mod tests {
         assert!(snapshot.run_order.is_empty());
         assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(snapshot.scheduler.session_id.as_deref(), Some("exec-1"));
+    }
+
+    #[test]
+    fn trace_snapshot_filters_runs_without_projection_overlay_rules() {
+        let store = WorkflowDiagnosticsStore::default();
+        store.record_workflow_event(
+            &WorkflowEvent::Started {
+                workflow_id: "wf-1".to_string(),
+                node_count: 1,
+                execution_id: "exec-1".to_string(),
+            },
+            1_000,
+        );
+        store.record_workflow_event(
+            &WorkflowEvent::Completed {
+                workflow_id: "wf-1".to_string(),
+                outputs: HashMap::new(),
+                execution_id: "exec-1".to_string(),
+            },
+            1_100,
+        );
+        store.record_workflow_event(
+            &WorkflowEvent::Started {
+                workflow_id: "wf-2".to_string(),
+                node_count: 1,
+                execution_id: "exec-2".to_string(),
+            },
+            1_200,
+        );
+
+        let snapshot = store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: None,
+                session_id: None,
+                workflow_id: None,
+                include_completed: Some(false),
+            })
+            .expect("trace snapshot");
+
+        assert_eq!(snapshot.traces.len(), 1);
+        assert_eq!(snapshot.traces[0].execution_id, "exec-2");
+        assert_eq!(snapshot.traces[0].status, WorkflowTraceStatus::Running);
     }
 }

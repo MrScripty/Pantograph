@@ -308,6 +308,14 @@ pub async fn workflow_get_diagnostics_snapshot(
 }
 
 #[command]
+pub async fn workflow_get_trace_snapshot(
+    request: pantograph_workflow_service::WorkflowTraceSnapshotRequest,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+) -> Result<pantograph_workflow_service::WorkflowTraceSnapshotResponse, String> {
+    super::headless_workflow_commands::workflow_get_trace_snapshot(request, diagnostics_store).await
+}
+
+#[command]
 pub async fn workflow_clear_diagnostics_history(
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
 ) -> Result<super::diagnostics::WorkflowDiagnosticsProjection, String> {

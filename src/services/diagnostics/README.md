@@ -11,7 +11,7 @@ transport adapters.
 | ----------- | ----------- |
 | `DiagnosticsService.ts` | Framework-agnostic owner for diagnostics state, selection, trace recording, and listener notifications. |
 | `traceAccumulator.ts` | Trace accumulation helpers that normalize workflow events and graph context into diagnostics snapshots. |
-| `types.ts` | Stable diagnostics DTOs shared by the diagnostics service and frontend store/view layers. |
+| `types.ts` | Stable diagnostics DTOs shared by the diagnostics service and frontend store/view layers, including backend-owned trace snapshot mirrors. |
 
 ## Problem
 Pantograph needs an internal diagnostics surface for workflow execution, but the
@@ -116,6 +116,9 @@ service.recordWorkflowEvent({
 
 ## Structured Producer Contract
 - `types.ts` is the structured producer for diagnostics snapshots.
+- `types.ts` also mirrors backend-owned `WorkflowTraceSnapshotRequest` and
+  `WorkflowTraceSnapshotResponse` contracts using the Rust wire casing for
+  direct inspection reads.
 - `WorkflowDiagnosticsState.runOrder` is ordered most-recent-first.
 - `DiagnosticsRunTrace.events` is retained in arrival order and trimmed from the
   oldest end when the configured event limit is exceeded.
