@@ -378,6 +378,11 @@ Update during implementation:
   snapshot attribution path into a small Rust helper and added adapter-level
   tests that prove it records traces under `trace_execution_id` when present
   and falls back to the requested session identity on scheduler errors.
+- 2026-04-12: Fifteenth implementation slice extracted the headless runtime
+  snapshot recording path into a matching helper and added adapter-level tests
+  that freeze the two intended behaviors: identified executions append
+  canonical runtime trace events, while execution-less diagnostics reads only
+  refresh the overlay snapshot.
 
 ## Commit Cadence Notes
 
@@ -438,6 +443,7 @@ Update during implementation:
   `src-tauri`, and TypeScript workflow contract mirrors
 - Thirteenth implementation slice added in `pantograph-workflow-service`
 - Fourteenth implementation slice added in `src-tauri/src/workflow`
+- Fifteenth implementation slice added in `src-tauri/src/workflow`
 
 ### Deviations
 

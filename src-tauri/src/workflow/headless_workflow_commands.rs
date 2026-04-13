@@ -20,8 +20,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
     WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -143,6 +143,54 @@ fn record_headless_scheduler_snapshot(
                 Some(error.to_envelope_json()),
             );
             requested_session_id.to_string()
+        }
+    }
+}
+
+fn record_headless_runtime_snapshot(
+    diagnostics_store: &WorkflowDiagnosticsStore,
+    workflow_id: String,
+    trace_execution_id: Option<&str>,
+    capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
+    trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    captured_at_ms: u64,
+) {
+    match (trace_execution_id, capabilities_result) {
+        (Some(trace_execution_id), Ok(capabilities)) => {
+            diagnostics_store.record_runtime_snapshot(
+                workflow_id,
+                trace_execution_id.to_string(),
+                captured_at_ms,
+                Some(capabilities),
+                trace_runtime_metrics,
+                None,
+            );
+        }
+        (Some(trace_execution_id), Err(error)) => {
+            diagnostics_store.record_runtime_snapshot(
+                workflow_id,
+                trace_execution_id.to_string(),
+                captured_at_ms,
+                None,
+                trace_runtime_metrics,
+                Some(error.to_envelope_json()),
+            );
+        }
+        (None, Ok(capabilities)) => {
+            diagnostics_store.update_runtime_snapshot(
+                Some(workflow_id),
+                Some(capabilities),
+                None,
+                captured_at_ms,
+            );
+        }
+        (None, Err(error)) => {
+            diagnostics_store.update_runtime_snapshot(
+                Some(workflow_id),
+                None,
+                Some(error.to_envelope_json()),
+                captured_at_ms,
+            );
         }
     }
 }
@@ -424,51 +472,23 @@ pub async fn workflow_get_diagnostics_snapshot(
             &gateway.runtime_lifecycle_snapshot().await,
         );
 
-        match runtime
+        let capabilities_result = match runtime
             .workflow_get_capabilities(WorkflowCapabilitiesRequest {
                 workflow_id: workflow_id.clone(),
             })
             .await
         {
-            Ok(capabilities) => {
-                if let Some(trace_execution_id) = trace_execution_id.as_deref() {
-                    diagnostics_store.record_runtime_snapshot(
-                        workflow_id,
-                        trace_execution_id.to_string(),
-                        captured_at_ms,
-                        Some(capabilities),
-                        runtime_trace_metrics,
-                        None,
-                    );
-                } else {
-                    diagnostics_store.update_runtime_snapshot(
-                        Some(workflow_id),
-                        Some(capabilities),
-                        None,
-                        captured_at_ms,
-                    );
-                }
-            }
-            Err(error) => {
-                if let Some(trace_execution_id) = trace_execution_id.as_deref() {
-                    diagnostics_store.record_runtime_snapshot(
-                        workflow_id,
-                        trace_execution_id.to_string(),
-                        captured_at_ms,
-                        None,
-                        runtime_trace_metrics,
-                        Some(error.to_envelope_json()),
-                    );
-                } else {
-                    diagnostics_store.update_runtime_snapshot(
-                        Some(workflow_id),
-                        None,
-                        Some(error.to_envelope_json()),
-                        captured_at_ms,
-                    );
-                }
-            }
-        }
+            Ok(capabilities) => Ok(capabilities),
+            Err(error) => Err(error),
+        };
+        record_headless_runtime_snapshot(
+            diagnostics_store.inner().as_ref(),
+            workflow_id,
+            trace_execution_id.as_deref(),
+            capabilities_result,
+            runtime_trace_metrics,
+            captured_at_ms,
+        );
     } else {
         diagnostics_store.update_runtime_snapshot(None, None, None, captured_at_ms);
     }
@@ -493,15 +513,16 @@ pub async fn workflow_clear_diagnostics_history(
 
 #[cfg(test)]
 mod tests {
-    use super::record_headless_scheduler_snapshot;
+    use super::{record_headless_runtime_snapshot, record_headless_scheduler_snapshot};
     use crate::workflow::diagnostics::{
         WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
     };
     use pantograph_workflow_service::graph::WorkflowSessionKind;
     use pantograph_workflow_service::{
+        WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowRuntimeRequirements,
         WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
         WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
-        WorkflowTraceSnapshotRequest,
+        WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     };
 
     fn running_session_summary() -> WorkflowSessionSummary {
@@ -514,6 +535,32 @@ mod tests {
             state: WorkflowSessionState::Running,
             queued_runs: 1,
             run_count: 2,
+        }
+    }
+
+    fn capability_response() -> WorkflowCapabilitiesResponse {
+        WorkflowCapabilitiesResponse {
+            max_input_bindings: 4,
+            max_output_targets: 2,
+            max_value_bytes: 2_048,
+            runtime_requirements: WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "high".to_string(),
+                required_models: vec!["model-a".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: vec!["kv-cache".to_string()],
+            },
+            models: vec![WorkflowCapabilityModel {
+                model_id: "model-a".to_string(),
+                model_revision_or_hash: None,
+                model_type: Some("embedding".to_string()),
+                node_ids: vec!["node-a".to_string()],
+                roles: vec!["embedding".to_string()],
+            }],
+            runtime_capabilities: Vec::new(),
         }
     }
 
@@ -597,6 +644,77 @@ mod tests {
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("scheduler_snapshot_failed")
         );
+    }
+
+    #[test]
+    fn headless_runtime_snapshot_helper_records_trace_for_identified_execution() {
+        let diagnostics_store = WorkflowDiagnosticsStore::default();
+
+        record_headless_runtime_snapshot(
+            &diagnostics_store,
+            "wf-1".to_string(),
+            Some("run-1"),
+            Ok(capability_response()),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_instance_id: Some("runtime-1".to_string()),
+                warmup_started_at_ms: Some(100),
+                warmup_completed_at_ms: Some(110),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            120,
+        );
+
+        let trace = diagnostics_store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("run-1".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("runtime trace");
+        assert_eq!(trace.execution_id, "run-1");
+        assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            trace.runtime.runtime_instance_id.as_deref(),
+            Some("runtime-1")
+        );
+        assert_eq!(
+            trace.runtime.lifecycle_decision_reason.as_deref(),
+            Some("runtime_ready")
+        );
+    }
+
+    #[test]
+    fn headless_runtime_snapshot_helper_keeps_trace_store_empty_without_execution_identity() {
+        let diagnostics_store = WorkflowDiagnosticsStore::default();
+
+        record_headless_runtime_snapshot(
+            &diagnostics_store,
+            "wf-1".to_string(),
+            None,
+            Ok(capability_response()),
+            WorkflowTraceRuntimeMetrics::default(),
+            120,
+        );
+
+        let projection = diagnostics_store.snapshot();
+        assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
+        let trace_snapshot = diagnostics_store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: None,
+                session_id: None,
+                workflow_id: Some("wf-1".to_string()),
+                include_completed: None,
+            })
+            .expect("trace snapshot");
+        assert!(trace_snapshot.traces.is_empty());
     }
 
     #[test]
