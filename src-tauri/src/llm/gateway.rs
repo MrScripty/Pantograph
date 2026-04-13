@@ -114,17 +114,24 @@ impl InferenceGateway {
             return Ok(());
         }
 
-        // Stop any existing embedding server
-        self.stop_embedding_server().await;
+        {
+            let mut guard = self.embedding_server.write().await;
+            if let Some(server) = guard.as_mut() {
+                if server.matches_runtime(model_path, mode.clone()) {
+                    server.mark_runtime_reused();
+                    log::info!("Reusing dedicated embedding server");
+                    return Ok(());
+                }
+            }
+        }
 
-        // Create and start new embedding server
-        let mut server = EmbeddingServer::new(mode);
+        // Create or restart the dedicated embedding server with backend-owned
+        // lifecycle tracking.
+        let mut server = EmbeddingServer::new(mode.clone());
         server
             .start(model_path, &self.spawner, devices)
             .await
             .map_err(GatewayError::EmbeddingServer)?;
-
-        // Store the server
         let mut guard = self.embedding_server.write().await;
         *guard = Some(server);
 
@@ -206,6 +213,17 @@ impl InferenceGateway {
         self.inner.runtime_lifecycle_snapshot().await
     }
 
+    /// Get the backend-owned lifecycle snapshot for the dedicated embedding runtime.
+    pub async fn embedding_runtime_lifecycle_snapshot(
+        &self,
+    ) -> Option<inference::RuntimeLifecycleSnapshot> {
+        self.embedding_server
+            .read()
+            .await
+            .as_ref()
+            .map(EmbeddingServer::runtime_lifecycle_snapshot)
+    }
+
     /// Check if currently in embedding mode.
     pub async fn is_embedding_mode(&self) -> bool {
         self.inner.is_embedding_mode().await
@@ -240,6 +258,76 @@ pub type SharedGateway = Arc<InferenceGateway>;
 
 #[cfg(test)]
 mod tests {
-    // Integration tests require a ProcessSpawner which needs runtime setup.
-    // The core gateway is tested in the inference crate.
+    use std::path::PathBuf;
+
+    use async_trait::async_trait;
+    use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use tokio::sync::mpsc;
+
+    use super::*;
+
+    struct MockProcessHandle;
+
+    impl ProcessHandle for MockProcessHandle {
+        fn pid(&self) -> u32 {
+            11
+        }
+
+        fn kill(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct MockProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+            Err("spawn should not be called in reuse-path tests".to_string())
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+    }
+
+    #[tokio::test]
+    async fn start_embedding_server_reuses_matching_runtime() {
+        let gateway = InferenceGateway::new(Arc::new(MockProcessSpawner));
+
+        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+
+        {
+            let mut guard = gateway.embedding_server.write().await;
+            *guard = Some(server);
+        }
+
+        gateway
+            .start_embedding_server("/models/embed.gguf", EmbeddingMemoryMode::CpuParallel, &[])
+            .await
+            .expect("matching runtime should be reused");
+
+        let snapshot = gateway
+            .embedding_runtime_lifecycle_snapshot()
+            .await
+            .expect("snapshot should exist");
+        assert_eq!(snapshot.runtime_reused, Some(true));
+        assert!(snapshot.active);
+    }
+
+    #[tokio::test]
+    async fn embedding_runtime_lifecycle_snapshot_returns_none_without_server() {
+        let gateway = InferenceGateway::new(Arc::new(MockProcessSpawner));
+
+        assert_eq!(gateway.embedding_runtime_lifecycle_snapshot().await, None);
+    }
 }

@@ -460,19 +460,21 @@ Update during implementation:
 - Seventeenth implementation slice added in `src-tauri/src/workflow`
 - Eighteenth implementation slice added across `src-tauri` diagnostics and
   read-only GUI consumers
+- Nineteenth implementation slice added in `src-tauri/src/llm` so the
+  dedicated embedding sidecar now records backend-owned lifecycle snapshots and
+  reuse decisions in Rust
 
 ### Deviations
 
 - Current runtime producers do not yet emit true warmup/reuse/instance-lifetime
-  facts for every runtime path; the inference gateway now records authoritative
-  lifecycle state for gateway-managed starts, but direct process-hosted or
-  adapter-specific runtime paths still need to converge on the same producer
-  contract.
+  facts for every runtime path; the inference gateway and dedicated embedding
+  sidecar now record authoritative lifecycle state, but remaining adapter-
+  specific runtime paths still need to converge on the same producer contract.
 
 ### Follow-Ups
 
-- Extend runtime lifecycle producers beyond the gateway-managed inference path
-  so every runtime host populates the same authoritative
+- Extend runtime lifecycle producers beyond the current inference-gateway and
+  embedding-sidecar paths so every runtime host populates the same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run

@@ -22,6 +22,10 @@ LLM gateway, process management, and Tauri command handlers for model and server
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.
 - Maintain predictable naming so callers can discover related modules quickly.
+- Keep sidecar lifecycle ownership in Rust adapters. The dedicated embedding
+  sidecar now records backend-owned runtime lifecycle snapshots in
+  `embedding_server.rs`; GUI consumers may read those facts but must not infer
+  warmup/reuse decisions locally.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.

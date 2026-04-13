@@ -5,7 +5,9 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use inference::RuntimeLifecycleSnapshot;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 
 use crate::config::{DeviceConfig, DeviceInfo, EmbeddingMemoryMode};
@@ -19,6 +21,8 @@ const EMBEDDING_MODEL_VRAM_MB: u64 = 800;
 
 /// PID file name for the embedding server
 const EMBEDDING_PID_FILE: &str = "embedding-server.pid";
+/// Canonical runtime identifier for the dedicated embedding sidecar.
+const EMBEDDING_RUNTIME_ID: &str = "llama.cpp.embedding";
 
 /// Dedicated embedding server that can run alongside the main LLM
 pub struct EmbeddingServer {
@@ -28,6 +32,8 @@ pub struct EmbeddingServer {
     ready: bool,
     pid_file: Option<PathBuf>,
     model_path: Option<String>,
+    runtime_lifecycle: RuntimeLifecycleSnapshot,
+    runtime_instance_sequence: u64,
 }
 
 impl EmbeddingServer {
@@ -40,6 +46,11 @@ impl EmbeddingServer {
             ready: false,
             pid_file: None,
             model_path: None,
+            runtime_lifecycle: RuntimeLifecycleSnapshot {
+                runtime_id: Some(EMBEDDING_RUNTIME_ID.to_string()),
+                ..RuntimeLifecycleSnapshot::default()
+            },
+            runtime_instance_sequence: 0,
         }
     }
 
@@ -73,6 +84,9 @@ impl EmbeddingServer {
             return Ok(());
         }
 
+        let warmup_started_at_ms = unix_timestamp_ms();
+        self.mark_start_attempt(warmup_started_at_ms);
+
         // Stop any existing server
         self.stop();
 
@@ -105,7 +119,16 @@ impl EmbeddingServer {
             }
         };
 
-        self.start_server(model_path, spawner, &device_config).await
+        match self.start_server(model_path, spawner, &device_config).await {
+            Ok(()) => {
+                self.mark_start_success(warmup_started_at_ms);
+                Ok(())
+            }
+            Err(error) => {
+                self.mark_start_failure(warmup_started_at_ms, error.clone());
+                Err(error)
+            }
+        }
     }
 
     /// Internal method to start the llama.cpp embedding server
@@ -287,6 +310,30 @@ impl EmbeddingServer {
         self.ready && self.child.is_some()
     }
 
+    /// Return the backend-owned lifecycle snapshot for the dedicated embedding runtime.
+    pub fn runtime_lifecycle_snapshot(&self) -> RuntimeLifecycleSnapshot {
+        self.runtime_lifecycle.clone()
+    }
+
+    /// Return whether the active embedding runtime can satisfy the requested configuration.
+    pub fn matches_runtime(&self, model_path: &str, mode: EmbeddingMemoryMode) -> bool {
+        self.is_ready() && self.mode == mode && self.model_path.as_deref() == Some(model_path)
+    }
+
+    /// Mark the current embedding runtime as reused by a later request.
+    pub fn mark_runtime_reused(&mut self) {
+        self.runtime_lifecycle.runtime_reused = Some(true);
+        self.runtime_lifecycle.active = self.is_ready();
+        self.runtime_lifecycle.last_error = None;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_test_ready_state(&mut self, child: Box<dyn ProcessHandle>, model_path: &str) {
+        self.child = Some(child);
+        self.ready = true;
+        self.model_path = Some(model_path.to_string());
+    }
+
     /// Stop the embedding server
     pub fn stop(&mut self) {
         if let Some(ref child) = self.child {
@@ -296,12 +343,53 @@ impl EmbeddingServer {
         self.child = None;
         self.ready = false;
         self.model_path = None;
+        self.runtime_lifecycle.active = false;
 
         // Clean up PID file
         if let Some(ref pid_file) = self.pid_file {
             let _ = std::fs::remove_file(pid_file);
         }
         self.pid_file = None;
+    }
+
+    fn mark_start_attempt(&mut self, warmup_started_at_ms: u64) {
+        self.runtime_lifecycle.runtime_id = Some(EMBEDDING_RUNTIME_ID.to_string());
+        self.runtime_lifecycle.runtime_instance_id = None;
+        self.runtime_lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
+        self.runtime_lifecycle.warmup_completed_at_ms = None;
+        self.runtime_lifecycle.warmup_duration_ms = None;
+        self.runtime_lifecycle.runtime_reused = Some(false);
+        self.runtime_lifecycle.active = false;
+        self.runtime_lifecycle.last_error = None;
+    }
+
+    fn mark_start_success(&mut self, warmup_started_at_ms: u64) {
+        let warmup_completed_at_ms = unix_timestamp_ms();
+        self.runtime_instance_sequence = self.runtime_instance_sequence.saturating_add(1);
+        self.runtime_lifecycle.runtime_id = Some(EMBEDDING_RUNTIME_ID.to_string());
+        self.runtime_lifecycle.runtime_instance_id = Some(format!(
+            "llama-cpp-embedding-{}",
+            self.runtime_instance_sequence
+        ));
+        self.runtime_lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
+        self.runtime_lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
+        self.runtime_lifecycle.warmup_duration_ms =
+            Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+        self.runtime_lifecycle.runtime_reused = Some(false);
+        self.runtime_lifecycle.active = true;
+        self.runtime_lifecycle.last_error = None;
+    }
+
+    fn mark_start_failure(&mut self, warmup_started_at_ms: u64, error: String) {
+        let warmup_completed_at_ms = unix_timestamp_ms();
+        self.runtime_lifecycle.runtime_id = Some(EMBEDDING_RUNTIME_ID.to_string());
+        self.runtime_lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
+        self.runtime_lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
+        self.runtime_lifecycle.warmup_duration_ms =
+            Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+        self.runtime_lifecycle.runtime_reused = Some(false);
+        self.runtime_lifecycle.active = false;
+        self.runtime_lifecycle.last_error = Some(error);
     }
 }
 
@@ -311,9 +399,29 @@ impl Drop for EmbeddingServer {
     }
 }
 
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use inference::process::ProcessHandle;
+
+    struct MockProcessHandle;
+
+    impl ProcessHandle for MockProcessHandle {
+        fn pid(&self) -> u32 {
+            7
+        }
+
+        fn kill(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_check_vram_available() {
@@ -346,5 +454,53 @@ mod tests {
     fn test_base_url() {
         let server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
         assert_eq!(server.base_url(), "http://127.0.0.1:8081");
+    }
+
+    #[test]
+    fn test_runtime_lifecycle_snapshot_tracks_start_success() {
+        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+
+        server.mark_start_attempt(100);
+        server.mark_start_success(100);
+
+        let snapshot = server.runtime_lifecycle_snapshot();
+        assert_eq!(snapshot.runtime_id.as_deref(), Some(EMBEDDING_RUNTIME_ID));
+        assert_eq!(
+            snapshot.runtime_instance_id.as_deref(),
+            Some("llama-cpp-embedding-1")
+        );
+        assert_eq!(snapshot.warmup_started_at_ms, Some(100));
+        assert!(snapshot.warmup_completed_at_ms.is_some());
+        assert!(snapshot.warmup_duration_ms.is_some());
+        assert_eq!(snapshot.runtime_reused, Some(false));
+        assert!(snapshot.active);
+        assert!(snapshot.last_error.is_none());
+    }
+
+    #[test]
+    fn test_runtime_lifecycle_snapshot_tracks_start_failure() {
+        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+
+        server.mark_start_attempt(200);
+        server.mark_start_failure(200, "spawn failed".to_string());
+
+        let snapshot = server.runtime_lifecycle_snapshot();
+        assert_eq!(snapshot.runtime_id.as_deref(), Some(EMBEDDING_RUNTIME_ID));
+        assert_eq!(snapshot.warmup_started_at_ms, Some(200));
+        assert!(snapshot.warmup_completed_at_ms.is_some());
+        assert!(snapshot.warmup_duration_ms.is_some());
+        assert_eq!(snapshot.runtime_reused, Some(false));
+        assert!(!snapshot.active);
+        assert_eq!(snapshot.last_error.as_deref(), Some("spawn failed"));
+    }
+
+    #[test]
+    fn test_matches_runtime_requires_ready_model_and_mode() {
+        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+
+        assert!(server.matches_runtime("/models/embed.gguf", EmbeddingMemoryMode::CpuParallel));
+        assert!(!server.matches_runtime("/models/other.gguf", EmbeddingMemoryMode::CpuParallel));
+        assert!(!server.matches_runtime("/models/embed.gguf", EmbeddingMemoryMode::GpuParallel));
     }
 }

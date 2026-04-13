@@ -68,3 +68,11 @@ pub async fn get_embedding_server_url(
 ) -> Result<Option<String>, String> {
     Ok(gateway.embedding_url().await)
 }
+
+/// Get the backend-owned lifecycle snapshot for the dedicated embedding server.
+#[command]
+pub async fn get_embedding_runtime_lifecycle_snapshot(
+    gateway: State<'_, SharedGateway>,
+) -> Result<Option<inference::RuntimeLifecycleSnapshot>, String> {
+    Ok(gateway.embedding_runtime_lifecycle_snapshot().await)
+}
