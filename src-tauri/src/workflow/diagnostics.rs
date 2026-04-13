@@ -186,6 +186,22 @@ impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleS
     }
 }
 
+impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleSnapshot {
+    fn from(snapshot: &DiagnosticsRuntimeLifecycleSnapshot) -> Self {
+        Self {
+            runtime_id: snapshot.runtime_id.clone(),
+            runtime_instance_id: snapshot.runtime_instance_id.clone(),
+            warmup_started_at_ms: snapshot.warmup_started_at_ms,
+            warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
+            warmup_duration_ms: snapshot.warmup_duration_ms,
+            runtime_reused: snapshot.runtime_reused,
+            lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone(),
+            active: snapshot.active,
+            last_error: snapshot.last_error.clone(),
+        }
+    }
+}
+
 fn normalize_runtime_key(value: &str) -> String {
     value
         .trim()
