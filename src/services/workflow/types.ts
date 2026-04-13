@@ -239,6 +239,7 @@ export type WorkflowSessionState = 'idle_loaded' | 'idle_unloaded' | 'running';
 export interface WorkflowSessionSummary {
   session_id: string;
   workflow_id: string;
+  session_kind: WorkflowSessionKind;
   usage_profile?: string | null;
   keep_alive: boolean;
   state: WorkflowSessionState;
@@ -261,6 +262,13 @@ export interface WorkflowSessionQueueItem {
 
 export interface WorkflowSessionQueueListResponse {
   session_id: string;
+  items: WorkflowSessionQueueItem[];
+}
+
+export interface WorkflowSchedulerSnapshotResponse {
+  workflow_id?: string | null;
+  session_id: string;
+  session: WorkflowSessionSummary;
   items: WorkflowSessionQueueItem[];
 }
 

@@ -5,7 +5,10 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
-use crate::workflow::WorkflowServiceError;
+use crate::workflow::{
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+};
 
 use super::connection_intent::{
     commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
@@ -189,6 +192,8 @@ struct GraphEditSession {
     graph: WorkflowGraph,
     undo_stack: Vec<WorkflowGraph>,
     redo_stack: Vec<WorkflowGraph>,
+    active_execution_id: Option<String>,
+    run_count: u64,
     last_accessed: Instant,
 }
 
@@ -201,6 +206,8 @@ impl GraphEditSession {
             graph,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            active_execution_id: None,
+            run_count: 0,
             last_accessed: now,
         }
     }
@@ -262,6 +269,48 @@ impl GraphEditSession {
             can_undo: !self.undo_stack.is_empty(),
             can_redo: !self.redo_stack.is_empty(),
             undo_count: self.undo_stack.len(),
+        }
+    }
+
+    fn session_summary(&self, session_id: &str) -> WorkflowSessionSummary {
+        WorkflowSessionSummary {
+            session_id: session_id.to_string(),
+            workflow_id: session_id.to_string(),
+            session_kind: WorkflowSessionKind::Edit,
+            usage_profile: None,
+            keep_alive: false,
+            state: if self.active_execution_id.is_some() {
+                WorkflowSessionState::Running
+            } else {
+                WorkflowSessionState::IdleLoaded
+            },
+            queued_runs: usize::from(self.active_execution_id.is_some()),
+            run_count: self.run_count,
+        }
+    }
+
+    fn queue_items(&self) -> Vec<WorkflowSessionQueueItem> {
+        self.active_execution_id
+            .as_ref()
+            .map(|execution_id| WorkflowSessionQueueItem {
+                queue_id: execution_id.clone(),
+                run_id: Some(execution_id.clone()),
+                priority: 0,
+                status: WorkflowSessionQueueItemStatus::Running,
+            })
+            .into_iter()
+            .collect()
+    }
+
+    fn mark_running(&mut self, session_id: &str) {
+        self.touch();
+        self.active_execution_id = Some(session_id.to_string());
+    }
+
+    fn finish_run(&mut self) {
+        self.touch();
+        if self.active_execution_id.take().is_some() {
+            self.run_count = self.run_count.saturating_add(1);
         }
     }
 }
@@ -366,6 +415,35 @@ impl GraphSessionStore {
             can_redo: undo.can_redo,
             undo_count: undo.undo_count,
         })
+    }
+
+    pub async fn get_scheduler_snapshot(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError> {
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        Ok(WorkflowSchedulerSnapshotResponse {
+            workflow_id: None,
+            session_id: session_id.to_string(),
+            session: state.session_summary(session_id),
+            items: state.queue_items(),
+        })
+    }
+
+    pub async fn mark_running(&self, session_id: &str) -> Result<(), WorkflowServiceError> {
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.mark_running(session_id);
+        Ok(())
+    }
+
+    pub async fn finish_run(&self, session_id: &str) -> Result<(), WorkflowServiceError> {
+        let handle = self.get_session_handle(session_id).await?;
+        let mut state = handle.lock().await;
+        state.finish_run();
+        Ok(())
     }
 
     pub async fn update_node_data(

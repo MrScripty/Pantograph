@@ -17,8 +17,8 @@ use pantograph_workflow_service::{
     WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionQueueListRequest,
-    WorkflowSessionStatusRequest, convert_graph_to_node_engine,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
+    convert_graph_to_node_engine,
 };
 use tauri::{AppHandle, State, ipc::Channel};
 
@@ -419,16 +419,16 @@ async fn emit_diagnostics_snapshots(
     workflow_service: &SharedWorkflowService,
     channel: &Channel<WorkflowEvent>,
 ) {
-    let session_status = match workflow_service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+    let scheduler_snapshot = match workflow_service
+        .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
             session_id: session_id.to_string(),
         })
         .await
     {
-        Ok(status) => status,
+        Ok(snapshot) => snapshot,
         Err(error) => {
             log::debug!(
-                "Skipping diagnostics snapshots for session '{}' because session status is unavailable: {}",
+                "Skipping diagnostics snapshots for session '{}' because scheduler snapshot is unavailable: {}",
                 session_id,
                 error
             );
@@ -436,34 +436,20 @@ async fn emit_diagnostics_snapshots(
         }
     };
 
-    let workflow_id = session_status.session.workflow_id.clone();
+    let workflow_id = scheduler_snapshot.workflow_id.clone();
+    let runtime_workflow_id = workflow_id
+        .clone()
+        .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
     let captured_at_ms = unix_timestamp_ms();
 
-    let (queue_items, scheduler_error) = match workflow_service
-        .workflow_list_session_queue(WorkflowSessionQueueListRequest {
-            session_id: session_id.to_string(),
-        })
-        .await
-    {
-        Ok(response) => (response.items, None),
-        Err(error) => {
-            log::warn!(
-                "Failed to collect scheduler snapshot for session '{}': {}",
-                session_id,
-                error
-            );
-            (Vec::new(), Some(error.to_envelope_json()))
-        }
-    };
-
     let _ = channel.send(WorkflowEvent::scheduler_snapshot(
-        workflow_id.clone(),
+        workflow_id,
         session_id.to_string(),
         session_id.to_string(),
         captured_at_ms,
-        Some(session_status.session.clone()),
-        queue_items,
-        scheduler_error,
+        Some(scheduler_snapshot.session.clone()),
+        scheduler_snapshot.items.clone(),
+        None,
     ));
 
     let runtime = match super::headless_workflow_commands::build_runtime(
@@ -476,7 +462,7 @@ async fn emit_diagnostics_snapshots(
         Ok(runtime) => runtime,
         Err(error) => {
             let _ = channel.send(WorkflowEvent::runtime_snapshot(
-                workflow_id,
+                runtime_workflow_id,
                 session_id.to_string(),
                 captured_at_ms,
                 None,
@@ -488,7 +474,7 @@ async fn emit_diagnostics_snapshots(
 
     let (capabilities, runtime_error) = match runtime
         .workflow_get_capabilities(WorkflowCapabilitiesRequest {
-            workflow_id: workflow_id.clone(),
+            workflow_id: runtime_workflow_id.clone(),
         })
         .await
     {
@@ -496,7 +482,7 @@ async fn emit_diagnostics_snapshots(
         Err(error) => {
             log::warn!(
                 "Failed to collect runtime snapshot for workflow '{}' in session '{}': {}",
-                workflow_id,
+                runtime_workflow_id,
                 session_id,
                 error
             );
@@ -505,7 +491,7 @@ async fn emit_diagnostics_snapshots(
     };
 
     let _ = channel.send(WorkflowEvent::runtime_snapshot(
-        workflow_id,
+        runtime_workflow_id,
         session_id.to_string(),
         captured_at_ms,
         capabilities,
@@ -590,6 +576,11 @@ async fn run_session_graph_snapshot(
     executor.set_event_sink(event_adapter.clone());
     sync_embedding_emit_metadata_flags_for_executor(&mut executor).await?;
 
+    workflow_service
+        .workflow_graph_mark_edit_session_running(&session_id)
+        .await
+        .map_err(|error| error.to_envelope_json())?;
+
     let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowStarted {
         workflow_id: session_id.clone(),
         execution_id: session_id.clone(),
@@ -603,21 +594,27 @@ async fn run_session_graph_snapshot(
             }
             Err(e) => {
                 log::error!("Error demanding from node {}: {}", node_id, e);
-                let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowFailed {
-                    workflow_id: session_id.clone(),
-                    execution_id: session_id.clone(),
-                    error: e.to_string(),
-                });
                 workflow_result = Err(e.to_string());
                 break;
             }
         }
     }
 
+    workflow_service
+        .workflow_graph_mark_edit_session_finished(&session_id)
+        .await
+        .map_err(|error| error.to_envelope_json())?;
+
     if workflow_result.is_ok() {
         let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
             workflow_id: session_id.clone(),
             execution_id: session_id.clone(),
+        });
+    } else if let Err(error) = &workflow_result {
+        let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowFailed {
+            workflow_id: session_id.clone(),
+            execution_id: session_id.clone(),
+            error: error.clone(),
         });
     }
 

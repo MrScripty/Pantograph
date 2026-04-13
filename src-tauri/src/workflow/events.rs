@@ -155,7 +155,7 @@ pub enum WorkflowEvent {
     /// Scheduler/session snapshot captured during execution
     SchedulerSnapshot {
         /// Workflow identifier associated with this run
-        workflow_id: String,
+        workflow_id: Option<String>,
         /// Unique identifier for this execution
         execution_id: String,
         /// Session identifier the snapshot belongs to
@@ -299,7 +299,7 @@ impl WorkflowEvent {
 
     /// Create a SchedulerSnapshot event
     pub fn scheduler_snapshot(
-        workflow_id: impl Into<String>,
+        workflow_id: Option<String>,
         execution_id: impl Into<String>,
         session_id: impl Into<String>,
         captured_at_ms: u64,
@@ -308,7 +308,7 @@ impl WorkflowEvent {
         error: Option<String>,
     ) -> Self {
         Self::SchedulerSnapshot {
-            workflow_id: workflow_id.into(),
+            workflow_id,
             execution_id: execution_id.into(),
             session_id: session_id.into(),
             captured_at_ms,

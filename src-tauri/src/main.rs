@@ -328,6 +328,7 @@ fn main() {
             workflow::commands::workflow_close_session,
             workflow::commands::workflow_get_session_status,
             workflow::commands::workflow_list_session_queue,
+            workflow::commands::workflow_get_scheduler_snapshot,
             workflow::commands::workflow_cancel_session_queue_item,
             workflow::commands::workflow_reprioritize_session_queue_item,
             workflow::commands::workflow_set_session_keep_alive,

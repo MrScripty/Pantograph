@@ -19,6 +19,7 @@ use crate::graph::{
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowSessionKind,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -340,6 +341,7 @@ pub enum WorkflowSessionState {
 pub struct WorkflowSessionSummary {
     pub session_id: String,
     pub workflow_id: String,
+    pub session_kind: WorkflowSessionKind,
     #[serde(default)]
     pub usage_profile: Option<String>,
     pub keep_alive: bool,
@@ -393,6 +395,25 @@ pub struct WorkflowSessionQueueListRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowSessionQueueListResponse {
     pub session_id: String,
+    pub items: Vec<WorkflowSessionQueueItem>,
+}
+
+/// Scheduler snapshot request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerSnapshotRequest {
+    pub session_id: String,
+}
+
+/// Scheduler snapshot response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerSnapshotResponse {
+    #[serde(default)]
+    pub workflow_id: Option<String>,
+    pub session_id: String,
+    pub session: WorkflowSessionSummary,
+    #[serde(default)]
     pub items: Vec<WorkflowSessionQueueItem>,
 }
 
@@ -927,6 +948,7 @@ impl WorkflowSessionStore {
         Ok(WorkflowSessionSummary {
             session_id: session_id.to_string(),
             workflow_id: state.workflow_id.clone(),
+            session_kind: WorkflowSessionKind::Workflow,
             usage_profile: state.usage_profile.clone(),
             keep_alive: state.keep_alive,
             state: session_state_from_record(state),
@@ -1576,6 +1598,41 @@ impl WorkflowService {
         })
     }
 
+    pub async fn workflow_get_scheduler_snapshot(
+        &self,
+        request: WorkflowSchedulerSnapshotRequest,
+    ) -> Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+
+        {
+            let store = self.session_store.lock().map_err(|_| {
+                WorkflowServiceError::Internal("session store lock poisoned".to_string())
+            })?;
+            match store.session_summary(session_id) {
+                Ok(session) => {
+                    let items = store.list_queue(session_id)?;
+                    return Ok(WorkflowSchedulerSnapshotResponse {
+                        workflow_id: Some(session.workflow_id.clone()),
+                        session_id: session_id.to_string(),
+                        session,
+                        items,
+                    });
+                }
+                Err(WorkflowServiceError::SessionNotFound(_)) => {}
+                Err(error) => return Err(error),
+            }
+        }
+
+        self.graph_session_store
+            .get_scheduler_snapshot(session_id)
+            .await
+    }
+
     pub async fn workflow_cancel_session_queue_item(
         &self,
         request: WorkflowSessionQueueCancelRequest,
@@ -2110,6 +2167,20 @@ impl WorkflowService {
             .get_session_graph(session_id)
             .await?;
         Ok(response.graph)
+    }
+
+    pub async fn workflow_graph_mark_edit_session_running(
+        &self,
+        session_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        self.graph_session_store.mark_running(session_id).await
+    }
+
+    pub async fn workflow_graph_mark_edit_session_finished(
+        &self,
+        session_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        self.graph_session_store.finish_run(session_id).await
     }
 }
 
@@ -4447,7 +4518,121 @@ mod tests {
             })
             .await
             .expect("get status");
+        assert_eq!(status.session.session_kind, WorkflowSessionKind::Workflow);
         assert!(!status.session.keep_alive);
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_returns_workflow_session_summary() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("scheduler snapshot");
+
+        assert_eq!(snapshot.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(snapshot.session_id, created.session_id);
+        assert_eq!(snapshot.session.session_kind, WorkflowSessionKind::Workflow);
+        assert_eq!(snapshot.session.workflow_id, "wf-1");
+        assert_eq!(
+            snapshot.session.usage_profile.as_deref(),
+            Some("interactive")
+        );
+        assert!(snapshot.items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
+        let service = WorkflowService::new();
+        let created = service
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: WorkflowGraph::new(),
+            })
+            .await
+            .expect("create edit session");
+
+        let idle_snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("idle edit snapshot");
+        assert_eq!(idle_snapshot.workflow_id, None);
+        assert_eq!(
+            idle_snapshot.session.session_kind,
+            WorkflowSessionKind::Edit
+        );
+        assert_eq!(
+            idle_snapshot.session.state,
+            WorkflowSessionState::IdleLoaded
+        );
+        assert_eq!(idle_snapshot.session.queued_runs, 0);
+        assert_eq!(idle_snapshot.session.run_count, 0);
+        assert!(idle_snapshot.items.is_empty());
+
+        service
+            .workflow_graph_mark_edit_session_running(&created.session_id)
+            .await
+            .expect("mark running");
+
+        let running_snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("running edit snapshot");
+        assert_eq!(
+            running_snapshot.session.session_kind,
+            WorkflowSessionKind::Edit
+        );
+        assert_eq!(
+            running_snapshot.session.state,
+            WorkflowSessionState::Running
+        );
+        assert_eq!(running_snapshot.session.queued_runs, 1);
+        assert_eq!(running_snapshot.items.len(), 1);
+        assert_eq!(
+            running_snapshot.items[0].status,
+            WorkflowSessionQueueItemStatus::Running
+        );
+        assert_eq!(
+            running_snapshot.items[0].run_id.as_deref(),
+            Some(created.session_id.as_str())
+        );
+
+        service
+            .workflow_graph_mark_edit_session_finished(&created.session_id)
+            .await
+            .expect("finish running edit session");
+
+        let completed_snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("completed edit snapshot");
+        assert_eq!(
+            completed_snapshot.session.state,
+            WorkflowSessionState::IdleLoaded
+        );
+        assert_eq!(completed_snapshot.session.queued_runs, 0);
+        assert_eq!(completed_snapshot.session.run_count, 1);
+        assert!(completed_snapshot.items.is_empty());
     }
 
     #[tokio::test]

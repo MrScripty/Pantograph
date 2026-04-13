@@ -13,13 +13,14 @@ use pantograph_embedded_runtime::{
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
     WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRunRequest, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
+    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -244,6 +245,16 @@ pub async fn workflow_list_session_queue(
 ) -> Result<WorkflowSessionQueueListResponse, String> {
     workflow_service
         .workflow_list_session_queue(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_get_scheduler_snapshot(
+    request: WorkflowSchedulerSnapshotRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSchedulerSnapshotResponse, String> {
+    workflow_service
+        .workflow_get_scheduler_snapshot(request)
         .await
         .map_err(workflow_error_json)
 }

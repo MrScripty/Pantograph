@@ -255,6 +255,7 @@ export type WorkflowSessionState = 'idle_loaded' | 'idle_unloaded' | 'running';
 export interface WorkflowSessionSummary {
   session_id: string;
   workflow_id: string;
+  session_kind: WorkflowSessionKind;
   usage_profile?: string | null;
   keep_alive: boolean;
   state: WorkflowSessionState;

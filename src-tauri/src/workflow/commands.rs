@@ -238,6 +238,15 @@ pub async fn workflow_list_session_queue(
 }
 
 #[command]
+pub async fn workflow_get_scheduler_snapshot(
+    request: pantograph_workflow_service::WorkflowSchedulerSnapshotRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowSchedulerSnapshotResponse, String> {
+    super::headless_workflow_commands::workflow_get_scheduler_snapshot(request, workflow_service)
+        .await
+}
+
+#[command]
 pub async fn workflow_cancel_session_queue_item(
     request: pantograph_workflow_service::WorkflowSessionQueueCancelRequest,
     workflow_service: State<'_, SharedWorkflowService>,

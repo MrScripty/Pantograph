@@ -11,14 +11,12 @@ import {
   createWorkflowDiagnosticsContext,
   createWorkflowDiagnosticsState,
   deriveNodeTypesById,
-  ensureDiagnosticsStateSchedulerSession,
   recordWorkflowEvent,
   selectDiagnosticsNode,
   selectDiagnosticsRun,
   setDiagnosticsCurrentSessionId,
   setDiagnosticsPanelOpen,
   setDiagnosticsTab,
-  updateDiagnosticsStateSchedulerFromEvent,
   updateDiagnosticsStateRuntimeSnapshot,
   updateDiagnosticsStateSchedulerSnapshot,
   updateDiagnosticsStateWorkflowContext,
@@ -138,36 +136,6 @@ export class DiagnosticsService {
       sessionQueue,
       capturedAtMs,
       lastError,
-    );
-    this.emit();
-  }
-
-  ensureSchedulerSession(
-    workflowId: string | null,
-    sessionId: string | null,
-    capturedAtMs = Date.now(),
-  ): void {
-    this.state = ensureDiagnosticsStateSchedulerSession(
-      this.state,
-      workflowId,
-      sessionId,
-      capturedAtMs,
-    );
-    this.emit();
-  }
-
-  applySchedulerEvent(
-    workflowId: string | null,
-    sessionId: string | null,
-    event: WorkflowEvent,
-    capturedAtMs = Date.now(),
-  ): void {
-    this.state = updateDiagnosticsStateSchedulerFromEvent(
-      this.state,
-      workflowId,
-      sessionId,
-      event,
-      capturedAtMs,
     );
     this.emit();
   }

@@ -6,6 +6,7 @@ import type {
   WorkflowGraph,
   WorkflowFile,
   WorkflowSessionHandle,
+  WorkflowSchedulerSnapshotResponse,
   WorkflowMetadata,
   WorkflowSessionQueueListResponse,
   WorkflowSessionStatusResponse,
@@ -254,6 +255,7 @@ export class WorkflowService {
         session: {
           session_id: id,
           workflow_id: 'mock-workflow',
+          session_kind: 'workflow',
           keep_alive: true,
           state: 'idle_loaded',
           queued_runs: 0,
@@ -286,6 +288,36 @@ export class WorkflowService {
       request: {
         session_id: id,
       } satisfies WorkflowSessionQueueListRequest,
+    });
+  }
+
+  async getSchedulerSnapshot(sessionId?: string): Promise<WorkflowSchedulerSnapshotResponse | null> {
+    const id = sessionId ?? this.currentExecutionId;
+    if (!id) {
+      return null;
+    }
+
+    if (USE_MOCKS) {
+      return {
+        workflow_id: 'mock-workflow',
+        session_id: id,
+        session: {
+          session_id: id,
+          workflow_id: 'mock-workflow',
+          session_kind: 'edit',
+          keep_alive: false,
+          state: 'idle_loaded',
+          queued_runs: 0,
+          run_count: 0,
+        },
+        items: [],
+      };
+    }
+
+    return invoke<WorkflowSchedulerSnapshotResponse>('workflow_get_scheduler_snapshot', {
+      request: {
+        session_id: id,
+      },
     });
   }
 
