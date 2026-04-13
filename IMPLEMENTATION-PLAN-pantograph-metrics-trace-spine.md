@@ -479,6 +479,10 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` so the read-only
   scheduler and trace snapshot command paths are exercised directly against
   backend-owned service and diagnostics stores
+- Twenty-fifth implementation slice added in
+  `src-tauri/src/workflow/headless_workflow_commands.rs` so diagnostics
+  projection refresh logic is exercised directly against backend-owned
+  scheduler snapshots, capability responses, and runtime lifecycle metrics
 
 ### Deviations
 
@@ -494,8 +498,9 @@ Update during implementation:
   paths so every runtime host populates the same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
 - Extend direct command-path acceptance coverage beyond the current embedding
-  runtime, scheduler, and trace snapshot readers so diagnostics projection
-  refresh paths are also exercised at the adapter boundary.
+  runtime, scheduler, trace snapshot, and diagnostics projection refresh paths
+  so the remaining read-only diagnostics readers are also exercised at the
+  adapter boundary.
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.

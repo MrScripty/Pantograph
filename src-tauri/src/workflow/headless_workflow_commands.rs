@@ -214,6 +214,69 @@ fn workflow_trace_snapshot_response(
         .map_err(workflow_error_json)
 }
 
+fn normalize_optional_request_value(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn workflow_diagnostics_snapshot_projection(
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
+    session_id: Option<String>,
+    workflow_id: Option<String>,
+    workflow_name: Option<String>,
+    scheduler_snapshot_result: Option<Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>>,
+    capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
+    runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
+    captured_at_ms: u64,
+) -> WorkflowDiagnosticsProjection {
+    let mut trace_execution_id = session_id.clone();
+
+    if let Some(session_id) = session_id.as_deref() {
+        trace_execution_id = Some(record_headless_scheduler_snapshot(
+            diagnostics_store.as_ref(),
+            session_id,
+            workflow_id.clone(),
+            workflow_name.clone(),
+            scheduler_snapshot_result.unwrap_or_else(|| {
+                Err(WorkflowServiceError::InvalidRequest(
+                    "scheduler snapshot unavailable".to_string(),
+                ))
+            }),
+            captured_at_ms,
+        ));
+    } else {
+        diagnostics_store.update_scheduler_snapshot(
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+            captured_at_ms,
+        );
+    }
+
+    if let Some(workflow_id) = workflow_id {
+        record_headless_runtime_snapshot(
+            diagnostics_store.as_ref(),
+            workflow_id,
+            trace_execution_id.as_deref(),
+            capabilities_result.unwrap_or_else(|| {
+                Err(WorkflowServiceError::InvalidRequest(
+                    "workflow capabilities unavailable".to_string(),
+                ))
+            }),
+            runtime_trace_metrics,
+            captured_at_ms,
+        );
+    } else {
+        diagnostics_store.update_runtime_snapshot(None, None, None, captured_at_ms);
+    }
+
+    diagnostics_store.snapshot()
+}
+
 pub async fn workflow_run(
     request: WorkflowRunRequest,
     app: AppHandle,
@@ -432,51 +495,21 @@ pub async fn workflow_get_diagnostics_snapshot(
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
 ) -> Result<WorkflowDiagnosticsProjection, String> {
     let captured_at_ms = super::workflow_execution_commands::unix_timestamp_ms();
-    let session_id = request
-        .session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let workflow_id = request
-        .workflow_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let workflow_name = request
-        .workflow_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let mut trace_execution_id = session_id.clone();
-
-    if let Some(session_id) = session_id.as_deref() {
-        trace_execution_id = Some(record_headless_scheduler_snapshot(
-            diagnostics_store.inner().as_ref(),
-            session_id,
-            workflow_id.clone(),
-            workflow_name.clone(),
+    let session_id = normalize_optional_request_value(request.session_id.as_deref());
+    let workflow_id = normalize_optional_request_value(request.workflow_id.as_deref());
+    let workflow_name = normalize_optional_request_value(request.workflow_name.as_deref());
+    let scheduler_snapshot_result = if let Some(session_id) = session_id.as_deref() {
+        Some(
             workflow_service
                 .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
                     session_id: session_id.to_string(),
                 })
                 .await,
-            captured_at_ms,
-        ));
+        )
     } else {
-        diagnostics_store.update_scheduler_snapshot(
-            None,
-            None,
-            None,
-            Vec::new(),
-            None,
-            captured_at_ms,
-        );
-    }
-
-    if let Some(workflow_id) = workflow_id {
+        None
+    };
+    let capabilities_result = if let Some(workflow_id) = workflow_id.as_ref() {
         let runtime = build_runtime(
             &app,
             gateway.inner(),
@@ -484,32 +517,31 @@ pub async fn workflow_get_diagnostics_snapshot(
             workflow_service.inner(),
             None,
         )?;
-        let runtime_trace_metrics = super::workflow_execution_commands::trace_runtime_metrics(
+        Some(
+            runtime
+                .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                    workflow_id: workflow_id.clone(),
+                })
+                .await,
+        )
+    } else {
+        None
+    };
+    let runtime_trace_metrics =
+        super::workflow_execution_commands::trace_runtime_metrics(
             &gateway.runtime_lifecycle_snapshot().await,
         );
 
-        let capabilities_result = match runtime
-            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
-                workflow_id: workflow_id.clone(),
-            })
-            .await
-        {
-            Ok(capabilities) => Ok(capabilities),
-            Err(error) => Err(error),
-        };
-        record_headless_runtime_snapshot(
-            diagnostics_store.inner().as_ref(),
-            workflow_id,
-            trace_execution_id.as_deref(),
-            capabilities_result,
-            runtime_trace_metrics,
-            captured_at_ms,
-        );
-    } else {
-        diagnostics_store.update_runtime_snapshot(None, None, None, captured_at_ms);
-    }
-
-    Ok(diagnostics_store.snapshot())
+    Ok(workflow_diagnostics_snapshot_projection(
+        diagnostics_store.inner(),
+        session_id,
+        workflow_id,
+        workflow_name,
+        scheduler_snapshot_result,
+        capabilities_result,
+        runtime_trace_metrics,
+        captured_at_ms,
+    ))
 }
 
 pub async fn workflow_get_trace_snapshot(
@@ -531,6 +563,7 @@ mod tests {
 
     use super::{
         record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
+        workflow_diagnostics_snapshot_projection,
         workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
     };
     use crate::workflow::diagnostics::{
@@ -921,5 +954,99 @@ mod tests {
                 "workflow trace snapshot request field 'execution_id' must not be blank"
             )
         );
+    }
+
+    #[test]
+    fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_data() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        let projection = workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_instance_id: Some("runtime-1".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            120,
+        );
+
+        assert_eq!(projection.run_order, vec!["run-1".to_string()]);
+        assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(projection.runtime.max_input_bindings, Some(4));
+        assert_eq!(projection.scheduler.session_id.as_deref(), Some("session-1"));
+        assert_eq!(
+            projection.scheduler.trace_execution_id.as_deref(),
+            Some("run-1")
+        );
+        let trace = projection.runs_by_id.get("run-1").expect("joined trace");
+        assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
+        assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(trace.nodes.len(), 0);
+    }
+
+    #[test]
+    fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without_context() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics::default(),
+            120,
+        );
+
+        let projection = workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            None,
+            None,
+            None,
+            None,
+            None,
+            WorkflowTraceRuntimeMetrics::default(),
+            130,
+        );
+
+        assert_eq!(projection.runtime.workflow_id, None);
+        assert_eq!(projection.scheduler.session_id, None);
+        assert_eq!(projection.scheduler.trace_execution_id, None);
+        assert_eq!(projection.run_order, vec!["run-1".to_string()]);
     }
 }
