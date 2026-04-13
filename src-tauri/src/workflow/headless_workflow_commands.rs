@@ -227,6 +227,25 @@ fn normalize_optional_request_value(value: Option<&str>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn stored_runtime_trace_metrics(
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
+    session_id: Option<&str>,
+    workflow_id: Option<&str>,
+) -> Option<WorkflowTraceRuntimeMetrics> {
+    diagnostics_store
+        .trace_snapshot(WorkflowTraceSnapshotRequest {
+            execution_id: None,
+            session_id: session_id.map(ToOwned::to_owned),
+            workflow_id: workflow_id.map(ToOwned::to_owned),
+            include_completed: Some(true),
+        })
+        .ok()?
+        .traces
+        .into_iter()
+        .next()
+        .map(|trace| trace.runtime)
+}
+
 fn workflow_diagnostics_snapshot_projection(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     session_id: Option<String>,
@@ -535,9 +554,17 @@ pub async fn workflow_get_diagnostics_snapshot(
     } else {
         None
     };
-    let runtime_trace_metrics = super::workflow_execution_commands::trace_runtime_metrics(
-        &gateway.runtime_lifecycle_snapshot().await,
-    );
+    let runtime_trace_metrics = if let Some(metrics) = stored_runtime_trace_metrics(
+        diagnostics_store.inner(),
+        session_id.as_deref(),
+        workflow_id.as_deref(),
+    ) {
+        metrics
+    } else {
+        super::workflow_execution_commands::trace_runtime_metrics(
+            &gateway.runtime_lifecycle_snapshot().await,
+        )
+    };
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store.inner(),
@@ -572,8 +599,9 @@ mod tests {
 
     use super::{
         record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
-        workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
-        workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
+        stored_runtime_trace_metrics, workflow_clear_diagnostics_history_response,
+        workflow_diagnostics_snapshot_projection, workflow_scheduler_snapshot_response,
+        workflow_trace_snapshot_response,
     };
     use crate::workflow::diagnostics::{
         WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
@@ -1061,6 +1089,48 @@ mod tests {
         assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
         assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(trace.nodes.len(), 0);
+    }
+
+    #[test]
+    fn stored_runtime_trace_metrics_prefers_latest_recorded_trace() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("embed-7".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            },
+            120,
+        );
+
+        let metrics =
+            stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1"))
+                .expect("stored trace metrics should exist");
+
+        assert_eq!(metrics.runtime_id.as_deref(), Some("llama.cpp.embedding"));
+        assert_eq!(metrics.runtime_instance_id.as_deref(), Some("embed-7"));
+        assert_eq!(metrics.runtime_reused, Some(true));
+        assert_eq!(
+            metrics.lifecycle_decision_reason.as_deref(),
+            Some("reused_embedding_runtime")
+        );
     }
 
     #[test]
