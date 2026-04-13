@@ -30,7 +30,9 @@ use crate::llm::SharedGateway;
 use crate::project_root::resolve_project_root;
 
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
-use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
+use super::diagnostics::{
+    WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
+};
 
 fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
@@ -87,6 +89,62 @@ pub(super) fn build_runtime(
         workflow_service.clone(),
         rag_backend,
     ))
+}
+
+fn record_headless_scheduler_snapshot(
+    diagnostics_store: &WorkflowDiagnosticsStore,
+    requested_session_id: &str,
+    requested_workflow_id: Option<String>,
+    requested_workflow_name: Option<String>,
+    snapshot_result: Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
+    captured_at_ms: u64,
+) -> String {
+    diagnostics_store.set_execution_metadata(
+        requested_session_id,
+        requested_workflow_id.clone(),
+        requested_workflow_name.clone(),
+    );
+
+    match snapshot_result {
+        Ok(snapshot) => {
+            let observed_execution_id = snapshot
+                .trace_execution_id
+                .clone()
+                .unwrap_or_else(|| requested_session_id.to_string());
+            if observed_execution_id != requested_session_id {
+                diagnostics_store.set_execution_metadata(
+                    &observed_execution_id,
+                    snapshot
+                        .workflow_id
+                        .clone()
+                        .or_else(|| requested_workflow_id.clone()),
+                    requested_workflow_name,
+                );
+            }
+            diagnostics_store.record_scheduler_snapshot(
+                snapshot.workflow_id,
+                observed_execution_id.clone(),
+                snapshot.session_id,
+                captured_at_ms,
+                Some(snapshot.session),
+                snapshot.items,
+                None,
+            );
+            observed_execution_id
+        }
+        Err(error) => {
+            diagnostics_store.record_scheduler_snapshot(
+                requested_workflow_id,
+                requested_session_id.to_string(),
+                requested_session_id.to_string(),
+                captured_at_ms,
+                None,
+                Vec::new(),
+                Some(error.to_envelope_json()),
+            );
+            requested_session_id.to_string()
+        }
+    }
 }
 
 pub async fn workflow_run(
@@ -331,54 +389,18 @@ pub async fn workflow_get_diagnostics_snapshot(
     let mut trace_execution_id = session_id.clone();
 
     if let Some(session_id) = session_id.as_deref() {
-        diagnostics_store.set_execution_metadata(
+        trace_execution_id = Some(record_headless_scheduler_snapshot(
+            diagnostics_store.inner().as_ref(),
             session_id,
             workflow_id.clone(),
             workflow_name.clone(),
-        );
-
-        match workflow_service
-            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
-                session_id: session_id.to_string(),
-            })
-            .await
-        {
-            Ok(snapshot) => {
-                let observed_execution_id = snapshot
-                    .trace_execution_id
-                    .clone()
-                    .unwrap_or_else(|| session_id.to_string());
-                if observed_execution_id != session_id {
-                    diagnostics_store.set_execution_metadata(
-                        &observed_execution_id,
-                        workflow_id.clone(),
-                        workflow_name.clone(),
-                    );
-                }
-                diagnostics_store.record_scheduler_snapshot(
-                    snapshot.workflow_id,
-                    observed_execution_id.clone(),
-                    snapshot.session_id,
-                    captured_at_ms,
-                    Some(snapshot.session),
-                    snapshot.items,
-                    None,
-                );
-                trace_execution_id = Some(observed_execution_id);
-            }
-            Err(error) => {
-                diagnostics_store.record_scheduler_snapshot(
-                    workflow_id.clone(),
-                    session_id.to_string(),
-                    session_id.to_string(),
-                    captured_at_ms,
-                    None,
-                    Vec::new(),
-                    Some(error.to_envelope_json()),
-                );
-                trace_execution_id = Some(session_id.to_string());
-            }
-        }
+            workflow_service
+                .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                    session_id: session_id.to_string(),
+                })
+                .await,
+            captured_at_ms,
+        ));
     } else {
         diagnostics_store.update_scheduler_snapshot(
             None,
@@ -467,4 +489,132 @@ pub async fn workflow_clear_diagnostics_history(
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
 ) -> Result<WorkflowDiagnosticsProjection, String> {
     Ok(diagnostics_store.clear_history())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::record_headless_scheduler_snapshot;
+    use crate::workflow::diagnostics::{
+        WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
+    };
+    use pantograph_workflow_service::graph::WorkflowSessionKind;
+    use pantograph_workflow_service::{
+        WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
+        WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+        WorkflowTraceSnapshotRequest,
+    };
+
+    fn running_session_summary() -> WorkflowSessionSummary {
+        WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-1".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 2,
+        }
+    }
+
+    #[test]
+    fn headless_scheduler_snapshot_helper_uses_trace_execution_identity() {
+        let diagnostics_store = WorkflowDiagnosticsStore::default();
+
+        let execution_id = record_headless_scheduler_snapshot(
+            &diagnostics_store,
+            "session-1",
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+            }),
+            120,
+        );
+
+        assert_eq!(execution_id, "run-1");
+        let trace = diagnostics_store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("run-1".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("scheduler trace");
+        assert_eq!(trace.execution_id, "run-1");
+        assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
+        assert_eq!(trace.queue.enqueued_at_ms, Some(100));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(110));
+    }
+
+    #[test]
+    fn headless_scheduler_snapshot_helper_falls_back_to_session_identity_on_error() {
+        let diagnostics_store = WorkflowDiagnosticsStore::default();
+
+        let execution_id = record_headless_scheduler_snapshot(
+            &diagnostics_store,
+            "session-1",
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Err(WorkflowServiceError::InvalidRequest(
+                "session missing".to_string(),
+            )),
+            120,
+        );
+
+        assert_eq!(execution_id, "session-1");
+        let trace = diagnostics_store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("session-1".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("scheduler trace");
+        assert_eq!(trace.execution_id, "session-1");
+        assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("scheduler_snapshot_failed")
+        );
+    }
+
+    #[test]
+    fn diagnostics_snapshot_request_still_allows_optional_scheduler_context() {
+        let request = WorkflowDiagnosticsSnapshotRequest {
+            session_id: Some("session-1".to_string()),
+            workflow_id: Some("wf-1".to_string()),
+            workflow_name: Some("Workflow 1".to_string()),
+        };
+
+        let value = serde_json::to_value(request).expect("serialize diagnostics request");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "session_id": "session-1",
+                "workflow_id": "wf-1",
+                "workflow_name": "Workflow 1"
+            })
+        );
+    }
 }

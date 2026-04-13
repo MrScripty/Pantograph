@@ -374,6 +374,10 @@ Update during implementation:
 - 2026-04-12: Thirteenth implementation slice added explicit service and
   contract coverage for `trace_execution_id`, including the ambiguous
   multi-pending case where the backend must leave the field unset.
+- 2026-04-12: Fourteenth implementation slice extracted the headless scheduler
+  snapshot attribution path into a small Rust helper and added adapter-level
+  tests that prove it records traces under `trace_execution_id` when present
+  and falls back to the requested session identity on scheduler errors.
 
 ## Commit Cadence Notes
 
@@ -433,6 +437,7 @@ Update during implementation:
 - Twelfth implementation slice added across `pantograph-workflow-service`,
   `src-tauri`, and TypeScript workflow contract mirrors
 - Thirteenth implementation slice added in `pantograph-workflow-service`
+- Fourteenth implementation slice added in `src-tauri/src/workflow`
 
 ### Deviations
 
