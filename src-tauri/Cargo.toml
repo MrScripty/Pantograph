@@ -36,6 +36,7 @@ workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library
 pantograph-workflow-service = { path = "../crates/pantograph-workflow-service" }
 pantograph-embedded-runtime = { path = "../crates/pantograph-embedded-runtime", default-features = false, features = ["backend-llamacpp", "backend-ollama", "backend-candle"] }
 pantograph-runtime-identity = { path = "../crates/pantograph-runtime-identity" }
+pantograph-runtime-registry = { path = "../crates/pantograph-runtime-registry" }
 
 # Workspace dependencies
 serde.workspace = true

@@ -1,6 +1,7 @@
 //! Shared utilities for command modules.
 
 use crate::config::AppConfig;
+use crate::llm::runtime_registry::reconcile_runtime_registry_mode_info;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::project_root::resolve_project_root;
 use std::path::PathBuf;
@@ -40,5 +41,5 @@ pub async fn sync_runtime_registry_from_gateway(
     registry: &SharedRuntimeRegistry,
 ) {
     let mode_info = gateway.mode_info().await;
-    registry.observe_mode_info(&mode_info);
+    reconcile_runtime_registry_mode_info(registry.as_ref(), &mode_info);
 }

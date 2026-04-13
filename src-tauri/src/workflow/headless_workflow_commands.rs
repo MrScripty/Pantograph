@@ -28,6 +28,7 @@ use pantograph_workflow_service::{
 use tauri::{AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
+use crate::llm::runtime_registry::reconcile_runtime_registry_mode_info;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::project_root::resolve_project_root;
 
@@ -132,7 +133,7 @@ async fn sync_runtime_registry_from_gateway(
     runtime_registry: &SharedRuntimeRegistry,
 ) {
     let mode_info = gateway.mode_info().await;
-    runtime_registry.observe_mode_info(&mode_info);
+    reconcile_runtime_registry_mode_info(runtime_registry.as_ref(), &mode_info);
 }
 
 fn record_headless_scheduler_snapshot(
