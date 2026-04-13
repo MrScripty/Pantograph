@@ -226,7 +226,9 @@ fn workflow_diagnostics_snapshot_projection(
     session_id: Option<String>,
     workflow_id: Option<String>,
     workflow_name: Option<String>,
-    scheduler_snapshot_result: Option<Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>>,
+    scheduler_snapshot_result: Option<
+        Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
+    >,
     capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
     runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
     captured_at_ms: u64,
@@ -527,10 +529,9 @@ pub async fn workflow_get_diagnostics_snapshot(
     } else {
         None
     };
-    let runtime_trace_metrics =
-        super::workflow_execution_commands::trace_runtime_metrics(
-            &gateway.runtime_lifecycle_snapshot().await,
-        );
+    let runtime_trace_metrics = super::workflow_execution_commands::trace_runtime_metrics(
+        &gateway.runtime_lifecycle_snapshot().await,
+    );
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store.inner(),
@@ -563,19 +564,20 @@ mod tests {
 
     use super::{
         record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
-        workflow_diagnostics_snapshot_projection,
-        workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
+        workflow_diagnostics_snapshot_projection, workflow_scheduler_snapshot_response,
+        workflow_trace_snapshot_response,
     };
     use crate::workflow::diagnostics::{
         WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
     };
     use pantograph_workflow_service::graph::WorkflowSessionKind;
     use pantograph_workflow_service::{
-        WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowRuntimeRequirements,
-        WorkflowGraph, WorkflowGraphEditSessionCreateRequest, WorkflowSchedulerSnapshotRequest,
-        WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
-        WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
-        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+        WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowGraph,
+        WorkflowGraphEditSessionCreateRequest, WorkflowRuntimeRequirements,
+        WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
+        WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+        WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+        WorkflowTraceSnapshotRequest,
     };
 
     fn running_session_summary() -> WorkflowSessionSummary {
@@ -927,10 +929,54 @@ mod tests {
         assert_eq!(snapshot.traces.len(), 1);
         let trace = &snapshot.traces[0];
         assert_eq!(trace.execution_id, "run-1");
+        assert_eq!(trace.session_id.as_deref(), Some("session-1"));
         assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
         assert_eq!(trace.queue.enqueued_at_ms, Some(100));
         assert_eq!(trace.queue.dequeued_at_ms, Some(110));
+    }
+
+    #[test]
+    fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let execution_id = record_headless_scheduler_snapshot(
+            diagnostics_store.as_ref(),
+            "session-1",
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+            }),
+            120,
+        );
+        assert_eq!(execution_id, "run-1");
+
+        let snapshot = workflow_trace_snapshot_response(
+            &diagnostics_store,
+            WorkflowTraceSnapshotRequest {
+                execution_id: None,
+                session_id: Some("session-1".to_string()),
+                workflow_id: None,
+                include_completed: None,
+            },
+        )
+        .expect("session-filtered trace snapshot");
+
+        assert_eq!(snapshot.traces.len(), 1);
+        let trace = &snapshot.traces[0];
+        assert_eq!(trace.execution_id, "run-1");
+        assert_eq!(trace.session_id.as_deref(), Some("session-1"));
     }
 
     #[test]
@@ -950,9 +996,8 @@ mod tests {
 
         assert!(error.contains("\"code\":\"invalid_request\""));
         assert!(
-            error.contains(
-                "workflow trace snapshot request field 'execution_id' must not be blank"
-            )
+            error
+                .contains("workflow trace snapshot request field 'execution_id' must not be blank")
         );
     }
 
@@ -995,12 +1040,16 @@ mod tests {
         assert_eq!(projection.run_order, vec!["run-1".to_string()]);
         assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(projection.runtime.max_input_bindings, Some(4));
-        assert_eq!(projection.scheduler.session_id.as_deref(), Some("session-1"));
+        assert_eq!(
+            projection.scheduler.session_id.as_deref(),
+            Some("session-1")
+        );
         assert_eq!(
             projection.scheduler.trace_execution_id.as_deref(),
             Some("run-1")
         );
         let trace = projection.runs_by_id.get("run-1").expect("joined trace");
+        assert_eq!(trace.session_id.as_deref(), Some("session-1"));
         assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
         assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(trace.nodes.len(), 0);

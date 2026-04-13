@@ -399,6 +399,9 @@ Update during implementation:
   attribution to workflow trace summaries and diagnostics projections so
   session-scoped trace reads remain correct even when queued/run execution ids
   diverge from the scheduling session identity.
+- 2026-04-13: Thirtieth implementation slice added headless workflow adapter
+  coverage for backend-owned `session_id` attribution so direct trace snapshot
+  reads and diagnostics projections are exercised at the Tauri boundary.
 
 ## Commit Cadence Notes
 
@@ -506,6 +509,10 @@ Update during implementation:
   frontend diagnostics types so canonical trace summaries now retain
   backend-owned `session_id` attribution and session-scoped trace snapshot
   filters work when execution ids differ from session ids
+- Thirtieth implementation slice added in
+  `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless trace
+  snapshot helper and diagnostics projection path are covered for backend-owned
+  `session_id` attribution at the adapter boundary
 
 ### Deviations
 
