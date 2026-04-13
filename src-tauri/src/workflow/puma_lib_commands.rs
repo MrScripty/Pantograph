@@ -255,7 +255,7 @@ fn normalize_backend_key(value: Option<&str>) -> Option<String> {
     }
 
     match token.as_str() {
-        "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+        "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
         "onnx-runtime" | "onnxruntime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
         "torch" | "pytorch" => Some("pytorch".to_string()),
         "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
@@ -403,6 +403,14 @@ mod tests {
         assert_eq!(
             infer_runtime_node_type(Some("text-generation"), Some("pytorch")),
             "pytorch-inference"
+        );
+    }
+
+    #[test]
+    fn normalize_backend_key_accepts_llama_cpp_alias() {
+        assert_eq!(
+            normalize_backend_key(Some("llama_cpp")),
+            Some("llamacpp".to_string())
         );
     }
 
