@@ -195,6 +195,25 @@ fn record_headless_runtime_snapshot(
     }
 }
 
+async fn workflow_scheduler_snapshot_response(
+    workflow_service: &SharedWorkflowService,
+    request: WorkflowSchedulerSnapshotRequest,
+) -> Result<WorkflowSchedulerSnapshotResponse, String> {
+    workflow_service
+        .workflow_get_scheduler_snapshot(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+fn workflow_trace_snapshot_response(
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
+    request: WorkflowTraceSnapshotRequest,
+) -> Result<WorkflowTraceSnapshotResponse, String> {
+    diagnostics_store
+        .trace_snapshot(request)
+        .map_err(workflow_error_json)
+}
+
 pub async fn workflow_run(
     request: WorkflowRunRequest,
     app: AppHandle,
@@ -361,10 +380,7 @@ pub async fn workflow_get_scheduler_snapshot(
     request: WorkflowSchedulerSnapshotRequest,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSchedulerSnapshotResponse, String> {
-    workflow_service
-        .workflow_get_scheduler_snapshot(request)
-        .await
-        .map_err(workflow_error_json)
+    workflow_scheduler_snapshot_response(workflow_service.inner(), request).await
 }
 
 pub async fn workflow_cancel_session_queue_item(
@@ -500,9 +516,7 @@ pub async fn workflow_get_trace_snapshot(
     request: WorkflowTraceSnapshotRequest,
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
 ) -> Result<WorkflowTraceSnapshotResponse, String> {
-    diagnostics_store
-        .trace_snapshot(request)
-        .map_err(workflow_error_json)
+    workflow_trace_snapshot_response(diagnostics_store.inner(), request)
 }
 
 pub async fn workflow_clear_diagnostics_history(
@@ -513,16 +527,22 @@ pub async fn workflow_clear_diagnostics_history(
 
 #[cfg(test)]
 mod tests {
-    use super::{record_headless_runtime_snapshot, record_headless_scheduler_snapshot};
+    use std::sync::Arc;
+
+    use super::{
+        record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
+        workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
+    };
     use crate::workflow::diagnostics::{
         WorkflowDiagnosticsSnapshotRequest, WorkflowDiagnosticsStore,
     };
     use pantograph_workflow_service::graph::WorkflowSessionKind;
     use pantograph_workflow_service::{
         WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowRuntimeRequirements,
-        WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
-        WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
-        WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+        WorkflowGraph, WorkflowGraphEditSessionCreateRequest, WorkflowSchedulerSnapshotRequest,
+        WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
+        WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     };
 
     fn running_session_summary() -> WorkflowSessionSummary {
@@ -805,6 +825,101 @@ mod tests {
                 "workflow_id": "wf-1",
                 "workflow_name": "Workflow 1"
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_scheduler_snapshot_response_reads_backend_owned_service_snapshot() {
+        let workflow_service = Arc::new(WorkflowService::new());
+        let created = workflow_service
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: WorkflowGraph::new(),
+            })
+            .await
+            .expect("create edit session");
+
+        let snapshot = workflow_scheduler_snapshot_response(
+            &workflow_service,
+            WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id.clone(),
+            },
+        )
+        .await
+        .expect("scheduler snapshot");
+
+        assert_eq!(snapshot.session_id, created.session_id);
+        assert_eq!(snapshot.workflow_id, None);
+        assert_eq!(snapshot.session.session_kind, WorkflowSessionKind::Edit);
+        assert_eq!(snapshot.session.state, WorkflowSessionState::IdleLoaded);
+        assert!(snapshot.items.is_empty());
+    }
+
+    #[test]
+    fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let execution_id = record_headless_scheduler_snapshot(
+            diagnostics_store.as_ref(),
+            "session-1",
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+            }),
+            120,
+        );
+        assert_eq!(execution_id, "run-1");
+
+        let snapshot = workflow_trace_snapshot_response(
+            &diagnostics_store,
+            WorkflowTraceSnapshotRequest {
+                execution_id: Some("run-1".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            },
+        )
+        .expect("trace snapshot");
+
+        assert_eq!(snapshot.traces.len(), 1);
+        let trace = &snapshot.traces[0];
+        assert_eq!(trace.execution_id, "run-1");
+        assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
+        assert_eq!(trace.queue.enqueued_at_ms, Some(100));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(110));
+    }
+
+    #[test]
+    fn workflow_trace_snapshot_response_returns_backend_validation_error() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        let error = workflow_trace_snapshot_response(
+            &diagnostics_store,
+            WorkflowTraceSnapshotRequest {
+                execution_id: Some("   ".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            },
+        )
+        .expect_err("blank execution id should be rejected");
+
+        assert!(error.contains("\"code\":\"invalid_request\""));
+        assert!(
+            error.contains(
+                "workflow trace snapshot request field 'execution_id' must not be blank"
+            )
         );
     }
 }
