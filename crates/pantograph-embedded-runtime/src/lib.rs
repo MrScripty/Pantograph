@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use node_engine::{
     CoreTaskExecutor, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
+use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
@@ -47,7 +48,7 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
-pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
+pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
@@ -580,21 +581,15 @@ impl EmbeddedWorkflowHost {
 
     fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
         match binary_id {
-            inference::ManagedBinaryId::LlamaCpp => {
-                vec![
-                    "llama_cpp".to_string(),
-                    "llama.cpp".to_string(),
-                    "llamacpp".to_string(),
-                ]
-            }
-            inference::ManagedBinaryId::Ollama => vec!["ollama".to_string()],
+            inference::ManagedBinaryId::LlamaCpp => backend_key_aliases("llama.cpp", "llama_cpp"),
+            inference::ManagedBinaryId::Ollama => backend_key_aliases("Ollama", "ollama"),
         }
     }
 
     fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) -> bool {
-        backend_keys.iter().any(|backend_key| {
-            inference::backend::canonical_backend_key(backend_key) == selected_backend_key
-        })
+        backend_keys
+            .iter()
+            .any(|backend_key| canonical_runtime_backend_key(backend_key) == selected_backend_key)
     }
 
     fn runtime_supports_external_connection(
@@ -609,6 +604,40 @@ impl EmbeddedWorkflowHost {
         available_backends.iter().any(|backend| {
             normalized_backend_keys.contains(&backend.backend_key)
                 && backend.capabilities.external_connection
+        })
+    }
+
+    fn is_python_sidecar_backend(backend: &inference::BackendInfo) -> bool {
+        backend.backend_key == "pytorch"
+    }
+
+    fn host_runtime_capability(
+        backend: &inference::BackendInfo,
+        selected_backend_key: &str,
+    ) -> Option<WorkflowRuntimeCapability> {
+        if backend.runtime_binary_id.is_some() || Self::is_python_sidecar_backend(backend) {
+            return None;
+        }
+
+        let backend_keys = backend_key_aliases(&backend.name, &backend.backend_key);
+        Some(WorkflowRuntimeCapability {
+            runtime_id: backend.backend_key.clone(),
+            display_name: backend.name.clone(),
+            install_state: if backend.available {
+                WorkflowRuntimeInstallState::SystemProvided
+            } else {
+                WorkflowRuntimeInstallState::Missing
+            },
+            available: backend.available,
+            configured: backend.available,
+            can_install: backend.can_install,
+            can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::Host,
+            selected: Self::runtime_matches_backend(&backend_keys, selected_backend_key),
+            supports_external_connection: backend.capabilities.external_connection,
+            backend_keys,
+            missing_files: Vec::new(),
+            unavailable_reason: backend.unavailable_reason.clone(),
         })
     }
 
@@ -792,7 +821,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
     }
 
     async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
-        Ok(self.gateway.current_backend_name().await)
+        Ok(canonical_runtime_backend_key(
+            &self.gateway.current_backend_name().await,
+        ))
     }
 
     async fn model_metadata(
@@ -832,7 +863,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         &self,
     ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
         let selected_backend_key =
-            inference::backend::canonical_backend_key(&self.gateway.current_backend_name().await);
+            canonical_runtime_backend_key(&self.gateway.current_backend_name().await);
         let available_backends = self.gateway.available_backends();
         let mut runtimes = inference::list_binary_capabilities(&self.app_data_dir)
             .map_err(WorkflowServiceError::RuntimeNotReady)?
@@ -872,6 +903,11 @@ impl WorkflowHost for EmbeddedWorkflowHost {
                 }
             })
             .collect::<Vec<_>>();
+        runtimes.extend(
+            available_backends.iter().filter_map(|backend| {
+                Self::host_runtime_capability(backend, &selected_backend_key)
+            }),
+        );
         runtimes.push(Self::python_runtime_capability(
             python_runtime::resolve_python_executable_for_env_ids(&[]),
             &selected_backend_key,
@@ -1359,11 +1395,9 @@ mod tests {
         assert!(!capability.supports_external_connection);
         assert!(capability.backend_keys.contains(&"pytorch".to_string()));
         assert!(capability.backend_keys.contains(&"diffusers".to_string()));
-        assert!(
-            capability
-                .backend_keys
-                .contains(&"onnx-runtime".to_string())
-        );
+        assert!(capability
+            .backend_keys
+            .contains(&"onnx-runtime".to_string()));
     }
 
     #[test]
@@ -1382,5 +1416,93 @@ mod tests {
             capability.unavailable_reason.as_deref(),
             Some("python executable is not configured")
         );
+    }
+
+    #[test]
+    fn host_runtime_capability_reports_candle_backend() {
+        let capability = EmbeddedWorkflowHost::host_runtime_capability(
+            &inference::BackendInfo {
+                name: "Candle".to_string(),
+                backend_key: "candle".to_string(),
+                description: "In-process Candle inference".to_string(),
+                capabilities: inference::BackendCapabilities {
+                    external_connection: false,
+                    ..inference::BackendCapabilities::default()
+                },
+                default_start_mode: inference::backend::BackendDefaultStartMode::Embedding,
+                active: true,
+                available: true,
+                unavailable_reason: None,
+                can_install: false,
+                runtime_binary_id: None,
+            },
+            "candle",
+        )
+        .expect("candle host capability");
+
+        assert_eq!(capability.runtime_id, "candle");
+        assert_eq!(capability.display_name, "Candle");
+        assert_eq!(
+            capability.install_state,
+            WorkflowRuntimeInstallState::SystemProvided
+        );
+        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Host);
+        assert!(capability.selected);
+        assert!(capability.backend_keys.contains(&"candle".to_string()));
+        assert!(capability.backend_keys.contains(&"Candle".to_string()));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_reports_candle_runtime_as_available() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            },
+            Arc::new(inference::InferenceGateway::with_backend(
+                Box::new(inference::CandleBackend::new()),
+                "Candle",
+            )),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let response = runtime
+            .workflow_preflight(WorkflowPreflightRequest {
+                workflow_id: "runtime-text".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+            })
+            .await
+            .expect("workflow preflight");
+
+        assert!(response.blocking_runtime_issues.is_empty());
+        assert!(response.can_run);
+
+        let capabilities = runtime
+            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                workflow_id: "runtime-text".to_string(),
+            })
+            .await
+            .expect("workflow capabilities");
+        assert_eq!(
+            capabilities.runtime_requirements.required_backends,
+            vec!["candle".to_string()]
+        );
+        let candle = capabilities
+            .runtime_capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "candle")
+            .expect("candle capability");
+        assert_eq!(candle.source_kind, WorkflowRuntimeSourceKind::Host);
+        assert!(candle.selected);
     }
 }
