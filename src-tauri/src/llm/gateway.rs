@@ -224,6 +224,12 @@ impl InferenceGateway {
             .map(EmbeddingServer::runtime_lifecycle_snapshot)
     }
 
+    #[cfg(test)]
+    pub(crate) async fn set_test_embedding_server(&self, server: EmbeddingServer) {
+        let mut guard = self.embedding_server.write().await;
+        *guard = Some(server);
+    }
+
     /// Check if currently in embedding mode.
     pub async fn is_embedding_mode(&self) -> bool {
         self.inner.is_embedding_mode().await

@@ -5,6 +5,12 @@ use crate::config::EmbeddingMemoryMode;
 use crate::llm::gateway::SharedGateway;
 use tauri::{AppHandle, Manager, State, command};
 
+async fn embedding_runtime_lifecycle_snapshot(
+    gateway: &SharedGateway,
+) -> Option<inference::RuntimeLifecycleSnapshot> {
+    gateway.embedding_runtime_lifecycle_snapshot().await
+}
+
 /// Get the current embedding memory mode
 #[command]
 pub async fn get_embedding_memory_mode(
@@ -74,5 +80,93 @@ pub async fn get_embedding_server_url(
 pub async fn get_embedding_runtime_lifecycle_snapshot(
     gateway: State<'_, SharedGateway>,
 ) -> Result<Option<inference::RuntimeLifecycleSnapshot>, String> {
-    Ok(gateway.embedding_runtime_lifecycle_snapshot().await)
+    Ok(embedding_runtime_lifecycle_snapshot(gateway.inner()).await)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use tokio::sync::mpsc;
+
+    use super::embedding_runtime_lifecycle_snapshot;
+    use crate::config::EmbeddingMemoryMode;
+    use crate::llm::{InferenceGateway, SharedGateway, embedding_server::EmbeddingServer};
+
+    struct MockProcessHandle;
+
+    impl ProcessHandle for MockProcessHandle {
+        fn pid(&self) -> u32 {
+            17
+        }
+
+        fn kill(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct MockProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+            Err("spawn not used in embedding command tests".to_string())
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+    }
+
+    #[tokio::test]
+    async fn embedding_runtime_lifecycle_snapshot_reads_backend_owned_snapshot() {
+        let gateway: SharedGateway = Arc::new(InferenceGateway::new(Arc::new(MockProcessSpawner)));
+        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+        server.set_test_runtime_lifecycle_snapshot(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-7".to_string()),
+            warmup_started_at_ms: Some(100),
+            warmup_completed_at_ms: Some(110),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            active: true,
+            last_error: None,
+        });
+        gateway.set_test_embedding_server(server).await;
+
+        let snapshot = embedding_runtime_lifecycle_snapshot(&gateway)
+            .await
+            .expect("snapshot should exist");
+
+        assert_eq!(snapshot.runtime_id.as_deref(), Some("llama.cpp.embedding"));
+        assert_eq!(
+            snapshot.runtime_instance_id.as_deref(),
+            Some("llama-cpp-embedding-7")
+        );
+        assert_eq!(snapshot.runtime_reused, Some(true));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("reused_embedding_runtime")
+        );
+    }
+
+    #[tokio::test]
+    async fn embedding_runtime_lifecycle_snapshot_returns_none_without_server() {
+        let gateway: SharedGateway = Arc::new(InferenceGateway::new(Arc::new(MockProcessSpawner)));
+
+        assert_eq!(embedding_runtime_lifecycle_snapshot(&gateway).await, None);
+    }
 }

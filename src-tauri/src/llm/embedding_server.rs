@@ -336,6 +336,14 @@ impl EmbeddingServer {
         self.model_path = Some(model_path.to_string());
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_test_runtime_lifecycle_snapshot(
+        &mut self,
+        snapshot: RuntimeLifecycleSnapshot,
+    ) {
+        self.runtime_lifecycle = snapshot;
+    }
+
     /// Stop the embedding server
     pub fn stop(&mut self) {
         if let Some(ref child) = self.child {

@@ -472,6 +472,9 @@ Update during implementation:
 - Twenty-second implementation slice added across `crates/inference`,
   `src-tauri/src/llm`, and `src-tauri/src/workflow` so runtime lifecycle
   snapshots now preserve backend-owned structured decision reasons end to end
+- Twenty-third implementation slice added in `src-tauri/src/llm/commands` so
+  the embedding runtime lifecycle command is exercised directly against a
+  backend-owned snapshot instead of relying only on lower-level gateway tests
 
 ### Deviations
 
@@ -486,6 +489,9 @@ Update during implementation:
   backend-start-outcome, embedding-sidecar, and PyTorch loaded-model reuse
   paths so every runtime host populates the same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
+- Extend direct command-path acceptance coverage beyond the current embedding
+  runtime snapshot reader so other read-only runtime and diagnostics surfaces
+  are exercised at the adapter boundary.
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
