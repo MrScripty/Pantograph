@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use futures_util::Stream;
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use tokio::sync::RwLock;
 
 use crate::backend::{
@@ -104,6 +105,10 @@ fn config_model_target(config: &BackendConfig) -> Option<String> {
         .or_else(|| config.model_id.clone())
 }
 
+fn runtime_id_for_backend_name(backend_name: &str) -> String {
+    canonical_runtime_backend_key(backend_name)
+}
+
 impl InferenceGateway {
     /// Create a new gateway with llama.cpp as the default backend
     #[cfg(feature = "backend-llamacpp")]
@@ -120,7 +125,7 @@ impl InferenceGateway {
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
             runtime_lifecycle: Arc::new(RwLock::new(RuntimeLifecycleSnapshot {
-                runtime_id: Some("llama.cpp".to_string()),
+                runtime_id: Some(runtime_id_for_backend_name("llama.cpp")),
                 ..RuntimeLifecycleSnapshot::default()
             })),
             runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
@@ -141,7 +146,7 @@ impl InferenceGateway {
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
             runtime_lifecycle: Arc::new(RwLock::new(RuntimeLifecycleSnapshot {
-                runtime_id: Some(name.to_string()),
+                runtime_id: Some(runtime_id_for_backend_name(name)),
                 ..RuntimeLifecycleSnapshot::default()
             })),
             runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
@@ -321,7 +326,7 @@ impl InferenceGateway {
         {
             let mut lifecycle = self.runtime_lifecycle.write().await;
             *lifecycle = RuntimeLifecycleSnapshot {
-                runtime_id: Some(canonical_backend_name.clone()),
+                runtime_id: Some(runtime_id_for_backend_name(&canonical_backend_name)),
                 ..RuntimeLifecycleSnapshot::default()
             };
         }
@@ -373,7 +378,7 @@ impl InferenceGateway {
             *last_config = Some(config.clone());
         }
 
-        let runtime_id = self.current_backend_name().await;
+        let runtime_id = runtime_id_for_backend_name(&self.current_backend_name().await);
         let warmup_started_at_ms = unix_timestamp_ms();
         let previous_runtime_instance_id = {
             let lifecycle = self.runtime_lifecycle.read().await;
@@ -913,7 +918,7 @@ mod tests {
                 .await
                 .runtime_id
                 .as_deref(),
-            Some("llama.cpp")
+            Some("llama_cpp")
         );
     }
 
@@ -934,7 +939,7 @@ mod tests {
                 .await
                 .runtime_id
                 .as_deref(),
-            Some("PyTorch")
+            Some("pytorch")
         );
     }
 
