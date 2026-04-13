@@ -6,8 +6,10 @@
 
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use futures_util::Stream;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::backend::{
@@ -39,6 +41,28 @@ pub enum GatewayError {
     NoSpawner,
 }
 
+/// Snapshot of the active runtime lifecycle owned by the inference gateway.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeLifecycleSnapshot {
+    #[serde(default)]
+    pub runtime_id: Option<String>,
+    #[serde(default)]
+    pub runtime_instance_id: Option<String>,
+    #[serde(default)]
+    pub warmup_started_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_completed_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub runtime_reused: Option<bool>,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
 /// The single entry point for ALL inference operations.
 ///
 /// Application code should only interact with InferenceGateway, never
@@ -61,6 +85,10 @@ pub struct InferenceGateway {
     embedding_memory_mode: Arc<RwLock<EmbeddingMemoryMode>>,
     /// Process spawner for starting backends
     spawner: Arc<RwLock<Option<Arc<dyn ProcessSpawner>>>>,
+    /// Backend-owned lifecycle snapshot for the active runtime instance.
+    runtime_lifecycle: Arc<RwLock<RuntimeLifecycleSnapshot>>,
+    /// Monotonic instance counter for runtime instance IDs.
+    runtime_instance_sequence: Arc<AtomicU64>,
 }
 
 impl InferenceGateway {
@@ -76,6 +104,11 @@ impl InferenceGateway {
             last_inference_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
+            runtime_lifecycle: Arc::new(RwLock::new(RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                ..RuntimeLifecycleSnapshot::default()
+            })),
+            runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -90,6 +123,11 @@ impl InferenceGateway {
             last_inference_config: Arc::new(RwLock::new(None)),
             embedding_memory_mode: Arc::new(RwLock::new(EmbeddingMemoryMode::default())),
             spawner: Arc::new(RwLock::new(None)),
+            runtime_lifecycle: Arc::new(RwLock::new(RuntimeLifecycleSnapshot {
+                runtime_id: Some(name.to_string()),
+                ..RuntimeLifecycleSnapshot::default()
+            })),
+            runtime_instance_sequence: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -136,6 +174,13 @@ impl InferenceGateway {
             let mut name_guard = self.current_backend_name.write().await;
             *name_guard = name.to_string();
         }
+        {
+            let mut lifecycle = self.runtime_lifecycle.write().await;
+            *lifecycle = RuntimeLifecycleSnapshot {
+                runtime_id: Some(name.to_string()),
+                ..RuntimeLifecycleSnapshot::default()
+            };
+        }
 
         log::info!("Switched to backend: {}", name);
         Ok(())
@@ -172,11 +217,62 @@ impl InferenceGateway {
             *last_config = Some(config.clone());
         }
 
-        let mut guard = self.backend.write().await;
-        guard
-            .start(config, spawner)
-            .await
-            .map_err(GatewayError::Backend)
+        let runtime_id = self.current_backend_name().await;
+        let warmup_started_at_ms = unix_timestamp_ms();
+        let runtime_reused = {
+            let lifecycle = self.runtime_lifecycle.read().await;
+            lifecycle.active && lifecycle.runtime_id.as_deref() == Some(runtime_id.as_str())
+        };
+        {
+            let mut lifecycle = self.runtime_lifecycle.write().await;
+            lifecycle.runtime_id = Some(runtime_id.clone());
+            lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
+            lifecycle.warmup_completed_at_ms = None;
+            lifecycle.warmup_duration_ms = None;
+            lifecycle.runtime_reused = Some(runtime_reused);
+            lifecycle.active = false;
+            lifecycle.last_error = None;
+        }
+
+        let start_result = {
+            let mut guard = self.backend.write().await;
+            guard.start(config, spawner).await
+        };
+
+        match start_result {
+            Ok(()) => {
+                let warmup_completed_at_ms = unix_timestamp_ms();
+                let runtime_instance_id = format!(
+                    "{}-{}",
+                    runtime_id.replace([' ', '.'], "-"),
+                    self.runtime_instance_sequence
+                        .fetch_add(1, Ordering::Relaxed)
+                        + 1
+                );
+                let mut lifecycle = self.runtime_lifecycle.write().await;
+                lifecycle.runtime_id = Some(runtime_id);
+                lifecycle.runtime_instance_id = Some(runtime_instance_id);
+                lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
+                lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
+                lifecycle.warmup_duration_ms =
+                    Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+                lifecycle.active = true;
+                lifecycle.last_error = None;
+                Ok(())
+            }
+            Err(error) => {
+                let completed_at_ms = unix_timestamp_ms();
+                let mut lifecycle = self.runtime_lifecycle.write().await;
+                lifecycle.runtime_id = Some(runtime_id);
+                lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
+                lifecycle.warmup_completed_at_ms = Some(completed_at_ms);
+                lifecycle.warmup_duration_ms =
+                    Some(completed_at_ms.saturating_sub(warmup_started_at_ms));
+                lifecycle.active = false;
+                lifecycle.last_error = Some(error.to_string());
+                Err(GatewayError::Backend(error))
+            }
+        }
     }
 
     /// Stop the current backend
@@ -188,6 +284,8 @@ impl InferenceGateway {
         *mode = false;
         let mut reranking_mode = self.reranking_mode.write().await;
         *reranking_mode = false;
+        let mut lifecycle = self.runtime_lifecycle.write().await;
+        lifecycle.active = false;
     }
 
     /// Check if currently in embedding mode
@@ -256,6 +354,11 @@ impl InferenceGateway {
     pub async fn capabilities(&self) -> BackendCapabilities {
         let guard = self.backend.read().await;
         guard.capabilities()
+    }
+
+    /// Get the backend-owned runtime lifecycle snapshot.
+    pub async fn runtime_lifecycle_snapshot(&self) -> RuntimeLifecycleSnapshot {
+        self.runtime_lifecycle.read().await.clone()
     }
 
     /// Get the current embedding memory mode
@@ -341,6 +444,15 @@ impl InferenceGateway {
     }
 }
 
+fn unix_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
 #[cfg(feature = "backend-llamacpp")]
 impl Default for InferenceGateway {
     fn default() -> Self {
@@ -354,13 +466,55 @@ pub type SharedGateway = Arc<InferenceGateway>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::pin::Pin;
     use std::sync::Arc;
 
     use async_trait::async_trait;
     use futures_util::stream;
+    use tokio::sync::mpsc;
 
     struct MockImageBackend;
+
+    struct MockProcessHandle;
+
+    impl crate::process::ProcessHandle for MockProcessHandle {
+        fn pid(&self) -> u32 {
+            1
+        }
+
+        fn kill(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct MockProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<
+            (
+                mpsc::Receiver<crate::process::ProcessEvent>,
+                Box<dyn crate::process::ProcessHandle>,
+            ),
+            String,
+        > {
+            let (_tx, rx) = mpsc::channel(1);
+            Ok((rx, Box::new(MockProcessHandle)))
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+    }
 
     #[async_trait]
     impl InferenceBackend for MockImageBackend {
@@ -507,5 +661,32 @@ mod tests {
             .await
             .expect("rerank should forward");
         assert!(result.results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_runtime_lifecycle_snapshot_tracks_start_and_stop() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let started = gateway.runtime_lifecycle_snapshot().await;
+        assert_eq!(started.runtime_id.as_deref(), Some("mock"));
+        assert!(started.runtime_instance_id.is_some());
+        assert!(started.warmup_started_at_ms.is_some());
+        assert!(started.warmup_completed_at_ms.is_some());
+        assert!(started.warmup_duration_ms.is_some());
+        assert_eq!(started.runtime_reused, Some(false));
+        assert!(started.active);
+        assert!(started.last_error.is_none());
+
+        gateway.stop().await;
+
+        let stopped = gateway.runtime_lifecycle_snapshot().await;
+        assert_eq!(stopped.runtime_id.as_deref(), Some("mock"));
+        assert!(!stopped.active);
     }
 }

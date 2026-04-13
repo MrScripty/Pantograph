@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowSessionQueueItem, WorkflowSessionSummary,
+    WorkflowTraceRuntimeMetrics,
 };
 
 use super::diagnostics::WorkflowDiagnosticsProjection;
@@ -150,6 +151,8 @@ pub enum WorkflowEvent {
         captured_at_ms: u64,
         /// Runtime capabilities and requirements when available
         capabilities: Option<WorkflowCapabilitiesResponse>,
+        /// Backend-owned runtime lifecycle metrics captured alongside the snapshot
+        trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
         /// Error encountered while collecting the runtime snapshot
         error: Option<String>,
     },
@@ -296,6 +299,7 @@ impl WorkflowEvent {
         execution_id: impl Into<String>,
         captured_at_ms: u64,
         capabilities: Option<WorkflowCapabilitiesResponse>,
+        trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
         error: Option<String>,
     ) -> Self {
         Self::RuntimeSnapshot {
@@ -303,6 +307,7 @@ impl WorkflowEvent {
             execution_id: execution_id.into(),
             captured_at_ms,
             capabilities,
+            trace_runtime_metrics,
             error,
         }
     }
@@ -375,6 +380,7 @@ mod tests {
             "exec-123",
             1234,
             None,
+            WorkflowTraceRuntimeMetrics::default(),
             Some("capability unavailable".to_string()),
         );
         let json = serde_json::to_string(&event).unwrap();

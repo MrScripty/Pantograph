@@ -18,7 +18,7 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    convert_graph_to_node_engine,
+    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
 };
 use tauri::{AppHandle, State, ipc::Channel};
 
@@ -412,6 +412,29 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn trace_runtime_metrics(
+    snapshot: &inference::RuntimeLifecycleSnapshot,
+) -> WorkflowTraceRuntimeMetrics {
+    WorkflowTraceRuntimeMetrics {
+        runtime_id: snapshot.runtime_id.clone(),
+        runtime_instance_id: snapshot.runtime_instance_id.clone(),
+        warmup_started_at_ms: snapshot.warmup_started_at_ms,
+        warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
+        warmup_duration_ms: snapshot.warmup_duration_ms,
+        runtime_reused: snapshot.runtime_reused,
+        lifecycle_decision_reason: match (
+            snapshot.last_error.as_ref(),
+            snapshot.runtime_reused,
+            snapshot.active,
+        ) {
+            (Some(_), _, _) => Some("runtime_start_failed".to_string()),
+            (None, Some(true), true) => Some("runtime_reused".to_string()),
+            (None, _, true) => Some("runtime_ready".to_string()),
+            (None, _, false) => None,
+        },
+    }
+}
+
 fn send_diagnostics_projection(
     channel: &Channel<WorkflowEvent>,
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
@@ -477,11 +500,14 @@ async fn emit_diagnostics_snapshots(
     ) {
         Ok(runtime) => runtime,
         Err(error) => {
+            let runtime_trace_metrics =
+                trace_runtime_metrics(&gateway.runtime_lifecycle_snapshot().await);
             let _ = channel.send(WorkflowEvent::runtime_snapshot(
                 runtime_workflow_id.clone(),
                 session_id.to_string(),
                 captured_at_ms,
                 None,
+                runtime_trace_metrics,
                 Some(error.clone()),
             ));
             diagnostics_store.update_runtime_snapshot(
@@ -512,12 +538,14 @@ async fn emit_diagnostics_snapshots(
             (None, Some(error.to_envelope_json()))
         }
     };
+    let runtime_trace_metrics = trace_runtime_metrics(&gateway.runtime_lifecycle_snapshot().await);
 
     let runtime_event = WorkflowEvent::runtime_snapshot(
         runtime_workflow_id,
         session_id.to_string(),
         captured_at_ms,
         capabilities,
+        runtime_trace_metrics,
         runtime_error,
     );
     diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);

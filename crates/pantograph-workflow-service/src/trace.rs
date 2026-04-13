@@ -190,6 +190,7 @@ pub enum WorkflowTraceEvent {
         execution_id: String,
         workflow_id: Option<String>,
         captured_at_ms: u64,
+        runtime: WorkflowTraceRuntimeMetrics,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         error: Option<String>,
     },
@@ -711,11 +712,13 @@ fn apply_trace_event(
         }
         WorkflowTraceEvent::RuntimeSnapshotCaptured {
             captured_at_ms,
+            runtime,
             capabilities,
             error,
             ..
         } => apply_runtime_snapshot(
             trace,
+            runtime,
             capabilities.as_ref(),
             error.as_deref(),
             *captured_at_ms,
@@ -807,21 +810,53 @@ fn apply_trace_event(
 
 fn apply_runtime_snapshot(
     trace: &mut WorkflowTraceRunState,
+    runtime: &WorkflowTraceRuntimeMetrics,
     capabilities: Option<&WorkflowCapabilitiesResponse>,
     error: Option<&str>,
     _captured_at_ms: u64,
 ) {
+    merge_runtime_metrics(&mut trace.runtime, runtime);
+
     if let Some(capabilities) = capabilities {
         if trace.runtime.runtime_id.is_none() {
             trace.runtime.runtime_id = infer_runtime_id(capabilities);
         }
-        trace.runtime.lifecycle_decision_reason =
-            Some(runtime_lifecycle_reason(capabilities).to_string());
+        if trace.runtime.lifecycle_decision_reason.is_none() {
+            trace.runtime.lifecycle_decision_reason =
+                Some(runtime_lifecycle_reason(capabilities).to_string());
+        }
         return;
     }
 
-    if error.is_some() {
+    if error.is_some() && trace.runtime.lifecycle_decision_reason.is_none() {
         trace.runtime.lifecycle_decision_reason = Some("capabilities_snapshot_failed".to_string());
+    }
+}
+
+fn merge_runtime_metrics(
+    target: &mut WorkflowTraceRuntimeMetrics,
+    source: &WorkflowTraceRuntimeMetrics,
+) {
+    if let Some(runtime_id) = source.runtime_id.clone() {
+        target.runtime_id = Some(runtime_id);
+    }
+    if let Some(runtime_instance_id) = source.runtime_instance_id.clone() {
+        target.runtime_instance_id = Some(runtime_instance_id);
+    }
+    if let Some(warmup_started_at_ms) = source.warmup_started_at_ms {
+        target.warmup_started_at_ms = Some(warmup_started_at_ms);
+    }
+    if let Some(warmup_completed_at_ms) = source.warmup_completed_at_ms {
+        target.warmup_completed_at_ms = Some(warmup_completed_at_ms);
+    }
+    if let Some(warmup_duration_ms) = source.warmup_duration_ms {
+        target.warmup_duration_ms = Some(warmup_duration_ms);
+    }
+    if let Some(runtime_reused) = source.runtime_reused {
+        target.runtime_reused = Some(runtime_reused);
+    }
+    if let Some(lifecycle_decision_reason) = source.lifecycle_decision_reason.clone() {
+        target.lifecycle_decision_reason = Some(lifecycle_decision_reason);
     }
 }
 
@@ -1291,6 +1326,15 @@ mod tests {
                 execution_id: "exec-1".to_string(),
                 workflow_id: Some("wf-1".to_string()),
                 captured_at_ms: 110,
+                runtime: WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("llama_cpp".to_string()),
+                    runtime_instance_id: Some("llama_cpp-1".to_string()),
+                    warmup_started_at_ms: Some(100),
+                    warmup_completed_at_ms: Some(110),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                },
                 capabilities: Some(WorkflowCapabilitiesResponse {
                     max_input_bindings: 4,
                     max_output_targets: 2,
@@ -1360,8 +1404,16 @@ mod tests {
         );
         assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));
         assert_eq!(
+            trace.runtime.runtime_instance_id.as_deref(),
+            Some("llama_cpp-1")
+        );
+        assert_eq!(trace.runtime.warmup_started_at_ms, Some(100));
+        assert_eq!(trace.runtime.warmup_completed_at_ms, Some(110));
+        assert_eq!(trace.runtime.warmup_duration_ms, Some(10));
+        assert_eq!(trace.runtime.runtime_reused, Some(false));
+        assert_eq!(
             trace.runtime.lifecycle_decision_reason.as_deref(),
-            Some("configured_runtime_available")
+            Some("runtime_ready")
         );
     }
 }

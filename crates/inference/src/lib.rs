@@ -55,11 +55,12 @@ pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::DeviceBackend;
-pub use gateway::{GatewayError, InferenceGateway, SharedGateway};
+pub use gateway::{GatewayError, InferenceGateway, RuntimeLifecycleSnapshot, SharedGateway};
 pub use managed_runtime::{
-    binary_capability, check_binary_status, download_binary, list_binary_capabilities,
-    managed_runtime_dir, remove_binary, resolve_binary_command, BinaryStatus, DownloadProgress,
-    ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState, ResolvedCommand,
+    BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
+    ManagedBinaryInstallState, ResolvedCommand, binary_capability, check_binary_status,
+    download_binary, list_binary_capabilities, managed_runtime_dir, remove_binary,
+    resolve_binary_command,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

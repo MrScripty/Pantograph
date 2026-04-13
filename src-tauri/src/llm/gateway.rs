@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use inference::process::ProcessSpawner;
 use inference::BackendConfig;
+use inference::process::ProcessSpawner;
 
 use super::embedding_server::EmbeddingServer;
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
@@ -199,6 +199,11 @@ impl InferenceGateway {
     /// Get capabilities of the current backend.
     pub async fn capabilities(&self) -> inference::BackendCapabilities {
         self.inner.capabilities().await
+    }
+
+    /// Get the backend-owned runtime lifecycle snapshot.
+    pub async fn runtime_lifecycle_snapshot(&self) -> inference::RuntimeLifecycleSnapshot {
+        self.inner.runtime_lifecycle_snapshot().await
     }
 
     /// Check if currently in embedding mode.

@@ -693,11 +693,13 @@ fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
             execution_id,
             captured_at_ms,
             capabilities,
+            trace_runtime_metrics,
             error,
         } => Some(WorkflowTraceEvent::RuntimeSnapshotCaptured {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
             captured_at_ms: *captured_at_ms,
+            runtime: trace_runtime_metrics.clone(),
             capabilities: capabilities.clone(),
             error: error.clone(),
         }),
@@ -1061,6 +1063,57 @@ mod tests {
             Some(WorkflowSessionKind::Workflow)
         );
         assert_eq!(snapshot.scheduler.items.len(), 1);
+    }
+
+    #[test]
+    fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
+        let store = WorkflowDiagnosticsStore::default();
+        store.record_workflow_event(
+            &WorkflowEvent::RuntimeSnapshot {
+                workflow_id: "wf-runtime".to_string(),
+                execution_id: "exec-runtime".to_string(),
+                captured_at_ms: 5_000,
+                capabilities: None,
+                trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-cpp-1".to_string()),
+                    warmup_started_at_ms: Some(4_900),
+                    warmup_completed_at_ms: Some(5_000),
+                    warmup_duration_ms: Some(100),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                },
+                error: None,
+            },
+            5_000,
+        );
+
+        let trace = store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("exec-runtime".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("runtime trace");
+
+        assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama.cpp"));
+        assert_eq!(
+            trace.runtime.runtime_instance_id.as_deref(),
+            Some("llama-cpp-1")
+        );
+        assert_eq!(trace.runtime.warmup_started_at_ms, Some(4_900));
+        assert_eq!(trace.runtime.warmup_completed_at_ms, Some(5_000));
+        assert_eq!(trace.runtime.warmup_duration_ms, Some(100));
+        assert_eq!(trace.runtime.runtime_reused, Some(false));
+        assert_eq!(
+            trace.runtime.lifecycle_decision_reason.as_deref(),
+            Some("runtime_ready")
+        );
     }
 
     #[test]

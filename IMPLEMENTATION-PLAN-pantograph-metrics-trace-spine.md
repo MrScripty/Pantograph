@@ -341,6 +341,10 @@ Update during implementation:
   `pantograph-workflow-service`, so queue observation timing and runtime
   readiness decisions are recorded in the canonical Rust trace store instead of
   remaining adapter-local.
+- 2026-04-12: Sixth implementation slice added backend-owned runtime lifecycle
+  snapshots in `crates/inference`, threaded those facts through Tauri workflow
+  runtime snapshot events, and merged authoritative warmup/instance metadata
+  into the canonical trace store.
 
 ## Commit Cadence Notes
 
@@ -388,19 +392,22 @@ Update during implementation:
   mirrors
 - Fifth Milestone 1 slice implemented across `pantograph-workflow-service` and
   `src-tauri/src/workflow`
+- Sixth Milestone 1 slice implemented across `crates/inference`,
+  `pantograph-workflow-service`, and `src-tauri`
 
 ### Deviations
 
 - Current runtime producers do not yet emit true warmup/reuse/instance-lifetime
-  facts, so the canonical trace store now records only snapshot-derived
-  runtime identity/readiness decisions and leaves warmup/reuse fields unset.
+  facts for every runtime path; the inference gateway now records authoritative
+  lifecycle state for gateway-managed starts, but direct process-hosted or
+  adapter-specific runtime paths still need to converge on the same producer
+  contract.
 
 ### Follow-Ups
 
-- Add producer-side runtime lifecycle hooks in
-  `crates/pantograph-embedded-runtime` and `crates/inference` so
-  `WorkflowTraceRuntimeMetrics` can record true warmup start/completion,
-  reuse, and instance identifiers rather than snapshot-derived readiness only.
+- Extend runtime lifecycle producers beyond the gateway-managed inference path
+  so every runtime host populates the same authoritative
+  `WorkflowTraceRuntimeMetrics` fields.
 - Tighten queue attribution so trace summaries distinguish session-scoped queue
   observation from run-scoped dequeue facts when concurrent or backlogged runs
   share a session.
@@ -413,6 +420,7 @@ Update during implementation:
 
 - `cargo test -p pantograph-workflow-service contract`
 - `cargo test -p pantograph-workflow-service trace`
+- `cargo test -p inference gateway`
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `cargo check -p pantograph-workflow-service`
