@@ -58,8 +58,7 @@ pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::DeviceBackend;
 pub use embedding_runtime::LlamaCppEmbeddingRuntime;
 pub use gateway::{
-    EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest,
-    RuntimeLifecycleSnapshot, SharedGateway,
+    EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest, SharedGateway,
 };
 pub use managed_runtime::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
@@ -72,7 +71,8 @@ pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
     ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
     ImageGenerationResult, ImageUrlData, MaskedPrompt, PromptSegment, RerankRequest,
-    RerankResponse, RerankResult, ServerModeInfo, StreamChoice, StreamChunk, StreamEvent,
+    RerankResponse, RerankResult, RuntimeLifecycleSnapshot, ServerModeInfo, StreamChoice,
+    StreamChunk, StreamEvent,
 };
 
 #[cfg(feature = "std-process")]

@@ -185,6 +185,30 @@ pub struct StreamEvent {
     pub error: Option<String>,
 }
 
+/// Snapshot of an inference runtime lifecycle owned by the backend.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeLifecycleSnapshot {
+    #[serde(default)]
+    pub runtime_id: Option<String>,
+    #[serde(default)]
+    pub runtime_instance_id: Option<String>,
+    #[serde(default)]
+    pub warmup_started_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_completed_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub runtime_reused: Option<bool>,
+    #[serde(default)]
+    pub lifecycle_decision_reason: Option<String>,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
 /// Server operating mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerModeInfo {
@@ -201,6 +225,12 @@ pub struct ServerModeInfo {
     pub model_path: Option<String>,
     /// Whether in embedding mode (sidecar only)
     pub is_embedding_mode: bool,
+    /// Backend-owned lifecycle snapshot for the active runtime.
+    #[serde(default)]
+    pub active_runtime: Option<RuntimeLifecycleSnapshot>,
+    /// Backend-owned lifecycle snapshot for the dedicated embedding runtime.
+    #[serde(default)]
+    pub embedding_runtime: Option<RuntimeLifecycleSnapshot>,
 }
 
 /// Type identifier for masked prompts in JSON context values

@@ -283,7 +283,9 @@ impl InferenceGateway {
 
     /// Get server mode info for the frontend.
     pub async fn mode_info(&self) -> ServerModeInfo {
-        self.inner.mode_info().await
+        let mut mode_info = self.inner.mode_info().await;
+        mode_info.embedding_runtime = self.embedding_runtime_lifecycle_snapshot().await;
+        mode_info
     }
 }
 
@@ -363,5 +365,48 @@ mod tests {
         let gateway = InferenceGateway::new(Arc::new(MockProcessSpawner));
 
         assert_eq!(gateway.embedding_runtime_lifecycle_snapshot().await, None);
+    }
+
+    #[tokio::test]
+    async fn mode_info_includes_embedding_runtime_snapshot() {
+        let gateway = InferenceGateway::new(Arc::new(MockProcessSpawner));
+        gateway.init().await;
+
+        let mut server = LlamaCppEmbeddingRuntime::new(InferenceEmbeddingMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+        server.set_test_runtime_lifecycle_snapshot(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-1".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(25),
+            warmup_duration_ms: Some(15),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("started_embedding_runtime".to_string()),
+            active: true,
+            last_error: None,
+        });
+        gateway.set_test_embedding_server(server).await;
+
+        let mode = gateway.mode_info().await;
+
+        assert!(mode.active_runtime.is_some());
+        assert_eq!(
+            mode.embedding_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_id.as_deref()),
+            Some("llama.cpp.embedding")
+        );
+        assert_eq!(
+            mode.embedding_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_reused),
+            Some(false)
+        );
+        assert_eq!(
+            mode.embedding_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_instance_id.as_deref()),
+            Some("llama-cpp-embedding-1")
+        );
     }
 }

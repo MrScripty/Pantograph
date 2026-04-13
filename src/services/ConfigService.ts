@@ -44,6 +44,20 @@ export interface ServerModeInfo {
   url: string | null;
   model_path: string | null;
   is_embedding_mode: boolean;
+  active_runtime: RuntimeLifecycleSnapshot | null;
+  embedding_runtime: RuntimeLifecycleSnapshot | null;
+}
+
+export interface RuntimeLifecycleSnapshot {
+  runtime_id: string | null;
+  runtime_instance_id: string | null;
+  warmup_started_at_ms: number | null;
+  warmup_completed_at_ms: number | null;
+  warmup_duration_ms: number | null;
+  runtime_reused: boolean | null;
+  lifecycle_decision_reason: string | null;
+  active: boolean;
+  last_error: string | null;
 }
 
 export interface ConfigState {
@@ -77,6 +91,8 @@ const defaultServerMode: ServerModeInfo = {
   url: null,
   model_path: null,
   is_embedding_mode: false,
+  active_runtime: null,
+  embedding_runtime: null,
 };
 
 class ConfigServiceClass {

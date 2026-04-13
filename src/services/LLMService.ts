@@ -32,6 +32,8 @@ class LLMServiceClass {
       url: null,
       model_path: null,
       is_embedding_mode: false,
+      active_runtime: null,
+      embedding_runtime: null,
     },
     isGenerating: false,
     messages: [],
@@ -199,6 +201,8 @@ class LLMServiceClass {
         url: null,
         model_path: null,
         is_embedding_mode: false,
+        active_runtime: null,
+        embedding_runtime: null,
       };
       this.state.isGenerating = false;
       Logger.log('LLM_STOPPED', {});

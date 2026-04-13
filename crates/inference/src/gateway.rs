@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use futures_util::Stream;
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::backend::{
@@ -20,7 +19,8 @@ use crate::backend::{
 use crate::config::EmbeddingMemoryMode;
 use crate::process::ProcessSpawner;
 use crate::types::{
-    ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse, ServerModeInfo,
+    ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse,
+    RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 
 #[cfg(feature = "backend-llamacpp")]
@@ -61,30 +61,6 @@ pub struct EmbeddingStartRequest {
     pub ollama_model_name: Option<String>,
     pub device: Option<String>,
     pub gpu_layers: Option<i32>,
-}
-
-/// Snapshot of the active runtime lifecycle owned by the inference gateway.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub struct RuntimeLifecycleSnapshot {
-    #[serde(default)]
-    pub runtime_id: Option<String>,
-    #[serde(default)]
-    pub runtime_instance_id: Option<String>,
-    #[serde(default)]
-    pub warmup_started_at_ms: Option<u64>,
-    #[serde(default)]
-    pub warmup_completed_at_ms: Option<u64>,
-    #[serde(default)]
-    pub warmup_duration_ms: Option<u64>,
-    #[serde(default)]
-    pub runtime_reused: Option<bool>,
-    #[serde(default)]
-    pub lifecycle_decision_reason: Option<String>,
-    #[serde(default)]
-    pub active: bool,
-    #[serde(default)]
-    pub last_error: Option<String>,
 }
 
 /// The single entry point for ALL inference operations.
@@ -512,6 +488,8 @@ impl InferenceGateway {
             url,
             model_path: None,
             is_embedding_mode: is_embedding,
+            active_runtime: Some(self.runtime_lifecycle_snapshot().await),
+            embedding_runtime: None,
         }
     }
 
@@ -990,6 +968,19 @@ mod tests {
         assert_eq!(mode.backend_name.as_deref(), Some("mock"));
         assert_eq!(mode.mode, "external");
         assert!(!mode.is_embedding_mode);
+        assert_eq!(
+            mode.active_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_id.as_deref()),
+            Some("mock")
+        );
+        assert_eq!(
+            mode.active_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_reused),
+            Some(false)
+        );
+        assert_eq!(mode.embedding_runtime, None);
     }
 
     #[tokio::test]

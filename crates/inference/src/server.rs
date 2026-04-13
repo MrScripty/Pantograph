@@ -651,6 +651,8 @@ impl LlamaServer {
                 _ => None,
             },
             is_embedding_mode: self.is_embedding_mode(),
+            active_runtime: None,
+            embedding_runtime: None,
         }
     }
 

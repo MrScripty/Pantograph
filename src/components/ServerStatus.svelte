@@ -4,6 +4,7 @@
   import {
     ConfigService,
     type ConfigState,
+    type RuntimeLifecycleSnapshot,
   } from '../services/ConfigService';
   import {
     HealthMonitorService,
@@ -170,6 +171,26 @@
       ? HealthMonitorService.getStatusLabel(healthState.lastResult.status)
       : 'Unknown'
   );
+
+  function formatRuntimeDuration(durationMs: number | null): string {
+    if (durationMs === null) {
+      return 'n/a';
+    }
+    if (durationMs < 1000) {
+      return `${durationMs}ms`;
+    }
+    return `${(durationMs / 1000).toFixed(1)}s`;
+  }
+
+  function runtimeStateLabel(snapshot: RuntimeLifecycleSnapshot | null): string {
+    if (!snapshot) {
+      return 'Unavailable';
+    }
+    if (snapshot.last_error) {
+      return 'Error';
+    }
+    return snapshot.active ? 'Active' : 'Idle';
+  }
 </script>
 
 <div class="space-y-3">
@@ -268,6 +289,52 @@
           {#if llmState.status.url}
             <span class="text-neutral-600 font-mono text-[10px]">{llmState.status.url}</span>
           {/if}
+        </div>
+
+        <div class="grid gap-2 text-[10px] text-neutral-400 md:grid-cols-2">
+          <div class="rounded border border-neutral-700 bg-neutral-900/60 p-2">
+            <div class="flex items-center justify-between gap-2 text-neutral-500">
+              <span>Active Runtime</span>
+              <span>{runtimeStateLabel(llmState.status.active_runtime)}</span>
+            </div>
+            <div class="mt-1 font-mono text-neutral-300">
+              {llmState.status.active_runtime?.runtime_id ?? llmState.status.backend_name ?? 'unknown'}
+            </div>
+            <div class="mt-1 text-neutral-500">
+              Instance {llmState.status.active_runtime?.runtime_instance_id ?? 'unreported'}
+            </div>
+            <div class="mt-1 text-neutral-500">
+              Warmup {formatRuntimeDuration(llmState.status.active_runtime?.warmup_duration_ms ?? null)}
+              • Reused {llmState.status.active_runtime?.runtime_reused === null ? 'unknown' : llmState.status.active_runtime?.runtime_reused ? 'yes' : 'no'}
+            </div>
+            {#if llmState.status.active_runtime?.lifecycle_decision_reason}
+              <div class="mt-1 text-neutral-600">
+                {llmState.status.active_runtime.lifecycle_decision_reason}
+              </div>
+            {/if}
+          </div>
+
+          <div class="rounded border border-neutral-700 bg-neutral-900/60 p-2">
+            <div class="flex items-center justify-between gap-2 text-neutral-500">
+              <span>Embedding Runtime</span>
+              <span>{runtimeStateLabel(llmState.status.embedding_runtime)}</span>
+            </div>
+            <div class="mt-1 font-mono text-neutral-300">
+              {llmState.status.embedding_runtime?.runtime_id ?? 'not active'}
+            </div>
+            <div class="mt-1 text-neutral-500">
+              Instance {llmState.status.embedding_runtime?.runtime_instance_id ?? 'unreported'}
+            </div>
+            <div class="mt-1 text-neutral-500">
+              Warmup {formatRuntimeDuration(llmState.status.embedding_runtime?.warmup_duration_ms ?? null)}
+              • Reused {llmState.status.embedding_runtime?.runtime_reused === null ? 'unknown' : llmState.status.embedding_runtime?.runtime_reused ? 'yes' : 'no'}
+            </div>
+            {#if llmState.status.embedding_runtime?.lifecycle_decision_reason}
+              <div class="mt-1 text-neutral-600">
+                {llmState.status.embedding_runtime.lifecycle_decision_reason}
+              </div>
+            {/if}
+          </div>
         </div>
 
         <!-- Health Status -->
