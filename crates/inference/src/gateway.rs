@@ -201,6 +201,23 @@ impl InferenceGateway {
                     ..BackendConfig::default()
                 })
             }
+            "PyTorch" => {
+                let model_path = request.file_model_path.ok_or_else(|| {
+                    GatewayError::Backend(BackendError::Config(
+                        "PyTorch model path not configured. Set a local model directory in Model Configuration.".to_string(),
+                    ))
+                })?;
+
+                Ok(BackendConfig {
+                    model_path: Some(model_path),
+                    device: request.device,
+                    embedding_mode: false,
+                    ..BackendConfig::default()
+                })
+            }
+            "Candle" => Err(GatewayError::Backend(BackendError::Config(
+                "Candle does not support inference mode. Use embedding mode with a SafeTensors embedding model instead.".to_string(),
+            ))),
             _ => {
                 let model_path = request.file_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
@@ -1080,6 +1097,51 @@ mod tests {
         );
         assert_eq!(config.model_path, None);
         assert!(!config.embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_inference_start_config_for_pytorch_uses_model_path_without_mmproj() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "PyTorch");
+
+        let config = gateway
+            .build_inference_start_config(InferenceStartRequest {
+                file_model_path: Some(PathBuf::from("/models/qwen2.5-7b-instruct")),
+                mmproj_path: None,
+                device: Some("cuda:0".to_string()),
+                ..InferenceStartRequest::default()
+            })
+            .await
+            .expect("config should build");
+
+        assert_eq!(
+            config
+                .model_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            Some("/models/qwen2.5-7b-instruct".to_string())
+        );
+        assert_eq!(config.mmproj_path, None);
+        assert_eq!(config.device.as_deref(), Some("cuda:0"));
+        assert!(!config.embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_inference_start_config_for_candle_rejects_inference_mode() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Candle");
+
+        let error = gateway
+            .build_inference_start_config(InferenceStartRequest {
+                file_model_path: Some(PathBuf::from("/models/unsupported")),
+                ..InferenceStartRequest::default()
+            })
+            .await
+            .expect_err("candle should reject inference mode");
+
+        assert!(matches!(
+            error,
+            GatewayError::Backend(BackendError::Config(message))
+            if message.contains("Candle does not support inference mode")
+        ));
     }
 
     #[tokio::test]
