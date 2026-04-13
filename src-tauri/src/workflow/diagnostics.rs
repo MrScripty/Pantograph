@@ -272,7 +272,8 @@ fn capability_runtime_lifecycle_snapshot(
     };
 
     Some(DiagnosticsRuntimeLifecycleSnapshot {
-        runtime_id: Some(selected_runtime.runtime_id.clone()),
+        runtime_id: Some(canonical_runtime_id(&selected_runtime.runtime_id))
+            .filter(|runtime_id| !runtime_id.is_empty()),
         runtime_instance_id: None,
         warmup_started_at_ms: None,
         warmup_completed_at_ms: None,
@@ -1541,6 +1542,64 @@ mod tests {
                 .as_ref()
                 .and_then(|runtime| runtime.lifecycle_decision_reason.as_deref()),
             Some("required_runtime_reported")
+        );
+    }
+
+    #[test]
+    fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_absent() {
+        let store = WorkflowDiagnosticsStore::default();
+        let snapshot =
+            store.update_runtime_snapshot(
+                Some("wf-runtime".to_string()),
+                Some(WorkflowCapabilitiesResponse {
+                    max_input_bindings: 4,
+                    max_output_targets: 2,
+                    max_value_bytes: 1000,
+                    runtime_requirements:
+                        pantograph_workflow_service::WorkflowRuntimeRequirements {
+                            estimated_peak_vram_mb: None,
+                            estimated_peak_ram_mb: None,
+                            estimated_min_vram_mb: None,
+                            estimated_min_ram_mb: None,
+                            estimation_confidence: "high".to_string(),
+                            required_models: vec!["model-a".to_string()],
+                            required_backends: vec!["pytorch".to_string()],
+                            required_extensions: Vec::new(),
+                        },
+                    models: Vec::new(),
+                    runtime_capabilities:
+                        vec![pantograph_workflow_service::WorkflowRuntimeCapability {
+                    runtime_id: "PyTorch".to_string(),
+                    display_name: "PyTorch".to_string(),
+                    install_state:
+                        pantograph_workflow_service::WorkflowRuntimeInstallState::SystemProvided,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: false,
+                    source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
+                    selected: true,
+                    supports_external_connection: false,
+                    backend_keys: vec!["pytorch".to_string(), "torch".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                }],
+                }),
+                None,
+                Some("black-forest-labs/flux.1-schnell".to_string()),
+                None,
+                None,
+                None,
+                5_000,
+            );
+
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_id.as_deref()),
+            Some("pytorch")
         );
     }
 

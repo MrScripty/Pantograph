@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
+use pantograph_runtime_identity::canonical_runtime_id;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
@@ -974,7 +975,7 @@ fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<Strin
         .iter()
         .find(|capability| capability.selected)
     {
-        return Some(selected_runtime.runtime_id.clone());
+        return normalize_inferred_runtime_id(&selected_runtime.runtime_id);
     }
 
     if capabilities.runtime_requirements.required_backends.len() == 1 {
@@ -988,14 +989,14 @@ fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<Strin
             .runtime_requirements
             .required_backends
             .first()
-            .cloned();
+            .and_then(|runtime_id| normalize_inferred_runtime_id(runtime_id));
     }
 
     if capabilities.runtime_capabilities.len() == 1 {
         return capabilities
             .runtime_capabilities
             .first()
-            .map(|capability| capability.runtime_id.clone());
+            .and_then(|capability| normalize_inferred_runtime_id(&capability.runtime_id));
     }
 
     None
@@ -1015,7 +1016,16 @@ fn find_runtime_id_for_required_backend(
                 .cmp(&runtime_capability_match_rank(right))
                 .then_with(|| left.runtime_id.cmp(&right.runtime_id))
         })
-        .map(|capability| capability.runtime_id.clone())
+        .and_then(|capability| normalize_inferred_runtime_id(&capability.runtime_id))
+}
+
+fn normalize_inferred_runtime_id(runtime_id: &str) -> Option<String> {
+    let runtime_id = canonical_runtime_id(runtime_id);
+    if runtime_id.is_empty() {
+        None
+    } else {
+        Some(runtime_id)
+    }
 }
 
 fn runtime_capability_matches_backend(
@@ -1401,6 +1411,30 @@ mod tests {
     }
 
     #[test]
+    fn infer_runtime_id_normalizes_selected_runtime_display_name() {
+        let capabilities = workflow_capabilities_with_runtimes(
+            crate::workflow::WorkflowRuntimeRequirements::default(),
+            vec![crate::workflow::WorkflowRuntimeCapability {
+                runtime_id: "PyTorch".to_string(),
+                display_name: "PyTorch".to_string(),
+                install_state: crate::workflow::WorkflowRuntimeInstallState::SystemProvided,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                source_kind: crate::workflow::WorkflowRuntimeSourceKind::System,
+                selected: true,
+                supports_external_connection: false,
+                backend_keys: vec!["pytorch".to_string(), "torch".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+        );
+
+        assert_eq!(infer_runtime_id(&capabilities).as_deref(), Some("pytorch"));
+    }
+
+    #[test]
     fn infer_runtime_id_matches_single_required_backend_alias_to_runtime_capability() {
         let capabilities = workflow_capabilities_with_runtimes(
             crate::workflow::WorkflowRuntimeRequirements {
@@ -1431,6 +1465,22 @@ mod tests {
         assert_eq!(
             runtime_lifecycle_reason(&capabilities),
             "required_runtime_reported"
+        );
+    }
+
+    #[test]
+    fn infer_runtime_id_normalizes_required_backend_fallback_alias() {
+        let capabilities = workflow_capabilities_with_runtimes(
+            crate::workflow::WorkflowRuntimeRequirements {
+                required_backends: vec!["onnxruntime".to_string()],
+                ..crate::workflow::WorkflowRuntimeRequirements::default()
+            },
+            Vec::new(),
+        );
+
+        assert_eq!(
+            infer_runtime_id(&capabilities).as_deref(),
+            Some("onnx-runtime")
         );
     }
 
