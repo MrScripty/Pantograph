@@ -271,6 +271,9 @@ impl InferenceGateway {
                     ..BackendConfig::default()
                 })
             }
+            "PyTorch" => Err(GatewayError::Backend(BackendError::Config(
+                "PyTorch does not support embedding mode. Use llama.cpp, Ollama, or Candle for embeddings.".to_string(),
+            ))),
             _ => {
                 let model_path = request.gguf_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
@@ -1164,5 +1167,24 @@ mod tests {
             Some("/models/bge-small-en-v1.5".to_string())
         );
         assert!(config.embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_embedding_start_config_for_pytorch_rejects_embedding_mode() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "PyTorch");
+
+        let error = gateway
+            .build_embedding_start_config(EmbeddingStartRequest {
+                gguf_model_path: Some(PathBuf::from("/models/embed.gguf")),
+                ..EmbeddingStartRequest::default()
+            })
+            .await
+            .expect_err("pytorch should reject embedding mode");
+
+        assert!(matches!(
+            error,
+            GatewayError::Backend(BackendError::Config(message))
+            if message.contains("PyTorch does not support embedding mode")
+        ));
     }
 }
