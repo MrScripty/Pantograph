@@ -140,6 +140,14 @@ pub struct BackendConfig {
     pub model_type: Option<String>,
 }
 
+/// Backend-owned outcome for a successful runtime start request.
+#[derive(Debug, Clone, Default)]
+pub struct BackendStartOutcome {
+    /// Whether the backend attached to an already-running runtime instead of
+    /// launching a fresh one.
+    pub runtime_reused: Option<bool>,
+}
+
 /// A streaming chunk from chat completion
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatChunk {
@@ -192,7 +200,7 @@ pub trait InferenceBackend: Send + Sync {
         &mut self,
         config: &BackendConfig,
         spawner: Arc<dyn ProcessSpawner>,
-    ) -> Result<(), BackendError>;
+    ) -> Result<BackendStartOutcome, BackendError>;
 
     /// Stop the backend and cleanup resources
     fn stop(&mut self);

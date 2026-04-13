@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
@@ -97,7 +98,7 @@ impl InferenceBackend for CandleBackend {
         &mut self,
         _config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
-    ) -> Result<(), BackendError> {
+    ) -> Result<BackendStartOutcome, BackendError> {
         // Candle runs in-process, so we don't need the spawner
         // The actual implementation would:
         // 1. Load the model from config.model_path or config.model_id

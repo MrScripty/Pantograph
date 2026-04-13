@@ -463,6 +463,9 @@ Update during implementation:
 - Nineteenth implementation slice added in `src-tauri/src/llm` so the
   dedicated embedding sidecar now records backend-owned lifecycle snapshots and
   reuse decisions in Rust
+- Twentieth implementation slice added in `crates/inference` so backend start
+  paths now report reuse outcomes to the gateway, preserving reused-runtime
+  attribution for adapter-specific cases such as Ollama daemon attachment
 
 ### Deviations
 
@@ -473,9 +476,9 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Extend runtime lifecycle producers beyond the current inference-gateway and
-  embedding-sidecar paths so every runtime host populates the same authoritative
-  `WorkflowTraceRuntimeMetrics` fields.
+- Extend runtime lifecycle producers beyond the current inference-gateway,
+  backend-start-outcome, and embedding-sidecar paths so every runtime host
+  populates the same authoritative `WorkflowTraceRuntimeMetrics` fields.
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.

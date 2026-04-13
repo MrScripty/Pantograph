@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::types::{RerankRequest, RerankResponse};
@@ -205,7 +206,7 @@ impl InferenceBackend for OllamaBackend {
         &mut self,
         _config: &BackendConfig,
         spawner: Arc<dyn ProcessSpawner>,
-    ) -> Result<(), BackendError> {
+    ) -> Result<BackendStartOutcome, BackendError> {
         self.stop();
         self.spawner = Some(spawner.clone());
         let base_url = Self::DEFAULT_BASE_URL.to_string();
@@ -214,7 +215,9 @@ impl InferenceBackend for OllamaBackend {
             self.base_url = Some(base_url);
             self.ready = true;
             log::info!("Connected to existing Ollama server");
-            return Ok(());
+            return Ok(BackendStartOutcome {
+                runtime_reused: Some(true),
+            });
         }
 
         let (rx, child) = spawner
@@ -234,7 +237,9 @@ impl InferenceBackend for OllamaBackend {
         self.base_url = Some(base_url);
         self.ready = true;
         log::info!("Started managed Ollama server");
-        Ok(())
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(false),
+        })
     }
 
     fn stop(&mut self) {

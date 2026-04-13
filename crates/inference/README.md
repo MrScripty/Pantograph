@@ -76,6 +76,9 @@ let spawner = StdProcessSpawner::new(
 - Inference owns install/remove/resolve/launch behavior for managed runtimes.
 - Workflow execution should preflight runtime requirements instead of triggering
   implicit downloads at run time.
+- Backend start paths also own runtime reuse facts. For example, the Ollama
+  backend reports whether it attached to an existing daemon so the gateway can
+  preserve lifecycle attribution without guessing in adapters.
 
 ## Feature Flags
 

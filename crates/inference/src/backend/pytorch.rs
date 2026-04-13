@@ -17,7 +17,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
@@ -388,7 +389,7 @@ impl InferenceBackend for PyTorchBackend {
         &mut self,
         config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
-    ) -> Result<(), BackendError> {
+    ) -> Result<BackendStartOutcome, BackendError> {
         // Initialise the Python worker module
         tokio::task::spawn_blocking(|| {
             Python::with_gil(|py| {
@@ -427,7 +428,9 @@ impl InferenceBackend for PyTorchBackend {
                 .await?;
         }
 
-        Ok(())
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(false),
+        })
     }
 
     fn stop(&mut self) {

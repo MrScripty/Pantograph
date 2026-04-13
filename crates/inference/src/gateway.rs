@@ -219,17 +219,22 @@ impl InferenceGateway {
 
         let runtime_id = self.current_backend_name().await;
         let warmup_started_at_ms = unix_timestamp_ms();
-        let runtime_reused = {
+        let previous_runtime_instance_id = {
             let lifecycle = self.runtime_lifecycle.read().await;
-            lifecycle.active && lifecycle.runtime_id.as_deref() == Some(runtime_id.as_str())
+            if lifecycle.active && lifecycle.runtime_id.as_deref() == Some(runtime_id.as_str()) {
+                lifecycle.runtime_instance_id.clone()
+            } else {
+                None
+            }
         };
         {
             let mut lifecycle = self.runtime_lifecycle.write().await;
             lifecycle.runtime_id = Some(runtime_id.clone());
+            lifecycle.runtime_instance_id = None;
             lifecycle.warmup_started_at_ms = Some(warmup_started_at_ms);
             lifecycle.warmup_completed_at_ms = None;
             lifecycle.warmup_duration_ms = None;
-            lifecycle.runtime_reused = Some(runtime_reused);
+            lifecycle.runtime_reused = None;
             lifecycle.active = false;
             lifecycle.last_error = None;
         }
@@ -240,15 +245,30 @@ impl InferenceGateway {
         };
 
         match start_result {
-            Ok(()) => {
+            Ok(start_outcome) => {
                 let warmup_completed_at_ms = unix_timestamp_ms();
-                let runtime_instance_id = format!(
-                    "{}-{}",
-                    runtime_id.replace([' ', '.'], "-"),
-                    self.runtime_instance_sequence
-                        .fetch_add(1, Ordering::Relaxed)
-                        + 1
-                );
+                let runtime_reused = start_outcome
+                    .runtime_reused
+                    .unwrap_or(previous_runtime_instance_id.is_some());
+                let runtime_instance_id = if runtime_reused {
+                    previous_runtime_instance_id.unwrap_or_else(|| {
+                        format!(
+                            "{}-{}",
+                            runtime_id.replace([' ', '.'], "-"),
+                            self.runtime_instance_sequence
+                                .fetch_add(1, Ordering::Relaxed)
+                                + 1
+                        )
+                    })
+                } else {
+                    format!(
+                        "{}-{}",
+                        runtime_id.replace([' ', '.'], "-"),
+                        self.runtime_instance_sequence
+                            .fetch_add(1, Ordering::Relaxed)
+                            + 1
+                    )
+                };
                 let mut lifecycle = self.runtime_lifecycle.write().await;
                 lifecycle.runtime_id = Some(runtime_id);
                 lifecycle.runtime_instance_id = Some(runtime_instance_id);
@@ -256,6 +276,7 @@ impl InferenceGateway {
                 lifecycle.warmup_completed_at_ms = Some(warmup_completed_at_ms);
                 lifecycle.warmup_duration_ms =
                     Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
+                lifecycle.runtime_reused = Some(runtime_reused);
                 lifecycle.active = true;
                 lifecycle.last_error = None;
                 Ok(())
@@ -474,7 +495,10 @@ mod tests {
     use futures_util::stream;
     use tokio::sync::mpsc;
 
+    use crate::backend::BackendStartOutcome;
+
     struct MockImageBackend;
+    struct MockReusedBackend;
 
     struct MockProcessHandle;
 
@@ -537,8 +561,10 @@ mod tests {
             &mut self,
             _config: &BackendConfig,
             _spawner: Arc<dyn ProcessSpawner>,
-        ) -> Result<(), BackendError> {
-            Ok(())
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+            })
         }
 
         fn stop(&mut self) {}
@@ -590,6 +616,68 @@ mod tests {
                     height: Some(512),
                 }],
                 seed_used: Some(7),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl InferenceBackend for MockReusedBackend {
+        fn name(&self) -> &'static str {
+            "MockReused"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock reused backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(true),
+            })
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
                 metadata: serde_json::Value::Null,
             })
         }
@@ -688,5 +776,28 @@ mod tests {
         let stopped = gateway.runtime_lifecycle_snapshot().await;
         assert_eq!(stopped.runtime_id.as_deref(), Some("mock"));
         assert!(!stopped.active);
+    }
+
+    #[tokio::test]
+    async fn test_runtime_lifecycle_snapshot_preserves_instance_id_for_reused_runtime() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockReusedBackend), "mock");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+        let first = gateway.runtime_lifecycle_snapshot().await;
+
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should reuse");
+        let second = gateway.runtime_lifecycle_snapshot().await;
+
+        assert_eq!(first.runtime_id.as_deref(), Some("mock"));
+        assert_eq!(second.runtime_id.as_deref(), Some("mock"));
+        assert_eq!(second.runtime_reused, Some(true));
+        assert_eq!(second.runtime_instance_id, first.runtime_instance_id);
     }
 }

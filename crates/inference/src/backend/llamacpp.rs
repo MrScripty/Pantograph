@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::config::DeviceConfig;
 use crate::process::ProcessSpawner;
@@ -219,7 +220,7 @@ impl InferenceBackend for LlamaCppBackend {
         &mut self,
         config: &BackendConfig,
         spawner: Arc<dyn ProcessSpawner>,
-    ) -> Result<(), BackendError> {
+    ) -> Result<BackendStartOutcome, BackendError> {
         // Store spawner for later use
         self.spawner = Some(spawner.clone());
 
@@ -246,7 +247,10 @@ impl InferenceBackend for LlamaCppBackend {
                     } else {
                         BackendError::StartupFailed(e)
                     }
-                })
+                })?;
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+            })
         } else if config.reranking_mode {
             let model_path = config.model_path.as_ref().ok_or_else(|| {
                 BackendError::Config("model_path required for reranking mode".to_string())
@@ -263,7 +267,10 @@ impl InferenceBackend for LlamaCppBackend {
                     } else {
                         BackendError::StartupFailed(e)
                     }
-                })
+                })?;
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+            })
         } else {
             // Start in inference mode (text LLM or VLM with optional vision)
             let model_path = config
@@ -293,7 +300,10 @@ impl InferenceBackend for LlamaCppBackend {
                     } else {
                         BackendError::StartupFailed(e)
                     }
-                })
+                })?;
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+            })
         }
     }
 
