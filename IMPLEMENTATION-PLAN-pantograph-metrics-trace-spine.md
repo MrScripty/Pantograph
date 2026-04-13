@@ -345,6 +345,10 @@ Update during implementation:
   snapshots in `crates/inference`, threaded those facts through Tauri workflow
   runtime snapshot events, and merged authoritative warmup/instance metadata
   into the canonical trace store.
+- 2026-04-12: Seventh implementation slice tightened scheduler trace
+  attribution by carrying `session_id` through `WorkflowTraceEvent` and
+  preferring queue items that match the active execution/session before falling
+  back to session-level backlog state.
 
 ## Commit Cadence Notes
 
@@ -394,6 +398,8 @@ Update during implementation:
   `src-tauri/src/workflow`
 - Sixth Milestone 1 slice implemented across `crates/inference`,
   `pantograph-workflow-service`, and `src-tauri`
+- Seventh Milestone 1 slice implemented across
+  `pantograph-workflow-service` and `src-tauri`
 
 ### Deviations
 
@@ -408,9 +414,9 @@ Update during implementation:
 - Extend runtime lifecycle producers beyond the gateway-managed inference path
   so every runtime host populates the same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
-- Tighten queue attribution so trace summaries distinguish session-scoped queue
-  observation from run-scoped dequeue facts when concurrent or backlogged runs
-  share a session.
+- Extend queue attribution beyond current execution/session matching so traces
+  can distinguish concurrent queued runs more precisely when richer run
+  identity surfaces are available from producers.
 - Extend diagnostics and trace inspection tests once runtime/queue producers
   emit richer lifecycle payloads.
 - Decide whether later detailed metrics inspection belongs in the existing

@@ -706,6 +706,7 @@ fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
         WorkflowEvent::SchedulerSnapshot {
             workflow_id,
             execution_id,
+            session_id,
             captured_at_ms,
             session,
             items,
@@ -714,6 +715,7 @@ fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
         } => Some(WorkflowTraceEvent::SchedulerSnapshotCaptured {
             execution_id: execution_id.clone(),
             workflow_id: workflow_id.clone(),
+            session_id: session_id.clone(),
             captured_at_ms: *captured_at_ms,
             session: session.clone(),
             items: items.clone(),

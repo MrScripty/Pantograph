@@ -197,6 +197,7 @@ pub enum WorkflowTraceEvent {
     SchedulerSnapshotCaptured {
         execution_id: String,
         workflow_id: Option<String>,
+        session_id: String,
         captured_at_ms: u64,
         session: Option<WorkflowSessionSummary>,
         items: Vec<WorkflowSessionQueueItem>,
@@ -724,6 +725,8 @@ fn apply_trace_event(
             *captured_at_ms,
         ),
         WorkflowTraceEvent::SchedulerSnapshotCaptured {
+            execution_id,
+            session_id,
             captured_at_ms,
             session,
             items,
@@ -731,6 +734,8 @@ fn apply_trace_event(
             ..
         } => apply_scheduler_snapshot(
             trace,
+            execution_id,
+            session_id,
             session.as_ref(),
             items,
             error.as_deref(),
@@ -899,6 +904,8 @@ fn runtime_lifecycle_reason(capabilities: &WorkflowCapabilitiesResponse) -> &'st
 
 fn apply_scheduler_snapshot(
     trace: &mut WorkflowTraceRunState,
+    execution_id: &str,
+    session_id: &str,
     session: Option<&WorkflowSessionSummary>,
     items: &[WorkflowSessionQueueItem],
     error: Option<&str>,
@@ -909,18 +916,27 @@ fn apply_scheduler_snapshot(
         return;
     }
 
-    let pending_visible = session
-        .map(|summary| summary.queued_runs > 0)
-        .unwrap_or(false)
-        || items
-            .iter()
-            .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
-    let running_visible = matches!(
-        session.map(|summary| summary.state),
-        Some(WorkflowSessionState::Running)
-    ) || items
-        .iter()
-        .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+    let matched_item = matched_queue_item(execution_id, session_id, items);
+    let pending_visible = matched_item
+        .map(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+        .unwrap_or_else(|| {
+            session
+                .map(|summary| summary.queued_runs > 0)
+                .unwrap_or(false)
+                || items
+                    .iter()
+                    .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+        });
+    let running_visible = matched_item
+        .map(|item| item.status == WorkflowSessionQueueItemStatus::Running)
+        .unwrap_or_else(|| {
+            matches!(
+                session.map(|summary| summary.state),
+                Some(WorkflowSessionState::Running)
+            ) || items
+                .iter()
+                .any(|item| item.status == WorkflowSessionQueueItemStatus::Running)
+        });
 
     if pending_visible {
         trace.queue.enqueued_at_ms.get_or_insert(captured_at_ms);
@@ -954,41 +970,69 @@ fn apply_scheduler_snapshot(
         }
         _ => None,
     };
-    trace.queue.scheduler_decision_reason = scheduler_decision_reason(session, items);
+    trace.queue.scheduler_decision_reason =
+        scheduler_decision_reason(execution_id, session_id, session, items);
 }
 
 fn scheduler_decision_reason(
+    execution_id: &str,
+    session_id: &str,
     session: Option<&WorkflowSessionSummary>,
     items: &[WorkflowSessionQueueItem],
 ) -> Option<String> {
-    let pending_visible = session
-        .map(|summary| summary.queued_runs > 0)
-        .unwrap_or(false)
-        || items
-            .iter()
-            .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
-    let running_visible = matches!(
-        session.map(|summary| summary.state),
-        Some(WorkflowSessionState::Running)
-    ) || items
-        .iter()
-        .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
-
-    let reason = if running_visible && pending_visible {
-        Some("running_with_backlog")
-    } else if running_visible {
-        Some("running")
-    } else if pending_visible {
-        Some("queued")
+    let matched_item = matched_queue_item(execution_id, session_id, items);
+    let reason = if let Some(item) = matched_item {
+        match item.status {
+            WorkflowSessionQueueItemStatus::Pending => Some("matched_pending_item"),
+            WorkflowSessionQueueItemStatus::Running => Some("matched_running_item"),
+        }
     } else {
-        match session.map(|summary| summary.state) {
-            Some(WorkflowSessionState::IdleLoaded) => Some("idle_loaded"),
-            Some(WorkflowSessionState::IdleUnloaded) => Some("idle_unloaded"),
-            Some(WorkflowSessionState::Running) | None => None,
+        let pending_visible = session
+            .map(|summary| summary.queued_runs > 0)
+            .unwrap_or(false)
+            || items
+                .iter()
+                .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+        let running_visible = matches!(
+            session.map(|summary| summary.state),
+            Some(WorkflowSessionState::Running)
+        ) || items
+            .iter()
+            .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+
+        if running_visible && pending_visible {
+            Some("session_running_with_backlog")
+        } else if running_visible {
+            Some("session_running")
+        } else if pending_visible {
+            Some("session_queued")
+        } else {
+            match session.map(|summary| summary.state) {
+                Some(WorkflowSessionState::IdleLoaded) => Some("idle_loaded"),
+                Some(WorkflowSessionState::IdleUnloaded) => Some("idle_unloaded"),
+                Some(WorkflowSessionState::Running) | None => None,
+            }
         }
     }?;
 
     Some(reason.to_string())
+}
+
+fn matched_queue_item<'a>(
+    execution_id: &str,
+    session_id: &str,
+    items: &'a [WorkflowSessionQueueItem],
+) -> Option<&'a WorkflowSessionQueueItem> {
+    items
+        .iter()
+        .find(|item| item.run_id.as_deref() == Some(execution_id))
+        .or_else(|| items.iter().find(|item| item.queue_id == execution_id))
+        .or_else(|| {
+            items
+                .iter()
+                .find(|item| item.run_id.as_deref() == Some(session_id))
+        })
+        .or_else(|| items.iter().find(|item| item.queue_id == session_id))
 }
 
 fn create_trace_node_record(node_id: &str, node_type: Option<String>) -> WorkflowTraceNodeRecord {
@@ -1292,6 +1336,7 @@ mod tests {
             &WorkflowTraceEvent::SchedulerSnapshotCaptured {
                 execution_id: "exec-1".to_string(),
                 workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
                 captured_at_ms: 90,
                 session: Some(WorkflowSessionSummary {
                     session_id: "session-1".to_string(),
@@ -1371,6 +1416,7 @@ mod tests {
             &WorkflowTraceEvent::SchedulerSnapshotCaptured {
                 execution_id: "exec-1".to_string(),
                 workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
                 captured_at_ms: 120,
                 session: Some(WorkflowSessionSummary {
                     session_id: "session-1".to_string(),
@@ -1400,7 +1446,7 @@ mod tests {
         assert_eq!(trace.queue.queue_wait_ms, Some(30));
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
-            Some("running")
+            Some("matched_running_item")
         );
         assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));
         assert_eq!(
@@ -1414,6 +1460,55 @@ mod tests {
         assert_eq!(
             trace.runtime.lifecycle_decision_reason.as_deref(),
             Some("runtime_ready")
+        );
+    }
+
+    #[test]
+    fn workflow_trace_store_prefers_matching_queue_items_over_session_backlog() {
+        let store = WorkflowTraceStore::new(10);
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+                execution_id: "exec-target".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                captured_at_ms: 200,
+                session: Some(WorkflowSessionSummary {
+                    session_id: "session-1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                    usage_profile: None,
+                    keep_alive: true,
+                    state: WorkflowSessionState::Running,
+                    queued_runs: 2,
+                    run_count: 3,
+                }),
+                items: vec![
+                    WorkflowSessionQueueItem {
+                        queue_id: "queue-other".to_string(),
+                        run_id: Some("other-run".to_string()),
+                        priority: 10,
+                        status: WorkflowSessionQueueItemStatus::Running,
+                    },
+                    WorkflowSessionQueueItem {
+                        queue_id: "queue-target".to_string(),
+                        run_id: Some("exec-target".to_string()),
+                        priority: 5,
+                        status: WorkflowSessionQueueItemStatus::Pending,
+                    },
+                ],
+                error: None,
+            },
+            200,
+        );
+
+        let trace = snapshot.traces.first().expect("trace summary");
+        assert_eq!(trace.status, WorkflowTraceStatus::Queued);
+        assert_eq!(trace.queue.enqueued_at_ms, Some(200));
+        assert_eq!(trace.queue.dequeued_at_ms, None);
+        assert_eq!(trace.queue.queue_wait_ms, None);
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("matched_pending_item")
         );
     }
 }
