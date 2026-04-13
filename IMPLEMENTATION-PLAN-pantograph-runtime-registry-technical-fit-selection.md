@@ -74,7 +74,8 @@ inputs to this plan rather than future work:
 
 The following Milestone 2 foundation slices have now landed in code:
 
-- app-layer `RuntimeRegistry` module under `src-tauri/src/llm/runtime_registry`
+- backend-owned `pantograph-runtime-registry` crate under
+  `crates/pantograph-runtime-registry`
 - canonical runtime registration and backend-key normalization at the registry
   boundary
 - deterministic runtime state transitions for stopped, warming, ready, busy,
@@ -84,8 +85,9 @@ The following Milestone 2 foundation slices have now landed in code:
   lifecycle, and reservation rejection while stopping
 - Tauri composition-root creation and shared app-state management for the
   registry in `src-tauri/src/main.rs`
-- backend-owned `ServerModeInfo` reconciliation into registry state for active
-  and embedding runtimes
+- Tauri-side `runtime_registry.rs` adapter that translates backend-owned
+  `ServerModeInfo` lifecycle facts into backend-owned registry observations for
+  active and embedding runtimes
 - backend/server command synchronization that refreshes registry state after
   backend switches, runtime starts, runtime stops, external attachment, and
   status reads
@@ -538,6 +540,10 @@ Update during implementation:
   runtime-boundary README updates for `src-tauri/src/llm`,
   `src-tauri/src/workflow`, `crates/inference/src`, and
   `crates/pantograph-embedded-runtime/src`.
+- 2026-04-13: Milestone 2 completed and standards-corrected by moving the
+  runtime-registry state machine out of `src-tauri` into
+  `crates/pantograph-runtime-registry`, leaving Tauri as composition and
+  observation-translation only.
 
 ## Commit Cadence Notes
 
@@ -580,20 +586,27 @@ Update during implementation:
 
 - Runtime producer-convergence hardening outside the runtime-registry plan
 
+### Completed
+
+- Milestone 2 runtime-registry foundation
+
 ### Not Started
 
-- Milestones 2 through 6 of this plan
+- Milestones 3 through 6 of this plan
 
 ### Deviations
 
 - Runtime unification groundwork landed before Milestone 1 documentation freeze.
   This is now recorded explicitly and should not be treated as permission to
   start runtime-registry state/admission code without the boundary work.
+- Runtime-registry foundation first landed under `src-tauri` and was then
+  refactored into a backend crate to comply with architecture standards. This
+  correction is now part of the recorded Milestone 2 outcome.
 
 ### Follow-Ups
 
-- Start runtime-registry foundation only after preserving the Milestone 1
-  boundary decisions
+- Start Milestones 3 through 6 only after preserving the Milestone 2 backend
+  ownership boundary
 - Keep this plan updated as implementation advances rather than allowing status
   drift to build again
 
@@ -601,5 +614,7 @@ Update during implementation:
 
 - Shared identity helper tests and downstream workflow/diagnostics alias tests
   are green for the prerequisite groundwork
-- Runtime-registry implementation verification has not started because the
-  runtime registry does not exist yet
+- `cargo test -p pantograph-runtime-registry` is green for the backend-owned
+  registry crate
+- `cargo check --manifest-path src-tauri/Cargo.toml` is green after replacing
+  the Tauri-owned registry implementation with a thin adapter

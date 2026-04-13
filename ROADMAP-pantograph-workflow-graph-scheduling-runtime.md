@@ -44,11 +44,11 @@ implementation progress in the runtime and diagnostics layers.
 
 ### Next gate before more implementation breadth
 
-- Refresh planning/docs so the repo reflects actual status
 - Finish any remaining runtime producer convergence that still emits divergent
   contracts
-- Freeze runtime-registry ownership and architecture boundaries before starting
-  runtime-registry or scheduler-v2 implementation work
+- Keep roadmap/plan status aligned with implementation reality
+- Build scheduler-v2 and later runtime-policy work on the now-frozen
+  backend-owned runtime-registry boundary
 
 ## Objective
 
@@ -292,8 +292,8 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   runtime producers beyond the current gateway-centric path
 - Full convergence of all runtime producers on one registry-ready capability
   contract family
-- Clear separation between runtime transport concerns and future runtime policy
-  ownership under the planned runtime registry
+- Broader producer coverage over the backend-owned runtime-registry boundary
+  beyond the current gateway-centric observation path
 
 ## Cross-Cutting Delivery Work
 
@@ -313,7 +313,8 @@ that has already landed and the safest next dependency order from here.
 1. Finish runtime adapter unification and remaining producer-convergence work
 2. Complete metrics/trace spine hardening so scheduler and registry policy are
    observable
-3. Freeze runtime-registry ownership/docs and begin scheduler-v2 foundation
+3. Begin scheduler-v2 foundation on top of the completed runtime-registry
+   boundary
 4. Implement parallel demand execution in `node-engine`
 5. Finish the real workflow event contract end-to-end
 6. Implement incremental graph execution

@@ -11,7 +11,7 @@ runtime contracts exposed by `crates/inference`.
 | ----------- | ----------- |
 | `gateway.rs` | Tauri-facing wrapper around `inference::InferenceGateway` that adapts app-state wiring and startup helpers without replacing the backend facade. |
 | `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, and runtime-status queries. |
-| `runtime_registry/` | App-layer runtime registry foundation for residency state, reservation bookkeeping, and future admission/retention policy. |
+| `runtime_registry.rs` | Tauri adapter that translates backend lifecycle facts into the backend-owned runtime-registry crate. |
 | `health_monitor.rs` | App-owned health polling loop for the currently configured runtime connection paths. |
 | `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
 | `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
@@ -40,9 +40,10 @@ Keep `src-tauri/src/llm` as the desktop host adapter and app-composition layer
 for runtime control. The Tauri app creates and manages the shared gateway in
 `src-tauri/src/main.rs`, injects it into command modules, and uses this
 directory for transport mapping, Tauri-specific spawning, and app-owned
-monitoring loops. The planned `RuntimeRegistry` will also be created from the
-app composition root and injected through this layer, but registry policy will
-remain separate from transport concerns and from `crates/inference`.
+monitoring loops. The shared `RuntimeRegistry` is still created from the app
+composition root and injected through this layer, but the registry state
+machine now lives in `crates/pantograph-runtime-registry` so transport code
+does not own runtime policy.
 
 ## Alternatives Rejected
 - Move runtime policy into `gateway.rs`.
@@ -59,14 +60,16 @@ remain separate from transport concerns and from `crates/inference`.
   do not redefine runtime lifecycle truth.
 - Health and recovery flows must operate through shared gateway-backed state,
   not independent adapter-local state machines.
-- Future `RuntimeRegistry` injection may pass through this layer, but runtime
-  residency and admission policy must not be implemented in command handlers.
+- Runtime-registry injection passes through this layer, but runtime residency
+  and admission policy must not be implemented in command handlers or other
+  Tauri transport modules.
 
 ## Revisit Triggers
 - A non-Tauri app root needs the same runtime composition logic and this
   directory stops being a clear desktop-only adapter boundary.
-- `RuntimeRegistry` introduction requires a dedicated submodule or crate for
-  app-owned runtime coordination.
+- Runtime-registry ownership now lives in
+  `crates/pantograph-runtime-registry`; this layer should remain a thin adapter
+  over that crate.
 - Health/recovery behavior grows beyond simple adapter orchestration and needs
   an ADR-level boundary split.
 
@@ -114,5 +117,5 @@ app.manage(gateway);
   backend/runtime contracts, not a separate policy schema.
 - Health/recovery overlays may add host-only fields, but they must not mutate
   the meaning of backend-owned lifecycle facts.
-- When `RuntimeRegistry` is introduced, any new structured outputs from this
-  directory must distinguish raw backend facts from registry policy decisions.
+- This directory must distinguish raw backend facts from registry policy
+  decisions owned by `crates/pantograph-runtime-registry`.
