@@ -59,7 +59,7 @@ impl TauriTaskExecutor {
             .map(|v| v.trim().to_lowercase())
             .filter(|v| !v.is_empty())?;
         match normalized.as_str() {
-            "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+            "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
             "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
             "torch" | "pytorch" => Some("pytorch".to_string()),
             "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
@@ -1375,6 +1375,14 @@ mod tests {
         ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
         VecEventSink, WorkflowEvent, extension_keys,
     };
+
+    #[test]
+    fn canonical_backend_key_accepts_llama_cpp_alias() {
+        assert_eq!(
+            TauriTaskExecutor::canonical_backend_key(Some("llama_cpp")),
+            Some("llamacpp".to_string())
+        );
+    }
 
     #[derive(Clone)]
     struct StubDependencyResolver {

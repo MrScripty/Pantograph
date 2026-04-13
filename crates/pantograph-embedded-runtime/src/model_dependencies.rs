@@ -268,7 +268,7 @@ impl TauriModelDependencyResolver {
             .map(|v| v.trim().to_lowercase())
             .filter(|v| !v.is_empty())?;
         match normalized.as_str() {
-            "llama.cpp" | "llama-cpp" | "llamacpp" => Some("llamacpp".to_string()),
+            "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
             "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
             "torch" | "pytorch" => Some("pytorch".to_string()),
             "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
@@ -866,7 +866,8 @@ impl TauriModelDependencyResolver {
             return Ok(None);
         };
 
-        let execution_descriptor = Self::resolve_execution_descriptor_with_api(api, &record).await?;
+        let execution_descriptor =
+            Self::resolve_execution_descriptor_with_api(api, &record).await?;
 
         Ok(Some(ResolvedPumasModel {
             record,
@@ -2160,6 +2161,10 @@ mod tests {
             Some("onnx-runtime".to_string())
         );
         assert_eq!(
+            TauriModelDependencyResolver::normalized_backend_key(&Some("llama_cpp".to_string())),
+            Some("llamacpp".to_string())
+        );
+        assert_eq!(
             TauriModelDependencyResolver::normalized_backend_key(&Some("torch".to_string())),
             Some("pytorch".to_string())
         );
@@ -2436,22 +2441,28 @@ mod tests {
 
     #[test]
     fn descriptor_lookup_fallback_is_allowed_only_for_missing_descriptor_cases() {
-        assert!(TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
-            &pumas_library::PumasError::ModelNotFound {
-                model_id: "missing".to_string()
-            }
-        ));
-        assert!(TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
-            &pumas_library::PumasError::NotFound {
-                resource: "resolve_model_execution_descriptor".to_string()
-            }
-        ));
-        assert!(!TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
-            &pumas_library::PumasError::Validation {
-                field: "validation_state".to_string(),
-                message: "invalid".to_string()
-            }
-        ));
+        assert!(
+            TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
+                &pumas_library::PumasError::ModelNotFound {
+                    model_id: "missing".to_string()
+                }
+            )
+        );
+        assert!(
+            TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
+                &pumas_library::PumasError::NotFound {
+                    resource: "resolve_model_execution_descriptor".to_string()
+                }
+            )
+        );
+        assert!(
+            !TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
+                &pumas_library::PumasError::Validation {
+                    field: "validation_state".to_string(),
+                    message: "invalid".to_string()
+                }
+            )
+        );
     }
 
     #[test]
