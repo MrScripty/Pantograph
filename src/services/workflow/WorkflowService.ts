@@ -346,6 +346,8 @@ export class WorkflowService {
           runtimeCapabilities: [],
           models: [],
           lastError: null,
+          activeModelTarget: null,
+          embeddingModelTarget: null,
           activeRuntime: null,
           embeddingRuntime: null,
         },

@@ -100,6 +100,8 @@ export interface DiagnosticsRuntimeSnapshot {
   runtimeCapabilities: WorkflowRuntimeCapability[];
   models: WorkflowCapabilityModel[];
   lastError: string | null;
+  activeModelTarget: string | null;
+  embeddingModelTarget: string | null;
   activeRuntime: DiagnosticsRuntimeLifecycleSnapshot | null;
   embeddingRuntime: DiagnosticsRuntimeLifecycleSnapshot | null;
 }

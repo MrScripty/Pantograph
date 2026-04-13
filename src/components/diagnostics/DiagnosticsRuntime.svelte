@@ -112,6 +112,9 @@
             <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
               Instance: {runtime.activeRuntime.runtimeInstanceId ?? 'unreported'}
             </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2 md:col-span-2">
+              Target: {runtime.activeModelTarget ?? 'unreported'}
+            </div>
             <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
               Warmup: {formatDiagnosticsDuration(runtime.activeRuntime.warmupDurationMs ?? null)}
             </div>
@@ -158,6 +161,9 @@
             </div>
             <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
               Instance: {runtime.embeddingRuntime.runtimeInstanceId ?? 'unreported'}
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2 md:col-span-2">
+              Target: {runtime.embeddingModelTarget ?? 'unreported'}
             </div>
             <div class="rounded-lg border border-neutral-800 bg-neutral-900/70 px-3 py-2">
               Warmup: {formatDiagnosticsDuration(runtime.embeddingRuntime.warmupDurationMs ?? null)}

@@ -42,6 +42,8 @@ function createEmptyProjection(): WorkflowDiagnosticsProjection {
       runtimeCapabilities: [],
       models: [],
       lastError: null,
+      activeModelTarget: null,
+      embeddingModelTarget: null,
       activeRuntime: null,
       embeddingRuntime: null,
     },

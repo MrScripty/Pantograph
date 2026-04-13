@@ -153,6 +153,8 @@ fn record_headless_runtime_snapshot(
     trace_execution_id: Option<&str>,
     capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
     trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    active_model_target: Option<String>,
+    embedding_model_target: Option<String>,
     active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     captured_at_ms: u64,
@@ -165,6 +167,8 @@ fn record_headless_runtime_snapshot(
                 captured_at_ms,
                 Some(capabilities),
                 trace_runtime_metrics,
+                active_model_target.clone(),
+                embedding_model_target.clone(),
                 active_runtime_snapshot.clone(),
                 embedding_runtime_snapshot.clone(),
                 None,
@@ -177,6 +181,8 @@ fn record_headless_runtime_snapshot(
                 captured_at_ms,
                 None,
                 trace_runtime_metrics,
+                active_model_target.clone(),
+                embedding_model_target.clone(),
                 active_runtime_snapshot.clone(),
                 embedding_runtime_snapshot.clone(),
                 Some(error.to_envelope_json()),
@@ -187,6 +193,8 @@ fn record_headless_runtime_snapshot(
                 Some(workflow_id),
                 Some(capabilities),
                 None,
+                active_model_target,
+                embedding_model_target,
                 active_runtime_snapshot,
                 embedding_runtime_snapshot,
                 captured_at_ms,
@@ -197,6 +205,8 @@ fn record_headless_runtime_snapshot(
                 Some(workflow_id),
                 None,
                 Some(error.to_envelope_json()),
+                active_model_target,
+                embedding_model_target,
                 active_runtime_snapshot,
                 embedding_runtime_snapshot,
                 captured_at_ms,
@@ -266,6 +276,8 @@ fn workflow_diagnostics_snapshot_projection(
     >,
     capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
     runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
+    active_model_target: Option<String>,
+    embedding_model_target: Option<String>,
     active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     captured_at_ms: u64,
@@ -307,12 +319,23 @@ fn workflow_diagnostics_snapshot_projection(
                 ))
             }),
             runtime_trace_metrics,
+            active_model_target,
+            embedding_model_target,
             active_runtime_snapshot,
             embedding_runtime_snapshot,
             captured_at_ms,
         );
     } else {
-        diagnostics_store.update_runtime_snapshot(None, None, None, None, None, captured_at_ms);
+        diagnostics_store.update_runtime_snapshot(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            captured_at_ms,
+        );
     }
 
     diagnostics_store.snapshot()
@@ -586,6 +609,7 @@ pub async fn workflow_get_diagnostics_snapshot(
             .as_deref(),
         )
     };
+    let mode_info = gateway.mode_info().await;
     let active_runtime_snapshot = Some(gateway.runtime_lifecycle_snapshot().await);
     let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
 
@@ -597,6 +621,8 @@ pub async fn workflow_get_diagnostics_snapshot(
         scheduler_snapshot_result,
         capabilities_result,
         runtime_trace_metrics,
+        mode_info.active_model_target,
+        mode_info.embedding_model_target,
         active_runtime_snapshot,
         embedding_runtime_snapshot,
         captured_at_ms,
@@ -781,6 +807,8 @@ mod tests {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
             },
+            Some("llava:13b".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             120,
@@ -809,6 +837,15 @@ mod tests {
             trace.runtime.lifecycle_decision_reason.as_deref(),
             Some("runtime_ready")
         );
+        let projection = diagnostics_store.snapshot();
+        assert_eq!(
+            projection.runtime.active_model_target.as_deref(),
+            Some("llava:13b")
+        );
+        assert_eq!(
+            projection.runtime.embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
     }
 
     #[test]
@@ -821,6 +858,8 @@ mod tests {
             None,
             Ok(capability_response()),
             WorkflowTraceRuntimeMetrics::default(),
+            Some("llava:7b".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             120,
@@ -828,6 +867,14 @@ mod tests {
 
         let projection = diagnostics_store.snapshot();
         assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(
+            projection.runtime.active_model_target.as_deref(),
+            Some("llava:7b")
+        );
+        assert_eq!(
+            projection.runtime.embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
         let trace_snapshot = diagnostics_store
             .trace_snapshot(WorkflowTraceSnapshotRequest {
                 execution_id: None,
@@ -881,6 +928,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
+            Some("llava:34b".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             130,
@@ -1106,6 +1155,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
+            Some("llava:34b".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             120,
@@ -1156,6 +1207,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
             },
+            Some("llava:34b".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             120,
@@ -1201,6 +1254,8 @@ mod tests {
             WorkflowTraceRuntimeMetrics::default(),
             None,
             None,
+            None,
+            None,
             120,
         );
 
@@ -1212,6 +1267,8 @@ mod tests {
             None,
             None,
             WorkflowTraceRuntimeMetrics::default(),
+            None,
+            None,
             None,
             None,
             130,
@@ -1257,6 +1314,8 @@ mod tests {
                 runtime_reused: Some(true),
                 lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
+            Some("llava:34b".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             120,

@@ -163,6 +163,10 @@ pub enum WorkflowEvent {
         capabilities: Option<WorkflowCapabilitiesResponse>,
         /// Backend-owned runtime lifecycle metrics captured alongside the snapshot
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        /// Backend-owned active runtime model target at capture time
+        active_model_target: Option<String>,
+        /// Backend-owned embedding runtime model target at capture time
+        embedding_model_target: Option<String>,
         /// Backend-owned lifecycle snapshot for the active runtime at capture time
         active_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
         /// Backend-owned lifecycle snapshot for the dedicated embedding runtime when available
@@ -327,6 +331,8 @@ impl WorkflowEvent {
         captured_at_ms: u64,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        active_model_target: Option<String>,
+        embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         error: Option<String>,
@@ -337,6 +343,8 @@ impl WorkflowEvent {
             captured_at_ms,
             capabilities,
             trace_runtime_metrics,
+            active_model_target,
+            embedding_model_target,
             active_runtime_snapshot: active_runtime_snapshot
                 .as_ref()
                 .map(DiagnosticsRuntimeLifecycleSnapshot::from),
@@ -421,6 +429,8 @@ mod tests {
             1234,
             None,
             WorkflowTraceRuntimeMetrics::default(),
+            Some("/models/main.gguf".to_string()),
+            Some("/models/embed.gguf".to_string()),
             None,
             None,
             Some("capability unavailable".to_string()),
@@ -429,6 +439,8 @@ mod tests {
         assert!(json.contains("RuntimeSnapshot"));
         assert!(json.contains("workflow-123"));
         assert!(json.contains("1234"));
+        assert!(json.contains("/models/main.gguf"));
+        assert!(json.contains("/models/embed.gguf"));
         assert!(json.contains("capability unavailable"));
     }
 

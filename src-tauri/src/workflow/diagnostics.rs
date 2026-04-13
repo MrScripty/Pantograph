@@ -208,6 +208,10 @@ pub struct DiagnosticsRuntimeSnapshot {
     #[serde(default)]
     pub last_error: Option<String>,
     #[serde(default)]
+    pub active_model_target: Option<String>,
+    #[serde(default)]
+    pub embedding_model_target: Option<String>,
+    #[serde(default)]
     pub active_runtime: Option<DiagnosticsRuntimeLifecycleSnapshot>,
     #[serde(default)]
     pub embedding_runtime: Option<DiagnosticsRuntimeLifecycleSnapshot>,
@@ -301,6 +305,8 @@ impl WorkflowDiagnosticsState {
                 runtime_capabilities: Vec::new(),
                 models: Vec::new(),
                 last_error: None,
+                active_model_target: None,
+                embedding_model_target: None,
                 active_runtime: None,
                 embedding_runtime: None,
             },
@@ -428,6 +434,8 @@ impl WorkflowDiagnosticsStore {
         captured_at_ms: u64,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        active_model_target: Option<String>,
+        embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         error: Option<String>,
@@ -438,6 +446,8 @@ impl WorkflowDiagnosticsStore {
             captured_at_ms,
             capabilities,
             trace_runtime_metrics,
+            active_model_target,
+            embedding_model_target,
             active_runtime_snapshot,
             embedding_runtime_snapshot,
             error,
@@ -472,6 +482,8 @@ impl WorkflowDiagnosticsStore {
         workflow_id: Option<String>,
         capabilities: Option<WorkflowCapabilitiesResponse>,
         last_error: Option<String>,
+        active_model_target: Option<String>,
+        embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         captured_at_ms: u64,
@@ -499,6 +511,8 @@ impl WorkflowDiagnosticsStore {
                     .map(|value| value.models.clone())
                     .unwrap_or_default(),
                 last_error,
+                active_model_target,
+                embedding_model_target,
                 active_runtime: active_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from),
@@ -887,6 +901,8 @@ fn apply_runtime_event(
     if let WorkflowEvent::RuntimeSnapshot {
         workflow_id,
         capabilities,
+        active_model_target,
+        embedding_model_target,
         active_runtime_snapshot,
         embedding_runtime_snapshot,
         error,
@@ -911,6 +927,8 @@ fn apply_runtime_event(
                 .map(|value| value.models.clone())
                 .unwrap_or_default(),
             last_error: error.clone(),
+            active_model_target: active_model_target.clone(),
+            embedding_model_target: embedding_model_target.clone(),
             active_runtime: active_runtime_snapshot.clone(),
             embedding_runtime: embedding_runtime_snapshot.clone(),
         };
@@ -1192,6 +1210,8 @@ mod tests {
                 runtime_capabilities: Vec::new(),
             }),
             None,
+            Some("/models/main.gguf".to_string()),
+            Some("/models/embed.gguf".to_string()),
             Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-cpp-1".to_string()),
@@ -1244,6 +1264,14 @@ mod tests {
         assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-runtime"));
         assert_eq!(snapshot.runtime.max_input_bindings, Some(4));
         assert_eq!(
+            snapshot.runtime.active_model_target.as_deref(),
+            Some("/models/main.gguf")
+        );
+        assert_eq!(
+            snapshot.runtime.embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+        assert_eq!(
             snapshot
                 .runtime
                 .active_runtime
@@ -1289,6 +1317,8 @@ mod tests {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
             },
+            Some("/models/main.gguf".to_string()),
+            Some("/models/embed.gguf".to_string()),
             Some(inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("llama.cpp".to_string()),
                 runtime_instance_id: Some("llama-cpp-1".to_string()),
@@ -1350,6 +1380,20 @@ mod tests {
                 .get("exec-runtime")
                 .and_then(|run| run.runtime.model_target.as_deref()),
             Some("/models/main.gguf")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .active_model_target
+                .as_deref(),
+            Some("/models/main.gguf")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .embedding_model_target
+                .as_deref(),
+            Some("/models/embed.gguf")
         );
         assert_eq!(
             snapshot
@@ -1479,7 +1523,16 @@ mod tests {
             },
             1_000,
         );
-        store.update_runtime_snapshot(Some("wf-1".to_string()), None, None, None, None, 2_000);
+        store.update_runtime_snapshot(
+            Some("wf-1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            2_000,
+        );
         store.update_scheduler_snapshot(
             Some("wf-1".to_string()),
             Some("exec-1".to_string()),

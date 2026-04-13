@@ -360,6 +360,8 @@ export interface WorkflowEventData {
     execution_id?: string;
     captured_at_ms: number;
     capabilities?: WorkflowCapabilitiesResponse | null;
+    active_model_target?: string | null;
+    embedding_model_target?: string | null;
     active_runtime_snapshot?: RuntimeLifecycleSnapshot | null;
     embedding_runtime_snapshot?: RuntimeLifecycleSnapshot | null;
     error?: string | null;
