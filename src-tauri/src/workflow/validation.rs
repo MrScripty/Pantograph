@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
+use super::effective_definition::{EffectiveDefinitionError, effective_node_definition};
 use super::registry::NodeRegistry;
 use super::types::{PortDataType, WorkflowGraph};
 
@@ -21,9 +21,7 @@ pub enum ValidationError {
     #[error("Node '{node_id}' has unconnected required input '{port}'")]
     UnconnectedInput { node_id: String, port: String },
 
-    #[error(
-        "Type mismatch on edge '{edge_id}': {source_type:?} cannot connect to {target_type:?}"
-    )]
+    #[error("Type mismatch on edge '{edge_id}': {source_type:?} cannot connect to {target_type:?}")]
     TypeMismatch {
         edge_id: String,
         source_type: PortDataType,
@@ -186,19 +184,21 @@ impl<'a> WorkflowValidator<'a> {
                 .find_node(&edge.target)
                 .ok_or_else(|| ValidationError::NodeNotFound(edge.target.clone()))?;
 
-            let source_def =
-                effective_node_definition(source_node, self.registry).map_err(|error| match error {
+            let source_def = effective_node_definition(source_node, self.registry).map_err(
+                |error| match error {
                     EffectiveDefinitionError::UnknownNodeType(node_type) => {
                         ValidationError::UnknownNodeType(node_type)
                     }
-                })?;
+                },
+            )?;
 
-            let target_def =
-                effective_node_definition(target_node, self.registry).map_err(|error| match error {
+            let target_def = effective_node_definition(target_node, self.registry).map_err(
+                |error| match error {
                     EffectiveDefinitionError::UnknownNodeType(node_type) => {
                         ValidationError::UnknownNodeType(node_type)
                     }
-                })?;
+                },
+            )?;
 
             let source_port = source_def
                 .outputs

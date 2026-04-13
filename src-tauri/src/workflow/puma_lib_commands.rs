@@ -34,7 +34,8 @@ pub async fn hydrate_puma_lib_node(
     )
     .await?;
 
-    let mut node_data = build_hydrated_node_data(&option, selected_binding_ids.unwrap_or_default())?;
+    let mut node_data =
+        build_hydrated_node_data(&option, selected_binding_ids.unwrap_or_default())?;
 
     if resolve_requirements.unwrap_or(false) {
         hydrate_dependency_requirements(&resolver, &mut node_data).await?;
@@ -374,7 +375,10 @@ mod tests {
 
         assert_eq!(node_data["modelPath"], json!("/models/tiny-sd-turbo"));
         assert_eq!(node_data["modelName"], json!("Tiny SD Turbo"));
-        assert_eq!(node_data["model_id"], json!("diffusion/cc-nms/tiny-sd-turbo"));
+        assert_eq!(
+            node_data["model_id"],
+            json!("diffusion/cc-nms/tiny-sd-turbo")
+        );
         assert_eq!(node_data["backend_key"], json!("onnx-runtime"));
         assert_eq!(node_data["recommended_backend"], json!("diffusers"));
         assert_eq!(node_data["selected_binding_ids"], json!(["binding-a"]));
@@ -411,6 +415,9 @@ mod tests {
             "binding-b".to_string(),
         ]);
 
-        assert_eq!(bindings, vec!["binding-a".to_string(), "binding-b".to_string()]);
+        assert_eq!(
+            bindings,
+            vec!["binding-a".to_string(), "binding-b".to_string()]
+        );
     }
 }

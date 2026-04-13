@@ -59,10 +59,8 @@ pub async fn run_dependency_environment_action(
             let mut requirements = resolver
                 .resolve_requirements_request(resolver_request)
                 .await?;
-            let selected_binding_ids = effective_selected_binding_ids(
-                &request.selected_binding_ids,
-                Some(&requirements),
-            );
+            let selected_binding_ids =
+                effective_selected_binding_ids(&request.selected_binding_ids, Some(&requirements));
             requirements.selected_binding_ids = selected_binding_ids.clone();
             json!({
                 "mode": mode,
@@ -108,14 +106,11 @@ fn build_model_dependency_request(
     }
 
     let requirements = request.dependency_requirements.as_ref();
-    let platform_context = request
-        .platform_context
-        .clone()
-        .or_else(|| {
-            requirements
-                .map(|value| value.platform_key.as_str())
-                .and_then(fallback_platform_context_from_key)
-        });
+    let platform_context = request.platform_context.clone().or_else(|| {
+        requirements
+            .map(|value| value.platform_key.as_str())
+            .and_then(fallback_platform_context_from_key)
+    });
     let selected_binding_ids =
         effective_selected_binding_ids(&request.selected_binding_ids, requirements);
 
@@ -138,8 +133,10 @@ fn build_dependency_environment_node_data(
     mode: &str,
     mut status: node_engine::ModelDependencyStatus,
 ) -> Result<Value, String> {
-    let selected_binding_ids =
-        effective_selected_binding_ids(&status.requirements.selected_binding_ids, Some(&status.requirements));
+    let selected_binding_ids = effective_selected_binding_ids(
+        &status.requirements.selected_binding_ids,
+        Some(&status.requirements),
+    );
     status.requirements.selected_binding_ids = selected_binding_ids.clone();
     let environment_ref = resolve_environment_ref(&status)?;
 

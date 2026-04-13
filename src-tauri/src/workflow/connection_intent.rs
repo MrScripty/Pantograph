@@ -8,7 +8,7 @@ use std::collections::{HashSet, VecDeque};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
+use super::effective_definition::{EffectiveDefinitionError, effective_node_definition};
 use super::registry::NodeRegistry;
 use super::types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
@@ -516,11 +516,13 @@ mod tests {
 
         assert!(!response.graph_revision.is_empty());
         assert!(response.revision_matches);
-        assert!(response
-            .compatible_nodes
-            .iter()
-            .any(|node| node.node_id == "target"
-                && node.anchors.iter().any(|port| port.port_id == "text")));
+        assert!(
+            response
+                .compatible_nodes
+                .iter()
+                .any(|node| node.node_id == "target"
+                    && node.anchors.iter().any(|port| port.port_id == "text"))
+        );
         assert!(response.insertable_node_types.iter().any(|node| {
             node.node_type == "llm-inference"
                 && node.category == NodeCategory::Processing
@@ -668,7 +670,10 @@ mod tests {
             },
         );
 
-        assert!(result.is_ok(), "dynamic expand input should accept number output");
+        assert!(
+            result.is_ok(),
+            "dynamic expand input should accept number output"
+        );
     }
 
     #[test]
