@@ -405,6 +405,9 @@ Update during implementation:
 - 2026-04-13: Thirty-first implementation slice added headless diagnostics
   clear-history helper coverage so the adapter reader path proves it clears run
   history while preserving backend-owned scheduler and runtime snapshots.
+- 2026-04-13: Thirty-second implementation slice added direct Tauri channel
+  transport coverage for workflow event emission so the adapter `send()` path
+  is exercised with a real IPC channel instead of only translation helpers.
 
 ## Commit Cadence Notes
 
@@ -520,6 +523,10 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless
   clear-history reader path is exercised directly and keeps scheduler/runtime
   snapshots while dropping retained run history
+- Thirty-second implementation slice added in
+  `src-tauri/src/workflow/event_adapter.rs` so workflow event transport is
+  covered through the real `tauri::ipc::Channel` send path instead of only the
+  lower-level translation helper
 
 ### Deviations
 
