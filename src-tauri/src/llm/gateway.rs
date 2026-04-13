@@ -1,18 +1,19 @@
 //! Inference Gateway - Tauri wrapper around inference::InferenceGateway
 //!
-//! This module wraps the core `inference::InferenceGateway` and adds
-//! Tauri-specific embedding server management for parallel embedding modes.
-//! All backend lifecycle operations delegate to the crate gateway which
-//! uses the `ProcessSpawner` abstraction.
+//! This module wraps the core `inference::InferenceGateway` and composes the
+//! inference-owned dedicated embedding runtime for parallel embedding modes.
+//! All runtime lifecycle operations delegate to backend-owned Rust types.
 
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use inference::BackendConfig;
+use inference::config::DeviceInfo as InferenceDeviceInfo;
 use inference::process::ProcessSpawner;
+use inference::{
+    BackendConfig, EmbeddingMemoryMode as InferenceEmbeddingMode, LlamaCppEmbeddingRuntime,
+};
 
-use super::embedding_server::EmbeddingServer;
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 
 /// Error types for gateway operations
@@ -21,8 +22,8 @@ pub enum GatewayError {
     #[error("{0}")]
     Inner(#[from] inference::GatewayError),
 
-    #[error("Embedding server error: {0}")]
-    EmbeddingServer(String),
+    #[error("Embedding runtime error: {0}")]
+    EmbeddingRuntime(String),
 }
 
 /// Tauri inference gateway wrapping the core inference gateway.
@@ -32,10 +33,30 @@ pub enum GatewayError {
 pub struct InferenceGateway {
     /// The core inference gateway (Arc-wrapped for sharing with CoreTaskExecutor)
     inner: Arc<inference::InferenceGateway>,
-    /// Dedicated embedding server for parallel modes (CPU+GPU or GPU+GPU)
-    embedding_server: Arc<RwLock<Option<EmbeddingServer>>>,
-    /// Process spawner (shared with inner gateway and embedding server)
+    /// Dedicated embedding runtime for parallel modes (CPU+GPU or GPU+GPU)
+    embedding_server: Arc<RwLock<Option<LlamaCppEmbeddingRuntime>>>,
+    /// Process spawner (shared with inner gateway and embedding runtime)
     spawner: Arc<dyn ProcessSpawner>,
+}
+
+fn to_inference_embedding_mode(mode: &EmbeddingMemoryMode) -> InferenceEmbeddingMode {
+    match mode {
+        EmbeddingMemoryMode::CpuParallel => InferenceEmbeddingMode::CpuParallel,
+        EmbeddingMemoryMode::GpuParallel => InferenceEmbeddingMode::GpuParallel,
+        EmbeddingMemoryMode::Sequential => InferenceEmbeddingMode::Sequential,
+    }
+}
+
+fn to_inference_devices(devices: &[DeviceInfo]) -> Vec<InferenceDeviceInfo> {
+    devices
+        .iter()
+        .map(|device| InferenceDeviceInfo {
+            id: device.id.clone(),
+            name: device.name.clone(),
+            total_vram_mb: device.total_vram_mb,
+            free_vram_mb: device.free_vram_mb,
+        })
+        .collect()
 }
 
 impl InferenceGateway {
@@ -81,7 +102,7 @@ impl InferenceGateway {
         self.inner.stop().await;
     }
 
-    /// Stop the dedicated embedding server (if running).
+    /// Stop the dedicated embedding runtime (if running).
     pub async fn stop_embedding_server(&self) {
         let mut guard = self.embedding_server.write().await;
         if let Some(ref mut server) = *guard {
@@ -90,15 +111,15 @@ impl InferenceGateway {
         *guard = None;
     }
 
-    /// Stop both the main backend and embedding server.
+    /// Stop both the main backend and embedding runtime.
     pub async fn stop_all(&self) {
         self.stop().await;
         self.stop_embedding_server().await;
     }
 
-    // ─── EMBEDDING SERVER MANAGEMENT ───────────────────────────────────
+    // ─── EMBEDDING RUNTIME MANAGEMENT ──────────────────────────────────
 
-    /// Start the dedicated embedding server for parallel modes.
+    /// Start the dedicated embedding runtime for parallel modes.
     ///
     /// This starts a separate llama.cpp instance for embedding operations,
     /// allowing vector search to work while the main LLM is loaded.
@@ -108,45 +129,44 @@ impl InferenceGateway {
         mode: EmbeddingMemoryMode,
         devices: &[DeviceInfo],
     ) -> Result<(), GatewayError> {
-        // Sequential mode doesn't need a dedicated server
         if mode == EmbeddingMemoryMode::Sequential {
-            log::info!("Sequential embedding mode: no dedicated server needed");
+            log::info!("Sequential embedding mode: no dedicated embedding runtime needed");
             return Ok(());
         }
+
+        let inference_mode = to_inference_embedding_mode(&mode);
+        let inference_devices = to_inference_devices(devices);
 
         {
             let mut guard = self.embedding_server.write().await;
             if let Some(server) = guard.as_mut() {
-                if server.matches_runtime(model_path, mode.clone()) {
+                if server.matches_runtime(model_path, inference_mode.clone()) {
                     server.mark_runtime_reused();
-                    log::info!("Reusing dedicated embedding server");
+                    log::info!("Reusing dedicated embedding runtime");
                     return Ok(());
                 }
             }
         }
 
-        // Create or restart the dedicated embedding server with backend-owned
-        // lifecycle tracking.
-        let mut server = EmbeddingServer::new(mode.clone());
+        let mut server = LlamaCppEmbeddingRuntime::new(inference_mode);
         server
-            .start(model_path, &self.spawner, devices)
+            .start(model_path, &self.spawner, &inference_devices)
             .await
-            .map_err(GatewayError::EmbeddingServer)?;
+            .map_err(GatewayError::EmbeddingRuntime)?;
         let mut guard = self.embedding_server.write().await;
         *guard = Some(server);
 
-        log::info!("Dedicated embedding server started");
+        log::info!("Dedicated embedding runtime started");
         Ok(())
     }
 
-    /// Get the URL of the embedding server (if available).
+    /// Get the URL of the dedicated embedding runtime (if available).
     ///
     /// Returns:
     /// - In parallel modes: URL of the dedicated embedding server
     /// - In sequential mode: None (use main gateway with mode switching)
     /// - If main backend is in embedding mode: main backend URL
     pub async fn embedding_url(&self) -> Option<String> {
-        // First check dedicated embedding server
         {
             let server = self.embedding_server.read().await;
             if let Some(ref srv) = *server {
@@ -156,7 +176,6 @@ impl InferenceGateway {
             }
         }
 
-        // Fall back to main server if in embedding mode
         if self.is_embedding_mode().await {
             return self.base_url().await;
         }
@@ -164,7 +183,7 @@ impl InferenceGateway {
         None
     }
 
-    /// Check if the embedding server is ready.
+    /// Check if the dedicated embedding runtime is ready.
     pub async fn is_embedding_server_ready(&self) -> bool {
         let server = self.embedding_server.read().await;
         if let Some(ref srv) = *server {
@@ -221,11 +240,11 @@ impl InferenceGateway {
             .read()
             .await
             .as_ref()
-            .map(EmbeddingServer::runtime_lifecycle_snapshot)
+            .map(LlamaCppEmbeddingRuntime::runtime_lifecycle_snapshot)
     }
 
     #[cfg(test)]
-    pub(crate) async fn set_test_embedding_server(&self, server: EmbeddingServer) {
+    pub(crate) async fn set_test_embedding_server(&self, server: LlamaCppEmbeddingRuntime) {
         let mut guard = self.embedding_server.write().await;
         *guard = Some(server);
     }
@@ -309,7 +328,7 @@ mod tests {
     async fn start_embedding_server_reuses_matching_runtime() {
         let gateway = InferenceGateway::new(Arc::new(MockProcessSpawner));
 
-        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+        let mut server = LlamaCppEmbeddingRuntime::new(InferenceEmbeddingMode::CpuParallel);
         server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
 
         {

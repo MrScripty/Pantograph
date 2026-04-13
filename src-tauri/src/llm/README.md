@@ -8,7 +8,6 @@ LLM gateway, process management, and Tauri command handlers for model and server
 | ----------- | ----------- |
 | backend/ | Subdirectory containing related implementation details. |
 | commands/ | Subdirectory containing related implementation details. |
-| embedding_server.rs | Source file used by modules in this directory. |
 | gateway.rs | Source file used by modules in this directory. |
 | health_monitor.rs | Source file used by modules in this directory. |
 | mod.rs | Source file used by modules in this directory. |
@@ -22,10 +21,10 @@ LLM gateway, process management, and Tauri command handlers for model and server
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.
 - Maintain predictable naming so callers can discover related modules quickly.
-- Keep sidecar lifecycle ownership in Rust adapters. The dedicated embedding
-  sidecar now records backend-owned runtime lifecycle snapshots in
-  `embedding_server.rs`; GUI consumers may read those facts but must not infer
-  warmup/reuse decisions locally.
+- Keep Tauri focused on composition and command adaptation. The dedicated
+  embedding runtime lifecycle now lives in `crates/inference`; GUI consumers
+  may read those backend-owned facts but must not infer warmup/reuse decisions
+  locally.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.

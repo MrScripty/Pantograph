@@ -1,4 +1,4 @@
-//! Embedding server and memory mode commands.
+//! Embedding runtime and memory mode commands.
 
 use super::shared::SharedAppConfig;
 use crate::config::EmbeddingMemoryMode;
@@ -61,13 +61,13 @@ pub async fn set_embedding_memory_mode(
     Ok(())
 }
 
-/// Check if the embedding server is ready
+/// Check if the dedicated embedding runtime is ready
 #[command]
 pub async fn is_embedding_server_ready(gateway: State<'_, SharedGateway>) -> Result<bool, String> {
     Ok(gateway.is_embedding_server_ready().await)
 }
 
-/// Get the embedding server URL if available
+/// Get the dedicated embedding runtime URL if available
 #[command]
 pub async fn get_embedding_server_url(
     gateway: State<'_, SharedGateway>,
@@ -75,7 +75,7 @@ pub async fn get_embedding_server_url(
     Ok(gateway.embedding_url().await)
 }
 
-/// Get the backend-owned lifecycle snapshot for the dedicated embedding server.
+/// Get the backend-owned lifecycle snapshot for the dedicated embedding runtime.
 #[command]
 pub async fn get_embedding_runtime_lifecycle_snapshot(
     gateway: State<'_, SharedGateway>,
@@ -93,8 +93,8 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::embedding_runtime_lifecycle_snapshot;
-    use crate::config::EmbeddingMemoryMode;
-    use crate::llm::{InferenceGateway, SharedGateway, embedding_server::EmbeddingServer};
+    use crate::llm::{InferenceGateway, SharedGateway};
+    use inference::{EmbeddingMemoryMode as InferenceEmbeddingMode, LlamaCppEmbeddingRuntime};
 
     struct MockProcessHandle;
 
@@ -132,7 +132,7 @@ mod tests {
     #[tokio::test]
     async fn embedding_runtime_lifecycle_snapshot_reads_backend_owned_snapshot() {
         let gateway: SharedGateway = Arc::new(InferenceGateway::new(Arc::new(MockProcessSpawner)));
-        let mut server = EmbeddingServer::new(EmbeddingMemoryMode::CpuParallel);
+        let mut server = LlamaCppEmbeddingRuntime::new(InferenceEmbeddingMode::CpuParallel);
         server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
         server.set_test_runtime_lifecycle_snapshot(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),

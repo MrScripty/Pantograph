@@ -1,7 +1,6 @@
 // Local Tauri-specific modules
 pub mod backend;
 pub mod commands;
-pub mod embedding_server;
 pub mod gateway;
 pub mod health_monitor;
 pub mod port_manager;

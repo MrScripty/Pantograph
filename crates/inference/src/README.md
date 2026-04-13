@@ -13,6 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete engine adapters such as llama.cpp, Ollama, Candle, and PyTorch. |
+| `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle and reuse management for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend and forwards requests through the frozen contracts. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
@@ -66,6 +67,9 @@ completion variant.
 - Matching llama.cpp sidecar starts should be reused when the requested mode,
   model, multimodal projection, and device config already match the live
   runtime so lifecycle metrics stay backend-owned and authoritative.
+- The dedicated parallel embedding runtime is owned by this crate rather than
+  by host adapters so lifecycle metrics and reuse decisions stay in one Rust
+  backend boundary.
 
 ## Revisit Triggers
 
@@ -77,7 +81,8 @@ completion variant.
 
 ## Dependencies
 
-**Internal:** `backend`, `gateway`, `process`, `types`, `server`, `kv_cache`.
+**Internal:** `backend`, `embedding_runtime`, `gateway`, `process`, `types`,
+`server`, `kv_cache`.
 **External:** `tokio`, `serde`, `reqwest`, `async-trait`, and feature-gated
 runtime crates such as Candle or PyO3-backed components.
 

@@ -28,6 +28,7 @@ pub mod backend;
 pub mod config;
 pub mod constants;
 pub mod device;
+pub mod embedding_runtime;
 pub mod gateway;
 pub mod kv_cache;
 pub mod managed_runtime;
@@ -55,6 +56,7 @@ pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::DeviceBackend;
+pub use embedding_runtime::LlamaCppEmbeddingRuntime;
 pub use gateway::{GatewayError, InferenceGateway, RuntimeLifecycleSnapshot, SharedGateway};
 pub use managed_runtime::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
