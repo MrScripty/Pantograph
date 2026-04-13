@@ -3,6 +3,7 @@
 //! This crate is intentionally separate from headless API bindings so URL-based
 //! HTTP integration remains an explicit opt-in for modular GUI embedding.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,6 +42,8 @@ pub struct FrontendHttpWorkflowHost {
     max_output_targets: usize,
     max_value_bytes: usize,
     backend_name: String,
+    backend_runtime_id: String,
+    backend_keys: Vec<String>,
     pumas_api: Option<Arc<pumas_library::PumasApi>>,
     http_client: reqwest::Client,
 }
@@ -72,13 +75,18 @@ impl FrontendHttpWorkflowHost {
         backend_name: String,
     ) -> Result<Self, FrontendHttpWorkflowHostError> {
         let base_url = normalize_base_url(base_url)?;
+        let backend_name = backend_name.trim().to_string();
+        let backend_runtime_id = normalize_backend_runtime_id(&backend_name);
+        let backend_keys = backend_key_aliases(&backend_name, &backend_runtime_id);
         Ok(Self {
             base_url,
             workflow_roots,
             max_input_bindings,
             max_output_targets,
             max_value_bytes,
-            backend_name: backend_name.trim().to_string(),
+            backend_name,
+            backend_runtime_id,
+            backend_keys,
             pumas_api,
             http_client: reqwest::Client::new(),
         })
@@ -104,7 +112,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
     }
 
     async fn default_backend_name(&self) -> Result<String, WorkflowServiceError> {
-        Ok(self.backend_name.clone())
+        Ok(self.backend_runtime_id.clone())
     }
 
     async fn model_metadata(
@@ -144,7 +152,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
         &self,
     ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
         Ok(vec![WorkflowRuntimeCapability {
-            runtime_id: self.backend_name.to_ascii_lowercase().replace(' ', "_"),
+            runtime_id: self.backend_runtime_id.clone(),
             display_name: self.backend_name.clone(),
             install_state: WorkflowRuntimeInstallState::Installed,
             available: true,
@@ -154,7 +162,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             source_kind: WorkflowRuntimeSourceKind::Host,
             selected: true,
             supports_external_connection: false,
-            backend_keys: vec![self.backend_name.clone()],
+            backend_keys: self.backend_keys.clone(),
             missing_files: Vec::new(),
             unavailable_reason: None,
         }])
@@ -319,6 +327,45 @@ fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkfl
     Ok(parsed.as_str().trim_end_matches('/').to_string())
 }
 
+fn normalize_backend_runtime_id(backend_name: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+
+    for ch in backend_name.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch.to_ascii_lowercase());
+            last_was_separator = false;
+        } else if !last_was_separator {
+            normalized.push('_');
+            last_was_separator = true;
+        }
+    }
+
+    let normalized = normalized.trim_matches('_').to_string();
+    if normalized.is_empty() {
+        DEFAULT_BACKEND_NAME.replace('-', "_")
+    } else {
+        normalized
+    }
+}
+
+fn backend_key_aliases(backend_name: &str, backend_runtime_id: &str) -> Vec<String> {
+    let mut aliases = BTreeSet::new();
+    let trimmed = backend_name.trim();
+
+    aliases.insert(backend_runtime_id.to_string());
+    if !trimmed.is_empty() {
+        aliases.insert(trimmed.to_string());
+    }
+
+    let collapsed = backend_runtime_id.replace('_', "");
+    if !collapsed.is_empty() {
+        aliases.insert(collapsed);
+    }
+
+    aliases.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,6 +402,29 @@ mod tests {
         let normalized =
             normalize_base_url("http://127.0.0.1:8080/".to_string()).expect("normalize");
         assert_eq!(normalized, "http://127.0.0.1:8080");
+    }
+
+    #[test]
+    fn normalize_backend_runtime_id_stabilizes_backend_aliases() {
+        assert_eq!(normalize_backend_runtime_id(" llama.cpp "), "llama_cpp");
+        assert_eq!(
+            normalize_backend_runtime_id("OpenAI Compatible"),
+            "openai_compatible"
+        );
+        assert_eq!(normalize_backend_runtime_id(""), "openai_compatible");
+    }
+
+    #[test]
+    fn backend_key_aliases_include_stable_and_display_forms() {
+        let aliases = backend_key_aliases("llama.cpp", "llama_cpp");
+        assert_eq!(
+            aliases,
+            vec![
+                "llama.cpp".to_string(),
+                "llama_cpp".to_string(),
+                "llamacpp".to_string()
+            ]
+        );
     }
 
     fn create_temp_workflow_root_with_output(workflow_id: &str) -> std::path::PathBuf {
@@ -570,6 +640,43 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("expected workflow error envelope JSON")
+        );
+    }
+
+    #[tokio::test]
+    async fn frontend_http_host_reports_stable_runtime_identity() {
+        let host = FrontendHttpWorkflowHost::new(
+            "http://127.0.0.1:8080".to_string(),
+            None,
+            Vec::new(),
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
+            "llama.cpp".to_string(),
+        )
+        .expect("build frontend host");
+
+        assert_eq!(
+            host.default_backend_name().await.expect("default backend"),
+            "llama_cpp"
+        );
+
+        let runtime = host
+            .runtime_capabilities()
+            .await
+            .expect("runtime capabilities");
+        assert_eq!(runtime.len(), 1);
+        assert_eq!(runtime[0].runtime_id, "llama_cpp");
+        assert_eq!(runtime[0].display_name, "llama.cpp");
+        assert_eq!(runtime[0].source_kind, WorkflowRuntimeSourceKind::Host);
+        assert!(runtime[0].selected);
+        assert_eq!(
+            runtime[0].backend_keys,
+            vec![
+                "llama.cpp".to_string(),
+                "llama_cpp".to_string(),
+                "llamacpp".to_string()
+            ]
         );
     }
 
