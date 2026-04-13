@@ -57,7 +57,10 @@ pub use backend::PyTorchBackend;
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::DeviceBackend;
 pub use embedding_runtime::LlamaCppEmbeddingRuntime;
-pub use gateway::{GatewayError, InferenceGateway, RuntimeLifecycleSnapshot, SharedGateway};
+pub use gateway::{
+    EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest,
+    RuntimeLifecycleSnapshot, SharedGateway,
+};
 pub use managed_runtime::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
     ManagedBinaryInstallState, ResolvedCommand, binary_capability, check_binary_status,

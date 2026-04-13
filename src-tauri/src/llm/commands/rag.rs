@@ -4,7 +4,7 @@ use super::resolve_embedding_model_path;
 use super::shared::{SharedAppConfig, get_project_data_dir};
 use crate::agent::DocsManager;
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
-use crate::llm::BackendConfig;
+use crate::llm::EmbeddingStartRequest;
 use crate::llm::gateway::SharedGateway;
 use tauri::{AppHandle, State, command, ipc::Channel};
 
@@ -207,53 +207,26 @@ pub async fn index_docs_with_switch(
         })
         .ok();
 
-    // Build embedding config based on which backend is active
     let backend_name = gateway.current_backend_name().await;
     log::info!("Current backend for embedding: {}", backend_name);
+    let candle_model_path = config
+        .read()
+        .await
+        .models
+        .candle_embedding_model_path
+        .as_ref()
+        .map(std::path::PathBuf::from);
 
-    let embedding_config = match backend_name.as_str() {
-        "Ollama" => {
-            // Ollama uses model names, not file paths
-            // Default to nomic-embed-text for embeddings
-            BackendConfig {
-                model_name: Some("nomic-embed-text".to_string()),
-                embedding_mode: true,
-                ..Default::default()
-            }
-        }
-        "Candle" => {
-            // Candle uses local SafeTensors model directories (not GGUF files)
-            // Get the path from config (user must download model manually from HuggingFace)
-            let config_guard = config.read().await;
-            let candle_path = config_guard
-                .models
-                .candle_embedding_model_path
-                .clone()
-                .ok_or_else(|| {
-                    "Candle embedding model path not configured. \
-                     Download a SafeTensors model from HuggingFace (e.g., BAAI/bge-small-en-v1.5) \
-                     and set the path in Settings."
-                        .to_string()
-                })?;
-            drop(config_guard);
-
-            BackendConfig {
-                model_path: Some(std::path::PathBuf::from(&candle_path)),
-                embedding_mode: true,
-                ..Default::default()
-            }
-        }
-        _ => {
-            // llama.cpp and others use file paths (GGUF format)
-            BackendConfig {
-                model_path: Some(resolved_embedding_model_path.clone()),
-                device: Some(device.device.clone()),
-                gpu_layers: Some(device.gpu_layers),
-                embedding_mode: true,
-                ..Default::default()
-            }
-        }
-    };
+    let embedding_config = gateway
+        .build_embedding_start_config(EmbeddingStartRequest {
+            gguf_model_path: Some(resolved_embedding_model_path.clone()),
+            candle_model_path,
+            ollama_model_name: Some("nomic-embed-text".to_string()),
+            device: Some(device.device.clone()),
+            gpu_layers: Some(device.gpu_layers),
+        })
+        .await
+        .map_err(|e| e.to_string())?;
 
     gateway
         .start(&embedding_config)

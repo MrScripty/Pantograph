@@ -4,6 +4,7 @@
 //! providing a unified interface for the rest of the application. It manages backend
 //! lifecycle, switching, and forwards requests to the active backend.
 
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,6 +40,26 @@ pub enum GatewayError {
 
     #[error("No process spawner configured")]
     NoSpawner,
+}
+
+/// Host-supplied inputs for starting the active backend in inference mode.
+#[derive(Debug, Clone, Default)]
+pub struct InferenceStartRequest {
+    pub file_model_path: Option<PathBuf>,
+    pub mmproj_path: Option<PathBuf>,
+    pub ollama_model_name: Option<String>,
+    pub device: Option<String>,
+    pub gpu_layers: Option<i32>,
+}
+
+/// Host-supplied inputs for starting the active backend in embedding mode.
+#[derive(Debug, Clone, Default)]
+pub struct EmbeddingStartRequest {
+    pub gguf_model_path: Option<PathBuf>,
+    pub candle_model_path: Option<PathBuf>,
+    pub ollama_model_name: Option<String>,
+    pub device: Option<String>,
+    pub gpu_layers: Option<i32>,
 }
 
 /// Snapshot of the active runtime lifecycle owned by the inference gateway.
@@ -154,6 +175,95 @@ impl InferenceGateway {
     /// Get the name of the currently active backend
     pub async fn current_backend_name(&self) -> String {
         self.current_backend_name.read().await.clone()
+    }
+
+    /// Build backend-owned startup config for inference mode using the active backend.
+    pub async fn build_inference_start_config(
+        &self,
+        request: InferenceStartRequest,
+    ) -> Result<BackendConfig, GatewayError> {
+        let backend_name = self.current_backend_name().await;
+        match backend_name.as_str() {
+            "Ollama" => {
+                let model_name = request.ollama_model_name.ok_or_else(|| {
+                    GatewayError::Backend(BackendError::Config(
+                        "Ollama VLM model not configured. Set a model like 'llava:13b' or 'qwen2-vl:7b' in Model Configuration.".to_string(),
+                    ))
+                })?;
+                Ok(BackendConfig {
+                    model_name: Some(model_name),
+                    embedding_mode: false,
+                    ..BackendConfig::default()
+                })
+            }
+            _ => {
+                let model_path = request.file_model_path.ok_or_else(|| {
+                    GatewayError::Backend(BackendError::Config(
+                        "VLM model path not configured".to_string(),
+                    ))
+                })?;
+                let mmproj_path = request.mmproj_path.ok_or_else(|| {
+                    GatewayError::Backend(BackendError::Config(
+                        "VLM mmproj path not configured".to_string(),
+                    ))
+                })?;
+
+                Ok(BackendConfig {
+                    model_path: Some(model_path),
+                    mmproj_path: Some(mmproj_path),
+                    device: request.device,
+                    gpu_layers: request.gpu_layers,
+                    embedding_mode: false,
+                    ..BackendConfig::default()
+                })
+            }
+        }
+    }
+
+    /// Build backend-owned startup config for embedding mode using the active backend.
+    pub async fn build_embedding_start_config(
+        &self,
+        request: EmbeddingStartRequest,
+    ) -> Result<BackendConfig, GatewayError> {
+        let backend_name = self.current_backend_name().await;
+        match backend_name.as_str() {
+            "Ollama" => {
+                let model_name = request
+                    .ollama_model_name
+                    .unwrap_or_else(|| "nomic-embed-text".to_string());
+                Ok(BackendConfig {
+                    model_name: Some(model_name),
+                    embedding_mode: true,
+                    ..BackendConfig::default()
+                })
+            }
+            "Candle" => {
+                let model_path = request.candle_model_path.ok_or_else(|| {
+                    GatewayError::Backend(BackendError::Config(
+                        "Candle embedding model path not configured. Download a SafeTensors model from HuggingFace (e.g., BAAI/bge-small-en-v1.5) and set the path in Settings.".to_string(),
+                    ))
+                })?;
+                Ok(BackendConfig {
+                    model_path: Some(model_path),
+                    embedding_mode: true,
+                    ..BackendConfig::default()
+                })
+            }
+            _ => {
+                let model_path = request.gguf_model_path.ok_or_else(|| {
+                    GatewayError::Backend(BackendError::Config(
+                        "Embedding model path not configured".to_string(),
+                    ))
+                })?;
+                Ok(BackendConfig {
+                    model_path: Some(model_path),
+                    device: request.device,
+                    gpu_layers: request.gpu_layers,
+                    embedding_mode: true,
+                    ..BackendConfig::default()
+                })
+            }
+        }
     }
 
     /// Switch to a different backend
@@ -864,5 +974,44 @@ mod tests {
         assert_eq!(mode.backend_name.as_deref(), Some("mock"));
         assert_eq!(mode.mode, "external");
         assert!(!mode.is_embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_inference_start_config_for_ollama_uses_model_name() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Ollama");
+
+        let config = gateway
+            .build_inference_start_config(InferenceStartRequest {
+                ollama_model_name: Some("llava:13b".to_string()),
+                ..InferenceStartRequest::default()
+            })
+            .await
+            .expect("config should build");
+
+        assert_eq!(config.model_name.as_deref(), Some("llava:13b"));
+        assert_eq!(config.model_path, None);
+        assert!(!config.embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_embedding_start_config_for_candle_uses_candle_model_path() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Candle");
+
+        let config = gateway
+            .build_embedding_start_config(EmbeddingStartRequest {
+                candle_model_path: Some(PathBuf::from("/models/bge-small-en-v1.5")),
+                ..EmbeddingStartRequest::default()
+            })
+            .await
+            .expect("config should build");
+
+        assert_eq!(
+            config
+                .model_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            Some("/models/bge-small-en-v1.5".to_string())
+        );
+        assert!(config.embedding_mode);
     }
 }

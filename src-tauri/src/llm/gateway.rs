@@ -11,7 +11,8 @@ use tokio::sync::RwLock;
 use inference::config::DeviceInfo as InferenceDeviceInfo;
 use inference::process::ProcessSpawner;
 use inference::{
-    BackendConfig, EmbeddingMemoryMode as InferenceEmbeddingMode, LlamaCppEmbeddingRuntime,
+    BackendConfig, EmbeddingMemoryMode as InferenceEmbeddingMode, EmbeddingStartRequest,
+    GatewayError as InferenceGatewayError, InferenceStartRequest, LlamaCppEmbeddingRuntime,
 };
 
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
@@ -197,6 +198,22 @@ impl InferenceGateway {
     /// Get the name of the currently active backend.
     pub async fn current_backend_name(&self) -> String {
         self.inner.current_backend_name().await
+    }
+
+    /// Build backend-owned startup config for the active inference runtime.
+    pub async fn build_inference_start_config(
+        &self,
+        request: InferenceStartRequest,
+    ) -> Result<BackendConfig, InferenceGatewayError> {
+        self.inner.build_inference_start_config(request).await
+    }
+
+    /// Build backend-owned startup config for the active embedding runtime.
+    pub async fn build_embedding_start_config(
+        &self,
+        request: EmbeddingStartRequest,
+    ) -> Result<BackendConfig, InferenceGatewayError> {
+        self.inner.build_embedding_start_config(request).await
     }
 
     /// Switch to a different backend.

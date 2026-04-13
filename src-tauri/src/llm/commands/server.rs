@@ -4,8 +4,8 @@ use super::config::list_devices;
 use super::shared::SharedAppConfig;
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
-use crate::llm::BackendConfig;
 use crate::llm::gateway::SharedGateway;
+use crate::llm::{BackendConfig, EmbeddingStartRequest, InferenceStartRequest};
 use reqwest::Url;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State, command};
@@ -253,43 +253,27 @@ pub async fn start_sidecar_inference(
     // Extract config values we'll need after dropping the guard
     let embedding_model_path = config_guard.models.embedding_model_path.clone();
     let embedding_memory_mode = config_guard.embedding_memory_mode.clone();
-
-    // Build backend-specific config
-    let backend_config = match backend_name.as_str() {
-        "Ollama" => {
-            // Ollama uses model names, not file paths
-            let model_name = config_guard.models.ollama_vlm_model.as_ref()
-                .ok_or_else(|| "Ollama VLM model not configured. Set a model like 'llava:13b' or 'qwen2-vl:7b' in Model Configuration.".to_string())?;
-            BackendConfig {
-                model_name: Some(model_name.clone()),
-                embedding_mode: false,
-                ..Default::default()
-            }
-        }
-        _ => {
-            // llama.cpp and others use file paths
-            let model_path = config_guard
-                .models
-                .vlm_model_path
-                .as_ref()
-                .ok_or_else(|| "VLM model path not configured".to_string())?;
-            let mmproj_path = config_guard
-                .models
-                .vlm_mmproj_path
-                .as_ref()
-                .ok_or_else(|| "VLM mmproj path not configured".to_string())?;
-
-            BackendConfig {
-                model_path: Some(std::path::PathBuf::from(model_path)),
-                mmproj_path: Some(std::path::PathBuf::from(mmproj_path)),
-                device: Some(config_guard.device.device.clone()),
-                gpu_layers: Some(config_guard.device.gpu_layers),
-                embedding_mode: false,
-                ..Default::default()
-            }
-        }
+    let inference_request = InferenceStartRequest {
+        file_model_path: config_guard
+            .models
+            .vlm_model_path
+            .as_ref()
+            .map(std::path::PathBuf::from),
+        mmproj_path: config_guard
+            .models
+            .vlm_mmproj_path
+            .as_ref()
+            .map(std::path::PathBuf::from),
+        ollama_model_name: config_guard.models.ollama_vlm_model.clone(),
+        device: Some(config_guard.device.device.clone()),
+        gpu_layers: Some(config_guard.device.gpu_layers),
     };
     drop(config_guard);
+
+    let backend_config = gateway
+        .build_inference_start_config(inference_request)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Start the main LLM server
     gateway
@@ -357,21 +341,27 @@ pub async fn start_sidecar_embedding(
 ) -> Result<ServerModeInfo, String> {
     let config_guard = config.read().await;
 
-    let model_path = config_guard
-        .models
-        .embedding_model_path
-        .as_ref()
-        .ok_or_else(|| "Embedding model path not configured".to_string())?;
-    let resolved_model_path = resolve_embedding_model_path(model_path)?;
-
-    let backend_config = BackendConfig {
-        model_path: Some(resolved_model_path),
+    let gguf_model_path = config_guard.models.embedding_model_path.as_ref();
+    let resolved_model_path = gguf_model_path
+        .map(|model_path| resolve_embedding_model_path(model_path))
+        .transpose()?;
+    let embedding_request = EmbeddingStartRequest {
+        gguf_model_path: resolved_model_path,
+        candle_model_path: config_guard
+            .models
+            .candle_embedding_model_path
+            .as_ref()
+            .map(std::path::PathBuf::from),
+        ollama_model_name: None,
         device: Some(config_guard.device.device.clone()),
         gpu_layers: Some(config_guard.device.gpu_layers),
-        embedding_mode: true,
-        ..Default::default()
     };
     drop(config_guard);
+
+    let backend_config = gateway
+        .build_embedding_start_config(embedding_request)
+        .await
+        .map_err(|e| e.to_string())?;
 
     gateway
         .start(&backend_config)
