@@ -675,6 +675,15 @@ pub async fn hydrate_puma_lib_node(
 }
 
 #[command]
+pub async fn run_dependency_environment_action(
+    resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
+    request: super::dependency_environment_commands::DependencyEnvironmentActionRequest,
+) -> Result<super::dependency_environment_commands::DependencyEnvironmentActionResponse, String> {
+    super::dependency_environment_commands::run_dependency_environment_action(resolver, request)
+        .await
+}
+
+#[command]
 pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     node_type: String,

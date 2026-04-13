@@ -83,15 +83,6 @@
     checked_at?: string;
   }
 
-  interface ModelDependencyInstallResult {
-    state: DependencyState;
-    code?: string;
-    message?: string;
-    requirements: ModelDependencyRequirements;
-    bindings: ModelDependencyBindingStatus[];
-    installed_at?: string;
-  }
-
   interface EnvironmentRef {
     contract_version: number;
     environment_key?: string;
@@ -351,22 +342,6 @@
     }
   });
 
-  function dependencyRequestPayload() {
-    const modelPath = (upstreamModelPath ?? '').trim();
-    if (!modelPath) return null;
-    return {
-      nodeType: 'dependency-environment',
-      modelPath,
-      modelId: upstreamModelId ?? dependencyRequirements?.model_id ?? undefined,
-      modelType: upstreamModelType ?? undefined,
-      taskTypePrimary: upstreamTaskType ?? undefined,
-      backendKey: upstreamBackendKey ?? dependencyRequirements?.backend_key ?? undefined,
-      platformContext: upstreamPlatformContext ?? undefined,
-      selectedBindingIds,
-      dependencyOverridePatches: effectiveManualOverrides.length > 0 ? effectiveManualOverrides : undefined,
-    };
-  }
-
   function dependencyTokenLabel(value: string): string {
     return value.replaceAll('_', ' ');
   }
@@ -430,26 +405,6 @@
     }
   });
 
-  function deriveEnvironmentRef(status: ModelDependencyStatus): EnvironmentRef {
-    const envIds = status.bindings
-      .map((row) => row.env_id ?? '')
-      .map((v) => v.trim())
-      .filter((v) => v.length > 0);
-    const envId = envIds[0];
-    const binding = status.requirements.bindings.find(
-      (b) => b.env_id === envId || b.binding_id === status.bindings[0]?.binding_id
-    );
-    return {
-      contract_version: 1,
-      env_id: envId,
-      env_ids: envIds,
-      environment_kind: binding?.environment_kind ?? 'unknown',
-      state: String(status.state),
-      platform_key: status.requirements.platform_key,
-      backend_key: status.requirements.backend_key,
-    };
-  }
-
   function persistNodeState() {
     updateNodeData(id, {
       mode,
@@ -461,6 +416,79 @@
       dependency_override_patches: manualOverrides,
       activity_log: activityLog,
     });
+  }
+
+  interface DependencyEnvironmentActionRequest {
+    action: 'resolve' | 'check' | 'install' | 'run';
+    mode?: 'auto' | 'manual';
+    modelPath: string;
+    modelId?: string;
+    modelType?: string;
+    taskTypePrimary?: string;
+    backendKey?: string;
+    platformContext?: Record<string, string>;
+    selectedBindingIds?: string[];
+    dependencyRequirements?: ModelDependencyRequirements;
+    dependencyOverridePatches?: DependencyOverridePatchV1[];
+  }
+
+  interface DependencyEnvironmentActionResponse {
+    nodeData: Record<string, unknown>;
+  }
+
+  function dependencyActionPayload(action: DependencyEnvironmentActionRequest['action']): DependencyEnvironmentActionRequest | null {
+    const modelPath = (upstreamModelPath ?? '').trim();
+    if (!modelPath) return null;
+    return {
+      action,
+      mode,
+      modelPath,
+      modelId: upstreamModelId ?? dependencyRequirements?.model_id ?? undefined,
+      modelType: upstreamModelType ?? undefined,
+      taskTypePrimary: upstreamTaskType ?? undefined,
+      backendKey: upstreamBackendKey ?? dependencyRequirements?.backend_key ?? undefined,
+      platformContext: upstreamPlatformContext ?? undefined,
+      selectedBindingIds,
+      dependencyRequirements: upstreamRequirements ?? dependencyRequirements ?? undefined,
+      dependencyOverridePatches: effectiveManualOverrides.length > 0 ? effectiveManualOverrides : undefined,
+    };
+  }
+
+  function applyDependencyActionNodeData(nodeData: Record<string, unknown>) {
+    updateNodeData(id, nodeData);
+    mode = (nodeData.mode as 'auto' | 'manual' | undefined) ?? mode;
+    selectedBindingIds = Array.isArray(nodeData.selected_binding_ids)
+      ? (nodeData.selected_binding_ids as string[])
+      : selectedBindingIds;
+    dependencyRequirements =
+      (nodeData.dependency_requirements as ModelDependencyRequirements | null | undefined) ??
+      dependencyRequirements;
+    dependencyStatus =
+      (nodeData.dependency_status as ModelDependencyStatus | null | undefined) ?? dependencyStatus;
+    environmentRef =
+      (nodeData.environment_ref as EnvironmentRef | null | undefined) ?? environmentRef;
+  }
+
+  async function runDependencyEnvironmentAction(
+    action: DependencyEnvironmentActionRequest['action']
+  ) {
+    const payload = dependencyActionPayload(action);
+    if (!payload) return;
+
+    isBusy = true;
+    try {
+      const response = await invoke<DependencyEnvironmentActionResponse>(
+        'run_dependency_environment_action',
+        { request: payload }
+      );
+      applyDependencyActionNodeData(response.nodeData);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      appendActivityLine(`${action}: error="${message}"`);
+      throw error;
+    } finally {
+      isBusy = false;
+    }
   }
 
   function activityTimestamp(): string {
@@ -754,84 +782,19 @@
   }
 
   async function resolveDependencyRequirements() {
-    const payload = dependencyRequestPayload();
-    if (!payload) return;
-
-    isBusy = true;
-    try {
-      const requirements = await invoke<ModelDependencyRequirements>(
-        'resolve_model_dependency_requirements',
-        payload,
-      );
-      dependencyRequirements = requirements;
-      if (selectedBindingIds.length === 0) {
-        selectedBindingIds = requirements.selected_binding_ids?.length
-          ? requirements.selected_binding_ids
-          : requirements.bindings.map((b) => b.binding_id);
-      }
-      persistNodeState();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendActivityLine(`resolve: error="${message}"`);
-      throw error;
-    } finally {
-      isBusy = false;
-    }
+    await runDependencyEnvironmentAction('resolve');
   }
 
   async function checkDependencies() {
-    const payload = dependencyRequestPayload();
-    if (!payload) return;
-
-    isBusy = true;
-    try {
-      const status = await invoke<ModelDependencyStatus>('check_model_dependencies', payload);
-      dependencyStatus = status;
-      dependencyRequirements = status.requirements;
-      environmentRef = deriveEnvironmentRef(status);
-      persistNodeState();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendActivityLine(`check: error="${message}"`);
-      throw error;
-    } finally {
-      isBusy = false;
-    }
+    await runDependencyEnvironmentAction('check');
   }
 
   async function installDependencies() {
-    const payload = dependencyRequestPayload();
-    if (!payload) return;
-
-    isBusy = true;
-    try {
-      const result = await invoke<ModelDependencyInstallResult>('install_model_dependencies', payload);
-      dependencyStatus = {
-        state: result.state,
-        code: result.code,
-        message: result.message,
-        requirements: result.requirements,
-        bindings: result.bindings,
-      };
-      dependencyRequirements = result.requirements;
-      environmentRef = deriveEnvironmentRef(dependencyStatus);
-      persistNodeState();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendActivityLine(`install: error="${message}"`);
-      throw error;
-    } finally {
-      isBusy = false;
-    }
+    await runDependencyEnvironmentAction('install');
   }
 
   async function runModeAction() {
-    await resolveDependencyRequirements();
-    await checkDependencies();
-    if (mode === 'auto' && dependencyStatus?.state === 'missing') {
-      await installDependencies();
-      await checkDependencies();
-    }
+    await runDependencyEnvironmentAction('run');
   }
 
   function toggleBinding(bindingId: string) {

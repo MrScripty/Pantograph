@@ -365,6 +365,7 @@ fn main() {
             workflow::commands::reset_model_review,
             workflow::commands::get_effective_model_metadata,
             workflow::commands::hydrate_puma_lib_node,
+            workflow::commands::run_dependency_environment_action,
             workflow::commands::resolve_model_dependency_requirements,
             workflow::commands::check_model_dependencies,
             workflow::commands::install_model_dependencies,

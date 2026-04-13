@@ -24,6 +24,7 @@
 
 pub mod commands;
 pub mod connection_intent;
+pub mod dependency_environment_commands;
 pub mod diagnostics;
 pub mod effective_definition;
 pub mod event_adapter;
