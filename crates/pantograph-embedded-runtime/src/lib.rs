@@ -1,12 +1,15 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use node_engine::{
     CoreTaskExecutor, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
+use pantograph_runtime_registry::{
+    RuntimeRegistration, RuntimeReservationRequest, SharedRuntimeRegistry,
+};
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
@@ -48,7 +51,7 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
-pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
+pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
@@ -161,6 +164,8 @@ pub struct EmbeddedRuntime {
     gateway: Arc<inference::InferenceGateway>,
     extensions: SharedExtensions,
     workflow_service: SharedWorkflowService,
+    runtime_registry: Option<SharedRuntimeRegistry>,
+    session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
@@ -180,6 +185,8 @@ impl EmbeddedRuntime {
             gateway,
             extensions,
             workflow_service,
+            runtime_registry: None,
+            session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
             rag_backend,
             python_runtime,
             additional_runtime_capabilities: Vec::new(),
@@ -266,6 +273,11 @@ impl EmbeddedRuntime {
         self
     }
 
+    pub fn with_runtime_registry(mut self, runtime_registry: SharedRuntimeRegistry) -> Self {
+        self.runtime_registry = Some(runtime_registry);
+        self
+    }
+
     pub fn workflow_service(&self) -> &SharedWorkflowService {
         &self.workflow_service
     }
@@ -289,6 +301,8 @@ impl EmbeddedRuntime {
             workflow_roots: self.config.workflow_roots.clone(),
             gateway: self.gateway.clone(),
             extensions: self.extensions.clone(),
+            runtime_registry: self.runtime_registry.clone(),
+            session_runtime_reservations: self.session_runtime_reservations.clone(),
             rag_backend: self.rag_backend.clone(),
             python_runtime: self.python_runtime.clone(),
             additional_runtime_capabilities: self.additional_runtime_capabilities.clone(),
@@ -578,6 +592,8 @@ struct EmbeddedWorkflowHost {
     workflow_roots: Vec<PathBuf>,
     gateway: Arc<inference::InferenceGateway>,
     extensions: SharedExtensions,
+    runtime_registry: Option<SharedRuntimeRegistry>,
+    session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
@@ -701,6 +717,92 @@ impl EmbeddedWorkflowHost {
             }
         })
         .collect()
+    }
+
+    fn trimmed_optional(value: Option<&str>) -> Option<String> {
+        value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    }
+
+    async fn reserve_loaded_session_runtime(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return Ok(());
+        };
+
+        {
+            let reservations = self.session_runtime_reservations.lock().map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "session runtime reservation lock poisoned".to_string(),
+                )
+            })?;
+            if reservations.contains_key(session_id) {
+                return Ok(());
+            }
+        }
+
+        let mode_info = self.gateway.mode_info().await;
+        let runtime_id = mode_info
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_id.clone())
+            .or_else(|| mode_info.backend_key.clone())
+            .or_else(|| mode_info.backend_name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let display_name = mode_info
+            .backend_name
+            .clone()
+            .unwrap_or_else(|| runtime_id.clone());
+
+        runtime_registry.register_runtime(
+            RuntimeRegistration::new(runtime_id.clone(), display_name)
+                .with_backend_keys(mode_info.backend_key.clone().into_iter().collect()),
+        );
+
+        let lease = runtime_registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id,
+                workflow_id: workflow_id.to_string(),
+                usage_profile: Self::trimmed_optional(usage_profile),
+                model_id: mode_info.active_model_target.clone(),
+                pin_runtime: false,
+            })
+            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+
+        let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session runtime reservation lock poisoned".to_string())
+        })?;
+        reservations.insert(session_id.to_string(), lease.reservation_id);
+        Ok(())
+    }
+
+    fn release_loaded_session_runtime(&self, session_id: &str) -> Result<(), WorkflowServiceError> {
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return Ok(());
+        };
+
+        let reservation_id = {
+            let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "session runtime reservation lock poisoned".to_string(),
+                )
+            })?;
+            reservations.remove(session_id)
+        };
+
+        if let Some(reservation_id) = reservation_id {
+            runtime_registry
+                .release_reservation(reservation_id)
+                .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+        }
+
+        Ok(())
     }
 
     fn apply_input_bindings(
@@ -941,6 +1043,25 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         Ok(runtimes)
     }
 
+    async fn load_session_runtime(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+    ) -> Result<(), WorkflowServiceError> {
+        self.reserve_loaded_session_runtime(session_id, workflow_id, usage_profile)
+            .await
+    }
+
+    async fn unload_session_runtime(
+        &self,
+        session_id: &str,
+        _workflow_id: &str,
+        _reason: pantograph_workflow_service::WorkflowSessionUnloadReason,
+    ) -> Result<(), WorkflowServiceError> {
+        self.release_loaded_session_runtime(session_id)
+    }
+
     async fn run_workflow(
         &self,
         workflow_id: &str,
@@ -1002,8 +1123,8 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pantograph_runtime_registry::RuntimeRegistry;
     use std::path::Path;
-    use std::sync::Mutex;
     use tempfile::TempDir;
 
     struct MockImagePythonRuntime {
@@ -1282,7 +1403,8 @@ mod tests {
             Arc::new(RwLock::new(ExecutorExtensions::new())),
             Arc::new(WorkflowService::new()),
             None,
-        );
+        )
+        .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
         let run_response = runtime
             .workflow_run(WorkflowRunRequest {
@@ -1368,7 +1490,8 @@ mod tests {
             Arc::new(WorkflowService::new()),
             None,
             python_runtime.clone(),
-        );
+        )
+        .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
         let response = runtime
             .workflow_run(WorkflowRunRequest {
@@ -1402,6 +1525,136 @@ mod tests {
         assert_eq!(
             requests[0].inputs.get("prompt"),
             Some(&serde_json::json!("a tiny painted robot"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_keep_alive_session_load_tracks_registry_reservation_lifecycle() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        let created = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+
+        let reserved_snapshot = runtime_registry.snapshot();
+        assert_eq!(reserved_snapshot.reservations.len(), 1);
+        assert_eq!(
+            reserved_snapshot.reservations[0].workflow_id,
+            "runtime-text"
+        );
+        assert_eq!(
+            reserved_snapshot.reservations[0].usage_profile.as_deref(),
+            Some("interactive")
+        );
+        assert_eq!(
+            reserved_snapshot.runtimes[0].active_reservation_ids.len(),
+            1
+        );
+
+        runtime
+            .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
+                session_id: created.session_id.clone(),
+                keep_alive: false,
+            })
+            .await
+            .expect("disable keep alive");
+
+        let released_snapshot = runtime_registry.snapshot();
+        assert!(released_snapshot.reservations.is_empty());
+        assert!(
+            released_snapshot.runtimes[0]
+                .active_reservation_ids
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_run() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        let created = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            })
+            .await
+            .expect("create session");
+
+        let run_response = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: created.session_id,
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("session-world"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-queued".to_string()),
+            })
+            .await
+            .expect("run queued session");
+        assert_eq!(run_response.outputs.len(), 1);
+        assert_eq!(
+            run_response.outputs[0].value,
+            serde_json::json!("session-world")
+        );
+
+        let snapshot = runtime_registry.snapshot();
+        assert!(snapshot.reservations.is_empty());
+        assert!(
+            snapshot
+                .runtimes
+                .iter()
+                .all(|runtime| runtime.active_reservation_ids.is_empty())
         );
     }
 
@@ -1442,9 +1695,11 @@ mod tests {
             .iter()
             .find(|capability| capability.runtime_id == "stable_audio")
             .expect("stable audio capability");
-        assert!(stable_audio
-            .backend_keys
-            .contains(&"stable_audio".to_string()));
+        assert!(
+            stable_audio
+                .backend_keys
+                .contains(&"stable_audio".to_string())
+        );
     }
 
     #[test]

@@ -125,6 +125,7 @@ pub(super) async fn build_runtime(
         workflow_service.clone(),
         rag_backend,
     )
+    .with_runtime_registry(runtime_registry.clone())
     .with_additional_runtime_capabilities(additional_runtime_capabilities))
 }
 

@@ -36,6 +36,10 @@ Pumas-specific dependency resolution.
 - App-global runtime residency, admission, retention, and eviction policy must
   stay outside this crate even though it exposes Pantograph-specific runtime
   capabilities.
+- If a runtime registry is injected, this crate may translate host-owned
+  session load/unload lifecycle into registry reservation operations, but it
+  still must not own the policy that decides when those reservations should
+  exist.
 
 ## Decision
 Keep this crate as the application/infrastructure integration layer for
@@ -45,10 +49,11 @@ mapping workflow dependency requests onto Pumas contracts, and it should prefer
 preserves the existing workflow-facing `model_path`, `model_type`, and
 `task_type_primary` facades, but the values behind those fields may come from
 the descriptor `entry_path` and descriptor task/type data rather than projected
-record metadata. The planned `RuntimeRegistry` may later consume this crate's
-capability and execution facts, but registry ownership belongs to a higher
-Pantograph application-layer coordinator rather than to this embedded-runtime
-crate.
+record metadata. The runtime registry may consume this crate's capability and
+execution facts, and this crate may emit reservation lifecycle signals into
+that registry when a host injects one. Registry ownership still belongs to a
+higher Pantograph application-layer coordinator rather than to this
+embedded-runtime crate.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.
@@ -69,6 +74,9 @@ crate.
 - This crate may expose runtime capabilities and execute Pantograph-owned
   runtime paths, but it must not become the owner of app-global runtime
   residency or admission policy.
+- Any registry interaction from this crate must remain a narrow translation of
+  session lifecycle into explicit registry operations, not an alternate policy
+  engine.
 
 ## Revisit Triggers
 - A second runtime integration path needs the same dependency-resolution policy
@@ -120,6 +128,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Hosts create the runtime by supplying gateway, workflow-service, and shared
   extension dependencies; this directory does not own those outer application
   boot decisions.
+- Hosts may optionally inject a shared runtime registry; when present, session
+  runtime load/unload lifecycle is translated into registry reservation
+  acquire/release operations.
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.

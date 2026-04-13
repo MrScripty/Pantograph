@@ -7259,6 +7259,7 @@ dependencies = [
  "node-engine",
  "once_cell",
  "pantograph-runtime-identity",
+ "pantograph-runtime-registry",
  "pantograph-workflow-service",
  "pumas-library",
  "reqwest",
