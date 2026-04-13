@@ -402,6 +402,9 @@ Update during implementation:
 - 2026-04-13: Thirtieth implementation slice added headless workflow adapter
   coverage for backend-owned `session_id` attribution so direct trace snapshot
   reads and diagnostics projections are exercised at the Tauri boundary.
+- 2026-04-13: Thirty-first implementation slice added headless diagnostics
+  clear-history helper coverage so the adapter reader path proves it clears run
+  history while preserving backend-owned scheduler and runtime snapshots.
 
 ## Commit Cadence Notes
 
@@ -513,6 +516,10 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless trace
   snapshot helper and diagnostics projection path are covered for backend-owned
   `session_id` attribution at the adapter boundary
+- Thirty-first implementation slice added in
+  `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless
+  clear-history reader path is exercised directly and keeps scheduler/runtime
+  snapshots while dropping retained run history
 
 ### Deviations
 
