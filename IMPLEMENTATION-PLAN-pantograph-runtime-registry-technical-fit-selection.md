@@ -7,16 +7,19 @@ Last updated: 2026-04-13
 
 ## Current Source-of-Truth Summary
 
-This plan is no longer "planning only," but the core runtime-registry work has
-also not started yet.
+This plan is no longer "planning only." Milestone 2 has now started, but the
+registry is still only at the foundation stage.
 
 The accurate status is:
 
 - prerequisite runtime-contract and diagnostics groundwork: completed
 - runtime-registry Milestone 1, Freeze Boundaries And Ownership: completed
-- runtime-registry milestones 2-6: not started
-- current next milestone: Milestone 2, Runtime Registry Foundation
-- stop rule: Milestone 2 may begin, but it must preserve ADR-002 and the
+- runtime-registry Milestone 2, Runtime Registry Foundation: in progress
+- runtime-registry milestones 3-6: not started
+- current next milestone: continue Milestone 2 by integrating registry-backed
+  lifecycle observation into existing runtime callers without moving policy out
+  of the app layer
+- stop rule remains active: Milestone 2 work must preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
 
 ## Objective
@@ -67,13 +70,27 @@ inputs to this plan rather than future work:
 - trace and diagnostics fallback matching aligned to canonical backend keys
 - runtime producer snapshot preservation for diagnostics and trace surfaces
 
+### Runtime-registry work already landed
+
+The following Milestone 2 foundation slices have now landed in code:
+
+- app-layer `RuntimeRegistry` module under `src-tauri/src/llm/runtime_registry`
+- canonical runtime registration and backend-key normalization at the registry
+  boundary
+- deterministic runtime state transitions for stopped, warming, ready, busy,
+  unhealthy, stopping, and failed states
+- reservation acquisition/release bookkeeping with deterministic snapshot output
+- focused unit coverage for canonicalization, invalid transitions, reservation
+  lifecycle, and reservation rejection while stopping
+- Tauri composition-root creation and shared app-state management for the
+  registry in `src-tauri/src/main.rs`
+
 ### What has not landed yet
 
-- no Pantograph-owned `RuntimeRegistry` exists yet
-- no registry-owned reservation/admission state machine exists yet
 - no registry-driven warmup, retention, or eviction policy exists yet
+- no registry integration with runtime producer observation, recovery cleanup,
+  or workflow execution decisions exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
-- no runtime-registry implementation code has been committed yet
 
 ## Inputs
 
@@ -350,16 +367,18 @@ preservation, and documentation traceability.
 runtime callers.
 
 **Tasks:**
-- [ ] Add focused runtime-registry modules for runtime records, model
+- [x] Add focused runtime-registry modules for runtime records, model
   residency, reservation/admission decisions, and error/reporting types
-- [ ] Keep the composition root near app startup; do not create ad hoc global
+- [x] Keep the composition root near app startup; do not create ad hoc global
   infrastructure inside feature modules
-- [ ] Track runtime states such as stopped, warming, ready, busy, unhealthy,
+- [x] Track runtime states such as stopped, warming, ready, busy, unhealthy,
   stopping, and failed
-- [ ] Add deterministic state-transition rules for start, connect-external,
-  stop, recovery, and stale cleanup
-- [ ] Perform decomposition review on any touched files approaching
+- [x] Add deterministic state-transition rules for start, connect-external,
+  stop, and recovery-ready status changes
+- [x] Perform decomposition review on any touched files approaching
   file-size/responsibility thresholds
+- [ ] Integrate registry-backed lifecycle observation with existing runtime
+  callers so cleanup and recovery paths stop relying on ad hoc local state
 
 **Verification:**
 - `cargo check --workspace`
@@ -367,7 +386,7 @@ runtime callers.
 - compile review confirms existing gateway callers still depend on preserved
   facades
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: Admission, Warmup, Retention, And Eviction
 
