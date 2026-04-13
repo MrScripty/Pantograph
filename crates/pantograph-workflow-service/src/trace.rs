@@ -939,7 +939,11 @@ fn apply_scheduler_snapshot(
         });
 
     if pending_visible {
-        trace.queue.enqueued_at_ms.get_or_insert(captured_at_ms);
+        if let Some(enqueued_at_ms) = matched_item.and_then(|item| item.enqueued_at_ms) {
+            trace.queue.enqueued_at_ms.get_or_insert(enqueued_at_ms);
+        } else {
+            trace.queue.enqueued_at_ms.get_or_insert(captured_at_ms);
+        }
         if !matches!(
             trace.status,
             WorkflowTraceStatus::Completed
@@ -952,7 +956,11 @@ fn apply_scheduler_snapshot(
     }
 
     if running_visible {
-        trace.queue.dequeued_at_ms.get_or_insert(captured_at_ms);
+        if let Some(dequeued_at_ms) = matched_item.and_then(|item| item.dequeued_at_ms) {
+            trace.queue.dequeued_at_ms.get_or_insert(dequeued_at_ms);
+        } else {
+            trace.queue.dequeued_at_ms.get_or_insert(captured_at_ms);
+        }
         if !matches!(
             trace.status,
             WorkflowTraceStatus::Completed
@@ -1351,6 +1359,8 @@ mod tests {
                 items: vec![WorkflowSessionQueueItem {
                     queue_id: "queue-1".to_string(),
                     run_id: Some("exec-1".to_string()),
+                    enqueued_at_ms: Some(80),
+                    dequeued_at_ms: None,
                     priority: 5,
                     status: WorkflowSessionQueueItemStatus::Pending,
                 }],
@@ -1431,6 +1441,8 @@ mod tests {
                 items: vec![WorkflowSessionQueueItem {
                     queue_id: "queue-1".to_string(),
                     run_id: Some("exec-1".to_string()),
+                    enqueued_at_ms: Some(80),
+                    dequeued_at_ms: Some(115),
                     priority: 5,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
@@ -1441,9 +1453,9 @@ mod tests {
 
         let trace = snapshot.traces.first().expect("trace summary");
         assert_eq!(trace.status, WorkflowTraceStatus::Running);
-        assert_eq!(trace.queue.enqueued_at_ms, Some(90));
-        assert_eq!(trace.queue.dequeued_at_ms, Some(120));
-        assert_eq!(trace.queue.queue_wait_ms, Some(30));
+        assert_eq!(trace.queue.enqueued_at_ms, Some(80));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(115));
+        assert_eq!(trace.queue.queue_wait_ms, Some(35));
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_running_item")
@@ -1486,12 +1498,16 @@ mod tests {
                     WorkflowSessionQueueItem {
                         queue_id: "queue-other".to_string(),
                         run_id: Some("other-run".to_string()),
+                        enqueued_at_ms: Some(100),
+                        dequeued_at_ms: Some(150),
                         priority: 10,
                         status: WorkflowSessionQueueItemStatus::Running,
                     },
                     WorkflowSessionQueueItem {
                         queue_id: "queue-target".to_string(),
                         run_id: Some("exec-target".to_string()),
+                        enqueued_at_ms: Some(180),
+                        dequeued_at_ms: None,
                         priority: 5,
                         status: WorkflowSessionQueueItemStatus::Pending,
                     },
@@ -1503,7 +1519,7 @@ mod tests {
 
         let trace = snapshot.traces.first().expect("trace summary");
         assert_eq!(trace.status, WorkflowTraceStatus::Queued);
-        assert_eq!(trace.queue.enqueued_at_ms, Some(200));
+        assert_eq!(trace.queue.enqueued_at_ms, Some(180));
         assert_eq!(trace.queue.dequeued_at_ms, None);
         assert_eq!(trace.queue.queue_wait_ms, None);
         assert_eq!(

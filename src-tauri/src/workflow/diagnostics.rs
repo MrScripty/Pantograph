@@ -1046,6 +1046,8 @@ mod tests {
             vec![WorkflowSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
+                enqueued_at_ms: None,
+                dequeued_at_ms: None,
                 priority: 10,
                 status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
             }],

@@ -379,6 +379,10 @@ pub struct WorkflowSessionQueueItem {
     pub queue_id: String,
     #[serde(default)]
     pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enqueued_at_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dequeued_at_ms: Option<u64>,
     pub priority: i32,
     pub status: WorkflowSessionQueueItemStatus,
 }
@@ -800,6 +804,7 @@ const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 struct WorkflowSessionQueuedRun {
     queue_id: String,
     run_id: Option<String>,
+    enqueued_at_ms: u64,
     inputs: Vec<WorkflowPortBinding>,
     output_targets: Option<Vec<WorkflowOutputTarget>>,
     timeout_ms: Option<u64>,
@@ -811,6 +816,8 @@ struct WorkflowSessionQueuedRun {
 struct WorkflowSessionActiveRun {
     queue_id: String,
     run_id: Option<String>,
+    enqueued_at_ms: u64,
+    dequeued_at_ms: u64,
     priority: i32,
 }
 
@@ -838,6 +845,15 @@ struct WorkflowSessionRecord {
 struct WorkflowSessionDequeuedRun {
     workflow_id: String,
     queued: WorkflowSessionQueuedRun,
+}
+
+fn unix_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
 }
 
 #[derive(Debug, Clone)]
@@ -999,6 +1015,8 @@ impl WorkflowSessionStore {
             items.push(WorkflowSessionQueueItem {
                 queue_id: active_run.queue_id.clone(),
                 run_id: active_run.run_id.clone(),
+                enqueued_at_ms: Some(active_run.enqueued_at_ms),
+                dequeued_at_ms: Some(active_run.dequeued_at_ms),
                 priority: active_run.priority,
                 status: WorkflowSessionQueueItemStatus::Running,
             });
@@ -1008,6 +1026,8 @@ impl WorkflowSessionStore {
             items.push(WorkflowSessionQueueItem {
                 queue_id: queued.queue_id.clone(),
                 run_id: queued.run_id.clone(),
+                enqueued_at_ms: Some(queued.enqueued_at_ms),
+                dequeued_at_ms: None,
                 priority: queued.priority,
                 status: WorkflowSessionQueueItemStatus::Pending,
             });
@@ -1034,6 +1054,7 @@ impl WorkflowSessionStore {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .map(ToOwned::to_owned),
+            enqueued_at_ms: unix_timestamp_ms(),
             inputs: request.inputs.clone(),
             output_targets: request.output_targets.clone(),
             timeout_ms: request.timeout_ms,
@@ -1097,6 +1118,8 @@ impl WorkflowSessionStore {
         state.active_run = Some(WorkflowSessionActiveRun {
             queue_id: queued.queue_id.clone(),
             run_id: queued.run_id.clone(),
+            enqueued_at_ms: queued.enqueued_at_ms,
+            dequeued_at_ms: unix_timestamp_ms(),
             priority: queued.priority,
         });
         state.access_tick = tick;
@@ -4610,6 +4633,8 @@ mod tests {
             running_snapshot.items[0].status,
             WorkflowSessionQueueItemStatus::Running
         );
+        assert!(running_snapshot.items[0].enqueued_at_ms.is_none());
+        assert!(running_snapshot.items[0].dequeued_at_ms.is_none());
         assert_eq!(
             running_snapshot.items[0].run_id.as_deref(),
             Some(created.session_id.as_str())
@@ -4633,6 +4658,93 @@ mod tests {
         assert_eq!(completed_snapshot.session.queued_runs, 0);
         assert_eq!(completed_snapshot.session.run_count, 1);
         assert!(completed_snapshot.items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn workflow_session_queue_items_include_authoritative_timestamps() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let request = WorkflowSessionRunRequest {
+            session_id: created.session_id.clone(),
+            inputs: Vec::new(),
+            output_targets: None,
+            timeout_ms: None,
+            run_id: Some("queued-run-1".to_string()),
+            priority: None,
+        };
+
+        let queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(&created.session_id, &request)
+                .expect("enqueue run")
+        };
+
+        let pending_items = {
+            let store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .list_queue(&created.session_id)
+                .expect("list pending queue items")
+        };
+        assert_eq!(pending_items.len(), 1);
+        assert_eq!(pending_items[0].queue_id, queue_id);
+        assert_eq!(pending_items[0].run_id.as_deref(), Some("queued-run-1"));
+        assert!(pending_items[0].enqueued_at_ms.is_some());
+        assert!(pending_items[0].dequeued_at_ms.is_none());
+        assert_eq!(
+            pending_items[0].status,
+            WorkflowSessionQueueItemStatus::Pending
+        );
+
+        let running_items = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .begin_queued_run(&created.session_id, &queue_id)
+                .expect("begin queued run");
+            store
+                .list_queue(&created.session_id)
+                .expect("list running queue items")
+        };
+        assert_eq!(running_items.len(), 1);
+        assert_eq!(running_items[0].queue_id, queue_id);
+        assert_eq!(
+            running_items[0].status,
+            WorkflowSessionQueueItemStatus::Running
+        );
+        assert_eq!(
+            running_items[0].enqueued_at_ms,
+            pending_items[0].enqueued_at_ms
+        );
+        assert!(running_items[0].dequeued_at_ms.is_some());
+        assert!(
+            running_items[0]
+                .dequeued_at_ms
+                .expect("dequeued timestamp present")
+                >= running_items[0]
+                    .enqueued_at_ms
+                    .expect("enqueued timestamp present")
+        );
     }
 
     #[tokio::test]

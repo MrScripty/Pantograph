@@ -303,6 +303,8 @@ impl GraphEditSession {
             .map(|execution_id| WorkflowSessionQueueItem {
                 queue_id: execution_id.clone(),
                 run_id: Some(execution_id.clone()),
+                enqueued_at_ms: None,
+                dequeued_at_ms: None,
                 priority: 0,
                 status: WorkflowSessionQueueItemStatus::Running,
             })

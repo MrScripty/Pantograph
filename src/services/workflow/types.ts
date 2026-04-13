@@ -256,6 +256,8 @@ export type WorkflowSessionQueueItemStatus = 'pending' | 'running';
 export interface WorkflowSessionQueueItem {
   queue_id: string;
   run_id?: string | null;
+  enqueued_at_ms?: number | null;
+  dequeued_at_ms?: number | null;
   priority: number;
   status: WorkflowSessionQueueItemStatus;
 }

@@ -349,6 +349,11 @@ Update during implementation:
   attribution by carrying `session_id` through `WorkflowTraceEvent` and
   preferring queue items that match the active execution/session before falling
   back to session-level backlog state.
+- 2026-04-12: Eighth implementation slice added authoritative enqueue/dequeue
+  timestamps to `WorkflowSessionQueueItem`, populated them in workflow session
+  scheduling, mirrored the additive contract to TypeScript, and taught the
+  trace store to prefer those producer timestamps over snapshot observation
+  time.
 
 ## Commit Cadence Notes
 
@@ -400,6 +405,8 @@ Update during implementation:
   `pantograph-workflow-service`, and `src-tauri`
 - Seventh Milestone 1 slice implemented across
   `pantograph-workflow-service` and `src-tauri`
+- Eighth Milestone 1 slice implemented across
+  `pantograph-workflow-service`, `src-tauri`, and TypeScript contract mirrors
 
 ### Deviations
 
@@ -417,6 +424,9 @@ Update during implementation:
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
+- Extend authoritative queue timing to every scheduler host so edit-session and
+  non-session producers emit the same enqueue/dequeue facts instead of falling
+  back to observation timestamps.
 - Extend diagnostics and trace inspection tests once runtime/queue producers
   emit richer lifecycle payloads.
 - Decide whether later detailed metrics inspection belongs in the existing
@@ -426,9 +436,11 @@ Update during implementation:
 
 - `cargo test -p pantograph-workflow-service contract`
 - `cargo test -p pantograph-workflow-service trace`
+- `cargo test -p pantograph-workflow-service workflow_session_queue_items_include_authoritative_timestamps`
 - `cargo test -p inference gateway`
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
+- `npm run typecheck`
 - `cargo check -p pantograph-workflow-service`
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
