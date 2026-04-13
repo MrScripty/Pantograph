@@ -1,40 +1,117 @@
 # src-tauri/src/llm
 
 ## Purpose
-LLM gateway, process management, and Tauri command handlers for model and server operations.
+This directory contains Pantograph's Tauri-side LLM composition and transport
+layer. It wires desktop commands, gateway-backed runtime lifecycle operations,
+health/recovery helpers, and startup/config adaptation onto the backend-owned
+runtime contracts exposed by `crates/inference`.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| backend/ | Subdirectory containing related implementation details. |
-| commands/ | Subdirectory containing related implementation details. |
-| gateway.rs | Source file used by modules in this directory. |
-| health_monitor.rs | Source file used by modules in this directory. |
-| mod.rs | Source file used by modules in this directory. |
-| port_manager.rs | Source file used by modules in this directory. |
-| process_tauri.rs | Source file used by modules in this directory. |
-| recovery.rs | Source file used by modules in this directory. |
-| server_discovery.rs | Source file used by modules in this directory. |
-| startup.rs | Runtime startup request construction and shared model-path resolution helpers for Tauri hosts. |
-| types.rs | Source file used by modules in this directory. |
+| `gateway.rs` | Tauri-facing wrapper around `inference::InferenceGateway` that adapts app-state wiring and startup helpers without replacing the backend facade. |
+| `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, and runtime-status queries. |
+| `health_monitor.rs` | App-owned health polling loop for the currently configured runtime connection paths. |
+| `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
+| `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
+| `process_tauri.rs` | Tauri-specific process spawning bridge used when the app must launch managed runtimes. |
+| `server_discovery.rs` | Local runtime/server registration and discovery helpers used by the desktop host. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
-- Keep Tauri focused on composition and command adaptation. The dedicated
-  embedding runtime lifecycle now lives in `crates/inference`; GUI consumers
-  may read those backend-owned facts but must not infer warmup/reuse decisions
-  locally.
-- Server lifecycle commands should return the backend-owned runtime status
-  contract directly instead of translating it into narrower adapter-local DTOs.
+## Problem
+Pantograph's desktop app still needs a native composition layer for runtime
+startup, server connection, health monitoring, and user-triggered backend
+control. That host wiring must remain thin enough that runtime lifecycle facts
+continue to come from the backend, while app-specific coordination stays in the
+desktop composition layer.
+
+## Constraints
+- The backend-owned `InferenceGateway` contract must remain the execution
+  facade.
+- Tauri commands must not become the owner of app-global runtime residency,
+  admission, retention, or eviction policy.
+- Health/recovery helpers must consume backend facts rather than deriving their
+  own runtime truth model.
+- Startup and config mapping must stay compatible with existing GUI command
+  surfaces until an explicit contract change is approved.
+
+## Decision
+Keep `src-tauri/src/llm` as the desktop host adapter and app-composition layer
+for runtime control. The Tauri app creates and manages the shared gateway in
+`src-tauri/src/main.rs`, injects it into command modules, and uses this
+directory for transport mapping, Tauri-specific spawning, and app-owned
+monitoring loops. The planned `RuntimeRegistry` will also be created from the
+app composition root and injected through this layer, but registry policy will
+remain separate from transport concerns and from `crates/inference`.
+
+## Alternatives Rejected
+- Move runtime policy into `gateway.rs`.
+  Rejected because `InferenceGateway` must stay the execution facade and source
+  of backend lifecycle facts, not the owner of Pantograph scheduler policy.
+- Let workflow commands own runtime health and recovery decisions directly.
+  Rejected because runtime lifecycle coordination is a shared concern across the
+  desktop host, not a workflow-only policy boundary.
+
+## Invariants
+- `src-tauri/src/main.rs` is the current desktop composition root for the shared
+  gateway and related host-owned runtime services.
+- Tauri commands in this directory adapt host calls onto backend contracts; they
+  do not redefine runtime lifecycle truth.
+- Health and recovery flows must operate through shared gateway-backed state,
+  not independent adapter-local state machines.
+- Future `RuntimeRegistry` injection may pass through this layer, but runtime
+  residency and admission policy must not be implemented in command handlers.
+
+## Revisit Triggers
+- A non-Tauri app root needs the same runtime composition logic and this
+  directory stops being a clear desktop-only adapter boundary.
+- `RuntimeRegistry` introduction requires a dedicated submodule or crate for
+  app-owned runtime coordination.
+- Health/recovery behavior grows beyond simple adapter orchestration and needs
+  an ADR-level boundary split.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** `src-tauri/src/main.rs`, `src-tauri/src/config`, `crates/inference`,
+and the workflow command layer that consumes shared gateway state.
+
+**External:** Tauri state management/runtime, serde, and desktop process-spawn
+capabilities required by managed runtimes.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- Reason: ADR-001 freezes the service/adapter split, and ADR-002 freezes this
+  directory as a host adapter/composition layer rather than the owner of the
+  planned runtime-policy layer.
+- Revisit trigger: the desktop host no longer owns the composition root for
+  runtime services.
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+let gateway: SharedGateway = Arc::new(InferenceGateway::new(spawner));
+tauri::async_runtime::block_on(async { gateway.init().await });
+app.manage(gateway);
 ```
+
+## API Consumer Contract
+- Tauri commands and app startup code consume the shared gateway through the
+  `SharedGateway` alias exported from this directory.
+- Command handlers return backend-owned runtime status and capability facts; the
+  GUI should treat those as authoritative over local inference about runtime
+  state.
+- Long-lived host services such as health monitoring and recovery must be
+  started and stopped by the app composition root or another explicit owner,
+  not by arbitrary UI calls.
+- Compatibility policy is additive: command surfaces may grow, but existing
+  backend-owned status shapes should remain stable unless an explicit contract
+  change is approved.
+
+## Structured Producer Contract
+- `gateway.rs` exposes backend-owned lifecycle and capability facts through the
+  Tauri host; adapter code must preserve canonical runtime ids and backend keys
+  instead of inventing local aliases.
+- Command payloads emitted from this directory are transport wrappers around
+  backend/runtime contracts, not a separate policy schema.
+- Health/recovery overlays may add host-only fields, but they must not mutate
+  the meaning of backend-owned lifecycle facts.
+- When `RuntimeRegistry` is introduced, any new structured outputs from this
+  directory must distinguish raw backend facts from registry policy decisions.

@@ -5,7 +5,9 @@ This directory contains Pantograph’s Tauri-side workflow transport and runtime
 integration layer. It wires frontend commands onto the core
 `pantograph-workflow-service` graph-edit/session APIs and hosts desktop-specific
 execution concerns such as event streaming, dependency-aware runtime setup, and
-process-backed task execution.
+process-backed task execution. As RuntimeRegistry work begins, this directory
+must remain a consumer of app-owned runtime policy rather than becoming the
+owner of that policy itself.
 
 ## Contents
 | File/Folder | Description |
@@ -33,6 +35,8 @@ while still handling desktop runtime execution concerns.
 - Expected incompatibility must not be reported as transport failure.
 - Existing public facades such as `validate_connection` must keep working during
   the migration.
+- Runtime admission, reservation, retention, and eviction policy must not be
+  implemented directly in Tauri workflow command handlers.
 - Persisted graphs may contain additive `node.data.definition` port overlays for
   dynamic inference settings; the legacy Tauri path must interpret those the
   same way as core during the migration window.
@@ -50,7 +54,10 @@ per-node `inputs`/`outputs` overlays so dynamic expand-setting ports behave the
 same way as the core service. Workflow diagnostics projections now adapt
 backend-owned `WorkflowTraceStore` snapshots from
 `pantograph-workflow-service`; Tauri retains only projection-only overlays such
-as retained event history, progress text, and runtime/scheduler snapshots.
+as retained event history, progress text, and runtime/scheduler snapshots. When
+the planned `RuntimeRegistry` is introduced, this directory should request
+registry-backed runtime operations through injected host state while keeping
+policy ownership outside the Tauri adapter boundary.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -73,6 +80,9 @@ as retained event history, progress text, and runtime/scheduler snapshots.
 - Session-scoped candidate and insert commands must log enough request/rejection
   context to diagnose release-only interaction failures without relying on
   browser-console access.
+- Workflow command handlers may coordinate with the future `RuntimeRegistry`,
+  but they must not become the long-lived owner of runtime residency or
+  admission state.
 - Legacy local validation must treat `node.data.definition` as an additive
   overlay on top of registry metadata, not as an unchecked replacement for the
   node type contract.
@@ -88,6 +98,8 @@ as retained event history, progress text, and runtime/scheduler snapshots.
   contracts.
 - Desktop execution needs a reusable host implementation outside Tauri.
 - Insert ranking/placement heuristics need a dedicated policy boundary.
+- RuntimeRegistry introduction requires a distinct host-state injection path or
+  changes the lifetime of workflow runtime helpers.
 
 ## Dependencies
 **Internal:** `pantograph-workflow-service`, node-engine workflow types, Tauri
@@ -97,9 +109,12 @@ command registration, mirrored frontend contracts.
 
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
 - Reason: graph editing is now part of the supported core service boundary.
+- Reason: workflow commands will consume runtime-registry operations but must
+  stay transport/adaptation code rather than the owner of runtime policy.
 - Revisit trigger: the Tauri runtime host itself needs an ADR-level split from
-  transport command wiring.
+  transport command wiring or workflow execution leaves the Tauri app boundary.
 
 ## Usage Examples
 ```rust
@@ -143,6 +158,9 @@ let snapshot = workflow_service
 - Canonical run/node lifecycle timing for diagnostics must come from
   `WorkflowTraceStore`; Tauri may only adapt that trace data into the existing
   GUI projection shape and attach additive UI-only overlay fields.
+- Runtime and scheduler snapshots carried through this directory must preserve
+  the distinction between backend/runtime producer facts and future
+  RuntimeRegistry policy decisions.
 - When a scheduler snapshot includes backend-owned `trace_execution_id`,
   adapters must attribute runtime/scheduler snapshot events to that execution
   instead of falling back to `session_id`. If the field is absent, the adapter
