@@ -691,18 +691,31 @@ fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
         WorkflowEvent::RuntimeSnapshot {
             workflow_id,
             execution_id,
-            ..
+            captured_at_ms,
+            capabilities,
+            error,
         } => Some(WorkflowTraceEvent::RuntimeSnapshotCaptured {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
+            captured_at_ms: *captured_at_ms,
+            capabilities: capabilities.clone(),
+            error: error.clone(),
         }),
         WorkflowEvent::SchedulerSnapshot {
             workflow_id,
             execution_id,
+            captured_at_ms,
+            session,
+            items,
+            error,
             ..
         } => Some(WorkflowTraceEvent::SchedulerSnapshotCaptured {
             execution_id: execution_id.clone(),
             workflow_id: workflow_id.clone(),
+            captured_at_ms: *captured_at_ms,
+            session: session.clone(),
+            items: items.clone(),
+            error: error.clone(),
         }),
         WorkflowEvent::DiagnosticsSnapshot { .. } => None,
     }

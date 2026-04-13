@@ -336,6 +336,11 @@ Update during implementation:
   `workflow_get_trace_snapshot` inspection command plus TypeScript contract
   mirrors so backend-owned trace reads no longer depend on the diagnostics
   projection shape.
+- 2026-04-12: Fifth implementation slice threaded scheduler/runtime snapshot
+  payloads through `WorkflowTraceEvent` and moved snapshot interpretation into
+  `pantograph-workflow-service`, so queue observation timing and runtime
+  readiness decisions are recorded in the canonical Rust trace store instead of
+  remaining adapter-local.
 
 ## Commit Cadence Notes
 
@@ -381,33 +386,35 @@ Update during implementation:
 - Third Milestone 1 slice implemented in `src-tauri/src/workflow`
 - Fourth Milestone 1 slice implemented across `src-tauri` and service contract
   mirrors
+- Fifth Milestone 1 slice implemented across `pantograph-workflow-service` and
+  `src-tauri/src/workflow`
 
 ### Deviations
 
-- None yet
+- Current runtime producers do not yet emit true warmup/reuse/instance-lifetime
+  facts, so the canonical trace store now records only snapshot-derived
+  runtime identity/readiness decisions and leaves warmup/reuse fields unset.
 
 ### Follow-Ups
 
-- Continue Milestone 1 by moving trace production and retention ownership out
-  of `src-tauri/src/workflow/diagnostics.rs` and behind workflow-service
-  readers.
-- Replace Tauri diagnostics lifecycle mutation with adaptation over
-  `WorkflowTraceStore` snapshots while preserving the current GUI projection
-  contract.
-- Add a direct trace snapshot command/inspection surface that returns
-  backend-owned `WorkflowTraceSnapshotResponse` without going through the
-  diagnostics projection.
-- Start recording queue timing and runtime lifecycle metrics into the canonical
-  trace store instead of leaving those substructures mostly empty.
-- Thread the new trace contracts through workflow-service trace readers and
-  Tauri commands without reintroducing adapter-owned aggregation.
-- Decide whether the first inspection surface should live in existing
-  diagnostics commands or a new dedicated trace command module
+- Add producer-side runtime lifecycle hooks in
+  `crates/pantograph-embedded-runtime` and `crates/inference` so
+  `WorkflowTraceRuntimeMetrics` can record true warmup start/completion,
+  reuse, and instance identifiers rather than snapshot-derived readiness only.
+- Tighten queue attribution so trace summaries distinguish session-scoped queue
+  observation from run-scoped dequeue facts when concurrent or backlogged runs
+  share a session.
+- Extend diagnostics and trace inspection tests once runtime/queue producers
+  emit richer lifecycle payloads.
+- Decide whether later detailed metrics inspection belongs in the existing
+  diagnostics command surface or a dedicated trace/metrics module.
 
 ### Verification Summary
 
 - `cargo test -p pantograph-workflow-service contract`
 - `cargo test -p pantograph-workflow-service trace`
+- `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
 - `cargo check -p pantograph-workflow-service`
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`

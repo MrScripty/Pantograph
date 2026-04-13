@@ -3,7 +3,10 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::workflow::WorkflowServiceError;
+use crate::workflow::{
+    WorkflowCapabilitiesResponse, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+};
 
 const DEFAULT_RETAINED_TRACE_LIMIT: usize = 200;
 
@@ -132,7 +135,7 @@ pub struct WorkflowTraceGraphContext {
 }
 
 /// Canonical backend-owned trace event model consumed by trace readers/stores.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WorkflowTraceEvent {
     RunStarted {
         execution_id: String,
@@ -186,10 +189,17 @@ pub enum WorkflowTraceEvent {
     RuntimeSnapshotCaptured {
         execution_id: String,
         workflow_id: Option<String>,
+        captured_at_ms: u64,
+        capabilities: Option<WorkflowCapabilitiesResponse>,
+        error: Option<String>,
     },
     SchedulerSnapshotCaptured {
         execution_id: String,
         workflow_id: Option<String>,
+        captured_at_ms: u64,
+        session: Option<WorkflowSessionSummary>,
+        items: Vec<WorkflowSessionQueueItem>,
+        error: Option<String>,
     },
 }
 
@@ -699,13 +709,35 @@ fn apply_trace_event(
             trace.ended_at_ms = Some(timestamp_ms);
             trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
         }
+        WorkflowTraceEvent::RuntimeSnapshotCaptured {
+            captured_at_ms,
+            capabilities,
+            error,
+            ..
+        } => apply_runtime_snapshot(
+            trace,
+            capabilities.as_ref(),
+            error.as_deref(),
+            *captured_at_ms,
+        ),
+        WorkflowTraceEvent::SchedulerSnapshotCaptured {
+            captured_at_ms,
+            session,
+            items,
+            error,
+            ..
+        } => apply_scheduler_snapshot(
+            trace,
+            session.as_ref(),
+            items,
+            error.as_deref(),
+            *captured_at_ms,
+        ),
         WorkflowTraceEvent::NodeProgress { .. }
         | WorkflowTraceEvent::NodeCompleted { .. }
         | WorkflowTraceEvent::NodeFailed { .. }
         | WorkflowTraceEvent::GraphModified { .. }
-        | WorkflowTraceEvent::IncrementalExecutionStarted { .. }
-        | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
-        | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => {}
+        | WorkflowTraceEvent::IncrementalExecutionStarted { .. } => {}
     }
 
     let Some(node_id) = event.node_id() else {
@@ -771,6 +803,157 @@ fn apply_trace_event(
         | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
         | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => {}
     }
+}
+
+fn apply_runtime_snapshot(
+    trace: &mut WorkflowTraceRunState,
+    capabilities: Option<&WorkflowCapabilitiesResponse>,
+    error: Option<&str>,
+    _captured_at_ms: u64,
+) {
+    if let Some(capabilities) = capabilities {
+        if trace.runtime.runtime_id.is_none() {
+            trace.runtime.runtime_id = infer_runtime_id(capabilities);
+        }
+        trace.runtime.lifecycle_decision_reason =
+            Some(runtime_lifecycle_reason(capabilities).to_string());
+        return;
+    }
+
+    if error.is_some() {
+        trace.runtime.lifecycle_decision_reason = Some("capabilities_snapshot_failed".to_string());
+    }
+}
+
+fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<String> {
+    if capabilities.runtime_requirements.required_backends.len() == 1 {
+        return capabilities
+            .runtime_requirements
+            .required_backends
+            .first()
+            .cloned();
+    }
+
+    if capabilities.runtime_capabilities.len() == 1 {
+        return capabilities
+            .runtime_capabilities
+            .first()
+            .map(|capability| capability.runtime_id.clone());
+    }
+
+    None
+}
+
+fn runtime_lifecycle_reason(capabilities: &WorkflowCapabilitiesResponse) -> &'static str {
+    if capabilities
+        .runtime_capabilities
+        .iter()
+        .any(|capability| capability.available && capability.configured)
+    {
+        "configured_runtime_available"
+    } else if !capabilities
+        .runtime_requirements
+        .required_backends
+        .is_empty()
+    {
+        "runtime_requirements_reported"
+    } else {
+        "capabilities_snapshot_available"
+    }
+}
+
+fn apply_scheduler_snapshot(
+    trace: &mut WorkflowTraceRunState,
+    session: Option<&WorkflowSessionSummary>,
+    items: &[WorkflowSessionQueueItem],
+    error: Option<&str>,
+    captured_at_ms: u64,
+) {
+    if error.is_some() {
+        trace.queue.scheduler_decision_reason = Some("scheduler_snapshot_failed".to_string());
+        return;
+    }
+
+    let pending_visible = session
+        .map(|summary| summary.queued_runs > 0)
+        .unwrap_or(false)
+        || items
+            .iter()
+            .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+    let running_visible = matches!(
+        session.map(|summary| summary.state),
+        Some(WorkflowSessionState::Running)
+    ) || items
+        .iter()
+        .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+
+    if pending_visible {
+        trace.queue.enqueued_at_ms.get_or_insert(captured_at_ms);
+        if !matches!(
+            trace.status,
+            WorkflowTraceStatus::Completed
+                | WorkflowTraceStatus::Failed
+                | WorkflowTraceStatus::Cancelled
+        ) && !running_visible
+        {
+            trace.status = WorkflowTraceStatus::Queued;
+        }
+    }
+
+    if running_visible {
+        trace.queue.dequeued_at_ms.get_or_insert(captured_at_ms);
+        if !matches!(
+            trace.status,
+            WorkflowTraceStatus::Completed
+                | WorkflowTraceStatus::Failed
+                | WorkflowTraceStatus::Cancelled
+                | WorkflowTraceStatus::Waiting
+        ) {
+            trace.status = WorkflowTraceStatus::Running;
+        }
+    }
+
+    trace.queue.queue_wait_ms = match (trace.queue.enqueued_at_ms, trace.queue.dequeued_at_ms) {
+        (Some(enqueued_at_ms), Some(dequeued_at_ms)) => {
+            Some(dequeued_at_ms.saturating_sub(enqueued_at_ms))
+        }
+        _ => None,
+    };
+    trace.queue.scheduler_decision_reason = scheduler_decision_reason(session, items);
+}
+
+fn scheduler_decision_reason(
+    session: Option<&WorkflowSessionSummary>,
+    items: &[WorkflowSessionQueueItem],
+) -> Option<String> {
+    let pending_visible = session
+        .map(|summary| summary.queued_runs > 0)
+        .unwrap_or(false)
+        || items
+            .iter()
+            .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+    let running_visible = matches!(
+        session.map(|summary| summary.state),
+        Some(WorkflowSessionState::Running)
+    ) || items
+        .iter()
+        .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+
+    let reason = if running_visible && pending_visible {
+        Some("running_with_backlog")
+    } else if running_visible {
+        Some("running")
+    } else if pending_visible {
+        Some("queued")
+    } else {
+        match session.map(|summary| summary.state) {
+            Some(WorkflowSessionState::IdleLoaded) => Some("idle_loaded"),
+            Some(WorkflowSessionState::IdleUnloaded) => Some("idle_unloaded"),
+            Some(WorkflowSessionState::Running) | None => None,
+        }
+    }?;
+
+    Some(reason.to_string())
 }
 
 fn create_trace_node_record(node_id: &str, node_type: Option<String>) -> WorkflowTraceNodeRecord {
@@ -1065,5 +1248,120 @@ mod tests {
         assert_eq!(snapshot.retained_trace_limit, 1);
         assert_eq!(snapshot.traces.len(), 1);
         assert_eq!(snapshot.traces[0].execution_id, "exec-2");
+    }
+
+    #[test]
+    fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
+        let store = WorkflowTraceStore::new(10);
+        store.record_event(
+            &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                captured_at_ms: 90,
+                session: Some(WorkflowSessionSummary {
+                    session_id: "session-1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                    usage_profile: None,
+                    keep_alive: true,
+                    state: WorkflowSessionState::IdleLoaded,
+                    queued_runs: 1,
+                    run_count: 2,
+                }),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("exec-1".to_string()),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Pending,
+                }],
+                error: None,
+            },
+            90,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 0,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RuntimeSnapshotCaptured {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                captured_at_ms: 110,
+                capabilities: Some(WorkflowCapabilitiesResponse {
+                    max_input_bindings: 4,
+                    max_output_targets: 2,
+                    max_value_bytes: 2_048,
+                    runtime_requirements: crate::workflow::WorkflowRuntimeRequirements {
+                        estimated_peak_vram_mb: None,
+                        estimated_peak_ram_mb: None,
+                        estimated_min_vram_mb: None,
+                        estimated_min_ram_mb: None,
+                        estimation_confidence: "high".to_string(),
+                        required_models: vec!["model-a".to_string()],
+                        required_backends: vec!["llama_cpp".to_string()],
+                        required_extensions: vec!["kv-cache".to_string()],
+                    },
+                    models: Vec::new(),
+                    runtime_capabilities: vec![crate::workflow::WorkflowRuntimeCapability {
+                        runtime_id: "llama_cpp".to_string(),
+                        display_name: "llama.cpp".to_string(),
+                        install_state: crate::workflow::WorkflowRuntimeInstallState::Installed,
+                        available: true,
+                        configured: true,
+                        can_install: false,
+                        can_remove: false,
+                        backend_keys: vec!["llama_cpp".to_string()],
+                        missing_files: Vec::new(),
+                        unavailable_reason: None,
+                    }],
+                }),
+                error: None,
+            },
+            110,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                captured_at_ms: 120,
+                session: Some(WorkflowSessionSummary {
+                    session_id: "session-1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                    usage_profile: None,
+                    keep_alive: true,
+                    state: WorkflowSessionState::Running,
+                    queued_runs: 0,
+                    run_count: 3,
+                }),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("exec-1".to_string()),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+                error: None,
+            },
+            120,
+        );
+
+        let trace = snapshot.traces.first().expect("trace summary");
+        assert_eq!(trace.status, WorkflowTraceStatus::Running);
+        assert_eq!(trace.queue.enqueued_at_ms, Some(90));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(120));
+        assert_eq!(trace.queue.queue_wait_ms, Some(30));
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("running")
+        );
+        assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            trace.runtime.lifecycle_decision_reason.as_deref(),
+            Some("configured_runtime_available")
+        );
     }
 }
