@@ -469,6 +469,9 @@ Update during implementation:
 - Twenty-first implementation slice added in
   `crates/inference/src/backend/pytorch.rs` so identical model/device start
   requests reuse the already-loaded PyTorch runtime instead of forcing a reload
+- Twenty-second implementation slice added across `crates/inference`,
+  `src-tauri/src/llm`, and `src-tauri/src/workflow` so runtime lifecycle
+  snapshots now preserve backend-owned structured decision reasons end to end
 
 ### Deviations
 

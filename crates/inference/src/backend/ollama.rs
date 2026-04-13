@@ -217,6 +217,7 @@ impl InferenceBackend for OllamaBackend {
             log::info!("Connected to existing Ollama server");
             return Ok(BackendStartOutcome {
                 runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("connected_existing_ollama_daemon".to_string()),
             });
         }
 
@@ -239,6 +240,7 @@ impl InferenceBackend for OllamaBackend {
         log::info!("Started managed Ollama server");
         Ok(BackendStartOutcome {
             runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("started_managed_ollama_daemon".to_string()),
         })
     }
 

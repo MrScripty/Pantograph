@@ -146,6 +146,8 @@ pub struct BackendStartOutcome {
     /// Whether the backend attached to an already-running runtime instead of
     /// launching a fresh one.
     pub runtime_reused: Option<bool>,
+    /// Structured reason describing the lifecycle decision taken by the backend.
+    pub lifecycle_decision_reason: Option<String>,
 }
 
 /// A streaming chunk from chat completion

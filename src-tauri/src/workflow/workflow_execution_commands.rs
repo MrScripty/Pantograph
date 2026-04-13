@@ -422,16 +422,18 @@ pub(crate) fn trace_runtime_metrics(
         warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
         warmup_duration_ms: snapshot.warmup_duration_ms,
         runtime_reused: snapshot.runtime_reused,
-        lifecycle_decision_reason: match (
-            snapshot.last_error.as_ref(),
-            snapshot.runtime_reused,
-            snapshot.active,
-        ) {
-            (Some(_), _, _) => Some("runtime_start_failed".to_string()),
-            (None, Some(true), true) => Some("runtime_reused".to_string()),
-            (None, _, true) => Some("runtime_ready".to_string()),
-            (None, _, false) => None,
-        },
+        lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone().or_else(|| {
+            match (
+                snapshot.last_error.as_ref(),
+                snapshot.runtime_reused,
+                snapshot.active,
+            ) {
+                (Some(_), _, _) => Some("runtime_start_failed".to_string()),
+                (None, Some(true), true) => Some("runtime_reused".to_string()),
+                (None, _, true) => Some("runtime_ready".to_string()),
+                (None, _, false) => None,
+            }
+        }),
     }
 }
 
@@ -692,6 +694,31 @@ async fn run_session_graph_snapshot(
     )
     .await;
     workflow_result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trace_runtime_metrics;
+
+    #[test]
+    fn trace_runtime_metrics_prefers_backend_lifecycle_reason() {
+        let metrics = trace_runtime_metrics(&inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("pytorch".to_string()),
+            runtime_instance_id: Some("pytorch-1".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(20),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("reused_loaded_pytorch_model".to_string()),
+            active: true,
+            last_error: None,
+        });
+
+        assert_eq!(
+            metrics.lifecycle_decision_reason.as_deref(),
+            Some("reused_loaded_pytorch_model")
+        );
+    }
 }
 
 pub async fn execute_workflow_v2(

@@ -323,6 +323,8 @@ impl EmbeddingServer {
     /// Mark the current embedding runtime as reused by a later request.
     pub fn mark_runtime_reused(&mut self) {
         self.runtime_lifecycle.runtime_reused = Some(true);
+        self.runtime_lifecycle.lifecycle_decision_reason =
+            Some("reused_embedding_runtime".to_string());
         self.runtime_lifecycle.active = self.is_ready();
         self.runtime_lifecycle.last_error = None;
     }
@@ -359,6 +361,7 @@ impl EmbeddingServer {
         self.runtime_lifecycle.warmup_completed_at_ms = None;
         self.runtime_lifecycle.warmup_duration_ms = None;
         self.runtime_lifecycle.runtime_reused = Some(false);
+        self.runtime_lifecycle.lifecycle_decision_reason = None;
         self.runtime_lifecycle.active = false;
         self.runtime_lifecycle.last_error = None;
     }
@@ -376,6 +379,8 @@ impl EmbeddingServer {
         self.runtime_lifecycle.warmup_duration_ms =
             Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
         self.runtime_lifecycle.runtime_reused = Some(false);
+        self.runtime_lifecycle.lifecycle_decision_reason =
+            Some("started_embedding_runtime".to_string());
         self.runtime_lifecycle.active = true;
         self.runtime_lifecycle.last_error = None;
     }
@@ -388,6 +393,8 @@ impl EmbeddingServer {
         self.runtime_lifecycle.warmup_duration_ms =
             Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
         self.runtime_lifecycle.runtime_reused = Some(false);
+        self.runtime_lifecycle.lifecycle_decision_reason =
+            Some("embedding_runtime_start_failed".to_string());
         self.runtime_lifecycle.active = false;
         self.runtime_lifecycle.last_error = Some(error);
     }
@@ -473,6 +480,10 @@ mod tests {
         assert!(snapshot.warmup_completed_at_ms.is_some());
         assert!(snapshot.warmup_duration_ms.is_some());
         assert_eq!(snapshot.runtime_reused, Some(false));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("started_embedding_runtime")
+        );
         assert!(snapshot.active);
         assert!(snapshot.last_error.is_none());
     }
@@ -490,6 +501,10 @@ mod tests {
         assert!(snapshot.warmup_completed_at_ms.is_some());
         assert!(snapshot.warmup_duration_ms.is_some());
         assert_eq!(snapshot.runtime_reused, Some(false));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("embedding_runtime_start_failed")
+        );
         assert!(!snapshot.active);
         assert_eq!(snapshot.last_error.as_deref(), Some("spawn failed"));
     }

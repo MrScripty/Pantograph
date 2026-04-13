@@ -58,6 +58,8 @@ pub struct RuntimeLifecycleSnapshot {
     #[serde(default)]
     pub runtime_reused: Option<bool>,
     #[serde(default)]
+    pub lifecycle_decision_reason: Option<String>,
+    #[serde(default)]
     pub active: bool,
     #[serde(default)]
     pub last_error: Option<String>,
@@ -235,6 +237,7 @@ impl InferenceGateway {
             lifecycle.warmup_completed_at_ms = None;
             lifecycle.warmup_duration_ms = None;
             lifecycle.runtime_reused = None;
+            lifecycle.lifecycle_decision_reason = None;
             lifecycle.active = false;
             lifecycle.last_error = None;
         }
@@ -277,6 +280,14 @@ impl InferenceGateway {
                 lifecycle.warmup_duration_ms =
                     Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
                 lifecycle.runtime_reused = Some(runtime_reused);
+                lifecycle.lifecycle_decision_reason =
+                    Some(start_outcome.lifecycle_decision_reason.unwrap_or_else(|| {
+                        if runtime_reused {
+                            "runtime_reused".to_string()
+                        } else {
+                            "runtime_ready".to_string()
+                        }
+                    }));
                 lifecycle.active = true;
                 lifecycle.last_error = None;
                 Ok(())
@@ -290,6 +301,7 @@ impl InferenceGateway {
                 lifecycle.warmup_duration_ms =
                     Some(completed_at_ms.saturating_sub(warmup_started_at_ms));
                 lifecycle.active = false;
+                lifecycle.lifecycle_decision_reason = Some("runtime_start_failed".to_string());
                 lifecycle.last_error = Some(error.to_string());
                 Err(GatewayError::Backend(error))
             }
@@ -564,6 +576,7 @@ mod tests {
         ) -> Result<BackendStartOutcome, BackendError> {
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_mock_runtime".to_string()),
             })
         }
 
@@ -642,6 +655,7 @@ mod tests {
         ) -> Result<BackendStartOutcome, BackendError> {
             Ok(BackendStartOutcome {
                 runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("reused_mock_runtime".to_string()),
             })
         }
 
@@ -768,6 +782,10 @@ mod tests {
         assert!(started.warmup_completed_at_ms.is_some());
         assert!(started.warmup_duration_ms.is_some());
         assert_eq!(started.runtime_reused, Some(false));
+        assert_eq!(
+            started.lifecycle_decision_reason.as_deref(),
+            Some("started_mock_runtime")
+        );
         assert!(started.active);
         assert!(started.last_error.is_none());
 
@@ -799,5 +817,9 @@ mod tests {
         assert_eq!(second.runtime_id.as_deref(), Some("mock"));
         assert_eq!(second.runtime_reused, Some(true));
         assert_eq!(second.runtime_instance_id, first.runtime_instance_id);
+        assert_eq!(
+            second.lifecycle_decision_reason.as_deref(),
+            Some("reused_mock_runtime")
+        );
     }
 }

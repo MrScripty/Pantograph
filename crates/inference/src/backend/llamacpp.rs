@@ -250,6 +250,7 @@ impl InferenceBackend for LlamaCppBackend {
                 })?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_llamacpp_embedding".to_string()),
             })
         } else if config.reranking_mode {
             let model_path = config.model_path.as_ref().ok_or_else(|| {
@@ -270,6 +271,7 @@ impl InferenceBackend for LlamaCppBackend {
                 })?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_llamacpp_reranking".to_string()),
             })
         } else {
             // Start in inference mode (text LLM or VLM with optional vision)
@@ -303,6 +305,7 @@ impl InferenceBackend for LlamaCppBackend {
                 })?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_llamacpp_inference".to_string()),
             })
         }
     }

@@ -79,6 +79,9 @@ let spawner = StdProcessSpawner::new(
 - Backend start paths also own runtime reuse facts. For example, the Ollama
   backend reports whether it attached to an existing daemon so the gateway can
   preserve lifecycle attribution without guessing in adapters.
+- When a backend knows why a runtime was reused or started, it should emit a
+  structured lifecycle decision reason rather than leaving adapters to infer a
+  generic label.
 
 ## Feature Flags
 

@@ -443,6 +443,7 @@ impl InferenceBackend for PyTorchBackend {
                 log::info!("PyTorch backend: reusing loaded model {}", model_path);
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("reused_loaded_pytorch_model".to_string()),
                 });
             }
 
@@ -450,12 +451,18 @@ impl InferenceBackend for PyTorchBackend {
 
             return Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("loaded_pytorch_model".to_string()),
             });
         }
 
         self.ready = true;
         Ok(BackendStartOutcome {
             runtime_reused: Some(was_ready),
+            lifecycle_decision_reason: Some(if was_ready {
+                "reused_pytorch_worker".to_string()
+            } else {
+                "initialized_pytorch_worker".to_string()
+            }),
         })
     }
 
@@ -610,18 +617,10 @@ mod tests {
         });
 
         assert!(backend.can_reuse_loaded_model("/models/demo", "cuda", None));
-        assert!(backend.can_reuse_loaded_model(
-            "/models/demo",
-            "cuda",
-            Some("text-generation")
-        ));
+        assert!(backend.can_reuse_loaded_model("/models/demo", "cuda", Some("text-generation")));
         assert!(!backend.can_reuse_loaded_model("/models/other", "cuda", None));
         assert!(!backend.can_reuse_loaded_model("/models/demo", "cpu", None));
-        assert!(!backend.can_reuse_loaded_model(
-            "/models/demo",
-            "cuda",
-            Some("dllm")
-        ));
+        assert!(!backend.can_reuse_loaded_model("/models/demo", "cuda", Some("dllm")));
     }
 
     #[test]
