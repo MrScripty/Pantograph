@@ -11,6 +11,7 @@ command handlers.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `mod.rs` | Public registry facade, transition API, and focused state-machine tests. |
+| `observation.rs` | Backend-lifecycle reconciliation rules that translate `ServerModeInfo` into registry state. |
 | `state.rs` | Runtime status, runtime record, and state-transition validation types. |
 | `reservation.rs` | Reservation request, lease, and stored reservation-record contracts. |
 | `snapshot.rs` | Machine-consumable registry snapshot types used for internal inspection and future diagnostics. |
@@ -49,6 +50,8 @@ here instead of in gateway or adapters.
 - Invalid state transitions are rejected rather than silently coerced.
 - Snapshot output reflects registry-owned state only; it does not invent
   backend facts.
+- Observation helpers reconcile backend-owned lifecycle snapshots into registry
+  state without moving policy into command handlers.
 
 ## Revisit Triggers
 - Non-Tauri hosts need the same registry module and app-layer reuse outweighs
@@ -84,6 +87,8 @@ registry.register_runtime(RuntimeRegistration::new("PyTorch", "PyTorch sidecar")
 - Callers must register runtimes before attempting transitions or reservations.
 - Transition and reservation methods return structured errors when the runtime
   is unknown or the requested state change is invalid.
+- Command layers may feed backend-owned `ServerModeInfo` observations into the
+  registry, but they must not implement their own runtime-state reconciliation.
 
 ## Structured Producer Contract
 - Snapshot types in `snapshot.rs` are machine-consumable internal contracts for

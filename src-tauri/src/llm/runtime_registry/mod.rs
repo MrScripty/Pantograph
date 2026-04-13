@@ -1,3 +1,4 @@
+mod observation;
 mod reservation;
 mod snapshot;
 mod state;
@@ -10,8 +11,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest};
 pub use snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
+use state::RuntimeModelResidencyRecord;
 pub use state::{RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition};
 
+use observation::{RuntimeObservation, observations_from_mode_info};
 use reservation::RuntimeReservationRecord;
 use state::RuntimeTransition as Transition;
 
@@ -250,6 +253,55 @@ impl RuntimeRegistry {
             reservations,
         }
     }
+
+    pub fn observe_mode_info(
+        &self,
+        mode_info: &inference::ServerModeInfo,
+    ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+        let observations = observations_from_mode_info(mode_info);
+        self.observe_runtime_set(observations)
+    }
+
+    fn observe_runtime_set(
+        &self,
+        observations: Vec<RuntimeObservation>,
+    ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+        let now_ms = unix_timestamp_ms();
+        let observed_runtime_ids = observations
+            .iter()
+            .map(RuntimeObservation::runtime_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+
+        for observation in observations {
+            apply_runtime_observation(&mut guard, observation, now_ms);
+        }
+
+        for record in guard.runtimes.values_mut() {
+            if observed_runtime_ids.contains(&record.runtime_id)
+                || !record.active_reservations.is_empty()
+            {
+                continue;
+            }
+
+            record.status = RuntimeRegistryStatus::Stopped;
+            record.runtime_instance_id = None;
+            record.last_error = None;
+            record.models.clear();
+            record.last_transition_at_ms = now_ms;
+        }
+
+        let mut snapshots = guard
+            .runtimes
+            .values()
+            .map(runtime_snapshot)
+            .collect::<Vec<_>>();
+        snapshots.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
+        snapshots
+    }
 }
 
 fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistryRuntimeSnapshot {
@@ -277,6 +329,65 @@ fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistryRuntimeSna
         active_reservation_ids,
         models,
     }
+}
+
+fn apply_runtime_observation(
+    state: &mut RuntimeRegistryState,
+    observation: RuntimeObservation,
+    now_ms: u64,
+) {
+    let runtime_id = observation.runtime_id();
+    let record = state.runtimes.entry(runtime_id.clone()).or_insert_with(|| {
+        RuntimeRegistryRecord::new(&runtime_id, &observation.display_name, now_ms)
+    });
+
+    record.runtime_id = runtime_id;
+    record.display_name = observation.display_name;
+    record.set_backend_keys(observation.backend_keys);
+    record.status = observation.status;
+    record.runtime_instance_id = match observation.status {
+        RuntimeRegistryStatus::Stopped => None,
+        _ => observation.runtime_instance_id,
+    };
+    record.last_error = observation.last_error;
+    record.last_transition_at_ms = now_ms;
+    sync_observed_models(record, observation.model_id, observation.status, now_ms);
+}
+
+fn sync_observed_models(
+    record: &mut RuntimeRegistryRecord,
+    model_id: Option<String>,
+    status: RuntimeRegistryStatus,
+    now_ms: u64,
+) {
+    if matches!(
+        status,
+        RuntimeRegistryStatus::Stopped | RuntimeRegistryStatus::Failed
+    ) {
+        record.models.clear();
+        return;
+    }
+
+    let Some(model_id) = model_id else {
+        record.models.clear();
+        return;
+    };
+
+    let existing_loaded_at_ms = record
+        .models
+        .get(&model_id)
+        .map(|model| model.loaded_at_ms)
+        .unwrap_or(now_ms);
+    record.models.clear();
+    record.models.insert(
+        model_id.clone(),
+        RuntimeModelResidencyRecord {
+            model_id,
+            usage_profile: None,
+            pinned: false,
+            loaded_at_ms: existing_loaded_at_ms,
+        },
+    );
 }
 
 fn unix_timestamp_ms() -> u64 {
@@ -406,5 +517,127 @@ mod tests {
             err,
             RuntimeRegistryError::ReservationRejected("llama_cpp".to_string())
         );
+    }
+
+    #[test]
+    fn observe_mode_info_registers_active_and_embedding_runtimes() {
+        let registry = RuntimeRegistry::new();
+
+        let snapshots = registry.observe_mode_info(&inference::ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: Some("http://127.0.0.1:11434".to_string()),
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("/models/qwen.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_runtime".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-embed-1".to_string()),
+                warmup_started_at_ms: Some(11),
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_embedding_runtime".to_string()),
+                active: true,
+                last_error: None,
+            }),
+        });
+
+        assert_eq!(snapshots.len(), 2);
+        let active_runtime = snapshots
+            .iter()
+            .find(|snapshot| snapshot.runtime_id == "llama_cpp")
+            .expect("active runtime snapshot");
+        assert_eq!(active_runtime.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(active_runtime.models[0].model_id, "/models/qwen.gguf");
+
+        let embedding_runtime = snapshots
+            .iter()
+            .find(|snapshot| snapshot.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(embedding_runtime.status, RuntimeRegistryStatus::Warming);
+        assert_eq!(embedding_runtime.models[0].model_id, "/models/embed.gguf");
+    }
+
+    #[test]
+    fn observe_mode_info_stops_unobserved_runtimes_without_reservations() {
+        let registry = RuntimeRegistry::new();
+
+        registry.observe_mode_info(&inference::ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: None,
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("/models/qwen.gguf".to_string()),
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_runtime".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        });
+
+        let snapshots = registry.observe_mode_info(&inference::ServerModeInfo {
+            backend_name: Some("ollama".to_string()),
+            backend_key: Some("ollama".to_string()),
+            mode: "external".to_string(),
+            ready: true,
+            url: Some("http://127.0.0.1:11434".to_string()),
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("llava:13b".to_string()),
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("ollama".to_string()),
+                runtime_instance_id: Some("ollama-1".to_string()),
+                warmup_started_at_ms: Some(30),
+                warmup_completed_at_ms: Some(35),
+                warmup_duration_ms: Some(5),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("connected_external_runtime".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        });
+
+        assert_eq!(snapshots.len(), 2);
+        let llama = snapshots
+            .iter()
+            .find(|snapshot| snapshot.runtime_id == "llama_cpp")
+            .expect("llama snapshot");
+        assert_eq!(llama.status, RuntimeRegistryStatus::Stopped);
+        assert!(llama.models.is_empty());
+
+        let ollama = snapshots
+            .iter()
+            .find(|snapshot| snapshot.runtime_id == "ollama")
+            .expect("ollama snapshot");
+        assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(ollama.models[0].model_id, "llava:13b");
     }
 }

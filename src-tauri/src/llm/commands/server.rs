@@ -1,20 +1,21 @@
 //! LLM server lifecycle management commands.
 
 use super::config::list_devices;
-use super::shared::SharedAppConfig;
+use super::shared::{SharedAppConfig, sync_runtime_registry_from_gateway};
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
-use crate::llm::gateway::SharedGateway;
 use crate::llm::startup::{
     build_configured_embedding_request, build_configured_inference_request,
     build_explicit_llamacpp_inference_request, build_external_inference_request,
     resolve_embedding_model_path,
 };
-use tauri::{command, AppHandle, State};
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+use tauri::{AppHandle, State, command};
 
 #[command]
 pub async fn connect_to_server(
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     url: String,
 ) -> Result<ServerModeInfo, String> {
     let external_backend_key = gateway
@@ -41,6 +42,7 @@ pub async fn connect_to_server(
         .await
         .map_err(|e| e.to_string())?;
 
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 
@@ -48,6 +50,7 @@ pub async fn connect_to_server(
 pub async fn start_sidecar_llm(
     _app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
     model_path: String,
     mmproj_path: String,
@@ -74,17 +77,26 @@ pub async fn start_sidecar_llm(
         .await
         .map_err(|e| e.to_string())?;
 
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 
 #[command]
-pub async fn get_llm_status(gateway: State<'_, SharedGateway>) -> Result<ServerModeInfo, String> {
+pub async fn get_llm_status(
+    gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
+) -> Result<ServerModeInfo, String> {
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 
 #[command]
-pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<ServerModeInfo, String> {
+pub async fn stop_llm(
+    gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
+) -> Result<ServerModeInfo, String> {
     gateway.stop().await;
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 
@@ -92,6 +104,7 @@ pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<ServerModeInf
 pub async fn start_sidecar_inference(
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
 ) -> Result<ServerModeInfo, String> {
@@ -165,6 +178,7 @@ pub async fn start_sidecar_inference(
         }
     }
 
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 
@@ -172,6 +186,7 @@ pub async fn start_sidecar_inference(
 pub async fn start_sidecar_embedding(
     _app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
 ) -> Result<ServerModeInfo, String> {
     let config_guard = config.read().await;
@@ -189,6 +204,7 @@ pub async fn start_sidecar_embedding(
         .map_err(|e| e.to_string())?;
 
     log::info!("Started sidecar in embedding mode");
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 

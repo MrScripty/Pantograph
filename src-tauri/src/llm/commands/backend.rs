@@ -2,7 +2,8 @@
 
 use crate::config::ServerModeInfo;
 use crate::llm::backend::BackendInfo;
-use crate::llm::gateway::SharedGateway;
+use crate::llm::commands::shared::sync_runtime_registry_from_gateway;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use inference::{ManagedBinaryInstallState, binary_capability};
 use tauri::{AppHandle, Manager, State, command};
 
@@ -52,6 +53,7 @@ pub async fn get_current_backend(gateway: State<'_, SharedGateway>) -> Result<St
 #[command]
 pub async fn switch_backend(
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     backend_name: String,
 ) -> Result<ServerModeInfo, String> {
     gateway
@@ -60,6 +62,7 @@ pub async fn switch_backend(
         .map_err(|e| e.to_string())?;
 
     log::info!("Switched to backend: {}", backend_name);
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     Ok(gateway.mode_info().await)
 }
 

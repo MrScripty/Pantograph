@@ -1,6 +1,7 @@
 //! Shared utilities for command modules.
 
 use crate::config::AppConfig;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::project_root::resolve_project_root;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,4 +33,12 @@ pub fn get_project_data_dir() -> Result<PathBuf, String> {
     }
 
     Ok(data_dir)
+}
+
+pub async fn sync_runtime_registry_from_gateway(
+    gateway: &SharedGateway,
+    registry: &SharedRuntimeRegistry,
+) {
+    let mode_info = gateway.mode_info().await;
+    registry.observe_mode_info(&mode_info);
 }
