@@ -10,11 +10,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, command, ipc::Channel};
 use tokio::sync::RwLock;
 
-use super::events::WorkflowEvent;
 use super::SharedExecutionManager;
+use super::events::WorkflowEvent;
 use crate::agent::rag::SharedRagManager;
 use crate::llm::gateway::SharedGateway;
 
@@ -500,7 +500,11 @@ pub async fn execute_orchestration(
     let executor = OrchestrationExecutor::new(data_executor);
 
     // Create an event adapter for the channel
-    let event_sink = super::event_adapter::TauriEventAdapter::new(channel, &orchestration_id);
+    let event_sink = super::event_adapter::TauriEventAdapter::new(
+        channel,
+        &orchestration_id,
+        Arc::new(super::diagnostics::WorkflowDiagnosticsStore::default()),
+    );
 
     // Execute the orchestration
     let result = executor

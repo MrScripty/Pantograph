@@ -53,6 +53,8 @@ fn main() {
     let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
     let workflow_service: workflow::commands::SharedWorkflowService =
         Arc::new(pantograph_workflow_service::WorkflowService::new());
+    let workflow_diagnostics_store: workflow::commands::SharedWorkflowDiagnosticsStore =
+        Arc::new(workflow::WorkflowDiagnosticsStore::default());
 
     // Resolve the real repo root at runtime so saved workflows survive source tree moves.
     let project_root =
@@ -104,6 +106,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(execution_manager)
         .manage(workflow_service)
+        .manage(workflow_diagnostics_store)
         .manage(workflow_graph_store)
         .manage(orchestration_store)
         .manage(node_registry)
@@ -329,6 +332,8 @@ fn main() {
             workflow::commands::workflow_get_session_status,
             workflow::commands::workflow_list_session_queue,
             workflow::commands::workflow_get_scheduler_snapshot,
+            workflow::commands::workflow_get_diagnostics_snapshot,
+            workflow::commands::workflow_clear_diagnostics_history,
             workflow::commands::workflow_cancel_session_queue_item,
             workflow::commands::workflow_reprioritize_session_queue_item,
             workflow::commands::workflow_set_session_keep_alive,

@@ -1,4 +1,5 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
+import type { WorkflowDiagnosticsProjection } from '../diagnostics/types';
 import type {
   NodeDefinition,
   WorkflowCapabilitiesResponse,
@@ -319,6 +320,55 @@ export class WorkflowService {
         session_id: id,
       },
     });
+  }
+
+  async getDiagnosticsSnapshot(
+    workflowId?: string | null,
+    workflowName?: string | null,
+    sessionId?: string | null,
+  ): Promise<WorkflowDiagnosticsProjection> {
+    if (USE_MOCKS) {
+      return {
+        runsById: {},
+        runOrder: [],
+        runtime: {
+          workflowId: workflowId ?? null,
+          capturedAtMs: null,
+          maxInputBindings: null,
+          maxOutputTargets: null,
+          maxValueBytes: null,
+          runtimeRequirements: null,
+          runtimeCapabilities: [],
+          models: [],
+          lastError: null,
+        },
+        scheduler: {
+          workflowId: workflowId ?? null,
+          sessionId: sessionId ?? null,
+          capturedAtMs: null,
+          session: null,
+          items: [],
+          lastError: null,
+        },
+        retainedEventLimit: 200,
+      };
+    }
+
+    return invoke<WorkflowDiagnosticsProjection>('workflow_get_diagnostics_snapshot', {
+      request: {
+        workflow_id: workflowId ?? null,
+        workflow_name: workflowName ?? null,
+        session_id: sessionId ?? null,
+      },
+    });
+  }
+
+  async clearDiagnosticsHistory(): Promise<WorkflowDiagnosticsProjection> {
+    if (USE_MOCKS) {
+      return this.getDiagnosticsSnapshot(null, null, null);
+    }
+
+    return invoke<WorkflowDiagnosticsProjection>('workflow_clear_diagnostics_history');
   }
 
   // --- Undo/Redo ---

@@ -287,7 +287,8 @@ export type WorkflowEventType =
   | 'WaitingForInput'
   | 'IncrementalExecutionStarted'
   | 'RuntimeSnapshot'
-  | 'SchedulerSnapshot';
+  | 'SchedulerSnapshot'
+  | 'DiagnosticsSnapshot';
 
 export interface WorkflowEventData {
   Started: { workflow_id: string; node_count: number; execution_id?: string };
@@ -334,6 +335,10 @@ export interface WorkflowEventData {
     session?: WorkflowSessionSummary | null;
     items: WorkflowSessionQueueItem[];
     error?: string | null;
+  };
+  DiagnosticsSnapshot: {
+    execution_id?: string;
+    snapshot: unknown;
   };
 }
 

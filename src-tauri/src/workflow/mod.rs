@@ -24,6 +24,7 @@
 
 pub mod commands;
 pub mod connection_intent;
+pub mod diagnostics;
 pub mod effective_definition;
 pub mod event_adapter;
 pub mod events;
@@ -45,6 +46,7 @@ pub mod workflow_persistence_commands;
 pub mod workflow_port_query_commands;
 
 // Re-export types used by main.rs
+pub use diagnostics::WorkflowDiagnosticsStore;
 pub use execution_manager::{ExecutionManager, SharedExecutionManager};
 pub use model_dependencies::SharedModelDependencyResolver;
 pub use orchestration::SharedOrchestrationStore;

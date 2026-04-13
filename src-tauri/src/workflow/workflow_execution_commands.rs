@@ -23,6 +23,7 @@ use pantograph_workflow_service::{
 use tauri::{AppHandle, State, ipc::Channel};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
+use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::task_executor::TauriTaskExecutor;
@@ -404,11 +405,22 @@ async fn restore_runtime_if_needed(
     }
 }
 
-fn unix_timestamp_ms() -> u64 {
+pub(crate) fn unix_timestamp_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
+}
+
+fn send_diagnostics_projection(
+    channel: &Channel<WorkflowEvent>,
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
+    execution_id: &str,
+) {
+    let _ = channel.send(WorkflowEvent::diagnostics_snapshot(
+        execution_id.to_string(),
+        diagnostics_store.snapshot(),
+    ));
 }
 
 async fn emit_diagnostics_snapshots(
@@ -417,6 +429,7 @@ async fn emit_diagnostics_snapshots(
     gateway: &SharedGateway,
     extensions: &SharedExtensions,
     workflow_service: &SharedWorkflowService,
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
     channel: &Channel<WorkflowEvent>,
 ) {
     let scheduler_snapshot = match workflow_service
@@ -442,7 +455,7 @@ async fn emit_diagnostics_snapshots(
         .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
     let captured_at_ms = unix_timestamp_ms();
 
-    let _ = channel.send(WorkflowEvent::scheduler_snapshot(
+    let scheduler_event = WorkflowEvent::scheduler_snapshot(
         workflow_id,
         session_id.to_string(),
         session_id.to_string(),
@@ -450,7 +463,10 @@ async fn emit_diagnostics_snapshots(
         Some(scheduler_snapshot.session.clone()),
         scheduler_snapshot.items.clone(),
         None,
-    ));
+    );
+    diagnostics_store.record_workflow_event(&scheduler_event, captured_at_ms);
+    let _ = channel.send(scheduler_event);
+    send_diagnostics_projection(channel, diagnostics_store, session_id);
 
     let runtime = match super::headless_workflow_commands::build_runtime(
         app,
@@ -462,12 +478,19 @@ async fn emit_diagnostics_snapshots(
         Ok(runtime) => runtime,
         Err(error) => {
             let _ = channel.send(WorkflowEvent::runtime_snapshot(
-                runtime_workflow_id,
+                runtime_workflow_id.clone(),
                 session_id.to_string(),
                 captured_at_ms,
                 None,
-                Some(error),
+                Some(error.clone()),
             ));
+            diagnostics_store.update_runtime_snapshot(
+                Some(runtime_workflow_id),
+                None,
+                Some(error),
+                captured_at_ms,
+            );
+            send_diagnostics_projection(channel, diagnostics_store, session_id);
             return;
         }
     };
@@ -490,13 +513,16 @@ async fn emit_diagnostics_snapshots(
         }
     };
 
-    let _ = channel.send(WorkflowEvent::runtime_snapshot(
+    let runtime_event = WorkflowEvent::runtime_snapshot(
         runtime_workflow_id,
         session_id.to_string(),
         captured_at_ms,
         capabilities,
         runtime_error,
-    ));
+    );
+    diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);
+    let _ = channel.send(runtime_event);
+    send_diagnostics_projection(channel, diagnostics_store, session_id);
 }
 
 async fn run_session_graph_snapshot(
@@ -508,6 +534,7 @@ async fn run_session_graph_snapshot(
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -523,11 +550,18 @@ async fn run_session_graph_snapshot(
         gateway.inner(),
         extensions.inner(),
         workflow_service.inner(),
+        diagnostics_store.inner(),
         &diagnostics_channel,
     )
     .await;
 
-    let event_adapter = Arc::new(TauriEventAdapter::new(channel, &session_id));
+    diagnostics_store.set_execution_graph(&session_id, &session_graph);
+
+    let event_adapter = Arc::new(TauriEventAdapter::new(
+        channel,
+        &session_id,
+        diagnostics_store.inner().clone(),
+    ));
     let runtime_ext = {
         let shared = extensions.read().await;
         snapshot_runtime_extensions(&shared)
@@ -625,6 +659,7 @@ async fn run_session_graph_snapshot(
         gateway.inner(),
         extensions.inner(),
         workflow_service.inner(),
+        diagnostics_store.inner(),
         &diagnostics_channel,
     )
     .await;
@@ -639,6 +674,7 @@ pub async fn execute_workflow_v2(
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<String, String> {
     let session = workflow_service
@@ -659,6 +695,7 @@ pub async fn execute_workflow_v2(
         rag_manager,
         extensions,
         workflow_service,
+        diagnostics_store,
         channel,
     )
     .await?;
@@ -927,6 +964,7 @@ pub async fn run_workflow_session(
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
     let session_graph = workflow_service
@@ -942,6 +980,7 @@ pub async fn run_workflow_session(
         rag_manager,
         extensions,
         workflow_service,
+        diagnostics_store,
         channel,
     )
     .await

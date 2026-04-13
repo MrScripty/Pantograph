@@ -4,31 +4,138 @@ import {
   isWorkflowEventRelevantToExecution,
 } from '@pantograph/svelte-graph';
 
-import { DiagnosticsService } from '../services/diagnostics/DiagnosticsService';
 import type {
   DiagnosticsSnapshot,
   DiagnosticsTab,
+  WorkflowDiagnosticsProjection,
+  WorkflowDiagnosticsState,
 } from '../services/diagnostics/types';
-import type { WorkflowGraph } from '../services/workflow/types';
+import type { WorkflowGraph, WorkflowEvent } from '../services/workflow/types';
 import { workflowGraph } from './workflowStore';
 import { currentGraphId, currentGraphName } from './graphSessionStore';
 import { workflowService } from '../services/workflow/WorkflowService';
 import { sessionStores } from './storeInstances';
 
-const diagnosticsService = new DiagnosticsService();
-const diagnosticsSnapshotStore = writable<DiagnosticsSnapshot>(diagnosticsService.getSnapshot());
+type DiagnosticsUiState = Pick<
+  WorkflowDiagnosticsState,
+  'panelOpen' | 'activeTab' | 'selectedRunId' | 'selectedNodeId'
+>;
 
-let diagnosticsUnsubscribe: (() => void) | null = null;
+const DEFAULT_UI_STATE: DiagnosticsUiState = {
+  panelOpen: false,
+  activeTab: 'overview',
+  selectedRunId: null,
+  selectedNodeId: null,
+};
+
+function createEmptyProjection(): WorkflowDiagnosticsProjection {
+  return {
+    runsById: {},
+    runOrder: [],
+    runtime: {
+      workflowId: null,
+      capturedAtMs: null,
+      maxInputBindings: null,
+      maxOutputTargets: null,
+      maxValueBytes: null,
+      runtimeRequirements: null,
+      runtimeCapabilities: [],
+      models: [],
+      lastError: null,
+    },
+    scheduler: {
+      workflowId: null,
+      sessionId: null,
+      capturedAtMs: null,
+      session: null,
+      items: [],
+      lastError: null,
+    },
+    retainedEventLimit: 200,
+  };
+}
+
+let latestProjection: WorkflowDiagnosticsProjection = createEmptyProjection();
+let latestWorkflowId: string | null = null;
+let latestWorkflowName: string | null = null;
+let latestWorkflowGraph: WorkflowGraph | null = null;
+let latestSessionId: string | null = null;
+let uiState: DiagnosticsUiState = { ...DEFAULT_UI_STATE };
+
+function createSnapshot(): DiagnosticsSnapshot {
+  const selectedRunId = uiState.selectedRunId;
+  const selectedRun = selectedRunId
+    ? latestProjection.runsById[selectedRunId] ?? null
+    : null;
+  const selectedNode = selectedRun && uiState.selectedNodeId
+    ? selectedRun.nodes[uiState.selectedNodeId] ?? null
+    : null;
+
+  return {
+    state: {
+      ...latestProjection,
+      ...uiState,
+      currentSessionId: latestSessionId,
+      currentWorkflowId: latestWorkflowId,
+      currentWorkflowName: latestWorkflowName,
+      currentGraphFingerprint: latestWorkflowGraph?.derived_graph?.graph_fingerprint ?? null,
+      currentGraphNodeCount: latestWorkflowGraph?.nodes.length ?? 0,
+      currentGraphEdgeCount: latestWorkflowGraph?.edges.length ?? 0,
+    },
+    selectedRun,
+    selectedNode,
+  };
+}
+
+function normalizeUiSelections(): void {
+  if (
+    uiState.selectedRunId !== null &&
+    !(uiState.selectedRunId in latestProjection.runsById)
+  ) {
+    uiState.selectedRunId = null;
+    uiState.selectedNodeId = null;
+  }
+
+  if (uiState.selectedRunId === null && latestProjection.runOrder.length > 0) {
+    uiState.selectedRunId = latestProjection.runOrder[0] ?? null;
+  }
+
+  const selectedRun = uiState.selectedRunId
+    ? latestProjection.runsById[uiState.selectedRunId] ?? null
+    : null;
+  if (!selectedRun) {
+    uiState.selectedNodeId = null;
+    return;
+  }
+
+  if (
+    uiState.selectedNodeId !== null &&
+    !(uiState.selectedNodeId in selectedRun.nodes)
+  ) {
+    uiState.selectedNodeId = null;
+  }
+}
+
+function applyProjection(projection: WorkflowDiagnosticsProjection): void {
+  latestProjection = projection;
+  normalizeUiSelections();
+  diagnosticsSnapshotStore.set(createSnapshot());
+}
+
+function emitSnapshot(): void {
+  normalizeUiSelections();
+  diagnosticsSnapshotStore.set(createSnapshot());
+}
+
+const diagnosticsSnapshotStore = writable<DiagnosticsSnapshot>(createSnapshot());
+
 let workflowEventUnsubscribe: (() => void) | null = null;
 let workflowGraphUnsubscribe: (() => void) | null = null;
 let workflowIdUnsubscribe: (() => void) | null = null;
 let workflowNameUnsubscribe: (() => void) | null = null;
 let sessionIdUnsubscribe: (() => void) | null = null;
 let diagnosticsStarted = false;
-let latestWorkflowId: string | null = null;
-let latestSessionId: string | null = null;
-let runtimeRefreshToken = 0;
-let schedulerRefreshToken = 0;
+let refreshToken = 0;
 
 function normalizeError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -40,84 +147,47 @@ function normalizeError(error: unknown): string {
   return String(error);
 }
 
-async function refreshRuntimeSnapshot(): Promise<void> {
-  const workflowId = latestWorkflowId;
-  const refreshToken = ++runtimeRefreshToken;
-  const capturedAtMs = Date.now();
-
-  if (!workflowId) {
-    diagnosticsService.updateRuntimeSnapshot(null, null, null, capturedAtMs);
-    return;
-  }
+async function refreshDiagnosticsProjection(): Promise<void> {
+  const token = ++refreshToken;
 
   try {
-    const capabilities = await workflowService.getWorkflowCapabilities(workflowId);
-    if (refreshToken !== runtimeRefreshToken) {
-      return;
-    }
-    diagnosticsService.updateRuntimeSnapshot(workflowId, capabilities, null, capturedAtMs);
-  } catch (error) {
-    if (refreshToken !== runtimeRefreshToken) {
-      return;
-    }
-    diagnosticsService.updateRuntimeSnapshot(
-      workflowId,
-      null,
-      normalizeError(error),
-      capturedAtMs,
+    const projection = await workflowService.getDiagnosticsSnapshot(
+      latestWorkflowId,
+      latestWorkflowName,
+      latestSessionId,
     );
+    if (token !== refreshToken) {
+      return;
+    }
+    applyProjection(projection);
+  } catch (error) {
+    if (token !== refreshToken) {
+      return;
+    }
+    applyProjection({
+      ...latestProjection,
+      runtime: {
+        ...latestProjection.runtime,
+        workflowId: latestWorkflowId,
+        lastError: normalizeError(error),
+      },
+      scheduler: {
+        ...latestProjection.scheduler,
+        workflowId: latestWorkflowId,
+        sessionId: latestSessionId,
+        lastError: normalizeError(error),
+      },
+    });
   }
 }
 
-async function refreshSchedulerSnapshot(): Promise<void> {
-  const sessionId = latestSessionId;
-  const workflowId = latestWorkflowId;
-  const refreshToken = ++schedulerRefreshToken;
-  const capturedAtMs = Date.now();
-
-  if (!sessionId) {
-    diagnosticsService.updateSchedulerSnapshot(workflowId, null, null, null, null, capturedAtMs);
-    return;
-  }
-
-  try {
-    const schedulerSnapshot = await workflowService.getSchedulerSnapshot(sessionId);
-    if (refreshToken !== schedulerRefreshToken) {
-      return;
-    }
-    diagnosticsService.updateSchedulerSnapshot(
-      schedulerSnapshot?.workflow_id ?? workflowId,
-      schedulerSnapshot?.session_id ?? sessionId,
-      schedulerSnapshot ? { session: schedulerSnapshot.session } : null,
-      schedulerSnapshot
-        ? {
-          session_id: schedulerSnapshot.session_id,
-          items: schedulerSnapshot.items,
-        }
-        : null,
-      null,
-      capturedAtMs,
-    );
-  } catch (error) {
-    if (refreshToken !== schedulerRefreshToken) {
-      return;
-    }
-    diagnosticsService.updateSchedulerSnapshot(
-      workflowId,
-      sessionId,
-      null,
-      null,
-      normalizeError(error),
-      capturedAtMs,
-    );
-  }
+function isDiagnosticsSnapshotEvent(
+  event: WorkflowEvent,
+): event is WorkflowEvent<'DiagnosticsSnapshot'> {
+  return event.type === 'DiagnosticsSnapshot';
 }
 
 function bindDiagnosticsStore(): void {
-  diagnosticsUnsubscribe = diagnosticsService.subscribe((snapshot) => {
-    diagnosticsSnapshotStore.set(snapshot);
-  });
-
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
     const currentExecutionId = workflowService.getCurrentExecutionId() ?? latestSessionId;
     const expectedExecutionId = claimWorkflowExecutionIdFromEvent(event, currentExecutionId);
@@ -125,72 +195,42 @@ function bindDiagnosticsStore(): void {
       return;
     }
 
-    diagnosticsService.recordWorkflowEvent(event);
-    switch (event.type) {
-      case 'RuntimeSnapshot':
-        diagnosticsService.updateRuntimeSnapshot(
-          event.data.workflow_id ?? latestWorkflowId,
-          event.data.capabilities ?? null,
-          event.data.error ?? null,
-          event.data.captured_at_ms,
-        );
-        break;
-      case 'SchedulerSnapshot':
-        diagnosticsService.updateSchedulerSnapshot(
-          event.data.workflow_id ?? latestWorkflowId,
-          event.data.session_id,
-          event.data.session ? { session: event.data.session } : null,
-          {
-            session_id: event.data.session_id,
-            items: event.data.items,
-          },
-          event.data.error ?? null,
-          event.data.captured_at_ms,
-        );
-        break;
-      case 'Started':
-      case 'Completed':
-      case 'Failed':
-      case 'WaitingForInput':
-      case 'IncrementalExecutionStarted':
-        void refreshSchedulerSnapshot();
-        break;
-      default:
-        break;
+    if (isDiagnosticsSnapshotEvent(event)) {
+      applyProjection(event.data.snapshot as WorkflowDiagnosticsProjection);
     }
   });
 
   workflowGraphUnsubscribe = workflowGraph.subscribe((graph) => {
-    diagnosticsService.updateWorkflowGraph(graph as WorkflowGraph | null);
+    latestWorkflowGraph = graph as WorkflowGraph | null;
+    emitSnapshot();
   });
 
   workflowIdUnsubscribe = currentGraphId.subscribe((workflowId) => {
     latestWorkflowId = workflowId;
-    diagnosticsService.updateWorkflowMetadata({ workflowId });
-    void refreshRuntimeSnapshot();
-    void refreshSchedulerSnapshot();
+    emitSnapshot();
+    void refreshDiagnosticsProjection();
   });
 
   workflowNameUnsubscribe = currentGraphName.subscribe((workflowName) => {
-    diagnosticsService.updateWorkflowMetadata({ workflowName });
+    latestWorkflowName = workflowName;
+    emitSnapshot();
+    void refreshDiagnosticsProjection();
   });
 
   sessionIdUnsubscribe = sessionStores.currentSessionId.subscribe((sessionId) => {
     latestSessionId = sessionId;
-    diagnosticsService.setCurrentSessionId(sessionId);
-    void refreshSchedulerSnapshot();
+    emitSnapshot();
+    void refreshDiagnosticsProjection();
   });
 }
 
 function unbindDiagnosticsStore(): void {
-  diagnosticsUnsubscribe?.();
   workflowEventUnsubscribe?.();
   workflowGraphUnsubscribe?.();
   workflowIdUnsubscribe?.();
   workflowNameUnsubscribe?.();
   sessionIdUnsubscribe?.();
 
-  diagnosticsUnsubscribe = null;
   workflowEventUnsubscribe = null;
   workflowGraphUnsubscribe = null;
   workflowIdUnsubscribe = null;
@@ -204,6 +244,7 @@ export function startDiagnosticsStore(): void {
   }
   diagnosticsStarted = true;
   bindDiagnosticsStore();
+  void refreshDiagnosticsProjection();
 }
 
 export function stopDiagnosticsStore(): void {
@@ -219,26 +260,40 @@ export const diagnosticsSnapshot: Readable<DiagnosticsSnapshot> = {
 };
 
 export function setDiagnosticsPanelOpen(panelOpen: boolean): void {
-  diagnosticsService.setPanelOpen(panelOpen);
+  uiState = { ...uiState, panelOpen };
+  emitSnapshot();
 }
 
 export function toggleDiagnosticsPanel(): void {
-  const current = diagnosticsService.getSnapshot();
-  diagnosticsService.setPanelOpen(!current.state.panelOpen);
+  uiState = { ...uiState, panelOpen: !uiState.panelOpen };
+  emitSnapshot();
 }
 
 export function setDiagnosticsTab(tab: DiagnosticsTab): void {
-  diagnosticsService.setActiveTab(tab);
+  uiState = { ...uiState, activeTab: tab };
+  emitSnapshot();
 }
 
 export function selectDiagnosticsRun(runId: string | null): void {
-  diagnosticsService.selectRun(runId);
+  uiState = {
+    ...uiState,
+    selectedRunId: runId,
+    selectedNodeId: null,
+  };
+  emitSnapshot();
 }
 
 export function selectDiagnosticsNode(nodeId: string | null): void {
-  diagnosticsService.selectNode(nodeId);
+  uiState = { ...uiState, selectedNodeId: nodeId };
+  emitSnapshot();
 }
 
-export function clearDiagnosticsHistory(): void {
-  diagnosticsService.clearHistory();
+export async function clearDiagnosticsHistory(): Promise<void> {
+  const projection = await workflowService.clearDiagnosticsHistory();
+  uiState = {
+    ...uiState,
+    selectedRunId: null,
+    selectedNodeId: null,
+  };
+  applyProjection(projection);
 }

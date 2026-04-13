@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use node_engine::{EventError, EventSink};
 use tauri::ipc::Channel;
 
+use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::events::WorkflowEvent as TauriWorkflowEvent;
 
 /// A value that flows through a port (alias for serde_json::Value)
@@ -18,14 +19,20 @@ type PortValue = serde_json::Value;
 pub struct TauriEventAdapter {
     channel: Channel<TauriWorkflowEvent>,
     workflow_id: String,
+    diagnostics_store: SharedWorkflowDiagnosticsStore,
 }
 
 impl TauriEventAdapter {
     /// Create a new adapter with the given Tauri channel and workflow ID
-    pub fn new(channel: Channel<TauriWorkflowEvent>, workflow_id: impl Into<String>) -> Self {
+    pub fn new(
+        channel: Channel<TauriWorkflowEvent>,
+        workflow_id: impl Into<String>,
+        diagnostics_store: SharedWorkflowDiagnosticsStore,
+    ) -> Self {
         Self {
             channel,
             workflow_id: workflow_id.into(),
+            diagnostics_store,
         }
     }
 }
@@ -125,12 +132,14 @@ impl EventSink for TauriEventAdapter {
                 message: prompt,
             },
 
-            node_engine::WorkflowEvent::GraphModified { dirty_tasks, .. } => TauriWorkflowEvent::GraphModified {
-                workflow_id: self.workflow_id.clone(),
-                execution_id: self.workflow_id.clone(),
-                graph: None,
-                dirty_tasks,
-            },
+            node_engine::WorkflowEvent::GraphModified { dirty_tasks, .. } => {
+                TauriWorkflowEvent::GraphModified {
+                    workflow_id: self.workflow_id.clone(),
+                    execution_id: self.workflow_id.clone(),
+                    graph: None,
+                    dirty_tasks,
+                }
+            }
 
             node_engine::WorkflowEvent::IncrementalExecutionStarted { tasks, .. } => {
                 TauriWorkflowEvent::IncrementalExecutionStarted {
@@ -141,9 +150,22 @@ impl EventSink for TauriEventAdapter {
             }
         };
 
+        let diagnostics_snapshot = self.diagnostics_store.record_workflow_event(
+            &tauri_event,
+            super::workflow_execution_commands::unix_timestamp_ms(),
+        );
+
         self.channel
             .send(tauri_event)
             .map_err(|_| EventError::channel_closed())
+            .and_then(|_| {
+                self.channel
+                    .send(TauriWorkflowEvent::diagnostics_snapshot(
+                        self.workflow_id.clone(),
+                        diagnostics_snapshot,
+                    ))
+                    .map_err(|_| EventError::channel_closed())
+            })
     }
 }
 

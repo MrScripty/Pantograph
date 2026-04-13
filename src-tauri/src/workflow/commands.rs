@@ -26,6 +26,8 @@ pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
 pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
 /// Shared headless workflow service state (session-aware).
 pub type SharedWorkflowService = Arc<pantograph_workflow_service::WorkflowService>;
+/// Shared backend-owned diagnostics projection store.
+pub type SharedWorkflowDiagnosticsStore = Arc<super::diagnostics::WorkflowDiagnosticsStore>;
 /// Shared filesystem-backed workflow graph store.
 pub type SharedWorkflowGraphStore = Arc<FileSystemWorkflowGraphStore>;
 
@@ -286,6 +288,33 @@ pub async fn workflow_set_session_keep_alive(
 }
 
 #[command]
+pub async fn workflow_get_diagnostics_snapshot(
+    request: super::diagnostics::WorkflowDiagnosticsSnapshotRequest,
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+) -> Result<super::diagnostics::WorkflowDiagnosticsProjection, String> {
+    super::headless_workflow_commands::workflow_get_diagnostics_snapshot(
+        request,
+        app,
+        gateway,
+        extensions,
+        workflow_service,
+        diagnostics_store,
+    )
+    .await
+}
+
+#[command]
+pub async fn workflow_clear_diagnostics_history(
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+) -> Result<super::diagnostics::WorkflowDiagnosticsProjection, String> {
+    super::headless_workflow_commands::workflow_clear_diagnostics_history(diagnostics_store).await
+}
+
+#[command]
 pub async fn execute_workflow_v2(
     app: AppHandle,
     graph: WorkflowGraph,
@@ -294,6 +323,7 @@ pub async fn execute_workflow_v2(
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<String, String> {
     super::workflow_execution_commands::execute_workflow_v2(
@@ -304,6 +334,7 @@ pub async fn execute_workflow_v2(
         rag_manager,
         extensions,
         workflow_service,
+        diagnostics_store,
         channel,
     )
     .await
@@ -532,6 +563,7 @@ pub async fn run_workflow_session(
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
     super::workflow_execution_commands::run_workflow_session(
@@ -542,6 +574,7 @@ pub async fn run_workflow_session(
         rag_manager,
         extensions,
         workflow_service,
+        diagnostics_store,
         channel,
     )
     .await

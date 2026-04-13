@@ -28,7 +28,8 @@ use crate::agent::rag::SharedRagManager;
 use crate::llm::SharedGateway;
 use crate::project_root::resolve_project_root;
 
-use super::commands::{SharedExtensions, SharedWorkflowService};
+use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
+use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
 
 fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
@@ -297,4 +298,122 @@ pub async fn workflow_set_session_keep_alive(
         .workflow_set_session_keep_alive(request)
         .await
         .map_err(workflow_error_json)
+}
+
+pub async fn workflow_get_diagnostics_snapshot(
+    request: WorkflowDiagnosticsSnapshotRequest,
+    app: AppHandle,
+    gateway: State<'_, SharedGateway>,
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+) -> Result<WorkflowDiagnosticsProjection, String> {
+    let captured_at_ms = super::workflow_execution_commands::unix_timestamp_ms();
+    let session_id = request
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let workflow_id = request
+        .workflow_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let workflow_name = request
+        .workflow_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    if let Some(session_id) = session_id.as_deref() {
+        diagnostics_store.set_execution_metadata(
+            session_id,
+            workflow_id.clone(),
+            workflow_name.clone(),
+        );
+
+        match workflow_service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: session_id.to_string(),
+            })
+            .await
+        {
+            Ok(snapshot) => {
+                diagnostics_store.update_scheduler_snapshot(
+                    snapshot.workflow_id,
+                    Some(snapshot.session_id),
+                    Some(snapshot.session),
+                    snapshot.items,
+                    None,
+                    captured_at_ms,
+                );
+            }
+            Err(error) => {
+                diagnostics_store.update_scheduler_snapshot(
+                    workflow_id.clone(),
+                    Some(session_id.to_string()),
+                    None,
+                    Vec::new(),
+                    Some(error.to_envelope_json()),
+                    captured_at_ms,
+                );
+            }
+        }
+    } else {
+        diagnostics_store.update_scheduler_snapshot(
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+            captured_at_ms,
+        );
+    }
+
+    if let Some(workflow_id) = workflow_id {
+        let runtime = build_runtime(
+            &app,
+            gateway.inner(),
+            extensions.inner(),
+            workflow_service.inner(),
+            None,
+        )?;
+
+        match runtime
+            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                workflow_id: workflow_id.clone(),
+            })
+            .await
+        {
+            Ok(capabilities) => {
+                diagnostics_store.update_runtime_snapshot(
+                    Some(workflow_id),
+                    Some(capabilities),
+                    None,
+                    captured_at_ms,
+                );
+            }
+            Err(error) => {
+                diagnostics_store.update_runtime_snapshot(
+                    Some(workflow_id),
+                    None,
+                    Some(error.to_envelope_json()),
+                    captured_at_ms,
+                );
+            }
+        }
+    } else {
+        diagnostics_store.update_runtime_snapshot(None, None, None, captured_at_ms);
+    }
+
+    Ok(diagnostics_store.snapshot())
+}
+
+pub async fn workflow_clear_diagnostics_history(
+    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
+) -> Result<WorkflowDiagnosticsProjection, String> {
+    Ok(diagnostics_store.clear_history())
 }

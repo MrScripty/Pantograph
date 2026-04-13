@@ -143,13 +143,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       description: 'Workflow execution and persistence via Tauri'
     },
     {
-      id: 'service:DiagnosticsService',
-      category: 'service',
-      label: 'DiagnosticsService',
-      filePath: 'src/services/diagnostics/DiagnosticsService.ts',
-      description: 'Workflow diagnostics trace accumulation and snapshot emission'
-    },
-    {
       id: 'service:RuntimeCompiler',
       category: 'service',
       label: 'RuntimeCompiler',
@@ -383,7 +376,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c23', source: 'component:SidePanel', target: 'service:RagService', connectionType: 'import' },
     { id: 'c24', source: 'component:HotLoadContainer', target: 'service:HotLoadRegistry', connectionType: 'import' },
     { id: 'c25', source: 'component:WorkflowToolbar', target: 'service:WorkflowService', connectionType: 'import' },
-    { id: 'c25a', source: 'store:diagnosticsStore', target: 'service:DiagnosticsService', connectionType: 'import' },
     { id: 'c25b', source: 'store:diagnosticsStore', target: 'service:WorkflowService', connectionType: 'subscription' },
     { id: 'c25c', source: 'store:diagnosticsStore', target: 'store:workflowStore', connectionType: 'subscription' },
 

@@ -1,9 +1,5 @@
 import type {
   WorkflowCapabilityModel,
-  WorkflowEvent,
-  WorkflowEventData,
-  WorkflowEventType,
-  WorkflowGraph,
   WorkflowRuntimeCapability,
   WorkflowRuntimeRequirements,
   WorkflowSessionQueueItem,
@@ -24,24 +20,16 @@ export type DiagnosticsTab = (typeof DIAGNOSTICS_TABS)[number];
 export type DiagnosticsRunStatus = 'running' | 'waiting' | 'completed' | 'failed';
 export type DiagnosticsNodeStatus = 'running' | 'waiting' | 'completed' | 'failed';
 
-export interface DiagnosticsWorkflowContext {
-  workflowId: string | null;
-  workflowName: string | null;
-  graphFingerprint: string | null;
-  graph: WorkflowGraph | null;
-  nodeTypesById: Record<string, string>;
-}
-
-export interface DiagnosticsEventRecord<T extends WorkflowEventType = WorkflowEventType> {
+export interface DiagnosticsEventRecord {
   id: string;
   sequence: number;
   timestampMs: number;
-  type: T;
+  type: string;
   executionId: string;
   workflowId: string | null;
   nodeId: string | null;
   summary: string;
-  payload: WorkflowEventData[T];
+  payload: unknown;
 }
 
 export interface DiagnosticsNodeTrace {
@@ -100,7 +88,15 @@ export interface DiagnosticsSchedulerSnapshot {
   lastError: string | null;
 }
 
-export interface WorkflowDiagnosticsState {
+export interface WorkflowDiagnosticsProjection {
+  runsById: Record<string, DiagnosticsRunTrace>;
+  runOrder: string[];
+  runtime: DiagnosticsRuntimeSnapshot;
+  scheduler: DiagnosticsSchedulerSnapshot;
+  retainedEventLimit: number;
+}
+
+export interface WorkflowDiagnosticsState extends WorkflowDiagnosticsProjection {
   panelOpen: boolean;
   activeTab: DiagnosticsTab;
   selectedRunId: string | null;
@@ -111,11 +107,6 @@ export interface WorkflowDiagnosticsState {
   currentGraphFingerprint: string | null;
   currentGraphNodeCount: number;
   currentGraphEdgeCount: number;
-  runsById: Record<string, DiagnosticsRunTrace>;
-  runOrder: string[];
-  runtime: DiagnosticsRuntimeSnapshot;
-  scheduler: DiagnosticsSchedulerSnapshot;
-  retainedEventLimit: number;
 }
 
 export interface DiagnosticsSnapshot {
@@ -123,5 +114,3 @@ export interface DiagnosticsSnapshot {
   selectedRun: DiagnosticsRunTrace | null;
   selectedNode: DiagnosticsNodeTrace | null;
 }
-
-export type DiagnosticsEventPayload = WorkflowEvent;

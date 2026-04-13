@@ -10,6 +10,8 @@ use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowSessionQueueItem, WorkflowSessionSummary,
 };
 
+use super::diagnostics::WorkflowDiagnosticsProjection;
+
 /// A value that flows through a port (alias for serde_json::Value)
 pub type PortValue = serde_json::Value;
 
@@ -169,6 +171,14 @@ pub enum WorkflowEvent {
         /// Error encountered while collecting the scheduler snapshot
         error: Option<String>,
     },
+
+    /// Backend-owned diagnostics projection captured after a workflow event.
+    DiagnosticsSnapshot {
+        /// Unique identifier for this execution
+        execution_id: String,
+        /// Canonical diagnostics projection for the workflow UI
+        snapshot: WorkflowDiagnosticsProjection,
+    },
 }
 
 impl WorkflowEvent {
@@ -315,6 +325,17 @@ impl WorkflowEvent {
             session,
             items,
             error,
+        }
+    }
+
+    /// Create a DiagnosticsSnapshot event
+    pub fn diagnostics_snapshot(
+        execution_id: impl Into<String>,
+        snapshot: WorkflowDiagnosticsProjection,
+    ) -> Self {
+        Self::DiagnosticsSnapshot {
+            execution_id: execution_id.into(),
+            snapshot,
         }
     }
 }
