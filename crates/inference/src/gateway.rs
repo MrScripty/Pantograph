@@ -362,6 +362,7 @@ impl InferenceGateway {
 
     /// Get server mode info (for legacy compatibility)
     pub async fn mode_info(&self) -> ServerModeInfo {
+        let backend_name = self.current_backend_name().await;
         let ready = self.is_ready().await;
         let is_embedding = self.is_embedding_mode().await;
         let is_reranking = self.is_reranking_mode().await;
@@ -369,6 +370,7 @@ impl InferenceGateway {
         let url = self.base_url().await;
 
         ServerModeInfo {
+            backend_name: Some(backend_name),
             mode: if !ready {
                 "none".to_string()
             } else if is_external {
@@ -859,6 +861,7 @@ mod tests {
             .expect("gateway should start");
 
         let mode = gateway.mode_info().await;
+        assert_eq!(mode.backend_name.as_deref(), Some("mock"));
         assert_eq!(mode.mode, "external");
         assert!(!mode.is_embedding_mode);
     }

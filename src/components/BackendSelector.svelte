@@ -74,10 +74,8 @@
     try {
       backends = await invoke<BackendInfo[]>('list_backends');
       runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
-      const backendName = await invoke<string>('get_current_backend');
-      // Only set currentBackend if server is actually running
       const status = await LLMService.refreshStatus();
-      currentBackend = status.ready ? backendName : '';
+      currentBackend = status.ready ? status.backend_name || '' : '';
     } catch (e) {
       error = String(e);
       console.error('Failed to load backends:', e);

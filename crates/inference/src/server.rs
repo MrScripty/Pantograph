@@ -14,6 +14,7 @@ use tokio::sync::RwLock;
 use crate::config::DeviceConfig;
 use crate::constants::{defaults, device_types, hosts, ports, timeouts};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use crate::types::ServerModeInfo;
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
 
@@ -98,21 +99,6 @@ pub enum ServerMode {
         model_path: String,
         device: DeviceConfig,
     },
-}
-
-/// Information about current server mode for frontend
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ServerModeInfo {
-    /// Current mode type
-    pub mode: String,
-    /// Whether the server is ready
-    pub ready: bool,
-    /// URL if connected to external server
-    pub url: Option<String>,
-    /// Model path if using sidecar
-    pub model_path: Option<String>,
-    /// Whether in embedding mode (sidecar only)
-    pub is_embedding_mode: bool,
 }
 
 /// Manages llama-server sidecar processes
@@ -648,6 +634,7 @@ impl LlamaServer {
     /// Get detailed server mode info for frontend
     pub fn mode_info(&self) -> ServerModeInfo {
         ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
             mode: match &self.mode {
                 ServerMode::None => "none".to_string(),
                 ServerMode::External { .. } => "external".to_string(),

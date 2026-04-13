@@ -26,6 +26,7 @@ export interface LLMState {
 class LLMServiceClass {
   private state: LLMState = {
     status: {
+      backend_name: null,
       mode: 'none',
       ready: false,
       url: null,
@@ -192,6 +193,7 @@ class LLMServiceClass {
     try {
       await invoke('stop_llm');
       this.state.status = {
+        backend_name: null,
         mode: 'none',
         ready: false,
         url: null,

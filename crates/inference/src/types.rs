@@ -188,6 +188,9 @@ pub struct StreamEvent {
 /// Server operating mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerModeInfo {
+    /// Backend identifier that owns the active runtime selection.
+    #[serde(default)]
+    pub backend_name: Option<String>,
     /// Current mode type
     pub mode: String,
     /// Whether the server is ready

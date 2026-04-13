@@ -38,6 +38,7 @@ export interface AppConfig {
 }
 
 export interface ServerModeInfo {
+  backend_name: string | null;
   mode: string;
   ready: boolean;
   url: string | null;
@@ -70,6 +71,7 @@ const defaultConfig: AppConfig = {
 };
 
 const defaultServerMode: ServerModeInfo = {
+  backend_name: null,
   mode: 'none',
   ready: false,
   url: null,
