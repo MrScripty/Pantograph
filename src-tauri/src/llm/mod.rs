@@ -10,6 +10,6 @@ pub mod server_discovery;
 pub mod types;
 
 // Re-export from local modules (keeping existing API)
-pub use backend::{BackendConfig, EmbeddingStartRequest, InferenceStartRequest};
+pub use backend::{EmbeddingStartRequest, InferenceStartRequest};
 pub use commands::*;
 pub use gateway::{InferenceGateway, SharedGateway};

@@ -5,7 +5,7 @@ use super::shared::SharedAppConfig;
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::gateway::SharedGateway;
-use crate::llm::{BackendConfig, EmbeddingStartRequest, InferenceStartRequest};
+use crate::llm::{EmbeddingStartRequest, InferenceStartRequest};
 use reqwest::Url;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State, command};
@@ -185,10 +185,13 @@ pub async fn connect_to_server(
             .map_err(|e| e.to_string())?;
     }
 
-    let backend_config = BackendConfig {
-        external_url: Some(external_url),
-        ..Default::default()
-    };
+    let backend_config = gateway
+        .build_inference_start_config(InferenceStartRequest {
+            external_url: Some(external_url),
+            ..InferenceStartRequest::default()
+        })
+        .await
+        .map_err(|e| e.to_string())?;
 
     gateway
         .start(&backend_config)
@@ -206,18 +209,29 @@ pub async fn start_sidecar_llm(
     model_path: String,
     mmproj_path: String,
 ) -> Result<ServerModeInfo, String> {
+    if gateway.current_backend_name().await != "llama.cpp" {
+        gateway
+            .switch_backend("llama.cpp")
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
     let config_guard = config.read().await;
     let device = config_guard.device.clone();
-    drop(config_guard);
-
-    let backend_config = BackendConfig {
-        model_path: Some(std::path::PathBuf::from(&model_path)),
+    let inference_request = InferenceStartRequest {
+        external_url: None,
+        file_model_path: Some(std::path::PathBuf::from(&model_path)),
         mmproj_path: Some(std::path::PathBuf::from(&mmproj_path)),
+        ollama_model_name: None,
         device: Some(device.device),
         gpu_layers: Some(device.gpu_layers),
-        embedding_mode: false,
-        ..Default::default()
     };
+    drop(config_guard);
+
+    let backend_config = gateway
+        .build_inference_start_config(inference_request)
+        .await
+        .map_err(|e| e.to_string())?;
 
     gateway
         .start(&backend_config)
@@ -254,6 +268,7 @@ pub async fn start_sidecar_inference(
     let embedding_model_path = config_guard.models.embedding_model_path.clone();
     let embedding_memory_mode = config_guard.embedding_memory_mode.clone();
     let inference_request = InferenceStartRequest {
+        external_url: None,
         file_model_path: config_guard
             .models
             .vlm_model_path

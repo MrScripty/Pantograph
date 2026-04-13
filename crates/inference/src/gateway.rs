@@ -45,6 +45,7 @@ pub enum GatewayError {
 /// Host-supplied inputs for starting the active backend in inference mode.
 #[derive(Debug, Clone, Default)]
 pub struct InferenceStartRequest {
+    pub external_url: Option<String>,
     pub file_model_path: Option<PathBuf>,
     pub mmproj_path: Option<PathBuf>,
     pub ollama_model_name: Option<String>,
@@ -183,6 +184,21 @@ impl InferenceGateway {
         request: InferenceStartRequest,
     ) -> Result<BackendConfig, GatewayError> {
         let backend_name = self.current_backend_name().await;
+        if let Some(external_url) = request.external_url {
+            if backend_name != "llama.cpp" {
+                return Err(GatewayError::Backend(BackendError::Config(format!(
+                    "External server attachment is only supported for llama.cpp, but active backend is '{}'",
+                    backend_name
+                ))));
+            }
+
+            return Ok(BackendConfig {
+                external_url: Some(external_url),
+                embedding_mode: false,
+                ..BackendConfig::default()
+            });
+        }
+
         match backend_name.as_str() {
             "Ollama" => {
                 let model_name = request.ollama_model_name.ok_or_else(|| {
@@ -982,6 +998,7 @@ mod tests {
 
         let config = gateway
             .build_inference_start_config(InferenceStartRequest {
+                external_url: None,
                 ollama_model_name: Some("llava:13b".to_string()),
                 ..InferenceStartRequest::default()
             })
@@ -989,6 +1006,26 @@ mod tests {
             .expect("config should build");
 
         assert_eq!(config.model_name.as_deref(), Some("llava:13b"));
+        assert_eq!(config.model_path, None);
+        assert!(!config.embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_inference_start_config_for_external_llamacpp_uses_external_url() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
+
+        let config = gateway
+            .build_inference_start_config(InferenceStartRequest {
+                external_url: Some("http://127.0.0.1:1234".to_string()),
+                ..InferenceStartRequest::default()
+            })
+            .await
+            .expect("config should build");
+
+        assert_eq!(
+            config.external_url.as_deref(),
+            Some("http://127.0.0.1:1234")
+        );
         assert_eq!(config.model_path, None);
         assert!(!config.embedding_mode);
     }

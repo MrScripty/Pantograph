@@ -5,5 +5,5 @@
 //! requiring a Tauri `AppHandle`.
 
 // Re-export backend types used by the Tauri app
-pub use inference::backend::{BackendCapabilities, BackendConfig, BackendInfo};
+pub use inference::backend::{BackendCapabilities, BackendInfo};
 pub use inference::{EmbeddingStartRequest, InferenceStartRequest};
