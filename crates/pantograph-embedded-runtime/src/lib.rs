@@ -772,6 +772,7 @@ impl EmbeddedWorkflowHost {
                 usage_profile: Self::trimmed_optional(usage_profile),
                 model_id: mode_info.active_model_target.clone(),
                 pin_runtime: false,
+                requirements: None,
             })
             .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
 

@@ -427,6 +427,14 @@ runtime callers.
   before they are introduced so ownership, cancellation, and overflow behavior
   stay explicit
 
+**Progress:**
+- 2026-04-13: Session runtime load/unload in the embedded host now translates
+  into explicit registry reservation acquire/release operations without moving
+  policy ownership into Tauri adapters.
+- 2026-04-13: `crates/pantograph-runtime-registry` now owns initial admission
+  budget primitives plus RAM/VRAM rejection reasons and tested safety-margin
+  checks for reservation requests.
+
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
 - unit tests for admission acceptance/rejection, warmup reuse, release-on-
@@ -442,7 +450,7 @@ runtime callers.
 - README/ADR update review for any newly introduced directory boundary or
   machine-consumed contract changes per `DOCUMENTATION-STANDARDS.md`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Technical-Fit Selection Integration
 
@@ -528,10 +536,15 @@ refactor lands.
 
 1. Start Milestone 3 by adding backend-owned admission, warmup, retention, and
    eviction policy on top of the completed runtime-registry foundation.
-2. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+2. Wire workflow/session runtime requirement facts into registry reservation
+   requests so the new backend admission checks participate in live
+   end-to-end execution paths.
+3. Add warmup/reuse plus retention-hint policy inside the registry boundary
+   without moving those decisions into gateway or adapter layers.
+4. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
    backend-owned registry refactor.
-3. Re-plan immediately if Milestone 3 implementation pressures any of the
+5. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
 
@@ -569,6 +582,9 @@ Update during implementation:
   documentation, testing, and plan standards; tasks and verification were
   tightened so the next implementation slice preserves the backend-owned
   registry boundary.
+- 2026-04-13: Milestone 3 started with backend-owned reservation lifecycle
+  translation in the embedded host and backend-owned admission budget/rejection
+  primitives in `crates/pantograph-runtime-registry`.
 
 ## Commit Cadence Notes
 
@@ -611,10 +627,11 @@ Update during implementation:
 ### In Progress
 
 - Runtime producer-convergence hardening outside the runtime-registry plan
+- Milestone 3 admission, warmup, retention, and eviction work
 
 ### Not Started
 
-- Milestones 3 through 6 of this plan
+- Milestones 4 through 6 of this plan
 
 ### Deviations
 

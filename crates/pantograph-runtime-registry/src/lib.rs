@@ -1,13 +1,19 @@
+mod admission;
 mod observation;
 mod reservation;
 mod snapshot;
 mod state;
 
+use admission::RuntimeReservationClaim;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub use admission::{
+    RuntimeAdmissionBudget, RuntimeAdmissionFailure, RuntimeReservationRequirements,
+};
+pub use observation::RuntimeObservation;
 use pantograph_runtime_identity::canonical_runtime_id;
 use reservation::RuntimeReservationRecord;
 pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest};
@@ -16,8 +22,6 @@ use state::RuntimeTransition as Transition;
 pub use state::{
     RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
 };
-
-pub use observation::RuntimeObservation;
 
 pub type SharedRuntimeRegistry = Arc<RuntimeRegistry>;
 
@@ -38,6 +42,12 @@ pub enum RuntimeRegistryError {
 
     #[error("runtime '{0}' cannot accept reservations while stopping or failed")]
     ReservationRejected(String),
+
+    #[error("runtime '{runtime_id}' admission rejected reservation: {failure}")]
+    AdmissionRejected {
+        runtime_id: String,
+        failure: RuntimeAdmissionFailure,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +55,7 @@ pub struct RuntimeRegistration {
     pub runtime_id: String,
     pub display_name: String,
     pub backend_keys: Vec<String>,
+    pub admission_budget: Option<RuntimeAdmissionBudget>,
 }
 
 impl RuntimeRegistration {
@@ -53,11 +64,17 @@ impl RuntimeRegistration {
             runtime_id: runtime_id.into(),
             display_name: display_name.into(),
             backend_keys: Vec::new(),
+            admission_budget: None,
         }
     }
 
     pub fn with_backend_keys(mut self, backend_keys: Vec<String>) -> Self {
         self.backend_keys = backend_keys;
+        self
+    }
+
+    pub fn with_admission_budget(mut self, admission_budget: RuntimeAdmissionBudget) -> Self {
+        self.admission_budget = Some(admission_budget);
         self
     }
 }
@@ -96,6 +113,7 @@ impl RuntimeRegistry {
         record.display_name = registration.display_name.trim().to_string();
         record.set_backend_keys(registration.backend_keys);
         record.runtime_id = runtime_id.clone();
+        record.admission_budget = registration.admission_budget;
         runtime_snapshot(record)
     }
 
@@ -173,7 +191,7 @@ impl RuntimeRegistry {
             .expect("runtime registry state lock poisoned");
         let record = guard
             .runtimes
-            .get_mut(&runtime_id)
+            .get(&runtime_id)
             .ok_or_else(|| RuntimeRegistryError::RuntimeNotFound(runtime_id.clone()))?;
 
         if matches!(
@@ -183,6 +201,19 @@ impl RuntimeRegistry {
             return Err(RuntimeRegistryError::ReservationRejected(runtime_id));
         }
 
+        let claim = RuntimeReservationClaim::from_requirements(request.requirements.as_ref());
+        if let Some(failure) = admission_failure(record, claim, &guard.reservations) {
+            return Err(RuntimeRegistryError::AdmissionRejected {
+                runtime_id,
+                failure,
+            });
+        }
+
+        let record = guard
+            .runtimes
+            .get_mut(&runtime_id)
+            .expect("runtime must exist after admission check");
+
         let reservation = RuntimeReservationRecord {
             reservation_id,
             runtime_id: runtime_id.clone(),
@@ -191,6 +222,7 @@ impl RuntimeRegistry {
             model_id: request.model_id,
             pin_runtime: request.pin_runtime,
             created_at_ms,
+            claim,
         };
 
         record.active_reservations.insert(reservation_id);
@@ -317,6 +349,80 @@ fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistryRuntimeSna
         active_reservation_ids,
         models,
     }
+}
+
+fn admission_failure(
+    record: &RuntimeRegistryRecord,
+    claim: RuntimeReservationClaim,
+    reservations: &BTreeMap<u64, RuntimeReservationRecord>,
+) -> Option<RuntimeAdmissionFailure> {
+    let budget = record.admission_budget.as_ref()?;
+
+    if let Some(requested_ram_mb) = claim.ram_mb {
+        let reserved_ram_mb =
+            total_reserved_resource_mb(&record.runtime_id, reservations, |reservation| {
+                reservation.claim.ram_mb
+            });
+        let available_ram_mb = available_budget_mb(
+            budget.total_ram_mb,
+            budget.safety_margin_ram_mb,
+            reserved_ram_mb,
+        );
+        if requested_ram_mb > available_ram_mb {
+            return Some(RuntimeAdmissionFailure::InsufficientRam {
+                requested_mb: requested_ram_mb,
+                available_mb: available_ram_mb,
+                reserved_mb: reserved_ram_mb,
+                total_mb: budget.total_ram_mb.unwrap_or(0),
+                safety_margin_mb: budget.safety_margin_ram_mb,
+            });
+        }
+    }
+
+    if let Some(requested_vram_mb) = claim.vram_mb {
+        let reserved_vram_mb =
+            total_reserved_resource_mb(&record.runtime_id, reservations, |reservation| {
+                reservation.claim.vram_mb
+            });
+        let available_vram_mb = available_budget_mb(
+            budget.total_vram_mb,
+            budget.safety_margin_vram_mb,
+            reserved_vram_mb,
+        );
+        if requested_vram_mb > available_vram_mb {
+            return Some(RuntimeAdmissionFailure::InsufficientVram {
+                requested_mb: requested_vram_mb,
+                available_mb: available_vram_mb,
+                reserved_mb: reserved_vram_mb,
+                total_mb: budget.total_vram_mb.unwrap_or(0),
+                safety_margin_mb: budget.safety_margin_vram_mb,
+            });
+        }
+    }
+
+    None
+}
+
+fn total_reserved_resource_mb<F>(
+    runtime_id: &str,
+    reservations: &BTreeMap<u64, RuntimeReservationRecord>,
+    claim_mb: F,
+) -> u64
+where
+    F: Fn(&RuntimeReservationRecord) -> Option<u64>,
+{
+    reservations
+        .values()
+        .filter(|reservation| reservation.runtime_id == runtime_id)
+        .filter_map(claim_mb)
+        .sum()
+}
+
+fn available_budget_mb(total_mb: Option<u64>, safety_margin_mb: u64, reserved_mb: u64) -> u64 {
+    total_mb
+        .unwrap_or(u64::MAX)
+        .saturating_sub(safety_margin_mb)
+        .saturating_sub(reserved_mb)
 }
 
 fn apply_runtime_observation(
@@ -453,6 +559,7 @@ mod tests {
                 usage_profile: Some("audio".to_string()),
                 model_id: Some("model-a".to_string()),
                 pin_runtime: true,
+                requirements: None,
             })
             .expect("acquire reservation");
 
@@ -498,6 +605,7 @@ mod tests {
                 usage_profile: None,
                 model_id: None,
                 pin_runtime: false,
+                requirements: None,
             })
             .expect_err("stopping runtime should reject reservations");
 
@@ -586,5 +694,153 @@ mod tests {
             .expect("ollama snapshot");
         assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
         assert_eq!(ollama.models[0].model_id, "llava:13b");
+    }
+
+    #[test]
+    fn admission_budget_rejects_reservations_that_exceed_remaining_vram() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(
+            RuntimeRegistration::new("llama.cpp", "llama.cpp").with_admission_budget(
+                RuntimeAdmissionBudget::new(None, Some(8192)).with_safety_margin_vram_mb(1024),
+            ),
+        );
+        registry
+            .transition_runtime(
+                "llama.cpp",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                },
+            )
+            .expect("ready transition");
+
+        registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "llama.cpp".to_string(),
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: Some(6144),
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: Some(4096),
+                    estimated_min_ram_mb: None,
+                }),
+            })
+            .expect("first reservation should fit available vram");
+
+        let err = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "llama.cpp".to_string(),
+                workflow_id: "wf-2".to_string(),
+                usage_profile: None,
+                model_id: Some("model-b".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: Some(2048),
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: Some(1024),
+                    estimated_min_ram_mb: None,
+                }),
+            })
+            .expect_err("second reservation should exceed remaining vram");
+
+        assert_eq!(
+            err,
+            RuntimeRegistryError::AdmissionRejected {
+                runtime_id: "llama_cpp".to_string(),
+                failure: RuntimeAdmissionFailure::InsufficientVram {
+                    requested_mb: 2048,
+                    available_mb: 1024,
+                    reserved_mb: 6144,
+                    total_mb: 8192,
+                    safety_margin_mb: 1024,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn admission_budget_uses_peak_ram_claim_and_release_restores_capacity() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(
+            RuntimeRegistration::new("pytorch", "PyTorch").with_admission_budget(
+                RuntimeAdmissionBudget::new(Some(4096), None).with_safety_margin_ram_mb(512),
+            ),
+        );
+        registry
+            .transition_runtime(
+                "pytorch",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime-ram".to_string()),
+                },
+            )
+            .expect("ready transition");
+
+        let lease = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "pytorch".to_string(),
+                workflow_id: "wf-ram-1".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                model_id: Some("model-ram-a".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: None,
+                    estimated_peak_ram_mb: Some(3584),
+                    estimated_min_vram_mb: None,
+                    estimated_min_ram_mb: Some(1024),
+                }),
+            })
+            .expect("peak ram claim should fit exactly");
+
+        let err = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "pytorch".to_string(),
+                workflow_id: "wf-ram-2".to_string(),
+                usage_profile: None,
+                model_id: Some("model-ram-b".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: None,
+                    estimated_peak_ram_mb: Some(1),
+                    estimated_min_vram_mb: None,
+                    estimated_min_ram_mb: Some(1),
+                }),
+            })
+            .expect_err("no ram should remain after first reservation");
+
+        assert_eq!(
+            err,
+            RuntimeRegistryError::AdmissionRejected {
+                runtime_id: "pytorch".to_string(),
+                failure: RuntimeAdmissionFailure::InsufficientRam {
+                    requested_mb: 1,
+                    available_mb: 0,
+                    reserved_mb: 3584,
+                    total_mb: 4096,
+                    safety_margin_mb: 512,
+                },
+            }
+        );
+
+        registry
+            .release_reservation(lease.reservation_id)
+            .expect("release reservation");
+
+        registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "pytorch".to_string(),
+                workflow_id: "wf-ram-3".to_string(),
+                usage_profile: None,
+                model_id: Some("model-ram-c".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: None,
+                    estimated_peak_ram_mb: Some(1024),
+                    estimated_min_vram_mb: None,
+                    estimated_min_ram_mb: Some(512),
+                }),
+            })
+            .expect("released capacity should admit a new reservation");
     }
 }

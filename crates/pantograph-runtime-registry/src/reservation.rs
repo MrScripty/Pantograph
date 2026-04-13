@@ -1,3 +1,4 @@
+use crate::admission::{RuntimeReservationClaim, RuntimeReservationRequirements};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -11,6 +12,8 @@ pub struct RuntimeReservationRequest {
     pub model_id: Option<String>,
     #[serde(default)]
     pub pin_runtime: bool,
+    #[serde(default)]
+    pub requirements: Option<RuntimeReservationRequirements>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +39,7 @@ pub(crate) struct RuntimeReservationRecord {
     pub model_id: Option<String>,
     pub pin_runtime: bool,
     pub created_at_ms: u64,
+    pub claim: RuntimeReservationClaim,
 }
 
 impl RuntimeReservationRecord {

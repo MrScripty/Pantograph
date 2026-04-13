@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::admission::RuntimeAdmissionBudget;
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +37,7 @@ pub struct RuntimeRegistryRecord {
     pub last_transition_at_ms: u64,
     pub active_reservations: BTreeSet<u64>,
     pub models: BTreeMap<String, RuntimeModelResidencyRecord>,
+    pub admission_budget: Option<RuntimeAdmissionBudget>,
 }
 
 impl RuntimeRegistryRecord {
@@ -50,6 +52,7 @@ impl RuntimeRegistryRecord {
             last_transition_at_ms: now_ms,
             active_reservations: BTreeSet::new(),
             models: BTreeMap::new(),
+            admission_budget: None,
         }
     }
 
