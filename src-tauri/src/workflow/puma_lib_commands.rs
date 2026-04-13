@@ -1,5 +1,6 @@
+use pantograph_runtime_identity::canonical_engine_backend_key;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tauri::State;
 
 use super::commands::{SharedExtensions, SharedNodeRegistry};
@@ -249,18 +250,7 @@ fn metadata_string(metadata: &Map<String, Value>, keys: &[&str]) -> Option<Strin
 }
 
 fn normalize_backend_key(value: Option<&str>) -> Option<String> {
-    let token = value?.trim().to_ascii_lowercase();
-    if token.is_empty() {
-        return None;
-    }
-
-    match token.as_str() {
-        "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
-        "onnx-runtime" | "onnxruntime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
-        "torch" | "pytorch" => Some("pytorch".to_string()),
-        "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
-        other => Some(other.to_string()),
-    }
+    canonical_engine_backend_key(value)
 }
 
 fn unique_binding_backend(bindings: &Value) -> Option<String> {

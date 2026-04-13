@@ -6,16 +6,18 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
-    Context, DependencyState, EventSink, ExecutorExtensions, ModelDependencyRequest,
-    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
-    Result, TaskExecutor, WorkflowEvent, core_executor::resolve_node_type, extension_keys,
+    core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
+    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
+    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
+    WorkflowEvent,
 };
+use pantograph_runtime_identity::canonical_engine_backend_key;
 
 use crate::python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
@@ -55,16 +57,7 @@ impl TauriTaskExecutor {
     const FNV64_PRIME: u64 = 0x0000_0100_0000_01B3;
 
     fn canonical_backend_key(value: Option<&str>) -> Option<String> {
-        let normalized = value
-            .map(|v| v.trim().to_lowercase())
-            .filter(|v| !v.is_empty())?;
-        match normalized.as_str() {
-            "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
-            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
-            "torch" | "pytorch" => Some("pytorch".to_string()),
-            "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
-            other => Some(other.to_string()),
-        }
+        canonical_engine_backend_key(value)
     }
 
     /// Create a new task executor with the default process Python runtime.
@@ -1370,10 +1363,10 @@ mod tests {
     use std::sync::Mutex;
 
     use node_engine::{
-        DependencyState, DependencyValidationState, ExecutorExtensions, ModelDependencyBinding,
-        ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
-        ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
-        VecEventSink, WorkflowEvent, extension_keys,
+        extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
+        ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
+        ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
+        ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
     };
 
     #[test]

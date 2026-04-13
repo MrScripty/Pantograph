@@ -4936,6 +4936,7 @@ dependencies = [
  "futures-util",
  "log",
  "once_cell",
+ "pantograph-runtime-identity",
  "pyo3",
  "reqwest",
  "serde",
@@ -6469,6 +6470,7 @@ dependencies = [
  "inference",
  "inventory",
  "log",
+ "pantograph-runtime-identity",
  "pyo3",
  "reqwest",
  "serde",
@@ -7215,6 +7217,7 @@ dependencies = [
  "node-engine",
  "once_cell",
  "pantograph-embedded-runtime",
+ "pantograph-runtime-identity",
  "pantograph-workflow-service",
  "pumas-library",
  "regex",
@@ -7254,6 +7257,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-runtime-identity",
  "pantograph-workflow-service",
  "pumas-library",
  "reqwest",
@@ -7275,6 +7279,7 @@ name = "pantograph-frontend-http-adapter"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "pantograph-runtime-identity",
  "pantograph-workflow-service",
  "pumas-library",
  "reqwest",
@@ -7282,6 +7287,10 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
 ]
+
+[[package]]
+name = "pantograph-runtime-identity"
+version = "0.1.0"
 
 [[package]]
 name = "pantograph-uniffi"

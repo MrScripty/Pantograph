@@ -10,11 +10,12 @@ use crate::llm::startup::{
 };
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_workflow_service::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
-    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
+    ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, Position,
+    UndoRedoState, WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
@@ -22,9 +23,9 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
+    WorkflowTraceRuntimeMetrics,
 };
-use tauri::{AppHandle, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, State};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -394,7 +395,7 @@ async fn prepare_embedding_runtime(
 }
 
 fn is_llamacpp_backend_name(backend_name: &str) -> bool {
-    inference::backend::canonical_backend_key(backend_name) == "llama_cpp"
+    canonical_runtime_backend_key(backend_name) == "llama_cpp"
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {

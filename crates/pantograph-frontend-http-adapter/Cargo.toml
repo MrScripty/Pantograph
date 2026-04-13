@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 async-trait.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true

@@ -27,6 +27,7 @@ inference = { path = "../inference", default-features = false }
 node-engine = { path = "../node-engine", features = ["inference-nodes"] }
 workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 
 serde.workspace = true
 serde_json.workspace = true

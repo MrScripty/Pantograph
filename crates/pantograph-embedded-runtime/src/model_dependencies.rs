@@ -7,17 +7,18 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use pantograph_runtime_identity::canonical_engine_backend_key;
 use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock};
 
 use node_engine::{
-    DependencyOverridePatchV1, DependencyOverrideScope, DependencyState, DependencyValidationError,
-    DependencyValidationErrorScope, DependencyValidationState, ModelDependencyBinding,
-    ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
-    ModelDependencyRequirement, ModelDependencyRequirements, ModelDependencyResolver,
-    ModelDependencyStatus, ModelRefV2, extension_keys,
+    extension_keys, DependencyOverridePatchV1, DependencyOverrideScope, DependencyState,
+    DependencyValidationError, DependencyValidationErrorScope, DependencyValidationState,
+    ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
+    ModelDependencyRequest, ModelDependencyRequirement, ModelDependencyRequirements,
+    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
 };
 
 /// Shared dependency resolver state.
@@ -264,16 +265,7 @@ impl TauriModelDependencyResolver {
     }
 
     fn canonical_backend_key(value: Option<&str>) -> Option<String> {
-        let normalized = value
-            .map(|v| v.trim().to_lowercase())
-            .filter(|v| !v.is_empty())?;
-        match normalized.as_str() {
-            "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
-            "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
-            "torch" | "pytorch" => Some("pytorch".to_string()),
-            "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
-            other => Some(other.to_string()),
-        }
+        canonical_engine_backend_key(value)
     }
 
     fn infer_engine(
@@ -389,7 +381,11 @@ impl TauriModelDependencyResolver {
                 out.push(owned);
             }
         }
-        if out.is_empty() { None } else { Some(out) }
+        if out.is_empty() {
+            None
+        } else {
+            Some(out)
+        }
     }
 
     fn make_requirements_id(

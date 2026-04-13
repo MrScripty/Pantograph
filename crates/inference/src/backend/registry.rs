@@ -6,7 +6,19 @@
 
 use std::collections::HashMap;
 
-use super::{BackendDefaultStartMode, BackendError, BackendInfo, InferenceBackend};
+use pantograph_runtime_identity::canonical_runtime_backend_key;
+
+use super::{BackendError, BackendInfo, InferenceBackend};
+
+#[cfg(any(
+    feature = "backend-llamacpp",
+    feature = "backend-ollama",
+    feature = "backend-candle",
+    feature = "backend-pytorch",
+))]
+use super::BackendDefaultStartMode;
+
+#[cfg(any(feature = "backend-llamacpp", feature = "backend-ollama"))]
 use crate::managed_runtime::ManagedBinaryId;
 
 #[cfg(feature = "backend-llamacpp")]
@@ -151,29 +163,23 @@ pub struct BackendRegistry {
     factories: HashMap<String, Box<dyn BackendFactory>>,
 }
 
-fn normalize_backend_lookup_key(name: &str) -> String {
-    name.chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .flat_map(|ch| ch.to_lowercase())
-        .collect()
-}
-
 pub fn canonical_backend_key(name: &str) -> String {
-    match normalize_backend_lookup_key(name).as_str() {
-        "llamacpp" => "llama_cpp".to_string(),
-        "ollama" => "ollama".to_string(),
-        "candle" => "candle".to_string(),
-        "pytorch" => "pytorch".to_string(),
-        other => other.to_string(),
-    }
+    canonical_runtime_backend_key(name)
 }
 
 impl BackendRegistry {
     /// Create a new registry with all available backends registered
     pub fn new() -> Self {
-        let mut registry = Self {
+        let registry = Self {
             factories: HashMap::new(),
         };
+        #[cfg(any(
+            feature = "backend-llamacpp",
+            feature = "backend-ollama",
+            feature = "backend-candle",
+            feature = "backend-pytorch",
+        ))]
+        let mut registry = registry;
 
         // Always register llama.cpp (default backend)
         #[cfg(feature = "backend-llamacpp")]
@@ -210,10 +216,12 @@ impl BackendRegistry {
     }
 
     fn resolve_factory(&self, name: &str) -> Option<&dyn BackendFactory> {
-        let normalized = normalize_backend_lookup_key(name);
-        self.factories.iter().find_map(|(registered_name, factory)| {
-            (normalize_backend_lookup_key(registered_name) == normalized).then_some(factory.as_ref())
-        })
+        self.factories
+            .iter()
+            .find_map(|(registered_name, factory)| {
+                (canonical_backend_key(registered_name) == canonical_backend_key(name))
+                    .then_some(factory.as_ref())
+            })
     }
 
     /// Create a backend instance by name
@@ -261,7 +269,9 @@ mod tests {
     #[test]
     fn test_registry_resolves_pytorch_aliases() {
         let registry = BackendRegistry::new();
-        let backend = registry.create("pytorch").expect("pytorch alias should resolve");
+        let backend = registry
+            .create("pytorch")
+            .expect("pytorch alias should resolve");
         assert_eq!(backend.name(), "PyTorch");
         assert!(registry.is_available("PyTorch"));
         assert!(registry.is_available("pytorch"));

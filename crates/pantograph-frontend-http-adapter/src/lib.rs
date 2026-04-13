@@ -3,17 +3,19 @@
 //! This crate is intentionally separate from headless API bindings so URL-based
 //! HTTP integration remains an explicit opt-in for modular GUI embedding.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use pantograph_runtime_identity::{
+    backend_key_aliases, normalize_runtime_identifier_with_fallback,
+};
 use pantograph_workflow_service::{
-    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost, WorkflowHostModelDescriptor,
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle, WorkflowRunOptions,
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
-    WorkflowServiceError, capabilities,
+    capabilities, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost,
+    WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
+    WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeSourceKind, WorkflowServiceError,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -76,7 +78,8 @@ impl FrontendHttpWorkflowHost {
     ) -> Result<Self, FrontendHttpWorkflowHostError> {
         let base_url = normalize_base_url(base_url)?;
         let backend_name = backend_name.trim().to_string();
-        let backend_runtime_id = normalize_backend_runtime_id(&backend_name);
+        let backend_runtime_id =
+            normalize_runtime_identifier_with_fallback(&backend_name, DEFAULT_BACKEND_NAME);
         let backend_keys = backend_key_aliases(&backend_name, &backend_runtime_id);
         Ok(Self {
             base_url,
@@ -327,45 +330,6 @@ fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkfl
     Ok(parsed.as_str().trim_end_matches('/').to_string())
 }
 
-fn normalize_backend_runtime_id(backend_name: &str) -> String {
-    let mut normalized = String::new();
-    let mut last_was_separator = false;
-
-    for ch in backend_name.trim().chars() {
-        if ch.is_ascii_alphanumeric() {
-            normalized.push(ch.to_ascii_lowercase());
-            last_was_separator = false;
-        } else if !last_was_separator {
-            normalized.push('_');
-            last_was_separator = true;
-        }
-    }
-
-    let normalized = normalized.trim_matches('_').to_string();
-    if normalized.is_empty() {
-        DEFAULT_BACKEND_NAME.replace('-', "_")
-    } else {
-        normalized
-    }
-}
-
-fn backend_key_aliases(backend_name: &str, backend_runtime_id: &str) -> Vec<String> {
-    let mut aliases = BTreeSet::new();
-    let trimmed = backend_name.trim();
-
-    aliases.insert(backend_runtime_id.to_string());
-    if !trimmed.is_empty() {
-        aliases.insert(trimmed.to_string());
-    }
-
-    let collapsed = backend_runtime_id.replace('_', "");
-    if !collapsed.is_empty() {
-        aliases.insert(collapsed);
-    }
-
-    aliases.into_iter().collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,12 +370,18 @@ mod tests {
 
     #[test]
     fn normalize_backend_runtime_id_stabilizes_backend_aliases() {
-        assert_eq!(normalize_backend_runtime_id(" llama.cpp "), "llama_cpp");
         assert_eq!(
-            normalize_backend_runtime_id("OpenAI Compatible"),
+            normalize_runtime_identifier_with_fallback(" llama.cpp ", DEFAULT_BACKEND_NAME),
+            "llama_cpp"
+        );
+        assert_eq!(
+            normalize_runtime_identifier_with_fallback("OpenAI Compatible", DEFAULT_BACKEND_NAME),
             "openai_compatible"
         );
-        assert_eq!(normalize_backend_runtime_id(""), "openai_compatible");
+        assert_eq!(
+            normalize_runtime_identifier_with_fallback("", DEFAULT_BACKEND_NAME),
+            "openai_compatible"
+        );
     }
 
     #[test]
@@ -637,10 +607,9 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(
-            err.to_string()
-                .contains("expected workflow error envelope JSON")
-        );
+        assert!(err
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
     }
 
     #[tokio::test]

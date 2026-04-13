@@ -6,6 +6,7 @@ description = "Graph-based workflow execution engine for Pantograph"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 # Core graph execution
 graph-flow = "0.2"
 

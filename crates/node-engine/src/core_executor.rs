@@ -10,13 +10,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use pantograph_runtime_identity::canonical_engine_backend_key;
+
 #[cfg(feature = "inference-nodes")]
 use inference::InferenceGateway;
 
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
-use crate::extensions::{ExecutorExtensions, extension_keys};
+use crate::extensions::{extension_keys, ExecutorExtensions};
 use crate::model_dependencies::{
     DependencyState, ModelDependencyBinding, ModelDependencyRequest, ModelDependencyResolver,
     ModelRefV2,
@@ -1194,16 +1197,7 @@ fn build_model_ref_v2(
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn canonical_backend_key(value: Option<&str>) -> Option<String> {
-    let normalized = value
-        .map(|v| v.trim().to_lowercase())
-        .filter(|v| !v.is_empty())?;
-    match normalized.as_str() {
-        "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
-        "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
-        "torch" | "pytorch" => Some("pytorch".to_string()),
-        "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
-        other => Some(other.to_string()),
-    }
+    canonical_engine_backend_key(value)
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -2869,31 +2863,30 @@ async fn execute_pytorch_inference(
                     match item {
                         Ok(token_obj) => {
                             // Try dict first: {"mode": "append"|"replace", "text": "..."}
-                            let result = if let Ok(dict) =
-                                token_obj.downcast::<pyo3::types::PyDict>()
-                            {
-                                let mode = dict
-                                    .get_item("mode")
-                                    .ok()
-                                    .flatten()
-                                    .and_then(|v| v.extract::<String>().ok())
-                                    .unwrap_or_else(|| "append".to_string());
-                                let text = dict
-                                    .get_item("text")
-                                    .ok()
-                                    .flatten()
-                                    .and_then(|v| v.extract::<String>().ok())
-                                    .unwrap_or_default();
-                                Ok((mode, text))
-                            } else if let Ok(text) = token_obj.extract::<String>() {
-                                // Backwards compat: plain string → append
-                                Ok(("append".to_string(), text))
-                            } else {
-                                Err(format!(
+                            let result =
+                                if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+                                    let mode = dict
+                                        .get_item("mode")
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.extract::<String>().ok())
+                                        .unwrap_or_else(|| "append".to_string());
+                                    let text = dict
+                                        .get_item("text")
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.extract::<String>().ok())
+                                        .unwrap_or_default();
+                                    Ok((mode, text))
+                                } else if let Ok(text) = token_obj.extract::<String>() {
+                                    // Backwards compat: plain string → append
+                                    Ok(("append".to_string(), text))
+                                } else {
+                                    Err(format!(
                                     "Token extraction failed: expected dict or string, got {:?}",
                                     token_obj.get_type().name()
                                 ))
-                            };
+                                };
                             if tx.blocking_send(result).is_err() {
                                 return;
                             }

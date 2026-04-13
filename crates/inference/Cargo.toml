@@ -27,6 +27,7 @@ backend-pytorch = ["dep:pyo3", "dep:tokio-stream"]  # In-process PyTorch via PyO
 std-process = []
 
 [dependencies]
+pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

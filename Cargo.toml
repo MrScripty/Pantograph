@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/inference",
     "crates/node-engine",
+    "crates/pantograph-runtime-identity",
     "crates/pantograph-embedded-runtime",
     "crates/pantograph-frontend-http-adapter",
     "crates/pantograph-workflow-service",
