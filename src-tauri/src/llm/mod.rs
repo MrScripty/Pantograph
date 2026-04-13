@@ -7,6 +7,7 @@ pub mod port_manager;
 pub mod process_tauri;
 pub mod recovery;
 pub mod server_discovery;
+pub mod startup;
 pub mod types;
 
 // Re-export from local modules (keeping existing API)

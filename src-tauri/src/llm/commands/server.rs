@@ -5,191 +5,27 @@ use super::shared::SharedAppConfig;
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::gateway::SharedGateway;
-use crate::llm::{EmbeddingStartRequest, InferenceStartRequest};
-use reqwest::Url;
-use std::path::{Path, PathBuf};
-use tauri::{AppHandle, State, command};
-
-fn derive_models_root(path: &Path) -> Option<PathBuf> {
-    let mut current = Some(path);
-    while let Some(candidate) = current {
-        if candidate
-            .to_string_lossy()
-            .ends_with("shared-resources/models")
-        {
-            return Some(candidate.to_path_buf());
-        }
-        current = candidate.parent();
-    }
-    None
-}
-
-fn find_gguf_files_in_dir(dir: &Path, limit: usize) -> Result<Vec<PathBuf>, String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| {
-        format!(
-            "Cannot read embedding model directory '{}': {}",
-            dir.display(),
-            e
-        )
-    })?;
-
-    let mut matches = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        if path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
-        {
-            matches.push(path);
-            if matches.len() >= limit {
-                break;
-            }
-        }
-    }
-
-    Ok(matches)
-}
-
-fn find_model_files_by_name(
-    models_root: &Path,
-    file_name: &std::ffi::OsStr,
-    limit: usize,
-) -> Vec<PathBuf> {
-    let mut matches = Vec::new();
-    let mut stack = vec![models_root.to_path_buf()];
-
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-                continue;
-            }
-            if path.is_file() && path.file_name() == Some(file_name) {
-                matches.push(path);
-                if matches.len() >= limit {
-                    return matches;
-                }
-            }
-        }
-    }
-
-    matches
-}
-
-pub(crate) fn resolve_embedding_model_path(model_path: &str) -> Result<PathBuf, String> {
-    let candidate = PathBuf::from(model_path);
-    if candidate.is_file() {
-        return Ok(candidate);
-    }
-    if candidate.is_dir() {
-        let matches = find_gguf_files_in_dir(&candidate, 8)?;
-        return match matches.len() {
-            0 => Err(format!(
-                "Embedding model directory '{}' contains no .gguf files. Select a GGUF embedding model in Puma-Lib.",
-                model_path
-            )),
-            1 => Ok(matches[0].clone()),
-            _ => {
-                let list = matches
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                Err(format!(
-                    "Embedding model directory '{}' contains multiple .gguf files: {}. Select a single GGUF file path.",
-                    model_path, list
-                ))
-            }
-        };
-    }
-
-    let file_name = candidate
-        .file_name()
-        .ok_or_else(|| format!("Embedding model path is invalid: {}", model_path))?;
-    let Some(models_root) = derive_models_root(&candidate) else {
-        return Err(format!(
-            "Embedding model file not found: {}. Update Model Configuration with a valid GGUF file path.",
-            model_path
-        ));
-    };
-
-    let matches = find_model_files_by_name(&models_root, file_name, 8);
-    match matches.len() {
-        0 => Err(format!(
-            "Embedding model file not found: {}. Could not find '{}' under '{}'. Update Model Configuration.",
-            model_path,
-            file_name.to_string_lossy(),
-            models_root.display()
-        )),
-        1 => {
-            log::warn!(
-                "Embedding model path '{}' was missing. Using discovered file '{}'",
-                model_path,
-                matches[0].display()
-            );
-            Ok(matches[0].clone())
-        }
-        _ => {
-            let list = matches
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            Err(format!(
-                "Embedding model file not found at '{}', and multiple candidates matched '{}': {}. Update Model Configuration explicitly.",
-                model_path,
-                file_name.to_string_lossy(),
-                list
-            ))
-        }
-    }
-}
-
-fn validate_external_server_url(url: &str) -> Result<String, String> {
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Err("External server URL is required".to_string());
-    }
-
-    let parsed = Url::parse(trimmed)
-        .map_err(|e| format!("Invalid external server URL '{}': {}", trimmed, e))?;
-    match parsed.scheme() {
-        "http" | "https" => Ok(trimmed.trim_end_matches('/').to_string()),
-        other => Err(format!(
-            "Unsupported external server URL scheme '{}'. Use http or https.",
-            other
-        )),
-    }
-}
+use crate::llm::startup::{
+    build_configured_embedding_request, build_configured_inference_request,
+    build_explicit_llamacpp_inference_request, build_external_inference_request,
+    resolve_embedding_model_path,
+};
+use tauri::{command, AppHandle, State};
 
 #[command]
 pub async fn connect_to_server(
     gateway: State<'_, SharedGateway>,
     url: String,
 ) -> Result<ServerModeInfo, String> {
-    let external_url = validate_external_server_url(&url)?;
-
-    if gateway.current_backend_name().await != "llama.cpp" {
+    if gateway.mode_info().await.backend_key.as_deref() != Some("llama_cpp") {
         gateway
-            .switch_backend("llama.cpp")
+            .switch_backend("llama_cpp")
             .await
             .map_err(|e| e.to_string())?;
     }
 
     let backend_config = gateway
-        .build_inference_start_config(InferenceStartRequest {
-            external_url: Some(external_url),
-            ..InferenceStartRequest::default()
-        })
+        .build_inference_start_config(build_external_inference_request(&url)?)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -209,23 +45,16 @@ pub async fn start_sidecar_llm(
     model_path: String,
     mmproj_path: String,
 ) -> Result<ServerModeInfo, String> {
-    if gateway.current_backend_name().await != "llama.cpp" {
+    if gateway.mode_info().await.backend_key.as_deref() != Some("llama_cpp") {
         gateway
-            .switch_backend("llama.cpp")
+            .switch_backend("llama_cpp")
             .await
             .map_err(|e| e.to_string())?;
     }
 
     let config_guard = config.read().await;
-    let device = config_guard.device.clone();
-    let inference_request = InferenceStartRequest {
-        external_url: None,
-        file_model_path: Some(std::path::PathBuf::from(&model_path)),
-        mmproj_path: Some(std::path::PathBuf::from(&mmproj_path)),
-        ollama_model_name: None,
-        device: Some(device.device),
-        gpu_layers: Some(device.gpu_layers),
-    };
+    let inference_request =
+        build_explicit_llamacpp_inference_request(&model_path, &mmproj_path, &config_guard.device);
     drop(config_guard);
 
     let backend_config = gateway
@@ -259,30 +88,14 @@ pub async fn start_sidecar_inference(
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
 ) -> Result<ServerModeInfo, String> {
+    let config_guard = config.read().await;
     let backend_name = gateway.current_backend_name().await;
     log::info!("Starting sidecar inference with backend: {}", backend_name);
-
-    let config_guard = config.read().await;
 
     // Extract config values we'll need after dropping the guard
     let embedding_model_path = config_guard.models.embedding_model_path.clone();
     let embedding_memory_mode = config_guard.embedding_memory_mode.clone();
-    let inference_request = InferenceStartRequest {
-        external_url: None,
-        file_model_path: config_guard
-            .models
-            .vlm_model_path
-            .as_ref()
-            .map(std::path::PathBuf::from),
-        mmproj_path: config_guard
-            .models
-            .vlm_mmproj_path
-            .as_ref()
-            .map(std::path::PathBuf::from),
-        ollama_model_name: config_guard.models.ollama_vlm_model.clone(),
-        device: Some(config_guard.device.device.clone()),
-        gpu_layers: Some(config_guard.device.gpu_layers),
-    };
+    let inference_request = build_configured_inference_request(&config_guard);
     drop(config_guard);
 
     let backend_config = gateway
@@ -355,22 +168,7 @@ pub async fn start_sidecar_embedding(
     config: State<'_, SharedAppConfig>,
 ) -> Result<ServerModeInfo, String> {
     let config_guard = config.read().await;
-
-    let gguf_model_path = config_guard.models.embedding_model_path.as_ref();
-    let resolved_model_path = gguf_model_path
-        .map(|model_path| resolve_embedding_model_path(model_path))
-        .transpose()?;
-    let embedding_request = EmbeddingStartRequest {
-        gguf_model_path: resolved_model_path,
-        candle_model_path: config_guard
-            .models
-            .candle_embedding_model_path
-            .as_ref()
-            .map(std::path::PathBuf::from),
-        ollama_model_name: None,
-        device: Some(config_guard.device.device.clone()),
-        gpu_layers: Some(config_guard.device.gpu_layers),
-    };
+    let embedding_request = build_configured_embedding_request(&config_guard)?;
     drop(config_guard);
 
     let backend_config = gateway
@@ -389,7 +187,7 @@ pub async fn start_sidecar_embedding(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_external_server_url;
+    use crate::llm::startup::validate_external_server_url;
 
     #[test]
     fn validates_external_server_urls() {

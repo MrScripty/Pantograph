@@ -49,5 +49,5 @@ pub use version::*;
 pub use vision::*;
 
 // Re-export shared types that are part of the public API
-pub(crate) use server::resolve_embedding_model_path;
+pub(crate) use crate::llm::startup::resolve_embedding_model_path;
 pub use shared::SharedAppConfig;

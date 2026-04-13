@@ -15,6 +15,7 @@ LLM gateway, process management, and Tauri command handlers for model and server
 | process_tauri.rs | Source file used by modules in this directory. |
 | recovery.rs | Source file used by modules in this directory. |
 | server_discovery.rs | Source file used by modules in this directory. |
+| startup.rs | Runtime startup request construction and shared model-path resolution helpers for Tauri hosts. |
 | types.rs | Source file used by modules in this directory. |
 
 ## Design Decisions
