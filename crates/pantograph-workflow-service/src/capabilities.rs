@@ -575,11 +575,28 @@ mod tests {
                 data: serde_json::json!({"backend_key": "llamacpp"}),
                 position: StoredPosition::default(),
             },
+            StoredGraphNode {
+                id: "n4".to_string(),
+                node_type: "onnx-inference".to_string(),
+                data: serde_json::json!({"backend_key": "onnxruntime"}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "n5".to_string(),
+                node_type: "audio-generation".to_string(),
+                data: serde_json::json!({"backend_key": "Stable Audio"}),
+                position: StoredPosition::default(),
+            },
         ];
 
         assert_eq!(
             extract_required_backends(&nodes),
-            vec!["llama_cpp".to_string(), "pytorch".to_string()]
+            vec![
+                "llama_cpp".to_string(),
+                "onnx-runtime".to_string(),
+                "pytorch".to_string(),
+                "stable_audio".to_string()
+            ]
         );
     }
 }

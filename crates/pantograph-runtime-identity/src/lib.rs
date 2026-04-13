@@ -14,7 +14,10 @@ pub fn canonical_runtime_backend_key(name: &str) -> String {
         "llamacpp" => "llama_cpp".to_string(),
         "ollama" => "ollama".to_string(),
         "candle" => "candle".to_string(),
-        "pytorch" => "pytorch".to_string(),
+        "torch" | "pytorch" => "pytorch".to_string(),
+        "onnxruntime" => "onnx-runtime".to_string(),
+        "stableaudio" => "stable_audio".to_string(),
+        "diffusers" => "diffusers".to_string(),
         other => other.to_string(),
     }
 }
@@ -111,6 +114,13 @@ mod tests {
         assert_eq!(canonical_runtime_backend_key("llama.cpp"), "llama_cpp");
         assert_eq!(canonical_runtime_backend_key("llama_cpp"), "llama_cpp");
         assert_eq!(canonical_runtime_backend_key("PyTorch"), "pytorch");
+        assert_eq!(canonical_runtime_backend_key("torch"), "pytorch");
+        assert_eq!(canonical_runtime_backend_key("onnxruntime"), "onnx-runtime");
+        assert_eq!(
+            canonical_runtime_backend_key("stable audio"),
+            "stable_audio"
+        );
+        assert_eq!(canonical_runtime_backend_key("diffusers"), "diffusers");
         assert_eq!(
             canonical_runtime_backend_key("OpenAI Compatible"),
             "openaicompatible"
