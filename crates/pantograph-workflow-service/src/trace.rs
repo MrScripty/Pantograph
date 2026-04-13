@@ -96,6 +96,8 @@ pub struct WorkflowTraceNodeRecord {
 pub struct WorkflowTraceSummary {
     pub execution_id: String,
     #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
     pub workflow_id: Option<String>,
     #[serde(default)]
     pub workflow_name: Option<String>,
@@ -330,6 +332,7 @@ struct WorkflowTraceExecutionContext {
 #[derive(Debug, Clone)]
 struct WorkflowTraceRunState {
     execution_id: String,
+    session_id: Option<String>,
     workflow_id: Option<String>,
     workflow_name: Option<String>,
     graph_fingerprint: Option<String>,
@@ -351,6 +354,7 @@ impl WorkflowTraceRunState {
     fn snapshot(&self) -> WorkflowTraceSummary {
         WorkflowTraceSummary {
             execution_id: self.execution_id.clone(),
+            session_id: self.session_id.clone(),
             workflow_id: self.workflow_id.clone(),
             workflow_name: self.workflow_name.clone(),
             graph_fingerprint: self.graph_fingerprint.clone(),
@@ -628,7 +632,7 @@ fn trace_matches_request(
         }
     }
     if let Some(session_id) = request.session_id.as_deref() {
-        if trace.execution_id != session_id {
+        if trace.session_id.as_deref() != Some(session_id) && trace.execution_id != session_id {
             return false;
         }
     }
@@ -660,6 +664,7 @@ fn create_trace_run_state(
 ) -> WorkflowTraceRunState {
     WorkflowTraceRunState {
         execution_id: execution_id.to_string(),
+        session_id: None,
         workflow_id,
         workflow_name: context.workflow_name.clone(),
         graph_fingerprint: context.graph_fingerprint.clone(),
@@ -983,6 +988,10 @@ fn apply_scheduler_snapshot(
     error: Option<&str>,
     captured_at_ms: u64,
 ) {
+    if trace.session_id.is_none() {
+        trace.session_id = Some(session_id.to_string());
+    }
+
     if error.is_some() {
         trace.queue.scheduler_decision_reason = Some("scheduler_snapshot_failed".to_string());
         return;
@@ -1141,6 +1150,7 @@ mod tests {
     fn workflow_trace_summary_serializes_with_snake_case_contract() {
         let value = serde_json::to_value(WorkflowTraceSummary {
             execution_id: "exec-1".to_string(),
+            session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
             workflow_name: Some("Workflow".to_string()),
             graph_fingerprint: Some("graph-1".to_string()),
@@ -1184,6 +1194,7 @@ mod tests {
 
         let expected = serde_json::json!({
             "execution_id": "exec-1",
+            "session_id": "session-1",
             "workflow_id": "wf-1",
             "workflow_name": "Workflow",
             "graph_fingerprint": "graph-1",
@@ -1385,6 +1396,60 @@ mod tests {
         assert_eq!(filtered.traces.len(), 1);
         assert_eq!(filtered.traces[0].execution_id, "exec-2");
         assert_eq!(filtered.traces[0].status, WorkflowTraceStatus::Running);
+    }
+
+    #[test]
+    fn workflow_trace_store_filters_by_session_id_when_execution_differs() {
+        let store = WorkflowTraceStore::new(10);
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "run-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 0,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+                execution_id: "run-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                captured_at_ms: 105,
+                session: Some(WorkflowSessionSummary {
+                    session_id: "session-1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                    state: WorkflowSessionState::Running,
+                    queued_runs: 0,
+                    run_count: 1,
+                }),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(105),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+                error: None,
+            },
+            105,
+        );
+
+        let filtered = store
+            .snapshot(&WorkflowTraceSnapshotRequest {
+                execution_id: None,
+                session_id: Some("session-1".to_string()),
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("session-filtered snapshot");
+
+        assert_eq!(filtered.traces.len(), 1);
+        assert_eq!(filtered.traces[0].execution_id, "run-1");
+        assert_eq!(filtered.traces[0].session_id.as_deref(), Some("session-1"));
     }
 
     #[test]

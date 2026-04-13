@@ -395,6 +395,10 @@ Update during implementation:
   scheduler `trace_execution_id` into the diagnostics projection and existing
   GUI scheduler view so operators can inspect the current trace target without
   frontend inference.
+- 2026-04-13: Twenty-ninth implementation slice added canonical `session_id`
+  attribution to workflow trace summaries and diagnostics projections so
+  session-scoped trace reads remain correct even when queued/run execution ids
+  diverge from the scheduling session identity.
 
 ## Commit Cadence Notes
 
@@ -497,6 +501,11 @@ Update during implementation:
   frontend diagnostics types so cancellation-shaped workflow failures now flow
   through an explicit cancelled run contract instead of collapsing into generic
   failed state
+- Twenty-ninth implementation slice added across
+  `crates/pantograph-workflow-service`, `src-tauri/src/workflow`, and matching
+  frontend diagnostics types so canonical trace summaries now retain
+  backend-owned `session_id` attribution and session-scoped trace snapshot
+  filters work when execution ids differ from session ids
 
 ### Deviations
 

@@ -15,6 +15,7 @@ import type { DiagnosticsRunTrace } from '../../services/diagnostics/types.ts';
 function createRunTrace(): DiagnosticsRunTrace {
   return {
     executionId: 'exec-1',
+    sessionId: 'session-1',
     workflowId: 'wf-1',
     workflowName: 'Workflow One',
     graphFingerprintAtStart: 'graph-1',
@@ -116,6 +117,7 @@ test('getRunNodeStatusCounts groups node states for overview summaries', () => {
     running: 1,
     waiting: 1,
     completed: 1,
+    cancelled: 0,
     failed: 1,
   });
 });

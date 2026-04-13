@@ -84,6 +84,8 @@ pub struct DiagnosticsNodeTrace {
 pub struct DiagnosticsRunTrace {
     pub execution_id: String,
     #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
     pub workflow_id: Option<String>,
     #[serde(default)]
     pub workflow_name: Option<String>,
@@ -553,6 +555,7 @@ fn diagnostics_run_trace(
 
     DiagnosticsRunTrace {
         execution_id: trace.execution_id.clone(),
+        session_id: trace.session_id.clone(),
         workflow_id: trace.workflow_id.clone(),
         workflow_name: trace.workflow_name.clone(),
         graph_fingerprint_at_start: trace.graph_fingerprint.clone(),
@@ -1224,6 +1227,7 @@ mod tests {
             .next()
             .expect("scheduler trace");
 
+        assert_eq!(trace.session_id.as_deref(), Some("edit-session-1"));
         assert_eq!(trace.status, WorkflowTraceStatus::Running);
         assert_eq!(trace.queue.enqueued_at_ms, Some(4_750));
         assert_eq!(trace.queue.dequeued_at_ms, Some(4_750));
@@ -1272,6 +1276,8 @@ mod tests {
             projection.scheduler.trace_execution_id.as_deref(),
             Some("run-1")
         );
+        let run = projection.runs_by_id.get("run-1").expect("run trace");
+        assert_eq!(run.session_id.as_deref(), Some("session-1"));
     }
 
     #[test]

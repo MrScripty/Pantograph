@@ -281,6 +281,7 @@ fn workflow_trace_contract_snapshot() {
     let response = WorkflowTraceSnapshotResponse {
         traces: vec![WorkflowTraceSummary {
             execution_id: "exec-1".to_string(),
+            session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
             workflow_name: Some("Workflow 1".to_string()),
             graph_fingerprint: Some("graph-1".to_string()),
@@ -327,6 +328,7 @@ fn workflow_trace_contract_snapshot() {
     let expected = serde_json::json!({
         "traces": [{
             "execution_id": "exec-1",
+            "session_id": "session-1",
             "workflow_id": "wf-1",
             "workflow_name": "Workflow 1",
             "graph_fingerprint": "graph-1",

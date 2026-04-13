@@ -152,6 +152,10 @@ let snapshot = workflow_service
   must emit explicit cancelled workflow events and preserve that outcome into
   diagnostics and trace projections instead of collapsing it into a generic
   failure badge.
+- When scheduler snapshots associate a run execution with a different workflow
+  session id, adapters must preserve that backend-owned `session_id` on trace
+  summaries and diagnostics projections rather than inferring the relationship
+  in TypeScript.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

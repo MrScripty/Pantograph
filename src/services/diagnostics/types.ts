@@ -58,6 +58,7 @@ export interface DiagnosticsNodeTrace {
 
 export interface DiagnosticsRunTrace {
   executionId: string;
+  sessionId: string | null;
   workflowId: string | null;
   workflowName: string | null;
   graphFingerprintAtStart: string | null;
@@ -154,6 +155,7 @@ export interface WorkflowTraceNodeRecord {
 
 export interface WorkflowTraceSummary {
   execution_id: string;
+  session_id?: string | null;
   workflow_id?: string | null;
   workflow_name?: string | null;
   graph_fingerprint?: string | null;

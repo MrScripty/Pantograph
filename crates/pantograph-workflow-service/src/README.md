@@ -122,6 +122,9 @@ Primary contract types:
 - Canonical trace summaries can now represent explicit cancelled run and node
   states when upstream adapters emit a cancellation outcome instead of a
   generic failure.
+- Canonical trace summaries also retain the originating `session_id` when a
+  queued/run execution id diverges from the session identity, so trace reads
+  can filter by session without adapter-local reconstruction.
 - `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
   optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
   `roles`.
