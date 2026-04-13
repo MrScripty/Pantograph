@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -50,6 +50,33 @@ pub mod runtime_extension_keys {
     pub const EVENT_SINK: &str = "pantograph_event_sink";
     /// Execution identifier for host-side stream/progress events.
     pub const EXECUTION_ID: &str = "pantograph_execution_id";
+    /// Recorder for Python-backed runtime execution metadata captured during a run.
+    pub const PYTHON_RUNTIME_EXECUTION_RECORDER: &str =
+        "pantograph_python_runtime_execution_recorder";
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PythonRuntimeExecutionMetadata {
+    pub snapshot: inference::RuntimeLifecycleSnapshot,
+    pub model_target: Option<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct PythonRuntimeExecutionRecorder {
+    state: Mutex<Option<PythonRuntimeExecutionMetadata>>,
+}
+
+impl PythonRuntimeExecutionRecorder {
+    pub fn record(&self, metadata: PythonRuntimeExecutionMetadata) {
+        *self.state.lock().expect("python runtime recorder lock") = Some(metadata);
+    }
+
+    pub fn snapshot(&self) -> Option<PythonRuntimeExecutionMetadata> {
+        self.state
+            .lock()
+            .expect("python runtime recorder lock")
+            .clone()
+    }
 }
 
 impl TauriTaskExecutor {
@@ -189,6 +216,102 @@ impl TauriTaskExecutor {
         out.sort();
         out.dedup();
         out
+    }
+
+    fn python_runtime_recorder(
+        extensions: &ExecutorExtensions,
+    ) -> Option<Arc<PythonRuntimeExecutionRecorder>> {
+        extensions
+            .get::<Arc<PythonRuntimeExecutionRecorder>>(
+                runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
+            )
+            .cloned()
+    }
+
+    fn python_runtime_backend_id(
+        node_type: &str,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> String {
+        if let Some(backend_key) =
+            Self::read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
+                .and_then(|value| Self::canonical_backend_key(Some(&value)))
+        {
+            return backend_key;
+        }
+
+        if let Some(engine) = inputs
+            .get("model_ref")
+            .and_then(|value| value.get("engine"))
+            .and_then(|value| value.as_str())
+            .and_then(|value| Self::canonical_backend_key(Some(value)))
+        {
+            return engine;
+        }
+
+        match node_type {
+            "onnx-inference" => "onnx-runtime".to_string(),
+            "audio-generation" => "stable_audio".to_string(),
+            _ => "pytorch".to_string(),
+        }
+    }
+
+    fn python_runtime_model_target(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+        inputs
+            .get("model_ref")
+            .and_then(|value| value.get("modelPath"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                Self::read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+            })
+    }
+
+    fn python_runtime_instance_id(runtime_id: &str, env_ids: &[String]) -> String {
+        if env_ids.is_empty() {
+            return format!("python-runtime:{}:default", runtime_id);
+        }
+
+        if env_ids.len() == 1 {
+            return format!(
+                "python-runtime:{}:{}",
+                runtime_id,
+                Self::sanitize_key_component(&env_ids[0])
+            );
+        }
+
+        let env_material = env_ids.join("|");
+        format!(
+            "python-runtime:{}:{}",
+            runtime_id,
+            Self::stable_hash_hex(&env_material)
+        )
+    }
+
+    fn python_runtime_execution_metadata(
+        node_type: &str,
+        request: &PythonNodeExecutionRequest,
+    ) -> PythonRuntimeExecutionMetadata {
+        let runtime_id = Self::python_runtime_backend_id(node_type, &request.inputs);
+        PythonRuntimeExecutionMetadata {
+            snapshot: inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some(runtime_id.clone()),
+                runtime_instance_id: Some(Self::python_runtime_instance_id(
+                    &runtime_id,
+                    &request.env_ids,
+                )),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: None,
+                lifecycle_decision_reason: Some("python_runtime_executed".to_string()),
+                active: true,
+                last_error: None,
+            },
+            model_target: Self::python_runtime_model_target(&request.inputs),
+        }
     }
 
     fn apply_inference_setting_defaults(inputs: &mut HashMap<String, serde_json::Value>) {
@@ -1244,6 +1367,7 @@ impl TauriTaskExecutor {
             inputs: runtime_inputs.clone(),
             env_ids: Self::collect_runtime_env_ids(&runtime_inputs),
         };
+        let runtime_metadata = Self::python_runtime_execution_metadata(node_type, &request);
 
         let streamed_any = Arc::new(AtomicBool::new(false));
         let stream_handler: Option<PythonStreamHandler> = Self::resolve_stream_target(extensions)
@@ -1265,7 +1389,20 @@ impl TauriTaskExecutor {
             .python_runtime
             .execute_node_with_stream(request, stream_handler)
             .await
-            .map_err(NodeEngineError::ExecutionFailed)?;
+            .map_err(|error| {
+                if let Some(recorder) = Self::python_runtime_recorder(extensions) {
+                    let mut failed = runtime_metadata.clone();
+                    failed.snapshot.active = false;
+                    failed.snapshot.lifecycle_decision_reason =
+                        Some("python_runtime_failed".to_string());
+                    failed.snapshot.last_error = Some(error.clone());
+                    recorder.record(failed);
+                }
+                NodeEngineError::ExecutionFailed(error)
+            })?;
+        if let Some(recorder) = Self::python_runtime_recorder(extensions) {
+            recorder.record(runtime_metadata);
+        }
         if !streamed_any.load(Ordering::Relaxed) && Self::supports_buffered_stream_replay(node_type)
         {
             Self::emit_python_stream_events(task_id, &outputs, extensions);
@@ -1360,8 +1497,6 @@ impl TaskExecutor for TauriTaskExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
     use node_engine::{
         extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
         ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
@@ -1441,6 +1576,17 @@ mod tests {
         let mut extensions = ExecutorExtensions::new();
         extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
         (executor, extensions)
+    }
+
+    fn install_python_runtime_recorder(
+        extensions: &mut ExecutorExtensions,
+    ) -> Arc<PythonRuntimeExecutionRecorder> {
+        let recorder = Arc::new(PythonRuntimeExecutionRecorder::default());
+        extensions.set(
+            runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
+            recorder.clone(),
+        );
+        recorder
     }
 
     fn make_requirements(state: DependencyValidationState) -> ModelDependencyRequirements {
@@ -1800,6 +1946,79 @@ mod tests {
         assert_eq!(request.node_type, "onnx-inference");
         assert_eq!(request.env_ids, vec!["venv:onnx".to_string()]);
         assert!(request.inputs.contains_key("model_ref"));
+    }
+
+    #[tokio::test]
+    async fn python_runtime_recorder_tracks_backend_and_environment_identity() {
+        let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
+        let mut adapter_response = HashMap::new();
+        adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
+        let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(RecordingPythonAdapter {
+            requests,
+            response: adapter_response,
+        });
+
+        let resolved_model_ref = ModelRefV2 {
+            contract_version: 2,
+            engine: "onnx-runtime".to_string(),
+            model_id: "kitten-tts".to_string(),
+            model_path: "/tmp/model.onnx".to_string(),
+            task_type_primary: "text-to-audio".to_string(),
+            dependency_bindings: vec![ModelDependencyBinding {
+                binding_id: "binding-onnx".to_string(),
+                profile_id: "profile-onnx".to_string(),
+                profile_version: 1,
+                profile_hash: Some("hash".to_string()),
+                backend_key: Some("onnx-runtime".to_string()),
+                platform_selector: Some("linux-x86_64".to_string()),
+                environment_kind: Some("python".to_string()),
+                env_id: Some("venv:onnx".to_string()),
+                python_executable_override: None,
+                validation_state: DependencyValidationState::Resolved,
+                validation_errors: Vec::new(),
+                requirements: Vec::new(),
+            }],
+            dependency_requirements_id: Some("requirements-onnx".to_string()),
+        };
+
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: ModelDependencyRequirements {
+                backend_key: Some("onnx-runtime".to_string()),
+                ..make_requirements(DependencyValidationState::Resolved)
+            },
+            status: make_status(DependencyState::Ready, None),
+            model_ref: Some(resolved_model_ref),
+        });
+        let (executor, mut extensions) = test_executor(adapter, resolver);
+        let recorder = install_python_runtime_recorder(&mut extensions);
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model.onnx"),
+        );
+        inputs.insert("backend_key".to_string(), serde_json::json!("onnxruntime"));
+
+        executor
+            .execute_task("onnx-inference-1", inputs, &Context::new(), &extensions)
+            .await
+            .expect("onnx execution should succeed");
+
+        let metadata = recorder.snapshot().expect("python runtime metadata");
+        assert_eq!(
+            metadata.snapshot.runtime_id.as_deref(),
+            Some("onnx-runtime")
+        );
+        assert_eq!(
+            metadata.snapshot.runtime_instance_id.as_deref(),
+            Some("python-runtime:onnx-runtime:venv_onnx")
+        );
+        assert_eq!(
+            metadata.snapshot.lifecycle_decision_reason.as_deref(),
+            Some("python_runtime_executed")
+        );
+        assert!(metadata.snapshot.active);
+        assert_eq!(metadata.model_target.as_deref(), Some("/tmp/model.onnx"));
     }
 
     #[tokio::test]

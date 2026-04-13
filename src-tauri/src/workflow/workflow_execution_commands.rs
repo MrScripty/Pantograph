@@ -31,7 +31,7 @@ use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
-use super::task_executor::TauriTaskExecutor;
+use super::task_executor::{PythonRuntimeExecutionRecorder, TauriTaskExecutor};
 
 #[derive(Clone, Default)]
 struct RuntimeExtensionsSnapshot {
@@ -64,6 +64,7 @@ fn apply_runtime_extensions(
     executor: &mut node_engine::WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,
     event_sink: Arc<dyn EventSink>,
+    python_runtime_execution_recorder: Arc<PythonRuntimeExecutionRecorder>,
     execution_id: &str,
 ) {
     if let Some(api) = &snapshot.pumas_api {
@@ -89,6 +90,10 @@ fn apply_runtime_extensions(
     executor.extensions_mut().set(
         super::task_executor::runtime_extension_keys::EXECUTION_ID,
         execution_id.to_string(),
+    );
+    executor.extensions_mut().set(
+        super::task_executor::runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
+        python_runtime_execution_recorder,
     );
 }
 
@@ -667,6 +672,7 @@ async fn run_session_graph_snapshot(
         &session_id,
         diagnostics_store.inner().clone(),
     ));
+    let python_runtime_execution_recorder = Arc::new(PythonRuntimeExecutionRecorder::default());
     let runtime_ext = {
         let shared = extensions.read().await;
         snapshot_runtime_extensions(&shared)
@@ -710,6 +716,7 @@ async fn run_session_graph_snapshot(
         &mut executor,
         &runtime_ext,
         event_adapter.clone() as Arc<dyn EventSink>,
+        python_runtime_execution_recorder.clone(),
         &session_id,
     );
     executor.set_event_sink(event_adapter.clone());
@@ -757,10 +764,18 @@ async fn run_session_graph_snapshot(
         });
     }
 
-    let execution_runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let execution_mode_info = gateway.mode_info().await;
-    let execution_runtime_model_target =
-        resolve_runtime_model_target(&execution_mode_info, &execution_runtime_snapshot);
+    let recorded_python_runtime = python_runtime_execution_recorder.snapshot();
+    let execution_runtime_snapshot = if let Some(metadata) = recorded_python_runtime.as_ref() {
+        metadata.snapshot.clone()
+    } else {
+        gateway.runtime_lifecycle_snapshot().await
+    };
+    let execution_runtime_model_target = recorded_python_runtime
+        .and_then(|metadata| metadata.model_target)
+        .or_else(|| {
+            resolve_runtime_model_target(&execution_mode_info, &execution_runtime_snapshot)
+        });
     restore_inference_runtime_best_effort(
         gateway.inner(),
         restore_config,
