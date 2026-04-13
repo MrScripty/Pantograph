@@ -47,7 +47,10 @@ dependency-aware, process-backed Python execution for nodes such as
 `onnx-inference`. Where legacy local validation or candidate lookup still
 exists, `effective_definition.rs` merges registry metadata with additive
 per-node `inputs`/`outputs` overlays so dynamic expand-setting ports behave the
-same way as the core service.
+same way as the core service. Workflow diagnostics projections now adapt
+backend-owned `WorkflowTraceStore` snapshots from
+`pantograph-workflow-service`; Tauri retains only projection-only overlays such
+as retained event history, progress text, and runtime/scheduler snapshots.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -137,6 +140,9 @@ let snapshot = workflow_service
 - Rejection enums are stable snake_case labels shared with TypeScript.
 - Graph fingerprints and returned graph snapshots come from core; Tauri must not
   invent or persist adapter-owned edit metadata.
+- Canonical run/node lifecycle timing for diagnostics must come from
+  `WorkflowTraceStore`; Tauri may only adapt that trace data into the existing
+  GUI projection shape and attach additive UI-only overlay fields.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

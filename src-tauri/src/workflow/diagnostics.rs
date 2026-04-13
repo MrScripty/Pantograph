@@ -4,11 +4,14 @@
 //! workflow run state, node lifecycle state, and retained event history are all
 //! derived in Rust before the GUI renders them.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSessionQueueItem, WorkflowSessionSummary,
+    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
+    WorkflowTraceNodeStatus, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
+    WorkflowTraceStore, WorkflowTraceSummary,
 };
 use serde::{Deserialize, Serialize};
 
@@ -164,29 +167,44 @@ pub struct WorkflowDiagnosticsSnapshotRequest {
 }
 
 #[derive(Debug, Clone, Default)]
-struct DiagnosticsExecutionContext {
-    workflow_id: Option<String>,
-    workflow_name: Option<String>,
-    graph_fingerprint: Option<String>,
-    node_count_at_start: usize,
-    node_types_by_id: HashMap<String, String>,
+struct DiagnosticsNodeOverlay {
+    last_progress: Option<f32>,
+    last_message: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DiagnosticsRunOverlay {
+    last_updated_at_ms: u64,
+    last_dirty_tasks: Vec<String>,
+    last_incremental_task_ids: Vec<String>,
+    nodes_by_id: BTreeMap<String, DiagnosticsNodeOverlay>,
+    events: Vec<DiagnosticsEventRecord>,
+}
+
+impl DiagnosticsRunOverlay {
+    fn new(timestamp_ms: u64) -> Self {
+        Self {
+            last_updated_at_ms: timestamp_ms,
+            last_dirty_tasks: Vec::new(),
+            last_incremental_task_ids: Vec::new(),
+            nodes_by_id: BTreeMap::new(),
+            events: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 struct WorkflowDiagnosticsState {
-    runs_by_id: BTreeMap<String, DiagnosticsRunTrace>,
-    run_order: Vec<String>,
+    overlays_by_execution_id: BTreeMap<String, DiagnosticsRunOverlay>,
     runtime: DiagnosticsRuntimeSnapshot,
     scheduler: DiagnosticsSchedulerSnapshot,
     retained_event_limit: usize,
-    execution_contexts: HashMap<String, DiagnosticsExecutionContext>,
 }
 
 impl WorkflowDiagnosticsState {
     fn new(retained_event_limit: usize) -> Self {
         Self {
-            runs_by_id: BTreeMap::new(),
-            run_order: Vec::new(),
+            overlays_by_execution_id: BTreeMap::new(),
             runtime: DiagnosticsRuntimeSnapshot {
                 workflow_id: None,
                 captured_at_ms: None,
@@ -207,24 +225,55 @@ impl WorkflowDiagnosticsState {
                 last_error: None,
             },
             retained_event_limit,
-            execution_contexts: HashMap::new(),
         }
     }
 
-    fn snapshot(&self) -> WorkflowDiagnosticsProjection {
+    fn snapshot(&self, traces: &WorkflowTraceSnapshotResponse) -> WorkflowDiagnosticsProjection {
+        let run_order = traces
+            .traces
+            .iter()
+            .map(|trace| trace.execution_id.clone())
+            .collect::<Vec<_>>();
+        let runs_by_id = traces
+            .traces
+            .iter()
+            .map(|trace| {
+                let overlay = self.overlays_by_execution_id.get(&trace.execution_id);
+                (
+                    trace.execution_id.clone(),
+                    diagnostics_run_trace(trace, overlay.cloned()),
+                )
+            })
+            .collect();
+
         WorkflowDiagnosticsProjection {
-            runs_by_id: self.runs_by_id.clone(),
-            run_order: self.run_order.clone(),
+            runs_by_id,
+            run_order,
             runtime: self.runtime.clone(),
             scheduler: self.scheduler.clone(),
             retained_event_limit: self.retained_event_limit,
         }
+    }
+
+    fn clear_history(&mut self) {
+        self.overlays_by_execution_id.clear();
+    }
+
+    fn prune_overlays(&mut self, traces: &WorkflowTraceSnapshotResponse) {
+        let retained_execution_ids = traces
+            .traces
+            .iter()
+            .map(|trace| trace.execution_id.as_str())
+            .collect::<HashSet<_>>();
+        self.overlays_by_execution_id
+            .retain(|execution_id, _| retained_execution_ids.contains(execution_id.as_str()));
     }
 }
 
 #[derive(Debug)]
 pub struct WorkflowDiagnosticsStore {
     state: Mutex<WorkflowDiagnosticsState>,
+    trace_store: WorkflowTraceStore,
 }
 
 impl Default for WorkflowDiagnosticsStore {
@@ -237,24 +286,28 @@ impl WorkflowDiagnosticsStore {
     pub fn new(retained_event_limit: usize) -> Self {
         Self {
             state: Mutex::new(WorkflowDiagnosticsState::new(retained_event_limit)),
+            trace_store: WorkflowTraceStore::new(retained_event_limit),
         }
     }
 
     pub fn snapshot(&self) -> WorkflowDiagnosticsProjection {
-        self.state
-            .lock()
-            .expect("workflow diagnostics lock poisoned")
-            .snapshot()
-    }
-
-    pub fn clear_history(&self) -> WorkflowDiagnosticsProjection {
+        let traces = self.trace_store.snapshot_all();
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        state.runs_by_id.clear();
-        state.run_order.clear();
-        state.snapshot()
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
+    }
+
+    pub fn clear_history(&self) -> WorkflowDiagnosticsProjection {
+        let traces = self.trace_store.clear_history();
+        let mut state = self
+            .state
+            .lock()
+            .expect("workflow diagnostics lock poisoned");
+        state.clear_history();
+        state.snapshot(&traces)
     }
 
     pub fn set_execution_metadata(
@@ -263,71 +316,13 @@ impl WorkflowDiagnosticsStore {
         workflow_id: Option<String>,
         workflow_name: Option<String>,
     ) {
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
-        let context = state
-            .execution_contexts
-            .entry(execution_id.to_string())
-            .or_default();
-        if let Some(workflow_id) = workflow_id {
-            context.workflow_id = Some(workflow_id);
-        }
-        if let Some(workflow_name) = workflow_name {
-            context.workflow_name = Some(workflow_name);
-        }
-
-        let workflow_id = context.workflow_id.clone();
-        let workflow_name = context.workflow_name.clone();
-        if let Some(run) = state.runs_by_id.get_mut(execution_id) {
-            if run.workflow_id.is_none() {
-                run.workflow_id = workflow_id;
-            }
-            if run.workflow_name.is_none() {
-                run.workflow_name = workflow_name;
-            }
-        }
+        self.trace_store
+            .set_execution_metadata(execution_id, workflow_id, workflow_name);
     }
 
     pub fn set_execution_graph(&self, execution_id: &str, graph: &WorkflowGraph) {
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
-        let context = state
-            .execution_contexts
-            .entry(execution_id.to_string())
-            .or_default();
-        context.graph_fingerprint = graph
-            .derived_graph
-            .as_ref()
-            .map(|derived| derived.graph_fingerprint.clone());
-        context.node_count_at_start = graph.nodes.len();
-        context.node_types_by_id = graph
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), node.node_type.clone()))
-            .collect();
-
-        let graph_fingerprint = context.graph_fingerprint.clone();
-        let node_count_at_start = context.node_count_at_start;
-        let node_types_by_id = context.node_types_by_id.clone();
-        if let Some(run) = state.runs_by_id.get_mut(execution_id) {
-            if run.graph_fingerprint_at_start.is_none() {
-                run.graph_fingerprint_at_start = graph_fingerprint;
-            }
-            if run.node_count_at_start == 0 {
-                run.node_count_at_start = node_count_at_start;
-            }
-            for (node_id, node_type) in &node_types_by_id {
-                if let Some(node) = run.nodes.get_mut(node_id) {
-                    if node.node_type.is_none() {
-                        node.node_type = Some(node_type.clone());
-                    }
-                }
-            }
-        }
+        self.trace_store
+            .set_execution_graph_context(execution_id, &graph_trace_context(graph));
     }
 
     pub fn update_runtime_snapshot(
@@ -363,7 +358,9 @@ impl WorkflowDiagnosticsStore {
             },
             None => WorkflowDiagnosticsState::new(state.retained_event_limit).runtime,
         };
-        state.snapshot()
+        let traces = self.trace_store.snapshot_all();
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
     }
 
     pub fn update_scheduler_snapshot(
@@ -390,7 +387,9 @@ impl WorkflowDiagnosticsStore {
             },
             None => WorkflowDiagnosticsState::new(state.retained_event_limit).scheduler,
         };
-        state.snapshot()
+        let traces = self.trace_store.snapshot_all();
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
     }
 
     pub fn record_workflow_event(
@@ -398,18 +397,22 @@ impl WorkflowDiagnosticsStore {
         event: &WorkflowEvent,
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
+        let traces = workflow_trace_event(event)
+            .map(|trace_event| self.trace_store.record_event(&trace_event, timestamp_ms))
+            .unwrap_or_else(|| self.trace_store.snapshot_all());
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        record_workflow_event(&mut state, event, timestamp_ms);
-        state.snapshot()
+        record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
     }
 }
 
 pub type SharedWorkflowDiagnosticsStore = Arc<WorkflowDiagnosticsStore>;
 
-fn record_workflow_event(
+fn record_diagnostics_overlay(
     state: &mut WorkflowDiagnosticsState,
     event: &WorkflowEvent,
     timestamp_ms: u64,
@@ -425,221 +428,276 @@ fn record_workflow_event(
         return;
     };
 
-    let context = state
-        .execution_contexts
-        .get(&execution_id)
-        .cloned()
-        .unwrap_or_default();
-    let workflow_id = event_workflow_id(event).or_else(|| context.workflow_id.clone());
-    let existing_run = state.runs_by_id.remove(&execution_id);
-    let mut run = existing_run.unwrap_or_else(|| {
-        create_run_trace(
-            &execution_id,
-            workflow_id.clone(),
-            &context,
-            timestamp_ms,
-            event_started_node_count(event).unwrap_or(context.node_count_at_start),
-        )
-    });
+    let overlay = state
+        .overlays_by_execution_id
+        .entry(execution_id.clone())
+        .or_insert_with(|| DiagnosticsRunOverlay::new(timestamp_ms));
+    overlay.last_updated_at_ms = timestamp_ms;
 
-    state.run_order.retain(|run_id| run_id != &execution_id);
-    state.run_order.insert(0, execution_id.clone());
-
-    if run.workflow_id.is_none() {
-        run.workflow_id = workflow_id.clone();
-    }
-    if run.workflow_name.is_none() {
-        run.workflow_name = context.workflow_name.clone();
-    }
-    if run.graph_fingerprint_at_start.is_none() {
-        run.graph_fingerprint_at_start = context.graph_fingerprint.clone();
-    }
-    if run.node_count_at_start == 0 && context.node_count_at_start > 0 {
-        run.node_count_at_start = context.node_count_at_start;
+    if let Some(node_id) = event_node_id(event) {
+        let node_overlay = overlay.nodes_by_id.entry(node_id).or_default();
+        match event {
+            WorkflowEvent::NodeStarted { .. } => {
+                node_overlay.last_progress = None;
+                node_overlay.last_message = None;
+            }
+            WorkflowEvent::NodeProgress {
+                progress, message, ..
+            } => {
+                node_overlay.last_progress = Some(*progress);
+                node_overlay.last_message = message.clone();
+            }
+            WorkflowEvent::WaitingForInput { message, .. } => {
+                node_overlay.last_message = message
+                    .clone()
+                    .or_else(|| Some("Waiting for input".to_string()));
+            }
+            _ => {}
+        }
     }
 
-    apply_run_lifecycle(&mut run, event, timestamp_ms);
-    apply_node_lifecycle(&mut run, &context, event, timestamp_ms);
+    match event {
+        WorkflowEvent::GraphModified { dirty_tasks, .. } => {
+            overlay.last_dirty_tasks = dirty_tasks.clone();
+        }
+        WorkflowEvent::IncrementalExecutionStarted { task_ids, .. } => {
+            overlay.last_incremental_task_ids = task_ids.clone();
+        }
+        _ => {}
+    }
 
-    let event_record = DiagnosticsEventRecord {
-        id: format!("{}-{}", execution_id, run.event_count),
-        sequence: run.event_count,
+    let sequence = overlay.events.len() + 1;
+    overlay.events.push(DiagnosticsEventRecord {
+        id: format!("{}-{}", execution_id, sequence),
+        sequence,
         timestamp_ms,
         event_type: event_type_name(event).to_string(),
-        execution_id: execution_id.clone(),
-        workflow_id,
+        execution_id,
+        workflow_id: event_workflow_id(event),
         node_id: event_node_id(event),
         summary: summarize_event(event),
         payload: event_payload(event),
-    };
-    run.events.push(event_record);
-    if run.events.len() > state.retained_event_limit {
-        let excess = run.events.len() - state.retained_event_limit;
-        run.events.drain(0..excess);
-    }
-
-    state.runs_by_id.insert(execution_id, run);
-}
-
-fn create_run_trace(
-    execution_id: &str,
-    workflow_id: Option<String>,
-    context: &DiagnosticsExecutionContext,
-    timestamp_ms: u64,
-    node_count_at_start: usize,
-) -> DiagnosticsRunTrace {
-    DiagnosticsRunTrace {
-        execution_id: execution_id.to_string(),
-        workflow_id,
-        workflow_name: context.workflow_name.clone(),
-        graph_fingerprint_at_start: context.graph_fingerprint.clone(),
-        node_count_at_start,
-        status: DiagnosticsRunStatus::Running,
-        started_at_ms: timestamp_ms,
-        ended_at_ms: None,
-        duration_ms: None,
-        last_updated_at_ms: timestamp_ms,
-        error: None,
-        waiting_for_input: false,
-        event_count: 0,
-        stream_event_count: 0,
-        last_dirty_tasks: Vec::new(),
-        last_incremental_task_ids: Vec::new(),
-        nodes: BTreeMap::new(),
-        events: Vec::new(),
-    }
-}
-
-fn create_node_trace(node_id: &str, node_type: Option<String>) -> DiagnosticsNodeTrace {
-    DiagnosticsNodeTrace {
-        node_id: node_id.to_string(),
-        node_type,
-        status: DiagnosticsNodeStatus::Running,
-        started_at_ms: None,
-        ended_at_ms: None,
-        duration_ms: None,
-        last_progress: None,
-        last_message: None,
-        stream_event_count: 0,
-        event_count: 0,
-        error: None,
-    }
-}
-
-fn apply_run_lifecycle(run: &mut DiagnosticsRunTrace, event: &WorkflowEvent, timestamp_ms: u64) {
-    run.last_updated_at_ms = timestamp_ms;
-    run.event_count += 1;
-
-    match event {
-        WorkflowEvent::Started { .. } => {
-            run.status = DiagnosticsRunStatus::Running;
-            run.waiting_for_input = false;
-            run.error = None;
-            run.ended_at_ms = None;
-            run.duration_ms = None;
-        }
-        WorkflowEvent::NodeStream { .. } => {
-            run.stream_event_count += 1;
-        }
-        WorkflowEvent::WaitingForInput { .. } => {
-            run.status = DiagnosticsRunStatus::Waiting;
-            run.waiting_for_input = true;
-        }
-        WorkflowEvent::Completed { .. } => {
-            run.status = DiagnosticsRunStatus::Completed;
-            run.waiting_for_input = false;
-            run.ended_at_ms = Some(timestamp_ms);
-            run.duration_ms = Some(timestamp_ms.saturating_sub(run.started_at_ms));
-        }
-        WorkflowEvent::Failed { error, .. } => {
-            run.status = DiagnosticsRunStatus::Failed;
-            run.waiting_for_input = false;
-            run.error = Some(error.clone());
-            run.ended_at_ms = Some(timestamp_ms);
-            run.duration_ms = Some(timestamp_ms.saturating_sub(run.started_at_ms));
-        }
-        WorkflowEvent::GraphModified { dirty_tasks, .. } => {
-            run.last_dirty_tasks = dirty_tasks.clone();
-        }
-        WorkflowEvent::IncrementalExecutionStarted { task_ids, .. } => {
-            run.last_incremental_task_ids = task_ids.clone();
-        }
-        WorkflowEvent::NodeStarted { .. } if run.status == DiagnosticsRunStatus::Waiting => {
-            run.status = DiagnosticsRunStatus::Running;
-            run.waiting_for_input = false;
-        }
-        _ => {}
-    }
-}
-
-fn apply_node_lifecycle(
-    run: &mut DiagnosticsRunTrace,
-    context: &DiagnosticsExecutionContext,
-    event: &WorkflowEvent,
-    timestamp_ms: u64,
-) {
-    let Some(node_id) = event_node_id(event) else {
-        return;
-    };
-    let explicit_node_type = event_node_type(event);
-    let node = run.nodes.entry(node_id.clone()).or_insert_with(|| {
-        create_node_trace(
-            &node_id,
-            explicit_node_type
-                .clone()
-                .or_else(|| context.node_types_by_id.get(&node_id).cloned()),
-        )
     });
-    if node.node_type.is_none() {
-        node.node_type =
-            explicit_node_type.or_else(|| context.node_types_by_id.get(&node_id).cloned());
+    if overlay.events.len() > state.retained_event_limit {
+        let excess = overlay.events.len() - state.retained_event_limit;
+        overlay.events.drain(0..excess);
     }
-    node.event_count += 1;
+}
 
+fn diagnostics_run_trace(
+    trace: &WorkflowTraceSummary,
+    overlay: Option<DiagnosticsRunOverlay>,
+) -> DiagnosticsRunTrace {
+    let DiagnosticsRunOverlay {
+        last_updated_at_ms,
+        last_dirty_tasks,
+        last_incremental_task_ids,
+        nodes_by_id,
+        events,
+    } = overlay.unwrap_or_else(|| DiagnosticsRunOverlay::new(trace.started_at_ms));
+
+    DiagnosticsRunTrace {
+        execution_id: trace.execution_id.clone(),
+        workflow_id: trace.workflow_id.clone(),
+        workflow_name: trace.workflow_name.clone(),
+        graph_fingerprint_at_start: trace.graph_fingerprint.clone(),
+        node_count_at_start: trace.node_count_at_start,
+        status: diagnostics_run_status(trace.status),
+        started_at_ms: trace.started_at_ms,
+        ended_at_ms: trace.ended_at_ms,
+        duration_ms: trace.duration_ms,
+        last_updated_at_ms: last_updated_at_ms
+            .max(trace.ended_at_ms.unwrap_or(trace.started_at_ms)),
+        error: trace.last_error.clone(),
+        waiting_for_input: trace.waiting_for_input,
+        event_count: trace.event_count,
+        stream_event_count: trace.stream_event_count,
+        last_dirty_tasks,
+        last_incremental_task_ids,
+        nodes: trace
+            .nodes
+            .iter()
+            .map(|node| {
+                let overlay = nodes_by_id.get(&node.node_id).cloned();
+                (node.node_id.clone(), diagnostics_node_trace(node, overlay))
+            })
+            .collect(),
+        events,
+    }
+}
+
+fn diagnostics_node_trace(
+    node: &WorkflowTraceNodeRecord,
+    overlay: Option<DiagnosticsNodeOverlay>,
+) -> DiagnosticsNodeTrace {
+    let overlay = overlay.unwrap_or_default();
+    DiagnosticsNodeTrace {
+        node_id: node.node_id.clone(),
+        node_type: node.node_type.clone(),
+        status: diagnostics_node_status(node.status),
+        started_at_ms: node.started_at_ms,
+        ended_at_ms: node.ended_at_ms,
+        duration_ms: node.duration_ms,
+        last_progress: overlay.last_progress,
+        last_message: overlay.last_message,
+        stream_event_count: node.stream_event_count,
+        event_count: node.event_count,
+        error: node.last_error.clone(),
+    }
+}
+
+fn diagnostics_run_status(status: WorkflowTraceStatus) -> DiagnosticsRunStatus {
+    match status {
+        WorkflowTraceStatus::Queued | WorkflowTraceStatus::Running => DiagnosticsRunStatus::Running,
+        WorkflowTraceStatus::Waiting => DiagnosticsRunStatus::Waiting,
+        WorkflowTraceStatus::Completed => DiagnosticsRunStatus::Completed,
+        WorkflowTraceStatus::Failed | WorkflowTraceStatus::Cancelled => {
+            DiagnosticsRunStatus::Failed
+        }
+    }
+}
+
+fn diagnostics_node_status(status: WorkflowTraceNodeStatus) -> DiagnosticsNodeStatus {
+    match status {
+        WorkflowTraceNodeStatus::Pending | WorkflowTraceNodeStatus::Running => {
+            DiagnosticsNodeStatus::Running
+        }
+        WorkflowTraceNodeStatus::Waiting => DiagnosticsNodeStatus::Waiting,
+        WorkflowTraceNodeStatus::Completed => DiagnosticsNodeStatus::Completed,
+        WorkflowTraceNodeStatus::Failed | WorkflowTraceNodeStatus::Cancelled => {
+            DiagnosticsNodeStatus::Failed
+        }
+    }
+}
+
+fn graph_trace_context(graph: &WorkflowGraph) -> WorkflowTraceGraphContext {
+    WorkflowTraceGraphContext {
+        graph_fingerprint: graph
+            .derived_graph
+            .as_ref()
+            .map(|derived| derived.graph_fingerprint.clone()),
+        node_count_at_start: graph.nodes.len(),
+        node_types_by_id: graph
+            .nodes
+            .iter()
+            .map(|node| (node.id.clone(), node.node_type.clone()))
+            .collect(),
+    }
+}
+
+fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
     match event {
-        WorkflowEvent::NodeStarted { .. } => {
-            node.status = DiagnosticsNodeStatus::Running;
-            node.started_at_ms.get_or_insert(timestamp_ms);
-            node.ended_at_ms = None;
-            node.duration_ms = None;
-            node.error = None;
-            node.last_message = None;
-            node.last_progress = None;
-        }
+        WorkflowEvent::Started {
+            workflow_id,
+            node_count,
+            execution_id,
+        } => Some(WorkflowTraceEvent::RunStarted {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+            node_count: *node_count,
+        }),
+        WorkflowEvent::NodeStarted {
+            node_id,
+            node_type,
+            execution_id,
+        } => Some(WorkflowTraceEvent::NodeStarted {
+            execution_id: execution_id.clone(),
+            node_id: node_id.clone(),
+            node_type: (!node_type.trim().is_empty()).then(|| node_type.clone()),
+        }),
         WorkflowEvent::NodeProgress {
-            progress, message, ..
-        } => {
-            node.status = DiagnosticsNodeStatus::Running;
-            node.last_progress = Some(*progress);
-            node.last_message = message.clone();
-        }
-        WorkflowEvent::NodeStream { .. } => {
-            node.status = DiagnosticsNodeStatus::Running;
-            node.stream_event_count += 1;
-        }
-        WorkflowEvent::NodeCompleted { .. } => {
-            node.status = DiagnosticsNodeStatus::Completed;
-            node.ended_at_ms = Some(timestamp_ms);
-            node.duration_ms = node
-                .started_at_ms
-                .map(|started| timestamp_ms.saturating_sub(started));
-            node.error = None;
-        }
-        WorkflowEvent::NodeError { error, .. } => {
-            node.status = DiagnosticsNodeStatus::Failed;
-            node.ended_at_ms = Some(timestamp_ms);
-            node.duration_ms = node
-                .started_at_ms
-                .map(|started| timestamp_ms.saturating_sub(started));
-            node.error = Some(error.clone());
-        }
-        WorkflowEvent::WaitingForInput { message, .. } => {
-            node.status = DiagnosticsNodeStatus::Waiting;
-            node.last_message = message
-                .clone()
-                .or_else(|| Some("Waiting for input".to_string()));
-        }
-        _ => {}
+            node_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::NodeProgress {
+            execution_id: execution_id.clone(),
+            node_id: node_id.clone(),
+        }),
+        WorkflowEvent::NodeStream {
+            node_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::NodeStream {
+            execution_id: execution_id.clone(),
+            node_id: node_id.clone(),
+        }),
+        WorkflowEvent::NodeCompleted {
+            node_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::NodeCompleted {
+            execution_id: execution_id.clone(),
+            node_id: node_id.clone(),
+        }),
+        WorkflowEvent::NodeError {
+            node_id,
+            error,
+            execution_id,
+        } => Some(WorkflowTraceEvent::NodeFailed {
+            execution_id: execution_id.clone(),
+            node_id: node_id.clone(),
+            error: error.clone(),
+        }),
+        WorkflowEvent::Completed {
+            workflow_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::RunCompleted {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        }),
+        WorkflowEvent::Failed {
+            workflow_id,
+            error,
+            execution_id,
+        } => Some(WorkflowTraceEvent::RunFailed {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+            error: error.clone(),
+        }),
+        WorkflowEvent::WaitingForInput {
+            workflow_id,
+            execution_id,
+            node_id,
+            ..
+        } => Some(WorkflowTraceEvent::WaitingForInput {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+            node_id: node_id.clone(),
+        }),
+        WorkflowEvent::GraphModified {
+            workflow_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::GraphModified {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        }),
+        WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::IncrementalExecutionStarted {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        }),
+        WorkflowEvent::RuntimeSnapshot {
+            workflow_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::RuntimeSnapshotCaptured {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        }),
+        WorkflowEvent::SchedulerSnapshot {
+            workflow_id,
+            execution_id,
+            ..
+        } => Some(WorkflowTraceEvent::SchedulerSnapshotCaptured {
+            execution_id: execution_id.clone(),
+            workflow_id: workflow_id.clone(),
+        }),
+        WorkflowEvent::DiagnosticsSnapshot { .. } => None,
     }
 }
 
@@ -764,22 +822,6 @@ fn event_node_id(event: &WorkflowEvent) -> Option<String> {
         | WorkflowEvent::NodeCompleted { node_id, .. }
         | WorkflowEvent::NodeError { node_id, .. }
         | WorkflowEvent::WaitingForInput { node_id, .. } => Some(node_id.clone()),
-        _ => None,
-    }
-}
-
-fn event_node_type(event: &WorkflowEvent) -> Option<String> {
-    match event {
-        WorkflowEvent::NodeStarted { node_type, .. } if !node_type.trim().is_empty() => {
-            Some(node_type.clone())
-        }
-        _ => None,
-    }
-}
-
-fn event_started_node_count(event: &WorkflowEvent) -> Option<usize> {
-    match event {
-        WorkflowEvent::Started { node_count, .. } => Some(*node_count),
         _ => None,
     }
 }
