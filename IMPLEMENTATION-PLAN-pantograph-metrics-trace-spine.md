@@ -324,6 +324,10 @@ Update during implementation:
   `crates/pantograph-workflow-service` with backend-owned trace DTOs,
   snake_case contract tests, request-filter validation, and README ownership
   updates.
+- 2026-04-12: Second implementation slice added a backend-owned
+  `WorkflowTraceStore` plus canonical trace-event and graph-context types in
+  `pantograph-workflow-service`, leaving Tauri adapter cutover as the next
+  isolated slice.
 
 ## Commit Cadence Notes
 
@@ -365,6 +369,7 @@ Update during implementation:
 
 - Plan updated with standards corrections and Milestone 1 scope
 - First Milestone 1 slice implemented in `pantograph-workflow-service`
+- Second Milestone 1 slice implemented in `pantograph-workflow-service`
 
 ### Deviations
 
@@ -375,6 +380,9 @@ Update during implementation:
 - Continue Milestone 1 by moving trace production and retention ownership out
   of `src-tauri/src/workflow/diagnostics.rs` and behind workflow-service
   readers.
+- Replace Tauri diagnostics lifecycle mutation with adaptation over
+  `WorkflowTraceStore` snapshots while preserving the current GUI projection
+  contract.
 - Thread the new trace contracts through workflow-service trace readers and
   Tauri commands without reintroducing adapter-owned aggregation.
 - Decide whether the first inspection surface should live in existing
@@ -383,6 +391,7 @@ Update during implementation:
 ### Verification Summary
 
 - `cargo test -p pantograph-workflow-service contract`
+- `cargo test -p pantograph-workflow-service trace`
 - `cargo check -p pantograph-workflow-service`
 - Reviewed `PLAN-STANDARDS.md`, `PLAN-TEMPLATE.md`,
   `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`,

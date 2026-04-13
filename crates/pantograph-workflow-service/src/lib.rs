@@ -34,9 +34,10 @@ pub use graph::{
     convert_graph_to_node_engine, validate_workflow_connection,
 };
 pub use trace::{
-    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
+    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
+    WorkflowTraceStore, WorkflowTraceSummary,
 };
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,

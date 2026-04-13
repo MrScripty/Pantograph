@@ -1,6 +1,11 @@
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::WorkflowServiceError;
+
+const DEFAULT_RETAINED_TRACE_LIMIT: usize = 200;
 
 /// Canonical status for a workflow trace at the service boundary.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,6 +122,147 @@ pub struct WorkflowTraceSummary {
     pub nodes: Vec<WorkflowTraceNodeRecord>,
 }
 
+/// Graph metadata captured at execution start so traces can preserve workflow
+/// shape context without depending on adapter-owned projection state.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WorkflowTraceGraphContext {
+    pub graph_fingerprint: Option<String>,
+    pub node_count_at_start: usize,
+    pub node_types_by_id: HashMap<String, String>,
+}
+
+/// Canonical backend-owned trace event model consumed by trace readers/stores.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkflowTraceEvent {
+    RunStarted {
+        execution_id: String,
+        workflow_id: Option<String>,
+        node_count: usize,
+    },
+    NodeStarted {
+        execution_id: String,
+        node_id: String,
+        node_type: Option<String>,
+    },
+    NodeProgress {
+        execution_id: String,
+        node_id: String,
+    },
+    NodeStream {
+        execution_id: String,
+        node_id: String,
+    },
+    NodeCompleted {
+        execution_id: String,
+        node_id: String,
+    },
+    NodeFailed {
+        execution_id: String,
+        node_id: String,
+        error: String,
+    },
+    RunCompleted {
+        execution_id: String,
+        workflow_id: Option<String>,
+    },
+    RunFailed {
+        execution_id: String,
+        workflow_id: Option<String>,
+        error: String,
+    },
+    WaitingForInput {
+        execution_id: String,
+        workflow_id: Option<String>,
+        node_id: String,
+    },
+    GraphModified {
+        execution_id: String,
+        workflow_id: Option<String>,
+    },
+    IncrementalExecutionStarted {
+        execution_id: String,
+        workflow_id: Option<String>,
+    },
+    RuntimeSnapshotCaptured {
+        execution_id: String,
+        workflow_id: Option<String>,
+    },
+    SchedulerSnapshotCaptured {
+        execution_id: String,
+        workflow_id: Option<String>,
+    },
+}
+
+impl WorkflowTraceEvent {
+    fn execution_id(&self) -> &str {
+        match self {
+            Self::RunStarted { execution_id, .. }
+            | Self::NodeStarted { execution_id, .. }
+            | Self::NodeProgress { execution_id, .. }
+            | Self::NodeStream { execution_id, .. }
+            | Self::NodeCompleted { execution_id, .. }
+            | Self::NodeFailed { execution_id, .. }
+            | Self::RunCompleted { execution_id, .. }
+            | Self::RunFailed { execution_id, .. }
+            | Self::WaitingForInput { execution_id, .. }
+            | Self::GraphModified { execution_id, .. }
+            | Self::IncrementalExecutionStarted { execution_id, .. }
+            | Self::RuntimeSnapshotCaptured { execution_id, .. }
+            | Self::SchedulerSnapshotCaptured { execution_id, .. } => execution_id,
+        }
+    }
+
+    fn workflow_id(&self) -> Option<&str> {
+        match self {
+            Self::RunStarted { workflow_id, .. }
+            | Self::RunCompleted { workflow_id, .. }
+            | Self::RunFailed { workflow_id, .. }
+            | Self::WaitingForInput { workflow_id, .. }
+            | Self::GraphModified { workflow_id, .. }
+            | Self::IncrementalExecutionStarted { workflow_id, .. }
+            | Self::RuntimeSnapshotCaptured { workflow_id, .. }
+            | Self::SchedulerSnapshotCaptured { workflow_id, .. } => workflow_id.as_deref(),
+            Self::NodeStarted { .. }
+            | Self::NodeProgress { .. }
+            | Self::NodeStream { .. }
+            | Self::NodeCompleted { .. }
+            | Self::NodeFailed { .. } => None,
+        }
+    }
+
+    fn node_id(&self) -> Option<&str> {
+        match self {
+            Self::NodeStarted { node_id, .. }
+            | Self::NodeProgress { node_id, .. }
+            | Self::NodeStream { node_id, .. }
+            | Self::NodeCompleted { node_id, .. }
+            | Self::NodeFailed { node_id, .. }
+            | Self::WaitingForInput { node_id, .. } => Some(node_id),
+            Self::RunStarted { .. }
+            | Self::RunCompleted { .. }
+            | Self::RunFailed { .. }
+            | Self::GraphModified { .. }
+            | Self::IncrementalExecutionStarted { .. }
+            | Self::RuntimeSnapshotCaptured { .. }
+            | Self::SchedulerSnapshotCaptured { .. } => None,
+        }
+    }
+
+    fn node_type(&self) -> Option<&str> {
+        match self {
+            Self::NodeStarted { node_type, .. } => node_type.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn node_count(&self) -> Option<usize> {
+        match self {
+            Self::RunStarted { node_count, .. } => Some(*node_count),
+            _ => None,
+        }
+    }
+}
+
 /// Debug/internal request surface for workflow trace snapshots.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -152,6 +298,290 @@ pub struct WorkflowTraceSnapshotResponse {
     pub retained_trace_limit: usize,
 }
 
+#[derive(Debug, Clone, Default)]
+struct WorkflowTraceExecutionContext {
+    workflow_id: Option<String>,
+    workflow_name: Option<String>,
+    graph_fingerprint: Option<String>,
+    node_count_at_start: usize,
+    node_types_by_id: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowTraceRunState {
+    execution_id: String,
+    workflow_id: Option<String>,
+    workflow_name: Option<String>,
+    graph_fingerprint: Option<String>,
+    status: WorkflowTraceStatus,
+    started_at_ms: u64,
+    ended_at_ms: Option<u64>,
+    duration_ms: Option<u64>,
+    queue: WorkflowTraceQueueMetrics,
+    runtime: WorkflowTraceRuntimeMetrics,
+    node_count_at_start: usize,
+    event_count: usize,
+    stream_event_count: usize,
+    waiting_for_input: bool,
+    last_error: Option<String>,
+    nodes_by_id: BTreeMap<String, WorkflowTraceNodeRecord>,
+}
+
+impl WorkflowTraceRunState {
+    fn snapshot(&self) -> WorkflowTraceSummary {
+        WorkflowTraceSummary {
+            execution_id: self.execution_id.clone(),
+            workflow_id: self.workflow_id.clone(),
+            workflow_name: self.workflow_name.clone(),
+            graph_fingerprint: self.graph_fingerprint.clone(),
+            status: self.status,
+            started_at_ms: self.started_at_ms,
+            ended_at_ms: self.ended_at_ms,
+            duration_ms: self.duration_ms,
+            queue: self.queue.clone(),
+            runtime: self.runtime.clone(),
+            node_count_at_start: self.node_count_at_start,
+            event_count: self.event_count,
+            stream_event_count: self.stream_event_count,
+            waiting_for_input: self.waiting_for_input,
+            last_error: self.last_error.clone(),
+            nodes: self.nodes_by_id.values().cloned().collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowTraceState {
+    traces_by_id: BTreeMap<String, WorkflowTraceRunState>,
+    trace_order: Vec<String>,
+    execution_contexts: HashMap<String, WorkflowTraceExecutionContext>,
+    retained_trace_limit: usize,
+}
+
+impl WorkflowTraceState {
+    fn new(retained_trace_limit: usize) -> Self {
+        Self {
+            traces_by_id: BTreeMap::new(),
+            trace_order: Vec::new(),
+            execution_contexts: HashMap::new(),
+            retained_trace_limit,
+        }
+    }
+
+    fn snapshot(&self, request: &WorkflowTraceSnapshotRequest) -> WorkflowTraceSnapshotResponse {
+        let traces = self
+            .trace_order
+            .iter()
+            .filter_map(|execution_id| self.traces_by_id.get(execution_id))
+            .filter(|trace| trace_matches_request(trace, request))
+            .map(WorkflowTraceRunState::snapshot)
+            .collect();
+
+        WorkflowTraceSnapshotResponse {
+            traces,
+            retained_trace_limit: self.retained_trace_limit,
+        }
+    }
+
+    fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
+        self.snapshot(&WorkflowTraceSnapshotRequest::default())
+    }
+
+    fn clear_history(&mut self) {
+        self.traces_by_id.clear();
+        self.trace_order.clear();
+        self.execution_contexts.clear();
+    }
+
+    fn set_execution_metadata(
+        &mut self,
+        execution_id: &str,
+        workflow_id: Option<String>,
+        workflow_name: Option<String>,
+    ) {
+        let context = self
+            .execution_contexts
+            .entry(execution_id.to_string())
+            .or_default();
+        if let Some(workflow_id) = workflow_id {
+            context.workflow_id = Some(workflow_id);
+        }
+        if let Some(workflow_name) = workflow_name {
+            context.workflow_name = Some(workflow_name);
+        }
+
+        if let Some(trace) = self.traces_by_id.get_mut(execution_id) {
+            if trace.workflow_id.is_none() {
+                trace.workflow_id = context.workflow_id.clone();
+            }
+            if trace.workflow_name.is_none() {
+                trace.workflow_name = context.workflow_name.clone();
+            }
+        }
+    }
+
+    fn set_execution_graph_context(
+        &mut self,
+        execution_id: &str,
+        graph_context: &WorkflowTraceGraphContext,
+    ) {
+        let context = self
+            .execution_contexts
+            .entry(execution_id.to_string())
+            .or_default();
+        context.graph_fingerprint = graph_context.graph_fingerprint.clone();
+        context.node_count_at_start = graph_context.node_count_at_start;
+        context.node_types_by_id = graph_context.node_types_by_id.clone();
+
+        if let Some(trace) = self.traces_by_id.get_mut(execution_id) {
+            if trace.graph_fingerprint.is_none() {
+                trace.graph_fingerprint = context.graph_fingerprint.clone();
+            }
+            if trace.node_count_at_start == 0 {
+                trace.node_count_at_start = context.node_count_at_start;
+            }
+            for (node_id, node_type) in &context.node_types_by_id {
+                if let Some(node) = trace.nodes_by_id.get_mut(node_id) {
+                    if node.node_type.is_none() {
+                        node.node_type = Some(node_type.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    fn record_event(&mut self, event: &WorkflowTraceEvent, timestamp_ms: u64) {
+        let execution_id = event.execution_id().to_string();
+        let context = self
+            .execution_contexts
+            .get(&execution_id)
+            .cloned()
+            .unwrap_or_default();
+        let workflow_id = event
+            .workflow_id()
+            .map(ToOwned::to_owned)
+            .or_else(|| context.workflow_id.clone());
+        let mut trace = self.traces_by_id.remove(&execution_id).unwrap_or_else(|| {
+            create_trace_run_state(
+                &execution_id,
+                workflow_id.clone(),
+                &context,
+                timestamp_ms,
+                event.node_count().unwrap_or(context.node_count_at_start),
+            )
+        });
+
+        self.trace_order
+            .retain(|candidate| candidate != &execution_id);
+        self.trace_order.insert(0, execution_id.clone());
+
+        if trace.workflow_id.is_none() {
+            trace.workflow_id = workflow_id;
+        }
+        if trace.workflow_name.is_none() {
+            trace.workflow_name = context.workflow_name.clone();
+        }
+        if trace.graph_fingerprint.is_none() {
+            trace.graph_fingerprint = context.graph_fingerprint.clone();
+        }
+        if trace.node_count_at_start == 0 && context.node_count_at_start > 0 {
+            trace.node_count_at_start = context.node_count_at_start;
+        }
+
+        apply_trace_event(&mut trace, &context, event, timestamp_ms);
+        self.traces_by_id.insert(execution_id, trace);
+        self.enforce_retention_limit();
+    }
+
+    fn enforce_retention_limit(&mut self) {
+        while self.trace_order.len() > self.retained_trace_limit {
+            let Some(removed_execution_id) = self.trace_order.pop() else {
+                break;
+            };
+            self.traces_by_id.remove(&removed_execution_id);
+            self.execution_contexts.remove(&removed_execution_id);
+        }
+    }
+}
+
+/// Backend-owned in-memory store for recent workflow traces.
+#[derive(Debug)]
+pub struct WorkflowTraceStore {
+    state: Mutex<WorkflowTraceState>,
+}
+
+impl Default for WorkflowTraceStore {
+    fn default() -> Self {
+        Self::new(DEFAULT_RETAINED_TRACE_LIMIT)
+    }
+}
+
+impl WorkflowTraceStore {
+    pub fn new(retained_trace_limit: usize) -> Self {
+        Self {
+            state: Mutex::new(WorkflowTraceState::new(retained_trace_limit)),
+        }
+    }
+
+    pub fn snapshot(
+        &self,
+        request: &WorkflowTraceSnapshotRequest,
+    ) -> Result<WorkflowTraceSnapshotResponse, WorkflowServiceError> {
+        request.validate()?;
+        Ok(self
+            .state
+            .lock()
+            .expect("workflow trace lock poisoned")
+            .snapshot(request))
+    }
+
+    pub fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
+        self.state
+            .lock()
+            .expect("workflow trace lock poisoned")
+            .snapshot_all()
+    }
+
+    pub fn clear_history(&self) -> WorkflowTraceSnapshotResponse {
+        let mut state = self.state.lock().expect("workflow trace lock poisoned");
+        state.clear_history();
+        state.snapshot_all()
+    }
+
+    pub fn set_execution_metadata(
+        &self,
+        execution_id: &str,
+        workflow_id: Option<String>,
+        workflow_name: Option<String>,
+    ) {
+        self.state
+            .lock()
+            .expect("workflow trace lock poisoned")
+            .set_execution_metadata(execution_id, workflow_id, workflow_name);
+    }
+
+    pub fn set_execution_graph_context(
+        &self,
+        execution_id: &str,
+        graph_context: &WorkflowTraceGraphContext,
+    ) {
+        self.state
+            .lock()
+            .expect("workflow trace lock poisoned")
+            .set_execution_graph_context(execution_id, graph_context);
+    }
+
+    pub fn record_event(
+        &self,
+        event: &WorkflowTraceEvent,
+        timestamp_ms: u64,
+    ) -> WorkflowTraceSnapshotResponse {
+        let mut state = self.state.lock().expect("workflow trace lock poisoned");
+        state.record_event(event, timestamp_ms);
+        state.snapshot_all()
+    }
+}
+
 fn validate_optional_filter(
     value: &Option<String>,
     field_name: &'static str,
@@ -166,6 +596,195 @@ fn validate_optional_filter(
     }
 
     Ok(())
+}
+
+fn trace_matches_request(
+    trace: &WorkflowTraceRunState,
+    request: &WorkflowTraceSnapshotRequest,
+) -> bool {
+    if let Some(execution_id) = request.execution_id.as_deref() {
+        if trace.execution_id != execution_id {
+            return false;
+        }
+    }
+    if let Some(session_id) = request.session_id.as_deref() {
+        if trace.execution_id != session_id {
+            return false;
+        }
+    }
+    if let Some(workflow_id) = request.workflow_id.as_deref() {
+        if trace.workflow_id.as_deref() != Some(workflow_id) {
+            return false;
+        }
+    }
+    if request.include_completed == Some(false)
+        && matches!(
+            trace.status,
+            WorkflowTraceStatus::Completed
+                | WorkflowTraceStatus::Failed
+                | WorkflowTraceStatus::Cancelled
+        )
+    {
+        return false;
+    }
+
+    true
+}
+
+fn create_trace_run_state(
+    execution_id: &str,
+    workflow_id: Option<String>,
+    context: &WorkflowTraceExecutionContext,
+    timestamp_ms: u64,
+    node_count_at_start: usize,
+) -> WorkflowTraceRunState {
+    WorkflowTraceRunState {
+        execution_id: execution_id.to_string(),
+        workflow_id,
+        workflow_name: context.workflow_name.clone(),
+        graph_fingerprint: context.graph_fingerprint.clone(),
+        status: WorkflowTraceStatus::Running,
+        started_at_ms: timestamp_ms,
+        ended_at_ms: None,
+        duration_ms: None,
+        queue: WorkflowTraceQueueMetrics::default(),
+        runtime: WorkflowTraceRuntimeMetrics::default(),
+        node_count_at_start,
+        event_count: 0,
+        stream_event_count: 0,
+        waiting_for_input: false,
+        last_error: None,
+        nodes_by_id: BTreeMap::new(),
+    }
+}
+
+fn apply_trace_event(
+    trace: &mut WorkflowTraceRunState,
+    context: &WorkflowTraceExecutionContext,
+    event: &WorkflowTraceEvent,
+    timestamp_ms: u64,
+) {
+    trace.event_count += 1;
+
+    match event {
+        WorkflowTraceEvent::RunStarted { .. } => {
+            trace.status = WorkflowTraceStatus::Running;
+            trace.waiting_for_input = false;
+            trace.last_error = None;
+            trace.ended_at_ms = None;
+            trace.duration_ms = None;
+        }
+        WorkflowTraceEvent::NodeStarted { .. } if trace.status == WorkflowTraceStatus::Waiting => {
+            trace.status = WorkflowTraceStatus::Running;
+            trace.waiting_for_input = false;
+        }
+        WorkflowTraceEvent::NodeStarted { .. } => {}
+        WorkflowTraceEvent::NodeStream { .. } => {
+            trace.stream_event_count += 1;
+        }
+        WorkflowTraceEvent::WaitingForInput { .. } => {
+            trace.status = WorkflowTraceStatus::Waiting;
+            trace.waiting_for_input = true;
+        }
+        WorkflowTraceEvent::RunCompleted { .. } => {
+            trace.status = WorkflowTraceStatus::Completed;
+            trace.waiting_for_input = false;
+            trace.ended_at_ms = Some(timestamp_ms);
+            trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
+        }
+        WorkflowTraceEvent::RunFailed { error, .. } => {
+            trace.status = WorkflowTraceStatus::Failed;
+            trace.waiting_for_input = false;
+            trace.last_error = Some(error.clone());
+            trace.ended_at_ms = Some(timestamp_ms);
+            trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
+        }
+        WorkflowTraceEvent::NodeProgress { .. }
+        | WorkflowTraceEvent::NodeCompleted { .. }
+        | WorkflowTraceEvent::NodeFailed { .. }
+        | WorkflowTraceEvent::GraphModified { .. }
+        | WorkflowTraceEvent::IncrementalExecutionStarted { .. }
+        | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
+        | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => {}
+    }
+
+    let Some(node_id) = event.node_id() else {
+        return;
+    };
+    let explicit_node_type = event.node_type().map(ToOwned::to_owned);
+    let node = trace
+        .nodes_by_id
+        .entry(node_id.to_string())
+        .or_insert_with(|| {
+            create_trace_node_record(
+                node_id,
+                explicit_node_type
+                    .clone()
+                    .or_else(|| context.node_types_by_id.get(node_id).cloned()),
+            )
+        });
+    if node.node_type.is_none() {
+        node.node_type =
+            explicit_node_type.or_else(|| context.node_types_by_id.get(node_id).cloned());
+    }
+    node.event_count += 1;
+
+    match event {
+        WorkflowTraceEvent::NodeStarted { .. } => {
+            node.status = WorkflowTraceNodeStatus::Running;
+            node.started_at_ms.get_or_insert(timestamp_ms);
+            node.ended_at_ms = None;
+            node.duration_ms = None;
+            node.last_error = None;
+        }
+        WorkflowTraceEvent::NodeProgress { .. } => {
+            node.status = WorkflowTraceNodeStatus::Running;
+        }
+        WorkflowTraceEvent::NodeStream { .. } => {
+            node.status = WorkflowTraceNodeStatus::Running;
+            node.stream_event_count += 1;
+        }
+        WorkflowTraceEvent::NodeCompleted { .. } => {
+            node.status = WorkflowTraceNodeStatus::Completed;
+            node.ended_at_ms = Some(timestamp_ms);
+            node.duration_ms = node
+                .started_at_ms
+                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
+            node.last_error = None;
+        }
+        WorkflowTraceEvent::NodeFailed { error, .. } => {
+            node.status = WorkflowTraceNodeStatus::Failed;
+            node.ended_at_ms = Some(timestamp_ms);
+            node.duration_ms = node
+                .started_at_ms
+                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
+            node.last_error = Some(error.clone());
+        }
+        WorkflowTraceEvent::WaitingForInput { .. } => {
+            node.status = WorkflowTraceNodeStatus::Waiting;
+        }
+        WorkflowTraceEvent::RunStarted { .. }
+        | WorkflowTraceEvent::RunCompleted { .. }
+        | WorkflowTraceEvent::RunFailed { .. }
+        | WorkflowTraceEvent::GraphModified { .. }
+        | WorkflowTraceEvent::IncrementalExecutionStarted { .. }
+        | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
+        | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => {}
+    }
+}
+
+fn create_trace_node_record(node_id: &str, node_type: Option<String>) -> WorkflowTraceNodeRecord {
+    WorkflowTraceNodeRecord {
+        node_id: node_id.to_string(),
+        node_type,
+        status: WorkflowTraceNodeStatus::Running,
+        started_at_ms: None,
+        ended_at_ms: None,
+        duration_ms: None,
+        event_count: 0,
+        stream_event_count: 0,
+        last_error: None,
+    }
 }
 
 #[cfg(test)]
@@ -307,5 +926,144 @@ mod tests {
             "unexpected validation error: {:?}",
             error
         );
+    }
+
+    #[test]
+    fn workflow_trace_store_records_run_and_node_timing() {
+        let store = WorkflowTraceStore::new(10);
+        store.set_execution_metadata(
+            "exec-1",
+            Some("wf-1".to_string()),
+            Some("Workflow".to_string()),
+        );
+        store.set_execution_graph_context(
+            "exec-1",
+            &WorkflowTraceGraphContext {
+                graph_fingerprint: Some("graph-1".to_string()),
+                node_count_at_start: 1,
+                node_types_by_id: HashMap::from([(
+                    "node-1".to_string(),
+                    "llm-inference".to_string(),
+                )]),
+            },
+        );
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 1,
+            },
+            1_000,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeStarted {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+                node_type: None,
+            },
+            1_010,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeStream {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+            },
+            1_030,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeCompleted {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+            },
+            1_050,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::RunCompleted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+            },
+            1_100,
+        );
+
+        let trace = snapshot.traces.first().expect("trace summary");
+        assert_eq!(trace.workflow_name.as_deref(), Some("Workflow"));
+        assert_eq!(trace.graph_fingerprint.as_deref(), Some("graph-1"));
+        assert_eq!(trace.status, WorkflowTraceStatus::Completed);
+        assert_eq!(trace.duration_ms, Some(100));
+        assert_eq!(trace.event_count, 5);
+        assert_eq!(trace.stream_event_count, 1);
+
+        let node = trace.nodes.first().expect("node summary");
+        assert_eq!(node.node_type.as_deref(), Some("llm-inference"));
+        assert_eq!(node.status, WorkflowTraceNodeStatus::Completed);
+        assert_eq!(node.duration_ms, Some(40));
+        assert_eq!(node.stream_event_count, 1);
+    }
+
+    #[test]
+    fn workflow_trace_store_filters_completed_runs() {
+        let store = WorkflowTraceStore::new(10);
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 0,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunCompleted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+            },
+            150,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-2".to_string(),
+                workflow_id: Some("wf-2".to_string()),
+                node_count: 0,
+            },
+            200,
+        );
+
+        let filtered = store
+            .snapshot(&WorkflowTraceSnapshotRequest {
+                execution_id: None,
+                session_id: None,
+                workflow_id: None,
+                include_completed: Some(false),
+            })
+            .expect("filtered snapshot");
+
+        assert_eq!(filtered.traces.len(), 1);
+        assert_eq!(filtered.traces[0].execution_id, "exec-2");
+        assert_eq!(filtered.traces[0].status, WorkflowTraceStatus::Running);
+    }
+
+    #[test]
+    fn workflow_trace_store_enforces_retention_limit() {
+        let store = WorkflowTraceStore::new(1);
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 0,
+            },
+            100,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-2".to_string(),
+                workflow_id: Some("wf-2".to_string()),
+                node_count: 0,
+            },
+            200,
+        );
+
+        assert_eq!(snapshot.retained_trace_limit, 1);
+        assert_eq!(snapshot.traces.len(), 1);
+        assert_eq!(snapshot.traces[0].execution_id, "exec-2");
     }
 }
