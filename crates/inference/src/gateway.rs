@@ -302,6 +302,7 @@ impl InferenceGateway {
             .registry
             .create(name)
             .map_err(|e| GatewayError::SwitchFailed(e.to_string()))?;
+        let canonical_backend_name = new_backend.name().to_string();
 
         // Stop current backend
         {
@@ -313,12 +314,12 @@ impl InferenceGateway {
         // Update current backend name
         {
             let mut name_guard = self.current_backend_name.write().await;
-            *name_guard = name.to_string();
+            *name_guard = canonical_backend_name.clone();
         }
         {
             let mut lifecycle = self.runtime_lifecycle.write().await;
             *lifecycle = RuntimeLifecycleSnapshot {
-                runtime_id: Some(name.to_string()),
+                runtime_id: Some(canonical_backend_name.clone()),
                 ..RuntimeLifecycleSnapshot::default()
             };
         }
@@ -327,7 +328,11 @@ impl InferenceGateway {
             *mode = false;
         }
 
-        log::info!("Switched to backend: {}", name);
+        log::info!(
+            "Switched to backend '{}' (requested as '{}')",
+            canonical_backend_name,
+            name
+        );
         Ok(())
     }
 
@@ -884,6 +889,40 @@ mod tests {
         let gateway = InferenceGateway::new();
         let name = gateway.current_backend_name().await;
         assert_eq!(name, "llama.cpp");
+    }
+
+    #[cfg(feature = "backend-llamacpp")]
+    #[tokio::test]
+    async fn test_switch_backend_normalizes_llamacpp_alias() {
+        let gateway = InferenceGateway::new();
+
+        gateway
+            .switch_backend("llama_cpp")
+            .await
+            .expect("llama_cpp alias should resolve");
+
+        assert_eq!(gateway.current_backend_name().await, "llama.cpp");
+        assert_eq!(
+            gateway.runtime_lifecycle_snapshot().await.runtime_id.as_deref(),
+            Some("llama.cpp")
+        );
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[tokio::test]
+    async fn test_switch_backend_normalizes_pytorch_alias() {
+        let gateway = InferenceGateway::new();
+
+        gateway
+            .switch_backend("pytorch")
+            .await
+            .expect("pytorch alias should resolve");
+
+        assert_eq!(gateway.current_backend_name().await, "PyTorch");
+        assert_eq!(
+            gateway.runtime_lifecycle_snapshot().await.runtime_id.as_deref(),
+            Some("PyTorch")
+        );
     }
 
     #[cfg(feature = "backend-llamacpp")]

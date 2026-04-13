@@ -143,6 +143,13 @@ pub struct BackendRegistry {
     factories: HashMap<String, Box<dyn BackendFactory>>,
 }
 
+fn normalize_backend_lookup_key(name: &str) -> String {
+    name.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
+}
+
 impl BackendRegistry {
     /// Create a new registry with all available backends registered
     pub fn new() -> Self {
@@ -184,17 +191,23 @@ impl BackendRegistry {
         self.factories.values().map(|f| f.info()).collect()
     }
 
+    fn resolve_factory(&self, name: &str) -> Option<&dyn BackendFactory> {
+        let normalized = normalize_backend_lookup_key(name);
+        self.factories.iter().find_map(|(registered_name, factory)| {
+            (normalize_backend_lookup_key(registered_name) == normalized).then_some(factory.as_ref())
+        })
+    }
+
     /// Create a backend instance by name
     pub fn create(&self, name: &str) -> Result<Box<dyn InferenceBackend>, BackendError> {
-        self.factories
-            .get(name)
+        self.resolve_factory(name)
             .ok_or_else(|| BackendError::Config(format!("Unknown backend: {}", name)))?
             .create()
     }
 
     /// Check if a backend is available
     pub fn is_available(&self, name: &str) -> bool {
-        self.factories.contains_key(name)
+        self.resolve_factory(name).is_some()
     }
 }
 
@@ -222,5 +235,17 @@ mod tests {
     fn test_registry_has_llamacpp() {
         let registry = BackendRegistry::new();
         assert!(registry.is_available("llama.cpp"));
+        assert!(registry.is_available("llama_cpp"));
+        assert!(registry.is_available("llama-cpp"));
+    }
+
+    #[cfg(feature = "backend-pytorch")]
+    #[test]
+    fn test_registry_resolves_pytorch_aliases() {
+        let registry = BackendRegistry::new();
+        let backend = registry.create("pytorch").expect("pytorch alias should resolve");
+        assert_eq!(backend.name(), "PyTorch");
+        assert!(registry.is_available("PyTorch"));
+        assert!(registry.is_available("pytorch"));
     }
 }
