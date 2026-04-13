@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{BackendError, BackendInfo, InferenceBackend};
+use super::{BackendDefaultStartMode, BackendError, BackendInfo, InferenceBackend};
 use crate::managed_runtime::ManagedBinaryId;
 
 #[cfg(feature = "backend-llamacpp")]
@@ -46,6 +46,7 @@ impl BackendFactory for LlamaCppFactory {
             backend_key: "llama_cpp".to_string(),
             description: "Local llama.cpp server with GGUF model support".to_string(),
             capabilities: LlamaCppBackend::static_capabilities(),
+            default_start_mode: BackendDefaultStartMode::Inference,
             active: false,
             available: true,
             unavailable_reason: None,
@@ -72,6 +73,7 @@ impl BackendFactory for OllamaFactory {
             backend_key: "ollama".to_string(),
             description: "Ollama daemon with automatic model management".to_string(),
             capabilities: OllamaBackend::static_capabilities(),
+            default_start_mode: BackendDefaultStartMode::Inference,
             active: false,
             available,
             unavailable_reason,
@@ -102,6 +104,7 @@ impl BackendFactory for CandleFactory {
                 "In-process Candle inference (CUDA required)".to_string()
             },
             capabilities: CandleBackend::static_capabilities(),
+            default_start_mode: BackendDefaultStartMode::Embedding,
             active: false,
             available,
             unavailable_reason,
@@ -129,6 +132,7 @@ impl BackendFactory for PyTorchFactory {
             description: "In-process PyTorch inference for dLLM, Sherry, and HuggingFace models"
                 .to_string(),
             capabilities: PyTorchBackend::static_capabilities(),
+            default_start_mode: BackendDefaultStartMode::Inference,
             active: false,
             available,
             unavailable_reason,

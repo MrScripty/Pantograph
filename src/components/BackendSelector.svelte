@@ -17,6 +17,7 @@
   interface BackendInfo {
     name: string;
     backend_key: string;
+    default_start_mode: 'inference' | 'embedding';
     description: string;
     capabilities: BackendCapabilities;
     active: boolean;
@@ -85,18 +86,20 @@
     }
   };
 
-  const switchBackend = async (backendKey: string) => {
-    if (backendKey === currentBackendKey || isSwitching) return;
+  const switchBackend = async (backend: BackendInfo) => {
+    if (backend.backend_key === currentBackendKey || isSwitching) return;
 
     isSwitching = true;
     error = null;
     try {
-      const status = await invoke<ServerModeInfo>('switch_backend', { backendName: backendKey });
-      currentBackendKey = status.backend_key || backendKey;
+      const status = await invoke<ServerModeInfo>('switch_backend', { backendName: backend.backend_key });
+      currentBackendKey = status.backend_key || backend.backend_key;
 
       // Auto-start the LLM after switching backends
       try {
-        const started = await ConfigService.startInferenceMode();
+        const started = backend.default_start_mode === 'embedding'
+          ? await ConfigService.startEmbeddingMode()
+          : await ConfigService.startInferenceMode();
         currentBackendKey = started.backend_key || currentBackendKey;
         await LLMService.refreshStatus();
       } catch (e) {
@@ -200,7 +203,7 @@
       // Toggle off - stop the server
       stopServer();
     } else if (backend.available) {
-      switchBackend(backend.backend_key);
+      switchBackend(backend);
     } else if (backend.can_install) {
       promptDownload(backend);
     }

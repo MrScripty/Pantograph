@@ -92,6 +92,13 @@ pub struct BackendCapabilities {
     pub tool_calling: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendDefaultStartMode {
+    Inference,
+    Embedding,
+}
+
 /// Backend information for UI display
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendInfo {
@@ -103,6 +110,8 @@ pub struct BackendInfo {
     pub description: String,
     /// Backend capabilities
     pub capabilities: BackendCapabilities,
+    /// Backend-owned recommended mode to start when the host selects this backend.
+    pub default_start_mode: BackendDefaultStartMode,
     /// Whether this backend is currently active
     pub active: bool,
     /// Whether this backend is available (dependencies met)
