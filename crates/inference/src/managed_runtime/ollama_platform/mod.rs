@@ -8,7 +8,8 @@ pub(crate) trait OllamaPlatform: Sync {
     fn release_asset(&self) -> ReleaseAsset;
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
-    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String>;
+    fn resolve_command(&self, install_dir: &Path, args: &[&str])
+    -> Result<ResolvedCommand, String>;
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -126,7 +127,10 @@ fn find_first_path(root: &Path, predicate: &dyn Fn(&Path) -> bool) -> Option<Pat
         return None;
     }
 
-    let mut entries = fs::read_dir(root).ok()?.collect::<Result<Vec<_>, _>>().ok()?;
+    let mut entries = fs::read_dir(root)
+        .ok()?
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
     entries.sort_by_key(|entry| entry.path());
 
     for entry in entries {

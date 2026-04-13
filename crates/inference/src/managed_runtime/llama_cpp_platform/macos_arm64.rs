@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use super::{
-    ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
-    ReleaseAsset, ResolvedCommand, LLAMA_CPP_RELEASE_TAG,
+    ArchiveKind, LLAMA_CPP_RELEASE_TAG, LlamaPlatform, ReleaseAsset, ResolvedCommand,
+    ensure_unix_library_aliases, extract_pid_file, prepend_env_path,
 };
 
 pub(crate) struct MacOsArm64Platform;
@@ -32,7 +32,11 @@ impl LlamaPlatform for MacOsArm64Platform {
         missing
     }
 
-    fn resolve_command(&self, binaries_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+    fn resolve_command(
+        &self,
+        binaries_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String> {
         let executable_path = binaries_dir.join(self.installed_server_name());
         if !executable_path.exists() {
             return Err(format!(
@@ -55,7 +59,12 @@ impl LlamaPlatform for MacOsArm64Platform {
     fn finalize_installation(&self, binaries_dir: &Path) -> Result<(), String> {
         ensure_unix_library_aliases(
             binaries_dir,
-            &["libggml.dylib", "libggml-base.dylib", "libllama.dylib", "libmtmd.dylib"],
+            &[
+                "libggml.dylib",
+                "libggml-base.dylib",
+                "libllama.dylib",
+                "libmtmd.dylib",
+            ],
         )
     }
 

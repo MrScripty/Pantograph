@@ -1,7 +1,9 @@
 use std::path::Path;
 
-use super::{find_executable, OllamaPlatform, OLLAMA_RELEASE_TAG};
-use crate::managed_runtime::{extract_pid_file, prepend_env_path, ArchiveKind, ReleaseAsset, ResolvedCommand};
+use super::{OLLAMA_RELEASE_TAG, OllamaPlatform, find_executable};
+use crate::managed_runtime::{
+    ArchiveKind, ReleaseAsset, ResolvedCommand, extract_pid_file, prepend_env_path,
+};
 
 pub(crate) struct LinuxPlatform;
 
@@ -27,14 +29,19 @@ impl OllamaPlatform for LinuxPlatform {
         }
     }
 
-    fn resolve_command(&self, install_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
-        let executable_path = find_executable(install_dir, self.executable_name()).ok_or_else(|| {
-            format!(
-                "Managed Ollama binary not found under {} for release {}",
-                install_dir.display(),
-                OLLAMA_RELEASE_TAG
-            )
-        })?;
+    fn resolve_command(
+        &self,
+        install_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String> {
+        let executable_path =
+            find_executable(install_dir, self.executable_name()).ok_or_else(|| {
+                format!(
+                    "Managed Ollama binary not found under {} for release {}",
+                    install_dir.display(),
+                    OLLAMA_RELEASE_TAG
+                )
+            })?;
         let working_directory = executable_path
             .parent()
             .map(Path::to_path_buf)
@@ -45,11 +52,7 @@ impl OllamaPlatform for LinuxPlatform {
             executable_path,
             working_directory: working_directory.clone(),
             args,
-            env_overrides: vec![prepend_env_path(
-                "LD_LIBRARY_PATH",
-                &working_directory,
-                ":",
-            )],
+            env_overrides: vec![prepend_env_path("LD_LIBRARY_PATH", &working_directory, ":")],
             pid_file,
         })
     }

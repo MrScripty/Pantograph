@@ -1,6 +1,6 @@
 use crate::managed_runtime::{
-    extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
-    ArchiveKind, ReleaseAsset, ResolvedCommand,
+    ArchiveKind, ReleaseAsset, ResolvedCommand, extract_pid_file as extract_pid_file_impl,
+    prepend_env_path as prepend_env_path_impl,
 };
 use std::ffi::OsString;
 use std::fs;
@@ -12,7 +12,11 @@ pub(crate) trait LlamaPlatform: Sync {
     fn release_asset(&self) -> ReleaseAsset;
     fn installed_server_name(&self) -> &'static str;
     fn validate_installation(&self, binaries_dir: &Path) -> Vec<String>;
-    fn resolve_command(&self, binaries_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String>;
+    fn resolve_command(
+        &self,
+        binaries_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String>;
     fn finalize_installation(&self, binaries_dir: &Path) -> Result<(), String>;
     fn is_runtime_library(&self, file_name: &str) -> bool;
 }
@@ -39,7 +43,10 @@ pub(crate) fn current_platform() -> &'static dyn LlamaPlatform {
     &CURRENT_PLATFORM
 }
 
-pub(crate) fn install_distribution(extracted_dir: &Path, binaries_dir: &Path) -> Result<(), String> {
+pub(crate) fn install_distribution(
+    extracted_dir: &Path,
+    binaries_dir: &Path,
+) -> Result<(), String> {
     let platform = current_platform();
     fs::create_dir_all(binaries_dir)
         .map_err(|e| format!("Failed to create binaries directory: {}", e))?;
@@ -70,7 +77,9 @@ fn copy_relevant_entries(
     platform: &dyn LlamaPlatform,
     installed_server: &mut bool,
 ) -> Result<(), String> {
-    for entry in fs::read_dir(current).map_err(|e| format!("Failed to read {:?}: {}", current, e))? {
+    for entry in
+        fs::read_dir(current).map_err(|e| format!("Failed to read {:?}: {}", current, e))?
+    {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let source_path = entry.path();
         let file_type = entry
@@ -160,8 +169,9 @@ fn copy_entry(source: &Path, destination: &Path, file_type: &fs::FileType) -> Re
                 .map_err(|e| format!("Failed to read metadata for {:?}: {}", destination, e))?
                 .permissions();
             permissions.set_mode(0o755);
-            fs::set_permissions(destination, permissions)
-                .map_err(|e| format!("Failed to update permissions for {:?}: {}", destination, e))?;
+            fs::set_permissions(destination, permissions).map_err(|e| {
+                format!("Failed to update permissions for {:?}: {}", destination, e)
+            })?;
         }
     }
 
@@ -187,19 +197,12 @@ pub(crate) fn find_option_value<'a>(args: &'a [&'a str], option_name: &str) -> O
     None
 }
 
-pub(crate) fn prepend_env_path(
-    key: &str,
-    prefix: &Path,
-    separator: &str,
-) -> (OsString, OsString) {
+pub(crate) fn prepend_env_path(key: &str, prefix: &Path, separator: &str) -> (OsString, OsString) {
     prepend_env_path_impl(key, prefix, separator)
 }
 
 #[cfg(unix)]
-pub(crate) fn ensure_unix_library_aliases(
-    directory: &Path,
-    bases: &[&str],
-) -> Result<(), String> {
+pub(crate) fn ensure_unix_library_aliases(directory: &Path, bases: &[&str]) -> Result<(), String> {
     for base in bases {
         ensure_unix_alias(directory, base)?;
     }
@@ -213,7 +216,9 @@ fn ensure_unix_alias(directory: &Path, base: &str) -> Result<(), String> {
     }
 
     let mut candidates = Vec::new();
-    for entry in fs::read_dir(directory).map_err(|e| format!("Failed to read {:?}: {}", directory, e))? {
+    for entry in
+        fs::read_dir(directory).map_err(|e| format!("Failed to read {:?}: {}", directory, e))?
+    {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let file_name = entry.file_name();
         let file_name = file_name.to_string_lossy().to_string();
@@ -265,7 +270,8 @@ mod tests {
 
     #[test]
     fn test_extract_pid_file_strips_split_flag() {
-        let (args, pid_file) = extract_pid_file(&["-m", "model.gguf", "--pid-file", "/tmp/llama.pid"]);
+        let (args, pid_file) =
+            extract_pid_file(&["-m", "model.gguf", "--pid-file", "/tmp/llama.pid"]);
         assert_eq!(args, vec!["-m", "model.gguf"]);
         assert_eq!(pid_file.unwrap().to_string_lossy(), "/tmp/llama.pid");
     }

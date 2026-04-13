@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use super::{
+    ArchiveKind, LLAMA_CPP_RELEASE_TAG, LlamaPlatform, ReleaseAsset, ResolvedCommand,
     ensure_unix_library_aliases, extract_pid_file, find_option_value, prepend_env_path,
-    ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand, LLAMA_CPP_RELEASE_TAG,
 };
 
 pub(crate) struct LinuxPlatform;
@@ -35,15 +35,26 @@ impl LlamaPlatform for LinuxPlatform {
         missing
     }
 
-    fn resolve_command(&self, binaries_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+    fn resolve_command(
+        &self,
+        binaries_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String> {
         let device = find_option_value(args, "--device").unwrap_or_default();
         let use_cuda = device.starts_with("CUDA");
 
-        let (executable_path, library_dir) = if use_cuda && binaries_dir.join("cuda/llama-server").exists() {
-            (binaries_dir.join("cuda/llama-server"), binaries_dir.join("cuda"))
-        } else {
-            (binaries_dir.join(self.installed_server_name()), binaries_dir.to_path_buf())
-        };
+        let (executable_path, library_dir) =
+            if use_cuda && binaries_dir.join("cuda/llama-server").exists() {
+                (
+                    binaries_dir.join("cuda/llama-server"),
+                    binaries_dir.join("cuda"),
+                )
+            } else {
+                (
+                    binaries_dir.join(self.installed_server_name()),
+                    binaries_dir.to_path_buf(),
+                )
+            };
 
         if !executable_path.exists() {
             return Err(format!(

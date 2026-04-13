@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use super::{
-    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand,
-    LLAMA_CPP_RELEASE_TAG,
+    ArchiveKind, LLAMA_CPP_RELEASE_TAG, LlamaPlatform, ReleaseAsset, ResolvedCommand,
+    extract_pid_file, prepend_env_path,
 };
 
 pub(crate) struct WindowsPlatform;
@@ -45,7 +45,11 @@ impl LlamaPlatform for WindowsPlatform {
         missing
     }
 
-    fn resolve_command(&self, binaries_dir: &Path, args: &[&str]) -> Result<ResolvedCommand, String> {
+    fn resolve_command(
+        &self,
+        binaries_dir: &Path,
+        args: &[&str],
+    ) -> Result<ResolvedCommand, String> {
         let executable_path = binaries_dir.join(self.installed_server_name());
         if !executable_path.exists() {
             return Err(format!(

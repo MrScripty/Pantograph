@@ -81,11 +81,10 @@ impl LlamaCppBackend {
 
         let mut normalized = Vec::with_capacity(items.len());
         for item in items {
-            let index = item
-                .get("index")
-                .and_then(|v| v.as_u64())
-                .ok_or_else(|| BackendError::Inference("Missing rerank result index".to_string()))?
-                as usize;
+            let index =
+                item.get("index").and_then(|v| v.as_u64()).ok_or_else(|| {
+                    BackendError::Inference("Missing rerank result index".to_string())
+                })? as usize;
             let score = item
                 .get("score")
                 .or_else(|| item.get("relevance_score"))
@@ -449,12 +448,7 @@ impl InferenceBackend for LlamaCppBackend {
 
         let preferred_url = format!("{}/v1/rerank", base_url);
         match self
-            .post_rerank_request(
-                &preferred_url,
-                &body,
-                &documents,
-                request.return_documents,
-            )
+            .post_rerank_request(&preferred_url, &body, &documents, request.return_documents)
             .await
         {
             Ok(response) => Ok(response),
@@ -464,13 +458,8 @@ impl InferenceBackend for LlamaCppBackend {
                     || message.contains("Not Found") =>
             {
                 let fallback_url = format!("{}/reranking", base_url);
-                self.post_rerank_request(
-                    &fallback_url,
-                    &body,
-                    &documents,
-                    request.return_documents,
-                )
-                .await
+                self.post_rerank_request(&fallback_url, &body, &documents, request.return_documents)
+                    .await
             }
             Err(error) => Err(error),
         }

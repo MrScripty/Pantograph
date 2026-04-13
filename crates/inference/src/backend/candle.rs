@@ -43,7 +43,7 @@ impl CandleBackend {
         BackendCapabilities {
             vision: false, // Candle doesn't support vision models yet
             image_generation: false,
-            embeddings: true,        // Primary use case
+            embeddings: true, // Primary use case
             reranking: false,
             gpu: true,               // CUDA support
             device_selection: false, // Limited device selection

@@ -527,9 +527,7 @@ impl LlamaServer {
             ServerMode::External { url } => Some(url.trim_end_matches('/').to_string()),
             ServerMode::SidecarInference { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
             ServerMode::SidecarEmbedding { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
-            ServerMode::SidecarReranking { port, .. } => {
-                Some(format!("http://127.0.0.1:{}", port))
-            }
+            ServerMode::SidecarReranking { port, .. } => Some(format!("http://127.0.0.1:{}", port)),
         }
     }
 

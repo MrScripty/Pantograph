@@ -8,8 +8,8 @@
 //! via `include_str!` and loaded into `sys.modules` on first use.
 
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use futures_util::Stream;

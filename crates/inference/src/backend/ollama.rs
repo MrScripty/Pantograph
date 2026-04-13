@@ -51,7 +51,7 @@ impl OllamaBackend {
         BackendCapabilities {
             vision: true, // Ollama supports multimodal models
             image_generation: false,
-            embeddings: true,        // Via embedding API
+            embeddings: true, // Via embedding API
             reranking: false,
             gpu: true,               // Ollama handles GPU automatically
             device_selection: false, // Ollama manages devices internally
@@ -67,7 +67,10 @@ impl OllamaBackend {
         } else {
             (
                 false,
-                Some("Ollama not found in PATH. Install it or download it through Pantograph.".to_string()),
+                Some(
+                    "Ollama not found in PATH. Install it or download it through Pantograph."
+                        .to_string(),
+                ),
             )
         }
     }
