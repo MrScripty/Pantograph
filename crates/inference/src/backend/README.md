@@ -110,3 +110,6 @@ fn create_backend() {
   for existing callers or be versioned through coordinated contract changes.
 - `reranking_mode` is backend-consumed lifecycle metadata, not a UI hint; host
   layers should treat it as part of sidecar startup configuration.
+- Backend `start()` results own lifecycle reuse facts when a backend can attach
+  to an already-loaded runtime. Callers should consume that outcome instead of
+  inferring reuse from adapter-local state.

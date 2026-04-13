@@ -466,6 +466,9 @@ Update during implementation:
 - Twentieth implementation slice added in `crates/inference` so backend start
   paths now report reuse outcomes to the gateway, preserving reused-runtime
   attribution for adapter-specific cases such as Ollama daemon attachment
+- Twenty-first implementation slice added in
+  `crates/inference/src/backend/pytorch.rs` so identical model/device start
+  requests reuse the already-loaded PyTorch runtime instead of forcing a reload
 
 ### Deviations
 
@@ -477,8 +480,9 @@ Update during implementation:
 ### Follow-Ups
 
 - Extend runtime lifecycle producers beyond the current inference-gateway,
-  backend-start-outcome, and embedding-sidecar paths so every runtime host
-  populates the same authoritative `WorkflowTraceRuntimeMetrics` fields.
+  backend-start-outcome, embedding-sidecar, and PyTorch loaded-model reuse
+  paths so every runtime host populates the same authoritative
+  `WorkflowTraceRuntimeMetrics` fields.
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.

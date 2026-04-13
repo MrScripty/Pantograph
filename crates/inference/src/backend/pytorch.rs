@@ -136,6 +136,19 @@ impl PyTorchBackend {
         }
     }
 
+    fn can_reuse_loaded_model(
+        &self,
+        model_path: &str,
+        device: &str,
+        model_type: Option<&str>,
+    ) -> bool {
+        self.loaded_model.as_ref().is_some_and(|loaded| {
+            loaded.model_path == model_path
+                && loaded.device == device
+                && model_type.is_none_or(|requested| loaded.model_type == requested)
+        })
+    }
+
     /// Load a model into the embedded Python runtime.
     pub async fn load_model(
         &mut self,
@@ -390,6 +403,8 @@ impl InferenceBackend for PyTorchBackend {
         config: &BackendConfig,
         _spawner: Arc<dyn ProcessSpawner>,
     ) -> Result<BackendStartOutcome, BackendError> {
+        let was_ready = self.ready;
+
         // Initialise the Python worker module
         tokio::task::spawn_blocking(|| {
             Python::with_gil(|py| {
@@ -417,19 +432,30 @@ impl InferenceBackend for PyTorchBackend {
         .unwrap_or_else(|_| "unknown".into());
         log::info!("PyTorch backend: transformers {}", tf_version);
 
-        self.ready = true;
-
         // If config includes a model_path, load it immediately
         if let Some(ref model_path) = config.model_path {
             let device = config.device.as_deref().unwrap_or("auto");
             let model_type = config.model_type.as_deref();
+            let model_path = model_path.to_string_lossy().to_string();
 
-            self.load_model(&model_path.to_string_lossy(), device, model_type)
-                .await?;
+            if self.can_reuse_loaded_model(&model_path, device, model_type) {
+                self.ready = true;
+                log::info!("PyTorch backend: reusing loaded model {}", model_path);
+                return Ok(BackendStartOutcome {
+                    runtime_reused: Some(true),
+                });
+            }
+
+            self.load_model(&model_path, device, model_type).await?;
+
+            return Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+            });
         }
 
+        self.ready = true;
         Ok(BackendStartOutcome {
-            runtime_reused: Some(false),
+            runtime_reused: Some(was_ready),
         })
     }
 
@@ -572,6 +598,30 @@ mod tests {
     fn test_no_loaded_model_initially() {
         let backend = PyTorchBackend::new();
         assert!(backend.loaded_model.is_none());
+    }
+
+    #[test]
+    fn test_can_reuse_loaded_model_requires_matching_request() {
+        let mut backend = PyTorchBackend::new();
+        backend.loaded_model = Some(LoadedModelInfo {
+            model_path: "/models/demo".to_string(),
+            model_type: "text-generation".to_string(),
+            device: "cuda".to_string(),
+        });
+
+        assert!(backend.can_reuse_loaded_model("/models/demo", "cuda", None));
+        assert!(backend.can_reuse_loaded_model(
+            "/models/demo",
+            "cuda",
+            Some("text-generation")
+        ));
+        assert!(!backend.can_reuse_loaded_model("/models/other", "cuda", None));
+        assert!(!backend.can_reuse_loaded_model("/models/demo", "cpu", None));
+        assert!(!backend.can_reuse_loaded_model(
+            "/models/demo",
+            "cuda",
+            Some("dllm")
+        ));
     }
 
     #[test]
