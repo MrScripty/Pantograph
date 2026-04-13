@@ -199,38 +199,53 @@ pub(crate) fn build_configured_inference_request(config: &AppConfig) -> Inferenc
     }
 }
 
+pub(crate) fn build_resolved_embedding_request(
+    gguf_model_path: Option<PathBuf>,
+    candle_model_path: Option<PathBuf>,
+    device: &DeviceConfig,
+    ollama_model_name: Option<String>,
+) -> EmbeddingStartRequest {
+    EmbeddingStartRequest {
+        gguf_model_path,
+        candle_model_path,
+        ollama_model_name,
+        device: Some(device.device.clone()),
+        gpu_layers: Some(device.gpu_layers),
+    }
+}
+
 pub(crate) fn build_configured_embedding_request(
     config: &AppConfig,
 ) -> Result<EmbeddingStartRequest, String> {
-    Ok(EmbeddingStartRequest {
-        gguf_model_path: config
+    Ok(build_resolved_embedding_request(
+        config
             .models
             .embedding_model_path
             .as_deref()
             .map(resolve_embedding_model_path)
             .transpose()?,
-        candle_model_path: config
+        config
             .models
             .candle_embedding_model_path
             .as_ref()
             .map(PathBuf::from),
-        ollama_model_name: None,
-        device: Some(config.device.device.clone()),
-        gpu_layers: Some(config.device.gpu_layers),
-    })
+        &config.device,
+        None,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use crate::config::{AppConfig, DeviceConfig, ModelConfig};
 
     use super::{
         build_configured_embedding_request, build_configured_inference_request,
         build_explicit_llamacpp_inference_request, build_external_inference_request,
-        resolve_embedding_model_path, validate_external_server_url,
+        build_resolved_embedding_request, resolve_embedding_model_path,
+        validate_external_server_url,
     };
 
     #[test]
@@ -306,6 +321,34 @@ mod tests {
         );
         assert_eq!(request.device.as_deref(), Some("cuda"));
         assert_eq!(request.gpu_layers, Some(-1));
+    }
+
+    #[test]
+    fn builds_resolved_embedding_request_from_runtime_inputs() {
+        let request = build_resolved_embedding_request(
+            Some(PathBuf::from("/models/embed.gguf")),
+            Some(PathBuf::from("/models/candle")),
+            &DeviceConfig {
+                device: "Vulkan0".to_string(),
+                gpu_layers: 24,
+            },
+            Some("nomic-embed-text".to_string()),
+        );
+
+        assert_eq!(
+            request.gguf_model_path.as_deref(),
+            Some(Path::new("/models/embed.gguf"))
+        );
+        assert_eq!(
+            request.candle_model_path.as_deref(),
+            Some(Path::new("/models/candle"))
+        );
+        assert_eq!(
+            request.ollama_model_name.as_deref(),
+            Some("nomic-embed-text")
+        );
+        assert_eq!(request.device.as_deref(), Some("Vulkan0"));
+        assert_eq!(request.gpu_layers, Some(24));
     }
 
     #[test]

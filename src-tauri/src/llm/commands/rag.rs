@@ -1,12 +1,12 @@
 //! RAG (Retrieval Augmented Generation) commands.
 
 use super::resolve_embedding_model_path;
-use super::shared::{SharedAppConfig, get_project_data_dir};
-use crate::agent::DocsManager;
+use super::shared::{get_project_data_dir, SharedAppConfig};
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
-use crate::llm::EmbeddingStartRequest;
+use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;
-use tauri::{AppHandle, State, command, ipc::Channel};
+use crate::llm::startup::build_resolved_embedding_request;
+use tauri::{command, ipc::Channel, AppHandle, State};
 
 /// Event sent during document indexing
 #[derive(Clone, serde::Serialize)]
@@ -194,6 +194,11 @@ pub async fn index_docs_with_switch(
     let resolved_embedding_model_path = resolve_embedding_model_path(&embedding_model_path)?;
 
     let device = config_guard.device.clone();
+    let candle_model_path = config_guard
+        .models
+        .candle_embedding_model_path
+        .as_ref()
+        .map(std::path::PathBuf::from);
     drop(config_guard);
 
     // Send progress: switching to embedding mode
@@ -209,22 +214,13 @@ pub async fn index_docs_with_switch(
 
     let backend_name = gateway.current_backend_name().await;
     log::info!("Current backend for embedding: {}", backend_name);
-    let candle_model_path = config
-        .read()
-        .await
-        .models
-        .candle_embedding_model_path
-        .as_ref()
-        .map(std::path::PathBuf::from);
-
     let embedding_config = gateway
-        .build_embedding_start_config(EmbeddingStartRequest {
-            gguf_model_path: Some(resolved_embedding_model_path.clone()),
+        .build_embedding_start_config(build_resolved_embedding_request(
+            Some(resolved_embedding_model_path.clone()),
             candle_model_path,
-            ollama_model_name: Some("nomic-embed-text".to_string()),
-            device: Some(device.device.clone()),
-            gpu_layers: Some(device.gpu_layers),
-        })
+            &device,
+            Some("nomic-embed-text".to_string()),
+        ))
         .await
         .map_err(|e| e.to_string())?;
 

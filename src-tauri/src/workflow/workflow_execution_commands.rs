@@ -4,13 +4,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
-use crate::llm::{EmbeddingStartRequest, SharedAppConfig, SharedGateway};
+use crate::llm::startup::build_resolved_embedding_request;
+use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
 use pantograph_workflow_service::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
-    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
+    ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, Position,
+    UndoRedoState, WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
@@ -18,9 +19,9 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
+    WorkflowTraceRuntimeMetrics,
 };
-use tauri::{AppHandle, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, State};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -376,13 +377,12 @@ async fn prepare_embedding_runtime(
     drop(guard);
 
     let embedding_config = gateway
-        .build_embedding_start_config(EmbeddingStartRequest {
-            gguf_model_path: Some(resolved_embedding_model_path),
-            candle_model_path: None,
-            ollama_model_name: Some("nomic-embed-text".to_string()),
-            device: Some(device.device),
-            gpu_layers: Some(device.gpu_layers),
-        })
+        .build_embedding_start_config(build_resolved_embedding_request(
+            Some(resolved_embedding_model_path),
+            None,
+            &device,
+            Some("nomic-embed-text".to_string()),
+        ))
         .await
         .map_err(|e| e.to_string())?;
 
