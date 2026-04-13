@@ -10,7 +10,7 @@ use crate::llm::startup::{
 };
 use crate::llm::{SharedAppConfig, SharedGateway};
 use node_engine::EventSink;
-use pantograph_runtime_identity::canonical_runtime_backend_key;
+use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use pantograph_workflow_service::{
     convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
     ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
@@ -414,9 +414,14 @@ pub(crate) fn trace_runtime_metrics(
     snapshot: &inference::RuntimeLifecycleSnapshot,
     model_target: Option<&str>,
 ) -> WorkflowTraceRuntimeMetrics {
+    let runtime_id = snapshot
+        .runtime_id
+        .as_deref()
+        .map(canonical_runtime_id)
+        .filter(|runtime_id| !runtime_id.is_empty());
     WorkflowTraceRuntimeMetrics {
-        runtime_id: snapshot.runtime_id.clone(),
-        observed_runtime_ids: snapshot.runtime_id.clone().into_iter().collect(),
+        runtime_id: runtime_id.clone(),
+        observed_runtime_ids: runtime_id.into_iter().collect(),
         runtime_instance_id: snapshot.runtime_instance_id.clone(),
         model_target: model_target.map(ToOwned::to_owned),
         warmup_started_at_ms: snapshot.warmup_started_at_ms,
@@ -834,6 +839,27 @@ mod tests {
             Some("reused_loaded_pytorch_model")
         );
         assert_eq!(metrics.model_target.as_deref(), Some("/models/demo"));
+    }
+
+    #[test]
+    fn trace_runtime_metrics_normalizes_known_runtime_aliases() {
+        let metrics = trace_runtime_metrics(
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            },
+            Some("/models/main.gguf"),
+        );
+
+        assert_eq!(metrics.runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(metrics.observed_runtime_ids, vec!["llama_cpp".to_string()]);
     }
 
     #[test]

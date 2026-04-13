@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
@@ -176,7 +177,11 @@ pub struct DiagnosticsRuntimeLifecycleSnapshot {
 impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleSnapshot {
     fn from(snapshot: &inference::RuntimeLifecycleSnapshot) -> Self {
         Self {
-            runtime_id: snapshot.runtime_id.clone(),
+            runtime_id: snapshot
+                .runtime_id
+                .as_deref()
+                .map(canonical_runtime_id)
+                .filter(|runtime_id| !runtime_id.is_empty()),
             runtime_instance_id: snapshot.runtime_instance_id.clone(),
             warmup_started_at_ms: snapshot.warmup_started_at_ms,
             warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
@@ -1650,6 +1655,24 @@ mod tests {
                 .and_then(|runtime| runtime.runtime_instance_id.as_deref()),
             Some("llama-cpp-embedding-7")
         );
+    }
+
+    #[test]
+    fn diagnostics_runtime_lifecycle_snapshot_normalizes_known_runtime_aliases() {
+        let snapshot =
+            DiagnosticsRuntimeLifecycleSnapshot::from(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("pytorch-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            });
+
+        assert_eq!(snapshot.runtime_id.as_deref(), Some("pytorch"));
     }
 
     #[test]

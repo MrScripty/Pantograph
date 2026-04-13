@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use futures_util::Stream;
-use pantograph_runtime_identity::canonical_runtime_backend_key;
+use pantograph_runtime_identity::canonical_runtime_id;
 use tokio::sync::RwLock;
 
 use crate::backend::{
@@ -106,7 +106,7 @@ fn config_model_target(config: &BackendConfig) -> Option<String> {
 }
 
 fn runtime_id_for_backend_name(backend_name: &str) -> String {
-    canonical_runtime_backend_key(backend_name)
+    canonical_runtime_id(backend_name)
 }
 
 impl InferenceGateway {

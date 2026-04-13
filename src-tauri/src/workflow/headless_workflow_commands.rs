@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use pantograph_embedded_runtime::{
     EmbeddedRuntime, EmbeddedRuntimeConfig, RagBackend, RagDocument,
 };
-use pantograph_runtime_identity::backend_key_aliases;
+use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_id};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
     WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
@@ -81,7 +81,8 @@ fn embedding_runtime_capabilities_from_snapshot(
     vec![WorkflowRuntimeCapability {
         runtime_id: snapshot
             .runtime_id
-            .clone()
+            .as_deref()
+            .map(canonical_runtime_id)
             .unwrap_or_else(|| "llama.cpp.embedding".to_string()),
         display_name: "Dedicated embedding runtime".to_string(),
         install_state: WorkflowRuntimeInstallState::Installed,

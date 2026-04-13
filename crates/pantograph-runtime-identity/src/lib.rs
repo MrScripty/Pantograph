@@ -19,6 +19,25 @@ pub fn canonical_runtime_backend_key(name: &str) -> String {
     }
 }
 
+pub fn canonical_runtime_id(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    match ascii_alnum_token(trimmed).as_str() {
+        "llamacppembedding" => "llama.cpp.embedding".to_string(),
+        "llamacpp" => "llama_cpp".to_string(),
+        "onnxruntime" => "onnx-runtime".to_string(),
+        "torch" | "pytorch" => "pytorch".to_string(),
+        "stableaudio" => "stable_audio".to_string(),
+        "ollama" => "ollama".to_string(),
+        "candle" => "candle".to_string(),
+        "diffusers" => "diffusers".to_string(),
+        _ => trimmed.to_string(),
+    }
+}
+
 pub fn canonical_engine_backend_key(value: Option<&str>) -> Option<String> {
     let normalized = value
         .map(|v| v.trim().to_lowercase())
@@ -112,6 +131,23 @@ mod tests {
             canonical_engine_backend_key(Some("torch")),
             Some("pytorch".to_string())
         );
+    }
+
+    #[test]
+    fn canonical_runtime_id_normalizes_known_runtime_aliases() {
+        assert_eq!(canonical_runtime_id("llama.cpp"), "llama_cpp");
+        assert_eq!(
+            canonical_runtime_id("llama_cpp_embedding"),
+            "llama.cpp.embedding"
+        );
+        assert_eq!(canonical_runtime_id("PyTorch"), "pytorch");
+        assert_eq!(canonical_runtime_id("onnx_runtime"), "onnx-runtime");
+        assert_eq!(canonical_runtime_id("Stable Audio"), "stable_audio");
+    }
+
+    #[test]
+    fn canonical_runtime_id_preserves_unknown_runtime_ids() {
+        assert_eq!(canonical_runtime_id("Custom Runtime"), "Custom Runtime");
     }
 
     #[test]
