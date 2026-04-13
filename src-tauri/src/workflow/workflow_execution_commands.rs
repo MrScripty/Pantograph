@@ -8,14 +8,14 @@ use crate::llm::startup::{
     build_resolved_embedding_request, capture_inference_restore_config,
     restore_inference_runtime_best_effort,
 };
-use crate::llm::{SharedAppConfig, SharedGateway};
+use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use pantograph_workflow_service::{
-    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
-    ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, Position,
-    UndoRedoState, WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
+    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
@@ -23,9 +23,9 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowTraceRuntimeMetrics,
+    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
 };
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, ipc::Channel};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -495,6 +495,7 @@ async fn emit_diagnostics_snapshots(
     app: &AppHandle,
     session_id: &str,
     gateway: &SharedGateway,
+    runtime_registry: &SharedRuntimeRegistry,
     extensions: &SharedExtensions,
     workflow_service: &SharedWorkflowService,
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
@@ -550,6 +551,7 @@ async fn emit_diagnostics_snapshots(
     let runtime = match super::headless_workflow_commands::build_runtime(
         app,
         gateway,
+        runtime_registry,
         extensions,
         workflow_service,
         None,
@@ -650,6 +652,7 @@ async fn run_session_graph_snapshot(
     session_id: String,
     session_graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
@@ -668,6 +671,7 @@ async fn run_session_graph_snapshot(
         &app,
         &session_id,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         diagnostics_store.inner(),
@@ -798,6 +802,7 @@ async fn run_session_graph_snapshot(
         &app,
         &session_id,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         diagnostics_store.inner(),
@@ -956,6 +961,7 @@ pub async fn execute_workflow_v2(
     app: AppHandle,
     graph: WorkflowGraph,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
@@ -977,6 +983,7 @@ pub async fn execute_workflow_v2(
         execution_id.clone(),
         session_graph,
         gateway,
+        runtime_registry,
         config,
         rag_manager,
         extensions,
@@ -1246,6 +1253,7 @@ pub async fn run_workflow_session(
     app: AppHandle,
     session_id: String,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
     rag_manager: State<'_, SharedRagManager>,
     extensions: State<'_, SharedExtensions>,
@@ -1262,6 +1270,7 @@ pub async fn run_workflow_session(
         session_id,
         session_graph,
         gateway,
+        runtime_registry,
         config,
         rag_manager,
         extensions,

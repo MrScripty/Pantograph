@@ -28,7 +28,7 @@ use pantograph_workflow_service::{
 use tauri::{AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
-use crate::llm::SharedGateway;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::project_root::resolve_project_root;
 
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
@@ -102,10 +102,12 @@ fn embedding_runtime_capabilities_from_snapshot(
 pub(super) async fn build_runtime(
     app: &AppHandle,
     gateway: &SharedGateway,
+    runtime_registry: &SharedRuntimeRegistry,
     extensions: &SharedExtensions,
     workflow_service: &SharedWorkflowService,
     rag_manager: Option<&SharedRagManager>,
 ) -> Result<EmbeddedRuntime, String> {
+    sync_runtime_registry_from_gateway(gateway, runtime_registry).await;
     let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
     let additional_runtime_capabilities = embedding_runtime_capabilities_from_snapshot(
         gateway.embedding_runtime_lifecycle_snapshot().await,
@@ -123,6 +125,14 @@ pub(super) async fn build_runtime(
         rag_backend,
     )
     .with_additional_runtime_capabilities(additional_runtime_capabilities))
+}
+
+async fn sync_runtime_registry_from_gateway(
+    gateway: &SharedGateway,
+    runtime_registry: &SharedRuntimeRegistry,
+) {
+    let mode_info = gateway.mode_info().await;
+    runtime_registry.observe_mode_info(&mode_info);
 }
 
 fn record_headless_scheduler_snapshot(
@@ -407,6 +417,7 @@ pub async fn workflow_run(
     request: WorkflowRunRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
@@ -414,6 +425,7 @@ pub async fn workflow_run(
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         Some(rag_manager.inner()),
@@ -429,12 +441,14 @@ pub async fn workflow_get_capabilities(
     request: WorkflowCapabilitiesRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowCapabilitiesResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         None,
@@ -450,12 +464,14 @@ pub async fn workflow_get_io(
     request: WorkflowIoRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowIoResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         None,
@@ -471,12 +487,14 @@ pub async fn workflow_preflight(
     request: WorkflowPreflightRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowPreflightResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         None,
@@ -492,12 +510,14 @@ pub async fn workflow_create_session(
     request: WorkflowSessionCreateRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionCreateResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         None,
@@ -513,6 +533,7 @@ pub async fn workflow_run_session(
     request: WorkflowSessionRunRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
@@ -520,6 +541,7 @@ pub async fn workflow_run_session(
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         Some(rag_manager.inner()),
@@ -535,12 +557,14 @@ pub async fn workflow_close_session(
     request: WorkflowSessionCloseRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionCloseResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         None,
@@ -603,12 +627,14 @@ pub async fn workflow_set_session_keep_alive(
     request: WorkflowSessionKeepAliveRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSessionKeepAliveResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
+        runtime_registry.inner(),
         extensions.inner(),
         workflow_service.inner(),
         None,
@@ -624,10 +650,12 @@ pub async fn workflow_get_diagnostics_snapshot(
     request: WorkflowDiagnosticsSnapshotRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
 ) -> Result<WorkflowDiagnosticsProjection, String> {
+    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     let captured_at_ms = super::workflow_execution_commands::unix_timestamp_ms();
     let session_id = normalize_optional_request_value(request.session_id.as_deref());
     let workflow_id = normalize_optional_request_value(request.workflow_id.as_deref());
@@ -647,6 +675,7 @@ pub async fn workflow_get_diagnostics_snapshot(
         let runtime = build_runtime(
             &app,
             gateway.inner(),
+            runtime_registry.inner(),
             extensions.inner(),
             workflow_service.inner(),
             None,
@@ -1238,8 +1267,10 @@ mod tests {
         .expect_err("blank execution id should be rejected");
 
         assert!(error.contains("\"code\":\"invalid_request\""));
-        assert!(error
-            .contains("workflow trace snapshot request field 'execution_id' must not be blank"));
+        assert!(
+            error
+                .contains("workflow trace snapshot request field 'execution_id' must not be blank")
+        );
     }
 
     #[test]
