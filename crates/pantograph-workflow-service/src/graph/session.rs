@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
@@ -25,6 +25,13 @@ use super::types::{
 use super::{ConnectionAnchor, InsertNodePositionHint};
 
 const DEFAULT_MAX_UNDO_SNAPSHOTS: usize = 64;
+
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -194,6 +201,7 @@ struct GraphEditSession {
     undo_stack: Vec<WorkflowGraph>,
     redo_stack: Vec<WorkflowGraph>,
     active_execution_id: Option<String>,
+    active_execution_started_at_ms: Option<u64>,
     run_count: u64,
     last_accessed: Instant,
 }
@@ -207,6 +215,7 @@ impl GraphEditSession {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             active_execution_id: None,
+            active_execution_started_at_ms: None,
             run_count: 0,
             last_accessed: now,
         };
@@ -300,13 +309,16 @@ impl GraphEditSession {
     fn queue_items(&self) -> Vec<WorkflowSessionQueueItem> {
         self.active_execution_id
             .as_ref()
-            .map(|execution_id| WorkflowSessionQueueItem {
-                queue_id: execution_id.clone(),
-                run_id: Some(execution_id.clone()),
-                enqueued_at_ms: None,
-                dequeued_at_ms: None,
-                priority: 0,
-                status: WorkflowSessionQueueItemStatus::Running,
+            .map(|execution_id| {
+                let started_at_ms = self.active_execution_started_at_ms;
+                WorkflowSessionQueueItem {
+                    queue_id: execution_id.clone(),
+                    run_id: Some(execution_id.clone()),
+                    enqueued_at_ms: started_at_ms,
+                    dequeued_at_ms: started_at_ms,
+                    priority: 0,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }
             })
             .into_iter()
             .collect()
@@ -314,12 +326,18 @@ impl GraphEditSession {
 
     fn mark_running(&mut self, session_id: &str) {
         self.touch();
+        if self.active_execution_id.as_deref() != Some(session_id)
+            || self.active_execution_started_at_ms.is_none()
+        {
+            self.active_execution_started_at_ms = Some(unix_timestamp_ms());
+        }
         self.active_execution_id = Some(session_id.to_string());
     }
 
     fn finish_run(&mut self) {
         self.touch();
         if self.active_execution_id.take().is_some() {
+            self.active_execution_started_at_ms = None;
             self.run_count = self.run_count.saturating_add(1);
         }
     }

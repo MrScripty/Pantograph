@@ -354,6 +354,9 @@ Update during implementation:
   scheduling, mirrored the additive contract to TypeScript, and taught the
   trace store to prefer those producer timestamps over snapshot observation
   time.
+- 2026-04-12: Ninth implementation slice extended authoritative queue timing
+  to graph edit sessions so direct edit-run scheduler snapshots emit concrete
+  start timestamps instead of placeholder `None` values.
 
 ## Commit Cadence Notes
 
@@ -407,6 +410,7 @@ Update during implementation:
   `pantograph-workflow-service` and `src-tauri`
 - Eighth Milestone 1 slice implemented across
   `pantograph-workflow-service`, `src-tauri`, and TypeScript contract mirrors
+- Ninth Milestone 1 slice implemented in `pantograph-workflow-service`
 
 ### Deviations
 
@@ -424,9 +428,6 @@ Update during implementation:
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
-- Extend authoritative queue timing to every scheduler host so edit-session and
-  non-session producers emit the same enqueue/dequeue facts instead of falling
-  back to observation timestamps.
 - Extend diagnostics and trace inspection tests once runtime/queue producers
   emit richer lifecycle payloads.
 - Decide whether later detailed metrics inspection belongs in the existing

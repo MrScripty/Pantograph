@@ -4633,8 +4633,13 @@ mod tests {
             running_snapshot.items[0].status,
             WorkflowSessionQueueItemStatus::Running
         );
-        assert!(running_snapshot.items[0].enqueued_at_ms.is_none());
-        assert!(running_snapshot.items[0].dequeued_at_ms.is_none());
+        let started_at_ms = running_snapshot.items[0]
+            .enqueued_at_ms
+            .expect("edit session running item should expose start time");
+        assert_eq!(
+            running_snapshot.items[0].dequeued_at_ms,
+            Some(started_at_ms)
+        );
         assert_eq!(
             running_snapshot.items[0].run_id.as_deref(),
             Some(created.session_id.as_str())
