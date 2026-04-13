@@ -25,6 +25,8 @@ LLM gateway, process management, and Tauri command handlers for model and server
   embedding runtime lifecycle now lives in `crates/inference`; GUI consumers
   may read those backend-owned facts but must not infer warmup/reuse decisions
   locally.
+- Server lifecycle commands should return the backend-owned runtime status
+  contract directly instead of translating it into narrower adapter-local DTOs.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.

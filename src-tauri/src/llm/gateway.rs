@@ -266,15 +266,7 @@ impl InferenceGateway {
 
     /// Get server mode info for the frontend.
     pub async fn mode_info(&self) -> ServerModeInfo {
-        let info = self.inner.mode_info().await;
-        // Convert from crate type to local config type
-        ServerModeInfo {
-            mode: info.mode,
-            ready: info.ready,
-            url: info.url,
-            model_path: info.model_path,
-            is_embedding_mode: info.is_embedding_mode,
-        }
+        self.inner.mode_info().await
     }
 }
 

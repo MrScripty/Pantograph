@@ -68,7 +68,7 @@ pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
     ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
-    ImageGenerationResult, ImageUrlData, LLMStatus, MaskedPrompt, PromptSegment, RerankRequest,
+    ImageGenerationResult, ImageUrlData, MaskedPrompt, PromptSegment, RerankRequest,
     RerankResponse, RerankResult, ServerModeInfo, StreamChoice, StreamChunk, StreamEvent,
 };
 

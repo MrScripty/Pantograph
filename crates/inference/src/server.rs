@@ -14,7 +14,6 @@ use tokio::sync::RwLock;
 use crate::config::DeviceConfig;
 use crate::constants::{defaults, device_types, hosts, ports, timeouts};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
-use crate::types::LLMStatus;
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
 
@@ -644,20 +643,6 @@ impl LlamaServer {
     pub(crate) fn set_test_runtime_state(&mut self, mode: ServerMode, ready: bool) {
         self.mode = mode;
         self.ready = ready;
-    }
-
-    pub fn status(&self) -> LLMStatus {
-        LLMStatus {
-            ready: self.ready,
-            mode: match &self.mode {
-                ServerMode::None => "none".to_string(),
-                ServerMode::External { .. } => "external".to_string(),
-                ServerMode::SidecarInference { .. } => "sidecar_inference".to_string(),
-                ServerMode::SidecarEmbedding { .. } => "sidecar_embedding".to_string(),
-                ServerMode::SidecarReranking { .. } => "sidecar_reranking".to_string(),
-            },
-            url: self.base_url(),
-        }
     }
 
     /// Get detailed server mode info for frontend

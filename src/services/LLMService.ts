@@ -1,4 +1,5 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
+import type { ServerModeInfo } from './ConfigService';
 import { Logger } from './Logger';
 
 export interface ChatMessage {
@@ -14,14 +15,8 @@ export interface StreamEvent {
   error: string | null;
 }
 
-export interface LLMStatus {
-  ready: boolean;
-  mode: 'none' | 'external' | 'sidecar';
-  url: string | null;
-}
-
 export interface LLMState {
-  status: LLMStatus;
+  status: ServerModeInfo;
   isGenerating: boolean;
   messages: ChatMessage[];
   currentResponse: string;
@@ -30,7 +25,13 @@ export interface LLMState {
 
 class LLMServiceClass {
   private state: LLMState = {
-    status: { ready: false, mode: 'none', url: null },
+    status: {
+      mode: 'none',
+      ready: false,
+      url: null,
+      model_path: null,
+      is_embedding_mode: false,
+    },
     isGenerating: false,
     messages: [],
     currentResponse: '',
@@ -57,7 +58,7 @@ class LLMServiceClass {
       this.state.error = null;
       this.notify();
 
-      const status = await invoke<LLMStatus>('connect_to_server', { url });
+      const status = await invoke<ServerModeInfo>('connect_to_server', { url });
       this.state.status = status;
       Logger.log('LLM_CONNECTED_EXTERNAL', { url });
       this.notify();
@@ -74,7 +75,7 @@ class LLMServiceClass {
       this.state.error = null;
       this.notify();
 
-      const status = await invoke<LLMStatus>('start_sidecar_llm', {
+      const status = await invoke<ServerModeInfo>('start_sidecar_llm', {
         modelPath,
         mmprojPath,
       });
@@ -89,9 +90,9 @@ class LLMServiceClass {
     }
   }
 
-  public async refreshStatus(): Promise<LLMStatus> {
+  public async refreshStatus(): Promise<ServerModeInfo> {
     try {
-      const status = await invoke<LLMStatus>('get_llm_status');
+      const status = await invoke<ServerModeInfo>('get_llm_status');
       this.state.status = status;
       this.notify();
       return status;
@@ -190,7 +191,13 @@ class LLMServiceClass {
   public async stop(): Promise<void> {
     try {
       await invoke('stop_llm');
-      this.state.status = { ready: false, mode: 'none', url: null };
+      this.state.status = {
+        mode: 'none',
+        ready: false,
+        url: null,
+        model_path: null,
+        is_embedding_mode: false,
+      };
       this.state.isGenerating = false;
       Logger.log('LLM_STOPPED', {});
       this.notify();

@@ -215,17 +215,5 @@ pub enum ConfigError {
     Serialize(serde_json::Error),
 }
 
-/// Information about current server mode for frontend
-#[derive(Debug, Clone, Serialize)]
-pub struct ServerModeInfo {
-    /// Current mode type
-    pub mode: String,
-    /// Whether the server is ready
-    pub ready: bool,
-    /// URL if connected to external server
-    pub url: Option<String>,
-    /// Model path if using sidecar
-    pub model_path: Option<String>,
-    /// Whether in embedding mode (sidecar only)
-    pub is_embedding_mode: bool,
-}
+/// Backend-owned runtime status contract exposed to the GUI.
+pub type ServerModeInfo = inference::ServerModeInfo;

@@ -6,7 +6,6 @@ use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::BackendConfig;
 use crate::llm::gateway::SharedGateway;
-use crate::llm::types::LLMStatus;
 use reqwest::Url;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State, command};
@@ -172,25 +171,11 @@ fn validate_external_server_url(url: &str) -> Result<String, String> {
     }
 }
 
-fn llm_status_from_mode_info(info: ServerModeInfo) -> LLMStatus {
-    let mode = match info.mode.as_str() {
-        "none" => "none",
-        "external" => "external",
-        _ => "sidecar",
-    };
-
-    LLMStatus {
-        ready: info.ready,
-        mode: mode.to_string(),
-        url: info.url,
-    }
-}
-
 #[command]
 pub async fn connect_to_server(
     gateway: State<'_, SharedGateway>,
     url: String,
-) -> Result<LLMStatus, String> {
+) -> Result<ServerModeInfo, String> {
     let external_url = validate_external_server_url(&url)?;
 
     if gateway.current_backend_name().await != "llama.cpp" {
@@ -210,7 +195,7 @@ pub async fn connect_to_server(
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(llm_status_from_mode_info(gateway.mode_info().await))
+    Ok(gateway.mode_info().await)
 }
 
 #[command]
@@ -220,7 +205,7 @@ pub async fn start_sidecar_llm(
     config: State<'_, SharedAppConfig>,
     model_path: String,
     mmproj_path: String,
-) -> Result<LLMStatus, String> {
+) -> Result<ServerModeInfo, String> {
     let config_guard = config.read().await;
     let device = config_guard.device.clone();
     drop(config_guard);
@@ -239,12 +224,12 @@ pub async fn start_sidecar_llm(
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(llm_status_from_mode_info(gateway.mode_info().await))
+    Ok(gateway.mode_info().await)
 }
 
 #[command]
-pub async fn get_llm_status(gateway: State<'_, SharedGateway>) -> Result<LLMStatus, String> {
-    Ok(llm_status_from_mode_info(gateway.mode_info().await))
+pub async fn get_llm_status(gateway: State<'_, SharedGateway>) -> Result<ServerModeInfo, String> {
+    Ok(gateway.mode_info().await)
 }
 
 #[command]
@@ -404,8 +389,7 @@ pub async fn start_sidecar_embedding(
 
 #[cfg(test)]
 mod tests {
-    use super::{llm_status_from_mode_info, validate_external_server_url};
-    use crate::config::ServerModeInfo;
+    use super::validate_external_server_url;
 
     #[test]
     fn validates_external_server_urls() {
@@ -415,20 +399,5 @@ mod tests {
         );
         assert!(validate_external_server_url("").is_err());
         assert!(validate_external_server_url("ftp://127.0.0.1").is_err());
-    }
-
-    #[test]
-    fn maps_external_mode_info_to_legacy_llm_status() {
-        let status = llm_status_from_mode_info(ServerModeInfo {
-            mode: "external".to_string(),
-            ready: true,
-            url: Some("http://127.0.0.1:1234".to_string()),
-            model_path: None,
-            is_embedding_mode: false,
-        });
-
-        assert!(status.ready);
-        assert_eq!(status.mode, "external");
-        assert_eq!(status.url.as_deref(), Some("http://127.0.0.1:1234"));
     }
 }

@@ -143,6 +143,9 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `types.rs` defines the stable machine-consumed request and response shapes.
 - Optional fields preserve meaning when omitted; callers may rely on omission as
   “backend default”.
+- `ServerModeInfo` is the backend-owned runtime status contract for GUI and host
+  adapters; hosts should consume it directly instead of deriving reduced local
+  status shapes.
 - `ImageGenerationRequest` reserves optional `init_image`, `mask_image`, and
   `strength` for later img2img/inpaint support.
 - `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only

@@ -3,14 +3,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// LLM server status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LLMStatus {
-    pub ready: bool,
-    pub mode: String,
-    pub url: Option<String>,
-}
-
 /// Chat message with multimodal content support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
