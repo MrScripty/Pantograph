@@ -107,6 +107,16 @@ pub enum WorkflowEvent {
         execution_id: String,
     },
 
+    /// Workflow was cancelled before completing successfully
+    Cancelled {
+        /// Workflow identifier associated with this run
+        workflow_id: String,
+        /// Cancellation reason when one is available
+        error: String,
+        /// Unique identifier for this execution
+        execution_id: String,
+    },
+
     /// Graph was modified (edge/node added/removed)
     GraphModified {
         /// Workflow identifier associated with this run
@@ -293,6 +303,19 @@ impl WorkflowEvent {
         }
     }
 
+    /// Create a Cancelled event
+    pub fn cancelled(
+        workflow_id: impl Into<String>,
+        error: impl Into<String>,
+        execution_id: impl Into<String>,
+    ) -> Self {
+        Self::Cancelled {
+            workflow_id: workflow_id.into(),
+            error: error.into(),
+            execution_id: execution_id.into(),
+        }
+    }
+
     /// Create a RuntimeSnapshot event
     pub fn runtime_snapshot(
         workflow_id: impl Into<String>,
@@ -345,6 +368,11 @@ impl WorkflowEvent {
     }
 }
 
+pub(super) fn is_cancelled_error_message(error: &str) -> bool {
+    let normalized = error.trim().to_ascii_lowercase();
+    normalized.contains("cancelled") || normalized.contains("canceled")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,5 +416,17 @@ mod tests {
         assert!(json.contains("workflow-123"));
         assert!(json.contains("1234"));
         assert!(json.contains("capability unavailable"));
+    }
+
+    #[test]
+    fn cancelled_error_message_helper_matches_common_cancelled_forms() {
+        assert!(is_cancelled_error_message("Workflow cancelled"));
+        assert!(is_cancelled_error_message(
+            "workflow run cancelled during execution"
+        ));
+        assert!(is_cancelled_error_message(
+            "workflow canceled before dispatch"
+        ));
+        assert!(!is_cancelled_error_message("runtime unavailable"));
     }
 }

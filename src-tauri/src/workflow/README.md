@@ -148,6 +148,10 @@ let snapshot = workflow_service
   instead of falling back to `session_id`. If the field is absent, the adapter
   may only use the requested session identity or update overlay-only state; it
   must not infer a concrete run id locally.
+- When backend or node-engine failures are cancellation-shaped, the adapter
+  must emit explicit cancelled workflow events and preserve that outcome into
+  diagnostics and trace projections instead of collapsing it into a generic
+  failure badge.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

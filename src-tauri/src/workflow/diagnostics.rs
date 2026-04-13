@@ -25,6 +25,7 @@ pub enum DiagnosticsRunStatus {
     Running,
     Waiting,
     Completed,
+    Cancelled,
     Failed,
 }
 
@@ -34,6 +35,7 @@ pub enum DiagnosticsNodeStatus {
     Running,
     Waiting,
     Completed,
+    Cancelled,
     Failed,
 }
 
@@ -604,9 +606,8 @@ fn diagnostics_run_status(status: WorkflowTraceStatus) -> DiagnosticsRunStatus {
         WorkflowTraceStatus::Queued | WorkflowTraceStatus::Running => DiagnosticsRunStatus::Running,
         WorkflowTraceStatus::Waiting => DiagnosticsRunStatus::Waiting,
         WorkflowTraceStatus::Completed => DiagnosticsRunStatus::Completed,
-        WorkflowTraceStatus::Failed | WorkflowTraceStatus::Cancelled => {
-            DiagnosticsRunStatus::Failed
-        }
+        WorkflowTraceStatus::Cancelled => DiagnosticsRunStatus::Cancelled,
+        WorkflowTraceStatus::Failed => DiagnosticsRunStatus::Failed,
     }
 }
 
@@ -617,9 +618,8 @@ fn diagnostics_node_status(status: WorkflowTraceNodeStatus) -> DiagnosticsNodeSt
         }
         WorkflowTraceNodeStatus::Waiting => DiagnosticsNodeStatus::Waiting,
         WorkflowTraceNodeStatus::Completed => DiagnosticsNodeStatus::Completed,
-        WorkflowTraceNodeStatus::Failed | WorkflowTraceNodeStatus::Cancelled => {
-            DiagnosticsNodeStatus::Failed
-        }
+        WorkflowTraceNodeStatus::Cancelled => DiagnosticsNodeStatus::Cancelled,
+        WorkflowTraceNodeStatus::Failed => DiagnosticsNodeStatus::Failed,
     }
 }
 
@@ -689,6 +689,15 @@ fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
         } => Some(WorkflowTraceEvent::NodeFailed {
             execution_id: execution_id.clone(),
             node_id: node_id.clone(),
+            error: error.clone(),
+        }),
+        WorkflowEvent::Cancelled {
+            workflow_id,
+            error,
+            execution_id,
+        } => Some(WorkflowTraceEvent::RunCancelled {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
             error: error.clone(),
         }),
         WorkflowEvent::Completed {
@@ -842,6 +851,7 @@ fn event_type_name(event: &WorkflowEvent) -> &'static str {
         WorkflowEvent::NodeError { .. } => "NodeError",
         WorkflowEvent::Completed { .. } => "Completed",
         WorkflowEvent::Failed { .. } => "Failed",
+        WorkflowEvent::Cancelled { .. } => "Cancelled",
         WorkflowEvent::GraphModified { .. } => "GraphModified",
         WorkflowEvent::WaitingForInput { .. } => "WaitingForInput",
         WorkflowEvent::IncrementalExecutionStarted { .. } => "IncrementalExecutionStarted",
@@ -861,6 +871,7 @@ fn event_execution_id(event: &WorkflowEvent) -> Option<String> {
         | WorkflowEvent::NodeError { execution_id, .. }
         | WorkflowEvent::Completed { execution_id, .. }
         | WorkflowEvent::Failed { execution_id, .. }
+        | WorkflowEvent::Cancelled { execution_id, .. }
         | WorkflowEvent::GraphModified { execution_id, .. }
         | WorkflowEvent::WaitingForInput { execution_id, .. }
         | WorkflowEvent::IncrementalExecutionStarted { execution_id, .. }
@@ -875,6 +886,7 @@ fn event_workflow_id(event: &WorkflowEvent) -> Option<String> {
         WorkflowEvent::Started { workflow_id, .. }
         | WorkflowEvent::Completed { workflow_id, .. }
         | WorkflowEvent::Failed { workflow_id, .. }
+        | WorkflowEvent::Cancelled { workflow_id, .. }
         | WorkflowEvent::GraphModified { workflow_id, .. }
         | WorkflowEvent::WaitingForInput { workflow_id, .. }
         | WorkflowEvent::IncrementalExecutionStarted { workflow_id, .. } => {
@@ -933,6 +945,7 @@ fn summarize_event(event: &WorkflowEvent) -> String {
         }
         WorkflowEvent::Completed { .. } => "Workflow completed".to_string(),
         WorkflowEvent::Failed { error, .. } => format!("Workflow failed: {}", error),
+        WorkflowEvent::Cancelled { error, .. } => format!("Workflow cancelled: {}", error),
         WorkflowEvent::GraphModified { dirty_tasks, .. } if !dirty_tasks.is_empty() => {
             format!("Graph modified; dirty tasks: {}", dirty_tasks.join(", "))
         }
@@ -1288,6 +1301,27 @@ mod tests {
         assert!(snapshot.run_order.is_empty());
         assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(snapshot.scheduler.session_id.as_deref(), Some("exec-1"));
+    }
+
+    #[test]
+    fn cancelled_workflow_event_maps_to_cancelled_trace_status() {
+        let store = WorkflowDiagnosticsStore::default();
+
+        let snapshot = store.record_workflow_event(
+            &WorkflowEvent::Cancelled {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                error: "workflow run cancelled during execution".to_string(),
+            },
+            200,
+        );
+
+        let trace = snapshot.runs_by_id.get("exec-1").expect("cancelled trace");
+        assert_eq!(trace.status, DiagnosticsRunStatus::Cancelled);
+        assert_eq!(
+            trace.error.as_deref(),
+            Some("workflow run cancelled during execution")
+        );
     }
 
     #[test]

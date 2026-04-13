@@ -304,6 +304,7 @@ export type WorkflowEventType =
   | 'NodeError'
   | 'Completed'
   | 'Failed'
+  | 'Cancelled'
   | 'GraphModified'
   | 'WaitingForInput'
   | 'IncrementalExecutionStarted'
@@ -324,6 +325,7 @@ export interface WorkflowEventData {
     execution_id?: string;
   };
   Failed: { workflow_id?: string; error: string; execution_id?: string };
+  Cancelled: { workflow_id?: string; error: string; execution_id?: string };
   GraphModified: {
     workflow_id?: string;
     execution_id?: string;

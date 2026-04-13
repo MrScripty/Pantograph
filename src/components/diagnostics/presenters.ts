@@ -71,6 +71,8 @@ export function getDiagnosticsStatusClasses(
       return 'bg-amber-950/80 text-amber-200 border-amber-800';
     case 'completed':
       return 'bg-emerald-950/80 text-emerald-200 border-emerald-800';
+    case 'cancelled':
+      return 'bg-neutral-900 text-neutral-300 border-neutral-700';
     case 'failed':
       return 'bg-red-950/80 text-red-200 border-red-800';
   }
@@ -83,6 +85,7 @@ export function getRunNodeStatusCounts(
     running: 0,
     waiting: 0,
     completed: 0,
+    cancelled: 0,
     failed: 0,
   };
 

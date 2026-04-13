@@ -173,6 +173,11 @@ pub enum WorkflowTraceEvent {
         workflow_id: Option<String>,
         error: String,
     },
+    RunCancelled {
+        execution_id: String,
+        workflow_id: Option<String>,
+        error: String,
+    },
     WaitingForInput {
         execution_id: String,
         workflow_id: Option<String>,
@@ -216,6 +221,7 @@ impl WorkflowTraceEvent {
             | Self::NodeFailed { execution_id, .. }
             | Self::RunCompleted { execution_id, .. }
             | Self::RunFailed { execution_id, .. }
+            | Self::RunCancelled { execution_id, .. }
             | Self::WaitingForInput { execution_id, .. }
             | Self::GraphModified { execution_id, .. }
             | Self::IncrementalExecutionStarted { execution_id, .. }
@@ -229,6 +235,7 @@ impl WorkflowTraceEvent {
             Self::RunStarted { workflow_id, .. }
             | Self::RunCompleted { workflow_id, .. }
             | Self::RunFailed { workflow_id, .. }
+            | Self::RunCancelled { workflow_id, .. }
             | Self::WaitingForInput { workflow_id, .. }
             | Self::GraphModified { workflow_id, .. }
             | Self::IncrementalExecutionStarted { workflow_id, .. }
@@ -253,6 +260,7 @@ impl WorkflowTraceEvent {
             Self::RunStarted { .. }
             | Self::RunCompleted { .. }
             | Self::RunFailed { .. }
+            | Self::RunCancelled { .. }
             | Self::GraphModified { .. }
             | Self::IncrementalExecutionStarted { .. }
             | Self::RuntimeSnapshotCaptured { .. }
@@ -716,6 +724,14 @@ fn apply_trace_event(
             trace.ended_at_ms = Some(timestamp_ms);
             trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
         }
+        WorkflowTraceEvent::RunCancelled { error, .. } => {
+            trace.status = WorkflowTraceStatus::Cancelled;
+            trace.waiting_for_input = false;
+            trace.last_error = Some(error.clone());
+            trace.ended_at_ms = Some(timestamp_ms);
+            trace.duration_ms = Some(timestamp_ms.saturating_sub(trace.started_at_ms));
+            cancel_active_trace_nodes(trace, error, timestamp_ms);
+        }
         WorkflowTraceEvent::RuntimeSnapshotCaptured {
             captured_at_ms,
             runtime,
@@ -811,10 +827,29 @@ fn apply_trace_event(
         WorkflowTraceEvent::RunStarted { .. }
         | WorkflowTraceEvent::RunCompleted { .. }
         | WorkflowTraceEvent::RunFailed { .. }
+        | WorkflowTraceEvent::RunCancelled { .. }
         | WorkflowTraceEvent::GraphModified { .. }
         | WorkflowTraceEvent::IncrementalExecutionStarted { .. }
         | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
         | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => {}
+    }
+}
+
+fn cancel_active_trace_nodes(trace: &mut WorkflowTraceRunState, error: &str, timestamp_ms: u64) {
+    for node in trace.nodes_by_id.values_mut() {
+        if matches!(
+            node.status,
+            WorkflowTraceNodeStatus::Running | WorkflowTraceNodeStatus::Waiting
+        ) {
+            node.status = WorkflowTraceNodeStatus::Cancelled;
+            node.ended_at_ms = Some(timestamp_ms);
+            node.duration_ms = node
+                .started_at_ms
+                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
+            if node.last_error.is_none() {
+                node.last_error = Some(error.to_string());
+            }
+        }
     }
 }
 
@@ -1687,6 +1722,49 @@ mod tests {
         assert_eq!(trace.nodes[0].node_id, "node-1");
         assert_eq!(trace.nodes[0].status, WorkflowTraceNodeStatus::Running);
         assert_eq!(trace.event_count, 3);
+    }
+
+    #[test]
+    fn workflow_trace_store_records_cancelled_runs_and_marks_active_nodes_cancelled() {
+        let store = WorkflowTraceStore::new(10);
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 1,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeStarted {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+                node_type: Some("llm-inference".to_string()),
+            },
+            110,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::RunCancelled {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                error: "workflow run cancelled during execution".to_string(),
+            },
+            140,
+        );
+
+        let trace = snapshot.traces.first().expect("trace");
+        assert_eq!(trace.status, WorkflowTraceStatus::Cancelled);
+        assert_eq!(trace.ended_at_ms, Some(140));
+        assert_eq!(trace.duration_ms, Some(40));
+        assert_eq!(
+            trace.last_error.as_deref(),
+            Some("workflow run cancelled during execution")
+        );
+        assert_eq!(trace.nodes.len(), 1);
+        assert_eq!(trace.nodes[0].status, WorkflowTraceNodeStatus::Cancelled);
+        assert_eq!(trace.nodes[0].ended_at_ms, Some(140));
+        assert_eq!(trace.nodes[0].duration_ms, Some(30));
     }
 
     #[test]

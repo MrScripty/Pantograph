@@ -119,6 +119,9 @@ Primary contract types:
   transition, this crate resets attempt-scoped trace state before recording the
   new attempt so retry or replay flows do not leak stale node, queue, or
   runtime facts into the restarted run.
+- Canonical trace summaries can now represent explicit cancelled run and node
+  states when upstream adapters emit a cancellation outcome instead of a
+  generic failure.
 - `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
   optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
   `roles`.

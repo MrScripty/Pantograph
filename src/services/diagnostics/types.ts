@@ -17,8 +17,18 @@ export const DIAGNOSTICS_TABS = [
 
 export type DiagnosticsTab = (typeof DIAGNOSTICS_TABS)[number];
 
-export type DiagnosticsRunStatus = 'running' | 'waiting' | 'completed' | 'failed';
-export type DiagnosticsNodeStatus = 'running' | 'waiting' | 'completed' | 'failed';
+export type DiagnosticsRunStatus =
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
+export type DiagnosticsNodeStatus =
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
 
 export interface DiagnosticsEventRecord {
   id: string;

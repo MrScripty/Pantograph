@@ -492,6 +492,11 @@ Update during implementation:
   `RunStarted` on the same execution id resets prior attempt-specific node,
   queue, and runtime state after terminal failure without erasing in-flight
   duplicate-start state
+- Twenty-eighth implementation slice added across
+  `crates/pantograph-workflow-service`, `src-tauri/src/workflow`, and matching
+  frontend diagnostics types so cancellation-shaped workflow failures now flow
+  through an explicit cancelled run contract instead of collapsing into generic
+  failed state
 
 ### Deviations
 
@@ -513,9 +518,9 @@ Update during implementation:
 - Extend queue attribution beyond current execution/session matching so traces
   can distinguish concurrent queued runs more precisely when richer run
   identity surfaces are available from producers.
-- Add explicit cancelled-run contracts once workflow producers can emit
-  machine-readable cancellation outcomes instead of relying on generic failure
-  strings.
+- Replace the current centralized cancellation-message classifier with a fully
+  machine-readable producer contract once every workflow producer can emit
+  explicit cancellation outcomes directly.
 - Decide whether later detailed metrics inspection belongs in the existing
   diagnostics command surface or a dedicated trace/metrics module.
 - Extend snapshot-path acceptance coverage beyond current diagnostics-store

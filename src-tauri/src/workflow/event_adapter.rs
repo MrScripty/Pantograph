@@ -9,7 +9,7 @@ use node_engine::{EventError, EventSink};
 use tauri::ipc::Channel;
 
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
-use super::events::WorkflowEvent as TauriWorkflowEvent;
+use super::events::{WorkflowEvent as TauriWorkflowEvent, is_cancelled_error_message};
 
 /// A value that flows through a port (alias for serde_json::Value)
 type PortValue = serde_json::Value;
@@ -47,6 +47,7 @@ fn translated_execution_id(event: &TauriWorkflowEvent) -> &str {
         | TauriWorkflowEvent::NodeError { execution_id, .. }
         | TauriWorkflowEvent::Completed { execution_id, .. }
         | TauriWorkflowEvent::Failed { execution_id, .. }
+        | TauriWorkflowEvent::Cancelled { execution_id, .. }
         | TauriWorkflowEvent::GraphModified { execution_id, .. }
         | TauriWorkflowEvent::WaitingForInput { execution_id, .. }
         | TauriWorkflowEvent::IncrementalExecutionStarted { execution_id, .. }
@@ -89,11 +90,21 @@ fn translate_node_event(
             workflow_id,
             execution_id,
             error,
-        } => TauriWorkflowEvent::Failed {
-            workflow_id,
-            error,
-            execution_id,
-        },
+        } => {
+            if is_cancelled_error_message(&error) {
+                TauriWorkflowEvent::Cancelled {
+                    workflow_id,
+                    error,
+                    execution_id,
+                }
+            } else {
+                TauriWorkflowEvent::Failed {
+                    workflow_id,
+                    error,
+                    execution_id,
+                }
+            }
+        }
 
         node_engine::WorkflowEvent::TaskStarted {
             task_id,
@@ -301,6 +312,45 @@ mod tests {
                 let node = trace.nodes.get("node-a").expect("node overlay");
                 assert_eq!(node.last_progress, Some(0.5));
                 assert_eq!(node.last_message.as_deref(), Some("working"));
+            }
+            other => panic!("unexpected diagnostics event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translated_workflow_failed_event_maps_cancelled_errors_to_cancelled_event() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            "adapter-workflow",
+            node_engine::WorkflowEvent::WorkflowFailed {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                error: "workflow run cancelled during execution".to_string(),
+            },
+            120,
+        );
+
+        match event {
+            super::TauriWorkflowEvent::Cancelled {
+                workflow_id,
+                execution_id,
+                error,
+            } => {
+                assert_eq!(workflow_id, "wf-1");
+                assert_eq!(execution_id, "exec-1");
+                assert!(error.contains("cancelled"));
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        match diagnostics_event {
+            super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+                let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+                assert_eq!(
+                    trace.status,
+                    crate::workflow::diagnostics::DiagnosticsRunStatus::Cancelled
+                );
             }
             other => panic!("unexpected diagnostics event: {other:?}"),
         }
