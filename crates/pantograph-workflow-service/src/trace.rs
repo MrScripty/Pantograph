@@ -948,6 +948,14 @@ fn merge_runtime_metrics(
 }
 
 fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<String> {
+    if let Some(selected_runtime) = capabilities
+        .runtime_capabilities
+        .iter()
+        .find(|capability| capability.selected)
+    {
+        return Some(selected_runtime.runtime_id.clone());
+    }
+
     if capabilities.runtime_requirements.required_backends.len() == 1 {
         return capabilities
             .runtime_requirements
@@ -968,6 +976,12 @@ fn infer_runtime_id(capabilities: &WorkflowCapabilitiesResponse) -> Option<Strin
 
 fn runtime_lifecycle_reason(capabilities: &WorkflowCapabilitiesResponse) -> &'static str {
     if capabilities
+        .runtime_capabilities
+        .iter()
+        .any(|capability| capability.selected)
+    {
+        "selected_runtime_reported"
+    } else if capabilities
         .runtime_capabilities
         .iter()
         .any(|capability| capability.available && capability.configured)
@@ -1151,6 +1165,20 @@ mod tests {
     use super::*;
     use crate::workflow::WorkflowServiceError;
 
+    fn workflow_capabilities_with_runtimes(
+        runtime_requirements: crate::workflow::WorkflowRuntimeRequirements,
+        runtime_capabilities: Vec<crate::workflow::WorkflowRuntimeCapability>,
+    ) -> WorkflowCapabilitiesResponse {
+        WorkflowCapabilitiesResponse {
+            max_input_bindings: 4,
+            max_output_targets: 2,
+            max_value_bytes: 2_048,
+            runtime_requirements,
+            models: Vec::new(),
+            runtime_capabilities,
+        }
+    }
+
     #[test]
     fn workflow_trace_summary_serializes_with_snake_case_contract() {
         let value = serde_json::to_value(WorkflowTraceSummary {
@@ -1243,6 +1271,80 @@ mod tests {
         });
 
         assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn infer_runtime_id_prefers_selected_runtime_capability() {
+        let capabilities = workflow_capabilities_with_runtimes(
+            crate::workflow::WorkflowRuntimeRequirements {
+                required_backends: vec!["llama_cpp".to_string()],
+                ..crate::workflow::WorkflowRuntimeRequirements::default()
+            },
+            vec![
+                crate::workflow::WorkflowRuntimeCapability {
+                    runtime_id: "llama_cpp".to_string(),
+                    display_name: "llama.cpp".to_string(),
+                    install_state: crate::workflow::WorkflowRuntimeInstallState::Installed,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: false,
+                    source_kind: crate::workflow::WorkflowRuntimeSourceKind::Managed,
+                    selected: false,
+                    supports_external_connection: true,
+                    backend_keys: vec!["llama_cpp".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                },
+                crate::workflow::WorkflowRuntimeCapability {
+                    runtime_id: "python-sidecar".to_string(),
+                    display_name: "Python sidecar".to_string(),
+                    install_state: crate::workflow::WorkflowRuntimeInstallState::SystemProvided,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: false,
+                    source_kind: crate::workflow::WorkflowRuntimeSourceKind::System,
+                    selected: true,
+                    supports_external_connection: false,
+                    backend_keys: vec!["pytorch".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                },
+            ],
+        );
+
+        assert_eq!(
+            infer_runtime_id(&capabilities).as_deref(),
+            Some("python-sidecar")
+        );
+    }
+
+    #[test]
+    fn runtime_lifecycle_reason_prefers_selected_runtime_metadata() {
+        let capabilities = workflow_capabilities_with_runtimes(
+            crate::workflow::WorkflowRuntimeRequirements::default(),
+            vec![crate::workflow::WorkflowRuntimeCapability {
+                runtime_id: "remote-llama".to_string(),
+                display_name: "Remote llama.cpp".to_string(),
+                install_state: crate::workflow::WorkflowRuntimeInstallState::Installed,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                source_kind: crate::workflow::WorkflowRuntimeSourceKind::Host,
+                selected: true,
+                supports_external_connection: false,
+                backend_keys: vec!["llama_cpp".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+        );
+
+        assert_eq!(
+            runtime_lifecycle_reason(&capabilities),
+            "selected_runtime_reported"
+        );
     }
 
     #[test]
