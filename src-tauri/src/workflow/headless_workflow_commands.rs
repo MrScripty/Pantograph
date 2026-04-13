@@ -718,6 +718,78 @@ mod tests {
     }
 
     #[test]
+    fn headless_scheduler_and_runtime_helpers_join_on_trace_execution_identity() {
+        let diagnostics_store = WorkflowDiagnosticsStore::default();
+
+        let execution_id = record_headless_scheduler_snapshot(
+            &diagnostics_store,
+            "session-1",
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Running,
+                }],
+            }),
+            120,
+        );
+        assert_eq!(execution_id, "run-1");
+
+        record_headless_runtime_snapshot(
+            &diagnostics_store,
+            "wf-1".to_string(),
+            Some("run-1"),
+            Ok(capability_response()),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_instance_id: Some("runtime-1".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            130,
+        );
+
+        let trace = diagnostics_store
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("run-1".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: None,
+            })
+            .expect("trace snapshot")
+            .traces
+            .into_iter()
+            .next()
+            .expect("joined trace");
+        assert_eq!(trace.execution_id, "run-1");
+        assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
+        assert_eq!(trace.queue.enqueued_at_ms, Some(100));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(110));
+        assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            trace.runtime.runtime_instance_id.as_deref(),
+            Some("runtime-1")
+        );
+        assert_eq!(
+            trace.runtime.lifecycle_decision_reason.as_deref(),
+            Some("runtime_reused")
+        );
+    }
+
+    #[test]
     fn diagnostics_snapshot_request_still_allows_optional_scheduler_context() {
         let request = WorkflowDiagnosticsSnapshotRequest {
             session_id: Some("session-1".to_string()),

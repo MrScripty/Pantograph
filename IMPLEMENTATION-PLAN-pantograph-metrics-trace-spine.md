@@ -387,6 +387,10 @@ Update during implementation:
   Tauri workflow READMEs so the new `trace_execution_id` contract and
   adapter-side fallback rules are documented at the ownership boundaries where
   later scheduler/runtime work will build on them.
+- 2026-04-12: Seventeenth implementation slice added an adapter-level joining
+  test proving the headless scheduler and runtime snapshot helpers merge onto
+  the same canonical trace when the backend provides a shared
+  `trace_execution_id`.
 
 ## Commit Cadence Notes
 
@@ -449,6 +453,7 @@ Update during implementation:
 - Fourteenth implementation slice added in `src-tauri/src/workflow`
 - Fifteenth implementation slice added in `src-tauri/src/workflow`
 - Sixteenth implementation slice added in touched README ownership notes
+- Seventeenth implementation slice added in `src-tauri/src/workflow`
 
 ### Deviations
 
