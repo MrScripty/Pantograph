@@ -2523,13 +2523,44 @@ fn find_runtime_capability<'a>(
     runtime_capabilities: &'a [WorkflowRuntimeCapability],
 ) -> Option<&'a WorkflowRuntimeCapability> {
     let needle = normalize_runtime_key(required_backend_key);
-    runtime_capabilities.iter().find(|runtime| {
-        normalize_runtime_key(&runtime.runtime_id) == needle
-            || runtime
-                .backend_keys
-                .iter()
-                .any(|backend_key| normalize_runtime_key(backend_key) == needle)
-    })
+    runtime_capabilities
+        .iter()
+        .filter(|runtime| runtime_matches_required_backend(runtime, &needle))
+        .max_by(|left, right| {
+            runtime_capability_match_rank(left)
+                .cmp(&runtime_capability_match_rank(right))
+                .then_with(|| left.runtime_id.cmp(&right.runtime_id))
+        })
+}
+
+fn runtime_matches_required_backend(
+    runtime: &WorkflowRuntimeCapability,
+    normalized_required_backend_key: &str,
+) -> bool {
+    normalize_runtime_key(&runtime.runtime_id) == normalized_required_backend_key
+        || runtime.backend_keys.iter().any(|backend_key| {
+            normalize_runtime_key(backend_key) == normalized_required_backend_key
+        })
+}
+
+fn runtime_capability_match_rank(
+    runtime: &WorkflowRuntimeCapability,
+) -> (bool, bool, bool, bool, u8) {
+    (
+        runtime.selected,
+        runtime.available && runtime.configured,
+        runtime.configured,
+        runtime.available,
+        runtime_install_state_rank(runtime.install_state),
+    )
+}
+
+fn runtime_install_state_rank(install_state: WorkflowRuntimeInstallState) -> u8 {
+    match install_state {
+        WorkflowRuntimeInstallState::Installed | WorkflowRuntimeInstallState::SystemProvided => 3,
+        WorkflowRuntimeInstallState::Missing => 2,
+        WorkflowRuntimeInstallState::Unsupported => 1,
+    }
 }
 
 fn describe_runtime_issue(
@@ -4314,6 +4345,82 @@ mod tests {
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
         assert!(err.to_string().contains("duplicate target"));
+    }
+
+    #[test]
+    fn runtime_preflight_prefers_selected_runtime_over_non_selected_match() {
+        let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
+            &["llama_cpp".to_string()],
+            &[
+                WorkflowRuntimeCapability {
+                    runtime_id: "managed-llama".to_string(),
+                    display_name: "Managed llama.cpp".to_string(),
+                    install_state: WorkflowRuntimeInstallState::Installed,
+                    available: true,
+                    configured: true,
+                    can_install: false,
+                    can_remove: true,
+                    source_kind: WorkflowRuntimeSourceKind::Managed,
+                    selected: false,
+                    supports_external_connection: true,
+                    backend_keys: vec!["llama_cpp".to_string(), "llama.cpp".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: None,
+                },
+                WorkflowRuntimeCapability {
+                    runtime_id: "remote-llama".to_string(),
+                    display_name: "Remote llama.cpp".to_string(),
+                    install_state: WorkflowRuntimeInstallState::Installed,
+                    available: false,
+                    configured: false,
+                    can_install: false,
+                    can_remove: false,
+                    source_kind: WorkflowRuntimeSourceKind::Host,
+                    selected: true,
+                    supports_external_connection: false,
+                    backend_keys: vec!["llama_cpp".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: Some("remote host is not configured".to_string()),
+                },
+            ],
+        );
+
+        assert_eq!(runtime_warnings.len(), 1);
+        assert_eq!(blocking_runtime_issues.len(), 1);
+        assert_eq!(blocking_runtime_issues[0].runtime_id, "remote-llama");
+        assert!(
+            blocking_runtime_issues[0]
+                .message
+                .contains("Remote llama.cpp is not configured")
+        );
+    }
+
+    #[test]
+    fn runtime_preflight_uses_ready_fallback_when_no_runtime_is_selected() {
+        let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
+            &["llama_cpp".to_string()],
+            &[
+                WorkflowRuntimeCapability {
+                    runtime_id: "missing-llama".to_string(),
+                    display_name: "Missing llama.cpp".to_string(),
+                    install_state: WorkflowRuntimeInstallState::Missing,
+                    available: false,
+                    configured: false,
+                    can_install: true,
+                    can_remove: false,
+                    source_kind: WorkflowRuntimeSourceKind::Managed,
+                    selected: false,
+                    supports_external_connection: true,
+                    backend_keys: vec!["llama_cpp".to_string()],
+                    missing_files: vec!["llama-server".to_string()],
+                    unavailable_reason: None,
+                },
+                ready_runtime_capability(),
+            ],
+        );
+
+        assert!(runtime_warnings.is_empty());
+        assert!(blocking_runtime_issues.is_empty());
     }
 
     #[test]
