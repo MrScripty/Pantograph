@@ -7218,6 +7218,7 @@ dependencies = [
  "once_cell",
  "pantograph-embedded-runtime",
  "pantograph-runtime-identity",
+ "pantograph-runtime-registry",
  "pantograph-workflow-service",
  "pumas-library",
  "regex",
@@ -7291,6 +7292,15 @@ dependencies = [
 [[package]]
 name = "pantograph-runtime-identity"
 version = "0.1.0"
+
+[[package]]
+name = "pantograph-runtime-registry"
+version = "0.1.0"
+dependencies = [
+ "pantograph-runtime-identity",
+ "serde",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "pantograph-uniffi"
