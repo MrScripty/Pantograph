@@ -54,6 +54,7 @@ impl LlamaCppBackend {
             device_selection: true, // Manual device choice
             streaming: true,        // SSE streaming
             tool_calling: true,     // Via OpenAI-compatible API
+            external_connection: true,
         }
     }
 

@@ -58,6 +58,7 @@ impl OllamaBackend {
             device_selection: false, // Ollama manages devices internally
             streaming: true,         // SSE streaming
             tool_calling: true,      // Via OpenAI-compatible API
+            external_connection: false,
         }
     }
 

@@ -41,7 +41,7 @@ pub use candle::CandleBackend;
 #[cfg(feature = "backend-pytorch")]
 pub use pytorch::PyTorchBackend;
 
-pub use registry::{BackendFactory, BackendRegistry, canonical_backend_key};
+pub use registry::{canonical_backend_key, BackendFactory, BackendRegistry};
 
 /// Error types for backend operations
 #[derive(Debug, thiserror::Error)]
@@ -90,6 +90,8 @@ pub struct BackendCapabilities {
     pub streaming: bool,
     /// Supports tool/function calling
     pub tool_calling: bool,
+    /// Supports attaching to an already-running external inference host.
+    pub external_connection: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

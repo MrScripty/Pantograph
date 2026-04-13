@@ -17,9 +17,16 @@ pub async fn connect_to_server(
     gateway: State<'_, SharedGateway>,
     url: String,
 ) -> Result<ServerModeInfo, String> {
-    if gateway.mode_info().await.backend_key.as_deref() != Some("llama_cpp") {
+    let external_backend_key = gateway
+        .available_backends()
+        .into_iter()
+        .find(|backend| backend.capabilities.external_connection)
+        .map(|backend| backend.backend_key)
+        .ok_or_else(|| "No backend supports external server attachment".to_string())?;
+
+    if gateway.mode_info().await.backend_key.as_deref() != Some(external_backend_key.as_str()) {
         gateway
-            .switch_backend("llama_cpp")
+            .switch_backend(&external_backend_key)
             .await
             .map_err(|e| e.to_string())?;
     }

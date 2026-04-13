@@ -6,15 +6,15 @@
 
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use futures_util::Stream;
 use tokio::sync::RwLock;
 
 use crate::backend::{
-    BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry, ChatChunk,
-    EmbeddingResult, InferenceBackend, canonical_backend_key,
+    canonical_backend_key, BackendCapabilities, BackendConfig, BackendError, BackendInfo,
+    BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::process::ProcessSpawner;
@@ -174,9 +174,11 @@ impl InferenceGateway {
     ) -> Result<BackendConfig, GatewayError> {
         let backend_name = self.current_backend_name().await;
         if let Some(external_url) = request.external_url {
-            if backend_name != "llama.cpp" {
+            let supports_external_connection =
+                self.backend.read().await.capabilities().external_connection;
+            if !supports_external_connection {
                 return Err(GatewayError::Backend(BackendError::Config(format!(
-                    "External server attachment is only supported for llama.cpp, but active backend is '{}'",
+                    "External server attachment is not supported for active backend '{}'",
                     backend_name
                 ))));
             }
@@ -745,6 +747,7 @@ mod tests {
         fn capabilities(&self) -> BackendCapabilities {
             BackendCapabilities {
                 image_generation: true,
+                external_connection: true,
                 ..BackendCapabilities::default()
             }
         }
@@ -905,7 +908,11 @@ mod tests {
 
         assert_eq!(gateway.current_backend_name().await, "llama.cpp");
         assert_eq!(
-            gateway.runtime_lifecycle_snapshot().await.runtime_id.as_deref(),
+            gateway
+                .runtime_lifecycle_snapshot()
+                .await
+                .runtime_id
+                .as_deref(),
             Some("llama.cpp")
         );
     }
@@ -922,7 +929,11 @@ mod tests {
 
         assert_eq!(gateway.current_backend_name().await, "PyTorch");
         assert_eq!(
-            gateway.runtime_lifecycle_snapshot().await.runtime_id.as_deref(),
+            gateway
+                .runtime_lifecycle_snapshot()
+                .await
+                .runtime_id
+                .as_deref(),
             Some("PyTorch")
         );
     }
@@ -1145,6 +1156,25 @@ mod tests {
         );
         assert_eq!(config.model_path, None);
         assert!(!config.embedding_mode);
+    }
+
+    #[tokio::test]
+    async fn test_build_inference_start_config_rejects_external_url_without_backend_support() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockReusedBackend), "mock");
+
+        let error = gateway
+            .build_inference_start_config(InferenceStartRequest {
+                external_url: Some("http://127.0.0.1:1234".to_string()),
+                ..InferenceStartRequest::default()
+            })
+            .await
+            .expect_err("non-external backend should reject external attachment");
+
+        assert!(matches!(
+            error,
+            GatewayError::Backend(BackendError::Config(message))
+            if message.contains("not supported for active backend 'mock'")
+        ));
     }
 
     #[tokio::test]

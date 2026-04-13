@@ -50,6 +50,7 @@ impl CandleBackend {
             device_selection: false, // Limited device selection
             streaming: false,        // Not supported yet
             tool_calling: false,     // Not supported
+            external_connection: false,
         }
     }
 
