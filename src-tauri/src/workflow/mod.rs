@@ -34,6 +34,7 @@ pub mod headless_workflow_commands;
 pub mod model_dependencies;
 pub mod model_dependency_commands;
 pub mod orchestration;
+pub mod puma_lib_commands;
 pub mod python_runtime;
 pub mod registry;
 pub mod task_executor;

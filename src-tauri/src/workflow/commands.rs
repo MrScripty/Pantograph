@@ -653,6 +653,28 @@ pub async fn get_effective_model_metadata(
 }
 
 #[command]
+pub async fn hydrate_puma_lib_node(
+    registry: State<'_, SharedNodeRegistry>,
+    extensions: State<'_, SharedExtensions>,
+    resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
+    model_path: Option<String>,
+    model_id: Option<String>,
+    selected_binding_ids: Option<Vec<String>>,
+    resolve_requirements: Option<bool>,
+) -> Result<super::puma_lib_commands::PumaLibNodeHydrationResponse, String> {
+    super::puma_lib_commands::hydrate_puma_lib_node(
+        registry,
+        extensions,
+        resolver,
+        model_path,
+        model_id,
+        selected_binding_ids,
+        resolve_requirements,
+    )
+    .await
+}
+
+#[command]
 pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     node_type: String,

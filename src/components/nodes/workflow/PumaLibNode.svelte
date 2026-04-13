@@ -100,12 +100,6 @@
 
   let modelPath = $state('');
   let modelId = $state<string | undefined>(undefined);
-  let modelType = $state<string | undefined>(undefined);
-  let taskTypePrimary = $state<string | undefined>(undefined);
-  let backendKey = $state<string | undefined>(undefined);
-  let recommendedBackend = $state<string | undefined>(undefined);
-  let dependencyBindings = $state<ModelDependencyBinding[]>([]);
-  let platformContext = $state<Record<string, string> | undefined>(undefined);
   let availableModels: PortOption[] = $state([]);
   let isLoading = $state(false);
   let loadError = $state<string | null>(null);
@@ -119,14 +113,6 @@
   $effect(() => {
     modelPath = data.modelPath || '';
     modelId = data.model_id as string | undefined;
-    modelType = data.model_type as string | undefined;
-    taskTypePrimary = data.task_type_primary as string | undefined;
-    backendKey = data.backend_key as string | undefined;
-    recommendedBackend = data.recommended_backend as string | undefined;
-    dependencyBindings = Array.isArray(data.dependency_bindings)
-      ? (data.dependency_bindings as ModelDependencyBinding[])
-      : [];
-    platformContext = data.platform_context as Record<string, string> | undefined;
     dependencyRequirements = (data.dependency_requirements as ModelDependencyRequirements | null) ?? null;
     requirementsMessage = null;
     requirementsCode = null;
@@ -145,109 +131,15 @@
       : availableModels,
   );
 
-  function normalizeBackendKey(value?: string): string | undefined {
-    const token = (value ?? '').trim().toLowerCase();
-    if (!token) {
-      return undefined;
-    }
-
-    switch (token) {
-      case 'llama.cpp':
-      case 'llama-cpp':
-      case 'llamacpp':
-        return 'llamacpp';
-      case 'onnx-runtime':
-      case 'onnxruntime':
-      case 'onnx_runtime':
-        return 'onnx-runtime';
-      case 'torch':
-      case 'pytorch':
-        return 'pytorch';
-      case 'stable-audio':
-      case 'stable_audio':
-        return 'stable_audio';
-      default:
-        return token;
-    }
-  }
-
-  function uniqueBindingBackend(bindings: ModelDependencyBinding[]): string | undefined {
-    const unique = new Set(
-      bindings
-        .map((binding) => normalizeBackendKey(binding.backend_key))
-        .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    );
-    if (unique.size === 1) {
-      return [...unique][0];
-    }
-    return undefined;
-  }
-
-  function selectedBindingBackend(): string | undefined {
-    const sourceBindings = dependencyRequirements?.bindings ?? [];
-    if (sourceBindings.length === 0) {
-      return undefined;
-    }
-
-    const selected = selectedBindingIds.length > 0
-      ? sourceBindings.filter((binding) => selectedBindingIds.includes(binding.binding_id))
-      : sourceBindings;
-    return uniqueBindingBackend(selected);
+  interface PumaLibHydrationResult {
+    nodeData: Record<string, unknown>;
   }
 
   onMount(async () => {
     await loadModels();
 
-    if (data.modelPath && availableModels.length > 0) {
-      const match = availableModels.find((m) => String(m.value) === data.modelPath);
-      if (match) {
-        const settings = (match.metadata?.inference_settings ?? []) as InferenceParamSchema[];
-        if (settings.length > 0) {
-          const existingSettings = Array.isArray(data.inference_settings)
-            ? data.inference_settings
-            : [];
-          if (existingSettings.length === 0) {
-            updateNodeData(id, {
-              modelName: data.modelName || match.label,
-              inference_settings: settings,
-            });
-          }
-          syncInferencePorts(id, settings);
-          syncExpandPorts(id, settings);
-        }
-        if (!data.model_id && typeof match.metadata?.id === 'string') {
-          const reviewReasons = Array.isArray(match.metadata?.review_reasons)
-            ? (match.metadata?.review_reasons as string[])
-            : [];
-          const nextDependencyBindings = Array.isArray(match.metadata?.dependency_bindings)
-            ? (match.metadata?.dependency_bindings as ModelDependencyBinding[])
-            : [];
-          const taskTypePrimary = match.metadata?.task_type_primary as string | undefined;
-          const recommendedBackend = normalizeBackendKey(
-            match.metadata?.recommended_backend as string | undefined,
-          );
-          updateNodeData(id, {
-            model_id: match.metadata.id,
-            model_type: match.metadata?.model_type,
-            task_type_primary: taskTypePrimary,
-            backend_key:
-              uniqueBindingBackend(nextDependencyBindings) ??
-              recommendedBackend ??
-              inferBackendKeyFromTask(taskTypePrimary),
-            recommended_backend: recommendedBackend,
-            runtime_engine_hints: match.metadata?.runtime_engine_hints,
-            requires_custom_code: match.metadata?.requires_custom_code,
-            custom_code_sources: match.metadata?.custom_code_sources,
-            platform_context: detectPlatformContext(),
-            dependency_bindings: nextDependencyBindings,
-            review_reasons: reviewReasons,
-          });
-        }
-      }
-    }
-
-    if (data.modelPath && !data.dependency_requirements) {
-      await resolveDependencyRequirements();
+    if ((data.model_id || data.modelPath) && (!data.modelPath || !data.dependency_requirements)) {
+      await hydrateNodeState(!data.dependency_requirements);
     }
   });
 
@@ -289,129 +181,39 @@
     }
   }
 
-  function inferNodeType(): string {
-    const task = (taskTypePrimary ?? '').toLowerCase();
-    if (task === 'text-to-image' || task === 'image-to-image') {
-      return 'diffusion-inference';
-    }
-    const backend = inferBackendKey();
-    if (backend === 'onnx-runtime') {
-      return 'onnx-inference';
-    }
-    if (task === 'text-to-audio') {
-      return 'audio-generation';
-    }
-    return 'pytorch-inference';
-  }
-
-  function inferBackendKeyFromTask(taskTypePrimary?: string): string {
-    const task = (taskTypePrimary ?? '').toLowerCase();
-    if (task === 'text-to-audio') {
-      return 'stable_audio';
-    }
-    if (task === 'audio-to-text') {
-      return 'pytorch';
-    }
-    if (task === 'text-to-image' || task === 'image-to-image') {
-      return 'pytorch';
-    }
-    return 'pytorch';
-  }
-
-  function inferBackendKey(): string {
-    const explicit = normalizeBackendKey(backendKey);
-    if (explicit) {
-      return explicit;
-    }
-    const selectedBinding = selectedBindingBackend();
-    if (selectedBinding) {
-      return selectedBinding;
-    }
-    const recommended = normalizeBackendKey(recommendedBackend);
-    if (recommended) {
-      return recommended;
-    }
-    const bindingDefault = uniqueBindingBackend(dependencyBindings);
-    if (bindingDefault) {
-      return bindingDefault;
-    }
-    return inferBackendKeyFromTask(taskTypePrimary);
-  }
-
-  function detectPlatformContext(): Record<string, string> {
-    const ua = navigator.userAgent.toLowerCase();
-    let os = 'unknown';
-    if (ua.includes('linux')) {
-      os = 'linux';
-    } else if (ua.includes('mac')) {
-      os = 'macos';
-    } else if (ua.includes('win')) {
-      os = 'windows';
-    }
-
-    let arch = 'unknown';
-    const platform = navigator.platform?.toLowerCase() ?? '';
-    if (platform.includes('x86_64') || platform.includes('x64') || platform.includes('win64')) {
-      arch = 'x86_64';
-    } else if (platform.includes('arm64') || platform.includes('aarch64')) {
-      arch = 'arm64';
-    }
-
-    return { os, arch };
-  }
-
-  function dependencyRequestPayload() {
-    const resolvedPlatformContext = platformContext ?? detectPlatformContext();
-    return {
-      nodeType: inferNodeType(),
-      modelPath,
-      modelId: modelId ?? undefined,
-      modelType: modelType ?? undefined,
-      taskTypePrimary: taskTypePrimary ?? undefined,
-      backendKey: inferBackendKey(),
-      platformContext: resolvedPlatformContext,
-      selectedBindingIds,
-    };
-  }
-
-  function persistBindingSelection() {
-    updateNodeData(id, {
-      selected_binding_ids: selectedBindingIds,
-    });
-  }
-
-  function applyRequirements(requirements: ModelDependencyRequirements) {
-    dependencyRequirements = requirements;
+  function applyHydratedNodeState(nodeData: Record<string, unknown>) {
+    updateNodeData(id, nodeData);
+    dependencyRequirements = (nodeData.dependency_requirements as ModelDependencyRequirements | null) ?? null;
     requirementsMessage = null;
     requirementsCode = null;
-
-    const incoming = Array.isArray(requirements.selected_binding_ids)
-      ? requirements.selected_binding_ids
+    selectedBindingIds = Array.isArray(nodeData.selected_binding_ids)
+      ? (nodeData.selected_binding_ids as string[])
       : [];
-    if (incoming.length > 0) {
-      selectedBindingIds = incoming;
-      persistBindingSelection();
-    } else if (selectedBindingIds.length === 0) {
-      selectedBindingIds = requirements.bindings.map((b) => b.binding_id);
-      persistBindingSelection();
-    }
 
-    updateNodeData(id, {
-      dependency_requirements: requirements,
-      dependency_requirements_id: requirements.model_id,
-      selected_binding_ids: selectedBindingIds,
+    const settings = Array.isArray(nodeData.inference_settings)
+      ? (nodeData.inference_settings as InferenceParamSchema[])
+      : [];
+    if (settings.length > 0) {
+      syncInferencePorts(id, settings);
+      syncExpandPorts(id, settings);
+    }
+  }
+
+  async function hydrateNodeState(resolveRequirements: boolean, nextModelPath?: string) {
+    const response = await invoke<PumaLibHydrationResult>('hydrate_puma_lib_node', {
+      modelPath: nextModelPath ?? modelPath || undefined,
+      modelId: modelId ?? undefined,
+      selectedBindingIds,
+      resolveRequirements,
     });
+    applyHydratedNodeState(response.nodeData);
   }
 
   async function resolveDependencyRequirements() {
-    if (!modelPath) return;
+    if (!modelPath && !modelId) return;
     isDependencyActionRunning = true;
     try {
-      const requirements = await invoke<ModelDependencyRequirements>(
-        'resolve_model_dependency_requirements',
-        dependencyRequestPayload(),
-      );
-      applyRequirements(requirements);
+      await hydrateNodeState(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       requirementsCode = 'requirements_resolution_failed';
@@ -426,56 +228,9 @@
     const selected = availableModels.find((m) => String(m.value) === target.value);
     if (selected) {
       modelPath = String(selected.value);
-      const settings = (selected.metadata?.inference_settings ?? []) as InferenceParamSchema[];
-      const nextDependencyBindings = Array.isArray(selected.metadata?.dependency_bindings)
-        ? (selected.metadata?.dependency_bindings as ModelDependencyBinding[])
-        : [];
-      const reviewReasons = Array.isArray(selected.metadata?.review_reasons)
-        ? (selected.metadata?.review_reasons as string[])
-        : [];
-      const nextTaskTypePrimary = selected.metadata?.task_type_primary as string | undefined;
-      const nextRecommendedBackend = normalizeBackendKey(
-        selected.metadata?.recommended_backend as string | undefined,
-      );
-      const nextBackendKey =
-        uniqueBindingBackend(nextDependencyBindings) ??
-        nextRecommendedBackend ??
-        inferBackendKeyFromTask(nextTaskTypePrimary);
-      const nextPlatformContext = detectPlatformContext();
-
       modelId = selected.metadata?.id as string | undefined;
-      modelType = selected.metadata?.model_type as string | undefined;
-      taskTypePrimary = nextTaskTypePrimary;
-      backendKey = nextBackendKey;
-      recommendedBackend = nextRecommendedBackend;
-      dependencyBindings = nextDependencyBindings;
-      platformContext = nextPlatformContext;
       selectedBindingIds = [];
-      updateNodeData(id, {
-        modelPath,
-        modelName: selected.label,
-        model_id: modelId,
-        model_type: modelType,
-        task_type_primary: taskTypePrimary,
-        backend_key: backendKey,
-        recommended_backend: recommendedBackend,
-        runtime_engine_hints: selected.metadata?.runtime_engine_hints,
-        requires_custom_code: selected.metadata?.requires_custom_code,
-        custom_code_sources: selected.metadata?.custom_code_sources,
-        platform_context: platformContext,
-        dependency_bindings: nextDependencyBindings,
-        review_reasons: reviewReasons,
-        selected_binding_ids: selectedBindingIds,
-        dependency_requirements: null,
-        inference_settings: settings,
-      });
-
-      if (settings.length > 0) {
-        syncInferencePorts(id, settings);
-        syncExpandPorts(id, settings);
-      }
-
-      resolveDependencyRequirements().catch(console.error);
+      hydrateNodeState(true, modelPath).catch(console.error);
     }
   }
 
