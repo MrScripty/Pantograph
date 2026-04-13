@@ -239,11 +239,6 @@ pub async fn stop_llm(gateway: State<'_, SharedGateway>) -> Result<(), String> {
 }
 
 #[command]
-pub async fn get_server_mode(gateway: State<'_, SharedGateway>) -> Result<ServerModeInfo, String> {
-    Ok(gateway.mode_info().await)
-}
-
-#[command]
 pub async fn start_sidecar_inference(
     app: AppHandle,
     gateway: State<'_, SharedGateway>,

@@ -215,7 +215,7 @@ class ConfigServiceClass {
    */
   public async refreshServerMode(): Promise<ServerModeInfo> {
     try {
-      const mode = await invoke<ServerModeInfo>('get_server_mode');
+      const mode = await invoke<ServerModeInfo>('get_llm_status');
       this.state.serverMode = mode;
       this.notify();
       return mode;

@@ -22,8 +22,8 @@ use llm::{
     get_embedding_memory_mode, get_embedding_runtime_lifecycle_snapshot, get_embedding_server_url,
     get_health_status, get_llm_status, get_model_config, get_rag_status,
     get_recovery_attempt_count, get_recovery_config, get_redo_count, get_sandbox_config,
-    get_server_mode, get_svelte_docs_status, get_system_prompt, get_timeline_commits,
-    hard_delete_commit, index_docs_with_switch, index_rag_documents, install_managed_runtime,
+    get_svelte_docs_status, get_system_prompt, get_timeline_commits, hard_delete_commit,
+    index_docs_with_switch, index_rag_documents, install_managed_runtime,
     is_embedding_server_ready, is_health_monitor_running, is_recovery_in_progress, list_backends,
     list_chunkable_docs, list_devices, list_generated_components, list_managed_runtimes,
     list_vector_databases, load_rag_from_disk, preview_doc_chunks, redo_component_change,
@@ -257,7 +257,6 @@ fn main() {
             set_device_config,
             list_devices,
             // Server mode commands
-            get_server_mode,
             start_sidecar_inference,
             start_sidecar_embedding,
             index_docs_with_switch,
