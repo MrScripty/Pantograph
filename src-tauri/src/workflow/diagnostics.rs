@@ -137,6 +137,8 @@ pub struct DiagnosticsSchedulerSnapshot {
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
+    pub trace_execution_id: Option<String>,
+    #[serde(default)]
     pub captured_at_ms: Option<u64>,
     #[serde(default)]
     pub session: Option<WorkflowSessionSummary>,
@@ -219,6 +221,7 @@ impl WorkflowDiagnosticsState {
             scheduler: DiagnosticsSchedulerSnapshot {
                 workflow_id: None,
                 session_id: None,
+                trace_execution_id: None,
                 captured_at_ms: None,
                 session: None,
                 items: Vec::new(),
@@ -429,6 +432,7 @@ impl WorkflowDiagnosticsStore {
             Some(session_id) => DiagnosticsSchedulerSnapshot {
                 workflow_id,
                 session_id: Some(session_id),
+                trace_execution_id: None,
                 captured_at_ms: Some(captured_at_ms),
                 session,
                 items,
@@ -808,6 +812,7 @@ fn apply_scheduler_event(
 ) {
     if let WorkflowEvent::SchedulerSnapshot {
         workflow_id,
+        execution_id,
         session_id,
         session,
         items,
@@ -818,6 +823,7 @@ fn apply_scheduler_event(
         state.scheduler = DiagnosticsSchedulerSnapshot {
             workflow_id: workflow_id.clone(),
             session_id: Some(session_id.clone()),
+            trace_execution_id: Some(execution_id.clone()),
             captured_at_ms: Some(timestamp_ms),
             session: session.clone(),
             items: items.clone(),
@@ -1162,7 +1168,7 @@ mod tests {
     #[test]
     fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store() {
         let store = WorkflowDiagnosticsStore::default();
-        store.record_scheduler_snapshot(
+        let projection = store.record_scheduler_snapshot(
             None,
             "edit-session-1".to_string(),
             "edit-session-1".to_string(),
@@ -1187,6 +1193,10 @@ mod tests {
             }],
             None,
         );
+        assert_eq!(
+            projection.scheduler.trace_execution_id.as_deref(),
+            Some("edit-session-1")
+        );
 
         let trace = store
             .trace_snapshot(WorkflowTraceSnapshotRequest {
@@ -1208,6 +1218,46 @@ mod tests {
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_running_item")
+        );
+    }
+
+    #[test]
+    fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
+        let store = WorkflowDiagnosticsStore::default();
+        let projection = store.record_scheduler_snapshot(
+            Some("wf-1".to_string()),
+            "run-1".to_string(),
+            "session-1".to_string(),
+            5_000,
+            Some(WorkflowSessionSummary {
+                session_id: "session-1".to_string(),
+                workflow_id: "wf-1".to_string(),
+                session_kind: WorkflowSessionKind::Workflow,
+                usage_profile: None,
+                keep_alive: true,
+                state: pantograph_workflow_service::WorkflowSessionState::Running,
+                queued_runs: 1,
+                run_count: 2,
+            }),
+            vec![WorkflowSessionQueueItem {
+                queue_id: "queue-1".to_string(),
+                run_id: Some("run-1".to_string()),
+                enqueued_at_ms: Some(100),
+                dequeued_at_ms: Some(110),
+                priority: 5,
+                status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+            }],
+            None,
+        );
+
+        assert_eq!(projection.scheduler.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(
+            projection.scheduler.session_id.as_deref(),
+            Some("session-1")
+        );
+        assert_eq!(
+            projection.scheduler.trace_execution_id.as_deref(),
+            Some("run-1")
         );
     }
 

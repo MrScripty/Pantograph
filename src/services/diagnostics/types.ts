@@ -82,6 +82,7 @@ export interface DiagnosticsRuntimeSnapshot {
 export interface DiagnosticsSchedulerSnapshot {
   workflowId: string | null;
   sessionId: string | null;
+  traceExecutionId: string | null;
   capturedAtMs: number | null;
   session: WorkflowSessionSummary | null;
   items: WorkflowSessionQueueItem[];

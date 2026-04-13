@@ -19,6 +19,9 @@
         <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Session</div>
         <div class="mt-3 truncate text-sm font-medium text-neutral-100">{scheduler.sessionId}</div>
         <div class="mt-2 text-xs text-neutral-500">{scheduler.workflowId ?? 'Unknown workflow'}</div>
+        <div class="mt-2 text-xs text-neutral-500">
+          Trace target {scheduler.traceExecutionId ?? 'session-scoped only'}
+        </div>
         <div class="mt-3 text-xs text-neutral-500">
           Refreshed {formatDiagnosticsTimestamp(scheduler.capturedAtMs)}
         </div>

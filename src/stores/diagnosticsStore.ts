@@ -46,6 +46,7 @@ function createEmptyProjection(): WorkflowDiagnosticsProjection {
     scheduler: {
       workflowId: null,
       sessionId: null,
+      traceExecutionId: null,
       capturedAtMs: null,
       session: null,
       items: [],

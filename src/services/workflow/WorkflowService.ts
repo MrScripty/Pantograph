@@ -350,6 +350,7 @@ export class WorkflowService {
         scheduler: {
           workflowId: workflowId ?? null,
           sessionId: sessionId ?? null,
+          traceExecutionId: null,
           capturedAtMs: null,
           session: null,
           items: [],

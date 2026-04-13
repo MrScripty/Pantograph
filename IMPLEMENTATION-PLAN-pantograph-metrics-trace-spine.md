@@ -391,6 +391,10 @@ Update during implementation:
   test proving the headless scheduler and runtime snapshot helpers merge onto
   the same canonical trace when the backend provides a shared
   `trace_execution_id`.
+- 2026-04-12: Eighteenth implementation slice surfaced the backend-owned
+  scheduler `trace_execution_id` into the diagnostics projection and existing
+  GUI scheduler view so operators can inspect the current trace target without
+  frontend inference.
 
 ## Commit Cadence Notes
 
@@ -454,6 +458,8 @@ Update during implementation:
 - Fifteenth implementation slice added in `src-tauri/src/workflow`
 - Sixteenth implementation slice added in touched README ownership notes
 - Seventeenth implementation slice added in `src-tauri/src/workflow`
+- Eighteenth implementation slice added across `src-tauri` diagnostics and
+  read-only GUI consumers
 
 ### Deviations
 
