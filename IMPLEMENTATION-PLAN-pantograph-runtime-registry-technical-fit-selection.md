@@ -13,10 +13,11 @@ also not started yet.
 The accurate status is:
 
 - prerequisite runtime-contract and diagnostics groundwork: completed
-- runtime-registry milestones 1-6: not started
-- current next milestone: Milestone 1, Freeze Boundaries And Ownership
-- stop rule: do not begin runtime-registry state/admission implementation until
-  Milestone 1 docs and ownership boundaries are landed
+- runtime-registry Milestone 1, Freeze Boundaries And Ownership: completed
+- runtime-registry milestones 2-6: not started
+- current next milestone: Milestone 2, Runtime Registry Foundation
+- stop rule: Milestone 2 may begin, but it must preserve ADR-002 and the
+  README boundary decisions landed in Milestone 1
 
 ## Objective
 
@@ -72,7 +73,7 @@ inputs to this plan rather than future work:
 - no registry-owned reservation/admission state machine exists yet
 - no registry-driven warmup, retention, or eviction policy exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
-- no milestone-1 documentation/ADR boundary freeze has been committed yet
+- no runtime-registry implementation code has been committed yet
 
 ## Inputs
 
@@ -334,14 +335,14 @@ preservation, and documentation traceability.
   implementation began before the ownership/boundary freeze landed
 
 **Milestone 1 Completion Checklist:**
-- [ ] architecture boundary accepted in ADR form
-- [ ] composition root and lifecycle owner named explicitly
-- [ ] facade-preservation decision recorded explicitly
-- [ ] reservation/admission high-level contract frozen
-- [ ] README and ADR traceability updated
-- [ ] plan status updated before Milestone 2 work begins
+- [x] architecture boundary accepted in ADR form
+- [x] composition root and lifecycle owner named explicitly
+- [x] facade-preservation decision recorded explicitly
+- [x] reservation/admission high-level contract frozen
+- [x] README and ADR traceability updated
+- [x] plan status updated before Milestone 2 work begins
 
-**Status:** Next
+**Status:** Completed
 
 ### Milestone 2: Runtime Registry Foundation
 
@@ -475,10 +476,12 @@ refactor lands.
 
 ### What must happen next
 
-1. Update ADR/README/architecture documentation for runtime-registry ownership
-   before coding the registry itself.
-2. Record the `RuntimeRegistry` boundary and composition-root ownership.
-3. Start Milestone 2 only after Milestone 1 is committed.
+1. Start Milestone 2 by introducing focused runtime-registry modules and
+   composition-root wiring that preserve ADR-002.
+2. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+   aligned with the README and ADR boundary decisions landed in Milestone 1.
+3. Re-plan immediately if Milestone 2 implementation pressures any of the
+   frozen ownership decisions.
 
 ### What should not happen next
 
@@ -500,6 +503,10 @@ Update during implementation:
 - 2026-04-13: Plan updated to reflect reality: runtime-registry implementation
   has not started, but prerequisite runtime-contract convergence and
   diagnostics groundwork is already complete in code.
+- 2026-04-13: Milestone 1 completed with ADR-002, ADR index creation, and
+  runtime-boundary README updates for `src-tauri/src/llm`,
+  `src-tauri/src/workflow`, `crates/inference/src`, and
+  `crates/pantograph-embedded-runtime/src`.
 
 ## Commit Cadence Notes
 
@@ -536,15 +543,15 @@ Update during implementation:
 ### Completed
 
 - Milestone 0 prerequisite runtime-contract groundwork
+- Milestone 1 architecture/documentation freeze for runtime-registry ownership
 
 ### In Progress
 
-- Planning/documentation catch-up so the repo matches the implementation state
 - Runtime producer-convergence hardening outside the runtime-registry plan
 
 ### Not Started
 
-- Milestones 1 through 6 of this plan
+- Milestones 2 through 6 of this plan
 
 ### Deviations
 
@@ -554,8 +561,8 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Land Milestone 1 docs/ADR/README updates
-- Start runtime-registry foundation only after Milestone 1 is committed
+- Start runtime-registry foundation only after preserving the Milestone 1
+  boundary decisions
 - Keep this plan updated as implementation advances rather than allowing status
   drift to build again
 
