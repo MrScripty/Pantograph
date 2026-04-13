@@ -2,9 +2,8 @@
 
 use super::shared::SharedAppConfig;
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig};
-use inference::{ManagedBinaryId, resolve_binary_command};
+use inference::list_llamacpp_devices;
 use tauri::{AppHandle, Manager, State, command};
-use tokio::process::Command;
 
 #[command]
 pub async fn get_model_config(config: State<'_, SharedAppConfig>) -> Result<ModelConfig, String> {
@@ -99,86 +98,15 @@ pub async fn list_devices(app: AppHandle) -> Result<Vec<DeviceInfo>, String> {
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
-    let resolved = resolve_binary_command(
-        &app_data_dir,
-        ManagedBinaryId::LlamaCpp,
-        &["--device", "CUDA0", "--list-devices"],
-    )?;
-
-    let mut command = Command::new(&resolved.executable_path);
-    command
-        .current_dir(&resolved.working_directory)
-        .args(&resolved.args);
-    for (key, value) in resolved.env_overrides {
-        command.env(key, value);
-    }
-
-    let output = command
-        .output()
-        .await
-        .map_err(|e| format!("Failed to spawn llama-server: {}", e))?;
-    let output = String::from_utf8_lossy(&output.stdout).to_string()
-        + &String::from_utf8_lossy(&output.stderr);
-
-    log::info!("Device list output: {}", output);
-
-    // Parse the output
-    // Format: "  Vulkan0: Intel(R) Graphics (RPL-P) (32003 MiB, 28803 MiB free)"
-    let mut devices = Vec::new();
-
-    // Always add CPU option first
-    devices.push(DeviceInfo {
-        id: "none".to_string(),
-        name: "CPU Only".to_string(),
-        total_vram_mb: 0,
-        free_vram_mb: 0,
-    });
-
-    for line in output.lines() {
-        let line = line.trim();
-        // Look for lines like "Vulkan0: ..." or "CUDA0: ..."
-        if let Some(colon_pos) = line.find(':') {
-            let id = line[..colon_pos].trim();
-            // Skip if it doesn't look like a device ID (e.g., "Available devices")
-            if !id.contains(' ')
-                && (id.starts_with("Vulkan") || id.starts_with("CUDA") || id.starts_with("Metal"))
-            {
-                let rest = line[colon_pos + 1..].trim();
-
-                // Parse name and VRAM info
-                // Format: "NVIDIA GeForce RTX 4060 Laptop GPU (8188 MiB, 547 MiB free)"
-                let (name, total_vram, free_vram) = if let Some(paren_pos) = rest.rfind('(') {
-                    let name = rest[..paren_pos].trim();
-                    let vram_info = &rest[paren_pos + 1..].trim_end_matches(')');
-
-                    // Parse "8188 MiB, 547 MiB free"
-                    let parts: Vec<&str> = vram_info.split(',').collect();
-                    let total = parts
-                        .first()
-                        .and_then(|s| s.trim().strip_suffix(" MiB"))
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-                    let free = parts
-                        .get(1)
-                        .and_then(|s| s.trim().strip_suffix(" MiB free"))
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-
-                    (name.to_string(), total, free)
-                } else {
-                    (rest.to_string(), 0, 0)
-                };
-
-                devices.push(DeviceInfo {
-                    id: id.to_string(),
-                    name,
-                    total_vram_mb: total_vram,
-                    free_vram_mb: free_vram,
-                });
-            }
-        }
-    }
-
+    let devices = list_llamacpp_devices(&app_data_dir).await?;
     log::info!("Found {} devices", devices.len());
-    Ok(devices)
+    Ok(devices
+        .into_iter()
+        .map(|device| DeviceInfo {
+            id: device.id,
+            name: device.name,
+            total_vram_mb: device.total_vram_mb,
+            free_vram_mb: device.free_vram_mb,
+        })
+        .collect())
 }

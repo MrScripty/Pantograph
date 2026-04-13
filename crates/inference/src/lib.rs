@@ -55,7 +55,7 @@ pub use backend::CandleBackend;
 pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
-pub use device::DeviceBackend;
+pub use device::{DeviceBackend, list_llamacpp_devices, parse_llamacpp_device_listing};
 pub use embedding_runtime::LlamaCppEmbeddingRuntime;
 pub use gateway::{
     EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest, SharedGateway,
