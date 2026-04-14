@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
-use crate::llm::commands::resolve_embedding_model_path;
 use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
@@ -11,15 +10,14 @@ use node_engine::EventSink;
 use pantograph_embedded_runtime::{
     apply_runtime_extensions_for_execution,
     embedding_workflow::{
-        resolve_embedding_model_id_from_workflow_graph, workflow_graph_has_embedding_node,
-        workflow_graph_has_llamacpp_inference_node,
+        prepare_embedding_runtime_for_workflow, resolve_embedding_model_id_from_workflow_graph,
+        workflow_graph_has_embedding_node, workflow_graph_has_llamacpp_inference_node,
     },
     workflow_runtime::{
         resolve_runtime_model_target, sync_embedding_emit_metadata_flags, trace_runtime_metrics,
     },
     RuntimeExtensionsSnapshot,
 };
-use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_workflow_service::{
     convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
     ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
@@ -41,86 +39,6 @@ use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::task_executor::{PythonRuntimeExecutionRecorder, TauriTaskExecutor};
-
-async fn prepare_embedding_runtime(
-    gateway: &SharedGateway,
-    config: &SharedAppConfig,
-    pumas_api: Option<Arc<pumas_library::PumasApi>>,
-    embedding_model_id_from_graph: Option<String>,
-    needs_embedding_node: bool,
-    needs_llamacpp_inference_node: bool,
-) -> Result<Option<inference::BackendConfig>, String> {
-    if !needs_embedding_node {
-        return Ok(None);
-    }
-
-    if needs_llamacpp_inference_node {
-        return Err(
-            "Workflow includes both `embedding` and `llamacpp-inference` nodes. They currently require different llama.cpp runtime modes; run them in separate workflow executions."
-                .to_string(),
-        );
-    }
-
-    let backend_name = gateway.current_backend_name().await;
-    if !is_llamacpp_backend_name(&backend_name) {
-        return Err(format!(
-            "Embedding nodes currently require the `llama.cpp` backend, but active backend is '{}'",
-            backend_name
-        ));
-    }
-
-    let model_id = embedding_model_id_from_graph.ok_or_else(|| {
-        "Embedding workflows must connect Puma-Lib `model_path` to embedding `model`".to_string()
-    })?;
-    let api = pumas_api.ok_or_else(|| {
-        "Puma-Lib runtime is not initialized; cannot resolve model path from model_id".to_string()
-    })?;
-
-    let model = api
-        .get_model(&model_id)
-        .await
-        .map_err(|e| {
-            format!(
-                "Failed to resolve model '{}' from Puma-Lib: {}",
-                model_id, e
-            )
-        })?
-        .ok_or_else(|| {
-            format!(
-                "Puma-Lib model '{}' was not found. Re-select the model in Puma-Lib node.",
-                model_id
-            )
-        })?;
-
-    if !model.model_type.eq_ignore_ascii_case("embedding") {
-        return Err(format!(
-            "Puma-Lib model '{}' is type '{}' but embedding node requires an embedding model",
-            model_id, model.model_type
-        ));
-    }
-
-    let resolved_embedding_model_path = resolve_embedding_model_path(&model.path)?;
-
-    let guard = config.read().await;
-    let device = guard.device.clone();
-    drop(guard);
-
-    let prepared = gateway
-        .prepare_embedding_runtime(build_resolved_embedding_request(
-            Some(resolved_embedding_model_path),
-            None,
-            &device,
-            Some("nomic-embed-text".to_string()),
-        ))
-        .await
-        .map_err(|e| format!("Failed to start llama.cpp in embedding mode: {}", e))?;
-
-    Ok(prepared.restore_config)
-}
-
-fn is_llamacpp_backend_name(backend_name: &str) -> bool {
-    canonical_runtime_backend_key(backend_name) == "llama_cpp"
-}
 
 pub(crate) fn unix_timestamp_ms() -> u64 {
     SystemTime::now()
@@ -360,10 +278,14 @@ async fn run_session_graph_snapshot(
     ));
     let python_runtime_execution_recorder = Arc::new(PythonRuntimeExecutionRecorder::default());
     let runtime_ext = RuntimeExtensionsSnapshot::from_shared(extensions.inner()).await;
-    let restore_config = prepare_embedding_runtime(
-        gateway.inner(),
-        config.inner(),
-        runtime_ext.pumas_api.clone(),
+    let guard = config.read().await;
+    let device = guard.device.clone();
+    drop(guard);
+    let inference_gateway = gateway.inner().as_ref().inner_arc();
+    let restore_config = prepare_embedding_runtime_for_workflow(
+        inference_gateway.as_ref(),
+        runtime_ext.pumas_api.as_deref(),
+        build_resolved_embedding_request(None, None, &device, Some("nomic-embed-text".to_string())),
         resolve_embedding_model_id_from_workflow_graph(&session_graph)?,
         workflow_graph_has_embedding_node(&session_graph),
         workflow_graph_has_llamacpp_inference_node(&session_graph),
@@ -489,15 +411,7 @@ async fn run_session_graph_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::{diagnostics_runtime_trace_metrics, is_llamacpp_backend_name};
-
-    #[test]
-    fn llama_cpp_backend_gate_accepts_stable_aliases() {
-        assert!(is_llamacpp_backend_name("llama.cpp"));
-        assert!(is_llamacpp_backend_name("llama_cpp"));
-        assert!(is_llamacpp_backend_name("llamacpp"));
-        assert!(!is_llamacpp_backend_name("ollama"));
-    }
+    use super::diagnostics_runtime_trace_metrics;
 
     #[test]
     fn diagnostics_runtime_trace_metrics_prefers_execution_snapshot_override() {

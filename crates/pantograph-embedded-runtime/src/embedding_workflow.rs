@@ -5,6 +5,9 @@
 //! workflow execution.
 
 use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
+
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 
 fn node_data_string(data: &serde_json::Value, keys: &[&str]) -> Option<String> {
     let obj = data.as_object()?;
@@ -15,6 +18,150 @@ fn node_data_string(data: &serde_json::Value, keys: &[&str]) -> Option<String> {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
     })
+}
+
+fn derive_models_root(path: &Path) -> Option<PathBuf> {
+    let mut current = Some(path);
+    while let Some(candidate) = current {
+        if candidate
+            .to_string_lossy()
+            .ends_with("shared-resources/models")
+        {
+            return Some(candidate.to_path_buf());
+        }
+        current = candidate.parent();
+    }
+    None
+}
+
+fn find_gguf_files_in_dir(dir: &Path, limit: usize) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        format!(
+            "Cannot read embedding model directory '{}': {}",
+            dir.display(),
+            e
+        )
+    })?;
+
+    let mut matches = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
+        {
+            matches.push(path);
+            if matches.len() >= limit {
+                break;
+            }
+        }
+    }
+
+    Ok(matches)
+}
+
+fn find_model_files_by_name(
+    models_root: &Path,
+    file_name: &std::ffi::OsStr,
+    limit: usize,
+) -> Vec<PathBuf> {
+    let mut matches = Vec::new();
+    let mut stack = vec![models_root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.is_file() && path.file_name() == Some(file_name) {
+                matches.push(path);
+                if matches.len() >= limit {
+                    return matches;
+                }
+            }
+        }
+    }
+
+    matches
+}
+
+pub fn resolve_embedding_model_path(model_path: &str) -> Result<PathBuf, String> {
+    let candidate = PathBuf::from(model_path);
+    if candidate.is_file() {
+        return Ok(candidate);
+    }
+    if candidate.is_dir() {
+        let matches = find_gguf_files_in_dir(&candidate, 8)?;
+        return match matches.len() {
+            0 => Err(format!(
+                "Embedding model directory '{}' contains no .gguf files. Select a GGUF embedding model in Puma-Lib.",
+                model_path
+            )),
+            1 => Ok(matches[0].clone()),
+            _ => {
+                let list = matches
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(format!(
+                    "Embedding model directory '{}' contains multiple .gguf files: {}. Select a single GGUF file path.",
+                    model_path, list
+                ))
+            }
+        };
+    }
+
+    let file_name = candidate
+        .file_name()
+        .ok_or_else(|| format!("Embedding model path is invalid: {}", model_path))?;
+    let Some(models_root) = derive_models_root(&candidate) else {
+        return Err(format!(
+            "Embedding model file not found: {}. Update Model Configuration with a valid GGUF file path.",
+            model_path
+        ));
+    };
+
+    let matches = find_model_files_by_name(&models_root, file_name, 8);
+    match matches.len() {
+        0 => Err(format!(
+            "Embedding model file not found: {}. Could not find '{}' under '{}'. Update Model Configuration.",
+            model_path,
+            file_name.to_string_lossy(),
+            models_root.display()
+        )),
+        1 => {
+            log::warn!(
+                "Embedding model path '{}' was missing. Using discovered file '{}'",
+                model_path,
+                matches[0].display()
+            );
+            Ok(matches[0].clone())
+        }
+        _ => {
+            let list = matches
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(format!(
+                "Embedding model file not found at '{}', and multiple candidates matched '{}': {}. Update Model Configuration explicitly.",
+                model_path,
+                file_name.to_string_lossy(),
+                list
+            ))
+        }
+    }
 }
 
 pub fn workflow_graph_has_embedding_node(
@@ -104,6 +251,72 @@ pub fn resolve_embedding_model_id_from_workflow_graph(
     Ok(selected_model_ids.into_iter().next())
 }
 
+pub async fn prepare_embedding_runtime_for_workflow(
+    gateway: &inference::InferenceGateway,
+    pumas_api: Option<&pumas_library::PumasApi>,
+    mut request: inference::EmbeddingStartRequest,
+    embedding_model_id_from_graph: Option<String>,
+    needs_embedding_node: bool,
+    needs_llamacpp_inference_node: bool,
+) -> Result<Option<inference::BackendConfig>, String> {
+    if !needs_embedding_node {
+        return Ok(None);
+    }
+
+    if needs_llamacpp_inference_node {
+        return Err(
+            "Workflow includes both `embedding` and `llamacpp-inference` nodes. They currently require different llama.cpp runtime modes; run them in separate workflow executions."
+                .to_string(),
+        );
+    }
+
+    let backend_name = gateway.current_backend_name().await;
+    if canonical_runtime_backend_key(&backend_name) != "llama_cpp" {
+        return Err(format!(
+            "Embedding nodes currently require the `llama.cpp` backend, but active backend is '{}'",
+            backend_name
+        ));
+    }
+
+    let model_id = embedding_model_id_from_graph.ok_or_else(|| {
+        "Embedding workflows must connect Puma-Lib `model_path` to embedding `model`".to_string()
+    })?;
+    let api = pumas_api.ok_or_else(|| {
+        "Puma-Lib runtime is not initialized; cannot resolve model path from model_id".to_string()
+    })?;
+
+    let model = api
+        .get_model(&model_id)
+        .await
+        .map_err(|e| {
+            format!(
+                "Failed to resolve model '{}' from Puma-Lib: {}",
+                model_id, e
+            )
+        })?
+        .ok_or_else(|| {
+            format!(
+                "Puma-Lib model '{}' was not found. Re-select the model in Puma-Lib node.",
+                model_id
+            )
+        })?;
+
+    if !model.model_type.eq_ignore_ascii_case("embedding") {
+        return Err(format!(
+            "Puma-Lib model '{}' is type '{}' but embedding node requires an embedding model",
+            model_id, model.model_type
+        ));
+    }
+
+    request.gguf_model_path = Some(resolve_embedding_model_path(&model.path)?);
+    let prepared = gateway
+        .prepare_embedding_runtime(request)
+        .await
+        .map_err(|e| format!("Failed to start llama.cpp in embedding mode: {}", e))?;
+
+    Ok(prepared.restore_config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,5 +400,28 @@ mod tests {
         let error =
             resolve_embedding_model_id_from_workflow_graph(&graph).expect_err("should reject");
         assert!(error.contains("must receive `model` from a Puma-Lib node"));
+    }
+
+    #[test]
+    fn resolve_embedding_model_path_returns_existing_file() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "pantograph-embedding-workflow-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("temp directory should be created");
+        let model_path = temp_dir.join("embed.gguf");
+        std::fs::write(&model_path, b"gguf").expect("embedding model file should be written");
+
+        let resolved = resolve_embedding_model_path(
+            model_path
+                .to_str()
+                .expect("temporary embedding path should be utf-8"),
+        )
+        .expect("embedding model path should resolve");
+        assert_eq!(resolved, model_path);
+
+        std::fs::remove_file(&model_path)
+            .expect("temporary embedding model file should be removed");
+        std::fs::remove_dir(&temp_dir).expect("temporary test directory should be removed");
     }
 }

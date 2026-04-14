@@ -11,7 +11,7 @@ packages.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection and model-id resolution used for runtime preparation. |
+| `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
@@ -93,6 +93,9 @@ embedded-runtime crate.
 - Embedding workflow graph inspection and Puma-Lib model-id resolution for
   runtime mode preparation must stay in backend Rust so adapters do not drift
   on workflow validation rules or required wiring.
+- Embedding model-path resolution and workflow-specific embedding runtime
+  preparation must stay in backend Rust so RAG, workflow execution, and server
+  startup consume one runtime-preparation rule set.
 - Workflow execution extension wiring plus runtime trace/model-target shaping
   must stay in backend Rust so adapters do not drift on execution metadata or
   diagnostics semantics.

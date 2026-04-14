@@ -318,6 +318,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   now live in `crates/pantograph-embedded-runtime`, leaving Tauri workflow
   commands to consume backend-owned execution metadata helpers instead of
   maintaining host-local copies.
+- Embedding model-path resolution and workflow-specific embedding runtime
+  preparation now live in `crates/pantograph-embedded-runtime`, leaving Tauri
+  startup, RAG, and workflow execution adapters to consume one backend-owned
+  embedding preparation rule set.
 
 **Still missing:**
 

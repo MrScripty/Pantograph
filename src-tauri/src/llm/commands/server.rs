@@ -7,9 +7,9 @@ use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::startup::{
     build_configured_embedding_request, build_configured_inference_request,
     build_explicit_llamacpp_inference_request, build_external_inference_request,
-    resolve_embedding_model_path,
 };
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use tauri::{command, AppHandle, State};
 
 #[command]
