@@ -11,6 +11,10 @@ use crate::llm::startup::{
 };
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
+use pantograph_embedded_runtime::embedding_workflow::{
+    resolve_embedding_model_id_from_workflow_graph, workflow_graph_has_embedding_node,
+    workflow_graph_has_llamacpp_inference_node,
+};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use pantograph_workflow_service::{
     convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
@@ -136,181 +140,6 @@ async fn sync_embedding_emit_metadata_flags_for_executor(
     }
 
     Ok(())
-}
-
-fn graph_has_embedding_node(graph: &WorkflowGraph) -> bool {
-    graph.nodes.iter().any(|node| node.node_type == "embedding")
-}
-
-fn graph_has_llamacpp_inference_node(graph: &WorkflowGraph) -> bool {
-    graph
-        .nodes
-        .iter()
-        .any(|node| node.node_type == "llamacpp-inference")
-}
-
-fn node_engine_graph_has_embedding_node(graph: &node_engine::WorkflowGraph) -> bool {
-    graph.nodes.iter().any(|node| node.node_type == "embedding")
-}
-
-fn node_engine_graph_has_llamacpp_inference_node(graph: &node_engine::WorkflowGraph) -> bool {
-    graph
-        .nodes
-        .iter()
-        .any(|node| node.node_type == "llamacpp-inference")
-}
-
-fn node_data_string(data: &serde_json::Value, keys: &[&str]) -> Option<String> {
-    let obj = data.as_object()?;
-    keys.iter().find_map(|key| {
-        obj.get(*key)
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-    })
-}
-
-fn resolve_embedding_model_id_from_graph(graph: &WorkflowGraph) -> Result<Option<String>, String> {
-    let node_by_id = graph
-        .nodes
-        .iter()
-        .map(|node| (node.id.as_str(), node))
-        .collect::<std::collections::HashMap<_, _>>();
-
-    let embedding_nodes = graph
-        .nodes
-        .iter()
-        .filter(|node| node.node_type == "embedding")
-        .collect::<Vec<_>>();
-    if embedding_nodes.is_empty() {
-        return Ok(None);
-    }
-
-    let mut selected_model_ids = std::collections::BTreeSet::new();
-    for embedding_node in embedding_nodes {
-        let mut model_ids_for_node = std::collections::BTreeSet::new();
-        for edge in graph
-            .edges
-            .iter()
-            .filter(|edge| edge.target == embedding_node.id && edge.target_handle == "model")
-        {
-            let source_node = node_by_id.get(edge.source.as_str()).ok_or_else(|| {
-                format!(
-                    "Embedding node '{}' references unknown source node '{}'",
-                    embedding_node.id, edge.source
-                )
-            })?;
-            if source_node.node_type != "puma-lib" {
-                return Err(format!(
-                    "Embedding node '{}' must receive `model` from a Puma-Lib node",
-                    embedding_node.id
-                ));
-            }
-            let model_id = node_data_string(&source_node.data, &["model_id", "modelId"])
-                .ok_or_else(|| {
-                    format!(
-                        "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
-                        source_node.id
-                    )
-                })?;
-            model_ids_for_node.insert(model_id);
-        }
-
-        if model_ids_for_node.is_empty() {
-            return Err(format!(
-                "Embedding node '{}' must connect Puma-Lib `model_path` output to `model` input",
-                embedding_node.id
-            ));
-        }
-        if model_ids_for_node.len() > 1 {
-            return Err(format!(
-                "Embedding node '{}' has multiple Puma-Lib model IDs connected to `model`; use exactly one",
-                embedding_node.id
-            ));
-        }
-        selected_model_ids.extend(model_ids_for_node);
-    }
-
-    if selected_model_ids.len() > 1 {
-        return Err(
-            "All embedding nodes in one workflow run must use the same Puma-Lib model".to_string(),
-        );
-    }
-
-    Ok(selected_model_ids.into_iter().next())
-}
-
-fn resolve_embedding_model_id_from_node_engine_graph(
-    graph: &node_engine::WorkflowGraph,
-) -> Result<Option<String>, String> {
-    let node_by_id = graph
-        .nodes
-        .iter()
-        .map(|node| (node.id.as_str(), node))
-        .collect::<std::collections::HashMap<_, _>>();
-
-    let embedding_nodes = graph
-        .nodes
-        .iter()
-        .filter(|node| node.node_type == "embedding")
-        .collect::<Vec<_>>();
-    if embedding_nodes.is_empty() {
-        return Ok(None);
-    }
-
-    let mut selected_model_ids = std::collections::BTreeSet::new();
-    for embedding_node in embedding_nodes {
-        let mut model_ids_for_node = std::collections::BTreeSet::new();
-        for edge in graph
-            .edges
-            .iter()
-            .filter(|edge| edge.target == embedding_node.id && edge.target_handle == "model")
-        {
-            let source_node = node_by_id.get(edge.source.as_str()).ok_or_else(|| {
-                format!(
-                    "Embedding node '{}' references unknown source node '{}'",
-                    embedding_node.id, edge.source
-                )
-            })?;
-            if source_node.node_type != "puma-lib" {
-                return Err(format!(
-                    "Embedding node '{}' must receive `model` from a Puma-Lib node",
-                    embedding_node.id
-                ));
-            }
-            let model_id = node_data_string(&source_node.data, &["model_id", "modelId"])
-                .ok_or_else(|| {
-                    format!(
-                        "Puma-Lib node '{}' is missing `model_id`. Re-select a model in Puma-Lib.",
-                        source_node.id
-                    )
-                })?;
-            model_ids_for_node.insert(model_id);
-        }
-
-        if model_ids_for_node.is_empty() {
-            return Err(format!(
-                "Embedding node '{}' must connect Puma-Lib `model_path` output to `model` input",
-                embedding_node.id
-            ));
-        }
-        if model_ids_for_node.len() > 1 {
-            return Err(format!(
-                "Embedding node '{}' has multiple Puma-Lib model IDs connected to `model`; use exactly one",
-                embedding_node.id
-            ));
-        }
-        selected_model_ids.extend(model_ids_for_node);
-    }
-
-    if selected_model_ids.len() > 1 {
-        return Err(
-            "All embedding nodes in one workflow run must use the same Puma-Lib model".to_string(),
-        );
-    }
-
-    Ok(selected_model_ids.into_iter().next())
 }
 
 async fn prepare_embedding_runtime(
@@ -687,9 +516,9 @@ async fn run_session_graph_snapshot(
         gateway.inner(),
         config.inner(),
         runtime_ext.pumas_api.clone(),
-        resolve_embedding_model_id_from_graph(&session_graph)?,
-        graph_has_embedding_node(&session_graph),
-        graph_has_llamacpp_inference_node(&session_graph),
+        resolve_embedding_model_id_from_workflow_graph(&session_graph)?,
+        workflow_graph_has_embedding_node(&session_graph),
+        workflow_graph_has_llamacpp_inference_node(&session_graph),
     )
     .await?;
 

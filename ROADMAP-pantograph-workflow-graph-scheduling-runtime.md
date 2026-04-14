@@ -307,6 +307,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Dedicated embedding runtime capability mapping now lives in
   `crates/pantograph-embedded-runtime`, leaving the Tauri headless workflow
   adapter as a consumer of backend-owned runtime capability helpers.
+- Embedding workflow graph inspection and Puma-Lib model-id resolution for
+  runtime mode preparation now lives in `crates/pantograph-embedded-runtime`,
+  reducing Tauri workflow execution commands to consumers of backend-owned
+  embedding workflow rules.
 
 **Still missing:**
 

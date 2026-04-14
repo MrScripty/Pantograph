@@ -47,6 +47,7 @@ use pantograph_workflow_service::{
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+pub mod embedding_workflow;
 pub mod model_dependencies;
 pub mod python_runtime;
 pub mod rag;
