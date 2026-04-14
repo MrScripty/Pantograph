@@ -67,6 +67,9 @@ desktop app wiring.
 - Hosts may supply runtime admission budgets and reservation memory
   requirements, but the resulting acceptance or rejection decision belongs to
   this crate.
+- Hosts may also supply a stable reservation owner id when repeated acquire
+  calls should reuse the same backend-owned reservation instead of duplicating
+  session-local prechecks in adapters.
 - Hosts may also supply a reservation retention hint such as keep-alive intent,
   but this crate remains the owner of how that hint affects retention
   disposition and future eviction policy.

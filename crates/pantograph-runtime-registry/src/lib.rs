@@ -47,6 +47,15 @@ pub enum RuntimeRegistryError {
     #[error("runtime '{0}' cannot accept reservations while stopping or failed")]
     ReservationRejected(String),
 
+    #[error(
+        "reservation owner '{owner_id}' is already bound to runtime '{existing_runtime_id}', not '{requested_runtime_id}'"
+    )]
+    ReservationOwnerConflict {
+        owner_id: String,
+        existing_runtime_id: String,
+        requested_runtime_id: String,
+    },
+
     #[error("runtime '{runtime_id}' admission rejected reservation: {failure}")]
     AdmissionRejected {
         runtime_id: String,
@@ -202,6 +211,23 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
+        if let Some(owner_id) = request.reservation_owner_id.as_deref() {
+            if let Some(existing_reservation) = guard
+                .reservations
+                .values()
+                .find(|reservation| reservation.reservation_owner_id.as_deref() == Some(owner_id))
+            {
+                if existing_reservation.runtime_id == runtime_id {
+                    return Ok(existing_reservation.clone().into_lease());
+                }
+
+                return Err(RuntimeRegistryError::ReservationOwnerConflict {
+                    owner_id: owner_id.to_string(),
+                    existing_runtime_id: existing_reservation.runtime_id.clone(),
+                    requested_runtime_id: runtime_id,
+                });
+            }
+        }
         let record = guard
             .runtimes
             .get(&runtime_id)
@@ -231,6 +257,7 @@ impl RuntimeRegistry {
             reservation_id,
             runtime_id: runtime_id.clone(),
             workflow_id: request.workflow_id,
+            reservation_owner_id: request.reservation_owner_id,
             usage_profile: request.usage_profile,
             model_id: request.model_id,
             pin_runtime: request.pin_runtime,
@@ -704,6 +731,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "onnxruntime".to_string(),
                 workflow_id: "wf-1".to_string(),
+                reservation_owner_id: None,
                 usage_profile: Some("audio".to_string()),
                 model_id: Some("model-a".to_string()),
                 pin_runtime: true,
@@ -776,6 +804,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "llama.cpp".to_string(),
                 workflow_id: "wf-budget".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: None,
                 pin_runtime: false,
@@ -824,6 +853,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "llama.cpp".to_string(),
                 workflow_id: "wf-stop".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: None,
                 pin_runtime: false,
@@ -957,6 +987,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "reserved-ready".to_string(),
                 workflow_id: "wf-reserved".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: Some("model-b".to_string()),
                 pin_runtime: false,
@@ -1007,6 +1038,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "shared-runtime".to_string(),
                 workflow_id: "wf-keep-alive".to_string(),
+                reservation_owner_id: None,
                 usage_profile: Some("interactive".to_string()),
                 model_id: Some("model-a".to_string()),
                 pin_runtime: false,
@@ -1018,6 +1050,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "shared-runtime".to_string(),
                 workflow_id: "wf-ephemeral".to_string(),
+                reservation_owner_id: None,
                 usage_profile: Some("batch".to_string()),
                 model_id: Some("model-a".to_string()),
                 pin_runtime: false,
@@ -1090,6 +1123,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "idempotent-runtime".to_string(),
                 workflow_id: "wf-idempotent".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: Some("model-a".to_string()),
                 pin_runtime: false,
@@ -1109,6 +1143,86 @@ mod tests {
                 .release_reservation_if_present(lease.reservation_id)
                 .expect("second release"),
             None
+        );
+    }
+
+    #[test]
+    fn acquire_reservation_reuses_existing_owner_binding() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![
+            RuntimeObservation {
+                runtime_id: "owner-runtime-a".to_string(),
+                display_name: "owner-runtime-a".to_string(),
+                backend_keys: vec!["llama_cpp".to_string()],
+                model_id: Some("model-a".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("owner-runtime-a-1".to_string()),
+                last_error: None,
+            },
+            RuntimeObservation {
+                runtime_id: "owner-runtime-b".to_string(),
+                display_name: "owner-runtime-b".to_string(),
+                backend_keys: vec!["llama_cpp".to_string()],
+                model_id: Some("model-b".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("owner-runtime-b-1".to_string()),
+                last_error: None,
+            },
+        ]);
+
+        let first = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "owner-runtime-a".to_string(),
+                workflow_id: "wf-owner".to_string(),
+                reservation_owner_id: Some("session-owner".to_string()),
+                usage_profile: Some("interactive".to_string()),
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::KeepAlive,
+            })
+            .expect("first owner reservation");
+
+        let reused = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "owner-runtime-a".to_string(),
+                workflow_id: "wf-owner".to_string(),
+                reservation_owner_id: Some("session-owner".to_string()),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("second owner reservation should reuse existing lease");
+
+        assert_eq!(first.reservation_id, reused.reservation_id);
+        assert_eq!(
+            reused.reservation_owner_id.as_deref(),
+            Some("session-owner")
+        );
+        assert_eq!(registry.snapshot().reservations.len(), 1);
+
+        let err = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "owner-runtime-b".to_string(),
+                workflow_id: "wf-owner".to_string(),
+                reservation_owner_id: Some("session-owner".to_string()),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect_err("owner should not bind to another runtime");
+
+        assert_eq!(
+            err,
+            RuntimeRegistryError::ReservationOwnerConflict {
+                owner_id: "session-owner".to_string(),
+                existing_runtime_id: "owner-runtime-a".to_string(),
+                requested_runtime_id: "owner-runtime-b".to_string(),
+            }
         );
     }
 
@@ -1187,6 +1301,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "llama.cpp".to_string(),
                 workflow_id: "wf-1".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: Some("model-a".to_string()),
                 pin_runtime: false,
@@ -1204,6 +1319,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "llama.cpp".to_string(),
                 workflow_id: "wf-2".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: Some("model-b".to_string()),
                 pin_runtime: false,
@@ -1253,6 +1369,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "pytorch".to_string(),
                 workflow_id: "wf-ram-1".to_string(),
+                reservation_owner_id: None,
                 usage_profile: Some("interactive".to_string()),
                 model_id: Some("model-ram-a".to_string()),
                 pin_runtime: false,
@@ -1270,6 +1387,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "pytorch".to_string(),
                 workflow_id: "wf-ram-2".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: Some("model-ram-b".to_string()),
                 pin_runtime: false,
@@ -1305,6 +1423,7 @@ mod tests {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id: "pytorch".to_string(),
                 workflow_id: "wf-ram-3".to_string(),
+                reservation_owner_id: None,
                 usage_profile: None,
                 model_id: Some("model-ram-c".to_string()),
                 pin_runtime: false,

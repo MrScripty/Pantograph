@@ -452,6 +452,10 @@ runtime callers.
 - 2026-04-13: The registry now also exposes an idempotent reservation-release
   path so overlapping cleanup or retry flows can remain concurrency-safe
   without adapter-local duplicate-release suppression logic.
+- 2026-04-13: Session runtime acquire now has a backend-owned owner-key reuse
+  path so repeated session loads can converge on the same reservation inside
+  the registry lock instead of depending on adapter-local duplicate-load
+  guards.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

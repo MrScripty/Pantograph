@@ -769,17 +769,6 @@ impl EmbeddedWorkflowHost {
             return Ok(());
         };
 
-        {
-            let reservations = self.session_runtime_reservations.lock().map_err(|_| {
-                WorkflowServiceError::Internal(
-                    "session runtime reservation lock poisoned".to_string(),
-                )
-            })?;
-            if reservations.contains_key(session_id) {
-                return Ok(());
-            }
-        }
-
         let mode_info = self.gateway.mode_info().await;
         let runtime_id = mode_info
             .active_runtime
@@ -807,6 +796,7 @@ impl EmbeddedWorkflowHost {
             .acquire_reservation(RuntimeReservationRequest {
                 runtime_id,
                 workflow_id: workflow_id.to_string(),
+                reservation_owner_id: Some(session_id.to_string()),
                 usage_profile: Self::trimmed_optional(usage_profile),
                 model_id: mode_info.active_model_target.clone(),
                 pin_runtime: false,
