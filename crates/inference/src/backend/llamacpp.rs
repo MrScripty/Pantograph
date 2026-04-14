@@ -267,7 +267,7 @@ impl InferenceBackend for LlamaCppBackend {
             {
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
-                    lifecycle_decision_reason: Some("reused_llamacpp_embedding".to_string()),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 });
             }
 
@@ -285,7 +285,7 @@ impl InferenceBackend for LlamaCppBackend {
                 })?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("started_llamacpp_embedding".to_string()),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
             })
         } else if config.reranking_mode {
             let model_path = config.model_path.as_ref().ok_or_else(|| {
@@ -298,7 +298,7 @@ impl InferenceBackend for LlamaCppBackend {
             {
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
-                    lifecycle_decision_reason: Some("reused_llamacpp_reranking".to_string()),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 });
             }
 
@@ -316,7 +316,7 @@ impl InferenceBackend for LlamaCppBackend {
                 })?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("started_llamacpp_reranking".to_string()),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
             })
         } else {
             // Start in inference mode (text LLM or VLM with optional vision)
