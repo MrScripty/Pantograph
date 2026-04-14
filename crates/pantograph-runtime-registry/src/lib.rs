@@ -292,6 +292,26 @@ impl RuntimeRegistry {
         }
     }
 
+    pub fn eviction_candidates(&self) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+        let guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        let mut candidates = guard
+            .runtimes
+            .values()
+            .filter(|record| runtime_is_evictable(record))
+            .map(runtime_snapshot)
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| {
+            eviction_status_rank(left.status)
+                .cmp(&eviction_status_rank(right.status))
+                .then_with(|| left.last_transition_at_ms.cmp(&right.last_transition_at_ms))
+                .then_with(|| left.runtime_id.cmp(&right.runtime_id))
+        });
+        candidates
+    }
+
     pub fn observe_runtimes(
         &self,
         observations: Vec<RuntimeObservation>,
@@ -358,6 +378,36 @@ fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistryRuntimeSna
         last_transition_at_ms: record.last_transition_at_ms,
         active_reservation_ids,
         models,
+    }
+}
+
+fn runtime_is_evictable(record: &RuntimeRegistryRecord) -> bool {
+    if !record.active_reservations.is_empty() {
+        return false;
+    }
+
+    if record.models.values().any(|model| model.pinned) {
+        return false;
+    }
+
+    matches!(
+        record.status,
+        RuntimeRegistryStatus::Warming
+            | RuntimeRegistryStatus::Ready
+            | RuntimeRegistryStatus::Unhealthy
+            | RuntimeRegistryStatus::Stopping
+    )
+}
+
+fn eviction_status_rank(status: RuntimeRegistryStatus) -> u8 {
+    match status {
+        RuntimeRegistryStatus::Unhealthy => 0,
+        RuntimeRegistryStatus::Ready => 1,
+        RuntimeRegistryStatus::Warming => 2,
+        RuntimeRegistryStatus::Stopping => 3,
+        RuntimeRegistryStatus::Busy
+        | RuntimeRegistryStatus::Stopped
+        | RuntimeRegistryStatus::Failed => 4,
     }
 }
 
@@ -766,6 +816,131 @@ mod tests {
             .expect("ollama snapshot");
         assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
         assert_eq!(ollama.models[0].model_id, "llava:13b");
+    }
+
+    #[test]
+    fn eviction_candidates_exclude_reserved_and_pinned_runtimes() {
+        let registry = RuntimeRegistry::new();
+
+        registry.observe_runtimes(vec![
+            RuntimeObservation {
+                runtime_id: "ready-old".to_string(),
+                display_name: "ready-old".to_string(),
+                backend_keys: vec!["llama_cpp".to_string()],
+                model_id: Some("model-a".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("ready-old-1".to_string()),
+                last_error: None,
+            },
+            RuntimeObservation {
+                runtime_id: "reserved-ready".to_string(),
+                display_name: "reserved-ready".to_string(),
+                backend_keys: vec!["llama_cpp".to_string()],
+                model_id: Some("model-b".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("reserved-ready-1".to_string()),
+                last_error: None,
+            },
+            RuntimeObservation {
+                runtime_id: "pinned-ready".to_string(),
+                display_name: "pinned-ready".to_string(),
+                backend_keys: vec!["llama_cpp".to_string()],
+                model_id: Some("model-c".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("pinned-ready-1".to_string()),
+                last_error: None,
+            },
+        ]);
+
+        let reserved = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "reserved-ready".to_string(),
+                workflow_id: "wf-reserved".to_string(),
+                usage_profile: None,
+                model_id: Some("model-b".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("reserve runtime");
+
+        {
+            let mut guard = registry
+                .state
+                .lock()
+                .expect("runtime registry state lock poisoned");
+            let pinned_runtime = guard
+                .runtimes
+                .get_mut("pinned-ready")
+                .expect("pinned runtime should exist");
+            let pinned_model = pinned_runtime
+                .models
+                .get_mut("model-c")
+                .expect("pinned model should exist");
+            pinned_model.pinned = true;
+        }
+
+        let candidates = registry.eviction_candidates();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].runtime_id, "ready-old");
+
+        registry
+            .release_reservation(reserved.reservation_id)
+            .expect("release reservation");
+    }
+
+    #[test]
+    fn eviction_candidates_use_deterministic_status_and_age_ordering() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("ready-old", "ready-old"));
+        registry.register_runtime(RuntimeRegistration::new("ready-new", "ready-new"));
+        registry.register_runtime(RuntimeRegistration::new("warming", "warming"));
+        registry.register_runtime(RuntimeRegistration::new("unhealthy", "unhealthy"));
+        registry.register_runtime(RuntimeRegistration::new("busy", "busy"));
+
+        {
+            let mut guard = registry
+                .state
+                .lock()
+                .expect("runtime registry state lock poisoned");
+            let ready_old = guard
+                .runtimes
+                .get_mut("ready-old")
+                .expect("ready-old runtime");
+            ready_old.status = RuntimeRegistryStatus::Ready;
+            ready_old.last_transition_at_ms = 10;
+
+            let ready_new = guard
+                .runtimes
+                .get_mut("ready-new")
+                .expect("ready-new runtime");
+            ready_new.status = RuntimeRegistryStatus::Ready;
+            ready_new.last_transition_at_ms = 20;
+
+            let warming = guard.runtimes.get_mut("warming").expect("warming runtime");
+            warming.status = RuntimeRegistryStatus::Warming;
+            warming.last_transition_at_ms = 5;
+
+            let unhealthy = guard
+                .runtimes
+                .get_mut("unhealthy")
+                .expect("unhealthy runtime");
+            unhealthy.status = RuntimeRegistryStatus::Unhealthy;
+            unhealthy.last_transition_at_ms = 30;
+
+            let busy = guard.runtimes.get_mut("busy").expect("busy runtime");
+            busy.status = RuntimeRegistryStatus::Busy;
+            busy.last_transition_at_ms = 1;
+        }
+
+        let candidates = registry.eviction_candidates();
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.runtime_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["unhealthy", "ready-old", "ready-new", "warming"]
+        );
     }
 
     #[test]

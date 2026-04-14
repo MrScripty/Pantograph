@@ -34,6 +34,9 @@ desktop app wiring.
 - Reservation retention hints are stored here so future retention and eviction
   policy can interpret a backend-owned signal instead of reverse-engineering
   adapter behavior.
+- Deterministic eviction-candidate ordering is also computed here so higher
+  layers can ask the registry for backend-owned pressure decisions rather than
+  sorting runtimes ad hoc.
 - Invalid state transitions are rejected rather than coerced.
 - Observation reconciliation updates registry-owned state but does not invent
   backend lifecycle facts.

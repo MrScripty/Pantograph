@@ -442,6 +442,9 @@ runtime callers.
   `keep_alive` state and forwards it through embedded-runtime into registry
   reservation records, while direct retention policy remains to be implemented
   inside the registry boundary.
+- 2026-04-13: `crates/pantograph-runtime-registry` now exposes deterministic
+  eviction candidates with active-reservation and pinned-model exclusion so the
+  next retention/eviction slice can consume a backend-owned ordering primitive.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -546,10 +549,13 @@ refactor lands.
    eviction policy on top of the completed runtime-registry foundation.
 2. Add warmup/reuse plus retention-hint interpretation inside the registry boundary
    without moving those decisions into gateway or adapter layers.
-3. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+3. Consume the new backend-owned eviction candidate ordering from registry
+   policy rather than rebuilding candidate selection in workflow service or
+   adapters.
+4. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
    backend-owned registry refactor.
-4. Re-plan immediately if Milestone 3 implementation pressures any of the
+5. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
 
@@ -597,6 +603,8 @@ Update during implementation:
   from workflow service into registry reservation records so the next policy
   slice can consume an explicit backend-owned hint instead of adapter-local
   behavior.
+- 2026-04-13: Milestone 3 eviction groundwork now includes deterministic
+  backend-owned candidate ordering with reserved and pinned runtimes excluded.
 
 ## Commit Cadence Notes
 
