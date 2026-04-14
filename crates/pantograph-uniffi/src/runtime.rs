@@ -36,6 +36,8 @@ pub struct FfiEmbeddedRuntimeConfig {
     ///
     /// If empty, the runtime uses `<project_root>/.pantograph/workflows`.
     pub workflow_roots: Vec<String>,
+    /// Optional limit on how many session runtimes may remain loaded at once.
+    pub max_loaded_sessions: Option<u64>,
 }
 
 /// Native embedded Pantograph runtime.
@@ -76,11 +78,16 @@ impl FfiPantographRuntime {
                 .set(node_engine::extension_keys::PUMAS_API, api.api_arc());
         }
 
+        let workflow_service = Arc::new(WorkflowService::new());
+        workflow_service
+            .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
+            .map_err(map_workflow_service_error)?;
+
         let runtime = EmbeddedRuntime::with_default_python_runtime(
             config,
             Arc::new(inference::InferenceGateway::new()),
             extensions,
-            Arc::new(WorkflowService::new()),
+            workflow_service,
             None,
         );
 
@@ -514,6 +521,7 @@ fn to_embedded_config(config: FfiEmbeddedRuntimeConfig) -> Result<EmbeddedRuntim
         app_data_dir,
         project_root,
         workflow_roots,
+        max_loaded_sessions: config.max_loaded_sessions.map(|value| value as usize),
     })
 }
 
@@ -712,6 +720,7 @@ mod tests {
                 app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
                 project_root: root.to_string_lossy().into_owned(),
                 workflow_roots: Vec::new(),
+                max_loaded_sessions: None,
             },
             None,
         )
@@ -796,6 +805,7 @@ mod tests {
                 app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
                 project_root: root.to_string_lossy().into_owned(),
                 workflow_roots: Vec::new(),
+                max_loaded_sessions: None,
             },
             None,
         )

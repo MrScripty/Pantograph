@@ -64,6 +64,9 @@ Runtime capability rule:
 - when the service asks a host to load session runtime resources, it now passes
   a backend-owned retention hint derived from session `keep_alive` state so
   adapters can forward intent without becoming retention-policy owners
+- hosts may also tune loaded-runtime residency separately from session count
+  through `WorkflowService::set_loaded_runtime_capacity_limit`, keeping the
+  capacity boundary backend-owned even when the value comes from app config
 
 Primary contract types:
 

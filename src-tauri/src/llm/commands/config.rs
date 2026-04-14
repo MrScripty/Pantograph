@@ -2,6 +2,7 @@
 
 use super::shared::SharedAppConfig;
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig};
+use crate::workflow::commands::SharedWorkflowService;
 use inference::list_llamacpp_devices;
 use tauri::{AppHandle, Manager, State, command};
 
@@ -43,6 +44,7 @@ pub async fn get_app_config(config: State<'_, SharedAppConfig>) -> Result<AppCon
 pub async fn set_app_config(
     app: AppHandle,
     config: State<'_, SharedAppConfig>,
+    workflow_service: State<'_, SharedWorkflowService>,
     new_config: AppConfig,
 ) -> Result<(), String> {
     let app_data_dir = app
@@ -52,10 +54,14 @@ pub async fn set_app_config(
 
     let mut config_guard = config.write().await;
     *config_guard = new_config;
+    let max_loaded_sessions = config_guard.workflow.max_loaded_sessions;
     config_guard
         .save(&app_data_dir)
         .await
         .map_err(|e| format!("Failed to save config: {}", e))?;
+    workflow_service
+        .set_loaded_runtime_capacity_limit(max_loaded_sessions)
+        .map_err(|e| format!("Failed to apply workflow runtime config: {}", e))?;
 
     log::info!("Application configuration saved");
     Ok(())

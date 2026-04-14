@@ -464,9 +464,16 @@ runtime callers.
   session capacity and delegates idle unload-candidate selection through an
   explicit host contract, while embedded-runtime consumes the registry's
   reservation-owner eviction order instead of using only session-local ranking.
+- 2026-04-13: Loaded-runtime capacity is now configurable through backend-owned
+  Rust surfaces in workflow-service, embedded runtime, standalone runtime,
+  UniFFI, and Tauri app config wiring without moving residency policy into the
+  frontend or adapter layer.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
+- `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
+- `cargo test -p pantograph-uniffi --features frontend-http`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
 - unit tests for admission acceptance/rejection, warmup reuse, release-on-
   completion/cancellation/failure, and eviction ordering
 - cross-layer acceptance check from workflow/session request through registry

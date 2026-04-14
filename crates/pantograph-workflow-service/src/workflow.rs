@@ -1420,6 +1420,20 @@ impl WorkflowService {
         }
     }
 
+    pub fn set_loaded_runtime_capacity_limit(
+        &self,
+        max_loaded_sessions: Option<usize>,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut store = self.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session store lock poisoned".to_string())
+        })?;
+        store.max_loaded_sessions = max_loaded_sessions
+            .unwrap_or(store.max_sessions)
+            .max(1)
+            .min(store.max_sessions);
+        Ok(())
+    }
+
     async fn ensure_session_runtime_loaded<H: WorkflowHost>(
         &self,
         host: &H,
@@ -4842,6 +4856,59 @@ mod tests {
                 .lock()
                 .expect("retention hints lock poisoned"),
             vec![WorkflowSessionRetentionHint::Ephemeral]
+        );
+    }
+
+    #[test]
+    fn loaded_runtime_capacity_limit_clamps_to_valid_session_bounds() {
+        let service = WorkflowService::with_capacity_limits(4, 4);
+
+        service
+            .set_loaded_runtime_capacity_limit(Some(2))
+            .expect("set lower loaded-runtime capacity");
+        assert_eq!(
+            service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned")
+                .max_loaded_sessions,
+            2
+        );
+
+        service
+            .set_loaded_runtime_capacity_limit(Some(0))
+            .expect("clamp loaded-runtime capacity to minimum");
+        assert_eq!(
+            service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned")
+                .max_loaded_sessions,
+            1
+        );
+
+        service
+            .set_loaded_runtime_capacity_limit(Some(99))
+            .expect("clamp loaded-runtime capacity to session limit");
+        assert_eq!(
+            service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned")
+                .max_loaded_sessions,
+            4
+        );
+
+        service
+            .set_loaded_runtime_capacity_limit(None)
+            .expect("reset loaded-runtime capacity to session limit");
+        assert_eq!(
+            service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned")
+                .max_loaded_sessions,
+            4
         );
     }
 

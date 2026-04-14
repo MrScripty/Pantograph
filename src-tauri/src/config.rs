@@ -147,6 +147,17 @@ impl Default for SandboxConfig {
     }
 }
 
+/// Workflow runtime coordination configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkflowConfig {
+    /// Optional limit on how many session runtimes may remain loaded at once.
+    ///
+    /// `None` preserves the workflow-service default, which currently matches
+    /// workflow session capacity.
+    #[serde(default)]
+    pub max_loaded_sessions: Option<usize>,
+}
+
 /// Full application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
@@ -167,6 +178,9 @@ pub struct AppConfig {
     /// Sandbox configuration for component validation
     #[serde(default)]
     pub sandbox: SandboxConfig,
+    /// Workflow runtime coordination settings
+    #[serde(default)]
+    pub workflow: WorkflowConfig,
 }
 
 impl AppConfig {

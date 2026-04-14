@@ -63,6 +63,7 @@ pub struct EmbeddedRuntimeConfig {
     pub app_data_dir: PathBuf,
     pub project_root: PathBuf,
     pub workflow_roots: Vec<PathBuf>,
+    pub max_loaded_sessions: Option<usize>,
 }
 
 impl EmbeddedRuntimeConfig {
@@ -71,6 +72,7 @@ impl EmbeddedRuntimeConfig {
             app_data_dir,
             workflow_roots: capabilities::default_workflow_roots(&project_root),
             project_root,
+            max_loaded_sessions: None,
         }
     }
 }
@@ -81,6 +83,7 @@ pub struct StandaloneRuntimeConfig {
     pub app_data_dir: PathBuf,
     pub project_root: PathBuf,
     pub workflow_roots: Vec<PathBuf>,
+    pub max_loaded_sessions: Option<usize>,
     pub binaries_dir: PathBuf,
     pub pumas_library_path: Option<PathBuf>,
 }
@@ -92,6 +95,7 @@ impl StandaloneRuntimeConfig {
             app_data_dir,
             workflow_roots: capabilities::default_workflow_roots(&project_root),
             project_root,
+            max_loaded_sessions: None,
             binaries_dir,
             pumas_library_path: None,
         }
@@ -225,6 +229,11 @@ impl EmbeddedRuntime {
             .await;
 
         let workflow_service = Arc::new(WorkflowService::new());
+        workflow_service
+            .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
+            .map_err(|error| EmbeddedRuntimeError::Initialization {
+                message: error.to_string(),
+            })?;
         let extensions: SharedExtensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
         let dependency_resolver: Arc<dyn node_engine::ModelDependencyResolver> = Arc::new(
             TauriModelDependencyResolver::new(extensions.clone(), config.project_root.clone()),
@@ -255,6 +264,7 @@ impl EmbeddedRuntime {
                 app_data_dir: config.app_data_dir,
                 project_root: config.project_root,
                 workflow_roots: config.workflow_roots,
+                max_loaded_sessions: config.max_loaded_sessions,
             },
             gateway,
             extensions,
@@ -1465,6 +1475,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),
@@ -1551,6 +1562,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),
@@ -1610,6 +1622,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),
@@ -1678,6 +1691,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),
@@ -1778,6 +1792,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),
@@ -1922,6 +1937,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::with_backend(
                 Box::new(inference::CandleBackend::new()),
@@ -1977,6 +1993,7 @@ mod tests {
                 app_data_dir,
                 project_root: temp.path().to_path_buf(),
                 workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),

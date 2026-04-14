@@ -16,10 +16,10 @@ use config::AppConfig;
 use constants::paths::DATA_DIR;
 use llm::{
     InferenceGateway, RuntimeRegistry, SharedAppConfig, SharedGateway, SharedRuntimeRegistry,
-    check_embedding_server, check_health_now, check_port_status, checkout_commit,
-    clear_rag_cache, connect_to_server, create_vector_database, find_alternate_port,
-    get_app_config, get_backend_capabilities, get_component_history, get_current_backend,
-    get_current_commit_info, get_default_port, get_device_config, get_embedding_memory_mode,
+    check_embedding_server, check_health_now, check_port_status, checkout_commit, clear_rag_cache,
+    connect_to_server, create_vector_database, find_alternate_port, get_app_config,
+    get_backend_capabilities, get_component_history, get_current_backend, get_current_commit_info,
+    get_default_port, get_device_config, get_embedding_memory_mode,
     get_embedding_runtime_lifecycle_snapshot, get_embedding_server_url, get_health_status,
     get_llm_status, get_model_config, get_rag_status, get_recovery_attempt_count,
     get_recovery_config, get_redo_count, get_sandbox_config, get_svelte_docs_status,
@@ -108,7 +108,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(execution_manager)
-        .manage(workflow_service)
+        .manage(workflow_service.clone())
         .manage(workflow_diagnostics_store)
         .manage(workflow_graph_store)
         .manage(orchestration_store)
@@ -119,6 +119,7 @@ fn main() {
         .setup({
             let shared_extensions = shared_extensions.clone();
             let model_dependency_resolver = model_dependency_resolver.clone();
+            let workflow_service = workflow_service.clone();
             move |app| {
             let app_data_dir = app
                 .path()
@@ -161,11 +162,9 @@ fn main() {
             let rag_manager = create_rag_manager(project_data_dir);
             app.manage(rag_manager);
 
-            // Load app configuration
-            let app_handle = app.handle().clone();
             let kv_cache_dir = app_data_dir.join("kv_cache");
-            tauri::async_runtime::spawn(async move {
-                let config = match AppConfig::load(&app_data_dir).await {
+            let config = tauri::async_runtime::block_on(async {
+                match AppConfig::load(&app_data_dir).await {
                     Ok(config) => {
                         log::info!("Loaded app configuration");
                         config
@@ -174,11 +173,13 @@ fn main() {
                         log::warn!("Failed to load config, using defaults: {}", e);
                         AppConfig::default()
                     }
-                };
-
-                let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
-                app_handle.manage(shared_config);
+                }
             });
+            workflow_service
+                .set_loaded_runtime_capacity_limit(config.workflow.max_loaded_sessions)
+                .expect("failed to apply workflow runtime config");
+            let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
+            app.manage(shared_config);
 
             // Initialize executor extensions (PumasApi etc.) asynchronously.
             // Prefer the sibling Pumas release build dir when available, then fall back

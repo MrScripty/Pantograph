@@ -132,6 +132,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Hosts create the runtime by supplying gateway, workflow-service, and shared
   extension dependencies; this directory does not own those outer application
   boot decisions.
+- `EmbeddedRuntimeConfig` and `StandaloneRuntimeConfig` may carry an optional
+  `max_loaded_sessions` limit so hosts can tune loaded-runtime residency
+  without moving unload policy ownership out of backend Rust services.
 - Hosts may optionally inject a shared runtime registry; when present, session
   runtime load/unload lifecycle is translated into registry reservation
   acquire/release operations.
