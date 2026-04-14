@@ -15,7 +15,9 @@ The accurate status is:
 - prerequisite runtime-contract and diagnostics groundwork: completed
 - runtime-registry Milestone 1, Freeze Boundaries And Ownership: completed
 - runtime-registry Milestone 2, Runtime Registry Foundation: completed
-- runtime-registry Milestones 3-6: not started
+- runtime-registry Milestone 3, Admission, Warmup, Retention, And Eviction:
+  in progress
+- runtime-registry Milestones 4-6: not started
 - current next milestone: Milestone 3, Admission, Warmup, Retention, And
   Eviction
 - stop rule remains active for later milestones: runtime-registry work must
@@ -98,8 +100,9 @@ The following Milestone 2 foundation slices have now landed in code:
 
 ### What has not landed yet
 
-- no registry-driven warmup, retention, or eviction policy exists yet
-- no registry-driven cleanup or recovery policy exists yet
+- embedded host release paths still do not consume retention dispositions into
+  a concrete runtime stop/reclaim action
+- no registry-driven cleanup or recovery worker exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
 ## Inputs
@@ -476,11 +479,16 @@ runtime callers.
   eviction lookup so embedded-runtime can request the first matching unload
   candidate from backend-owned policy order instead of re-filtering that
   ranking locally.
+- 2026-04-13: `pantograph-embedded-runtime` now consumes backend-owned warmup
+  dispositions during session runtime loads, reuses ready runtimes, waits for
+  in-flight warmup transitions, and releases reservations again when that wait
+  times out instead of leaking session/runtime ownership.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
 - `cargo test -p pantograph-runtime-registry warmup_disposition -- --nocapture`
 - `cargo test -p pantograph-runtime-registry eviction_reservation_candidate_for_owners -- --nocapture`
+- `cargo test -p pantograph-embedded-runtime`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
