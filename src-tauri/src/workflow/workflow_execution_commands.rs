@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -7,23 +6,12 @@ use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
-use pantograph_embedded_runtime::{
-    apply_runtime_extensions_for_execution,
-    embedding_workflow::{
-        prepare_embedding_runtime_for_workflow, resolve_embedding_model_id_from_workflow_graph,
-        workflow_graph_has_embedding_node, workflow_graph_has_llamacpp_inference_node,
-    },
-    workflow_runtime::{
-        build_runtime_diagnostics_projection, resolve_runtime_model_target,
-        sync_embedding_emit_metadata_flags,
-    },
-    RuntimeExtensionsSnapshot,
-};
+use pantograph_embedded_runtime::workflow_runtime::build_runtime_diagnostics_projection;
 use pantograph_workflow_service::{
-    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
-    ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
-    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, Position,
-    UndoRedoState, WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
+    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
@@ -38,7 +26,6 @@ use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
-use super::task_executor::{PythonRuntimeExecutionRecorder, TauriTaskExecutor};
 
 pub(crate) fn unix_timestamp_ms() -> u64 {
     SystemTime::now()
@@ -207,11 +194,6 @@ async fn run_session_graph_snapshot(
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let project_root = std::path::Path::new(manifest_dir)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
     let diagnostics_channel = channel.clone();
 
     emit_diagnostics_snapshots(
@@ -235,123 +217,32 @@ async fn run_session_graph_snapshot(
         &session_id,
         diagnostics_store.inner().clone(),
     ));
-    let python_runtime_execution_recorder = Arc::new(PythonRuntimeExecutionRecorder::default());
-    let runtime_ext = RuntimeExtensionsSnapshot::from_shared(extensions.inner()).await;
     let guard = config.read().await;
     let device = guard.device.clone();
     drop(guard);
-    let inference_gateway = gateway.inner().as_ref().inner_arc();
-    let restore_config = prepare_embedding_runtime_for_workflow(
-        inference_gateway.as_ref(),
-        runtime_ext.pumas_api.as_deref(),
-        build_resolved_embedding_request(None, None, &device, Some("nomic-embed-text".to_string())),
-        resolve_embedding_model_id_from_workflow_graph(&session_graph)?,
-        workflow_graph_has_embedding_node(&session_graph),
-        workflow_graph_has_llamacpp_inference_node(&session_graph),
+    let runtime = super::headless_workflow_commands::build_runtime(
+        &app,
+        gateway.inner(),
+        runtime_registry.inner(),
+        extensions.inner(),
+        workflow_service.inner(),
+        Some(rag_manager.inner()),
     )
     .await?;
-
-    let core = Arc::new(
-        node_engine::CoreTaskExecutor::new()
-            .with_project_root(project_root)
-            .with_gateway(gateway.inner_arc())
-            .with_event_sink(event_adapter.clone() as Arc<dyn EventSink>)
-            .with_execution_id(session_id.clone()),
-    );
-    let host = Arc::new(TauriTaskExecutor::new(rag_manager.inner().clone()));
-    let task_executor = node_engine::CompositeTaskExecutor::new(
-        Some(host as Arc<dyn node_engine::TaskExecutor>),
-        core,
-    );
-
-    let terminal_nodes: Vec<String> = session_graph
-        .nodes
-        .iter()
-        .filter(|node| !session_graph.edges.iter().any(|e| e.source == node.id))
-        .map(|node| node.id.clone())
-        .collect();
-
-    let mut executor = node_engine::WorkflowExecutor::new(
-        &session_id,
-        convert_graph_to_node_engine(&session_graph),
-        event_adapter.clone(),
-    );
-    apply_runtime_extensions_for_execution(
-        &mut executor,
-        &runtime_ext,
-        Some(event_adapter.clone() as Arc<dyn EventSink>),
-        Some(session_id.clone()),
-        Some(python_runtime_execution_recorder.clone()),
-    );
-    executor.set_event_sink(event_adapter.clone());
-    sync_embedding_emit_metadata_flags(&mut executor)
+    let outcome = runtime
+        .execute_edit_session_graph(
+            &session_id,
+            &session_graph,
+            build_resolved_embedding_request(
+                None,
+                None,
+                &device,
+                Some("nomic-embed-text".to_string()),
+            ),
+            event_adapter.clone() as Arc<dyn EventSink>,
+        )
         .await
         .map_err(|error| error.to_string())?;
-
-    workflow_service
-        .workflow_graph_mark_edit_session_running(&session_id)
-        .await
-        .map_err(|error| error.to_envelope_json())?;
-
-    let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowStarted {
-        workflow_id: session_id.clone(),
-        execution_id: session_id.clone(),
-    });
-
-    let mut workflow_result: Result<(), String> = Ok(());
-    for node_id in &terminal_nodes {
-        match executor.demand(node_id, &task_executor).await {
-            Ok(_outputs) => {
-                log::debug!("Demanded outputs from node: {}", node_id);
-            }
-            Err(e) => {
-                log::error!("Error demanding from node {}: {}", node_id, e);
-                workflow_result = Err(e.to_string());
-                break;
-            }
-        }
-    }
-
-    workflow_service
-        .workflow_graph_mark_edit_session_finished(&session_id)
-        .await
-        .map_err(|error| error.to_envelope_json())?;
-
-    if workflow_result.is_ok() {
-        let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowCompleted {
-            workflow_id: session_id.clone(),
-            execution_id: session_id.clone(),
-        });
-    } else if let Err(error) = &workflow_result {
-        let _ = event_adapter.send(node_engine::WorkflowEvent::WorkflowFailed {
-            workflow_id: session_id.clone(),
-            execution_id: session_id.clone(),
-            error: error.clone(),
-        });
-    }
-
-    let execution_mode_info = gateway.mode_info().await;
-    let recorded_python_runtime = python_runtime_execution_recorder.snapshot();
-    let execution_runtime_snapshot = if let Some(metadata) = recorded_python_runtime.as_ref() {
-        metadata.snapshot.clone()
-    } else {
-        gateway.runtime_lifecycle_snapshot().await
-    };
-    let execution_runtime_model_target = recorded_python_runtime
-        .and_then(|metadata| metadata.model_target)
-        .or_else(|| {
-            resolve_runtime_model_target(&execution_mode_info, &execution_runtime_snapshot)
-        });
-    if let Err(error) = gateway
-        .inner()
-        .restore_inference_runtime(restore_config)
-        .await
-    {
-        log::warn!(
-            "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
-            error
-        );
-    }
     emit_diagnostics_snapshots(
         &app,
         &session_id,
@@ -361,11 +252,14 @@ async fn run_session_graph_snapshot(
         workflow_service.inner(),
         diagnostics_store.inner(),
         &diagnostics_channel,
-        Some(execution_runtime_snapshot),
-        execution_runtime_model_target,
+        Some(outcome.runtime_snapshot),
+        outcome.runtime_model_target,
     )
     .await;
-    workflow_result
+    if let Some(error) = outcome.error {
+        return Err(error);
+    }
+    Ok(())
 }
 
 pub async fn execute_workflow_v2(

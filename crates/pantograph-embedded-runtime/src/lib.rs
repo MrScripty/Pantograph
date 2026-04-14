@@ -18,15 +18,16 @@ use pantograph_runtime_registry::{
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
-    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
-    FileSystemWorkflowGraphStore, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowFile,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
-    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    convert_graph_to_node_engine, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, FileSystemWorkflowGraphStore, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowFile, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
@@ -220,6 +221,13 @@ pub struct EmbeddedRuntime {
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EditSessionGraphExecutionOutcome {
+    pub runtime_snapshot: inference::RuntimeLifecycleSnapshot,
+    pub runtime_model_target: Option<String>,
+    pub error: Option<String>,
 }
 
 impl EmbeddedRuntime {
@@ -515,6 +523,142 @@ impl EmbeddedRuntime {
         self.workflow_service
             .workflow_graph_close_edit_session(request)
             .await
+    }
+
+    pub async fn execute_edit_session_graph(
+        &self,
+        session_id: &str,
+        session_graph: &pantograph_workflow_service::WorkflowGraph,
+        embedding_request: inference::EmbeddingStartRequest,
+        event_sink: Arc<dyn EventSink>,
+    ) -> Result<EditSessionGraphExecutionOutcome, String> {
+        let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
+        let restore_config = embedding_workflow::prepare_embedding_runtime_for_workflow(
+            self.gateway.as_ref(),
+            runtime_ext.pumas_api.as_deref(),
+            embedding_request,
+            embedding_workflow::resolve_embedding_model_id_from_workflow_graph(session_graph)?,
+            embedding_workflow::workflow_graph_has_embedding_node(session_graph),
+            embedding_workflow::workflow_graph_has_llamacpp_inference_node(session_graph),
+        )
+        .await?;
+
+        let core = Arc::new(
+            CoreTaskExecutor::new()
+                .with_project_root(self.config.project_root.clone())
+                .with_gateway(self.gateway.clone())
+                .with_event_sink(event_sink.clone())
+                .with_execution_id(session_id.to_string()),
+        );
+        let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
+            self.rag_backend.clone(),
+            self.python_runtime.clone(),
+        ));
+        let task_executor = node_engine::CompositeTaskExecutor::new(
+            Some(host as Arc<dyn node_engine::TaskExecutor>),
+            core,
+        );
+
+        let terminal_nodes: Vec<String> = session_graph
+            .nodes
+            .iter()
+            .filter(|node| {
+                !session_graph
+                    .edges
+                    .iter()
+                    .any(|edge| edge.source == node.id)
+            })
+            .map(|node| node.id.clone())
+            .collect();
+
+        let python_runtime_execution_recorder =
+            Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
+        let mut executor = WorkflowExecutor::new(
+            session_id,
+            convert_graph_to_node_engine(session_graph),
+            event_sink.clone(),
+        );
+        apply_runtime_extensions_for_execution(
+            &mut executor,
+            &runtime_ext,
+            Some(event_sink.clone()),
+            Some(session_id.to_string()),
+            Some(python_runtime_execution_recorder.clone()),
+        );
+        executor.set_event_sink(event_sink.clone());
+        workflow_runtime::sync_embedding_emit_metadata_flags(&mut executor)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        self.workflow_service
+            .workflow_graph_mark_edit_session_running(session_id)
+            .await
+            .map_err(|error| error.to_envelope_json())?;
+
+        let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowStarted {
+            workflow_id: session_id.to_string(),
+            execution_id: session_id.to_string(),
+        });
+
+        let mut workflow_result: Result<(), String> = Ok(());
+        for node_id in &terminal_nodes {
+            match executor.demand(node_id, &task_executor).await {
+                Ok(_outputs) => {
+                    log::debug!("Demanded outputs from node: {}", node_id);
+                }
+                Err(error) => {
+                    log::error!("Error demanding from node {}: {}", node_id, error);
+                    workflow_result = Err(error.to_string());
+                    break;
+                }
+            }
+        }
+
+        self.workflow_service
+            .workflow_graph_mark_edit_session_finished(session_id)
+            .await
+            .map_err(|error| error.to_envelope_json())?;
+
+        if workflow_result.is_ok() {
+            let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowCompleted {
+                workflow_id: session_id.to_string(),
+                execution_id: session_id.to_string(),
+            });
+        } else if let Err(error) = &workflow_result {
+            let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowFailed {
+                workflow_id: session_id.to_string(),
+                execution_id: session_id.to_string(),
+                error: error.clone(),
+            });
+        }
+
+        let execution_mode_info = self.gateway.mode_info().await;
+        let recorded_python_runtime = python_runtime_execution_recorder.snapshot();
+        let runtime_snapshot = if let Some(metadata) = recorded_python_runtime.as_ref() {
+            metadata.snapshot.clone()
+        } else {
+            self.gateway.runtime_lifecycle_snapshot().await
+        };
+        let runtime_model_target = recorded_python_runtime
+            .and_then(|metadata| metadata.model_target)
+            .or_else(|| {
+                workflow_runtime::resolve_runtime_model_target(
+                    &execution_mode_info,
+                    &runtime_snapshot,
+                )
+            });
+        if let Err(error) = self.gateway.restore_inference_runtime(restore_config).await {
+            log::warn!(
+                "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
+                error
+            );
+        }
+
+        Ok(EditSessionGraphExecutionOutcome {
+            runtime_snapshot,
+            runtime_model_target,
+            error: workflow_result.err(),
+        })
     }
 
     pub async fn workflow_graph_get_edit_session_graph(
