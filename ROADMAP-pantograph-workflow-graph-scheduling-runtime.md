@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-13
+Last updated: 2026-04-14
 
 ## Current Implementation Snapshot
 
@@ -34,6 +34,9 @@ implementation progress in the runtime and diagnostics layers.
   backend-owned workflow capability contracts.
 - External/managed runtime capability reporting is materially more consistent
   than it was at roadmap creation time.
+- RAG embedding-mode indexing transitions now also refresh the shared runtime
+  registry on prepare and restore paths, reducing drift between real producer
+  state and registry-backed diagnostics or eviction policy.
 
 ### Active implementation stream
 

@@ -3,7 +3,7 @@
 ## Status
 Active
 
-Last updated: 2026-04-13
+Last updated: 2026-04-14
 
 ## Current Source-of-Truth Summary
 
@@ -494,6 +494,10 @@ runtime callers.
 - 2026-04-13: Reclaim sequencing is now a backend-owned runtime-registry
   contract, so embedded-runtime no longer derives producer-stop versus
   registry-only-stop behavior from raw retention/status facts locally.
+- 2026-04-14: The RAG embedding indexing command now refreshes the shared
+  runtime registry after embedding-mode preparation and restore transitions, so
+  another real host-driven producer path no longer bypasses Milestone 3
+  registry convergence.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
