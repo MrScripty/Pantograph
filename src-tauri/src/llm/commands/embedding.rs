@@ -3,7 +3,7 @@
 use super::shared::SharedAppConfig;
 use crate::config::EmbeddingMemoryMode;
 use crate::llm::gateway::SharedGateway;
-use tauri::{AppHandle, Manager, State, command};
+use tauri::{command, AppHandle, Manager, State};
 
 async fn embedding_runtime_lifecycle_snapshot(
     gateway: &SharedGateway,
@@ -141,7 +141,7 @@ mod tests {
             warmup_completed_at_ms: Some(110),
             warmup_duration_ms: Some(10),
             runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
         });
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(snapshot.runtime_reused, Some(true));
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
-            Some("reused_embedding_runtime")
+            Some("runtime_reused")
         );
     }
 

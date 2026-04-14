@@ -13,10 +13,10 @@ use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use pantograph_workflow_service::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState,
-    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
+    ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
+    InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint, Position,
+    UndoRedoState, WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
@@ -24,9 +24,9 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
+    WorkflowTraceRuntimeMetrics,
 };
-use tauri::{AppHandle, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, State};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -873,7 +873,7 @@ mod tests {
             warmup_completed_at_ms: Some(110),
             warmup_duration_ms: Some(10),
             runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
         };
@@ -909,7 +909,7 @@ mod tests {
         assert_eq!(metrics.model_target.as_deref(), Some("/models/embed.gguf"));
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
-            Some("reused_embedding_runtime")
+            Some("runtime_reused")
         );
     }
 
@@ -935,7 +935,7 @@ mod tests {
             warmup_completed_at_ms: None,
             warmup_duration_ms: None,
             runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
             active: true,
             last_error: None,
         };

@@ -1114,7 +1114,7 @@ mod tests {
                 warmup_completed_at_ms: Some(20),
                 warmup_duration_ms: Some(10),
                 runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("started_embedding_runtime".to_string()),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
                 active: true,
                 last_error: None,
             },
@@ -1269,10 +1269,8 @@ mod tests {
         .expect_err("blank execution id should be rejected");
 
         assert!(error.contains("\"code\":\"invalid_request\""));
-        assert!(
-            error
-                .contains("workflow trace snapshot request field 'execution_id' must not be blank")
-        );
+        assert!(error
+            .contains("workflow trace snapshot request field 'execution_id' must not be blank"));
     }
 
     #[test]
@@ -1361,7 +1359,7 @@ mod tests {
                 warmup_completed_at_ms: Some(99),
                 warmup_duration_ms: Some(9),
                 runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
             },
             Some("llava:34b".to_string()),
             Some("/models/embed.gguf".to_string()),
@@ -1380,7 +1378,7 @@ mod tests {
         assert_eq!(metrics.runtime_reused, Some(true));
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
-            Some("reused_embedding_runtime")
+            Some("runtime_reused")
         );
     }
 

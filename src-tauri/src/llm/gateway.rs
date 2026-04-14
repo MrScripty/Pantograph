@@ -380,7 +380,7 @@ mod tests {
             warmup_completed_at_ms: Some(25),
             warmup_duration_ms: Some(15),
             runtime_reused: Some(false),
-            lifecycle_decision_reason: Some("started_embedding_runtime".to_string()),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
         });

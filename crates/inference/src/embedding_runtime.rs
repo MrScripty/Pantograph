@@ -7,10 +7,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::RuntimeLifecycleSnapshot;
 use crate::config::{DeviceConfig, DeviceInfo, EmbeddingMemoryMode};
 use crate::constants::{device_types, hosts};
 use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use crate::RuntimeLifecycleSnapshot;
 
 /// Default port for the embedding server (separate from main LLM on 8080)
 const EMBEDDING_SERVER_PORT: u16 = 8081;
@@ -291,10 +291,9 @@ impl LlamaCppEmbeddingRuntime {
     /// Mark the current embedding runtime as reused by a later request.
     pub fn mark_runtime_reused(&mut self) {
         self.runtime_lifecycle.runtime_reused = Some(true);
-        self.runtime_lifecycle.lifecycle_decision_reason =
-            Some("reused_embedding_runtime".to_string());
         self.runtime_lifecycle.active = self.is_ready();
         self.runtime_lifecycle.last_error = None;
+        self.refresh_lifecycle_decision_reason();
     }
 
     #[doc(hidden)]
@@ -336,6 +335,7 @@ impl LlamaCppEmbeddingRuntime {
         self.runtime_lifecycle.lifecycle_decision_reason = None;
         self.runtime_lifecycle.active = false;
         self.runtime_lifecycle.last_error = None;
+        self.refresh_lifecycle_decision_reason();
     }
 
     fn mark_start_success(&mut self, warmup_started_at_ms: u64) {
@@ -351,10 +351,9 @@ impl LlamaCppEmbeddingRuntime {
         self.runtime_lifecycle.warmup_duration_ms =
             Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
         self.runtime_lifecycle.runtime_reused = Some(false);
-        self.runtime_lifecycle.lifecycle_decision_reason =
-            Some("started_embedding_runtime".to_string());
         self.runtime_lifecycle.active = true;
         self.runtime_lifecycle.last_error = None;
+        self.refresh_lifecycle_decision_reason();
     }
 
     fn mark_start_failure(&mut self, warmup_started_at_ms: u64, error: String) {
@@ -365,10 +364,15 @@ impl LlamaCppEmbeddingRuntime {
         self.runtime_lifecycle.warmup_duration_ms =
             Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
         self.runtime_lifecycle.runtime_reused = Some(false);
-        self.runtime_lifecycle.lifecycle_decision_reason =
-            Some("embedding_runtime_start_failed".to_string());
         self.runtime_lifecycle.active = false;
         self.runtime_lifecycle.last_error = Some(error);
+        self.refresh_lifecycle_decision_reason();
+    }
+
+    fn refresh_lifecycle_decision_reason(&mut self) {
+        self.runtime_lifecycle.lifecycle_decision_reason = self
+            .runtime_lifecycle
+            .normalized_lifecycle_decision_reason();
     }
 }
 
@@ -454,7 +458,7 @@ mod tests {
         assert_eq!(snapshot.runtime_reused, Some(false));
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
-            Some("started_embedding_runtime")
+            Some("runtime_ready")
         );
         assert!(snapshot.active);
         assert!(snapshot.last_error.is_none());
@@ -470,7 +474,7 @@ mod tests {
         assert_eq!(snapshot.runtime_reused, Some(false));
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
-            Some("embedding_runtime_start_failed")
+            Some("runtime_start_failed")
         );
         assert!(!snapshot.active);
         assert_eq!(snapshot.last_error.as_deref(), Some("boom"));

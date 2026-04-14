@@ -1329,7 +1329,7 @@ mod tests {
                 warmup_completed_at_ms: Some(4_850),
                 warmup_duration_ms: Some(50),
                 runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 active: true,
                 last_error: None,
             }),
@@ -1636,7 +1636,7 @@ mod tests {
                 warmup_completed_at_ms: Some(4_760),
                 warmup_duration_ms: Some(60),
                 runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 active: true,
                 last_error: None,
             }),
@@ -1772,8 +1772,8 @@ mod tests {
 
     #[test]
     fn inference_runtime_lifecycle_snapshot_from_diagnostics_infers_default_reason() {
-        let snapshot = inference::RuntimeLifecycleSnapshot::from(
-            &DiagnosticsRuntimeLifecycleSnapshot {
+        let snapshot =
+            inference::RuntimeLifecycleSnapshot::from(&DiagnosticsRuntimeLifecycleSnapshot {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: Some("runtime-1".to_string()),
                 warmup_started_at_ms: Some(10),
@@ -1783,8 +1783,7 @@ mod tests {
                 lifecycle_decision_reason: None,
                 active: true,
                 last_error: None,
-            },
-        );
+            });
 
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
@@ -1794,8 +1793,8 @@ mod tests {
 
     #[test]
     fn inference_runtime_lifecycle_snapshot_from_diagnostics_infers_start_failure_reason() {
-        let snapshot = inference::RuntimeLifecycleSnapshot::from(
-            &DiagnosticsRuntimeLifecycleSnapshot {
+        let snapshot =
+            inference::RuntimeLifecycleSnapshot::from(&DiagnosticsRuntimeLifecycleSnapshot {
                 runtime_id: Some("llama_cpp".to_string()),
                 runtime_instance_id: None,
                 warmup_started_at_ms: Some(10),
@@ -1805,8 +1804,7 @@ mod tests {
                 lifecycle_decision_reason: None,
                 active: false,
                 last_error: Some("failed".to_string()),
-            },
-        );
+            });
 
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),

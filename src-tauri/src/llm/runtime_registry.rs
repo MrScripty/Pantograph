@@ -8,7 +8,7 @@ use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeObservation, RuntimeRegistryRuntimeSnapshot, observed_runtime_status_from_lifecycle,
+    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistryRuntimeSnapshot,
 };
 
 pub use pantograph_runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
@@ -158,7 +158,7 @@ mod tests {
                     warmup_completed_at_ms: None,
                     warmup_duration_ms: None,
                     runtime_reused: Some(false),
-                    lifecycle_decision_reason: Some("started_embedding_runtime".to_string()),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
                     active: true,
                     last_error: None,
                 }),
