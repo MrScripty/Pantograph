@@ -468,9 +468,14 @@ runtime callers.
   Rust surfaces in workflow-service, embedded runtime, standalone runtime,
   UniFFI, and Tauri app config wiring without moving residency policy into the
   frontend or adapter layer.
+- 2026-04-13: `crates/pantograph-runtime-registry` now exposes a backend-owned
+  warmup disposition contract so hosts can ask whether a runtime should start,
+  reuse a loaded instance, or wait for an in-flight transition without
+  re-encoding registry status semantics locally.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
+- `cargo test -p pantograph-runtime-registry warmup_disposition -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
@@ -631,6 +636,9 @@ Update during implementation:
   behavior.
 - 2026-04-13: Milestone 3 eviction groundwork now includes deterministic
   backend-owned candidate ordering with reserved and pinned runtimes excluded.
+- 2026-04-13: Milestone 3 runtime policy now also includes a backend-owned
+  warmup start/reuse/wait disposition derived from registry status, reducing
+  another source of host-local lifecycle drift.
 
 ## Commit Cadence Notes
 

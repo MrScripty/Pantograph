@@ -4,6 +4,7 @@ mod reservation;
 mod retention;
 mod snapshot;
 mod state;
+mod warmup;
 
 use admission::RuntimeReservationClaim;
 use std::collections::{BTreeMap, BTreeSet};
@@ -26,6 +27,7 @@ use state::RuntimeTransition as Transition;
 pub use state::{
     RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
 };
+pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupReason};
 
 pub type SharedRuntimeRegistry = Arc<RuntimeRegistry>;
 
@@ -313,6 +315,17 @@ impl RuntimeRegistry {
         runtime_retention_disposition(runtime_id, &guard)
     }
 
+    pub fn warmup_disposition(
+        &self,
+        runtime_id: &str,
+    ) -> Result<RuntimeWarmupDisposition, RuntimeRegistryError> {
+        let guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        runtime_warmup_disposition(runtime_id, &guard)
+    }
+
     pub fn snapshot(&self) -> RuntimeRegistrySnapshot {
         let generated_at_ms = unix_timestamp_ms();
         let guard = self
@@ -577,6 +590,58 @@ fn runtime_retention_disposition(
         runtime_id,
         RuntimeRetentionReason::Status(record.status),
     ))
+}
+
+fn runtime_warmup_disposition(
+    runtime_id: &str,
+    state: &RuntimeRegistryState,
+) -> Result<RuntimeWarmupDisposition, RuntimeRegistryError> {
+    let runtime_id = canonical_runtime_id(runtime_id);
+    let record = state
+        .runtimes
+        .get(&runtime_id)
+        .ok_or_else(|| RuntimeRegistryError::RuntimeNotFound(runtime_id.clone()))?;
+
+    let disposition = match record.status {
+        RuntimeRegistryStatus::Stopped => RuntimeWarmupDisposition::start(
+            runtime_id,
+            RuntimeWarmupReason::NoLoadedInstance,
+            record.status,
+        ),
+        RuntimeRegistryStatus::Failed | RuntimeRegistryStatus::Unhealthy => {
+            RuntimeWarmupDisposition::start(
+                runtime_id,
+                RuntimeWarmupReason::RecoveryRequired,
+                record.status,
+            )
+        }
+        RuntimeRegistryStatus::Ready => RuntimeWarmupDisposition::reuse(
+            runtime_id,
+            RuntimeWarmupReason::LoadedInstanceReady,
+            record.status,
+            record.runtime_instance_id.clone(),
+        ),
+        RuntimeRegistryStatus::Busy => RuntimeWarmupDisposition::reuse(
+            runtime_id,
+            RuntimeWarmupReason::LoadedInstanceBusy,
+            record.status,
+            record.runtime_instance_id.clone(),
+        ),
+        RuntimeRegistryStatus::Warming => RuntimeWarmupDisposition::wait(
+            runtime_id,
+            RuntimeWarmupReason::WarmupInProgress,
+            record.status,
+            record.runtime_instance_id.clone(),
+        ),
+        RuntimeRegistryStatus::Stopping => RuntimeWarmupDisposition::wait(
+            runtime_id,
+            RuntimeWarmupReason::StopInProgress,
+            record.status,
+            record.runtime_instance_id.clone(),
+        ),
+    };
+
+    Ok(disposition)
 }
 
 fn release_reservation_locked(
@@ -1250,6 +1315,100 @@ mod tests {
             RuntimeRetentionDisposition::retain(
                 "busy",
                 RuntimeRetentionReason::Status(RuntimeRegistryStatus::Busy),
+            )
+        );
+    }
+
+    #[test]
+    fn warmup_disposition_starts_stopped_runtime() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("llama.cpp", "llama.cpp"));
+
+        assert_eq!(
+            registry
+                .warmup_disposition("llama.cpp")
+                .expect("warmup disposition"),
+            RuntimeWarmupDisposition::start(
+                "llama_cpp",
+                RuntimeWarmupReason::NoLoadedInstance,
+                RuntimeRegistryStatus::Stopped,
+            )
+        );
+    }
+
+    #[test]
+    fn warmup_disposition_reuses_ready_runtime_instance() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("ready", "Ready"));
+        registry
+            .transition_runtime(
+                "ready",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("ready-1".to_string()),
+                },
+            )
+            .expect("runtime should become ready");
+
+        assert_eq!(
+            registry
+                .warmup_disposition("ready")
+                .expect("warmup disposition"),
+            RuntimeWarmupDisposition::reuse(
+                "ready",
+                RuntimeWarmupReason::LoadedInstanceReady,
+                RuntimeRegistryStatus::Ready,
+                Some("ready-1".to_string()),
+            )
+        );
+    }
+
+    #[test]
+    fn warmup_disposition_waits_for_warming_runtime() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("warming", "Warming"));
+        registry
+            .transition_runtime(
+                "warming",
+                RuntimeTransition::WarmupStarted {
+                    runtime_instance_id: Some("warming-1".to_string()),
+                },
+            )
+            .expect("warmup should start");
+
+        assert_eq!(
+            registry
+                .warmup_disposition("warming")
+                .expect("warmup disposition"),
+            RuntimeWarmupDisposition::wait(
+                "warming",
+                RuntimeWarmupReason::WarmupInProgress,
+                RuntimeRegistryStatus::Warming,
+                Some("warming-1".to_string()),
+            )
+        );
+    }
+
+    #[test]
+    fn warmup_disposition_marks_failed_runtime_for_recovery() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("failed", "Failed"));
+        registry
+            .transition_runtime(
+                "failed",
+                RuntimeTransition::Failed {
+                    message: "boom".to_string(),
+                },
+            )
+            .expect("failure should be recorded");
+
+        assert_eq!(
+            registry
+                .warmup_disposition("failed")
+                .expect("warmup disposition"),
+            RuntimeWarmupDisposition::start(
+                "failed",
+                RuntimeWarmupReason::RecoveryRequired,
+                RuntimeRegistryStatus::Failed,
             )
         );
     }

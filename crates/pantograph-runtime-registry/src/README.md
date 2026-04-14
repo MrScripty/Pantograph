@@ -27,6 +27,8 @@ desktop app wiring.
   reservation release and runtime retention inspection paths.
 - `snapshot.rs`: deterministic machine-readable snapshot contracts for runtime
   state inspection.
+- `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
+  runtime registry status for host execution orchestration.
 
 ## Invariants
 - Runtime ids and backend keys are canonicalized at the registry boundary.
@@ -48,6 +50,9 @@ desktop app wiring.
 - Reservation-owner eviction ordering is also computed here so callers can
   reuse backend-owned runtime pressure decisions when choosing which loaded
   session reservation to release.
+- Warmup/reuse lifecycle classification is also computed here so callers can
+  decide whether to start, reuse, or wait without rebuilding status semantics
+  in host adapters.
 - Single-runtime observation updates are also supported here so adapters can
   reconcile producer-specific runtime snapshots without implicitly stopping
   unrelated runtimes that were observed through a different producer path.
@@ -82,5 +87,7 @@ desktop app wiring.
 - Hosts may also supply a reservation retention hint such as keep-alive intent,
   but this crate remains the owner of how that hint affects retention
   disposition and future eviction policy.
+- Hosts may ask for a warmup disposition after registration or observation, but
+  they must not re-encode runtime-status-to-start/reuse/wait rules locally.
 - New fields in public snapshot/lease structs should be additive unless a
   deliberate migration is recorded.
