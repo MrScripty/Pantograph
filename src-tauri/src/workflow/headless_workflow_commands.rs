@@ -663,7 +663,7 @@ pub async fn workflow_get_diagnostics_snapshot(
         metrics
     } else {
         let runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
-        let mode_info = gateway.mode_info().await;
+        let mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
         trace_runtime_metrics(
             &runtime_snapshot,
             resolve_runtime_model_target(&mode_info, &runtime_snapshot).as_deref(),

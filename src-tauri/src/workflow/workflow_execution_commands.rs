@@ -6,7 +6,9 @@ use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
-use pantograph_embedded_runtime::workflow_runtime::build_runtime_diagnostics_projection;
+use pantograph_embedded_runtime::{
+    workflow_runtime::build_runtime_diagnostics_projection, HostRuntimeModeSnapshot,
+};
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
@@ -98,7 +100,7 @@ async fn emit_diagnostics_snapshots(
     send_diagnostics_projection(channel, diagnostics_store, session_id);
 
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
-    let gateway_mode_info = gateway.mode_info().await;
+    let gateway_mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let diagnostics_projection = build_runtime_diagnostics_projection(
         runtime_snapshot_override.as_ref(),
         &gateway_snapshot,

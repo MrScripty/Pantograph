@@ -673,7 +673,8 @@ impl EmbeddedRuntime {
             });
         }
 
-        let execution_mode_info = self.gateway.mode_info().await;
+        let execution_mode_info =
+            HostRuntimeModeSnapshot::from_mode_info(&self.gateway.mode_info().await);
         let recorded_python_runtime = python_runtime_execution_recorder.snapshot();
         let runtime_snapshot = if let Some(metadata) = recorded_python_runtime.as_ref() {
             metadata.snapshot.clone()

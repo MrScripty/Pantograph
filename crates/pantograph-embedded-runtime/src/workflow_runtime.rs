@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::HostRuntimeModeSnapshot;
 use node_engine::{NodeEngineError, WorkflowExecutor};
 use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_workflow_service::WorkflowTraceRuntimeMetrics;
@@ -71,7 +72,7 @@ pub fn trace_runtime_metrics(
 }
 
 pub fn resolve_runtime_model_target(
-    mode_info: &inference::ServerModeInfo,
+    mode_info: &HostRuntimeModeSnapshot,
     snapshot: &inference::RuntimeLifecycleSnapshot,
 ) -> Option<String> {
     if snapshot
@@ -89,7 +90,7 @@ pub fn resolve_runtime_model_target(
 pub fn build_runtime_diagnostics_projection(
     runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
     gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
-    gateway_mode_info: &inference::ServerModeInfo,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
     runtime_model_target_override: Option<&str>,
 ) -> RuntimeDiagnosticsProjection {
     let active_runtime_snapshot = runtime_snapshot_override
@@ -116,6 +117,8 @@ pub fn build_runtime_diagnostics_projection(
 
 #[cfg(test)]
 mod tests {
+    use crate::HostRuntimeModeSnapshot;
+
     use super::{
         build_runtime_diagnostics_projection, resolve_runtime_model_target, trace_runtime_metrics,
     };
@@ -167,14 +170,9 @@ mod tests {
 
     #[test]
     fn resolve_runtime_model_target_prefers_embedding_target_for_embedding_alias() {
-        let mode_info = inference::ServerModeInfo {
+        let mode_info = HostRuntimeModeSnapshot {
             backend_name: Some("llama.cpp".to_string()),
             backend_key: Some("llama_cpp".to_string()),
-            mode: "sidecar_inference".to_string(),
-            ready: true,
-            url: None,
-            model_path: None,
-            is_embedding_mode: false,
             active_model_target: Some("/models/main.gguf".to_string()),
             embedding_model_target: Some("/models/embed.gguf".to_string()),
             active_runtime: None,
@@ -222,14 +220,9 @@ mod tests {
             active: true,
             last_error: None,
         };
-        let mode_info = inference::ServerModeInfo {
+        let mode_info = HostRuntimeModeSnapshot {
             backend_name: Some("llama.cpp".to_string()),
             backend_key: Some("llama_cpp".to_string()),
-            mode: "sidecar_inference".to_string(),
-            ready: true,
-            url: None,
-            model_path: None,
-            is_embedding_mode: false,
             active_model_target: Some("/models/restore.gguf".to_string()),
             embedding_model_target: Some("/models/embed.gguf".to_string()),
             active_runtime: None,
