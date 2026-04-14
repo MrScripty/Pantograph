@@ -39,6 +39,9 @@ desktop app wiring.
 - Post-release retention disposition is computed here so callers can observe a
   backend-owned keep-alive or evictable decision without rebuilding policy from
   raw reservation state.
+- Idempotent reservation-release helpers are provided here so overlapping
+  cleanup paths can stay concurrency-safe without inventing adapter-local
+  suppression rules.
 - Deterministic eviction-candidate ordering is also computed here so higher
   layers can ask the registry for backend-owned pressure decisions rather than
   sorting runtimes ad hoc.

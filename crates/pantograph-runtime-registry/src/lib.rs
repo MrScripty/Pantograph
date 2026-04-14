@@ -252,6 +252,17 @@ impl RuntimeRegistry {
             .map(|_| ())
     }
 
+    pub fn release_reservation_if_present(
+        &self,
+        reservation_id: u64,
+    ) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
+        let mut guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        release_reservation_locked(&mut guard, reservation_id)
+    }
+
     pub fn release_reservation_with_disposition(
         &self,
         reservation_id: u64,
@@ -260,16 +271,8 @@ impl RuntimeRegistry {
             .state
             .lock()
             .expect("runtime registry state lock poisoned");
-        let reservation = guard
-            .reservations
-            .remove(&reservation_id)
-            .ok_or(RuntimeRegistryError::ReservationNotFound(reservation_id))?;
-
-        if let Some(runtime) = guard.runtimes.get_mut(&reservation.runtime_id) {
-            runtime.active_reservations.remove(&reservation_id);
-        }
-
-        runtime_retention_disposition(&reservation.runtime_id, &guard)
+        release_reservation_locked(&mut guard, reservation_id)?
+            .ok_or(RuntimeRegistryError::ReservationNotFound(reservation_id))
     }
 
     pub fn retention_disposition(
@@ -467,6 +470,21 @@ fn runtime_retention_disposition(
         runtime_id,
         RuntimeRetentionReason::Status(record.status),
     ))
+}
+
+fn release_reservation_locked(
+    state: &mut RuntimeRegistryState,
+    reservation_id: u64,
+) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
+    let Some(reservation) = state.reservations.remove(&reservation_id) else {
+        return Ok(None);
+    };
+
+    if let Some(runtime) = state.runtimes.get_mut(&reservation.runtime_id) {
+        runtime.active_reservations.remove(&reservation_id);
+    }
+
+    runtime_retention_disposition(&reservation.runtime_id, state).map(Some)
 }
 
 fn eviction_status_rank(status: RuntimeRegistryStatus) -> u8 {
@@ -1052,6 +1070,45 @@ mod tests {
                 "busy",
                 RuntimeRetentionReason::Status(RuntimeRegistryStatus::Busy),
             )
+        );
+    }
+
+    #[test]
+    fn release_reservation_if_present_is_idempotent() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![RuntimeObservation {
+            runtime_id: "idempotent-runtime".to_string(),
+            display_name: "idempotent-runtime".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("idempotent-runtime-1".to_string()),
+            last_error: None,
+        }]);
+
+        let lease = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "idempotent-runtime".to_string(),
+                workflow_id: "wf-idempotent".to_string(),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("reservation");
+
+        assert_eq!(
+            registry
+                .release_reservation_if_present(lease.reservation_id)
+                .expect("first release"),
+            Some(RuntimeRetentionDisposition::evict("idempotent-runtime"))
+        );
+        assert_eq!(
+            registry
+                .release_reservation_if_present(lease.reservation_id)
+                .expect("second release"),
+            None
         );
     }
 

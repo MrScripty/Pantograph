@@ -449,6 +449,9 @@ runtime callers.
   backend-owned retention disposition, including keep-alive-backed retention
   reasons for shared runtimes, so adapters do not need to infer policy from raw
   reservation state.
+- 2026-04-13: The registry now also exposes an idempotent reservation-release
+  path so overlapping cleanup or retry flows can remain concurrency-safe
+  without adapter-local duplicate-release suppression logic.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
