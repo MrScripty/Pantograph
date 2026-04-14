@@ -441,16 +441,11 @@ impl InferenceGateway {
                 lifecycle.warmup_duration_ms =
                     Some(warmup_completed_at_ms.saturating_sub(warmup_started_at_ms));
                 lifecycle.runtime_reused = Some(runtime_reused);
-                lifecycle.lifecycle_decision_reason =
-                    Some(start_outcome.lifecycle_decision_reason.unwrap_or_else(|| {
-                        if runtime_reused {
-                            "runtime_reused".to_string()
-                        } else {
-                            "runtime_ready".to_string()
-                        }
-                    }));
                 lifecycle.active = true;
                 lifecycle.last_error = None;
+                lifecycle.lifecycle_decision_reason = start_outcome.lifecycle_decision_reason;
+                lifecycle.lifecycle_decision_reason =
+                    lifecycle.normalized_lifecycle_decision_reason();
                 Ok(())
             }
             Err(error) => {
@@ -462,8 +457,9 @@ impl InferenceGateway {
                 lifecycle.warmup_duration_ms =
                     Some(completed_at_ms.saturating_sub(warmup_started_at_ms));
                 lifecycle.active = false;
-                lifecycle.lifecycle_decision_reason = Some("runtime_start_failed".to_string());
                 lifecycle.last_error = Some(error.to_string());
+                lifecycle.lifecycle_decision_reason =
+                    lifecycle.normalized_lifecycle_decision_reason();
                 Err(GatewayError::Backend(error))
             }
         }
@@ -698,6 +694,8 @@ mod tests {
 
     struct MockImageBackend;
     struct MockReusedBackend;
+    struct MockImplicitLifecycleBackend;
+    struct MockFailingBackend;
 
     struct MockProcessHandle;
 
@@ -855,6 +853,129 @@ mod tests {
 
         async fn health_check(&self) -> bool {
             true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl InferenceBackend for MockImplicitLifecycleBackend {
+        fn name(&self) -> &'static str {
+            "MockImplicitLifecycle"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock backend without explicit lifecycle reasons"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: None,
+            })
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl InferenceBackend for MockFailingBackend {
+        fn name(&self) -> &'static str {
+            "MockFailing"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock backend that fails to start"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Err(BackendError::StartupFailed("mock start failure".to_string()))
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            false
+        }
+
+        async fn health_check(&self) -> bool {
+            false
         }
 
         fn base_url(&self) -> Option<String> {
@@ -1050,6 +1171,45 @@ mod tests {
         assert_eq!(
             second.lifecycle_decision_reason.as_deref(),
             Some("reused_mock_runtime")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_lifecycle_snapshot_normalizes_missing_start_reason() {
+        let gateway =
+            InferenceGateway::with_backend(Box::new(MockImplicitLifecycleBackend), "mock");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let snapshot = gateway.runtime_lifecycle_snapshot().await;
+        assert_eq!(snapshot.runtime_reused, Some(false));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_ready")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_lifecycle_snapshot_normalizes_start_failure_reason() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockFailingBackend), "mock");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        let error = gateway.start(&BackendConfig::default()).await;
+        assert!(error.is_err());
+
+        let snapshot = gateway.runtime_lifecycle_snapshot().await;
+        assert_eq!(snapshot.runtime_reused, None);
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_start_failed")
+        );
+        assert_eq!(
+            snapshot.last_error.as_deref(),
+            Some("Startup failed: mock start failure")
         );
     }
 

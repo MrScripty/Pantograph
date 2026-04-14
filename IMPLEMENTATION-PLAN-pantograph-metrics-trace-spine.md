@@ -566,6 +566,10 @@ Update during implementation:
   `src-tauri/src/workflow/diagnostics.rs` so diagnostics runtime snapshots now
   consume backend-owned lifecycle decision-reason normalization instead of
   cloning potentially incomplete adapter input
+- Fortieth implementation slice added in
+  `crates/inference/src/gateway.rs` so inference-gateway lifecycle snapshots
+  now derive default start-success and start-failure reasons from the
+  backend-owned snapshot contract instead of reconstructing them inline
 
 ### Deviations
 
