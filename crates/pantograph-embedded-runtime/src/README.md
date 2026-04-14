@@ -17,6 +17,7 @@ packages.
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
+| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations. |
 
 ## Problem
@@ -82,6 +83,8 @@ embedded-runtime crate.
 - Any registry interaction from this crate must remain a narrow translation of
   session lifecycle into explicit registry operations, not an alternate policy
   engine.
+- Producer-specific runtime capability mapping must stay in backend Rust so
+  adapters do not drift on runtime ids, install state, or backend-key aliases.
 - Gateway and producer observation mapping for the shared runtime registry must
   stay in backend Rust so adapters do not drift on runtime-id, backend-key, or
   lifecycle-status translation.

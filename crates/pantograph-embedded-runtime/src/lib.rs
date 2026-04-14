@@ -50,6 +50,7 @@ use uuid::Uuid;
 pub mod model_dependencies;
 pub mod python_runtime;
 pub mod rag;
+pub mod runtime_capabilities;
 pub mod runtime_registry;
 pub mod task_executor;
 

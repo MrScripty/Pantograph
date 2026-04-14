@@ -10,7 +10,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
-use crate::llm::runtime_registry::reconcile_runtime_registry_mode_info;
+use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
 /// Health check result
@@ -352,8 +352,7 @@ async fn sync_runtime_registry(app: &AppHandle, gateway: &SharedGateway) {
         return;
     };
 
-    let mode_info = gateway.mode_info().await;
-    reconcile_runtime_registry_mode_info(runtime_registry.as_ref(), &mode_info);
+    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
 }
 
 impl Default for HealthMonitor {

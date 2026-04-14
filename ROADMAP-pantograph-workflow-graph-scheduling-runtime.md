@@ -304,6 +304,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   runtime registry now lives in `crates/pantograph-embedded-runtime`, leaving
   the Tauri registry module as a thin re-export of backend-owned producer
   mapping logic.
+- Dedicated embedding runtime capability mapping now lives in
+  `crates/pantograph-embedded-runtime`, leaving the Tauri headless workflow
+  adapter as a consumer of backend-owned runtime capability helpers.
 
 **Still missing:**
 

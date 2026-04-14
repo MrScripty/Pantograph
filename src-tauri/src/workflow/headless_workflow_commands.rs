@@ -8,14 +8,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_embedded_runtime::{
-    EmbeddedRuntime, EmbeddedRuntimeConfig, RagBackend, RagDocument,
+    runtime_capabilities::dedicated_embedding_runtime_capabilities, EmbeddedRuntime,
+    EmbeddedRuntimeConfig, RagBackend, RagDocument,
 };
-use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_id};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
     WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
     WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
     WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
@@ -28,7 +27,7 @@ use pantograph_workflow_service::{
 use tauri::{AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
-use crate::llm::runtime_registry::reconcile_runtime_registry_mode_info;
+use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::project_root::resolve_project_root;
 
@@ -72,34 +71,6 @@ impl RagBackend for TauriRagBackend {
     }
 }
 
-fn embedding_runtime_capabilities_from_snapshot(
-    snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-) -> Vec<WorkflowRuntimeCapability> {
-    let Some(snapshot) = snapshot else {
-        return Vec::new();
-    };
-
-    vec![WorkflowRuntimeCapability {
-        runtime_id: snapshot
-            .runtime_id
-            .as_deref()
-            .map(canonical_runtime_id)
-            .unwrap_or_else(|| "llama.cpp.embedding".to_string()),
-        display_name: "Dedicated embedding runtime".to_string(),
-        install_state: WorkflowRuntimeInstallState::Installed,
-        available: snapshot.active,
-        configured: snapshot.active,
-        can_install: false,
-        can_remove: false,
-        source_kind: WorkflowRuntimeSourceKind::Host,
-        selected: false,
-        supports_external_connection: false,
-        backend_keys: backend_key_aliases("llama.cpp", "llama_cpp"),
-        missing_files: Vec::new(),
-        unavailable_reason: snapshot.last_error,
-    }]
-}
-
 pub(super) async fn build_runtime(
     app: &AppHandle,
     gateway: &SharedGateway,
@@ -108,9 +79,9 @@ pub(super) async fn build_runtime(
     workflow_service: &SharedWorkflowService,
     rag_manager: Option<&SharedRagManager>,
 ) -> Result<EmbeddedRuntime, String> {
-    sync_runtime_registry_from_gateway(gateway, runtime_registry).await;
+    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
     let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
-    let additional_runtime_capabilities = embedding_runtime_capabilities_from_snapshot(
+    let additional_runtime_capabilities = dedicated_embedding_runtime_capabilities(
         gateway.embedding_runtime_lifecycle_snapshot().await,
     );
     let rag_backend = rag_manager.cloned().map(|manager| {
@@ -127,14 +98,6 @@ pub(super) async fn build_runtime(
     )
     .with_runtime_registry(runtime_registry.clone())
     .with_additional_runtime_capabilities(additional_runtime_capabilities))
-}
-
-async fn sync_runtime_registry_from_gateway(
-    gateway: &SharedGateway,
-    runtime_registry: &SharedRuntimeRegistry,
-) {
-    let mode_info = gateway.mode_info().await;
-    reconcile_runtime_registry_mode_info(runtime_registry.as_ref(), &mode_info);
 }
 
 fn record_headless_scheduler_snapshot(
@@ -767,8 +730,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        embedding_runtime_capabilities_from_snapshot, record_headless_runtime_snapshot,
-        record_headless_scheduler_snapshot, stored_runtime_snapshots, stored_runtime_trace_metrics,
+        record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
+        stored_runtime_snapshots, stored_runtime_trace_metrics,
         workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
         workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
     };
@@ -780,10 +743,10 @@ mod tests {
     use pantograph_workflow_service::{
         WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowGraph,
         WorkflowGraphEditSessionCreateRequest, WorkflowRuntimeRequirements,
-        WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotRequest,
-        WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
-        WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
-        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+        WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
+        WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+        WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+        WorkflowTraceSnapshotRequest,
     };
 
     fn running_session_summary() -> WorkflowSessionSummary {
@@ -1102,39 +1065,6 @@ mod tests {
                 "workflow_name": "Workflow 1"
             })
         );
-    }
-
-    #[test]
-    fn embedding_runtime_capability_helper_reports_dedicated_runtime() {
-        let capabilities = embedding_runtime_capabilities_from_snapshot(Some(
-            inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("llama.cpp.embedding".to_string()),
-                runtime_instance_id: Some("llama-cpp-embedding-9".to_string()),
-                warmup_started_at_ms: Some(10),
-                warmup_completed_at_ms: Some(20),
-                warmup_duration_ms: Some(10),
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
-                active: true,
-                last_error: None,
-            },
-        ));
-
-        assert_eq!(capabilities.len(), 1);
-        let capability = &capabilities[0];
-        assert_eq!(capability.runtime_id, "llama.cpp.embedding");
-        assert_eq!(capability.display_name, "Dedicated embedding runtime");
-        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Host);
-        assert!(capability.available);
-        assert!(capability.configured);
-        assert!(!capability.selected);
-        assert!(capability.backend_keys.contains(&"llama_cpp".to_string()));
-        assert!(capability.backend_keys.contains(&"llamacpp".to_string()));
-    }
-
-    #[test]
-    fn embedding_runtime_capability_helper_omits_missing_snapshot() {
-        assert!(embedding_runtime_capabilities_from_snapshot(None).is_empty());
     }
 
     #[tokio::test]
