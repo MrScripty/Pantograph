@@ -523,6 +523,16 @@ pub enum WorkflowSessionUnloadReason {
     SessionClosed,
 }
 
+/// Idle session runtime candidate that may be unloaded under capacity pressure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSessionRuntimeUnloadCandidate {
+    pub session_id: String,
+    pub workflow_id: String,
+    pub keep_alive: bool,
+    pub access_tick: u64,
+    pub run_count: u64,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowErrorCode {
@@ -842,6 +852,18 @@ pub trait WorkflowHost: Send + Sync {
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
+
+    async fn select_runtime_unload_candidate(
+        &self,
+        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+    ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
+        Ok(candidates.iter().cloned().min_by(|left, right| {
+            left.access_tick
+                .cmp(&right.access_tick)
+                .then_with(|| left.run_count.cmp(&right.run_count))
+                .then_with(|| left.session_id.cmp(&right.session_id))
+        }))
+    }
 }
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
@@ -925,11 +947,12 @@ struct WorkflowSessionStore {
 }
 
 impl WorkflowSessionStore {
-    fn new(max_sessions: usize) -> Self {
+    fn new(max_sessions: usize, max_loaded_sessions: usize) -> Self {
         let max_sessions = max_sessions.max(1);
+        let max_loaded_sessions = max_loaded_sessions.max(1).min(max_sessions);
         Self {
             max_sessions,
-            max_loaded_sessions: max_sessions,
+            max_loaded_sessions,
             tick: 0,
             active: HashMap::new(),
         }
@@ -976,7 +999,10 @@ impl WorkflowSessionStore {
             .count()
     }
 
-    fn pick_runtime_unload_candidate(&self, exclude_session_id: &str) -> Option<(String, String)> {
+    fn runtime_unload_candidates(
+        &self,
+        exclude_session_id: &str,
+    ) -> Vec<WorkflowSessionRuntimeUnloadCandidate> {
         self.active
             .iter()
             .filter(|(session_id, state)| {
@@ -984,8 +1010,16 @@ impl WorkflowSessionStore {
                     && state.active_run.is_none()
                     && session_id.as_str() != exclude_session_id
             })
-            .min_by_key(|(_, state)| (state.access_tick, state.run_count))
-            .map(|(session_id, state)| (session_id.clone(), state.workflow_id.clone()))
+            .map(
+                |(session_id, state)| WorkflowSessionRuntimeUnloadCandidate {
+                    session_id: session_id.clone(),
+                    workflow_id: state.workflow_id.clone(),
+                    keep_alive: state.keep_alive,
+                    access_tick: state.access_tick,
+                    run_count: state.run_count,
+                },
+            )
+            .collect()
     }
 
     fn mark_runtime_loaded(
@@ -1369,12 +1403,19 @@ impl Default for WorkflowService {
 
 impl WorkflowService {
     pub fn new() -> Self {
-        Self::with_max_sessions(DEFAULT_MAX_SESSIONS)
+        Self::with_capacity_limits(DEFAULT_MAX_SESSIONS, DEFAULT_MAX_SESSIONS)
     }
 
     pub fn with_max_sessions(max_sessions: usize) -> Self {
+        Self::with_capacity_limits(max_sessions, max_sessions)
+    }
+
+    pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
         Self {
-            session_store: Arc::new(Mutex::new(WorkflowSessionStore::new(max_sessions))),
+            session_store: Arc::new(Mutex::new(WorkflowSessionStore::new(
+                max_sessions,
+                max_loaded_sessions,
+            ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
         }
     }
@@ -1386,10 +1427,7 @@ impl WorkflowService {
     ) -> Result<(), WorkflowServiceError> {
         enum RuntimeDecision {
             Ready,
-            UnloadCandidate {
-                session_id: String,
-                workflow_id: String,
-            },
+            SelectUnloadCandidate(Vec<WorkflowSessionRuntimeUnloadCandidate>),
             LoadTarget {
                 workflow_id: String,
                 usage_profile: Option<String>,
@@ -1411,19 +1449,9 @@ impl WorkflowService {
                 if target.runtime_loaded {
                     RuntimeDecision::Ready
                 } else if store.loaded_session_count() >= store.max_loaded_sessions {
-                    if let Some((candidate_id, candidate_workflow_id)) =
-                        store.pick_runtime_unload_candidate(session_id)
-                    {
-                        RuntimeDecision::UnloadCandidate {
-                            session_id: candidate_id,
-                            workflow_id: candidate_workflow_id,
-                        }
-                    } else {
-                        return Err(WorkflowServiceError::SchedulerBusy(
-                            "runtime capacity exhausted; no idle session runtime available for unload"
-                                .to_string(),
-                        ));
-                    }
+                    RuntimeDecision::SelectUnloadCandidate(
+                        store.runtime_unload_candidates(session_id),
+                    )
                 } else {
                     RuntimeDecision::LoadTarget {
                         workflow_id: target.workflow_id.clone(),
@@ -1439,18 +1467,22 @@ impl WorkflowService {
 
             match decision {
                 RuntimeDecision::Ready => return Ok(()),
-                RuntimeDecision::UnloadCandidate {
-                    session_id: candidate_session_id,
-                    workflow_id: candidate_workflow_id,
-                } => {
+                RuntimeDecision::SelectUnloadCandidate(candidates) => {
+                    let Some(candidate) = host.select_runtime_unload_candidate(&candidates).await?
+                    else {
+                        return Err(WorkflowServiceError::SchedulerBusy(
+                            "runtime capacity exhausted; no idle session runtime available for unload"
+                                .to_string(),
+                        ));
+                    };
                     host.unload_session_runtime(
-                        &candidate_session_id,
-                        &candidate_workflow_id,
+                        &candidate.session_id,
+                        &candidate.workflow_id,
                         WorkflowSessionUnloadReason::CapacityRebalance,
                     )
                     .await?;
                     if let Ok(mut store) = self.session_store.lock() {
-                        let _ = store.mark_runtime_loaded(&candidate_session_id, false);
+                        let _ = store.mark_runtime_loaded(&candidate.session_id, false);
                     }
                 }
                 RuntimeDecision::LoadTarget {
@@ -3053,6 +3085,29 @@ mod tests {
         }
     }
 
+    struct SelectingRuntimeHost {
+        selected_session_id: String,
+        unloads: Arc<Mutex<Vec<String>>>,
+        capabilities: WorkflowHostCapabilities,
+    }
+
+    impl SelectingRuntimeHost {
+        fn new(selected_session_id: String, unloads: Arc<Mutex<Vec<String>>>) -> Self {
+            Self {
+                selected_session_id,
+                unloads,
+                capabilities: WorkflowHostCapabilities {
+                    max_input_bindings: 16,
+                    max_output_targets: 16,
+                    max_value_bytes: 4096,
+                    runtime_requirements: WorkflowRuntimeRequirements::default(),
+                    models: Vec::new(),
+                    runtime_capabilities: vec![ready_runtime_capability()],
+                },
+            }
+        }
+    }
+
     struct PreflightHost {
         capabilities: WorkflowHostCapabilities,
     }
@@ -3286,6 +3341,81 @@ mod tests {
                 .lock()
                 .expect("retention hints lock poisoned")
                 .push(retention_hint);
+            Ok(())
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for SelectingRuntimeHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("selection-graph".to_string())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn runtime_capabilities(
+            &self,
+        ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+            Ok(self.capabilities.runtime_capabilities.clone())
+        }
+
+        async fn select_runtime_unload_candidate(
+            &self,
+            candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+        ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
+            Ok(candidates
+                .iter()
+                .find(|candidate| candidate.session_id == self.selected_session_id)
+                .cloned())
+        }
+
+        async fn unload_session_runtime(
+            &self,
+            session_id: &str,
+            _workflow_id: &str,
+            _reason: WorkflowSessionUnloadReason,
+        ) -> Result<(), WorkflowServiceError> {
+            self.unloads
+                .lock()
+                .expect("unloads lock poisoned")
+                .push(session_id.to_string());
+            Ok(())
+        }
+
+        async fn load_session_runtime(
+            &self,
+            _session_id: &str,
+            _workflow_id: &str,
+            _usage_profile: Option<&str>,
+            _retention_hint: WorkflowSessionRetentionHint,
+        ) -> Result<(), WorkflowServiceError> {
             Ok(())
         }
 
@@ -4712,6 +4842,80 @@ mod tests {
                 .lock()
                 .expect("retention hints lock poisoned"),
             vec![WorkflowSessionRetentionHint::Ephemeral]
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
+        let unloads = Arc::new(Mutex::new(Vec::new()));
+        let service = WorkflowService::with_capacity_limits(3, 2);
+
+        let first = service
+            .create_workflow_session(
+                &SelectingRuntimeHost::new(String::new(), unloads.clone()),
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("first".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create first keep-alive session");
+        let second = service
+            .create_workflow_session(
+                &SelectingRuntimeHost::new(String::new(), unloads.clone()),
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-2".to_string(),
+                    usage_profile: Some("second".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create second keep-alive session");
+        let third = service
+            .create_workflow_session(
+                &SelectingRuntimeHost::new(String::new(), unloads.clone()),
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-3".to_string(),
+                    usage_profile: Some("third".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create third session");
+        let third_session_id = third.session_id.clone();
+
+        let selecting_host = SelectingRuntimeHost::new(second.session_id.clone(), unloads.clone());
+
+        service
+            .run_workflow_session(
+                &selecting_host,
+                WorkflowSessionRunRequest {
+                    session_id: third_session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("run third session");
+
+        let unloads = unloads.lock().expect("unloads lock poisoned");
+        assert_eq!(
+            unloads.first().map(String::as_str),
+            Some(second.session_id.as_str())
+        );
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &third_session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &first.session_id)
         );
     }
 

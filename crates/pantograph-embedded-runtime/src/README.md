@@ -40,6 +40,10 @@ Pumas-specific dependency resolution.
   session load/unload lifecycle into registry reservation operations, but it
   still must not own the policy that decides when those reservations should
   exist.
+- When workflow-service asks for an idle unload candidate under loaded-runtime
+  pressure, this crate may project session ids into registry reservation-owner
+  ids and consume the registry's ordered eviction candidates, but it still must
+  not invent an alternate eviction policy locally.
 
 ## Decision
 Keep this crate as the application/infrastructure integration layer for

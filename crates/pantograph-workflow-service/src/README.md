@@ -106,6 +106,12 @@ Primary contract types:
 - Session `keep_alive` interpretation starts here; adapters may forward the
   resulting retention hint to lower-level runtime infrastructure, but they must
   not invent separate retention policy.
+- This crate owns session-idle/runtime-loaded facts, but hosts may consume
+  those facts through an explicit unload-candidate contract so backend runtime
+  registries remain the owner of reservation eviction ordering.
+- Session capacity and loaded-runtime capacity may now diverge here, which
+  makes runtime rebalance reachable without conflating "how many sessions may
+  exist" with "how many runtimes may stay loaded".
 - Graph edit sessions, graph persistence contracts, revision-aware connection
   intent, and undo/redo semantics are backend-owned in this crate.
 - Workflow trace and metrics contract ownership is backend-owned in this crate;

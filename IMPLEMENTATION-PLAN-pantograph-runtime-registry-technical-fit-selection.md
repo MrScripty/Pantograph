@@ -460,6 +460,10 @@ runtime callers.
   candidates derived from backend-owned runtime pressure and retention policy
   so higher layers can consume one policy order instead of rebuilding unload
   ranking from local state alone.
+- 2026-04-13: Workflow service now separates loaded-runtime capacity from
+  session capacity and delegates idle unload-candidate selection through an
+  explicit host contract, while embedded-runtime consumes the registry's
+  reservation-owner eviction order instead of using only session-local ranking.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

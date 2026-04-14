@@ -36,8 +36,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionStatusRequest,
-    WorkflowSessionStatusResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -956,6 +956,17 @@ impl EmbeddedWorkflowHost {
 
         Ok(outputs)
     }
+
+    fn fallback_runtime_unload_candidate(
+        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+    ) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
+        candidates.iter().cloned().min_by(|left, right| {
+            left.access_tick
+                .cmp(&right.access_tick)
+                .then_with(|| left.run_count.cmp(&right.run_count))
+                .then_with(|| left.session_id.cmp(&right.session_id))
+        })
+    }
 }
 
 #[async_trait]
@@ -1091,6 +1102,31 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         _reason: pantograph_workflow_service::WorkflowSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         self.release_loaded_session_runtime(session_id)
+    }
+
+    async fn select_runtime_unload_candidate(
+        &self,
+        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+    ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return Ok(Self::fallback_runtime_unload_candidate(candidates));
+        };
+
+        let candidates_by_session_id = candidates
+            .iter()
+            .cloned()
+            .map(|candidate| (candidate.session_id.clone(), candidate))
+            .collect::<HashMap<_, _>>();
+        for reservation in runtime_registry.eviction_reservation_candidates() {
+            let Some(owner_id) = reservation.reservation_owner_id.as_deref() else {
+                continue;
+            };
+            if let Some(candidate) = candidates_by_session_id.get(owner_id) {
+                return Ok(Some(candidate.clone()));
+            }
+        }
+
+        Ok(Self::fallback_runtime_unload_candidate(candidates))
     }
 
     async fn run_workflow(
