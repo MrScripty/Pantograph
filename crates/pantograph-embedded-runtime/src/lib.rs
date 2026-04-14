@@ -398,6 +398,14 @@ impl EmbeddedRuntime {
 
     pub async fn shutdown(&self) {
         self.gateway.stop().await;
+        if let Some(runtime_registry) = self.runtime_registry.as_ref() {
+            let mode_info =
+                HostRuntimeModeSnapshot::from_mode_info(&self.gateway.mode_info().await);
+            runtime_registry::reconcile_runtime_registry_mode_info(
+                runtime_registry.as_ref(),
+                &mode_info,
+            );
+        }
     }
 
     fn host(&self) -> EmbeddedWorkflowHost {
@@ -2949,6 +2957,74 @@ mod tests {
             .runtime_capabilities
             .iter()
             .any(|capability| capability.runtime_id == "llama.cpp.embedding"));
+    }
+
+    #[tokio::test]
+    async fn embedded_runtime_shutdown_reconciles_registry_to_stopped() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let mode_info = HostRuntimeModeSnapshot::from_mode_info(&inference::ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: Some("http://127.0.0.1:11434".to_string()),
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("/models/qwen.gguf".to_string()),
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-9".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        });
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Some(runtime_registry.clone()),
+            Some(mode_info),
+        )
+        .await;
+
+        let ready_snapshot = runtime_registry.snapshot();
+        let ready_runtime = ready_snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("active runtime should be registered before shutdown");
+        assert_eq!(ready_runtime.status, RuntimeRegistryStatus::Ready);
+
+        runtime.shutdown().await;
+
+        let stopped_snapshot = runtime_registry.snapshot();
+        let stopped_runtime = stopped_snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("active runtime should remain observable after shutdown");
+        assert_eq!(stopped_runtime.status, RuntimeRegistryStatus::Stopped);
     }
 
     #[tokio::test]
