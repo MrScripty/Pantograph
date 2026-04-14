@@ -3,13 +3,14 @@
 pub use pantograph_embedded_runtime::runtime_registry::{
     reconcile_runtime_registry_mode_info, reconcile_runtime_registry_snapshot_override,
 };
+use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
 
 pub async fn sync_runtime_registry_from_gateway(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
 ) {
-    let mode_info = gateway.mode_info().await;
+    let mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     reconcile_runtime_registry_mode_info(registry, &mode_info);
 }
 

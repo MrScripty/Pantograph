@@ -4,6 +4,7 @@
 //! facts, but the capability-shape mapping belongs in backend Rust rather than
 //! adapter modules.
 
+use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_id};
 use pantograph_workflow_service::{
     WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
@@ -38,7 +39,7 @@ pub fn dedicated_embedding_runtime_capabilities(
 }
 
 pub fn runtime_capabilities_from_mode_info(
-    mode_info: &inference::ServerModeInfo,
+    mode_info: &HostRuntimeModeSnapshot,
 ) -> Vec<WorkflowRuntimeCapability> {
     let mut capabilities = Vec::new();
     capabilities.extend(dedicated_embedding_runtime_capabilities(
@@ -85,14 +86,9 @@ mod tests {
 
     #[test]
     fn runtime_capabilities_from_mode_info_collects_embedding_runtime_capability() {
-        let capabilities = runtime_capabilities_from_mode_info(&inference::ServerModeInfo {
+        let capabilities = runtime_capabilities_from_mode_info(&HostRuntimeModeSnapshot {
             backend_name: Some("llama.cpp".to_string()),
             backend_key: Some("llama_cpp".to_string()),
-            mode: "sidecar_inference".to_string(),
-            ready: true,
-            url: Some("http://127.0.0.1:11434".to_string()),
-            model_path: None,
-            is_embedding_mode: false,
             active_model_target: Some("/models/qwen.gguf".to_string()),
             embedding_model_target: Some("/models/embed.gguf".to_string()),
             active_runtime: None,

@@ -4,6 +4,7 @@
 //! snapshots into `pantograph_runtime_registry::RuntimeObservation` values so
 //! host adapters do not own registry-observation mapping logic.
 
+use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
@@ -20,7 +21,7 @@ pub struct ActiveRuntimeDescriptor {
     pub runtime_instance_id: Option<String>,
 }
 
-pub fn active_runtime_descriptor(mode_info: &inference::ServerModeInfo) -> ActiveRuntimeDescriptor {
+pub fn active_runtime_descriptor(mode_info: &HostRuntimeModeSnapshot) -> ActiveRuntimeDescriptor {
     let runtime_id = mode_info
         .active_runtime
         .as_ref()
@@ -51,7 +52,7 @@ pub fn active_runtime_descriptor(mode_info: &inference::ServerModeInfo) -> Activ
 }
 
 pub fn active_runtime_observation(
-    mode_info: &inference::ServerModeInfo,
+    mode_info: &HostRuntimeModeSnapshot,
     include_stopped: bool,
 ) -> Option<RuntimeObservation> {
     let snapshot = mode_info
@@ -89,7 +90,7 @@ pub fn active_runtime_observation(
 }
 
 pub fn embedding_runtime_observation(
-    mode_info: &inference::ServerModeInfo,
+    mode_info: &HostRuntimeModeSnapshot,
 ) -> Option<RuntimeObservation> {
     let snapshot = mode_info.embedding_runtime.as_ref()?.clone();
     let runtime_id = snapshot
@@ -113,9 +114,7 @@ pub fn embedding_runtime_observation(
     })
 }
 
-pub fn observations_from_mode_info(
-    mode_info: &inference::ServerModeInfo,
-) -> Vec<RuntimeObservation> {
+pub fn observations_from_mode_info(mode_info: &HostRuntimeModeSnapshot) -> Vec<RuntimeObservation> {
     let mut observations = Vec::new();
 
     if let Some(observation) = active_runtime_observation(mode_info, true) {
@@ -131,14 +130,14 @@ pub fn observations_from_mode_info(
 
 pub fn reconcile_runtime_registry_mode_info(
     registry: &RuntimeRegistry,
-    mode_info: &inference::ServerModeInfo,
+    mode_info: &HostRuntimeModeSnapshot,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
     registry.observe_runtimes(observations_from_mode_info(mode_info))
 }
 
 pub fn reconcile_active_runtime_mode_info(
     registry: &RuntimeRegistry,
-    mode_info: &inference::ServerModeInfo,
+    mode_info: &HostRuntimeModeSnapshot,
     include_stopped: bool,
 ) -> Option<RuntimeRegistryRuntimeSnapshot> {
     active_runtime_observation(mode_info, include_stopped)
@@ -187,14 +186,9 @@ mod tests {
 
         let snapshots = reconcile_runtime_registry_mode_info(
             &registry,
-            &inference::ServerModeInfo {
+            &HostRuntimeModeSnapshot {
                 backend_name: Some("llama.cpp".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
-                mode: "sidecar_inference".to_string(),
-                ready: true,
-                url: Some("http://127.0.0.1:11434".to_string()),
-                model_path: None,
-                is_embedding_mode: false,
                 active_model_target: Some("/models/qwen.gguf".to_string()),
                 embedding_model_target: Some("/models/embed.gguf".to_string()),
                 active_runtime: Some(inference::RuntimeLifecycleSnapshot {
@@ -244,14 +238,9 @@ mod tests {
 
         reconcile_runtime_registry_mode_info(
             &registry,
-            &inference::ServerModeInfo {
+            &HostRuntimeModeSnapshot {
                 backend_name: Some("llama.cpp".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
-                mode: "sidecar_inference".to_string(),
-                ready: true,
-                url: None,
-                model_path: None,
-                is_embedding_mode: false,
                 active_model_target: Some("/models/qwen.gguf".to_string()),
                 embedding_model_target: None,
                 active_runtime: Some(inference::RuntimeLifecycleSnapshot {
@@ -271,14 +260,9 @@ mod tests {
 
         let snapshots = reconcile_runtime_registry_mode_info(
             &registry,
-            &inference::ServerModeInfo {
+            &HostRuntimeModeSnapshot {
                 backend_name: Some("ollama".to_string()),
                 backend_key: Some("ollama".to_string()),
-                mode: "external".to_string(),
-                ready: true,
-                url: Some("http://127.0.0.1:11434".to_string()),
-                model_path: None,
-                is_embedding_mode: false,
                 active_model_target: Some("llava:13b".to_string()),
                 embedding_model_target: None,
                 active_runtime: Some(inference::RuntimeLifecycleSnapshot {
@@ -318,14 +302,9 @@ mod tests {
 
         reconcile_runtime_registry_mode_info(
             &registry,
-            &inference::ServerModeInfo {
+            &HostRuntimeModeSnapshot {
                 backend_name: Some("llama.cpp".to_string()),
                 backend_key: Some("llama_cpp".to_string()),
-                mode: "sidecar_inference".to_string(),
-                ready: true,
-                url: Some("http://127.0.0.1:11434".to_string()),
-                model_path: None,
-                is_embedding_mode: false,
                 active_model_target: Some("/models/qwen.gguf".to_string()),
                 embedding_model_target: None,
                 active_runtime: Some(inference::RuntimeLifecycleSnapshot {

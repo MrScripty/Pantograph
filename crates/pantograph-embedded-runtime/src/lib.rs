@@ -49,6 +49,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub mod embedding_workflow;
+pub mod host_runtime;
 pub mod model_dependencies;
 pub mod python_runtime;
 pub mod rag;
@@ -57,6 +58,7 @@ pub mod runtime_registry;
 pub mod task_executor;
 pub mod workflow_runtime;
 
+pub use host_runtime::HostRuntimeModeSnapshot;
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
@@ -276,7 +278,7 @@ impl EmbeddedRuntime {
         workflow_service: SharedWorkflowService,
         rag_backend: Option<Arc<dyn RagBackend>>,
         runtime_registry: Option<SharedRuntimeRegistry>,
-        host_runtime_mode_info: Option<inference::ServerModeInfo>,
+        host_runtime_mode_info: Option<HostRuntimeModeSnapshot>,
     ) -> Self {
         if let (Some(runtime_registry), Some(mode_info)) =
             (runtime_registry.as_ref(), host_runtime_mode_info.as_ref())
@@ -1026,9 +1028,10 @@ impl EmbeddedWorkflowHost {
         mode_info: &inference::ServerModeInfo,
         include_stopped: bool,
     ) {
+        let snapshot = HostRuntimeModeSnapshot::from_mode_info(mode_info);
         runtime_registry::reconcile_active_runtime_mode_info(
             runtime_registry,
-            mode_info,
+            &snapshot,
             include_stopped,
         );
     }
@@ -1210,7 +1213,8 @@ impl EmbeddedWorkflowHost {
         };
 
         let mode_info = self.gateway.mode_info().await;
-        let descriptor = runtime_registry::active_runtime_descriptor(&mode_info);
+        let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
+        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
@@ -2870,7 +2874,7 @@ mod tests {
         install_fake_default_runtime(&app_data_dir);
 
         let runtime_registry = Arc::new(RuntimeRegistry::new());
-        let mode_info = inference::ServerModeInfo {
+        let mode_info = HostRuntimeModeSnapshot::from_mode_info(&inference::ServerModeInfo {
             backend_name: Some("llama.cpp".to_string()),
             backend_key: Some("llama_cpp".to_string()),
             mode: "sidecar_inference".to_string(),
@@ -2902,7 +2906,7 @@ mod tests {
                 active: true,
                 last_error: None,
             }),
-        };
+        });
         let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
             EmbeddedRuntimeConfig {
                 app_data_dir,
