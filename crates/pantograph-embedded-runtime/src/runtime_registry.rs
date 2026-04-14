@@ -136,14 +136,6 @@ pub fn reconcile_runtime_registry_mode_info(
     registry.observe_runtimes(observations_from_mode_info(mode_info))
 }
 
-pub async fn reconcile_runtime_registry_from_gateway(
-    registry: &RuntimeRegistry,
-    gateway: &inference::InferenceGateway,
-) -> Vec<RuntimeRegistryRuntimeSnapshot> {
-    let mode_info = gateway.mode_info().await;
-    reconcile_runtime_registry_mode_info(registry, &mode_info)
-}
-
 pub fn reconcile_active_runtime_mode_info(
     registry: &RuntimeRegistry,
     mode_info: &inference::ServerModeInfo,
@@ -387,17 +379,5 @@ mod tests {
             .find(|runtime| runtime.runtime_id == "pytorch")
             .expect("python runtime should be present in registry");
         assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
-    }
-
-    #[tokio::test]
-    async fn reconcile_gateway_registers_current_backend_runtime() {
-        let registry = RuntimeRegistry::new();
-        let gateway = inference::InferenceGateway::new();
-
-        let snapshots = reconcile_runtime_registry_from_gateway(&registry, &gateway).await;
-
-        assert_eq!(snapshots.len(), 1);
-        assert_eq!(snapshots[0].runtime_id, "llama_cpp");
-        assert_eq!(snapshots[0].status, RuntimeRegistryStatus::Stopped);
     }
 }
