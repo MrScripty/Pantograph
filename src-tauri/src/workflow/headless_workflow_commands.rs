@@ -1451,6 +1451,64 @@ mod tests {
     }
 
     #[test]
+    fn stored_runtime_snapshots_normalize_missing_lifecycle_reason_from_diagnostics_projection() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
+                runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:13b".to_string()),
+                warmup_started_at_ms: Some(100),
+                warmup_completed_at_ms: Some(110),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            Some("llava:13b".to_string()),
+            None,
+            Some(inference::RuntimeLifecycleSnapshot::from(
+                &DiagnosticsRuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama_cpp".to_string()),
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                    warmup_started_at_ms: Some(100),
+                    warmup_completed_at_ms: Some(110),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: None,
+                    active: true,
+                    last_error: None,
+                },
+            )),
+            None,
+            120,
+        );
+
+        let (active_runtime, _) = stored_runtime_snapshots(&diagnostics_store, Some("wf-1"))
+            .expect("stored runtime snapshots should exist");
+
+        assert_eq!(
+            active_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.lifecycle_decision_reason.as_deref()),
+            Some("runtime_ready")
+        );
+    }
+
+    #[test]
     fn workflow_diagnostics_snapshot_projection_preserves_observed_runtime_ids() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 

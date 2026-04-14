@@ -570,6 +570,11 @@ Update during implementation:
   `crates/inference/src/gateway.rs` so inference-gateway lifecycle snapshots
   now derive default start-success and start-failure reasons from the
   backend-owned snapshot contract instead of reconstructing them inline
+- Forty-first implementation slice added across
+  `src-tauri/src/workflow/diagnostics.rs` and
+  `src-tauri/src/workflow/headless_workflow_commands.rs` so diagnostics-backed
+  runtime snapshot round-trips now preserve backend-owned lifecycle reason
+  normalization when headless paths reconstruct inference snapshots
 
 ### Deviations
 

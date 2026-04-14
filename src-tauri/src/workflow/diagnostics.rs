@@ -196,7 +196,7 @@ impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleS
 
 impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleSnapshot {
     fn from(snapshot: &DiagnosticsRuntimeLifecycleSnapshot) -> Self {
-        Self {
+        let mut lifecycle_snapshot = Self {
             runtime_id: snapshot.runtime_id.clone(),
             runtime_instance_id: snapshot.runtime_instance_id.clone(),
             warmup_started_at_ms: snapshot.warmup_started_at_ms,
@@ -206,7 +206,10 @@ impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleS
             lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone(),
             active: snapshot.active,
             last_error: snapshot.last_error.clone(),
-        }
+        };
+        lifecycle_snapshot.lifecycle_decision_reason =
+            lifecycle_snapshot.normalized_lifecycle_decision_reason();
+        lifecycle_snapshot
     }
 }
 
@@ -1760,6 +1763,50 @@ mod tests {
                 active: false,
                 last_error: Some("failed".to_string()),
             });
+
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_start_failed")
+        );
+    }
+
+    #[test]
+    fn inference_runtime_lifecycle_snapshot_from_diagnostics_infers_default_reason() {
+        let snapshot = inference::RuntimeLifecycleSnapshot::from(
+            &DiagnosticsRuntimeLifecycleSnapshot {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_instance_id: Some("runtime-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: None,
+                active: true,
+                last_error: None,
+            },
+        );
+
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_ready")
+        );
+    }
+
+    #[test]
+    fn inference_runtime_lifecycle_snapshot_from_diagnostics_infers_start_failure_reason() {
+        let snapshot = inference::RuntimeLifecycleSnapshot::from(
+            &DiagnosticsRuntimeLifecycleSnapshot {
+                runtime_id: Some("llama_cpp".to_string()),
+                runtime_instance_id: None,
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: None,
+                lifecycle_decision_reason: None,
+                active: false,
+                last_error: Some("failed".to_string()),
+            },
+        );
 
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
