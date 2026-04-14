@@ -451,6 +451,26 @@ impl RuntimeRegistry {
         snapshots.sort_by(|left, right| left.runtime_id.cmp(&right.runtime_id));
         snapshots
     }
+
+    pub fn observe_runtime(
+        &self,
+        observation: RuntimeObservation,
+    ) -> RuntimeRegistryRuntimeSnapshot {
+        let now_ms = unix_timestamp_ms();
+        let runtime_id = canonical_runtime_id(&observation.runtime_id);
+        let mut guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+
+        apply_runtime_observation(&mut guard, observation, now_ms);
+
+        let record = guard
+            .runtimes
+            .get(&runtime_id)
+            .expect("observed runtime must exist after observation");
+        runtime_snapshot(record)
+    }
 }
 
 fn runtime_snapshot(record: &RuntimeRegistryRecord) -> RuntimeRegistryRuntimeSnapshot {
@@ -1026,6 +1046,55 @@ mod tests {
             .expect("ollama snapshot");
         assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
         assert_eq!(ollama.models[0].model_id, "llava:13b");
+    }
+
+    #[test]
+    fn observe_runtime_updates_single_runtime_without_stopping_others() {
+        let registry = RuntimeRegistry::new();
+
+        registry.observe_runtimes(vec![
+            RuntimeObservation {
+                runtime_id: "llama.cpp".to_string(),
+                display_name: "llama.cpp".to_string(),
+                backend_keys: vec!["llama_cpp".to_string()],
+                model_id: Some("/models/qwen.gguf".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                last_error: None,
+            },
+            RuntimeObservation {
+                runtime_id: "onnx-runtime".to_string(),
+                display_name: "ONNX Runtime (Python sidecar)".to_string(),
+                backend_keys: vec!["onnx-runtime".to_string()],
+                model_id: Some("/models/voice.onnx".to_string()),
+                status: RuntimeRegistryStatus::Ready,
+                runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                last_error: None,
+            },
+        ]);
+
+        let updated = registry.observe_runtime(RuntimeObservation {
+            runtime_id: "onnx-runtime".to_string(),
+            display_name: "ONNX Runtime (Python sidecar)".to_string(),
+            backend_keys: vec!["onnx-runtime".to_string()],
+            model_id: Some("/models/voice-v2.onnx".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+            last_error: None,
+        });
+
+        assert_eq!(updated.runtime_id, "onnx-runtime");
+        assert_eq!(updated.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(updated.models[0].model_id, "/models/voice-v2.onnx");
+
+        let snapshot = registry.snapshot();
+        let llama = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("llama runtime should remain observed");
+        assert_eq!(llama.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(llama.models[0].model_id, "/models/qwen.gguf");
     }
 
     #[test]

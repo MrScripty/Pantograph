@@ -286,6 +286,8 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Diagnostics preserve concrete runtime producers and lifecycle snapshots.
 - External capability handling is materially less placeholder-driven than at the
   start of this roadmap.
+- Execution-specific Python-sidecar runtime snapshots can now be reconciled
+  into the shared runtime registry without replacing gateway-observed runtimes.
 
 **Still missing:**
 

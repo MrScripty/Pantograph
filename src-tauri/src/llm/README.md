@@ -113,6 +113,10 @@ app.manage(gateway);
 - `gateway.rs` exposes backend-owned lifecycle and capability facts through the
   Tauri host; adapter code must preserve canonical runtime ids and backend keys
   instead of inventing local aliases.
+- `runtime_registry.rs` may translate either full gateway mode snapshots or
+  single producer-specific runtime snapshots into backend-owned registry
+  observations, but it must not become the owner of lifecycle or retention
+  policy.
 - Command payloads emitted from this directory are transport wrappers around
   backend/runtime contracts, not a separate policy schema.
 - Health/recovery overlays may add host-only fields, but they must not mutate

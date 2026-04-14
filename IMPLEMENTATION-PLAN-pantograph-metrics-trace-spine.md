@@ -534,6 +534,12 @@ Update during implementation:
   `crates/inference/src/backend/llamacpp.rs`, and `crates/inference/src/README.md`
   so matching llama.cpp sidecar starts now reuse the active runtime with
   structured lifecycle reasons and direct backend tests
+- Thirty-fourth implementation slice added across
+  `crates/pantograph-runtime-registry/src/lib.rs`,
+  `src-tauri/src/llm/runtime_registry.rs`, and
+  `src-tauri/src/workflow/workflow_execution_commands.rs` so execution-specific
+  Python-sidecar runtime snapshots can be reconciled into the shared runtime
+  registry without stopping gateway-observed runtimes
 
 ### Deviations
 
@@ -545,8 +551,9 @@ Update during implementation:
 ### Follow-Ups
 
 - Extend runtime lifecycle producers beyond the current inference-gateway,
-  backend-start-outcome, embedding-sidecar, and PyTorch loaded-model reuse
-  paths so every runtime host populates the same authoritative
+  backend-start-outcome, embedding-sidecar, PyTorch loaded-model reuse, and
+  Python-sidecar registry-observation paths so every runtime host populates the
+  same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
 - Extend direct command-path acceptance coverage beyond the current embedding
   runtime, scheduler, trace snapshot, and diagnostics projection refresh paths

@@ -48,6 +48,9 @@ desktop app wiring.
 - Reservation-owner eviction ordering is also computed here so callers can
   reuse backend-owned runtime pressure decisions when choosing which loaded
   session reservation to release.
+- Single-runtime observation updates are also supported here so adapters can
+  reconcile producer-specific runtime snapshots without implicitly stopping
+  unrelated runtimes that were observed through a different producer path.
 - Invalid state transitions are rejected rather than coerced.
 - Observation reconciliation updates registry-owned state but does not invent
   backend lifecycle facts.
@@ -67,6 +70,9 @@ desktop app wiring.
   execution adapters.
 - Hosts may reconcile backend-owned runtime observations into the registry, but
   they must not reimplement reservation or transition policy locally.
+- Hosts may use `observe_runtime` when a single producer-specific runtime
+  snapshot must update registry state without replacing the current full
+  observation set for other runtimes.
 - Hosts may supply runtime admission budgets and reservation memory
   requirements, but the resulting acceptance or rejection decision belongs to
   this crate.

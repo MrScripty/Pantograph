@@ -4,6 +4,7 @@
 //! `pantograph_runtime_registry::RuntimeObservation` values and then delegates
 //! all registry state ownership to the backend crate.
 
+use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_id};
 use pantograph_runtime_registry::{
     RuntimeObservation, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
 };
@@ -15,6 +16,30 @@ pub fn reconcile_runtime_registry_mode_info(
     mode_info: &inference::ServerModeInfo,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
     registry.observe_runtimes(observations_from_mode_info(mode_info))
+}
+
+pub fn reconcile_runtime_registry_snapshot_override(
+    registry: &RuntimeRegistry,
+    snapshot: &inference::RuntimeLifecycleSnapshot,
+    model_id: Option<&str>,
+) -> Option<RuntimeRegistryRuntimeSnapshot> {
+    let runtime_id = snapshot
+        .runtime_id
+        .as_deref()
+        .map(canonical_runtime_id)
+        .filter(|runtime_id| !runtime_id.is_empty())?;
+    let display_name = runtime_display_name(&runtime_id);
+    let backend_keys = runtime_backend_keys(&display_name, &runtime_id);
+
+    Some(registry.observe_runtime(RuntimeObservation {
+        runtime_id,
+        display_name: display_name.clone(),
+        backend_keys,
+        model_id: model_id.map(ToOwned::to_owned),
+        status: observed_status(snapshot),
+        runtime_instance_id: snapshot.runtime_instance_id.clone(),
+        last_error: snapshot.last_error.clone(),
+    }))
 }
 
 fn observations_from_mode_info(mode_info: &inference::ServerModeInfo) -> Vec<RuntimeObservation> {
@@ -89,6 +114,31 @@ fn observed_status(snapshot: &inference::RuntimeLifecycleSnapshot) -> RuntimeReg
     }
 
     RuntimeRegistryStatus::Stopped
+}
+
+fn runtime_display_name(runtime_id: &str) -> String {
+    match runtime_id {
+        "llama_cpp" => "llama.cpp".to_string(),
+        "llama.cpp.embedding" => "Dedicated embedding runtime".to_string(),
+        "pytorch" => "PyTorch (Python sidecar)".to_string(),
+        "diffusers" => "Diffusers (Python sidecar)".to_string(),
+        "onnx-runtime" => "ONNX Runtime (Python sidecar)".to_string(),
+        "stable_audio" => "Stable Audio (Python sidecar)".to_string(),
+        _ => runtime_id.to_string(),
+    }
+}
+
+fn runtime_backend_keys(display_name: &str, runtime_id: &str) -> Vec<String> {
+    let mut aliases = backend_key_aliases(display_name, runtime_id);
+
+    match runtime_id {
+        "llama.cpp.embedding" => aliases.push("llama_cpp".to_string()),
+        _ => {}
+    }
+
+    aliases.sort();
+    aliases.dedup();
+    aliases
 }
 
 #[cfg(test)]
@@ -224,5 +274,74 @@ mod tests {
             .expect("ollama snapshot");
         assert_eq!(ollama.status, RuntimeRegistryStatus::Ready);
         assert_eq!(ollama.models[0].model_id, "llava:13b");
+    }
+
+    #[test]
+    fn reconcile_snapshot_override_adds_python_runtime_without_stopping_gateway_runtime() {
+        let registry = RuntimeRegistry::new();
+
+        reconcile_runtime_registry_mode_info(
+            &registry,
+            &inference::ServerModeInfo {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                mode: "sidecar_inference".to_string(),
+                ready: true,
+                url: Some("http://127.0.0.1:11434".to_string()),
+                model_path: None,
+                is_embedding_mode: false,
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-1".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("started_runtime".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+        );
+
+        let pytorch = reconcile_runtime_registry_snapshot_override(
+            &registry,
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:venv_torch".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: None,
+                lifecycle_decision_reason: Some("python_runtime_executed".to_string()),
+                active: true,
+                last_error: None,
+            },
+            Some("/models/demo"),
+        )
+        .expect("python snapshot should be reconciled");
+
+        assert_eq!(pytorch.runtime_id, "pytorch");
+        assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(pytorch.models[0].model_id, "/models/demo");
+
+        let snapshot = registry.snapshot();
+        let llama = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("gateway runtime should remain in registry");
+        assert_eq!(llama.status, RuntimeRegistryStatus::Ready);
+
+        let pytorch = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("python runtime should be present in registry");
+        assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
     }
 }

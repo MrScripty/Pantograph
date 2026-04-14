@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
+use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
 use crate::llm::startup::{
     build_resolved_embedding_request, capture_inference_restore_config,
     restore_inference_runtime_best_effort,
@@ -547,6 +548,19 @@ async fn emit_diagnostics_snapshots(
     let gateway_mode_info = gateway.mode_info().await;
     let gateway_runtime_model_target =
         resolve_runtime_model_target(&gateway_mode_info, &gateway_snapshot);
+    let override_runtime_model_target = runtime_snapshot_override.as_ref().and_then(|snapshot| {
+        runtime_model_target_override
+            .as_deref()
+            .map(ToOwned::to_owned)
+            .or_else(|| resolve_runtime_model_target(&gateway_mode_info, snapshot))
+    });
+    if let Some(snapshot) = runtime_snapshot_override.as_ref() {
+        reconcile_runtime_registry_snapshot_override(
+            runtime_registry.as_ref(),
+            snapshot,
+            override_runtime_model_target.as_deref(),
+        );
+    }
 
     let runtime = match super::headless_workflow_commands::build_runtime(
         app,
@@ -565,17 +579,10 @@ async fn emit_diagnostics_snapshots(
                 &gateway_snapshot,
             );
             let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-            let runtime_model_target_override =
-                runtime_snapshot_override.as_ref().and_then(|snapshot| {
-                    runtime_model_target_override
-                        .as_deref()
-                        .map(ToOwned::to_owned)
-                        .or_else(|| resolve_runtime_model_target(&gateway_mode_info, snapshot))
-                });
             let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
                 runtime_snapshot_override.as_ref(),
                 &gateway_snapshot,
-                runtime_model_target_override.as_deref(),
+                override_runtime_model_target.as_deref(),
                 gateway_runtime_model_target.as_deref(),
             );
             let runtime_event = WorkflowEvent::runtime_snapshot(
@@ -617,16 +624,10 @@ async fn emit_diagnostics_snapshots(
     let active_runtime_snapshot =
         diagnostics_active_runtime_snapshot(runtime_snapshot_override.as_ref(), &gateway_snapshot);
     let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-    let runtime_model_target_override = runtime_snapshot_override.as_ref().and_then(|snapshot| {
-        runtime_model_target_override
-            .as_deref()
-            .map(ToOwned::to_owned)
-            .or_else(|| resolve_runtime_model_target(&gateway_mode_info, snapshot))
-    });
     let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
         runtime_snapshot_override.as_ref(),
         &gateway_snapshot,
-        runtime_model_target_override.as_deref(),
+        override_runtime_model_target.as_deref(),
         gateway_runtime_model_target.as_deref(),
     );
 
