@@ -276,15 +276,21 @@ impl EmbeddedRuntime {
         workflow_service: SharedWorkflowService,
         rag_backend: Option<Arc<dyn RagBackend>>,
         runtime_registry: Option<SharedRuntimeRegistry>,
-        additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
+        host_runtime_mode_info: Option<inference::ServerModeInfo>,
     ) -> Self {
-        if let Some(runtime_registry) = runtime_registry.as_ref() {
-            let mode_info = gateway.mode_info().await;
+        if let (Some(runtime_registry), Some(mode_info)) =
+            (runtime_registry.as_ref(), host_runtime_mode_info.as_ref())
+        {
             runtime_registry::reconcile_runtime_registry_mode_info(
                 runtime_registry.as_ref(),
-                &mode_info,
+                mode_info,
             );
         }
+
+        let additional_runtime_capabilities = host_runtime_mode_info
+            .as_ref()
+            .map(runtime_capabilities::runtime_capabilities_from_mode_info)
+            .unwrap_or_default();
 
         let mut runtime = Self::with_default_python_runtime(
             config,
@@ -2855,7 +2861,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hosted_runtime_constructor_syncs_registry_and_preserves_capabilities() {
+    async fn hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from_mode_info() {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");
 
@@ -2864,20 +2870,38 @@ mod tests {
         install_fake_default_runtime(&app_data_dir);
 
         let runtime_registry = Arc::new(RuntimeRegistry::new());
-        let injected_capability = WorkflowRuntimeCapability {
-            runtime_id: "llama.cpp.embedding".to_string(),
-            display_name: "Dedicated embedding runtime".to_string(),
-            install_state: WorkflowRuntimeInstallState::Installed,
-            available: true,
-            configured: true,
-            can_install: false,
-            can_remove: false,
-            source_kind: WorkflowRuntimeSourceKind::Host,
-            selected: false,
-            supports_external_connection: false,
-            backend_keys: vec!["llama_cpp".to_string(), "llamacpp".to_string()],
-            missing_files: Vec::new(),
-            unavailable_reason: None,
+        let mode_info = inference::ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: Some("http://127.0.0.1:11434".to_string()),
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("/models/qwen.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-2".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-8".to_string()),
+                warmup_started_at_ms: Some(11),
+                warmup_completed_at_ms: Some(19),
+                warmup_duration_ms: Some(8),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
         };
         let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
             EmbeddedRuntimeConfig {
@@ -2891,14 +2915,24 @@ mod tests {
             Arc::new(WorkflowService::new()),
             None,
             Some(runtime_registry.clone()),
-            vec![injected_capability.clone()],
+            Some(mode_info),
         )
         .await;
 
         let snapshot = runtime_registry.snapshot();
-        assert_eq!(snapshot.runtimes.len(), 1);
-        assert_eq!(snapshot.runtimes[0].runtime_id, "llama_cpp");
-        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
+        assert_eq!(snapshot.runtimes.len(), 2);
+        let active = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("active runtime");
+        assert_eq!(active.status, RuntimeRegistryStatus::Ready);
+        let embedding = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime");
+        assert_eq!(embedding.status, RuntimeRegistryStatus::Ready);
 
         let capabilities = runtime
             .workflow_get_capabilities(WorkflowCapabilitiesRequest {
@@ -2909,7 +2943,7 @@ mod tests {
         assert!(capabilities
             .runtime_capabilities
             .iter()
-            .any(|capability| capability == &injected_capability));
+            .any(|capability| capability.runtime_id == "llama.cpp.embedding"));
     }
 
     #[tokio::test]

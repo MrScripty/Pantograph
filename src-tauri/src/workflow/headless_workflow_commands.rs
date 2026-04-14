@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_embedded_runtime::{
-    runtime_capabilities::dedicated_embedding_runtime_capabilities,
     workflow_runtime::{resolve_runtime_model_target, trace_runtime_metrics},
     EmbeddedRuntime, EmbeddedRuntimeConfig, RagBackend, RagDocument,
 };
@@ -81,9 +80,7 @@ pub(super) async fn build_runtime(
     rag_manager: Option<&SharedRagManager>,
 ) -> Result<EmbeddedRuntime, String> {
     let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
-    let additional_runtime_capabilities = dedicated_embedding_runtime_capabilities(
-        gateway.embedding_runtime_lifecycle_snapshot().await,
-    );
+    let host_runtime_mode_info = gateway.mode_info().await;
     let rag_backend = rag_manager.cloned().map(|manager| {
         Arc::new(TauriRagBackend {
             rag_manager: manager,
@@ -96,7 +93,7 @@ pub(super) async fn build_runtime(
         workflow_service.clone(),
         rag_backend,
         Some(runtime_registry.clone()),
-        additional_runtime_capabilities,
+        Some(host_runtime_mode_info),
     )
     .await)
 }

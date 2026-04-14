@@ -37,6 +37,16 @@ pub fn dedicated_embedding_runtime_capabilities(
     }]
 }
 
+pub fn runtime_capabilities_from_mode_info(
+    mode_info: &inference::ServerModeInfo,
+) -> Vec<WorkflowRuntimeCapability> {
+    let mut capabilities = Vec::new();
+    capabilities.extend(dedicated_embedding_runtime_capabilities(
+        mode_info.embedding_runtime.clone(),
+    ));
+    capabilities
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,5 +81,36 @@ mod tests {
     #[test]
     fn dedicated_embedding_runtime_capability_omits_missing_snapshot() {
         assert!(dedicated_embedding_runtime_capabilities(None).is_empty());
+    }
+
+    #[test]
+    fn runtime_capabilities_from_mode_info_collects_embedding_runtime_capability() {
+        let capabilities = runtime_capabilities_from_mode_info(&inference::ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: Some("http://127.0.0.1:11434".to_string()),
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: Some("/models/qwen.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: None,
+            embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-4".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(15),
+                warmup_duration_ms: Some(5),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+        });
+
+        assert_eq!(capabilities.len(), 1);
+        assert_eq!(capabilities[0].runtime_id, "llama.cpp.embedding");
+        assert!(capabilities[0].available);
     }
 }
