@@ -156,6 +156,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Hosts may optionally inject a shared runtime registry; when present, session
   runtime load/unload lifecycle is translated into registry reservation
   acquire/release operations.
+- Hosts that own additional producer snapshots beyond the core
+  `inference::InferenceGateway` may pass a richer `ServerModeInfo` snapshot
+  into the hosted runtime constructor so backend Rust can derive registry
+  observations and additive runtime capabilities from one contract.
 - Direct embedded workflow runs may also reconcile Python-sidecar execution
   snapshots into that shared registry so producer-specific runtime facts do not
   depend on Tauri-only diagnostics paths.
@@ -184,5 +188,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   consumers; a future `RuntimeRegistry` may compose them with admission or
   residency state, but this crate must not silently fold policy-level decisions
   into those producer contracts.
+- Registry reconciliation should consume the richest available producer
+  snapshot contract, typically a host-owned `ServerModeInfo`; callers should
+  not bypass that contract with a narrower core-gateway-only helper when
+  additional producer facts such as the dedicated embedding sidecar are
+  available.
 - If the descriptor contract changes, this directory must regenerate its README
   contract text and add ADR coverage if the compatibility boundary expands.

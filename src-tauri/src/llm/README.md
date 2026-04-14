@@ -117,6 +117,9 @@ app.manage(gateway);
   single producer-specific runtime snapshots into backend-owned registry
   observations, but it must not become the owner of lifecycle or retention
   policy.
+- When this directory synchronizes registry state from the shared gateway, it
+  must use the richer Tauri `mode_info()` snapshot rather than the narrower
+  core-gateway view so dedicated embedding-sidecar facts are not dropped.
 - Command payloads emitted from this directory are transport wrappers around
   backend/runtime contracts, not a separate policy schema.
 - Health/recovery overlays may add host-only fields, but they must not mutate
