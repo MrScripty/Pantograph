@@ -30,6 +30,9 @@ desktop app wiring.
   state inspection.
 - `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
   runtime registry status for host execution orchestration.
+- `reclaim.rs`: backend-owned reclaim disposition contracts that tell hosts
+  when retention policy requires a real producer stop versus a registry-only
+  terminal stop.
 
 ## Invariants
 - Runtime ids and backend keys are canonicalized at the registry boundary.
@@ -57,6 +60,10 @@ desktop app wiring.
 - Warmup/reuse lifecycle classification is also computed here so callers can
   decide whether to start, reuse, or wait without rebuilding status semantics
   in host adapters.
+- Reclaim sequencing is also computed here so hosts can ask whether an
+  evictable runtime still needs a real producer stop or can be converged to
+  `stopped` inside the registry without re-deriving that policy from raw
+  status.
 - Single-runtime observation updates are also supported here so adapters can
   reconcile producer-specific runtime snapshots without implicitly stopping
   unrelated runtimes that were observed through a different producer path.
@@ -96,5 +103,8 @@ desktop app wiring.
   disposition and future eviction policy.
 - Hosts may ask for a warmup disposition after registration or observation, but
   they must not re-encode runtime-status-to-start/reuse/wait rules locally.
+- Hosts may ask the registry to begin reclaim for an evictable runtime; the
+  returned action tells them whether a live producer still needs to be stopped
+  before they reconcile the final stopped observation.
 - New fields in public snapshot/lease structs should be additive unless a
   deliberate migration is recorded.

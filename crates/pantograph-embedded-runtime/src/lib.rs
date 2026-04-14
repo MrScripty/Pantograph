@@ -12,9 +12,10 @@ use pantograph_runtime_identity::{
     runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
-    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionDecision,
-    RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision, SharedRuntimeRegistry,
+    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeReclaimAction,
+    RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
+    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision,
+    SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -1067,44 +1068,18 @@ impl EmbeddedWorkflowHost {
                 .map(|snapshot| snapshot.active)
                 .unwrap_or(false)
             && active_runtime_id.as_deref() == Some(disposition.runtime_id.as_str());
-        let status = runtime_registry
-            .warmup_disposition(&disposition.runtime_id)
-            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?
-            .status;
 
-        if runtime_is_active {
-            if status != pantograph_runtime_registry::RuntimeRegistryStatus::Stopping {
-                runtime_registry
-                    .transition_runtime(&disposition.runtime_id, RuntimeTransition::StopRequested)
-                    .map(|_| ())
-                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
-            }
+        let reclaim = runtime_registry
+            .reclaim_runtime(&disposition.runtime_id, runtime_is_active)
+            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+
+        if reclaim.action == RuntimeReclaimAction::StopProducer {
             self.gateway.stop().await;
             let stopped_mode_info = self.gateway.mode_info().await;
             Self::reconcile_active_runtime_mode_info(runtime_registry, &stopped_mode_info, true);
-            return Ok(());
         }
 
-        match status {
-            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
-            | pantograph_runtime_registry::RuntimeRegistryStatus::Failed => Ok(()),
-            pantograph_runtime_registry::RuntimeRegistryStatus::Stopping => runtime_registry
-                .transition_runtime(&disposition.runtime_id, RuntimeTransition::Stopped)
-                .map(|_| ())
-                .map_err(|error| WorkflowServiceError::Internal(error.to_string())),
-            pantograph_runtime_registry::RuntimeRegistryStatus::Warming
-            | pantograph_runtime_registry::RuntimeRegistryStatus::Ready
-            | pantograph_runtime_registry::RuntimeRegistryStatus::Busy
-            | pantograph_runtime_registry::RuntimeRegistryStatus::Unhealthy => {
-                runtime_registry
-                    .transition_runtime(&disposition.runtime_id, RuntimeTransition::StopRequested)
-                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
-                runtime_registry
-                    .transition_runtime(&disposition.runtime_id, RuntimeTransition::Stopped)
-                    .map(|_| ())
-                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))
-            }
-        }
+        Ok(())
     }
 
     async fn reserve_loaded_session_runtime(

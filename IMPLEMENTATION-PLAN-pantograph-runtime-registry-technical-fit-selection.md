@@ -491,6 +491,9 @@ runtime callers.
   inference producer before reconciling the registry back to `stopped`, so
   registry eviction decisions for the active runtime no longer stop at
   bookkeeping-only state changes.
+- 2026-04-13: Reclaim sequencing is now a backend-owned runtime-registry
+  contract, so embedded-runtime no longer derives producer-stop versus
+  registry-only-stop behavior from raw retention/status facts locally.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

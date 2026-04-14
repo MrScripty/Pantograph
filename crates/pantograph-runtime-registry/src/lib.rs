@@ -1,5 +1,6 @@
 mod admission;
 mod observation;
+mod reclaim;
 mod reservation;
 mod retention;
 mod snapshot;
@@ -17,6 +18,7 @@ pub use admission::{
 };
 pub use observation::{observed_runtime_status_from_lifecycle, RuntimeObservation};
 use pantograph_runtime_identity::canonical_runtime_id;
+pub use reclaim::{RuntimeReclaimAction, RuntimeReclaimDisposition};
 use reservation::RuntimeReservationRecord;
 pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest, RuntimeRetentionHint};
 pub use retention::{
@@ -313,6 +315,19 @@ impl RuntimeRegistry {
             .lock()
             .expect("runtime registry state lock poisoned");
         runtime_retention_disposition(runtime_id, &guard)
+    }
+
+    pub fn reclaim_runtime(
+        &self,
+        runtime_id: &str,
+        producer_active: bool,
+    ) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
+        let now_ms = unix_timestamp_ms();
+        let mut guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        runtime_reclaim(runtime_id, producer_active, &mut guard, now_ms)
     }
 
     pub fn warmup_disposition(
@@ -658,6 +673,54 @@ fn runtime_warmup_disposition(
     };
 
     Ok(disposition)
+}
+
+fn runtime_reclaim(
+    runtime_id: &str,
+    producer_active: bool,
+    state: &mut RuntimeRegistryState,
+    now_ms: u64,
+) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
+    let retention = runtime_retention_disposition(runtime_id, state)?;
+    let runtime_id = retention.runtime_id.clone();
+    let record = state
+        .runtimes
+        .get_mut(&runtime_id)
+        .ok_or_else(|| RuntimeRegistryError::RuntimeNotFound(runtime_id.clone()))?;
+
+    if retention.decision == RuntimeRetentionDecision::Retain {
+        return Ok(RuntimeReclaimDisposition::no_action(
+            runtime_id,
+            retention.reason,
+            record.status,
+        ));
+    }
+
+    if producer_active {
+        if record.status != RuntimeRegistryStatus::Stopping {
+            record.status = RuntimeRegistryStatus::Stopping;
+            record.last_transition_at_ms = now_ms;
+        }
+
+        return Ok(RuntimeReclaimDisposition::stop_producer(
+            runtime_id,
+            record.status,
+        ));
+    }
+
+    if record.status != RuntimeRegistryStatus::Stopped {
+        record.status = RuntimeRegistryStatus::Stopped;
+        record.runtime_instance_id = None;
+        record.last_error = None;
+        record.models.clear();
+        record.last_transition_at_ms = now_ms;
+    }
+
+    Ok(RuntimeReclaimDisposition::no_action(
+        runtime_id,
+        RuntimeRetentionReason::Evictable,
+        record.status,
+    ))
 }
 
 fn release_reservation_locked(
@@ -1467,6 +1530,140 @@ mod tests {
                 .expect("second release"),
             None
         );
+    }
+
+    #[test]
+    fn reclaim_runtime_marks_inactive_evictable_runtime_stopped() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![RuntimeObservation {
+            runtime_id: "inactive-reclaim".to_string(),
+            display_name: "inactive-reclaim".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("inactive-reclaim-1".to_string()),
+            last_error: None,
+        }]);
+
+        let lease = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "inactive-reclaim".to_string(),
+                workflow_id: "wf-inactive".to_string(),
+                reservation_owner_id: Some("session-inactive".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("reservation");
+        registry
+            .release_reservation_if_present(lease.reservation_id)
+            .expect("release");
+
+        assert_eq!(
+            registry
+                .reclaim_runtime("inactive-reclaim", false)
+                .expect("reclaim disposition"),
+            RuntimeReclaimDisposition::no_action(
+                "inactive-reclaim",
+                RuntimeRetentionReason::Evictable,
+                RuntimeRegistryStatus::Stopped,
+            )
+        );
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
+        assert!(snapshot.runtimes[0].runtime_instance_id.is_none());
+        assert!(snapshot.runtimes[0].models.is_empty());
+    }
+
+    #[test]
+    fn reclaim_runtime_requests_stop_for_active_evictable_runtime() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![RuntimeObservation {
+            runtime_id: "active-reclaim".to_string(),
+            display_name: "active-reclaim".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("active-reclaim-1".to_string()),
+            last_error: None,
+        }]);
+
+        let lease = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "active-reclaim".to_string(),
+                workflow_id: "wf-active".to_string(),
+                reservation_owner_id: Some("session-active".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("reservation");
+        registry
+            .release_reservation_if_present(lease.reservation_id)
+            .expect("release");
+
+        assert_eq!(
+            registry
+                .reclaim_runtime("active-reclaim", true)
+                .expect("reclaim disposition"),
+            RuntimeReclaimDisposition::stop_producer(
+                "active-reclaim",
+                RuntimeRegistryStatus::Stopping,
+            )
+        );
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopping);
+        assert_eq!(
+            snapshot.runtimes[0].runtime_instance_id.as_deref(),
+            Some("active-reclaim-1")
+        );
+    }
+
+    #[test]
+    fn reclaim_runtime_keeps_keep_alive_runtime_retained() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![RuntimeObservation {
+            runtime_id: "retained-reclaim".to_string(),
+            display_name: "retained-reclaim".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("retained-reclaim-1".to_string()),
+            last_error: None,
+        }]);
+
+        let _lease = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "retained-reclaim".to_string(),
+                workflow_id: "wf-retained".to_string(),
+                reservation_owner_id: Some("session-retained".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::KeepAlive,
+            })
+            .expect("reservation");
+
+        assert_eq!(
+            registry
+                .reclaim_runtime("retained-reclaim", true)
+                .expect("reclaim disposition"),
+            RuntimeReclaimDisposition::no_action(
+                "retained-reclaim",
+                RuntimeRetentionReason::KeepAliveReservation,
+                RuntimeRegistryStatus::Ready,
+            )
+        );
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Ready);
     }
 
     #[test]
