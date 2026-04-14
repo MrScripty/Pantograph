@@ -820,7 +820,7 @@ mod tests {
     }
 
     #[test]
-    fn trace_runtime_metrics_prefers_backend_lifecycle_reason() {
+    fn trace_runtime_metrics_keeps_canonical_backend_lifecycle_reason() {
         let metrics = trace_runtime_metrics(
             &inference::RuntimeLifecycleSnapshot {
                 runtime_id: Some("pytorch".to_string()),
@@ -829,7 +829,7 @@ mod tests {
                 warmup_completed_at_ms: Some(20),
                 warmup_duration_ms: Some(10),
                 runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("reused_loaded_pytorch_model".to_string()),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 active: true,
                 last_error: None,
             },
@@ -838,7 +838,7 @@ mod tests {
 
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
-            Some("reused_loaded_pytorch_model")
+            Some("runtime_reused")
         );
         assert_eq!(metrics.model_target.as_deref(), Some("/models/demo"));
     }

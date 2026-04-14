@@ -444,7 +444,7 @@ impl InferenceBackend for PyTorchBackend {
                 log::info!("PyTorch backend: reusing loaded model {}", model_path);
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
-                    lifecycle_decision_reason: Some("reused_loaded_pytorch_model".to_string()),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 });
             }
 
@@ -452,18 +452,21 @@ impl InferenceBackend for PyTorchBackend {
 
             return Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("loaded_pytorch_model".to_string()),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
             });
         }
 
         self.ready = true;
         Ok(BackendStartOutcome {
             runtime_reused: Some(was_ready),
-            lifecycle_decision_reason: Some(if was_ready {
-                "reused_pytorch_worker".to_string()
-            } else {
-                "initialized_pytorch_worker".to_string()
-            }),
+            lifecycle_decision_reason: Some(
+                if was_ready {
+                    "runtime_reused"
+                } else {
+                    "runtime_ready"
+                }
+                .to_string(),
+            ),
         })
     }
 
