@@ -20,7 +20,7 @@ packages.
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations. |
-| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection and runtime trace/model-target shaping. |
+| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, and runtime diagnostics projection. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,

@@ -14,7 +14,8 @@ use pantograph_embedded_runtime::{
         workflow_graph_has_embedding_node, workflow_graph_has_llamacpp_inference_node,
     },
     workflow_runtime::{
-        resolve_runtime_model_target, sync_embedding_emit_metadata_flags, trace_runtime_metrics,
+        build_runtime_diagnostics_projection, resolve_runtime_model_target,
+        sync_embedding_emit_metadata_flags,
     },
     RuntimeExtensionsSnapshot,
 };
@@ -30,7 +31,6 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowTraceRuntimeMetrics,
 };
 use tauri::{ipc::Channel, AppHandle, State};
 
@@ -45,27 +45,6 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
-}
-
-fn diagnostics_runtime_trace_metrics(
-    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
-    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
-    runtime_model_target_override: Option<&str>,
-    gateway_runtime_model_target: Option<&str>,
-) -> WorkflowTraceRuntimeMetrics {
-    trace_runtime_metrics(
-        runtime_snapshot_override.unwrap_or(gateway_snapshot),
-        runtime_model_target_override.or(gateway_runtime_model_target),
-    )
-}
-
-fn diagnostics_active_runtime_snapshot(
-    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
-    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
-) -> inference::RuntimeLifecycleSnapshot {
-    runtime_snapshot_override
-        .cloned()
-        .unwrap_or_else(|| gateway_snapshot.clone())
 }
 
 fn send_diagnostics_projection(
@@ -133,19 +112,17 @@ async fn emit_diagnostics_snapshots(
 
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let gateway_mode_info = gateway.mode_info().await;
-    let gateway_runtime_model_target =
-        resolve_runtime_model_target(&gateway_mode_info, &gateway_snapshot);
-    let override_runtime_model_target = runtime_snapshot_override.as_ref().and_then(|snapshot| {
-        runtime_model_target_override
-            .as_deref()
-            .map(ToOwned::to_owned)
-            .or_else(|| resolve_runtime_model_target(&gateway_mode_info, snapshot))
-    });
+    let diagnostics_projection = build_runtime_diagnostics_projection(
+        runtime_snapshot_override.as_ref(),
+        &gateway_snapshot,
+        &gateway_mode_info,
+        runtime_model_target_override.as_deref(),
+    );
     if let Some(snapshot) = runtime_snapshot_override.as_ref() {
         reconcile_runtime_registry_snapshot_override(
             runtime_registry.as_ref(),
             snapshot,
-            override_runtime_model_target.as_deref(),
+            diagnostics_projection.runtime_model_target.as_deref(),
         );
     }
 
@@ -161,26 +138,16 @@ async fn emit_diagnostics_snapshots(
     {
         Ok(runtime) => runtime,
         Err(error) => {
-            let active_runtime_snapshot = diagnostics_active_runtime_snapshot(
-                runtime_snapshot_override.as_ref(),
-                &gateway_snapshot,
-            );
             let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-            let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
-                runtime_snapshot_override.as_ref(),
-                &gateway_snapshot,
-                override_runtime_model_target.as_deref(),
-                gateway_runtime_model_target.as_deref(),
-            );
             let runtime_event = WorkflowEvent::runtime_snapshot(
                 runtime_workflow_id.clone(),
                 trace_execution_id.clone(),
                 captured_at_ms,
                 None,
-                runtime_trace_metrics,
+                diagnostics_projection.trace_runtime_metrics.clone(),
                 gateway_mode_info.active_model_target.clone(),
                 gateway_mode_info.embedding_model_target.clone(),
-                Some(active_runtime_snapshot),
+                Some(diagnostics_projection.active_runtime_snapshot.clone()),
                 embedding_runtime_snapshot,
                 Some(error.clone()),
             );
@@ -208,25 +175,17 @@ async fn emit_diagnostics_snapshots(
             (None, Some(error.to_envelope_json()))
         }
     };
-    let active_runtime_snapshot =
-        diagnostics_active_runtime_snapshot(runtime_snapshot_override.as_ref(), &gateway_snapshot);
     let embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-    let runtime_trace_metrics = diagnostics_runtime_trace_metrics(
-        runtime_snapshot_override.as_ref(),
-        &gateway_snapshot,
-        override_runtime_model_target.as_deref(),
-        gateway_runtime_model_target.as_deref(),
-    );
 
     let runtime_event = WorkflowEvent::runtime_snapshot(
         runtime_workflow_id,
         trace_execution_id,
         captured_at_ms,
         capabilities,
-        runtime_trace_metrics,
+        diagnostics_projection.trace_runtime_metrics,
         gateway_mode_info.active_model_target.clone(),
         gateway_mode_info.embedding_model_target.clone(),
-        Some(active_runtime_snapshot),
+        Some(diagnostics_projection.active_runtime_snapshot),
         embedding_runtime_snapshot,
         runtime_error,
     );
@@ -407,60 +366,6 @@ async fn run_session_graph_snapshot(
     )
     .await;
     workflow_result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::diagnostics_runtime_trace_metrics;
-
-    #[test]
-    fn diagnostics_runtime_trace_metrics_prefers_execution_snapshot_override() {
-        let execution_snapshot = inference::RuntimeLifecycleSnapshot {
-            runtime_id: Some("llama.cpp.embedding".to_string()),
-            runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
-            warmup_started_at_ms: Some(100),
-            warmup_completed_at_ms: Some(110),
-            warmup_duration_ms: Some(10),
-            runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("runtime_reused".to_string()),
-            active: true,
-            last_error: None,
-        };
-        let restored_gateway_snapshot = inference::RuntimeLifecycleSnapshot {
-            runtime_id: Some("llama.cpp".to_string()),
-            runtime_instance_id: Some("llama-cpp-restore-9".to_string()),
-            warmup_started_at_ms: Some(200),
-            warmup_completed_at_ms: Some(240),
-            warmup_duration_ms: Some(40),
-            runtime_reused: Some(false),
-            lifecycle_decision_reason: Some("runtime_ready".to_string()),
-            active: true,
-            last_error: None,
-        };
-
-        let metrics = diagnostics_runtime_trace_metrics(
-            Some(&execution_snapshot),
-            &restored_gateway_snapshot,
-            Some("/models/embed.gguf"),
-            Some("/models/restore.gguf"),
-        );
-
-        assert_eq!(metrics.runtime_id.as_deref(), Some("llama.cpp.embedding"));
-        assert_eq!(
-            metrics.observed_runtime_ids,
-            vec!["llama.cpp.embedding".to_string()]
-        );
-        assert_eq!(
-            metrics.runtime_instance_id.as_deref(),
-            Some("llama-cpp-embedding-2")
-        );
-        assert_eq!(metrics.runtime_reused, Some(true));
-        assert_eq!(metrics.model_target.as_deref(), Some("/models/embed.gguf"));
-        assert_eq!(
-            metrics.lifecycle_decision_reason.as_deref(),
-            Some("runtime_reused")
-        );
-    }
 }
 
 pub async fn execute_workflow_v2(
