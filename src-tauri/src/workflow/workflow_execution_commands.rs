@@ -884,7 +884,7 @@ mod tests {
             warmup_completed_at_ms: Some(240),
             warmup_duration_ms: Some(40),
             runtime_reused: Some(false),
-            lifecycle_decision_reason: Some("started_llamacpp_inference".to_string()),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
             active: true,
             last_error: None,
         };

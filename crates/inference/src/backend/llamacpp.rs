@@ -338,7 +338,7 @@ impl InferenceBackend for LlamaCppBackend {
             ) {
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
-                    lifecycle_decision_reason: Some("reused_llamacpp_inference".to_string()),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
                 });
             }
 
@@ -361,7 +361,7 @@ impl InferenceBackend for LlamaCppBackend {
                 })?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("started_llamacpp_inference".to_string()),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
             })
         }
     }
@@ -622,7 +622,7 @@ mod tests {
         assert_eq!(outcome.runtime_reused, Some(true));
         assert_eq!(
             outcome.lifecycle_decision_reason.as_deref(),
-            Some("reused_llamacpp_inference")
+            Some("runtime_reused")
         );
     }
 
