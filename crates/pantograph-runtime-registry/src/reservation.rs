@@ -1,6 +1,14 @@
 use crate::admission::{RuntimeReservationClaim, RuntimeReservationRequirements};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeRetentionHint {
+    #[default]
+    Ephemeral,
+    KeepAlive,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeReservationRequest {
@@ -14,6 +22,8 @@ pub struct RuntimeReservationRequest {
     pub pin_runtime: bool,
     #[serde(default)]
     pub requirements: Option<RuntimeReservationRequirements>,
+    #[serde(default)]
+    pub retention_hint: RuntimeRetentionHint,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +37,8 @@ pub struct RuntimeReservationLease {
     #[serde(default)]
     pub model_id: Option<String>,
     pub pin_runtime: bool,
+    #[serde(default)]
+    pub retention_hint: RuntimeRetentionHint,
     pub created_at_ms: u64,
 }
 
@@ -38,6 +50,7 @@ pub(crate) struct RuntimeReservationRecord {
     pub usage_profile: Option<String>,
     pub model_id: Option<String>,
     pub pin_runtime: bool,
+    pub retention_hint: RuntimeRetentionHint,
     pub created_at_ms: u64,
     pub claim: RuntimeReservationClaim,
 }
@@ -51,6 +64,7 @@ impl RuntimeReservationRecord {
             usage_profile: self.usage_profile,
             model_id: self.model_id,
             pin_runtime: self.pin_runtime,
+            retention_hint: self.retention_hint,
             created_at_ms: self.created_at_ms,
         }
     }

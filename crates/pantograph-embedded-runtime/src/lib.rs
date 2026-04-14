@@ -9,7 +9,7 @@ use node_engine::{
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
     RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
-    SharedRuntimeRegistry,
+    RuntimeRetentionHint, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -36,7 +36,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRunRequest, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionStatusRequest,
+    WorkflowSessionStatusResponse,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -748,11 +749,21 @@ impl EmbeddedWorkflowHost {
         Some(requirements)
     }
 
+    fn runtime_retention_hint(
+        retention_hint: WorkflowSessionRetentionHint,
+    ) -> RuntimeRetentionHint {
+        match retention_hint {
+            WorkflowSessionRetentionHint::Ephemeral => RuntimeRetentionHint::Ephemeral,
+            WorkflowSessionRetentionHint::KeepAlive => RuntimeRetentionHint::KeepAlive,
+        }
+    }
+
     async fn reserve_loaded_session_runtime(
         &self,
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
+        retention_hint: WorkflowSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
             return Ok(());
@@ -800,6 +811,7 @@ impl EmbeddedWorkflowHost {
                 model_id: mode_info.active_model_target.clone(),
                 pin_runtime: false,
                 requirements,
+                retention_hint: Self::runtime_retention_hint(retention_hint),
             })
             .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
 
@@ -1076,8 +1088,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
+        retention_hint: WorkflowSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
-        self.reserve_loaded_session_runtime(session_id, workflow_id, usage_profile)
+        self.reserve_loaded_session_runtime(session_id, workflow_id, usage_profile, retention_hint)
             .await
     }
 
@@ -1597,6 +1610,10 @@ mod tests {
         assert_eq!(
             reserved_snapshot.reservations[0].usage_profile.as_deref(),
             Some("interactive")
+        );
+        assert_eq!(
+            reserved_snapshot.reservations[0].retention_hint,
+            RuntimeRetentionHint::KeepAlive
         );
         assert_eq!(
             reserved_snapshot.runtimes[0].active_reservation_ids.len(),

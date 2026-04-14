@@ -16,7 +16,7 @@ pub use admission::{
 pub use observation::RuntimeObservation;
 use pantograph_runtime_identity::canonical_runtime_id;
 use reservation::RuntimeReservationRecord;
-pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest};
+pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest, RuntimeRetentionHint};
 pub use snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use state::RuntimeTransition as Transition;
 pub use state::{
@@ -230,6 +230,7 @@ impl RuntimeRegistry {
             usage_profile: request.usage_profile,
             model_id: request.model_id,
             pin_runtime: request.pin_runtime,
+            retention_hint: request.retention_hint,
             created_at_ms,
             claim,
         };
@@ -569,6 +570,7 @@ mod tests {
                 model_id: Some("model-a".to_string()),
                 pin_runtime: true,
                 requirements: None,
+                retention_hint: RuntimeRetentionHint::KeepAlive,
             })
             .expect("acquire reservation");
 
@@ -581,6 +583,10 @@ mod tests {
         );
         assert_eq!(snapshot.reservations.len(), 1);
         assert_eq!(snapshot.reservations[0].runtime_id, "onnx-runtime");
+        assert_eq!(
+            snapshot.reservations[0].retention_hint,
+            RuntimeRetentionHint::KeepAlive
+        );
 
         registry
             .release_reservation(lease.reservation_id)
@@ -628,6 +634,7 @@ mod tests {
                     estimated_min_vram_mb: Some(4096),
                     estimated_min_ram_mb: None,
                 }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
             })
             .expect_err("preserved vram budget should still reject oversized request");
 
@@ -670,6 +677,7 @@ mod tests {
                 model_id: None,
                 pin_runtime: false,
                 requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
             })
             .expect_err("stopping runtime should reject reservations");
 
@@ -790,6 +798,7 @@ mod tests {
                     estimated_min_vram_mb: Some(4096),
                     estimated_min_ram_mb: None,
                 }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
             })
             .expect("first reservation should fit available vram");
 
@@ -806,6 +815,7 @@ mod tests {
                     estimated_min_vram_mb: Some(1024),
                     estimated_min_ram_mb: None,
                 }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
             })
             .expect_err("second reservation should exceed remaining vram");
 
@@ -854,6 +864,7 @@ mod tests {
                     estimated_min_vram_mb: None,
                     estimated_min_ram_mb: Some(1024),
                 }),
+                retention_hint: RuntimeRetentionHint::KeepAlive,
             })
             .expect("peak ram claim should fit exactly");
 
@@ -870,6 +881,7 @@ mod tests {
                     estimated_min_vram_mb: None,
                     estimated_min_ram_mb: Some(1),
                 }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
             })
             .expect_err("no ram should remain after first reservation");
 
@@ -904,6 +916,7 @@ mod tests {
                     estimated_min_vram_mb: None,
                     estimated_min_ram_mb: Some(512),
                 }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
             })
             .expect("released capacity should admit a new reservation");
     }

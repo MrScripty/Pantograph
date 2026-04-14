@@ -506,6 +506,14 @@ pub struct WorkflowSessionKeepAliveResponse {
     pub state: WorkflowSessionState,
 }
 
+/// Host runtime retention hint derived from session behavior.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSessionRetentionHint {
+    Ephemeral,
+    KeepAlive,
+}
+
 /// Host runtime unload reason.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -820,6 +828,7 @@ pub trait WorkflowHost: Send + Sync {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
+        _retention_hint: WorkflowSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
@@ -1384,6 +1393,7 @@ impl WorkflowService {
             LoadTarget {
                 workflow_id: String,
                 usage_profile: Option<String>,
+                retention_hint: WorkflowSessionRetentionHint,
             },
         }
 
@@ -1418,6 +1428,11 @@ impl WorkflowService {
                     RuntimeDecision::LoadTarget {
                         workflow_id: target.workflow_id.clone(),
                         usage_profile: target.usage_profile.clone(),
+                        retention_hint: if target.keep_alive {
+                            WorkflowSessionRetentionHint::KeepAlive
+                        } else {
+                            WorkflowSessionRetentionHint::Ephemeral
+                        },
                     }
                 }
             };
@@ -1441,9 +1456,15 @@ impl WorkflowService {
                 RuntimeDecision::LoadTarget {
                     workflow_id,
                     usage_profile,
+                    retention_hint,
                 } => {
-                    host.load_session_runtime(session_id, &workflow_id, usage_profile.as_deref())
-                        .await?;
+                    host.load_session_runtime(
+                        session_id,
+                        &workflow_id,
+                        usage_profile.as_deref(),
+                        retention_hint,
+                    )
+                    .await?;
                     let mut store = self.session_store.lock().map_err(|_| {
                         WorkflowServiceError::Internal("session store lock poisoned".to_string())
                     })?;
@@ -2915,6 +2936,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
@@ -3005,6 +3027,27 @@ mod tests {
                     runtime_requirements: WorkflowRuntimeRequirements::default(),
                     models: Vec::new(),
                     runtime_capabilities: Vec::new(),
+                },
+            }
+        }
+    }
+
+    struct RecordingRuntimeHost {
+        retention_hints: Arc<Mutex<Vec<WorkflowSessionRetentionHint>>>,
+        capabilities: WorkflowHostCapabilities,
+    }
+
+    impl RecordingRuntimeHost {
+        fn new(retention_hints: Arc<Mutex<Vec<WorkflowSessionRetentionHint>>>) -> Self {
+            Self {
+                retention_hints,
+                capabilities: WorkflowHostCapabilities {
+                    max_input_bindings: 16,
+                    max_output_targets: 16,
+                    max_value_bytes: 4096,
+                    runtime_requirements: WorkflowRuntimeRequirements::default(),
+                    models: Vec::new(),
+                    runtime_capabilities: vec![ready_runtime_capability()],
                 },
             }
         }
@@ -3203,6 +3246,62 @@ mod tests {
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for RecordingRuntimeHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("recording-graph".to_string())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn runtime_capabilities(
+            &self,
+        ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+            Ok(self.capabilities.runtime_capabilities.clone())
+        }
+
+        async fn load_session_runtime(
+            &self,
+            _session_id: &str,
+            _workflow_id: &str,
+            _usage_profile: Option<&str>,
+            retention_hint: WorkflowSessionRetentionHint,
+        ) -> Result<(), WorkflowServiceError> {
+            self.retention_hints
+                .lock()
+                .expect("retention hints lock poisoned")
+                .push(retention_hint);
+            Ok(())
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
         }
     }
 
@@ -4547,6 +4646,73 @@ mod tests {
             .await
             .expect_err("closed session should not run");
         assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
+        let retention_hints = Arc::new(Mutex::new(Vec::new()));
+        let host = RecordingRuntimeHost::new(retention_hints.clone());
+        let service = WorkflowService::with_max_sessions(2);
+
+        service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create keep-alive session");
+
+        assert_eq!(
+            *retention_hints
+                .lock()
+                .expect("retention hints lock poisoned"),
+            vec![WorkflowSessionRetentionHint::KeepAlive]
+        );
+    }
+
+    #[tokio::test]
+    async fn one_shot_session_run_loads_runtime_with_ephemeral_retention_hint() {
+        let retention_hints = Arc::new(Mutex::new(Vec::new()));
+        let host = RecordingRuntimeHost::new(retention_hints.clone());
+        let service = WorkflowService::with_max_sessions(2);
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create one-shot session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id,
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("run one-shot session");
+
+        assert_eq!(
+            *retention_hints
+                .lock()
+                .expect("retention hints lock poisoned"),
+            vec![WorkflowSessionRetentionHint::Ephemeral]
+        );
     }
 
     #[tokio::test]

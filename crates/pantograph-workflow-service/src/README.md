@@ -61,6 +61,9 @@ Runtime capability rule:
 - `run_workflow_session` reuses a session-scoped runtime preflight cache keyed
   by graph fingerprint and runtime capability fingerprint
 - execution never triggers runtime installation implicitly
+- when the service asks a host to load session runtime resources, it now passes
+  a backend-owned retention hint derived from session `keep_alive` state so
+  adapters can forward intent without becoming retention-policy owners
 
 Primary contract types:
 
@@ -100,6 +103,9 @@ Primary contract types:
 - Runtime requirement extraction/estimation is backend-owned in this crate.
 - Adapters should provide host dependencies (workflow roots, backend identity,
   optional model metadata), not duplicate capability business logic.
+- Session `keep_alive` interpretation starts here; adapters may forward the
+  resulting retention hint to lower-level runtime infrastructure, but they must
+  not invent separate retention policy.
 - Graph edit sessions, graph persistence contracts, revision-aware connection
   intent, and undo/redo semantics are backend-owned in this crate.
 - Workflow trace and metrics contract ownership is backend-owned in this crate;

@@ -54,7 +54,7 @@ pub use workflow::{
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
     WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest, WorkflowSessionState,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowSessionSummary,
-    WorkflowSessionUnloadReason,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
+    WorkflowSessionRunRequest, WorkflowSessionState, WorkflowSessionStatusRequest,
+    WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };

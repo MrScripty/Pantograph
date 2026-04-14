@@ -438,6 +438,10 @@ runtime callers.
   memory estimates into registry reservation requests, and repeated runtime
   registration preserves any previously configured admission budget instead of
   wiping it.
+- 2026-04-13: `WorkflowService` now derives a typed retention hint from session
+  `keep_alive` state and forwards it through embedded-runtime into registry
+  reservation records, while direct retention policy remains to be implemented
+  inside the registry boundary.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -540,7 +544,7 @@ refactor lands.
 
 1. Start Milestone 3 by adding backend-owned admission, warmup, retention, and
    eviction policy on top of the completed runtime-registry foundation.
-2. Add warmup/reuse plus retention-hint policy inside the registry boundary
+2. Add warmup/reuse plus retention-hint interpretation inside the registry boundary
    without moving those decisions into gateway or adapter layers.
 3. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
@@ -589,6 +593,10 @@ Update during implementation:
 - 2026-04-13: Milestone 3 live reservation wiring now forwards workflow memory
   estimates into registry requests, and repeated registration no longer clears
   a preconfigured admission budget.
+- 2026-04-13: Milestone 3 now also carries typed keep-alive retention intent
+  from workflow service into registry reservation records so the next policy
+  slice can consume an explicit backend-owned hint instead of adapter-local
+  behavior.
 
 ## Commit Cadence Notes
 
