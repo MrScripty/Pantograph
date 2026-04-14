@@ -6,10 +6,8 @@ use node_engine::{Context, ExecutorExtensions, Result, TaskExecutor};
 
 use crate::agent::rag::SharedRagManager;
 
+pub use pantograph_embedded_runtime::task_executor::PythonRuntimeExecutionRecorder;
 use pantograph_embedded_runtime::task_executor::TauriTaskExecutor as EmbeddedTaskExecutor;
-pub use pantograph_embedded_runtime::task_executor::{
-    runtime_extension_keys, PythonRuntimeExecutionRecorder,
-};
 use pantograph_embedded_runtime::{PythonRuntimeAdapter, RagBackend, RagDocument};
 
 struct TauriRagBackend {

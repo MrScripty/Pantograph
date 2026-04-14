@@ -20,6 +20,7 @@ packages.
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations. |
+| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection and runtime trace/model-target shaping. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,
@@ -92,6 +93,9 @@ embedded-runtime crate.
 - Embedding workflow graph inspection and Puma-Lib model-id resolution for
   runtime mode preparation must stay in backend Rust so adapters do not drift
   on workflow validation rules or required wiring.
+- Workflow execution extension wiring plus runtime trace/model-target shaping
+  must stay in backend Rust so adapters do not drift on execution metadata or
+  diagnostics semantics.
 
 ## Revisit Triggers
 - A second runtime integration path needs the same dependency-resolution policy

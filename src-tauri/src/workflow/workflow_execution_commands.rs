@@ -8,11 +8,18 @@ use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
-use pantograph_embedded_runtime::embedding_workflow::{
-    resolve_embedding_model_id_from_workflow_graph, workflow_graph_has_embedding_node,
-    workflow_graph_has_llamacpp_inference_node,
+use pantograph_embedded_runtime::{
+    apply_runtime_extensions_for_execution,
+    embedding_workflow::{
+        resolve_embedding_model_id_from_workflow_graph, workflow_graph_has_embedding_node,
+        workflow_graph_has_llamacpp_inference_node,
+    },
+    workflow_runtime::{
+        resolve_runtime_model_target, sync_embedding_emit_metadata_flags, trace_runtime_metrics,
+    },
+    RuntimeExtensionsSnapshot,
 };
-use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_workflow_service::{
     convert_graph_to_node_engine, ConnectionAnchor, ConnectionCandidatesResponse,
     ConnectionCommitResponse, EdgeInsertionPreviewResponse, GraphEdge, GraphNode,
@@ -34,110 +41,6 @@ use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
 use super::task_executor::{PythonRuntimeExecutionRecorder, TauriTaskExecutor};
-
-#[derive(Clone, Default)]
-struct RuntimeExtensionsSnapshot {
-    pumas_api: Option<Arc<pumas_library::PumasApi>>,
-    kv_cache_store: Option<Arc<inference::kv_cache::KvCacheStore>>,
-    dependency_resolver: Option<Arc<dyn node_engine::ModelDependencyResolver>>,
-}
-
-fn snapshot_runtime_extensions(
-    shared: &node_engine::ExecutorExtensions,
-) -> RuntimeExtensionsSnapshot {
-    RuntimeExtensionsSnapshot {
-        pumas_api: shared
-            .get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
-            .cloned(),
-        kv_cache_store: shared
-            .get::<Arc<inference::kv_cache::KvCacheStore>>(
-                node_engine::extension_keys::KV_CACHE_STORE,
-            )
-            .cloned(),
-        dependency_resolver: shared
-            .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
-                node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-            )
-            .cloned(),
-    }
-}
-
-fn apply_runtime_extensions(
-    executor: &mut node_engine::WorkflowExecutor,
-    snapshot: &RuntimeExtensionsSnapshot,
-    event_sink: Arc<dyn EventSink>,
-    python_runtime_execution_recorder: Arc<PythonRuntimeExecutionRecorder>,
-    execution_id: &str,
-) {
-    if let Some(api) = &snapshot.pumas_api {
-        executor
-            .extensions_mut()
-            .set(node_engine::extension_keys::PUMAS_API, api.clone());
-    }
-    if let Some(store) = &snapshot.kv_cache_store {
-        executor
-            .extensions_mut()
-            .set(node_engine::extension_keys::KV_CACHE_STORE, store.clone());
-    }
-    if let Some(resolver) = &snapshot.dependency_resolver {
-        executor.extensions_mut().set(
-            node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-            resolver.clone(),
-        );
-    }
-    executor.extensions_mut().set(
-        super::task_executor::runtime_extension_keys::EVENT_SINK,
-        event_sink,
-    );
-    executor.extensions_mut().set(
-        super::task_executor::runtime_extension_keys::EXECUTION_ID,
-        execution_id.to_string(),
-    );
-    executor.extensions_mut().set(
-        super::task_executor::runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
-        python_runtime_execution_recorder,
-    );
-}
-
-async fn sync_embedding_emit_metadata_flags_for_executor(
-    executor: &mut node_engine::WorkflowExecutor,
-) -> Result<(), String> {
-    let snapshot = executor.get_graph_snapshot().await;
-    let mut counts = std::collections::HashMap::<String, u32>::new();
-    for edge in &snapshot.edges {
-        let key = format!("{}:{}", edge.source, edge.source_handle);
-        counts
-            .entry(key)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-    }
-
-    for node in &snapshot.nodes {
-        if node.node_type != "embedding" {
-            continue;
-        }
-        let key = format!("{}:metadata", node.id);
-        let emit_metadata = counts.get(&key).copied().unwrap_or(0) > 0;
-        let mut data = node.data.clone();
-        match data {
-            serde_json::Value::Object(ref mut map) => {
-                map.insert(
-                    "emit_metadata".to_string(),
-                    serde_json::json!(emit_metadata),
-                );
-            }
-            _ => {
-                data = serde_json::json!({ "emit_metadata": emit_metadata });
-            }
-        }
-        executor
-            .update_node_data(&node.id, data)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
-}
 
 async fn prepare_embedding_runtime(
     gateway: &SharedGateway,
@@ -226,28 +129,6 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
-pub(crate) fn trace_runtime_metrics(
-    snapshot: &inference::RuntimeLifecycleSnapshot,
-    model_target: Option<&str>,
-) -> WorkflowTraceRuntimeMetrics {
-    let runtime_id = snapshot
-        .runtime_id
-        .as_deref()
-        .map(canonical_runtime_id)
-        .filter(|runtime_id| !runtime_id.is_empty());
-    WorkflowTraceRuntimeMetrics {
-        runtime_id: runtime_id.clone(),
-        observed_runtime_ids: runtime_id.into_iter().collect(),
-        runtime_instance_id: snapshot.runtime_instance_id.clone(),
-        model_target: model_target.map(ToOwned::to_owned),
-        warmup_started_at_ms: snapshot.warmup_started_at_ms,
-        warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
-        warmup_duration_ms: snapshot.warmup_duration_ms,
-        runtime_reused: snapshot.runtime_reused,
-        lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
-    }
-}
-
 fn diagnostics_runtime_trace_metrics(
     runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
     gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
@@ -267,22 +148,6 @@ fn diagnostics_active_runtime_snapshot(
     runtime_snapshot_override
         .cloned()
         .unwrap_or_else(|| gateway_snapshot.clone())
-}
-
-pub(crate) fn resolve_runtime_model_target(
-    mode_info: &crate::config::ServerModeInfo,
-    snapshot: &inference::RuntimeLifecycleSnapshot,
-) -> Option<String> {
-    if snapshot
-        .runtime_id
-        .as_deref()
-        .map(canonical_runtime_id)
-        .as_deref()
-        == Some("llama.cpp.embedding")
-    {
-        return mode_info.embedding_model_target.clone();
-    }
-    mode_info.active_model_target.clone()
 }
 
 fn send_diagnostics_projection(
@@ -494,10 +359,7 @@ async fn run_session_graph_snapshot(
         diagnostics_store.inner().clone(),
     ));
     let python_runtime_execution_recorder = Arc::new(PythonRuntimeExecutionRecorder::default());
-    let runtime_ext = {
-        let shared = extensions.read().await;
-        snapshot_runtime_extensions(&shared)
-    };
+    let runtime_ext = RuntimeExtensionsSnapshot::from_shared(extensions.inner()).await;
     let restore_config = prepare_embedding_runtime(
         gateway.inner(),
         config.inner(),
@@ -533,15 +395,17 @@ async fn run_session_graph_snapshot(
         convert_graph_to_node_engine(&session_graph),
         event_adapter.clone(),
     );
-    apply_runtime_extensions(
+    apply_runtime_extensions_for_execution(
         &mut executor,
         &runtime_ext,
-        event_adapter.clone() as Arc<dyn EventSink>,
-        python_runtime_execution_recorder.clone(),
-        &session_id,
+        Some(event_adapter.clone() as Arc<dyn EventSink>),
+        Some(session_id.clone()),
+        Some(python_runtime_execution_recorder.clone()),
     );
     executor.set_event_sink(event_adapter.clone());
-    sync_embedding_emit_metadata_flags_for_executor(&mut executor).await?;
+    sync_embedding_emit_metadata_flags(&mut executor)
+        .await
+        .map_err(|error| error.to_string())?;
 
     workflow_service
         .workflow_graph_mark_edit_session_running(&session_id)
@@ -625,10 +489,7 @@ async fn run_session_graph_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        diagnostics_runtime_trace_metrics, is_llamacpp_backend_name, resolve_runtime_model_target,
-        trace_runtime_metrics,
-    };
+    use super::{diagnostics_runtime_trace_metrics, is_llamacpp_backend_name};
 
     #[test]
     fn llama_cpp_backend_gate_accepts_stable_aliases() {
@@ -636,51 +497,6 @@ mod tests {
         assert!(is_llamacpp_backend_name("llama_cpp"));
         assert!(is_llamacpp_backend_name("llamacpp"));
         assert!(!is_llamacpp_backend_name("ollama"));
-    }
-
-    #[test]
-    fn trace_runtime_metrics_keeps_canonical_backend_lifecycle_reason() {
-        let metrics = trace_runtime_metrics(
-            &inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("pytorch".to_string()),
-                runtime_instance_id: Some("pytorch-1".to_string()),
-                warmup_started_at_ms: Some(10),
-                warmup_completed_at_ms: Some(20),
-                warmup_duration_ms: Some(10),
-                runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("runtime_reused".to_string()),
-                active: true,
-                last_error: None,
-            },
-            Some("/models/demo"),
-        );
-
-        assert_eq!(
-            metrics.lifecycle_decision_reason.as_deref(),
-            Some("runtime_reused")
-        );
-        assert_eq!(metrics.model_target.as_deref(), Some("/models/demo"));
-    }
-
-    #[test]
-    fn trace_runtime_metrics_normalizes_known_runtime_aliases() {
-        let metrics = trace_runtime_metrics(
-            &inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("llama.cpp".to_string()),
-                runtime_instance_id: Some("llama-cpp-1".to_string()),
-                warmup_started_at_ms: None,
-                warmup_completed_at_ms: None,
-                warmup_duration_ms: None,
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
-                active: true,
-                last_error: None,
-            },
-            Some("/models/main.gguf"),
-        );
-
-        assert_eq!(metrics.runtime_id.as_deref(), Some("llama_cpp"));
-        assert_eq!(metrics.observed_runtime_ids, vec!["llama_cpp".to_string()]);
     }
 
     #[test]
@@ -729,39 +545,6 @@ mod tests {
         assert_eq!(
             metrics.lifecycle_decision_reason.as_deref(),
             Some("runtime_reused")
-        );
-    }
-
-    #[test]
-    fn resolve_runtime_model_target_prefers_embedding_target_for_embedding_alias() {
-        let mode_info = crate::config::ServerModeInfo {
-            backend_name: Some("llama.cpp".to_string()),
-            backend_key: Some("llama_cpp".to_string()),
-            mode: "sidecar_inference".to_string(),
-            ready: true,
-            url: None,
-            model_path: None,
-            is_embedding_mode: false,
-            active_model_target: Some("/models/main.gguf".to_string()),
-            embedding_model_target: Some("/models/embed.gguf".to_string()),
-            active_runtime: None,
-            embedding_runtime: None,
-        };
-        let snapshot = inference::RuntimeLifecycleSnapshot {
-            runtime_id: Some("llama_cpp_embedding".to_string()),
-            runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
-            warmup_started_at_ms: None,
-            warmup_completed_at_ms: None,
-            warmup_duration_ms: None,
-            runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("runtime_reused".to_string()),
-            active: true,
-            last_error: None,
-        };
-
-        assert_eq!(
-            resolve_runtime_model_target(&mode_info, &snapshot).as_deref(),
-            Some("/models/embed.gguf")
         );
     }
 }

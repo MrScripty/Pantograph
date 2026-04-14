@@ -8,8 +8,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_embedded_runtime::{
-    runtime_capabilities::dedicated_embedding_runtime_capabilities, EmbeddedRuntime,
-    EmbeddedRuntimeConfig, RagBackend, RagDocument,
+    runtime_capabilities::dedicated_embedding_runtime_capabilities,
+    workflow_runtime::{resolve_runtime_model_target, trace_runtime_metrics},
+    EmbeddedRuntime, EmbeddedRuntimeConfig, RagBackend, RagDocument,
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
@@ -665,13 +666,9 @@ pub async fn workflow_get_diagnostics_snapshot(
     } else {
         let runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
         let mode_info = gateway.mode_info().await;
-        super::workflow_execution_commands::trace_runtime_metrics(
+        trace_runtime_metrics(
             &runtime_snapshot,
-            super::workflow_execution_commands::resolve_runtime_model_target(
-                &mode_info,
-                &runtime_snapshot,
-            )
-            .as_deref(),
+            resolve_runtime_model_target(&mode_info, &runtime_snapshot).as_deref(),
         )
     };
     let mode_info = gateway.mode_info().await;

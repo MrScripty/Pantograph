@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use node_engine::{
-    CoreTaskExecutor, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
+    CoreTaskExecutor, EventSink, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
 use pantograph_runtime_identity::{
     backend_key_aliases, canonical_runtime_backend_key, canonical_runtime_id,
@@ -54,6 +54,7 @@ pub mod rag;
 pub mod runtime_capabilities;
 pub mod runtime_registry;
 pub mod task_executor;
+pub mod workflow_runtime;
 
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use python_runtime::{
@@ -163,12 +164,14 @@ pub fn apply_runtime_extensions(
     executor: &mut WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,
 ) {
-    apply_runtime_extensions_with_python_runtime_recorder(executor, snapshot, None);
+    apply_runtime_extensions_for_execution(executor, snapshot, None, None, None);
 }
 
-fn apply_runtime_extensions_with_python_runtime_recorder(
+pub fn apply_runtime_extensions_for_execution(
     executor: &mut WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,
+    event_sink: Option<Arc<dyn EventSink>>,
+    execution_id: Option<String>,
     python_runtime_execution_recorder: Option<Arc<task_executor::PythonRuntimeExecutionRecorder>>,
 ) {
     if let Some(api) = &snapshot.pumas_api {
@@ -185,6 +188,18 @@ fn apply_runtime_extensions_with_python_runtime_recorder(
         executor.extensions_mut().set(
             node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
             resolver.clone(),
+        );
+    }
+    if let Some(event_sink) = event_sink {
+        executor.extensions_mut().set(
+            task_executor::runtime_extension_keys::EVENT_SINK,
+            event_sink,
+        );
+    }
+    if let Some(execution_id) = execution_id {
+        executor.extensions_mut().set(
+            task_executor::runtime_extension_keys::EXECUTION_ID,
+            execution_id,
         );
     }
     if let Some(recorder) = python_runtime_execution_recorder {
@@ -1428,10 +1443,13 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         let python_runtime_execution_recorder =
             Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
 
-        let mut executor = WorkflowExecutor::new(execution_id, graph, Arc::new(NullEventSink));
-        apply_runtime_extensions_with_python_runtime_recorder(
+        let mut executor =
+            WorkflowExecutor::new(execution_id.clone(), graph, Arc::new(NullEventSink));
+        apply_runtime_extensions_for_execution(
             &mut executor,
             &runtime_ext,
+            None,
+            Some(execution_id.clone()),
             Some(python_runtime_execution_recorder.clone()),
         );
 

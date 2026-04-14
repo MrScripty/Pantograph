@@ -314,6 +314,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Temporary embedding-mode prepare/restore orchestration for workflow execution
   and RAG indexing now lives in `crates/inference`, leaving Tauri callers to
   provide request inputs and consume backend-owned restore context.
+- Workflow execution extension wiring and runtime trace/model-target shaping
+  now live in `crates/pantograph-embedded-runtime`, leaving Tauri workflow
+  commands to consume backend-owned execution metadata helpers instead of
+  maintaining host-local copies.
 
 **Still missing:**
 
