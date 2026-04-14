@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use node_engine::{
@@ -13,7 +14,7 @@ use pantograph_runtime_identity::{
 use pantograph_runtime_registry::{
     observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
     RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
-    SharedRuntimeRegistry,
+    RuntimeTransition, RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -61,6 +62,14 @@ pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographT
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
+
+const RUNTIME_WARMUP_POLL_INTERVAL_MS: u64 = 25;
+
+#[cfg(not(test))]
+const RUNTIME_WARMUP_WAIT_TIMEOUT_MS: u64 = 5_000;
+
+#[cfg(test)]
+const RUNTIME_WARMUP_WAIT_TIMEOUT_MS: u64 = 250;
 
 #[derive(Debug, Clone)]
 pub struct EmbeddedRuntimeConfig {
@@ -831,6 +840,205 @@ impl EmbeddedWorkflowHost {
         }
     }
 
+    fn active_runtime_descriptor(
+        mode_info: &inference::ServerModeInfo,
+    ) -> (String, String, Vec<String>, Option<String>) {
+        let runtime_id = mode_info
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_id.clone())
+            .or_else(|| mode_info.backend_key.clone())
+            .or_else(|| mode_info.backend_name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let display_name = mode_info
+            .backend_name
+            .clone()
+            .unwrap_or_else(|| runtime_id.clone());
+        let backend_keys = mode_info
+            .backend_key
+            .clone()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let runtime_instance_id = mode_info
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_instance_id.clone());
+
+        (runtime_id, display_name, backend_keys, runtime_instance_id)
+    }
+
+    fn active_runtime_observation(
+        mode_info: &inference::ServerModeInfo,
+    ) -> Option<RuntimeObservation> {
+        let snapshot = mode_info
+            .active_runtime
+            .as_ref()
+            .cloned()
+            .unwrap_or_default();
+        let (runtime_id, display_name, backend_keys, _) =
+            Self::active_runtime_descriptor(mode_info);
+        let status = observed_runtime_status_from_lifecycle(
+            snapshot.active,
+            snapshot.warmup_started_at_ms,
+            snapshot.warmup_completed_at_ms,
+            snapshot.last_error.is_some(),
+        );
+
+        if matches!(
+            status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        ) && snapshot.last_error.is_none()
+        {
+            return None;
+        }
+
+        Some(RuntimeObservation {
+            runtime_id,
+            display_name,
+            backend_keys,
+            model_id: mode_info.active_model_target.clone(),
+            status,
+            runtime_instance_id: snapshot.runtime_instance_id,
+            last_error: snapshot.last_error,
+        })
+    }
+
+    fn reconcile_active_runtime_mode_info(
+        runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
+        mode_info: &inference::ServerModeInfo,
+    ) {
+        if let Some(observation) = Self::active_runtime_observation(mode_info) {
+            runtime_registry.observe_runtime(observation);
+        }
+    }
+
+    fn record_session_runtime_reservation(
+        &self,
+        session_id: &str,
+        reservation_id: u64,
+    ) -> Result<Option<u64>, WorkflowServiceError> {
+        let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session runtime reservation lock poisoned".to_string())
+        })?;
+
+        Ok(reservations.insert(session_id.to_string(), reservation_id))
+    }
+
+    fn restore_session_runtime_reservation(
+        &self,
+        session_id: &str,
+        previous_reservation_id: Option<u64>,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session runtime reservation lock poisoned".to_string())
+        })?;
+
+        if let Some(previous_reservation_id) = previous_reservation_id {
+            reservations.insert(session_id.to_string(), previous_reservation_id);
+        } else {
+            reservations.remove(session_id);
+        }
+
+        Ok(())
+    }
+
+    async fn wait_for_runtime_warmup_transition(
+        &self,
+        runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
+        runtime_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let wait_future = async {
+            loop {
+                let mode_info = self.gateway.mode_info().await;
+                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info);
+
+                let disposition = runtime_registry
+                    .warmup_disposition(runtime_id)
+                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+                match disposition.decision {
+                    RuntimeWarmupDecision::ReuseLoadedRuntime => return Ok(()),
+                    RuntimeWarmupDecision::StartRuntime => {
+                        let runtime_instance_id = mode_info
+                            .active_runtime
+                            .as_ref()
+                            .and_then(|snapshot| snapshot.runtime_instance_id.clone());
+                        runtime_registry
+                            .transition_runtime(
+                                runtime_id,
+                                RuntimeTransition::WarmupStarted {
+                                    runtime_instance_id,
+                                },
+                            )
+                            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+                        return Ok(());
+                    }
+                    RuntimeWarmupDecision::WaitForTransition => {
+                        tokio::time::sleep(Duration::from_millis(RUNTIME_WARMUP_POLL_INTERVAL_MS))
+                            .await;
+                    }
+                }
+            }
+        };
+
+        tokio::time::timeout(
+            Duration::from_millis(RUNTIME_WARMUP_WAIT_TIMEOUT_MS),
+            wait_future,
+        )
+        .await
+        .map_err(|_| {
+            WorkflowServiceError::RuntimeTimeout(format!(
+                "timed out waiting for runtime '{}' to finish warmup or shutdown transition",
+                runtime_id
+            ))
+        })?
+    }
+
+    async fn consume_runtime_warmup_disposition(
+        &self,
+        runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
+        runtime_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        match runtime_registry
+            .warmup_disposition(runtime_id)
+            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?
+            .decision
+        {
+            RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
+            RuntimeWarmupDecision::StartRuntime => {
+                let mode_info = self.gateway.mode_info().await;
+                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info);
+
+                match runtime_registry
+                    .warmup_disposition(runtime_id)
+                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?
+                    .decision
+                {
+                    RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
+                    RuntimeWarmupDecision::WaitForTransition => {
+                        self.wait_for_runtime_warmup_transition(runtime_registry, runtime_id)
+                            .await
+                    }
+                    RuntimeWarmupDecision::StartRuntime => runtime_registry
+                        .transition_runtime(
+                            runtime_id,
+                            RuntimeTransition::WarmupStarted {
+                                runtime_instance_id: mode_info
+                                    .active_runtime
+                                    .as_ref()
+                                    .and_then(|snapshot| snapshot.runtime_instance_id.clone()),
+                            },
+                        )
+                        .map(|_| ())
+                        .map_err(|error| WorkflowServiceError::Internal(error.to_string())),
+                }
+            }
+            RuntimeWarmupDecision::WaitForTransition => {
+                self.wait_for_runtime_warmup_transition(runtime_registry, runtime_id)
+                    .await
+            }
+        }
+    }
+
     async fn reserve_loaded_session_runtime(
         &self,
         session_id: &str,
@@ -843,17 +1051,8 @@ impl EmbeddedWorkflowHost {
         };
 
         let mode_info = self.gateway.mode_info().await;
-        let runtime_id = mode_info
-            .active_runtime
-            .as_ref()
-            .and_then(|snapshot| snapshot.runtime_id.clone())
-            .or_else(|| mode_info.backend_key.clone())
-            .or_else(|| mode_info.backend_name.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        let display_name = mode_info
-            .backend_name
-            .clone()
-            .unwrap_or_else(|| runtime_id.clone());
+        let (runtime_id, display_name, backend_keys, _) =
+            Self::active_runtime_descriptor(&mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
@@ -862,12 +1061,12 @@ impl EmbeddedWorkflowHost {
 
         runtime_registry.register_runtime(
             RuntimeRegistration::new(runtime_id.clone(), display_name)
-                .with_backend_keys(mode_info.backend_key.clone().into_iter().collect()),
+                .with_backend_keys(backend_keys),
         );
 
         let lease = runtime_registry
             .acquire_reservation(RuntimeReservationRequest {
-                runtime_id,
+                runtime_id: runtime_id.clone(),
                 workflow_id: workflow_id.to_string(),
                 reservation_owner_id: Some(session_id.to_string()),
                 usage_profile: Self::trimmed_optional(usage_profile),
@@ -878,10 +1077,23 @@ impl EmbeddedWorkflowHost {
             })
             .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
 
-        let mut reservations = self.session_runtime_reservations.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session runtime reservation lock poisoned".to_string())
-        })?;
-        reservations.insert(session_id.to_string(), lease.reservation_id);
+        let previous_reservation_id =
+            self.record_session_runtime_reservation(session_id, lease.reservation_id)?;
+        if let Err(error) = self
+            .consume_runtime_warmup_disposition(runtime_registry.as_ref(), &runtime_id)
+            .await
+        {
+            self.restore_session_runtime_reservation(session_id, previous_reservation_id)?;
+            if previous_reservation_id != Some(lease.reservation_id) {
+                runtime_registry
+                    .release_reservation_if_present(lease.reservation_id)
+                    .map_err(|release_error| {
+                        WorkflowServiceError::Internal(release_error.to_string())
+                    })?;
+            }
+            return Err(error);
+        }
+
         Ok(())
     }
 
@@ -1284,13 +1496,30 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::stream;
+    use inference::backend::{
+        BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+        EmbeddingResult, InferenceBackend,
+    };
+    use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use inference::{RerankRequest, RerankResponse};
     use pantograph_runtime_registry::{RuntimeRegistry, RuntimeRegistryStatus};
     use std::path::Path;
+    use std::pin::Pin;
     use tempfile::TempDir;
+    use tokio::sync::mpsc;
 
     struct MockImagePythonRuntime {
         requests: Mutex<Vec<PythonNodeExecutionRequest>>,
     }
+
+    struct MockReadyBackend {
+        ready: bool,
+    }
+
+    struct MockProcessHandle;
+
+    struct MockProcessSpawner;
 
     #[async_trait::async_trait]
     impl PythonRuntimeAdapter for MockImagePythonRuntime {
@@ -1303,6 +1532,104 @@ mod tests {
                 "image".to_string(),
                 serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ=="),
             )]))
+        }
+    }
+
+    impl ProcessHandle for MockProcessHandle {
+        fn pid(&self) -> u32 {
+            1
+        }
+
+        fn kill(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+            let (_tx, rx) = mpsc::channel(1);
+            Ok((rx, Box::new(MockProcessHandle)))
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceBackend for MockReadyBackend {
+        fn name(&self) -> &'static str {
+            "Mock"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock ready backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            self.ready = true;
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_mock_runtime".to_string()),
+            })
+        }
+
+        fn stop(&mut self) {
+            self.ready = false;
+        }
+
+        fn is_ready(&self) -> bool {
+            self.ready
+        }
+
+        async fn health_check(&self) -> bool {
+            self.ready
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<
+            Pin<Box<dyn futures_util::Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+            BackendError,
+        > {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
         }
     }
 
@@ -1803,6 +2130,10 @@ mod tests {
             reserved_snapshot.runtimes[0].active_reservation_ids.len(),
             1
         );
+        assert_eq!(
+            reserved_snapshot.runtimes[0].status,
+            RuntimeRegistryStatus::Warming
+        );
 
         runtime
             .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
@@ -1817,6 +2148,181 @@ mod tests {
         assert!(released_snapshot.runtimes[0]
             .active_reservation_ids
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_session_runtime_load_reuses_ready_gateway_runtime_in_registry() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "mock",
+        ));
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            gateway,
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        runtime
+            .host()
+            .load_session_runtime(
+                "session-ready",
+                "runtime-text",
+                Some("interactive"),
+                WorkflowSessionRetentionHint::KeepAlive,
+            )
+            .await
+            .expect("ready runtime should be reused");
+
+        let snapshot = runtime_registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(snapshot.runtimes.len(), 1);
+        assert_eq!(snapshot.runtimes[0].runtime_id, "mock");
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Ready);
+        assert!(snapshot.runtimes[0].runtime_instance_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_session_runtime_load_waits_for_existing_warmup_transition() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        runtime_registry.register_runtime(RuntimeRegistration::new("llama.cpp", "llama.cpp"));
+        runtime_registry
+            .transition_runtime(
+                "llama.cpp",
+                RuntimeTransition::WarmupStarted {
+                    runtime_instance_id: Some("llama-1".to_string()),
+                },
+            )
+            .expect("runtime should enter warming");
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        let ready_registry = runtime_registry.clone();
+        let ready_task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            ready_registry
+                .transition_runtime(
+                    "llama.cpp",
+                    RuntimeTransition::Ready {
+                        runtime_instance_id: Some("llama-1".to_string()),
+                    },
+                )
+                .expect("runtime should become ready");
+        });
+
+        runtime
+            .host()
+            .load_session_runtime(
+                "session-wait",
+                "runtime-text",
+                None,
+                WorkflowSessionRetentionHint::KeepAlive,
+            )
+            .await
+            .expect("load should wait for warmup completion");
+        ready_task.await.expect("ready transition task");
+
+        let snapshot = runtime_registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Ready);
+        assert_eq!(
+            snapshot.runtimes[0].runtime_instance_id.as_deref(),
+            Some("llama-1")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        runtime_registry.register_runtime(RuntimeRegistration::new("llama.cpp", "llama.cpp"));
+        runtime_registry
+            .transition_runtime(
+                "llama.cpp",
+                RuntimeTransition::WarmupStarted {
+                    runtime_instance_id: Some("llama-timeout".to_string()),
+                },
+            )
+            .expect("runtime should enter warming");
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        let error = runtime
+            .host()
+            .load_session_runtime(
+                "session-timeout",
+                "runtime-text",
+                None,
+                WorkflowSessionRetentionHint::KeepAlive,
+            )
+            .await
+            .expect_err("warming timeout should fail");
+        assert!(matches!(error, WorkflowServiceError::RuntimeTimeout(_)));
+
+        let snapshot = runtime_registry.snapshot();
+        assert!(snapshot.reservations.is_empty());
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.active_reservation_ids.is_empty()));
     }
 
     #[tokio::test]
