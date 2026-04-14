@@ -551,6 +551,12 @@ Update during implementation:
   `src-tauri/src/llm/runtime_registry.rs` so shared runtime display-name and
   backend-alias mapping now lives in one backend-owned Rust helper instead of
   drifting between host-specific producer adapters
+- Thirty-seventh implementation slice added across
+  `crates/pantograph-runtime-registry/src/observation.rs`,
+  `crates/pantograph-embedded-runtime/src/lib.rs`, and
+  `src-tauri/src/llm/runtime_registry.rs` so lifecycle-snapshot status
+  classification now comes from one backend-owned registry helper instead of
+  duplicated host-local warmup/error mapping
 
 ### Deviations
 

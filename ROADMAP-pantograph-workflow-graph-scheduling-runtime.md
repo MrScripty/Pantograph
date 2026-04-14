@@ -294,6 +294,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Shared runtime display-name and backend-alias mapping now lives in
   `crates/pantograph-runtime-identity` so embedded and Tauri runtime producers
   no longer maintain separate host-local identity tables.
+- Lifecycle-snapshot status classification now lives in
+  `crates/pantograph-runtime-registry` so embedded and Tauri runtime producers
+  no longer duplicate warmup/error-to-status mapping.
 
 **Still missing:**
 

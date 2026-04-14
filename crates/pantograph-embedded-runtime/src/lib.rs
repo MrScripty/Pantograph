@@ -11,8 +11,9 @@ use pantograph_runtime_identity::{
     runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeObservation, RuntimeRegistration, RuntimeRegistryStatus, RuntimeReservationRequest,
+    RuntimeObservation, RuntimeRegistration, RuntimeReservationRequest,
     RuntimeReservationRequirements, RuntimeRetentionHint, SharedRuntimeRegistry,
+    observed_runtime_status_from_lifecycle,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -702,24 +703,6 @@ impl EmbeddedWorkflowHost {
         runtime_backend_key_aliases(display_name, runtime_id)
     }
 
-    fn observed_runtime_status(
-        snapshot: &inference::RuntimeLifecycleSnapshot,
-    ) -> RuntimeRegistryStatus {
-        if snapshot.active {
-            if snapshot.warmup_started_at_ms.is_some() && snapshot.warmup_completed_at_ms.is_none()
-            {
-                return RuntimeRegistryStatus::Warming;
-            }
-            return RuntimeRegistryStatus::Ready;
-        }
-
-        if snapshot.last_error.is_some() {
-            return RuntimeRegistryStatus::Failed;
-        }
-
-        RuntimeRegistryStatus::Stopped
-    }
-
     fn observe_python_runtime_execution_metadata(
         &self,
         metadata: Option<&task_executor::PythonRuntimeExecutionMetadata>,
@@ -746,7 +729,12 @@ impl EmbeddedWorkflowHost {
             display_name: display_name.to_string(),
             backend_keys: Self::python_runtime_backend_keys(display_name, &runtime_id),
             model_id: metadata.model_target.clone(),
-            status: Self::observed_runtime_status(&metadata.snapshot),
+            status: observed_runtime_status_from_lifecycle(
+                metadata.snapshot.active,
+                metadata.snapshot.warmup_started_at_ms,
+                metadata.snapshot.warmup_completed_at_ms,
+                metadata.snapshot.last_error.is_some(),
+            ),
             runtime_instance_id: metadata.snapshot.runtime_instance_id.clone(),
             last_error: metadata.snapshot.last_error.clone(),
         });
@@ -1291,7 +1279,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pantograph_runtime_registry::RuntimeRegistry;
+    use pantograph_runtime_registry::{RuntimeRegistry, RuntimeRegistryStatus};
     use std::path::Path;
     use tempfile::TempDir;
 

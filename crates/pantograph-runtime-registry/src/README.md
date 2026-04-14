@@ -18,7 +18,8 @@ desktop app wiring.
 - `admission.rs`: runtime admission budget, request requirement, and rejection
   reason contracts owned by the backend registry policy layer.
 - `observation.rs`: host-supplied runtime observation contracts used to
-  reconcile backend lifecycle facts into registry state.
+  reconcile backend lifecycle facts into registry state, including shared
+  lifecycle-to-registry-status helpers for host adapters.
 - `state.rs`: runtime status, registry records, and transition validation
   rules.
 - `reservation.rs`: reservation request, lease, and stored reservation-record
@@ -56,6 +57,9 @@ desktop app wiring.
 - Single-runtime observation updates are also supported here so adapters can
   reconcile producer-specific runtime snapshots without implicitly stopping
   unrelated runtimes that were observed through a different producer path.
+- Lifecycle-to-registry-status mapping is also owned here so different hosts do
+  not drift on how active, warming, and failed producer snapshots are
+  classified.
 - Invalid state transitions are rejected rather than coerced.
 - Observation reconciliation updates registry-owned state but does not invent
   backend lifecycle facts.

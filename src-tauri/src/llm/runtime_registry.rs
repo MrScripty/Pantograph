@@ -8,7 +8,7 @@ use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeObservation, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
+    RuntimeObservation, RuntimeRegistryRuntimeSnapshot, observed_runtime_status_from_lifecycle,
 };
 
 pub use pantograph_runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};
@@ -40,7 +40,12 @@ pub fn reconcile_runtime_registry_snapshot_override(
         display_name: display_name.clone(),
         backend_keys,
         model_id: model_id.map(ToOwned::to_owned),
-        status: observed_status(snapshot),
+        status: observed_runtime_status_from_lifecycle(
+            snapshot.active,
+            snapshot.warmup_started_at_ms,
+            snapshot.warmup_completed_at_ms,
+            snapshot.last_error.is_some(),
+        ),
         runtime_instance_id: snapshot.runtime_instance_id.clone(),
         last_error: snapshot.last_error.clone(),
     }))
@@ -78,7 +83,12 @@ fn active_runtime_observation(mode_info: &inference::ServerModeInfo) -> RuntimeO
         display_name,
         backend_keys: mode_info.backend_key.clone().into_iter().collect(),
         model_id: mode_info.active_model_target.clone(),
-        status: observed_status(&snapshot),
+        status: observed_runtime_status_from_lifecycle(
+            snapshot.active,
+            snapshot.warmup_started_at_ms,
+            snapshot.warmup_completed_at_ms,
+            snapshot.last_error.is_some(),
+        ),
         runtime_instance_id: snapshot.runtime_instance_id,
         last_error: snapshot.last_error,
     }
@@ -98,31 +108,21 @@ fn embedding_runtime_observation(
         display_name: "Dedicated embedding runtime".to_string(),
         backend_keys: mode_info.backend_key.clone().into_iter().collect(),
         model_id: mode_info.embedding_model_target.clone(),
-        status: observed_status(&snapshot),
+        status: observed_runtime_status_from_lifecycle(
+            snapshot.active,
+            snapshot.warmup_started_at_ms,
+            snapshot.warmup_completed_at_ms,
+            snapshot.last_error.is_some(),
+        ),
         runtime_instance_id: snapshot.runtime_instance_id,
         last_error: snapshot.last_error,
     })
 }
 
-fn observed_status(snapshot: &inference::RuntimeLifecycleSnapshot) -> RuntimeRegistryStatus {
-    if snapshot.active {
-        if snapshot.warmup_started_at_ms.is_some() && snapshot.warmup_completed_at_ms.is_none() {
-            return RuntimeRegistryStatus::Warming;
-        }
-
-        return RuntimeRegistryStatus::Ready;
-    }
-
-    if snapshot.last_error.is_some() {
-        return RuntimeRegistryStatus::Failed;
-    }
-
-    RuntimeRegistryStatus::Stopped
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pantograph_runtime_registry::RuntimeRegistryStatus;
 
     #[test]
     fn reconcile_mode_info_registers_active_and_embedding_runtimes() {
