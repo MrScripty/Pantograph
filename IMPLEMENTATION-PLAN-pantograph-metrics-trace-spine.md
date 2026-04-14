@@ -562,6 +562,10 @@ Update during implementation:
   `src-tauri/src/workflow/workflow_execution_commands.rs` so default lifecycle
   decision-reason normalization now lives with the backend-owned lifecycle
   snapshot contract instead of an adapter-local trace helper
+- Thirty-ninth implementation slice added in
+  `src-tauri/src/workflow/diagnostics.rs` so diagnostics runtime snapshots now
+  consume backend-owned lifecycle decision-reason normalization instead of
+  cloning potentially incomplete adapter input
 
 ### Deviations
 

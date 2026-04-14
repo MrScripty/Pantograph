@@ -187,7 +187,7 @@ impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleS
             warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
             warmup_duration_ms: snapshot.warmup_duration_ms,
             runtime_reused: snapshot.runtime_reused,
-            lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone(),
+            lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
             active: snapshot.active,
             last_error: snapshot.last_error.clone(),
         }
@@ -1373,7 +1373,7 @@ mod tests {
                 .active_runtime
                 .as_ref()
                 .and_then(|runtime| runtime.runtime_id.as_deref()),
-            Some("llama.cpp")
+            Some("llama_cpp")
         );
         assert_eq!(
             snapshot
@@ -1723,6 +1723,48 @@ mod tests {
             });
 
         assert_eq!(snapshot.runtime_id.as_deref(), Some("pytorch"));
+    }
+
+    #[test]
+    fn diagnostics_runtime_lifecycle_snapshot_infers_default_lifecycle_reason() {
+        let snapshot =
+            DiagnosticsRuntimeLifecycleSnapshot::from(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: None,
+                active: true,
+                last_error: None,
+            });
+
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_ready")
+        );
+    }
+
+    #[test]
+    fn diagnostics_runtime_lifecycle_snapshot_infers_start_failure_reason() {
+        let snapshot =
+            DiagnosticsRuntimeLifecycleSnapshot::from(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: None,
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(25),
+                warmup_duration_ms: Some(15),
+                runtime_reused: None,
+                lifecycle_decision_reason: None,
+                active: false,
+                last_error: Some("failed".to_string()),
+            });
+
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_start_failed")
+        );
     }
 
     #[test]
