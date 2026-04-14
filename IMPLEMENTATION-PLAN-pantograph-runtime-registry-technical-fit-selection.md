@@ -472,10 +472,15 @@ runtime callers.
   warmup disposition contract so hosts can ask whether a runtime should start,
   reuse a loaded instance, or wait for an in-flight transition without
   re-encoding registry status semantics locally.
+- 2026-04-13: The registry now also exposes owner-filtered reservation
+  eviction lookup so embedded-runtime can request the first matching unload
+  candidate from backend-owned policy order instead of re-filtering that
+  ranking locally.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
 - `cargo test -p pantograph-runtime-registry warmup_disposition -- --nocapture`
+- `cargo test -p pantograph-runtime-registry eviction_reservation_candidate_for_owners -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check --manifest-path src-tauri/Cargo.toml`

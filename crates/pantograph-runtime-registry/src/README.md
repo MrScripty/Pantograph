@@ -51,6 +51,9 @@ desktop app wiring.
 - Reservation-owner eviction ordering is also computed here so callers can
   reuse backend-owned runtime pressure decisions when choosing which loaded
   session reservation to release.
+- Owner-filtered reservation eviction lookup is also computed here so hosts can
+  ask for the first matching unload candidate from backend-owned ordering
+  instead of rebuilding that filter locally.
 - Warmup/reuse lifecycle classification is also computed here so callers can
   decide whether to start, reuse, or wait without rebuilding status semantics
   in host adapters.

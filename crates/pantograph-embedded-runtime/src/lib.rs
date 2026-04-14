@@ -1190,12 +1190,17 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             .cloned()
             .map(|candidate| (candidate.session_id.clone(), candidate))
             .collect::<HashMap<_, _>>();
-        for reservation in runtime_registry.eviction_reservation_candidates() {
-            let Some(owner_id) = reservation.reservation_owner_id.as_deref() else {
-                continue;
-            };
-            if let Some(candidate) = candidates_by_session_id.get(owner_id) {
-                return Ok(Some(candidate.clone()));
+        let owner_ids = candidates_by_session_id
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        if let Some(reservation) =
+            runtime_registry.eviction_reservation_candidate_for_owners(&owner_ids)
+        {
+            if let Some(owner_id) = reservation.reservation_owner_id.as_deref() {
+                if let Some(candidate) = candidates_by_session_id.get(owner_id) {
+                    return Ok(Some(candidate.clone()));
+                }
             }
         }
 

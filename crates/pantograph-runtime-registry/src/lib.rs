@@ -424,6 +424,22 @@ impl RuntimeRegistry {
         candidates
     }
 
+    pub fn eviction_reservation_candidate_for_owners(
+        &self,
+        owner_ids: &[&str],
+    ) -> Option<RuntimeReservationLease> {
+        let owner_ids = owner_ids.iter().copied().collect::<BTreeSet<_>>();
+        self.eviction_reservation_candidates()
+            .into_iter()
+            .find(|reservation| {
+                reservation
+                    .reservation_owner_id
+                    .as_deref()
+                    .map(|owner_id| owner_ids.contains(owner_id))
+                    .unwrap_or(false)
+            })
+    }
+
     pub fn observe_runtimes(
         &self,
         observations: Vec<RuntimeObservation>,
@@ -1678,6 +1694,69 @@ mod tests {
         assert_eq!(candidates[0].reservation_id, old_ephemeral.reservation_id);
         assert_eq!(candidates[1].reservation_id, old_keep_alive.reservation_id);
         assert_eq!(candidates[2].reservation_id, new_ephemeral.reservation_id);
+    }
+
+    #[test]
+    fn eviction_reservation_candidate_for_owners_returns_first_matching_owner() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("ready-old", "ready-old"));
+        registry.register_runtime(RuntimeRegistration::new("ready-new", "ready-new"));
+
+        {
+            let mut guard = registry
+                .state
+                .lock()
+                .expect("runtime registry state lock poisoned");
+            let ready_old = guard
+                .runtimes
+                .get_mut("ready-old")
+                .expect("ready-old runtime");
+            ready_old.status = RuntimeRegistryStatus::Ready;
+            ready_old.last_transition_at_ms = 10;
+
+            let ready_new = guard
+                .runtimes
+                .get_mut("ready-new")
+                .expect("ready-new runtime");
+            ready_new.status = RuntimeRegistryStatus::Ready;
+            ready_new.last_transition_at_ms = 20;
+        }
+
+        let old_ephemeral = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "ready-old".to_string(),
+                workflow_id: "wf-a".to_string(),
+                reservation_owner_id: Some("session-a".to_string()),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("old ephemeral reservation");
+        let _new_ephemeral = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "ready-new".to_string(),
+                workflow_id: "wf-b".to_string(),
+                reservation_owner_id: Some("session-b".to_string()),
+                usage_profile: None,
+                model_id: None,
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("new ephemeral reservation");
+
+        let selected = registry
+            .eviction_reservation_candidate_for_owners(&["session-b", "session-a"])
+            .expect("matching candidate should exist");
+        assert_eq!(selected.reservation_id, old_ephemeral.reservation_id);
+
+        assert!(
+            registry
+                .eviction_reservation_candidate_for_owners(&["missing-session"])
+                .is_none()
+        );
     }
 
     #[test]
