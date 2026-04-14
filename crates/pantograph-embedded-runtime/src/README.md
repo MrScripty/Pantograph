@@ -157,7 +157,7 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   runtime load/unload lifecycle is translated into registry reservation
   acquire/release operations.
 - Hosts that own additional producer snapshots beyond the core
-  `inference::InferenceGateway` may pass a richer `ServerModeInfo` snapshot
+  `inference::InferenceGateway` may pass a richer `HostRuntimeModeSnapshot`
   into the hosted runtime constructor so backend Rust can derive registry
   observations and additive runtime capabilities from one contract.
 - Direct embedded workflow runs may also reconcile Python-sidecar execution
@@ -189,8 +189,8 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   residency state, but this crate must not silently fold policy-level decisions
   into those producer contracts.
 - Registry reconciliation should consume the richest available producer
-  snapshot contract, typically a host-owned `ServerModeInfo`; callers should
-  not bypass that contract with a narrower core-gateway-only helper when
+  snapshot contract, typically a host-owned `HostRuntimeModeSnapshot`; callers
+  should not bypass that contract with a narrower core-gateway-only helper when
   additional producer facts such as the dedicated embedding sidecar are
   available.
 - If the descriptor contract changes, this directory must regenerate its README
