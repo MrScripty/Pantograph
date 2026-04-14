@@ -429,18 +429,7 @@ pub(crate) fn trace_runtime_metrics(
         warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
         warmup_duration_ms: snapshot.warmup_duration_ms,
         runtime_reused: snapshot.runtime_reused,
-        lifecycle_decision_reason: snapshot.lifecycle_decision_reason.clone().or_else(|| {
-            match (
-                snapshot.last_error.as_ref(),
-                snapshot.runtime_reused,
-                snapshot.active,
-            ) {
-                (Some(_), _, _) => Some("runtime_start_failed".to_string()),
-                (None, Some(true), true) => Some("runtime_reused".to_string()),
-                (None, _, true) => Some("runtime_ready".to_string()),
-                (None, _, false) => None,
-            }
-        }),
+        lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
     }
 }
 

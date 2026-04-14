@@ -209,6 +209,23 @@ pub struct RuntimeLifecycleSnapshot {
     pub last_error: Option<String>,
 }
 
+impl RuntimeLifecycleSnapshot {
+    pub fn default_lifecycle_decision_reason(&self) -> Option<&'static str> {
+        match (self.last_error.as_ref(), self.runtime_reused, self.active) {
+            (Some(_), _, _) => Some("runtime_start_failed"),
+            (None, Some(true), true) => Some("runtime_reused"),
+            (None, _, true) => Some("runtime_ready"),
+            (None, _, false) => None,
+        }
+    }
+
+    pub fn normalized_lifecycle_decision_reason(&self) -> Option<String> {
+        self.lifecycle_decision_reason
+            .clone()
+            .or_else(|| self.default_lifecycle_decision_reason().map(str::to_string))
+    }
+}
+
 /// Server operating mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerModeInfo {
@@ -367,6 +384,63 @@ mod tests {
         assert_eq!(
             decoded.metadata["scheduler"],
             serde_json::json!("flow_match_euler")
+        );
+    }
+
+    #[test]
+    fn runtime_lifecycle_snapshot_normalized_reason_preserves_explicit_reason() {
+        let snapshot = RuntimeLifecycleSnapshot {
+            lifecycle_decision_reason: Some("reused_embedding_runtime".to_string()),
+            active: true,
+            runtime_reused: Some(true),
+            ..RuntimeLifecycleSnapshot::default()
+        };
+
+        assert_eq!(
+            snapshot.normalized_lifecycle_decision_reason().as_deref(),
+            Some("reused_embedding_runtime")
+        );
+    }
+
+    #[test]
+    fn runtime_lifecycle_snapshot_normalized_reason_infers_reuse() {
+        let snapshot = RuntimeLifecycleSnapshot {
+            active: true,
+            runtime_reused: Some(true),
+            ..RuntimeLifecycleSnapshot::default()
+        };
+
+        assert_eq!(
+            snapshot.normalized_lifecycle_decision_reason().as_deref(),
+            Some("runtime_reused")
+        );
+    }
+
+    #[test]
+    fn runtime_lifecycle_snapshot_normalized_reason_infers_ready() {
+        let snapshot = RuntimeLifecycleSnapshot {
+            active: true,
+            runtime_reused: Some(false),
+            ..RuntimeLifecycleSnapshot::default()
+        };
+
+        assert_eq!(
+            snapshot.normalized_lifecycle_decision_reason().as_deref(),
+            Some("runtime_ready")
+        );
+    }
+
+    #[test]
+    fn runtime_lifecycle_snapshot_normalized_reason_infers_start_failure() {
+        let snapshot = RuntimeLifecycleSnapshot {
+            active: false,
+            last_error: Some("failed".to_string()),
+            ..RuntimeLifecycleSnapshot::default()
+        };
+
+        assert_eq!(
+            snapshot.normalized_lifecycle_decision_reason().as_deref(),
+            Some("runtime_start_failed")
         );
     }
 }

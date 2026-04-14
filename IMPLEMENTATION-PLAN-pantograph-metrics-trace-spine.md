@@ -557,6 +557,11 @@ Update during implementation:
   `src-tauri/src/llm/runtime_registry.rs` so lifecycle-snapshot status
   classification now comes from one backend-owned registry helper instead of
   duplicated host-local warmup/error mapping
+- Thirty-eighth implementation slice added across
+  `crates/inference/src/types.rs` and
+  `src-tauri/src/workflow/workflow_execution_commands.rs` so default lifecycle
+  decision-reason normalization now lives with the backend-owned lifecycle
+  snapshot contract instead of an adapter-local trace helper
 
 ### Deviations
 
