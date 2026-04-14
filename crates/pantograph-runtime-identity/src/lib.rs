@@ -98,6 +98,36 @@ pub fn backend_key_aliases(display_name: &str, runtime_id: &str) -> Vec<String> 
     aliases.into_iter().collect()
 }
 
+pub fn runtime_display_name(runtime_id: &str) -> Option<&'static str> {
+    match canonical_runtime_id(runtime_id).as_str() {
+        "llama_cpp" => Some("llama.cpp"),
+        "llama.cpp.embedding" => Some("Dedicated embedding runtime"),
+        "ollama" => Some("Ollama"),
+        "candle" => Some("Candle"),
+        "pytorch" => Some("PyTorch (Python sidecar)"),
+        "diffusers" => Some("Diffusers (Python sidecar)"),
+        "onnx-runtime" => Some("ONNX Runtime (Python sidecar)"),
+        "stable_audio" => Some("Stable Audio (Python sidecar)"),
+        _ => None,
+    }
+}
+
+pub fn runtime_backend_key_aliases(display_name: &str, runtime_id: &str) -> Vec<String> {
+    let mut aliases = BTreeSet::from_iter(backend_key_aliases(display_name, runtime_id));
+
+    match canonical_runtime_id(runtime_id).as_str() {
+        "pytorch" => {
+            aliases.insert("torch".to_string());
+        }
+        "llama.cpp.embedding" => {
+            aliases.insert("llama_cpp".to_string());
+        }
+        _ => {}
+    }
+
+    aliases.into_iter().collect()
+}
+
 fn ascii_alnum_token(name: &str) -> String {
     name.chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
@@ -180,6 +210,40 @@ mod tests {
                 "llama.cpp".to_string(),
                 "llama_cpp".to_string(),
                 "llamacpp".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_display_name_returns_known_runtime_labels() {
+        assert_eq!(runtime_display_name("llama.cpp"), Some("llama.cpp"));
+        assert_eq!(
+            runtime_display_name("llama_cpp_embedding"),
+            Some("Dedicated embedding runtime")
+        );
+        assert_eq!(
+            runtime_display_name("onnx-runtime"),
+            Some("ONNX Runtime (Python sidecar)")
+        );
+        assert_eq!(runtime_display_name("custom-runtime"), None);
+    }
+
+    #[test]
+    fn runtime_backend_key_aliases_include_known_extra_aliases() {
+        assert_eq!(
+            runtime_backend_key_aliases("PyTorch (Python sidecar)", "pytorch"),
+            vec![
+                "PyTorch (Python sidecar)".to_string(),
+                "pytorch".to_string(),
+                "torch".to_string()
+            ]
+        );
+        assert_eq!(
+            runtime_backend_key_aliases("Dedicated embedding runtime", "llama.cpp.embedding"),
+            vec![
+                "Dedicated embedding runtime".to_string(),
+                "llama.cpp.embedding".to_string(),
+                "llama_cpp".to_string()
             ]
         );
     }

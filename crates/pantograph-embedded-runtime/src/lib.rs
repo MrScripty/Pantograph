@@ -8,6 +8,7 @@ use node_engine::{
 };
 use pantograph_runtime_identity::{
     backend_key_aliases, canonical_runtime_backend_key, canonical_runtime_id,
+    runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
     RuntimeObservation, RuntimeRegistration, RuntimeRegistryStatus, RuntimeReservationRequest,
@@ -698,23 +699,7 @@ impl EmbeddedWorkflowHost {
     }
 
     fn python_runtime_backend_keys(display_name: &str, runtime_id: &str) -> Vec<String> {
-        let mut backend_keys = backend_key_aliases(display_name, runtime_id);
-        if runtime_id == "pytorch" {
-            backend_keys.push("torch".to_string());
-            backend_keys.sort();
-            backend_keys.dedup();
-        }
-        backend_keys
-    }
-
-    fn python_runtime_display_name(runtime_id: &str) -> &'static str {
-        match runtime_id {
-            "pytorch" => "PyTorch (Python sidecar)",
-            "diffusers" => "Diffusers (Python sidecar)",
-            "onnx-runtime" => "ONNX Runtime (Python sidecar)",
-            "stable_audio" => "Stable Audio (Python sidecar)",
-            _ => "Python runtime",
-        }
+        runtime_backend_key_aliases(display_name, runtime_id)
     }
 
     fn observed_runtime_status(
@@ -755,7 +740,7 @@ impl EmbeddedWorkflowHost {
             return Ok(());
         };
 
-        let display_name = Self::python_runtime_display_name(&runtime_id);
+        let display_name = runtime_display_name(&runtime_id).unwrap_or("Python runtime");
         runtime_registry.observe_runtime(RuntimeObservation {
             runtime_id: runtime_id.clone(),
             display_name: display_name.to_string(),
@@ -778,10 +763,22 @@ impl EmbeddedWorkflowHost {
             Err(reason) => (false, Some(reason)),
         };
         [
-            ("PyTorch (Python sidecar)", "pytorch"),
-            ("Diffusers (Python sidecar)", "diffusers"),
-            ("ONNX Runtime (Python sidecar)", "onnx-runtime"),
-            ("Stable Audio (Python sidecar)", "stable_audio"),
+            (
+                runtime_display_name("pytorch").unwrap_or("PyTorch (Python sidecar)"),
+                "pytorch",
+            ),
+            (
+                runtime_display_name("diffusers").unwrap_or("Diffusers (Python sidecar)"),
+                "diffusers",
+            ),
+            (
+                runtime_display_name("onnx-runtime").unwrap_or("ONNX Runtime (Python sidecar)"),
+                "onnx-runtime",
+            ),
+            (
+                runtime_display_name("stable_audio").unwrap_or("Stable Audio (Python sidecar)"),
+                "stable_audio",
+            ),
         ]
         .into_iter()
         .map(|(display_name, runtime_id)| {

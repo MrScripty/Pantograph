@@ -4,7 +4,9 @@
 //! `pantograph_runtime_registry::RuntimeObservation` values and then delegates
 //! all registry state ownership to the backend crate.
 
-use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_id};
+use pantograph_runtime_identity::{
+    canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
+};
 use pantograph_runtime_registry::{
     RuntimeObservation, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
 };
@@ -28,8 +30,10 @@ pub fn reconcile_runtime_registry_snapshot_override(
         .as_deref()
         .map(canonical_runtime_id)
         .filter(|runtime_id| !runtime_id.is_empty())?;
-    let display_name = runtime_display_name(&runtime_id);
-    let backend_keys = runtime_backend_keys(&display_name, &runtime_id);
+    let display_name = runtime_display_name(&runtime_id)
+        .unwrap_or(runtime_id.as_str())
+        .to_string();
+    let backend_keys = runtime_backend_key_aliases(&display_name, &runtime_id);
 
     Some(registry.observe_runtime(RuntimeObservation {
         runtime_id,
@@ -114,31 +118,6 @@ fn observed_status(snapshot: &inference::RuntimeLifecycleSnapshot) -> RuntimeReg
     }
 
     RuntimeRegistryStatus::Stopped
-}
-
-fn runtime_display_name(runtime_id: &str) -> String {
-    match runtime_id {
-        "llama_cpp" => "llama.cpp".to_string(),
-        "llama.cpp.embedding" => "Dedicated embedding runtime".to_string(),
-        "pytorch" => "PyTorch (Python sidecar)".to_string(),
-        "diffusers" => "Diffusers (Python sidecar)".to_string(),
-        "onnx-runtime" => "ONNX Runtime (Python sidecar)".to_string(),
-        "stable_audio" => "Stable Audio (Python sidecar)".to_string(),
-        _ => runtime_id.to_string(),
-    }
-}
-
-fn runtime_backend_keys(display_name: &str, runtime_id: &str) -> Vec<String> {
-    let mut aliases = backend_key_aliases(display_name, runtime_id);
-
-    match runtime_id {
-        "llama.cpp.embedding" => aliases.push("llama_cpp".to_string()),
-        _ => {}
-    }
-
-    aliases.sort();
-    aliases.dedup();
-    aliases
 }
 
 #[cfg(test)]

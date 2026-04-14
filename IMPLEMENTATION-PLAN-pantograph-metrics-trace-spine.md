@@ -545,6 +545,12 @@ Update during implementation:
   `crates/pantograph-embedded-runtime/src/README.md` so direct embedded/headless
   workflow runs also reconcile Python-sidecar execution snapshots into the
   shared runtime registry instead of leaving that producer path Tauri-only
+- Thirty-sixth implementation slice added across
+  `crates/pantograph-runtime-identity/src/lib.rs`,
+  `crates/pantograph-embedded-runtime/src/lib.rs`, and
+  `src-tauri/src/llm/runtime_registry.rs` so shared runtime display-name and
+  backend-alias mapping now lives in one backend-owned Rust helper instead of
+  drifting between host-specific producer adapters
 
 ### Deviations
 
@@ -560,6 +566,9 @@ Update during implementation:
   Python-sidecar registry-observation paths so every remaining runtime host
   populates the same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
+- Continue converging producer metadata beyond shared identity/alias mapping so
+  warmup, reuse, degraded-state, and reconnect facts are emitted through the
+  same registry-ready capability contract family across all remaining hosts.
 - Extend direct command-path acceptance coverage beyond the current embedding
   runtime, scheduler, trace snapshot, and diagnostics projection refresh paths
   so the remaining diagnostics reader and transport paths are also exercised at

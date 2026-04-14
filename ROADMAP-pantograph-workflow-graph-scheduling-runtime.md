@@ -291,6 +291,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Direct embedded/headless workflow runs now reconcile Python-sidecar runtime
   snapshots into the shared registry instead of depending on Tauri-only
   diagnostics capture.
+- Shared runtime display-name and backend-alias mapping now lives in
+  `crates/pantograph-runtime-identity` so embedded and Tauri runtime producers
+  no longer maintain separate host-local identity tables.
 
 **Still missing:**
 
