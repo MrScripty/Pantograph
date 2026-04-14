@@ -6,10 +6,12 @@ use async_trait::async_trait;
 use node_engine::{
     CoreTaskExecutor, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
-use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
+use pantograph_runtime_identity::{
+    backend_key_aliases, canonical_runtime_backend_key, canonical_runtime_id,
+};
 use pantograph_runtime_registry::{
-    RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
-    RuntimeRetentionHint, SharedRuntimeRegistry,
+    RuntimeObservation, RuntimeRegistration, RuntimeRegistryStatus, RuntimeReservationRequest,
+    RuntimeReservationRequirements, RuntimeRetentionHint, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -147,6 +149,14 @@ pub fn apply_runtime_extensions(
     executor: &mut WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,
 ) {
+    apply_runtime_extensions_with_python_runtime_recorder(executor, snapshot, None);
+}
+
+fn apply_runtime_extensions_with_python_runtime_recorder(
+    executor: &mut WorkflowExecutor,
+    snapshot: &RuntimeExtensionsSnapshot,
+    python_runtime_execution_recorder: Option<Arc<task_executor::PythonRuntimeExecutionRecorder>>,
+) {
     if let Some(api) = &snapshot.pumas_api {
         executor
             .extensions_mut()
@@ -161,6 +171,12 @@ pub fn apply_runtime_extensions(
         executor.extensions_mut().set(
             node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
             resolver.clone(),
+        );
+    }
+    if let Some(recorder) = python_runtime_execution_recorder {
+        executor.extensions_mut().set(
+            task_executor::runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
+            recorder,
         );
     }
 }
@@ -691,6 +707,68 @@ impl EmbeddedWorkflowHost {
         backend_keys
     }
 
+    fn python_runtime_display_name(runtime_id: &str) -> &'static str {
+        match runtime_id {
+            "pytorch" => "PyTorch (Python sidecar)",
+            "diffusers" => "Diffusers (Python sidecar)",
+            "onnx-runtime" => "ONNX Runtime (Python sidecar)",
+            "stable_audio" => "Stable Audio (Python sidecar)",
+            _ => "Python runtime",
+        }
+    }
+
+    fn observed_runtime_status(
+        snapshot: &inference::RuntimeLifecycleSnapshot,
+    ) -> RuntimeRegistryStatus {
+        if snapshot.active {
+            if snapshot.warmup_started_at_ms.is_some() && snapshot.warmup_completed_at_ms.is_none()
+            {
+                return RuntimeRegistryStatus::Warming;
+            }
+            return RuntimeRegistryStatus::Ready;
+        }
+
+        if snapshot.last_error.is_some() {
+            return RuntimeRegistryStatus::Failed;
+        }
+
+        RuntimeRegistryStatus::Stopped
+    }
+
+    fn observe_python_runtime_execution_metadata(
+        &self,
+        metadata: Option<&task_executor::PythonRuntimeExecutionMetadata>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return Ok(());
+        };
+        let Some(metadata) = metadata else {
+            return Ok(());
+        };
+        let Some(runtime_id) = metadata
+            .snapshot
+            .runtime_id
+            .as_deref()
+            .map(canonical_runtime_id)
+            .filter(|runtime_id| !runtime_id.is_empty())
+        else {
+            return Ok(());
+        };
+
+        let display_name = Self::python_runtime_display_name(&runtime_id);
+        runtime_registry.observe_runtime(RuntimeObservation {
+            runtime_id: runtime_id.clone(),
+            display_name: display_name.to_string(),
+            backend_keys: Self::python_runtime_backend_keys(display_name, &runtime_id),
+            model_id: metadata.model_target.clone(),
+            status: Self::observed_runtime_status(&metadata.snapshot),
+            runtime_instance_id: metadata.snapshot.runtime_instance_id.clone(),
+            last_error: metadata.snapshot.last_error.clone(),
+        });
+
+        Ok(())
+    }
+
     fn python_runtime_capabilities(
         executable_probe: Result<PathBuf, String>,
         selected_backend_key: &str,
@@ -1175,24 +1253,40 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             Some(host as Arc<dyn node_engine::TaskExecutor>),
             core,
         );
+        let python_runtime_execution_recorder =
+            Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
 
         let mut executor = WorkflowExecutor::new(execution_id, graph, Arc::new(NullEventSink));
-        apply_runtime_extensions(&mut executor, &runtime_ext);
+        apply_runtime_extensions_with_python_runtime_recorder(
+            &mut executor,
+            &runtime_ext,
+            Some(python_runtime_execution_recorder.clone()),
+        );
 
         let mut node_outputs = HashMap::new();
+        let mut run_result = Ok(());
         for node_id in &output_node_ids {
             if run_handle.is_cancelled() {
-                return Err(WorkflowServiceError::RuntimeTimeout(
+                run_result = Err(WorkflowServiceError::RuntimeTimeout(
                     "workflow run cancelled during execution".to_string(),
                 ));
+                break;
             }
-            let outputs = executor
-                .demand(node_id, &task_executor)
-                .await
-                .map_err(|e| WorkflowServiceError::Internal(e.to_string()))?;
-            node_outputs.insert(node_id.clone(), outputs);
+            match executor.demand(node_id, &task_executor).await {
+                Ok(outputs) => {
+                    node_outputs.insert(node_id.clone(), outputs);
+                }
+                Err(error) => {
+                    run_result = Err(WorkflowServiceError::Internal(error.to_string()));
+                    break;
+                }
+            }
         }
 
+        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshot();
+        self.observe_python_runtime_execution_metadata(python_runtime_execution_metadata.as_ref())?;
+
+        run_result?;
         Self::collect_run_outputs(&node_outputs, &output_node_ids, output_targets)
     }
 }
@@ -1605,6 +1699,69 @@ mod tests {
             requests[0].inputs.get("prompt"),
             Some(&serde_json::json!("a tiny painted robot"))
         );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
+        let temp = TempDir::new().expect("temp dir");
+        write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Arc::new(MockImagePythonRuntime {
+                requests: Mutex::new(Vec::new()),
+            }),
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        runtime
+            .workflow_run(WorkflowRunRequest {
+                workflow_id: "runtime-diffusion".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("a tiny painted robot"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "image-output-1".to_string(),
+                    port_id: "image".to_string(),
+                }]),
+                timeout_ms: None,
+                run_id: Some("diffusion-run-2".to_string()),
+            })
+            .await
+            .expect("workflow run");
+
+        let snapshot = runtime_registry.snapshot();
+        let pytorch = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("python runtime should be observed");
+        assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Ready);
+        assert!(
+            pytorch
+                .runtime_instance_id
+                .as_deref()
+                .is_some_and(|value| value.starts_with("python-runtime:pytorch:"))
+        );
+        assert_eq!(pytorch.models.len(), 1);
+        assert_eq!(pytorch.models[0].model_id, "/tmp/mock-diffusion-model");
     }
 
     #[tokio::test]

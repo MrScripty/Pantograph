@@ -138,6 +138,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Hosts may optionally inject a shared runtime registry; when present, session
   runtime load/unload lifecycle is translated into registry reservation
   acquire/release operations.
+- Direct embedded workflow runs may also reconcile Python-sidecar execution
+  snapshots into that shared registry so producer-specific runtime facts do not
+  depend on Tauri-only diagnostics paths.
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.

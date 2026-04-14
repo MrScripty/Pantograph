@@ -540,6 +540,11 @@ Update during implementation:
   `src-tauri/src/workflow/workflow_execution_commands.rs` so execution-specific
   Python-sidecar runtime snapshots can be reconciled into the shared runtime
   registry without stopping gateway-observed runtimes
+- Thirty-fifth implementation slice added in
+  `crates/pantograph-embedded-runtime/src/lib.rs` and
+  `crates/pantograph-embedded-runtime/src/README.md` so direct embedded/headless
+  workflow runs also reconcile Python-sidecar execution snapshots into the
+  shared runtime registry instead of leaving that producer path Tauri-only
 
 ### Deviations
 
@@ -552,8 +557,8 @@ Update during implementation:
 
 - Extend runtime lifecycle producers beyond the current inference-gateway,
   backend-start-outcome, embedding-sidecar, PyTorch loaded-model reuse, and
-  Python-sidecar registry-observation paths so every runtime host populates the
-  same authoritative
+  Python-sidecar registry-observation paths so every remaining runtime host
+  populates the same authoritative
   `WorkflowTraceRuntimeMetrics` fields.
 - Extend direct command-path acceptance coverage beyond the current embedding
   runtime, scheduler, trace snapshot, and diagnostics projection refresh paths

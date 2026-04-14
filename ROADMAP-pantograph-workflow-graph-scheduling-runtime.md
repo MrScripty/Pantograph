@@ -288,6 +288,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   start of this roadmap.
 - Execution-specific Python-sidecar runtime snapshots can now be reconciled
   into the shared runtime registry without replacing gateway-observed runtimes.
+- Direct embedded/headless workflow runs now reconcile Python-sidecar runtime
+  snapshots into the shared registry instead of depending on Tauri-only
+  diagnostics capture.
 
 **Still missing:**
 
