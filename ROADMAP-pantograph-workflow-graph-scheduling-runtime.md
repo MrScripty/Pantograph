@@ -40,6 +40,9 @@ implementation progress in the runtime and diagnostics layers.
 - Direct embedded-runtime shutdown now also reconciles the shared registry back
   to `stopped`, so embedded hosts do not leave runtime-residency state stale
   after process stop.
+- Edit-session embedding execution now also reconciles the shared registry
+  after restoring inference mode, so registry snapshots track the restored
+  runtime instance instead of the pre-restore producer state.
 
 ### Active implementation stream
 

@@ -510,6 +510,10 @@ runtime callers.
 - 2026-04-14: `EmbeddedRuntime::shutdown()` now reconciles the shared runtime
   registry after stopping the gateway producer, so embedded hosts do not leave
   previously ready runtimes stuck in stale registry state after shutdown.
+- 2026-04-14: Edit-session embedding execution now also reconciles the shared
+  runtime registry after restoring inference mode, and the backend regression
+  test verifies that registry state tracks the restored runtime instance rather
+  than leaving the pre-restore instance id stale.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -620,10 +624,10 @@ refactor lands.
    eviction policy on top of the completed runtime-registry foundation.
 2. Add warmup/reuse plus retention-hint interpretation inside the registry boundary
    without moving those decisions into gateway or adapter layers.
-3. Reconcile the shared runtime registry after the remaining producer restore
-   paths, starting with edit-session embedding restore in
-   `crates/pantograph-embedded-runtime`, so registry truth stays aligned with
-   real runtime transitions.
+3. Continue reconciling the shared runtime registry after any remaining
+   producer restore or stop paths beyond the landed edit-session, RAG, and
+   shutdown slices so registry truth stays aligned with real runtime
+   transitions.
 4. Consume the new backend-owned eviction candidate ordering from registry
    policy rather than rebuilding candidate selection in workflow service or
    adapters.
