@@ -23,6 +23,8 @@ desktop app wiring.
   rules.
 - `reservation.rs`: reservation request, lease, and stored reservation-record
   contracts.
+- `retention.rs`: backend-owned retention disposition contracts returned by
+  reservation release and runtime retention inspection paths.
 - `snapshot.rs`: deterministic machine-readable snapshot contracts for runtime
   state inspection.
 
@@ -34,6 +36,9 @@ desktop app wiring.
 - Reservation retention hints are stored here so future retention and eviction
   policy can interpret a backend-owned signal instead of reverse-engineering
   adapter behavior.
+- Post-release retention disposition is computed here so callers can observe a
+  backend-owned keep-alive or evictable decision without rebuilding policy from
+  raw reservation state.
 - Deterministic eviction-candidate ordering is also computed here so higher
   layers can ask the registry for backend-owned pressure decisions rather than
   sorting runtimes ad hoc.
@@ -60,7 +65,7 @@ desktop app wiring.
   requirements, but the resulting acceptance or rejection decision belongs to
   this crate.
 - Hosts may also supply a reservation retention hint such as keep-alive intent,
-  but this crate remains the owner of how that hint affects future retention or
-  eviction policy.
+  but this crate remains the owner of how that hint affects retention
+  disposition and future eviction policy.
 - New fields in public snapshot/lease structs should be additive unless a
   deliberate migration is recorded.

@@ -445,6 +445,10 @@ runtime callers.
 - 2026-04-13: `crates/pantograph-runtime-registry` now exposes deterministic
   eviction candidates with active-reservation and pinned-model exclusion so the
   next retention/eviction slice can consume a backend-owned ordering primitive.
+- 2026-04-13: Reservation release and direct retention inspection now return a
+  backend-owned retention disposition, including keep-alive-backed retention
+  reasons for shared runtimes, so adapters do not need to infer policy from raw
+  reservation state.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

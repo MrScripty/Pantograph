@@ -838,7 +838,7 @@ impl EmbeddedWorkflowHost {
 
         if let Some(reservation_id) = reservation_id {
             runtime_registry
-                .release_reservation(reservation_id)
+                .release_reservation_with_disposition(reservation_id)
                 .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
         }
 

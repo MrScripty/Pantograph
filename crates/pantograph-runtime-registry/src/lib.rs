@@ -1,6 +1,7 @@
 mod admission;
 mod observation;
 mod reservation;
+mod retention;
 mod snapshot;
 mod state;
 
@@ -17,6 +18,9 @@ pub use observation::RuntimeObservation;
 use pantograph_runtime_identity::canonical_runtime_id;
 use reservation::RuntimeReservationRecord;
 pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest, RuntimeRetentionHint};
+pub use retention::{
+    RuntimeRetentionDecision, RuntimeRetentionDisposition, RuntimeRetentionReason,
+};
 pub use snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use state::RuntimeTransition as Transition;
 pub use state::{
@@ -244,6 +248,14 @@ impl RuntimeRegistry {
     }
 
     pub fn release_reservation(&self, reservation_id: u64) -> Result<(), RuntimeRegistryError> {
+        self.release_reservation_with_disposition(reservation_id)
+            .map(|_| ())
+    }
+
+    pub fn release_reservation_with_disposition(
+        &self,
+        reservation_id: u64,
+    ) -> Result<RuntimeRetentionDisposition, RuntimeRegistryError> {
         let mut guard = self
             .state
             .lock()
@@ -257,7 +269,18 @@ impl RuntimeRegistry {
             runtime.active_reservations.remove(&reservation_id);
         }
 
-        Ok(())
+        runtime_retention_disposition(&reservation.runtime_id, &guard)
+    }
+
+    pub fn retention_disposition(
+        &self,
+        runtime_id: &str,
+    ) -> Result<RuntimeRetentionDisposition, RuntimeRegistryError> {
+        let guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        runtime_retention_disposition(runtime_id, &guard)
     }
 
     pub fn snapshot(&self) -> RuntimeRegistrySnapshot {
@@ -397,6 +420,53 @@ fn runtime_is_evictable(record: &RuntimeRegistryRecord) -> bool {
             | RuntimeRegistryStatus::Unhealthy
             | RuntimeRegistryStatus::Stopping
     )
+}
+
+fn runtime_retention_disposition(
+    runtime_id: &str,
+    state: &RuntimeRegistryState,
+) -> Result<RuntimeRetentionDisposition, RuntimeRegistryError> {
+    let runtime_id = canonical_runtime_id(runtime_id);
+    let record = state
+        .runtimes
+        .get(&runtime_id)
+        .ok_or_else(|| RuntimeRegistryError::RuntimeNotFound(runtime_id.clone()))?;
+
+    if record.active_reservations.iter().any(|reservation_id| {
+        state
+            .reservations
+            .get(reservation_id)
+            .map(|reservation| reservation.retention_hint == RuntimeRetentionHint::KeepAlive)
+            .unwrap_or(false)
+    }) {
+        return Ok(RuntimeRetentionDisposition::retain(
+            runtime_id,
+            RuntimeRetentionReason::KeepAliveReservation,
+        ));
+    }
+
+    if !record.active_reservations.is_empty() {
+        return Ok(RuntimeRetentionDisposition::retain(
+            runtime_id,
+            RuntimeRetentionReason::ActiveReservations,
+        ));
+    }
+
+    if record.models.values().any(|model| model.pinned) {
+        return Ok(RuntimeRetentionDisposition::retain(
+            runtime_id,
+            RuntimeRetentionReason::PinnedModel,
+        ));
+    }
+
+    if runtime_is_evictable(record) {
+        return Ok(RuntimeRetentionDisposition::evict(runtime_id));
+    }
+
+    Ok(RuntimeRetentionDisposition::retain(
+        runtime_id,
+        RuntimeRetentionReason::Status(record.status),
+    ))
 }
 
 fn eviction_status_rank(status: RuntimeRegistryStatus) -> u8 {
@@ -637,10 +707,23 @@ mod tests {
             snapshot.reservations[0].retention_hint,
             RuntimeRetentionHint::KeepAlive
         );
+        assert_eq!(
+            registry
+                .retention_disposition("onnxruntime")
+                .expect("disposition"),
+            RuntimeRetentionDisposition::retain(
+                "onnx-runtime",
+                RuntimeRetentionReason::KeepAliveReservation,
+            )
+        );
 
-        registry
-            .release_reservation(lease.reservation_id)
+        let disposition = registry
+            .release_reservation_with_disposition(lease.reservation_id)
             .expect("release reservation");
+        assert_eq!(
+            disposition,
+            RuntimeRetentionDisposition::evict("onnx-runtime")
+        );
 
         let released = registry.snapshot();
         assert!(released.runtimes[0].active_reservation_ids.is_empty());
@@ -887,6 +970,89 @@ mod tests {
         registry
             .release_reservation(reserved.reservation_id)
             .expect("release reservation");
+    }
+
+    #[test]
+    fn release_disposition_prefers_keep_alive_hint_when_other_reservations_remain() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![RuntimeObservation {
+            runtime_id: "shared-runtime".to_string(),
+            display_name: "shared-runtime".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("shared-runtime-1".to_string()),
+            last_error: None,
+        }]);
+
+        let keep_alive = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "shared-runtime".to_string(),
+                workflow_id: "wf-keep-alive".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::KeepAlive,
+            })
+            .expect("keep-alive reservation");
+        let ephemeral = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "shared-runtime".to_string(),
+                workflow_id: "wf-ephemeral".to_string(),
+                usage_profile: Some("batch".to_string()),
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("ephemeral reservation");
+
+        let disposition = registry
+            .release_reservation_with_disposition(ephemeral.reservation_id)
+            .expect("release ephemeral reservation");
+
+        assert_eq!(
+            disposition,
+            RuntimeRetentionDisposition::retain(
+                "shared-runtime",
+                RuntimeRetentionReason::KeepAliveReservation,
+            )
+        );
+
+        registry
+            .release_reservation(keep_alive.reservation_id)
+            .expect("release keep-alive reservation");
+    }
+
+    #[test]
+    fn retention_disposition_returns_status_reason_for_non_evictable_runtime() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("busy", "busy"));
+        registry
+            .transition_runtime(
+                "busy",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("busy-runtime".to_string()),
+                },
+            )
+            .expect("ready transition");
+        registry
+            .transition_runtime(
+                "busy",
+                RuntimeTransition::Busy {
+                    runtime_instance_id: Some("busy-runtime".to_string()),
+                },
+            )
+            .expect("busy transition");
+
+        assert_eq!(
+            registry.retention_disposition("busy").expect("disposition"),
+            RuntimeRetentionDisposition::retain(
+                "busy",
+                RuntimeRetentionReason::Status(RuntimeRegistryStatus::Busy),
+            )
+        );
     }
 
     #[test]
