@@ -14,11 +14,11 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock};
 
 use node_engine::{
-    extension_keys, DependencyOverridePatchV1, DependencyOverrideScope, DependencyState,
-    DependencyValidationError, DependencyValidationErrorScope, DependencyValidationState,
-    ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
-    ModelDependencyRequest, ModelDependencyRequirement, ModelDependencyRequirements,
-    ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+    DependencyOverridePatchV1, DependencyOverrideScope, DependencyState, DependencyValidationError,
+    DependencyValidationErrorScope, DependencyValidationState, ModelDependencyBinding,
+    ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
+    ModelDependencyRequirement, ModelDependencyRequirements, ModelDependencyResolver,
+    ModelDependencyStatus, ModelRefV2, extension_keys,
 };
 
 /// Shared dependency resolver state.
@@ -381,11 +381,7 @@ impl TauriModelDependencyResolver {
                 out.push(owned);
             }
         }
-        if out.is_empty() {
-            None
-        } else {
-            Some(out)
-        }
+        if out.is_empty() { None } else { Some(out) }
     }
 
     fn make_requirements_id(

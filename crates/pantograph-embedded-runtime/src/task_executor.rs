@@ -12,10 +12,9 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
-    core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
-    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
-    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
-    WorkflowEvent,
+    Context, DependencyState, EventSink, ExecutorExtensions, ModelDependencyRequest,
+    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
+    Result, TaskExecutor, WorkflowEvent, core_executor::resolve_node_type, extension_keys,
 };
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
@@ -1498,10 +1497,10 @@ impl TaskExecutor for TauriTaskExecutor {
 mod tests {
     use super::*;
     use node_engine::{
-        extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
-        ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
-        ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
-        ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
+        DependencyState, DependencyValidationState, ExecutorExtensions, ModelDependencyBinding,
+        ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
+        ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
+        VecEventSink, WorkflowEvent, extension_keys,
     };
 
     #[test]
