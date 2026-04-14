@@ -413,6 +413,9 @@ runtime callers.
 - [ ] Keep admission, retention, and eviction policy in
   `crates/pantograph-runtime-registry`; adapters and gateway callers may invoke
   explicit registry operations but must not become policy owners
+- [ ] Reconcile the shared runtime registry after every producer restore path,
+  including edit-session embedding restore, so real producer transitions do
+  not leave stale residency state behind
 - [ ] Add admission checks using estimated RAM/VRAM with explicit safety margins
   and failure reasons
 - [ ] Add warmup/reuse orchestration for session create/run through explicit
@@ -429,6 +432,12 @@ runtime callers.
 - [ ] Bound and document any new admission, retention, or cleanup queues/timers
   before they are introduced so ownership, cancellation, and overflow behavior
   stay explicit
+- [ ] Preserve standards-aligned layering while implementing Milestone 3:
+  backend/runtime crates own policy and lifecycle behavior, `src-tauri`
+  remains a composition/transport boundary, and new async coordination must
+  follow the single-owner and non-blocking rules from
+  `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`, and
+  `CONCURRENCY-STANDARDS.md`
 
 **Progress:**
 - 2026-04-13: Session runtime load/unload in the embedded host now translates
@@ -611,13 +620,17 @@ refactor lands.
    eviction policy on top of the completed runtime-registry foundation.
 2. Add warmup/reuse plus retention-hint interpretation inside the registry boundary
    without moving those decisions into gateway or adapter layers.
-3. Consume the new backend-owned eviction candidate ordering from registry
+3. Reconcile the shared runtime registry after the remaining producer restore
+   paths, starting with edit-session embedding restore in
+   `crates/pantograph-embedded-runtime`, so registry truth stays aligned with
+   real runtime transitions.
+4. Consume the new backend-owned eviction candidate ordering from registry
    policy rather than rebuilding candidate selection in workflow service or
    adapters.
-4. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+5. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
    backend-owned registry refactor.
-5. Re-plan immediately if Milestone 3 implementation pressures any of the
+6. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
 
@@ -629,6 +642,8 @@ refactor lands.
   ad hoc.
 - Do not move budget, retention, or eviction logic back into `src-tauri` now
   that the backend crate boundary has been restored.
+- Do not satisfy restore-reconciliation gaps by adding Tauri-only bookkeeping
+  instead of backend-owned runtime synchronization.
 
 ## Execution Notes
 
