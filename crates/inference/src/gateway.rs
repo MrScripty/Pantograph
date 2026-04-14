@@ -64,6 +64,14 @@ pub struct EmbeddingStartRequest {
     pub gpu_layers: Option<i32>,
 }
 
+/// Result of switching the active backend into embedding mode.
+#[derive(Debug, Clone, Default)]
+pub struct EmbeddingRuntimePreparation {
+    pub backend_name: String,
+    pub restore_config: Option<BackendConfig>,
+    pub base_url: Option<String>,
+}
+
 /// The single entry point for ALL inference operations.
 ///
 /// Application code should only interact with InferenceGateway, never
@@ -298,6 +306,35 @@ impl InferenceGateway {
         }
     }
 
+    /// Start the active backend in embedding mode and capture restore context.
+    pub async fn prepare_embedding_runtime(
+        &self,
+        request: EmbeddingStartRequest,
+    ) -> Result<EmbeddingRuntimePreparation, GatewayError> {
+        let backend_name = self.current_backend_name().await;
+        if self.is_ready().await && self.is_embedding_mode().await {
+            return Ok(EmbeddingRuntimePreparation {
+                backend_name,
+                restore_config: None,
+                base_url: self.base_url().await,
+            });
+        }
+
+        let restore_config = if self.is_ready().await && !self.is_embedding_mode().await {
+            self.last_inference_config().await
+        } else {
+            None
+        };
+        let config = self.build_embedding_start_config(request).await?;
+        self.start(&config).await?;
+
+        Ok(EmbeddingRuntimePreparation {
+            backend_name,
+            restore_config,
+            base_url: self.base_url().await,
+        })
+    }
+
     /// Switch to a different backend
     ///
     /// This stops the current backend and creates a new instance
@@ -507,6 +544,17 @@ impl InferenceGateway {
         self.last_inference_config.read().await.clone()
     }
 
+    /// Restore the last non-embedding inference runtime when available.
+    pub async fn restore_inference_runtime(
+        &self,
+        restore_config: Option<BackendConfig>,
+    ) -> Result<(), GatewayError> {
+        if let Some(config) = restore_config {
+            self.start(&config).await?;
+        }
+        Ok(())
+    }
+
     /// Get server mode info (for legacy compatibility)
     pub async fn mode_info(&self) -> ServerModeInfo {
         let backend_name = self.current_backend_name().await;
@@ -693,6 +741,7 @@ mod tests {
     use crate::backend::BackendStartOutcome;
 
     struct MockImageBackend;
+    struct MockHttpBackend;
     struct MockReusedBackend;
     struct MockImplicitLifecycleBackend;
     struct MockFailingBackend;
@@ -815,6 +864,88 @@ mod tests {
                     height: Some(512),
                 }],
                 seed_used: Some(7),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl InferenceBackend for MockHttpBackend {
+        fn name(&self) -> &'static str {
+            "MockHttp"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock HTTP backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities {
+                external_connection: true,
+                ..BackendCapabilities::default()
+            }
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_http_runtime".to_string()),
+            })
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            Some("http://127.0.0.1:11434".to_string())
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
+        async fn generate_image(
+            &self,
+            request: ImageGenerationRequest,
+        ) -> Result<ImageGenerationResult, BackendError> {
+            Ok(ImageGenerationResult {
+                images: vec![crate::types::EncodedImage {
+                    data_base64: request.prompt,
+                    mime_type: "image/png".to_string(),
+                    width: Some(512),
+                    height: Some(512),
+                }],
+                seed_used: Some(11),
                 metadata: serde_json::Value::Null,
             })
         }
@@ -1428,5 +1559,63 @@ mod tests {
             GatewayError::Backend(BackendError::Config(message))
             if message.contains("PyTorch does not support embedding mode")
         ));
+    }
+
+    #[tokio::test]
+    async fn test_prepare_embedding_runtime_captures_restore_config_and_base_url() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "Ollama");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        let inference_config = BackendConfig {
+            model_name: Some("llava:13b".to_string()),
+            ..BackendConfig::default()
+        };
+        gateway
+            .start(&inference_config)
+            .await
+            .expect("gateway should start in inference mode");
+
+        let prepared = gateway
+            .prepare_embedding_runtime(EmbeddingStartRequest::default())
+            .await
+            .expect("embedding preparation should succeed");
+
+        assert_eq!(prepared.backend_name, "Ollama");
+        assert_eq!(
+            prepared
+                .restore_config
+                .as_ref()
+                .and_then(|config| config.model_name.as_deref()),
+            Some("llava:13b")
+        );
+        assert_eq!(prepared.base_url.as_deref(), Some("http://127.0.0.1:11434"));
+        assert!(gateway.is_embedding_mode().await);
+    }
+
+    #[tokio::test]
+    async fn test_prepare_embedding_runtime_keeps_existing_embedding_runtime() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "Ollama");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        gateway
+            .start(&BackendConfig {
+                model_name: Some("nomic-embed-text".to_string()),
+                embedding_mode: true,
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start in embedding mode");
+        let before = gateway.runtime_lifecycle_snapshot().await;
+
+        let prepared = gateway
+            .prepare_embedding_runtime(EmbeddingStartRequest::default())
+            .await
+            .expect("existing embedding runtime should be reused");
+        let after = gateway.runtime_lifecycle_snapshot().await;
+
+        assert_eq!(prepared.backend_name, "Ollama");
+        assert!(prepared.restore_config.is_none());
+        assert_eq!(prepared.base_url.as_deref(), Some("http://127.0.0.1:11434"));
+        assert_eq!(after.runtime_instance_id, before.runtime_instance_id);
     }
 }

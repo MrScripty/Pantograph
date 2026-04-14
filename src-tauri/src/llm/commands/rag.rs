@@ -5,10 +5,7 @@ use super::shared::{get_project_data_dir, SharedAppConfig};
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
 use crate::llm::gateway::SharedGateway;
-use crate::llm::startup::{
-    build_resolved_embedding_request, capture_inference_restore_config, restore_inference_runtime,
-    restore_inference_runtime_best_effort,
-};
+use crate::llm::startup::build_resolved_embedding_request;
 use tauri::{command, ipc::Channel, AppHandle, State};
 
 /// Event sent during document indexing
@@ -188,10 +185,6 @@ pub async fn index_docs_with_switch(
         .clone();
     log::info!("Embedding model path: {:?}", embedding_model_path);
 
-    // Check if we need to restore VLM mode after
-    let restore_config = capture_inference_restore_config(&gateway).await;
-    let restore_vlm = restore_config.is_some();
-    log::info!("Restore VLM after indexing: {}", restore_vlm);
     let resolved_embedding_model_path = resolve_embedding_model_path(&embedding_model_path)?;
 
     let device = config_guard.device.clone();
@@ -213,41 +206,40 @@ pub async fn index_docs_with_switch(
         })
         .ok();
 
-    let backend_name = gateway.current_backend_name().await;
-    log::info!("Current backend for embedding: {}", backend_name);
-    let embedding_config = gateway
-        .build_embedding_start_config(build_resolved_embedding_request(
+    let prepared = gateway
+        .prepare_embedding_runtime(build_resolved_embedding_request(
             Some(resolved_embedding_model_path.clone()),
             candle_model_path,
             &device,
             Some("nomic-embed-text".to_string()),
         ))
         .await
-        .map_err(|e| e.to_string())?;
-
-    gateway
-        .start(&embedding_config)
-        .await
         .map_err(|e| format!("Failed to start embedding server: {}", e))?;
+    let restore_vlm = prepared.restore_config.is_some();
+    log::info!("Restore VLM after indexing: {}", restore_vlm);
+    log::info!("Current backend for embedding: {}", prepared.backend_name);
 
     // Update RAG manager with embedding URL from the gateway
     // All backends now expose an HTTP API (llama.cpp sidecar, Ollama daemon, Candle's Axum server)
-    let embedding_url = match gateway.base_url().await {
+    let embedding_url = match prepared.base_url.clone() {
         Some(url) => url,
         None => {
             // Backend has no HTTP API (e.g., Candle)
             // Restore VLM mode if needed and return error
-            restore_inference_runtime_best_effort(
-                &gateway,
-                restore_config.clone(),
-                "Failed to restore VLM mode after RAG embedding startup fallback",
-            )
-            .await;
+            if let Err(error) = gateway
+                .restore_inference_runtime(prepared.restore_config.clone())
+                .await
+            {
+                log::warn!(
+                    "Failed to restore VLM mode after RAG embedding startup fallback: {}",
+                    error
+                );
+            }
             return Err(format!(
                 "The {} backend does not support RAG indexing through the GUI. \
                  It runs in-process without an HTTP API. \
                  Please use llama.cpp or Ollama for RAG/embedding functionality.",
-                backend_name
+                prepared.backend_name
             ));
         }
     };
@@ -322,12 +314,15 @@ pub async fn index_docs_with_switch(
                 })
                 .ok();
 
-            restore_inference_runtime_best_effort(
-                &gateway,
-                restore_config.clone(),
-                "Failed to restore VLM mode after RAG indexing failure",
-            )
-            .await;
+            if let Err(error) = gateway
+                .restore_inference_runtime(prepared.restore_config.clone())
+                .await
+            {
+                log::warn!(
+                    "Failed to restore VLM mode after RAG indexing failure: {}",
+                    error
+                );
+            }
 
             return Err(e.to_string());
         }
@@ -345,7 +340,10 @@ pub async fn index_docs_with_switch(
             })
             .ok();
 
-        restore_inference_runtime(&gateway, restore_config, "Failed to restore VLM mode").await?;
+        gateway
+            .restore_inference_runtime(prepared.restore_config)
+            .await
+            .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
     }
 
     channel

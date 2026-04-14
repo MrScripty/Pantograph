@@ -58,7 +58,8 @@ pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::{list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend};
 pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingRuntime};
 pub use gateway::{
-    EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest, SharedGateway,
+    EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
+    InferenceStartRequest, SharedGateway,
 };
 pub use managed_runtime::{
     binary_capability, check_binary_status, download_binary, list_binary_capabilities,

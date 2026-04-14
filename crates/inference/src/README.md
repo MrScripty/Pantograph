@@ -14,7 +14,7 @@ details.
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete engine adapters such as llama.cpp, Ollama, Candle, and PyTorch. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
-| `gateway.rs` | The single entry point that owns the active backend and forwards requests through the frozen contracts. |
+| `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
@@ -79,6 +79,9 @@ than replaces.
 - The dedicated parallel embedding runtime is owned by this crate rather than
   by host adapters so lifecycle metrics and reuse decisions stay in one Rust
   backend boundary.
+- Temporary embedding-mode switches for workflows or host features must be
+  prepared and restored through backend-owned gateway operations rather than
+  being orchestrated independently by adapters.
 
 ## Revisit Triggers
 

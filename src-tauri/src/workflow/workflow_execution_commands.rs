@@ -5,10 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::agent::rag::SharedRagManager;
 use crate::llm::commands::resolve_embedding_model_path;
 use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
-use crate::llm::startup::{
-    build_resolved_embedding_request, capture_inference_restore_config,
-    restore_inference_runtime_best_effort,
-};
+use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
 use pantograph_embedded_runtime::embedding_workflow::{
@@ -169,12 +166,6 @@ async fn prepare_embedding_runtime(
         ));
     }
 
-    if gateway.is_ready().await && gateway.is_embedding_mode().await {
-        return Ok(None);
-    }
-
-    let restore_config = capture_inference_restore_config(gateway).await;
-
     let model_id = embedding_model_id_from_graph.ok_or_else(|| {
         "Embedding workflows must connect Puma-Lib `model_path` to embedding `model`".to_string()
     })?;
@@ -211,22 +202,17 @@ async fn prepare_embedding_runtime(
     let device = guard.device.clone();
     drop(guard);
 
-    let embedding_config = gateway
-        .build_embedding_start_config(build_resolved_embedding_request(
+    let prepared = gateway
+        .prepare_embedding_runtime(build_resolved_embedding_request(
             Some(resolved_embedding_model_path),
             None,
             &device,
             Some("nomic-embed-text".to_string()),
         ))
         .await
-        .map_err(|e| e.to_string())?;
-
-    gateway
-        .start(&embedding_config)
-        .await
         .map_err(|e| format!("Failed to start llama.cpp in embedding mode: {}", e))?;
 
-    Ok(restore_config)
+    Ok(prepared.restore_config)
 }
 
 fn is_llamacpp_backend_name(backend_name: &str) -> bool {
@@ -611,12 +597,16 @@ async fn run_session_graph_snapshot(
         .or_else(|| {
             resolve_runtime_model_target(&execution_mode_info, &execution_runtime_snapshot)
         });
-    restore_inference_runtime_best_effort(
-        gateway.inner(),
-        restore_config,
-        "Workflow executed in embedding mode but failed to restore previous inference mode",
-    )
-    .await;
+    if let Err(error) = gateway
+        .inner()
+        .restore_inference_runtime(restore_config)
+        .await
+    {
+        log::warn!(
+            "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
+            error
+        );
+    }
     emit_diagnostics_snapshots(
         &app,
         &session_id,

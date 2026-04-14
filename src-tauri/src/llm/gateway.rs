@@ -12,8 +12,8 @@ use inference::config::DeviceInfo as InferenceDeviceInfo;
 use inference::process::ProcessSpawner;
 use inference::{
     BackendConfig, DedicatedEmbeddingRuntimeManager, EmbeddingMemoryMode as InferenceEmbeddingMode,
-    EmbeddingStartRequest, GatewayError as InferenceGatewayError, InferenceStartRequest,
-    LlamaCppEmbeddingRuntime,
+    EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError as InferenceGatewayError,
+    InferenceStartRequest, LlamaCppEmbeddingRuntime,
 };
 
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
@@ -193,6 +193,14 @@ impl InferenceGateway {
         self.inner.build_embedding_start_config(request).await
     }
 
+    /// Start the active backend in embedding mode and capture restore context.
+    pub async fn prepare_embedding_runtime(
+        &self,
+        request: EmbeddingStartRequest,
+    ) -> Result<EmbeddingRuntimePreparation, InferenceGatewayError> {
+        self.inner.prepare_embedding_runtime(request).await
+    }
+
     /// Switch to a different backend.
     pub async fn switch_backend(&self, name: &str) -> Result<(), GatewayError> {
         self.inner
@@ -249,9 +257,12 @@ impl InferenceGateway {
         self.inner.is_embedding_mode().await
     }
 
-    /// Get the last inference config (for restoring after embedding mode).
-    pub async fn last_inference_config(&self) -> Option<BackendConfig> {
-        self.inner.last_inference_config().await
+    /// Restore the last non-embedding inference runtime when available.
+    pub async fn restore_inference_runtime(
+        &self,
+        restore_config: Option<BackendConfig>,
+    ) -> Result<(), InferenceGatewayError> {
+        self.inner.restore_inference_runtime(restore_config).await
     }
 
     /// Get server mode info for the frontend.
