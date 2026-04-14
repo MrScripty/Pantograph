@@ -45,6 +45,9 @@ desktop app wiring.
 - Deterministic eviction-candidate ordering is also computed here so higher
   layers can ask the registry for backend-owned pressure decisions rather than
   sorting runtimes ad hoc.
+- Reservation-owner eviction ordering is also computed here so callers can
+  reuse backend-owned runtime pressure decisions when choosing which loaded
+  session reservation to release.
 - Invalid state transitions are rejected rather than coerced.
 - Observation reconciliation updates registry-owned state but does not invent
   backend lifecycle facts.

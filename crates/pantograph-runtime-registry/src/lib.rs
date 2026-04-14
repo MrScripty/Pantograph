@@ -365,6 +365,52 @@ impl RuntimeRegistry {
         candidates
     }
 
+    pub fn eviction_reservation_candidates(&self) -> Vec<RuntimeReservationLease> {
+        let guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        let ordered_runtime_ids = guard
+            .runtimes
+            .values()
+            .filter(|record| runtime_is_reservation_evictable(record))
+            .map(|record| record.runtime_id.clone())
+            .collect::<Vec<_>>();
+
+        let mut candidates = ordered_runtime_ids
+            .into_iter()
+            .flat_map(|runtime_id| {
+                let mut reservations = guard
+                    .reservations
+                    .values()
+                    .filter(|reservation| reservation.runtime_id == runtime_id)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                reservations.sort_by(|left, right| {
+                    retention_hint_rank(left.retention_hint)
+                        .cmp(&retention_hint_rank(right.retention_hint))
+                        .then_with(|| left.created_at_ms.cmp(&right.created_at_ms))
+                        .then_with(|| left.reservation_id.cmp(&right.reservation_id))
+                });
+                reservations
+                    .into_iter()
+                    .map(RuntimeReservationRecord::into_lease)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| {
+            runtime_eviction_rank(&left.runtime_id, &guard)
+                .cmp(&runtime_eviction_rank(&right.runtime_id, &guard))
+                .then_with(|| {
+                    retention_hint_rank(left.retention_hint)
+                        .cmp(&retention_hint_rank(right.retention_hint))
+                })
+                .then_with(|| left.created_at_ms.cmp(&right.created_at_ms))
+                .then_with(|| left.reservation_id.cmp(&right.reservation_id))
+        });
+        candidates
+    }
+
     pub fn observe_runtimes(
         &self,
         observations: Vec<RuntimeObservation>,
@@ -452,6 +498,20 @@ fn runtime_is_evictable(record: &RuntimeRegistryRecord) -> bool {
     )
 }
 
+fn runtime_is_reservation_evictable(record: &RuntimeRegistryRecord) -> bool {
+    if record.models.values().any(|model| model.pinned) {
+        return false;
+    }
+
+    matches!(
+        record.status,
+        RuntimeRegistryStatus::Warming
+            | RuntimeRegistryStatus::Ready
+            | RuntimeRegistryStatus::Unhealthy
+            | RuntimeRegistryStatus::Stopping
+    )
+}
+
 fn runtime_retention_disposition(
     runtime_id: &str,
     state: &RuntimeRegistryState,
@@ -524,6 +584,25 @@ fn eviction_status_rank(status: RuntimeRegistryStatus) -> u8 {
         | RuntimeRegistryStatus::Stopped
         | RuntimeRegistryStatus::Failed => 4,
     }
+}
+
+fn retention_hint_rank(retention_hint: RuntimeRetentionHint) -> u8 {
+    match retention_hint {
+        RuntimeRetentionHint::Ephemeral => 0,
+        RuntimeRetentionHint::KeepAlive => 1,
+    }
+}
+
+fn runtime_eviction_rank(runtime_id: &str, state: &RuntimeRegistryState) -> (u8, u64, String) {
+    let runtime_id = canonical_runtime_id(runtime_id);
+    let Some(record) = state.runtimes.get(&runtime_id) else {
+        return (u8::MAX, u64::MAX, runtime_id);
+    };
+    (
+        eviction_status_rank(record.status),
+        record.last_transition_at_ms,
+        record.runtime_id.clone(),
+    )
 }
 
 fn admission_failure(
@@ -1278,6 +1357,99 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["unhealthy", "ready-old", "ready-new", "warming"]
         );
+    }
+
+    #[test]
+    fn eviction_reservation_candidates_follow_runtime_and_retention_ordering() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(RuntimeRegistration::new("ready-old", "ready-old"));
+        registry.register_runtime(RuntimeRegistration::new("ready-new", "ready-new"));
+        registry.register_runtime(RuntimeRegistration::new("busy", "busy"));
+
+        {
+            let mut guard = registry
+                .state
+                .lock()
+                .expect("runtime registry state lock poisoned");
+            let ready_old = guard
+                .runtimes
+                .get_mut("ready-old")
+                .expect("ready-old runtime");
+            ready_old.status = RuntimeRegistryStatus::Ready;
+            ready_old.last_transition_at_ms = 10;
+
+            let ready_new = guard
+                .runtimes
+                .get_mut("ready-new")
+                .expect("ready-new runtime");
+            ready_new.status = RuntimeRegistryStatus::Ready;
+            ready_new.last_transition_at_ms = 20;
+
+            let busy = guard.runtimes.get_mut("busy").expect("busy runtime");
+            busy.status = RuntimeRegistryStatus::Busy;
+            busy.last_transition_at_ms = 1;
+        }
+
+        let old_keep_alive = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "ready-old".to_string(),
+                workflow_id: "wf-a".to_string(),
+                reservation_owner_id: Some("session-a".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::KeepAlive,
+            })
+            .expect("old keep-alive reservation");
+        let old_ephemeral = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "ready-old".to_string(),
+                workflow_id: "wf-b".to_string(),
+                reservation_owner_id: Some("session-b".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("old ephemeral reservation");
+        let new_ephemeral = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "ready-new".to_string(),
+                workflow_id: "wf-c".to_string(),
+                reservation_owner_id: Some("session-c".to_string()),
+                usage_profile: None,
+                model_id: Some("model-b".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("new ephemeral reservation");
+        let _busy_ephemeral = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "busy".to_string(),
+                workflow_id: "wf-d".to_string(),
+                reservation_owner_id: Some("session-d".to_string()),
+                usage_profile: None,
+                model_id: Some("model-c".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("busy reservation");
+
+        let candidates = registry.eviction_reservation_candidates();
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.reservation_owner_id.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("session-b"), Some("session-a"), Some("session-c")]
+        );
+        assert_eq!(candidates[0].reservation_id, old_ephemeral.reservation_id);
+        assert_eq!(candidates[1].reservation_id, old_keep_alive.reservation_id);
+        assert_eq!(candidates[2].reservation_id, new_ephemeral.reservation_id);
     }
 
     #[test]

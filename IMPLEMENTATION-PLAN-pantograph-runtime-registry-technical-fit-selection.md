@@ -456,6 +456,10 @@ runtime callers.
   path so repeated session loads can converge on the same reservation inside
   the registry lock instead of depending on adapter-local duplicate-load
   guards.
+- 2026-04-13: The registry now exposes ordered reservation-owner eviction
+  candidates derived from backend-owned runtime pressure and retention policy
+  so higher layers can consume one policy order instead of rebuilding unload
+  ranking from local state alone.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
