@@ -1729,6 +1729,88 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        runtime_registry.observe_runtimes(vec![pantograph_runtime_registry::RuntimeObservation {
+            runtime_id: "shared-runtime".to_string(),
+            display_name: "shared-runtime".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: pantograph_runtime_registry::RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("shared-runtime-1".to_string()),
+            last_error: None,
+        }]);
+        runtime_registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "shared-runtime".to_string(),
+                workflow_id: "wf-a".to_string(),
+                reservation_owner_id: Some("session-a".to_string()),
+                usage_profile: Some("interactive".to_string()),
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::KeepAlive,
+            })
+            .expect("keep-alive reservation");
+        runtime_registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "shared-runtime".to_string(),
+                workflow_id: "wf-b".to_string(),
+                reservation_owner_id: Some("session-b".to_string()),
+                usage_profile: Some("batch".to_string()),
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("ephemeral reservation");
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry);
+
+        let selected = runtime
+            .host()
+            .select_runtime_unload_candidate(&[
+                WorkflowSessionRuntimeUnloadCandidate {
+                    session_id: "session-a".to_string(),
+                    workflow_id: "wf-a".to_string(),
+                    keep_alive: true,
+                    access_tick: 1,
+                    run_count: 0,
+                },
+                WorkflowSessionRuntimeUnloadCandidate {
+                    session_id: "session-b".to_string(),
+                    workflow_id: "wf-b".to_string(),
+                    keep_alive: false,
+                    access_tick: 99,
+                    run_count: 5,
+                },
+            ])
+            .await
+            .expect("select unload candidate")
+            .expect("candidate should exist");
+
+        assert_eq!(selected.session_id, "session-b");
+    }
+
     #[test]
     fn python_runtime_capabilities_report_python_backed_engines() {
         let capabilities = EmbeddedWorkflowHost::python_runtime_capabilities(
