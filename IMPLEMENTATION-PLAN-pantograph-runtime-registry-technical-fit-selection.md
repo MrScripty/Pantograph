@@ -100,8 +100,8 @@ The following Milestone 2 foundation slices have now landed in code:
 
 ### What has not landed yet
 
-- embedded host release paths still do not consume retention dispositions into
-  a concrete runtime stop/reclaim action
+- no dedicated reclaim worker executes producer-side stop actions across all
+  runtime producers after registry eviction decisions
 - no registry-driven cleanup or recovery worker exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
@@ -483,6 +483,10 @@ runtime callers.
   dispositions during session runtime loads, reuses ready runtimes, waits for
   in-flight warmup transitions, and releases reservations again when that wait
   times out instead of leaking session/runtime ownership.
+- 2026-04-13: Embedded host release paths now also consume backend-owned
+  retention dispositions and translate evictable runtimes into explicit
+  stop-requested or stopped registry transitions, so reservation cleanup no
+  longer leaves shared runtime state drifting after unload or timeout paths.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
