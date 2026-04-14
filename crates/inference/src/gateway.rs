@@ -965,7 +965,9 @@ mod tests {
             _config: &BackendConfig,
             _spawner: Arc<dyn ProcessSpawner>,
         ) -> Result<BackendStartOutcome, BackendError> {
-            Err(BackendError::StartupFailed("mock start failure".to_string()))
+            Err(BackendError::StartupFailed(
+                "mock start failure".to_string(),
+            ))
         }
 
         fn stop(&mut self) {}

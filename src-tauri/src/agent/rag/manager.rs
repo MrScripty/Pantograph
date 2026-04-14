@@ -18,11 +18,11 @@ use tokio::sync::RwLock;
 
 use super::error::RagError;
 use super::lancedb::{
-    CHUNKS_TABLE_NAME, DEFAULT_EMBEDDING_DIM, create_schema, embeddings_to_record_batch,
-    get_bool_col, get_i32_col, get_string_col,
+    create_schema, embeddings_to_record_batch, get_bool_col, get_i32_col, get_string_col,
+    CHUNKS_TABLE_NAME, DEFAULT_EMBEDDING_DIM,
 };
 use super::types::{IndexingProgress, RagStatus, SvelteDoc};
-use crate::agent::chunker::{ChunkConfig, chunk_document};
+use crate::agent::chunker::{chunk_document, ChunkConfig};
 use crate::agent::docs::DocsManager;
 use crate::agent::docs_index::IndexEntry;
 use crate::agent::embeddings::{

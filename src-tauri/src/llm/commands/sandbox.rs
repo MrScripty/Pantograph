@@ -5,7 +5,7 @@ use crate::config::SandboxConfig;
 use node_engine::resolve_path_within_root;
 use serde::Serialize;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, State, command};
+use tauri::{command, AppHandle, Manager, State};
 
 /// Get the current sandbox configuration
 #[command]

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
-use inference::{ManagedBinaryId, managed_runtime_dir, resolve_binary_command};
+use inference::{managed_runtime_dir, resolve_binary_command, ManagedBinaryId};
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};

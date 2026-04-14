@@ -55,16 +55,15 @@ pub use backend::CandleBackend;
 pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
-pub use device::{DeviceBackend, list_llamacpp_devices, parse_llamacpp_device_listing};
+pub use device::{list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend};
 pub use embedding_runtime::LlamaCppEmbeddingRuntime;
 pub use gateway::{
     EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest, SharedGateway,
 };
 pub use managed_runtime::{
-    BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ResolvedCommand, binary_capability, check_binary_status,
-    download_binary, list_binary_capabilities, managed_runtime_dir, remove_binary,
-    resolve_binary_command,
+    binary_capability, check_binary_status, download_binary, list_binary_capabilities,
+    managed_runtime_dir, remove_binary, resolve_binary_command, BinaryStatus, DownloadProgress,
+    ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState, ResolvedCommand,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

@@ -15,7 +15,6 @@ use agent::create_rag_manager;
 use config::AppConfig;
 use constants::paths::DATA_DIR;
 use llm::{
-    InferenceGateway, RuntimeRegistry, SharedAppConfig, SharedGateway, SharedRuntimeRegistry,
     check_embedding_server, check_health_now, check_port_status, checkout_commit, clear_rag_cache,
     connect_to_server, create_vector_database, find_alternate_port, get_app_config,
     get_backend_capabilities, get_component_history, get_current_backend, get_current_commit_info,
@@ -33,7 +32,8 @@ use llm::{
     set_model_config, set_sandbox_config, set_system_prompt, start_health_monitor,
     start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm, stop_health_monitor,
     stop_llm, switch_backend, trigger_recovery, undo_component_change, update_svelte_docs,
-    validate_component,
+    validate_component, InferenceGateway, RuntimeRegistry, SharedAppConfig, SharedGateway,
+    SharedRuntimeRegistry,
 };
 use project_root::resolve_project_root;
 use std::sync::Arc;

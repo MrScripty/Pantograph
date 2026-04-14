@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use admission::{
     RuntimeAdmissionBudget, RuntimeAdmissionFailure, RuntimeReservationRequirements,
 };
-pub use observation::{RuntimeObservation, observed_runtime_status_from_lifecycle};
+pub use observation::{observed_runtime_status_from_lifecycle, RuntimeObservation};
 use pantograph_runtime_identity::canonical_runtime_id;
 use reservation::RuntimeReservationRecord;
 pub use reservation::{RuntimeReservationLease, RuntimeReservationRequest, RuntimeRetentionHint};
@@ -1752,11 +1752,9 @@ mod tests {
             .expect("matching candidate should exist");
         assert_eq!(selected.reservation_id, old_ephemeral.reservation_id);
 
-        assert!(
-            registry
-                .eviction_reservation_candidate_for_owners(&["missing-session"])
-                .is_none()
-        );
+        assert!(registry
+            .eviction_reservation_candidate_for_owners(&["missing-session"])
+            .is_none());
     }
 
     #[test]

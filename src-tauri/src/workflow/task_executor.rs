@@ -8,7 +8,7 @@ use crate::agent::rag::SharedRagManager;
 
 use pantograph_embedded_runtime::task_executor::TauriTaskExecutor as EmbeddedTaskExecutor;
 pub use pantograph_embedded_runtime::task_executor::{
-    PythonRuntimeExecutionRecorder, runtime_extension_keys,
+    runtime_extension_keys, PythonRuntimeExecutionRecorder,
 };
 use pantograph_embedded_runtime::{PythonRuntimeAdapter, RagBackend, RagDocument};
 

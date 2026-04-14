@@ -4,7 +4,7 @@ use super::shared::SharedAppConfig;
 use crate::config::{AppConfig, DeviceConfig, DeviceInfo, ModelConfig};
 use crate::workflow::commands::SharedWorkflowService;
 use inference::list_llamacpp_devices;
-use tauri::{AppHandle, Manager, State, command};
+use tauri::{command, AppHandle, Manager, State};
 
 #[command]
 pub async fn get_model_config(config: State<'_, SharedAppConfig>) -> Result<ModelConfig, String> {

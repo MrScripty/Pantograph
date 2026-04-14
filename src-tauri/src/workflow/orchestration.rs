@@ -10,11 +10,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, State, command, ipc::Channel};
+use tauri::{command, ipc::Channel, AppHandle, State};
 use tokio::sync::RwLock;
 
-use super::SharedExecutionManager;
 use super::events::WorkflowEvent;
+use super::SharedExecutionManager;
 use crate::agent::rag::SharedRagManager;
 use crate::llm::gateway::SharedGateway;
 

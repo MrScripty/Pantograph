@@ -11,9 +11,9 @@ use pantograph_runtime_identity::{
     runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeObservation, RuntimeRegistration, RuntimeReservationRequest,
-    RuntimeReservationRequirements, RuntimeRetentionHint, SharedRuntimeRegistry,
-    observed_runtime_status_from_lifecycle,
+    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
+    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
+    SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -57,7 +57,7 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
-pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
+pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
@@ -1744,12 +1744,10 @@ mod tests {
             .expect("python runtime should be observed");
         assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
         assert_eq!(pytorch.status, RuntimeRegistryStatus::Ready);
-        assert!(
-            pytorch
-                .runtime_instance_id
-                .as_deref()
-                .is_some_and(|value| value.starts_with("python-runtime:pytorch:"))
-        );
+        assert!(pytorch
+            .runtime_instance_id
+            .as_deref()
+            .is_some_and(|value| value.starts_with("python-runtime:pytorch:")));
         assert_eq!(pytorch.models.len(), 1);
         assert_eq!(pytorch.models[0].model_id, "/tmp/mock-diffusion-model");
     }
@@ -1816,11 +1814,9 @@ mod tests {
 
         let released_snapshot = runtime_registry.snapshot();
         assert!(released_snapshot.reservations.is_empty());
-        assert!(
-            released_snapshot.runtimes[0]
-                .active_reservation_ids
-                .is_empty()
-        );
+        assert!(released_snapshot.runtimes[0]
+            .active_reservation_ids
+            .is_empty());
     }
 
     #[tokio::test]
@@ -1882,12 +1878,10 @@ mod tests {
 
         let snapshot = runtime_registry.snapshot();
         assert!(snapshot.reservations.is_empty());
-        assert!(
-            snapshot
-                .runtimes
-                .iter()
-                .all(|runtime| runtime.active_reservation_ids.is_empty())
-        );
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.active_reservation_ids.is_empty()));
     }
 
     #[tokio::test]
@@ -2010,11 +2004,9 @@ mod tests {
             .iter()
             .find(|capability| capability.runtime_id == "stable_audio")
             .expect("stable audio capability");
-        assert!(
-            stable_audio
-                .backend_keys
-                .contains(&"stable_audio".to_string())
-        );
+        assert!(stable_audio
+            .backend_keys
+            .contains(&"stable_audio".to_string()));
     }
 
     #[test]

@@ -41,17 +41,12 @@ impl TaskDescriptor for RerankerTask {
             node_type: "reranker".to_string(),
             category: NodeCategory::Processing,
             label: "LlamaCpp Reranker".to_string(),
-            description: "Rank candidate documents with a GGUF reranker via llama.cpp"
-                .to_string(),
+            description: "Rank candidate documents with a GGUF reranker via llama.cpp".to_string(),
             inputs: vec![
                 PortMetadata::required(PORT_MODEL_PATH, "Model Path", PortDataType::String),
                 PortMetadata::required(PORT_QUERY, "Query", PortDataType::String),
                 PortMetadata::required(PORT_DOCUMENTS, "Documents", PortDataType::Json),
-                PortMetadata::optional(
-                    PORT_DOCUMENTS_JSON,
-                    "Documents JSON",
-                    PortDataType::String,
-                ),
+                PortMetadata::optional(PORT_DOCUMENTS_JSON, "Documents JSON", PortDataType::String),
                 PortMetadata::optional(PORT_TOP_K, "Top K", PortDataType::Number),
                 PortMetadata::optional(
                     PORT_RETURN_DOCUMENTS,

@@ -9,7 +9,7 @@ pub(crate) trait OllamaPlatform: Sync {
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
     fn resolve_command(&self, install_dir: &Path, args: &[&str])
-    -> Result<ResolvedCommand, String>;
+        -> Result<ResolvedCommand, String>;
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

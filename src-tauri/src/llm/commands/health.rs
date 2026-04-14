@@ -3,7 +3,7 @@
 //! Commands for health checking and recovery management.
 
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State, command};
+use tauri::{command, AppHandle, Manager, State};
 
 use super::shared::sync_runtime_registry_from_gateway;
 use crate::llm::health_monitor::{

@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use super::{OLLAMA_RELEASE_TAG, OllamaPlatform, find_executable};
+use super::{find_executable, OllamaPlatform, OLLAMA_RELEASE_TAG};
 use crate::managed_runtime::{
-    ArchiveKind, ReleaseAsset, ResolvedCommand, extract_pid_file, prepend_env_path,
+    extract_pid_file, prepend_env_path, ArchiveKind, ReleaseAsset, ResolvedCommand,
 };
 
 pub(crate) struct MacOsArm64Platform;

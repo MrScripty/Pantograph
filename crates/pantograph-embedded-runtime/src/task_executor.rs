@@ -12,9 +12,10 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
-    Context, DependencyState, EventSink, ExecutorExtensions, ModelDependencyRequest,
-    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
-    Result, TaskExecutor, WorkflowEvent, core_executor::resolve_node_type, extension_keys,
+    core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
+    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
+    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
+    WorkflowEvent,
 };
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
@@ -1400,8 +1401,9 @@ impl TauriTaskExecutor {
                     .is_some_and(|recorder| recorder.has_seen_runtime_instance(runtime_instance_id))
             });
         runtime_metadata.snapshot.runtime_reused = Some(runtime_reused);
-        runtime_metadata.snapshot.lifecycle_decision_reason =
-            runtime_metadata.snapshot.normalized_lifecycle_decision_reason();
+        runtime_metadata.snapshot.lifecycle_decision_reason = runtime_metadata
+            .snapshot
+            .normalized_lifecycle_decision_reason();
 
         let streamed_any = Arc::new(AtomicBool::new(false));
         let stream_handler: Option<PythonStreamHandler> = Self::resolve_stream_target(extensions)
@@ -1435,7 +1437,8 @@ impl TauriTaskExecutor {
                 NodeEngineError::ExecutionFailed(error)
             })?;
         if let Some(recorder) = recorder.as_ref() {
-            if let Some(runtime_instance_id) = runtime_metadata.snapshot.runtime_instance_id.as_deref()
+            if let Some(runtime_instance_id) =
+                runtime_metadata.snapshot.runtime_instance_id.as_deref()
             {
                 recorder.mark_runtime_instance_seen(runtime_instance_id);
             }
@@ -1536,10 +1539,10 @@ impl TaskExecutor for TauriTaskExecutor {
 mod tests {
     use super::*;
     use node_engine::{
-        DependencyState, DependencyValidationState, ExecutorExtensions, ModelDependencyBinding,
-        ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
-        ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
-        VecEventSink, WorkflowEvent, extension_keys,
+        extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
+        ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
+        ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
+        ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
     };
 
     #[test]

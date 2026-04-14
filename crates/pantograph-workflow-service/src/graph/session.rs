@@ -6,9 +6,9 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
-    scheduler_snapshot_trace_execution_id,
+    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+    WorkflowSessionSummary,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -1019,12 +1019,10 @@ mod tests {
         assert!(response.accepted);
         let graph = response.graph.expect("updated graph");
         assert_eq!(graph.edges.len(), 2);
-        assert!(
-            graph
-                .edges
-                .iter()
-                .all(|edge| edge.id != "text-input-text-text-output-text")
-        );
+        assert!(graph
+            .edges
+            .iter()
+            .all(|edge| edge.id != "text-input-text-text-output-text"));
         let inserted_node_id = response.inserted_node_id.expect("inserted node id");
         assert!(graph.find_node(&inserted_node_id).is_some());
     }

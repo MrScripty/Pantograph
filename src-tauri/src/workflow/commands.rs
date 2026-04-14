@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, State, command, ipc::Channel};
+use tauri::{command, ipc::Channel, AppHandle, State};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;

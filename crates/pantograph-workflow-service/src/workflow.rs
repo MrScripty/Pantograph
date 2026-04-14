@@ -3814,10 +3814,9 @@ mod tests {
             .expect_err("invalid host output should be internal");
 
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(
-            err.to_string()
-                .contains("outputs.0.port_id must be non-empty")
-        );
+        assert!(err
+            .to_string()
+            .contains("outputs.0.port_id must be non-empty"));
     }
 
     #[tokio::test]
@@ -4062,23 +4061,19 @@ mod tests {
             response.inputs[0].ports[0].data_type.as_deref(),
             Some("string")
         );
-        assert!(
-            response.inputs[0]
-                .ports
-                .iter()
-                .all(|port| port.port_id != "legacy-out")
-        );
+        assert!(response.inputs[0]
+            .ports
+            .iter()
+            .all(|port| port.port_id != "legacy-out"));
 
         assert_eq!(response.outputs.len(), 1);
         assert_eq!(response.outputs[0].node_id, "text-output-1");
         assert_eq!(response.outputs[0].ports.len(), 1);
         assert_eq!(response.outputs[0].ports[0].port_id, "text");
-        assert!(
-            response.outputs[0]
-                .ports
-                .iter()
-                .all(|port| port.port_id != "stream")
-        );
+        assert!(response.outputs[0]
+            .ports
+            .iter()
+            .all(|port| port.port_id != "stream"));
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -4235,10 +4230,9 @@ mod tests {
             .expect_err("workflow io should reject missing io_binding_origin");
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
-        assert!(
-            err.to_string()
-                .contains("missing definition.io_binding_origin")
-        );
+        assert!(err
+            .to_string()
+            .contains("missing definition.io_binding_origin"));
         let _ = fs::remove_dir_all(temp_root);
     }
 
@@ -4438,10 +4432,9 @@ mod tests {
             .expect_err("expected output_not_produced");
 
         assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-        assert!(
-            err.to_string()
-                .contains("requested output target 'text-output-1.text' was not produced")
-        );
+        assert!(err
+            .to_string()
+            .contains("requested output target 'text-output-1.text' was not produced"));
     }
 
     #[tokio::test]
@@ -4506,12 +4499,10 @@ mod tests {
         assert_eq!(response.invalid_targets.len(), 1);
         assert_eq!(response.invalid_targets[0].node_id, "text-output-1");
         assert_eq!(response.invalid_targets[0].port_id, "stream");
-        assert!(
-            response
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("does not declare required metadata"))
-        );
+        assert!(response
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("does not declare required metadata")));
     }
 
     #[tokio::test]
@@ -4542,12 +4533,10 @@ mod tests {
         assert_eq!(response.graph_fingerprint, "preflight-graph");
         assert!(response.missing_required_inputs.is_empty());
         assert!(response.invalid_targets.is_empty());
-        assert!(
-            response
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("does not declare required metadata"))
-        );
+        assert!(response
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("does not declare required metadata")));
     }
 
     #[tokio::test]
@@ -4625,11 +4614,9 @@ mod tests {
         assert_eq!(runtime_warnings.len(), 1);
         assert_eq!(blocking_runtime_issues.len(), 1);
         assert_eq!(blocking_runtime_issues[0].runtime_id, "remote-llama");
-        assert!(
-            blocking_runtime_issues[0]
-                .message
-                .contains("Remote llama.cpp is not configured")
-        );
+        assert!(blocking_runtime_issues[0]
+            .message
+            .contains("Remote llama.cpp is not configured"));
     }
 
     #[test]
@@ -4974,16 +4961,12 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(second.session_id.as_str())
         );
-        assert!(
-            unloads
-                .iter()
-                .any(|session_id| session_id == &third_session_id)
-        );
-        assert!(
-            !unloads
-                .iter()
-                .any(|session_id| session_id == &first.session_id)
-        );
+        assert!(unloads
+            .iter()
+            .any(|session_id| session_id == &third_session_id));
+        assert!(!unloads
+            .iter()
+            .any(|session_id| session_id == &first.session_id));
     }
 
     #[tokio::test]
@@ -5390,12 +5373,10 @@ mod tests {
 
         assert_eq!(snapshot.trace_execution_id, None);
         assert_eq!(snapshot.items.len(), 2);
-        assert!(
-            snapshot
-                .items
-                .iter()
-                .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
-        );
+        assert!(snapshot
+            .items
+            .iter()
+            .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending));
     }
 
     #[tokio::test]

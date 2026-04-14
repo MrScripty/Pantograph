@@ -9,7 +9,7 @@ use node_engine::{EventError, EventSink};
 use tauri::ipc::Channel;
 
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
-use super::events::{WorkflowEvent as TauriWorkflowEvent, is_cancelled_error_message};
+use super::events::{is_cancelled_error_message, WorkflowEvent as TauriWorkflowEvent};
 
 /// A value that flows through a port (alias for serde_json::Value)
 type PortValue = serde_json::Value;

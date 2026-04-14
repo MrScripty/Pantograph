@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use super::effective_definition::{EffectiveDefinitionError, effective_node_definition};
+use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
 use super::registry::NodeRegistry;
 use super::types::{PortDataType, WorkflowGraph};
 
@@ -21,7 +21,9 @@ pub enum ValidationError {
     #[error("Node '{node_id}' has unconnected required input '{port}'")]
     UnconnectedInput { node_id: String, port: String },
 
-    #[error("Type mismatch on edge '{edge_id}': {source_type:?} cannot connect to {target_type:?}")]
+    #[error(
+        "Type mismatch on edge '{edge_id}': {source_type:?} cannot connect to {target_type:?}"
+    )]
     TypeMismatch {
         edge_id: String,
         source_type: PortDataType,

@@ -19,8 +19,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
     WorkflowSessionStatusRequest,
 };
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use tokio::sync::RwLock;
 
 use crate::{FfiError, FfiPumasApi};
@@ -837,13 +837,11 @@ mod tests {
         let list_response_json = runtime.workflow_graph_list().expect("list workflow graphs");
         let list_response: serde_json::Value =
             serde_json::from_str(&list_response_json).expect("parse list response");
-        assert!(
-            list_response["workflows"]
-                .as_array()
-                .expect("workflows")
-                .iter()
-                .any(|metadata| metadata["id"] == "Native Edited Workflow")
-        );
+        assert!(list_response["workflows"]
+            .as_array()
+            .expect("workflows")
+            .iter()
+            .any(|metadata| metadata["id"] == "Native Edited Workflow"));
 
         let load_response_json = runtime
             .workflow_graph_load(serde_json::json!({ "path": path }).to_string())

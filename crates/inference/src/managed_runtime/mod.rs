@@ -117,7 +117,7 @@ trait ManagedBinaryDefinition: Sync {
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
     fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String>;
     fn resolve_command(&self, install_dir: &Path, args: &[&str])
-    -> Result<ResolvedCommand, String>;
+        -> Result<ResolvedCommand, String>;
 
     fn system_command(&self) -> Option<PathBuf> {
         None

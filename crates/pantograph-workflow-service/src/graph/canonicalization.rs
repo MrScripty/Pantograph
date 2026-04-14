@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use super::registry::NodeRegistry;
 use super::types::{
@@ -702,16 +702,12 @@ mod tests {
             .as_array()
             .expect("diffusion inputs");
 
-        assert!(
-            expand_outputs
-                .iter()
-                .any(|port| port["id"] == json!("steps"))
-        );
-        assert!(
-            diffusion_inputs
-                .iter()
-                .any(|port| port["id"] == json!("steps"))
-        );
+        assert!(expand_outputs
+            .iter()
+            .any(|port| port["id"] == json!("steps")));
+        assert!(diffusion_inputs
+            .iter()
+            .any(|port| port["id"] == json!("steps")));
         assert!(canonical.edges.iter().any(|edge| {
             edge.source == "expand"
                 && edge.source_handle == "steps"

@@ -3,16 +3,16 @@
 //! Handles restart attempts with exponential backoff.
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
 use crate::constants::ports;
-use crate::llm::SharedGateway;
 use crate::llm::health_monitor::ServerEvent;
 use crate::llm::port_manager::{check_port_available, find_available_port};
+use crate::llm::SharedGateway;
 
 /// Recovery strategy to use
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 //! LLM server lifecycle management commands.
 
 use super::config::list_devices;
-use super::shared::{SharedAppConfig, sync_runtime_registry_from_gateway};
+use super::shared::{sync_runtime_registry_from_gateway, SharedAppConfig};
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::startup::{
@@ -10,7 +10,7 @@ use crate::llm::startup::{
     resolve_embedding_model_path,
 };
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
-use tauri::{AppHandle, State, command};
+use tauri::{command, AppHandle, State};
 
 #[command]
 pub async fn connect_to_server(

@@ -5,7 +5,7 @@ use crate::llm::gateway::SharedGateway;
 use crate::llm::types::*;
 use futures_util::StreamExt;
 use reqwest::Client;
-use tauri::{AppHandle, State, command, ipc::Channel};
+use tauri::{command, ipc::Channel, AppHandle, State};
 
 #[command]
 pub async fn send_vision_prompt(

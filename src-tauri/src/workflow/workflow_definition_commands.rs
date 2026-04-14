@@ -1,6 +1,6 @@
 use pantograph_workflow_service::{
-    NodeDefinition, NodeRegistry, PortDataType,
-    validate_workflow_connection as validate_connection_internal,
+    validate_workflow_connection as validate_connection_internal, NodeDefinition, NodeRegistry,
+    PortDataType,
 };
 
 pub fn validate_workflow_connection(source_type: PortDataType, target_type: PortDataType) -> bool {

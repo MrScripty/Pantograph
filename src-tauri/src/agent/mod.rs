@@ -9,13 +9,13 @@ pub mod rag;
 pub mod tools;
 pub mod types;
 
-pub use chunker::{ChunkConfig, preview_chunks};
+pub use chunker::{preview_chunks, ChunkConfig};
 pub use docs::DocsManager;
 pub use embeddings::check_embedding_server;
 pub use enricher::EnricherRegistry;
 pub use enricher_svelte::SvelteDocsEnricher;
 pub use prompt::SYSTEM_PROMPT;
-pub use rag::{SvelteDoc, create_rag_manager};
+pub use rag::{create_rag_manager, SvelteDoc};
 pub use tools::*;
 pub use types::*;
 

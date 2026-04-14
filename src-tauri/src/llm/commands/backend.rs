@@ -4,8 +4,8 @@ use crate::config::ServerModeInfo;
 use crate::llm::backend::BackendInfo;
 use crate::llm::commands::shared::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
-use inference::{ManagedBinaryInstallState, binary_capability};
-use tauri::{AppHandle, Manager, State, command};
+use inference::{binary_capability, ManagedBinaryInstallState};
+use tauri::{command, AppHandle, Manager, State};
 
 /// List all available inference backends
 #[command]
