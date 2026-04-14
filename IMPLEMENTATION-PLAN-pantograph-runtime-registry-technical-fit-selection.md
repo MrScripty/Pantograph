@@ -498,6 +498,9 @@ runtime callers.
   runtime registry after embedding-mode preparation and restore transitions, so
   another real host-driven producer path no longer bypasses Milestone 3
   registry convergence.
+- 2026-04-14: `EmbeddedRuntime::shutdown()` now reconciles the shared runtime
+  registry after stopping the gateway producer, so embedded hosts do not leave
+  previously ready runtimes stuck in stale registry state after shutdown.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

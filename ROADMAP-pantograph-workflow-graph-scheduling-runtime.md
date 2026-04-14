@@ -37,6 +37,9 @@ implementation progress in the runtime and diagnostics layers.
 - RAG embedding-mode indexing transitions now also refresh the shared runtime
   registry on prepare and restore paths, reducing drift between real producer
   state and registry-backed diagnostics or eviction policy.
+- Direct embedded-runtime shutdown now also reconciles the shared registry back
+  to `stopped`, so embedded hosts do not leave runtime-residency state stale
+  after process stop.
 
 ### Active implementation stream
 
