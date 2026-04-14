@@ -396,16 +396,21 @@ impl EmbeddedRuntime {
         &self.gateway
     }
 
+    async fn reconcile_runtime_registry_from_gateway(&self) {
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return;
+        };
+
+        let mode_info = HostRuntimeModeSnapshot::from_mode_info(&self.gateway.mode_info().await);
+        runtime_registry::reconcile_runtime_registry_mode_info(
+            runtime_registry.as_ref(),
+            &mode_info,
+        );
+    }
+
     pub async fn shutdown(&self) {
         self.gateway.stop().await;
-        if let Some(runtime_registry) = self.runtime_registry.as_ref() {
-            let mode_info =
-                HostRuntimeModeSnapshot::from_mode_info(&self.gateway.mode_info().await);
-            runtime_registry::reconcile_runtime_registry_mode_info(
-                runtime_registry.as_ref(),
-                &mode_info,
-            );
-        }
+        self.reconcile_runtime_registry_from_gateway().await;
     }
 
     fn host(&self) -> EmbeddedWorkflowHost {
@@ -702,6 +707,8 @@ impl EmbeddedRuntime {
                 "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
                 error
             );
+        } else {
+            self.reconcile_runtime_registry_from_gateway().await;
         }
 
         Ok(EditSessionGraphExecutionOutcome {
@@ -1688,6 +1695,7 @@ mod tests {
     use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use inference::{RerankRequest, RerankResponse};
     use pantograph_runtime_registry::{RuntimeRegistry, RuntimeRegistryStatus};
+    use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use std::path::Path;
     use std::pin::Pin;
     use tempfile::TempDir;
@@ -2054,6 +2062,68 @@ mod tests {
             serde_json::to_vec(&workflow_json).expect("serialize workflow"),
         )
         .expect("write workflow");
+    }
+
+    fn write_imported_embedding_model(root: &Path) -> (String, PathBuf) {
+        let model_dir = root
+            .join("shared-resources")
+            .join("models")
+            .join("embedding")
+            .join("imported")
+            .join("test-embed");
+        std::fs::create_dir_all(&model_dir).expect("create embedding model dir");
+
+        let model_file = model_dir.join("embed.gguf");
+        std::fs::write(&model_file, b"gguf").expect("write embedding model");
+        std::fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::json!({
+                "schema_version": 2,
+                "model_id": "embedding/imported/test-embed",
+                "family": "imported",
+                "model_type": "embedding",
+                "official_name": "test-embed",
+                "cleaned_name": "test-embed",
+                "source_path": model_dir.display().to_string(),
+                "storage_kind": "library_owned",
+                "import_state": "ready",
+                "validation_state": "valid",
+                "task_type_primary": "feature-extraction",
+                "recommended_backend": "llamacpp",
+                "runtime_engine_hints": ["llamacpp"]
+            })
+            .to_string(),
+        )
+        .expect("write embedding metadata");
+
+        ("embedding/imported/test-embed".to_string(), model_file)
+    }
+
+    fn edit_session_embedding_graph(model_id: &str) -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "puma-lib-1".to_string(),
+                    node_type: "puma-lib".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({ "model_id": model_id }),
+                },
+                GraphNode {
+                    id: "embedding-1".to_string(),
+                    node_type: "embedding".to_string(),
+                    position: Position { x: 200.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "edge-model".to_string(),
+                source: "puma-lib-1".to_string(),
+                source_handle: "model_path".to_string(),
+                target: "embedding-1".to_string(),
+                target_handle: "model".to_string(),
+            }],
+            ..WorkflowGraph::default()
+        }
     }
 
     #[tokio::test]
@@ -3025,6 +3095,122 @@ mod tests {
             .find(|runtime| runtime.runtime_id == "llama_cpp")
             .expect("active runtime should remain observable after shutdown");
         assert_eq!(stopped_runtime.status, RuntimeRegistryStatus::Stopped);
+    }
+
+    #[tokio::test]
+    async fn execute_edit_session_graph_reconciles_registry_after_restore() {
+        let temp = TempDir::new().expect("temp dir");
+        let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
+
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp.path())
+                .build()
+                .await
+                .expect("build pumas api"),
+        );
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("rebuild model index");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let inference_model_path = temp.path().join("main.gguf");
+        std::fs::write(&inference_model_path, b"gguf").expect("write inference model");
+        let mmproj_path = temp.path().join("main.mmproj");
+        std::fs::write(&mmproj_path, b"mmproj").expect("write mmproj");
+
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        ));
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&inference::BackendConfig {
+                model_path: Some(inference_model_path.clone()),
+                mmproj_path: Some(mmproj_path),
+                ..inference::BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start in inference mode");
+
+        let host_runtime_mode_info =
+            HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+        let initial_runtime_instance_id = host_runtime_mode_info
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_instance_id.clone())
+            .expect("initial runtime instance id");
+
+        let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
+        extensions
+            .write()
+            .await
+            .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            gateway.clone(),
+            extensions,
+            Arc::new(WorkflowService::new()),
+            None,
+            Some(runtime_registry.clone()),
+            Some(host_runtime_mode_info),
+        )
+        .await;
+
+        let graph = edit_session_embedding_graph(&model_id);
+        let session = runtime
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+            })
+            .await
+            .expect("create edit session");
+
+        let outcome = runtime
+            .execute_edit_session_graph(
+                &session.session_id,
+                &graph,
+                inference::EmbeddingStartRequest {
+                    gguf_model_path: Some(embedding_model_path),
+                    ..inference::EmbeddingStartRequest::default()
+                },
+                Arc::new(node_engine::NullEventSink),
+            )
+            .await
+            .expect("edit-session execution should restore runtime even when node demand fails");
+        assert!(outcome.error.is_some());
+
+        let restored_mode_info = gateway.mode_info().await;
+        let restored_runtime_instance_id = restored_mode_info
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_instance_id.clone())
+            .expect("restored runtime instance id");
+        assert_ne!(
+            restored_runtime_instance_id, initial_runtime_instance_id,
+            "restore path should produce a fresh runtime instance for this regression check"
+        );
+
+        let snapshot = runtime_registry.snapshot();
+        let registry_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("active runtime should remain registered after restore");
+        assert_eq!(
+            registry_runtime.runtime_instance_id.as_deref(),
+            Some(restored_runtime_instance_id.as_str())
+        );
+        assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
     }
 
     #[tokio::test]
