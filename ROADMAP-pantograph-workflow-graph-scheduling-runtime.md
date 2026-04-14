@@ -300,6 +300,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Dedicated embedding-runtime reuse/start/stop orchestration now lives in
   `crates/inference`, leaving the Tauri gateway wrapper as a consumer of a
   backend-owned coordinator instead of the owner of that runtime lifecycle.
+- Gateway and Python-sidecar runtime observation translation for the shared
+  runtime registry now lives in `crates/pantograph-embedded-runtime`, leaving
+  the Tauri registry module as a thin re-export of backend-owned producer
+  mapping logic.
 
 **Still missing:**
 

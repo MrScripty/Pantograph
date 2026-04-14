@@ -17,6 +17,7 @@ packages.
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
+| `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,
@@ -81,6 +82,9 @@ embedded-runtime crate.
 - Any registry interaction from this crate must remain a narrow translation of
   session lifecycle into explicit registry operations, not an alternate policy
   engine.
+- Gateway and producer observation mapping for the shared runtime registry must
+  stay in backend Rust so adapters do not drift on runtime-id, backend-key, or
+  lifecycle-status translation.
 
 ## Revisit Triggers
 - A second runtime integration path needs the same dependency-resolution policy
@@ -141,6 +145,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Direct embedded workflow runs may also reconcile Python-sidecar execution
   snapshots into that shared registry so producer-specific runtime facts do not
   depend on Tauri-only diagnostics paths.
+- Tauri and other adapters may reuse this crate's runtime-registry translation
+  helpers, but they must not own separate gateway-to-registry observation
+  mapping logic.
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.

@@ -12,10 +12,9 @@ use pantograph_runtime_identity::{
     runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeReclaimAction,
-    RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
-    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision,
-    SharedRuntimeRegistry,
+    RuntimeReclaimAction, RuntimeRegistration, RuntimeReservationRequest,
+    RuntimeReservationRequirements, RuntimeRetentionDecision, RuntimeRetentionHint,
+    RuntimeTransition, RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -51,6 +50,7 @@ use uuid::Uuid;
 pub mod model_dependencies;
 pub mod python_runtime;
 pub mod rag;
+pub mod runtime_registry;
 pub mod task_executor;
 
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
@@ -723,31 +723,11 @@ impl EmbeddedWorkflowHost {
         let Some(metadata) = metadata else {
             return Ok(());
         };
-        let Some(runtime_id) = metadata
-            .snapshot
-            .runtime_id
-            .as_deref()
-            .map(canonical_runtime_id)
-            .filter(|runtime_id| !runtime_id.is_empty())
-        else {
-            return Ok(());
-        };
-
-        let display_name = runtime_display_name(&runtime_id).unwrap_or("Python runtime");
-        runtime_registry.observe_runtime(RuntimeObservation {
-            runtime_id: runtime_id.clone(),
-            display_name: display_name.to_string(),
-            backend_keys: Self::python_runtime_backend_keys(display_name, &runtime_id),
-            model_id: metadata.model_target.clone(),
-            status: observed_runtime_status_from_lifecycle(
-                metadata.snapshot.active,
-                metadata.snapshot.warmup_started_at_ms,
-                metadata.snapshot.warmup_completed_at_ms,
-                metadata.snapshot.last_error.is_some(),
-            ),
-            runtime_instance_id: metadata.snapshot.runtime_instance_id.clone(),
-            last_error: metadata.snapshot.last_error.clone(),
-        });
+        runtime_registry::reconcile_runtime_registry_snapshot_override(
+            runtime_registry.as_ref(),
+            &metadata.snapshot,
+            metadata.model_target.as_deref(),
+        );
 
         Ok(())
     }
@@ -841,80 +821,16 @@ impl EmbeddedWorkflowHost {
         }
     }
 
-    fn active_runtime_descriptor(
-        mode_info: &inference::ServerModeInfo,
-    ) -> (String, String, Vec<String>, Option<String>) {
-        let runtime_id = mode_info
-            .active_runtime
-            .as_ref()
-            .and_then(|snapshot| snapshot.runtime_id.clone())
-            .or_else(|| mode_info.backend_key.clone())
-            .or_else(|| mode_info.backend_name.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        let display_name = mode_info
-            .backend_name
-            .clone()
-            .unwrap_or_else(|| runtime_id.clone());
-        let backend_keys = mode_info
-            .backend_key
-            .clone()
-            .into_iter()
-            .collect::<Vec<_>>();
-        let runtime_instance_id = mode_info
-            .active_runtime
-            .as_ref()
-            .and_then(|snapshot| snapshot.runtime_instance_id.clone());
-
-        (runtime_id, display_name, backend_keys, runtime_instance_id)
-    }
-
-    fn active_runtime_observation(
-        mode_info: &inference::ServerModeInfo,
-        include_stopped: bool,
-    ) -> Option<RuntimeObservation> {
-        let snapshot = mode_info
-            .active_runtime
-            .as_ref()
-            .cloned()
-            .unwrap_or_default();
-        let (runtime_id, display_name, backend_keys, _) =
-            Self::active_runtime_descriptor(mode_info);
-        let status = observed_runtime_status_from_lifecycle(
-            snapshot.active,
-            snapshot.warmup_started_at_ms,
-            snapshot.warmup_completed_at_ms,
-            snapshot.last_error.is_some(),
-        );
-
-        if !include_stopped
-            && matches!(
-                status,
-                pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
-            )
-            && snapshot.last_error.is_none()
-        {
-            return None;
-        }
-
-        Some(RuntimeObservation {
-            runtime_id,
-            display_name,
-            backend_keys,
-            model_id: mode_info.active_model_target.clone(),
-            status,
-            runtime_instance_id: snapshot.runtime_instance_id,
-            last_error: snapshot.last_error,
-        })
-    }
-
     fn reconcile_active_runtime_mode_info(
         runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
         mode_info: &inference::ServerModeInfo,
         include_stopped: bool,
     ) {
-        if let Some(observation) = Self::active_runtime_observation(mode_info, include_stopped) {
-            runtime_registry.observe_runtime(observation);
-        }
+        runtime_registry::reconcile_active_runtime_mode_info(
+            runtime_registry,
+            mode_info,
+            include_stopped,
+        );
     }
 
     fn record_session_runtime_reservation(
@@ -1094,8 +1010,7 @@ impl EmbeddedWorkflowHost {
         };
 
         let mode_info = self.gateway.mode_info().await;
-        let (runtime_id, display_name, backend_keys, _) =
-            Self::active_runtime_descriptor(&mode_info);
+        let descriptor = runtime_registry::active_runtime_descriptor(&mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
@@ -1103,13 +1018,16 @@ impl EmbeddedWorkflowHost {
         );
 
         runtime_registry.register_runtime(
-            RuntimeRegistration::new(runtime_id.clone(), display_name)
-                .with_backend_keys(backend_keys),
+            RuntimeRegistration::new(
+                descriptor.runtime_id.clone(),
+                descriptor.display_name.clone(),
+            )
+            .with_backend_keys(descriptor.backend_keys.clone()),
         );
 
         let lease = runtime_registry
             .acquire_reservation(RuntimeReservationRequest {
-                runtime_id: runtime_id.clone(),
+                runtime_id: descriptor.runtime_id.clone(),
                 workflow_id: workflow_id.to_string(),
                 reservation_owner_id: Some(session_id.to_string()),
                 usage_profile: Self::trimmed_optional(usage_profile),
@@ -1123,7 +1041,7 @@ impl EmbeddedWorkflowHost {
         let previous_reservation_id =
             self.record_session_runtime_reservation(session_id, lease.reservation_id)?;
         if let Err(error) = self
-            .consume_runtime_warmup_disposition(runtime_registry.as_ref(), &runtime_id)
+            .consume_runtime_warmup_disposition(runtime_registry.as_ref(), &descriptor.runtime_id)
             .await
         {
             self.restore_session_runtime_reservation(session_id, previous_reservation_id)?;
