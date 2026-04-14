@@ -100,8 +100,8 @@ The following Milestone 2 foundation slices have now landed in code:
 
 ### What has not landed yet
 
-- no dedicated reclaim worker executes producer-side stop actions across all
-  runtime producers after registry eviction decisions
+- no shared reclaim path yet covers every runtime producer beyond the
+  gateway-backed embedded host path
 - no registry-driven cleanup or recovery worker exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
@@ -487,6 +487,10 @@ runtime callers.
   retention dispositions and translate evictable runtimes into explicit
   stop-requested or stopped registry transitions, so reservation cleanup no
   longer leaves shared runtime state drifting after unload or timeout paths.
+- 2026-04-13: Gateway-backed reclaim execution now also stops the real embedded
+  inference producer before reconciling the registry back to `stopped`, so
+  registry eviction decisions for the active runtime no longer stop at
+  bookkeeping-only state changes.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

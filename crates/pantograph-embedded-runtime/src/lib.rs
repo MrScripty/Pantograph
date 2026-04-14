@@ -869,6 +869,7 @@ impl EmbeddedWorkflowHost {
 
     fn active_runtime_observation(
         mode_info: &inference::ServerModeInfo,
+        include_stopped: bool,
     ) -> Option<RuntimeObservation> {
         let snapshot = mode_info
             .active_runtime
@@ -884,10 +885,12 @@ impl EmbeddedWorkflowHost {
             snapshot.last_error.is_some(),
         );
 
-        if matches!(
-            status,
-            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
-        ) && snapshot.last_error.is_none()
+        if !include_stopped
+            && matches!(
+                status,
+                pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+            )
+            && snapshot.last_error.is_none()
         {
             return None;
         }
@@ -906,8 +909,9 @@ impl EmbeddedWorkflowHost {
     fn reconcile_active_runtime_mode_info(
         runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
         mode_info: &inference::ServerModeInfo,
+        include_stopped: bool,
     ) {
-        if let Some(observation) = Self::active_runtime_observation(mode_info) {
+        if let Some(observation) = Self::active_runtime_observation(mode_info, include_stopped) {
             runtime_registry.observe_runtime(observation);
         }
     }
@@ -950,7 +954,7 @@ impl EmbeddedWorkflowHost {
         let wait_future = async {
             loop {
                 let mode_info = self.gateway.mode_info().await;
-                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info);
+                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info, false);
 
                 let disposition = runtime_registry
                     .warmup_disposition(runtime_id)
@@ -1006,7 +1010,7 @@ impl EmbeddedWorkflowHost {
             RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
             RuntimeWarmupDecision::StartRuntime => {
                 let mode_info = self.gateway.mode_info().await;
-                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info);
+                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info, false);
 
                 match runtime_registry
                     .warmup_disposition(runtime_id)
@@ -1069,10 +1073,15 @@ impl EmbeddedWorkflowHost {
             .status;
 
         if runtime_is_active {
-            runtime_registry
-                .transition_runtime(&disposition.runtime_id, RuntimeTransition::StopRequested)
-                .map(|_| ())
-                .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+            if status != pantograph_runtime_registry::RuntimeRegistryStatus::Stopping {
+                runtime_registry
+                    .transition_runtime(&disposition.runtime_id, RuntimeTransition::StopRequested)
+                    .map(|_| ())
+                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+            }
+            self.gateway.stop().await;
+            let stopped_mode_info = self.gateway.mode_info().await;
+            Self::reconcile_active_runtime_mode_info(runtime_registry, &stopped_mode_info, true);
             return Ok(());
         }
 
@@ -2342,7 +2351,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_session_runtime_unload_marks_active_runtime_for_stop_when_evictable() {
+    async fn test_session_runtime_unload_stops_active_gateway_runtime_when_evictable() {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");
 
@@ -2397,7 +2406,8 @@ mod tests {
 
         let snapshot = runtime_registry.snapshot();
         assert!(snapshot.reservations.is_empty());
-        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopping);
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
+        assert!(!runtime.gateway().is_ready().await);
     }
 
     #[tokio::test]
