@@ -575,6 +575,13 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` so diagnostics-backed
   runtime snapshot round-trips now preserve backend-owned lifecycle reason
   normalization when headless paths reconstruct inference snapshots
+- Forty-second implementation slice added across
+  `crates/pantograph-embedded-runtime/src/task_executor.rs`,
+  `src-tauri/src/llm/runtime_registry.rs`,
+  `src-tauri/src/workflow/headless_workflow_commands.rs`, and
+  `crates/pantograph-workflow-service/src/trace.rs` so Python-sidecar runtime
+  producer paths now emit the shared lifecycle reason contract with explicit
+  reuse facts instead of Python-specific reason strings
 
 ### Deviations
 
