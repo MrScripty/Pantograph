@@ -56,7 +56,7 @@ pub use backend::PyTorchBackend;
 
 pub use config::{DeviceConfig, EmbeddingMemoryMode};
 pub use device::{list_llamacpp_devices, parse_llamacpp_device_listing, DeviceBackend};
-pub use embedding_runtime::LlamaCppEmbeddingRuntime;
+pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingRuntime};
 pub use gateway::{
     EmbeddingStartRequest, GatewayError, InferenceGateway, InferenceStartRequest, SharedGateway,
 };

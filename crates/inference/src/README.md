@@ -13,7 +13,7 @@ details.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `backend/` | Backend trait definitions and concrete engine adapters such as llama.cpp, Ollama, Candle, and PyTorch. |
-| `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle and reuse management for parallel embedding modes. |
+| `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend and forwards requests through the frozen contracts. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |

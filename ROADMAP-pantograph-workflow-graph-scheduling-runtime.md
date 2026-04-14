@@ -297,6 +297,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Lifecycle-snapshot status classification now lives in
   `crates/pantograph-runtime-registry` so embedded and Tauri runtime producers
   no longer duplicate warmup/error-to-status mapping.
+- Dedicated embedding-runtime reuse/start/stop orchestration now lives in
+  `crates/inference`, leaving the Tauri gateway wrapper as a consumer of a
+  backend-owned coordinator instead of the owner of that runtime lifecycle.
 
 **Still missing:**
 

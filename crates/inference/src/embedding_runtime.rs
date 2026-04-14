@@ -36,6 +36,15 @@ pub struct LlamaCppEmbeddingRuntime {
     runtime_instance_sequence: u64,
 }
 
+/// Backend-owned coordinator for the optional dedicated embedding runtime.
+///
+/// Hosts may compose this manager, but the reuse/start/stop logic stays in the
+/// inference crate rather than being reimplemented in adapters.
+#[derive(Default)]
+pub struct DedicatedEmbeddingRuntimeManager {
+    runtime: Option<LlamaCppEmbeddingRuntime>,
+}
+
 impl LlamaCppEmbeddingRuntime {
     /// Create a new embedding runtime manager.
     pub fn new(mode: EmbeddingMemoryMode) -> Self {
@@ -376,6 +385,77 @@ impl LlamaCppEmbeddingRuntime {
     }
 }
 
+impl DedicatedEmbeddingRuntimeManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub async fn ensure_runtime(
+        &mut self,
+        model_path: &str,
+        mode: EmbeddingMemoryMode,
+        spawner: &Arc<dyn ProcessSpawner>,
+        devices: &[DeviceInfo],
+    ) -> Result<(), String> {
+        if mode == EmbeddingMemoryMode::Sequential {
+            log::info!("Sequential embedding mode: no dedicated embedding runtime needed");
+            return Ok(());
+        }
+
+        if let Some(runtime) = self.runtime.as_mut() {
+            if runtime.matches_runtime(model_path, mode.clone()) {
+                runtime.mark_runtime_reused();
+                log::info!("Reusing dedicated embedding runtime");
+                return Ok(());
+            }
+        }
+
+        let mut runtime = LlamaCppEmbeddingRuntime::new(mode);
+        runtime.start(model_path, spawner, devices).await?;
+        self.runtime = Some(runtime);
+        log::info!("Dedicated embedding runtime started");
+        Ok(())
+    }
+
+    pub fn stop(&mut self) {
+        if let Some(runtime) = self.runtime.as_mut() {
+            runtime.stop();
+        }
+        self.runtime = None;
+    }
+
+    pub fn base_url(&self) -> Option<String> {
+        self.runtime
+            .as_ref()
+            .filter(|runtime| runtime.is_ready())
+            .map(LlamaCppEmbeddingRuntime::base_url)
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.runtime
+            .as_ref()
+            .map(LlamaCppEmbeddingRuntime::is_ready)
+            .unwrap_or(false)
+    }
+
+    pub fn runtime_lifecycle_snapshot(&self) -> Option<RuntimeLifecycleSnapshot> {
+        self.runtime
+            .as_ref()
+            .map(LlamaCppEmbeddingRuntime::runtime_lifecycle_snapshot)
+    }
+
+    pub fn model_target(&self) -> Option<String> {
+        self.runtime
+            .as_ref()
+            .and_then(LlamaCppEmbeddingRuntime::model_target)
+    }
+
+    #[doc(hidden)]
+    pub fn set_test_runtime(&mut self, runtime: LlamaCppEmbeddingRuntime) {
+        self.runtime = Some(runtime);
+    }
+}
+
 impl Drop for LlamaCppEmbeddingRuntime {
     fn drop(&mut self) {
         self.stop();
@@ -392,8 +472,11 @@ fn unix_timestamp_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use tokio::sync::mpsc;
 
     struct MockProcessHandle;
+    struct MockProcessSpawner;
 
     impl ProcessHandle for MockProcessHandle {
         fn pid(&self) -> u32 {
@@ -402,6 +485,25 @@ mod tests {
 
         fn kill(&self) -> Result<(), String> {
             Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+            Err("spawn should not be called in reuse-path tests".to_string())
+        }
+
+        fn app_data_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
+        }
+
+        fn binaries_dir(&self) -> Result<PathBuf, String> {
+            Ok(PathBuf::from("/tmp"))
         }
     }
 
@@ -488,5 +590,31 @@ mod tests {
         assert!(runtime.matches_runtime("/models/embed.gguf", EmbeddingMemoryMode::CpuParallel));
         assert!(!runtime.matches_runtime("/models/other.gguf", EmbeddingMemoryMode::CpuParallel));
         assert!(!runtime.matches_runtime("/models/embed.gguf", EmbeddingMemoryMode::GpuParallel));
+    }
+
+    #[tokio::test]
+    async fn dedicated_embedding_runtime_manager_reuses_matching_runtime() {
+        let mut runtime = LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        runtime.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+
+        let mut manager = DedicatedEmbeddingRuntimeManager::new();
+        manager.set_test_runtime(runtime);
+        let spawner: Arc<dyn ProcessSpawner> = Arc::new(MockProcessSpawner);
+
+        manager
+            .ensure_runtime(
+                "/models/embed.gguf",
+                EmbeddingMemoryMode::CpuParallel,
+                &spawner,
+                &[],
+            )
+            .await
+            .expect("matching runtime should be reused");
+
+        let snapshot = manager
+            .runtime_lifecycle_snapshot()
+            .expect("snapshot should exist");
+        assert_eq!(snapshot.runtime_reused, Some(true));
+        assert!(snapshot.active);
     }
 }
