@@ -80,7 +80,6 @@ pub(super) async fn build_runtime(
     workflow_service: &SharedWorkflowService,
     rag_manager: Option<&SharedRagManager>,
 ) -> Result<EmbeddedRuntime, String> {
-    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
     let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
     let additional_runtime_capabilities = dedicated_embedding_runtime_capabilities(
         gateway.embedding_runtime_lifecycle_snapshot().await,
@@ -90,15 +89,16 @@ pub(super) async fn build_runtime(
             rag_manager: manager,
         }) as Arc<dyn RagBackend>
     });
-    Ok(EmbeddedRuntime::with_default_python_runtime(
+    Ok(EmbeddedRuntime::hosted_with_default_python_runtime(
         config,
         gateway.inner_arc(),
         extensions.clone(),
         workflow_service.clone(),
         rag_backend,
+        Some(runtime_registry.clone()),
+        additional_runtime_capabilities,
     )
-    .with_runtime_registry(runtime_registry.clone())
-    .with_additional_runtime_capabilities(additional_runtime_capabilities))
+    .await)
 }
 
 fn record_headless_scheduler_snapshot(

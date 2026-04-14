@@ -269,6 +269,39 @@ impl EmbeddedRuntime {
         )
     }
 
+    pub async fn hosted_with_default_python_runtime(
+        config: EmbeddedRuntimeConfig,
+        gateway: Arc<inference::InferenceGateway>,
+        extensions: SharedExtensions,
+        workflow_service: SharedWorkflowService,
+        rag_backend: Option<Arc<dyn RagBackend>>,
+        runtime_registry: Option<SharedRuntimeRegistry>,
+        additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
+    ) -> Self {
+        if let Some(runtime_registry) = runtime_registry.as_ref() {
+            let mode_info = gateway.mode_info().await;
+            runtime_registry::reconcile_runtime_registry_mode_info(
+                runtime_registry.as_ref(),
+                &mode_info,
+            );
+        }
+
+        let mut runtime = Self::with_default_python_runtime(
+            config,
+            gateway.clone(),
+            extensions,
+            workflow_service,
+            rag_backend,
+        )
+        .with_additional_runtime_capabilities(additional_runtime_capabilities);
+
+        if let Some(runtime_registry) = runtime_registry {
+            runtime = runtime.with_runtime_registry(runtime_registry);
+        }
+
+        runtime
+    }
+
     #[cfg(feature = "standalone")]
     pub async fn standalone(config: StandaloneRuntimeConfig) -> Result<Self, EmbeddedRuntimeError> {
         use inference::process::StdProcessSpawner;
@@ -2819,6 +2852,64 @@ mod tests {
             .expect("candle capability");
         assert_eq!(candle.source_kind, WorkflowRuntimeSourceKind::Host);
         assert!(candle.selected);
+    }
+
+    #[tokio::test]
+    async fn hosted_runtime_constructor_syncs_registry_and_preserves_capabilities() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let injected_capability = WorkflowRuntimeCapability {
+            runtime_id: "llama.cpp.embedding".to_string(),
+            display_name: "Dedicated embedding runtime".to_string(),
+            install_state: WorkflowRuntimeInstallState::Installed,
+            available: true,
+            configured: true,
+            can_install: false,
+            can_remove: false,
+            source_kind: WorkflowRuntimeSourceKind::Host,
+            selected: false,
+            supports_external_connection: false,
+            backend_keys: vec!["llama_cpp".to_string(), "llamacpp".to_string()],
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        };
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Some(runtime_registry.clone()),
+            vec![injected_capability.clone()],
+        )
+        .await;
+
+        let snapshot = runtime_registry.snapshot();
+        assert_eq!(snapshot.runtimes.len(), 1);
+        assert_eq!(snapshot.runtimes[0].runtime_id, "llama_cpp");
+        assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
+
+        let capabilities = runtime
+            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                workflow_id: "runtime-text".to_string(),
+            })
+            .await
+            .expect("workflow capabilities");
+        assert!(capabilities
+            .runtime_capabilities
+            .iter()
+            .any(|capability| capability == &injected_capability));
     }
 
     #[tokio::test]
