@@ -55,6 +55,9 @@ implementation progress in the runtime and diagnostics layers.
   runtimes in the convergence path, so completed task-adapter processes no
   longer leave stale ready-state registry observations or false reuse hints
   after the run has already exited.
+- Window-close teardown now also uses the shared stop-and-sync registry
+  adapter, closing the remaining obvious host-owned shutdown path that had
+  still stopped producers without reconciling the backend-owned registry.
 
 ### Active implementation stream
 

@@ -538,6 +538,10 @@ runtime callers.
   executor no longer reports false live reuse for per-task adapter processes
   and the shared runtime registry settles those producer snapshots back to
   `stopped` after task completion instead of leaving stale ready state behind.
+- 2026-04-14: Window-close teardown in the Tauri host now also routes through
+  the shared stop-and-sync runtime-registry adapter, so the last user-driven
+  shutdown path no longer bypasses registry reconciliation when both main and
+  embedding producers are stopped together.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -661,7 +665,7 @@ refactor lands.
 6. If alternate-port recovery remains a roadmap requirement, widen the
    backend-owned restart contract in `crates/inference` rather than
    introducing host-only port override policy in Tauri.
-6. Re-plan immediately if Milestone 3 implementation pressures any of the
+7. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
 
