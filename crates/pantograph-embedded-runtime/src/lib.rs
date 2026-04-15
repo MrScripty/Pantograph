@@ -2373,13 +2373,9 @@ mod tests {
             .find(|runtime| runtime.runtime_id == "pytorch")
             .expect("python runtime should be observed");
         assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
-        assert_eq!(pytorch.status, RuntimeRegistryStatus::Ready);
-        assert!(pytorch
-            .runtime_instance_id
-            .as_deref()
-            .is_some_and(|value| value.starts_with("python-runtime:pytorch:")));
-        assert_eq!(pytorch.models.len(), 1);
-        assert_eq!(pytorch.models[0].model_id, "/tmp/mock-diffusion-model");
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Stopped);
+        assert!(pytorch.runtime_instance_id.is_none());
+        assert!(pytorch.models.is_empty());
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@
 //! (for example RAG search or Python-backed execution). All other nodes are
 //! handled by `CoreTaskExecutor` via `CompositeTaskExecutor`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -64,7 +64,6 @@ pub struct PythonRuntimeExecutionMetadata {
 #[derive(Debug, Default)]
 pub struct PythonRuntimeExecutionRecorder {
     state: Mutex<Option<PythonRuntimeExecutionMetadata>>,
-    seen_runtime_instance_ids: Mutex<HashSet<String>>,
 }
 
 impl PythonRuntimeExecutionRecorder {
@@ -77,25 +76,6 @@ impl PythonRuntimeExecutionRecorder {
             .lock()
             .expect("python runtime recorder lock")
             .clone()
-    }
-
-    pub fn has_seen_runtime_instance(&self, runtime_instance_id: &str) -> bool {
-        self.seen_runtime_instance_ids
-            .lock()
-            .expect("python runtime recorder lock")
-            .contains(runtime_instance_id)
-    }
-
-    pub fn mark_runtime_instance_seen(&self, runtime_instance_id: &str) {
-        let trimmed = runtime_instance_id.trim();
-        if trimmed.is_empty() {
-            return;
-        }
-
-        self.seen_runtime_instance_ids
-            .lock()
-            .expect("python runtime recorder lock")
-            .insert(trimmed.to_string());
     }
 }
 
@@ -1391,16 +1371,6 @@ impl TauriTaskExecutor {
         let recorder = Self::python_runtime_recorder(extensions);
         let mut runtime_metadata =
             Self::python_runtime_execution_metadata(node_type, &request, false);
-        let runtime_reused = runtime_metadata
-            .snapshot
-            .runtime_instance_id
-            .as_deref()
-            .is_some_and(|runtime_instance_id| {
-                recorder
-                    .as_ref()
-                    .is_some_and(|recorder| recorder.has_seen_runtime_instance(runtime_instance_id))
-            });
-        runtime_metadata.snapshot.runtime_reused = Some(runtime_reused);
         runtime_metadata.snapshot.lifecycle_decision_reason = runtime_metadata
             .snapshot
             .normalized_lifecycle_decision_reason();
@@ -1437,11 +1407,7 @@ impl TauriTaskExecutor {
                 NodeEngineError::ExecutionFailed(error)
             })?;
         if let Some(recorder) = recorder.as_ref() {
-            if let Some(runtime_instance_id) =
-                runtime_metadata.snapshot.runtime_instance_id.as_deref()
-            {
-                recorder.mark_runtime_instance_seen(runtime_instance_id);
-            }
+            runtime_metadata.snapshot.active = false;
             recorder.record(runtime_metadata);
         }
         if !streamed_any.load(Ordering::Relaxed) && Self::supports_buffered_stream_replay(node_type)
@@ -2059,12 +2025,12 @@ mod tests {
             metadata.snapshot.lifecycle_decision_reason.as_deref(),
             Some("runtime_ready")
         );
-        assert!(metadata.snapshot.active);
+        assert!(!metadata.snapshot.active);
         assert_eq!(metadata.model_target.as_deref(), Some("/tmp/model.onnx"));
     }
 
     #[tokio::test]
-    async fn python_runtime_recorder_marks_second_execution_of_same_runtime_as_reused() {
+    async fn python_runtime_recorder_keeps_process_runtime_non_reused_across_runs() {
         let requests = Arc::new(Mutex::new(Vec::<PythonNodeExecutionRequest>::new()));
         let mut adapter_response = HashMap::new();
         adapter_response.insert("audio".to_string(), serde_json::json!("base64-audio"));
@@ -2129,11 +2095,12 @@ mod tests {
             .expect("second onnx execution should succeed");
 
         let metadata = recorder.snapshot().expect("python runtime metadata");
-        assert_eq!(metadata.snapshot.runtime_reused, Some(true));
+        assert_eq!(metadata.snapshot.runtime_reused, Some(false));
         assert_eq!(
             metadata.snapshot.lifecycle_decision_reason.as_deref(),
-            Some("runtime_reused")
+            Some("runtime_ready")
         );
+        assert!(!metadata.snapshot.active);
     }
 
     #[tokio::test]
