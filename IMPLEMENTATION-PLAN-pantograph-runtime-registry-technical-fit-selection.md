@@ -105,9 +105,6 @@ The following Milestone 2 foundation slices have now landed in code:
 
 ### What has not landed yet
 
-- remaining host reclaim call sites still need to route through the new shared
-  targeted reclaim adapter for active-runtime and dedicated-embedding
-  producers
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
 ## Inputs
@@ -593,8 +590,7 @@ runtime callers.
   or the dedicated embedding producer before re-synchronizing the shared
   registry. `src-tauri/src/llm/commands/registry.rs` now uses that adapter for
   synchronized runtime-registry snapshot reads and explicit targeted reclaim
-  commands. Milestone 3 still needs any remaining host reclaim call sites to
-  adopt that adapter so those flows stop relying on local producer teardown.
+  commands.
 - 2026-04-15: Host-runtime producer matching for targeted reclaim now also
   lives in `crates/pantograph-embedded-runtime::runtime_registry`, and the
   Tauri runtime-registry wrapper now consumes that backend-owned helper
@@ -604,6 +600,10 @@ runtime callers.
   `crates/pantograph-embedded-runtime::runtime_registry`, leaving the Tauri
   wrapper to implement host stop primitives instead of owning reclaim
   sequencing locally.
+- 2026-04-15: Embedded-runtime reservation-release eviction now also routes
+  through the same backend-owned reclaim coordinator, so known host reclaim
+  paths no longer keep local `reclaim_runtime` plus producer-stop sequencing
+  outside the shared runtime-registry adapter boundary.
 - 2026-04-15: `crates/pantograph-workflow-service` now owns an explicit stale
   workflow-session cleanup contract for idle, unloaded, non-keep-alive
   sessions, with focused service tests plus thin embedded-runtime and Tauri
@@ -621,6 +621,7 @@ runtime callers.
 - `cargo test -p pantograph-embedded-runtime`
 - `cargo test -p pantograph-embedded-runtime live_host_runtime_producer -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime reclaim_runtime_and_reconcile_runtime_registry -- --nocapture`
+- `cargo test -p pantograph-embedded-runtime test_session_runtime_unload_stops_active_gateway_runtime_when_evictable -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_stale_cleanup_worker -- --nocapture`

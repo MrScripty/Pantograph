@@ -93,9 +93,7 @@ implementation progress in the runtime and diagnostics layers.
   runtime ids onto the correct host stop path for active-runtime and
   dedicated-embedding producers before re-synchronizing the shared registry,
   and the host now exposes synchronized runtime-registry snapshot and targeted
-  reclaim commands through that shared path. The remaining work is to route
-  the last host reclaim call sites through the same adapter instead of ad hoc
-  producer teardown.
+  reclaim commands through that shared path.
 - Host-runtime producer matching for targeted reclaim now also lives in
   `crates/pantograph-embedded-runtime`, leaving the Tauri runtime-registry
   wrapper to consume backend-owned active-vs-embedding matching instead of
@@ -103,6 +101,9 @@ implementation progress in the runtime and diagnostics layers.
 - Targeted reclaim sequencing now also lives in
   `crates/pantograph-embedded-runtime`, with Tauri implementing only the host
   stop primitives needed by the backend-owned reclaim coordinator.
+- Embedded-runtime reservation-release eviction now also routes through the
+  same backend-owned reclaim coordinator, so current host reclaim paths no
+  longer rely on ad hoc producer teardown.
 - Workflow-session stale cleanup for idle, unloaded, non-keep-alive sessions
   now lives in `crates/pantograph-workflow-service`, and a bounded backend-
   owned cleanup worker now invokes that contract on a timer while Tauri only
@@ -119,8 +120,6 @@ implementation progress in the runtime and diagnostics layers.
 
 - Finish any remaining runtime producer convergence that still emits divergent
   contracts
-- Route the remaining host reclaim call sites through the shared targeted
-  reclaim adapter
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
   backend-owned runtime-registry boundary
