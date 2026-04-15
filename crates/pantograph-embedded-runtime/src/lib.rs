@@ -709,6 +709,7 @@ impl EmbeddedRuntime {
             embedding_workflow::workflow_graph_has_llamacpp_inference_node(session_graph),
         )
         .await?;
+        self.reconcile_runtime_registry_from_gateway().await;
 
         let core = Arc::new(
             CoreTaskExecutor::new()
@@ -1913,7 +1914,9 @@ mod tests {
     };
     use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use inference::{RerankRequest, RerankResponse};
-    use pantograph_runtime_registry::{RuntimeRegistry, RuntimeRegistryStatus};
+    use pantograph_runtime_registry::{
+        RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
+    };
     use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use std::path::Path;
     use std::pin::Pin;
@@ -3880,6 +3883,128 @@ mod tests {
             Some(restored_runtime_instance_id.as_str())
         );
         assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
+    }
+
+    #[tokio::test]
+    async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare() {
+        let temp = TempDir::new().expect("temp dir");
+        let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
+
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp.path())
+                .build()
+                .await
+                .expect("build pumas api"),
+        );
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("rebuild model index");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let inference_model_path = temp.path().join("main.gguf");
+        std::fs::write(&inference_model_path, b"gguf").expect("write inference model");
+        let mmproj_path = temp.path().join("main.mmproj");
+        std::fs::write(&mmproj_path, b"mmproj").expect("write mmproj");
+
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        ));
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&inference::BackendConfig {
+                model_path: Some(inference_model_path.clone()),
+                mmproj_path: Some(mmproj_path),
+                ..inference::BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start in inference mode");
+
+        let host_runtime_mode_info =
+            HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+        let initial_runtime_instance_id = host_runtime_mode_info
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_instance_id.clone())
+            .expect("initial runtime instance id");
+
+        let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
+        extensions
+            .write()
+            .await
+            .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            gateway.clone(),
+            extensions,
+            Arc::new(WorkflowService::new()),
+            None,
+            Some(runtime_registry.clone()),
+            Some(host_runtime_mode_info),
+        )
+        .await;
+
+        let started_snapshot = Arc::new(Mutex::new(None::<RuntimeRegistrySnapshot>));
+        let started_snapshot_sink = started_snapshot.clone();
+        let runtime_registry_for_sink = runtime_registry.clone();
+        let event_sink = Arc::new(node_engine::CallbackEventSink::new(move |event| {
+            if matches!(event, node_engine::WorkflowEvent::WorkflowStarted { .. }) {
+                let mut guard = started_snapshot_sink
+                    .lock()
+                    .expect("started snapshot lock poisoned");
+                *guard = Some(runtime_registry_for_sink.snapshot());
+            }
+        }));
+
+        let graph = edit_session_embedding_graph(&model_id);
+        let session = runtime
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+            })
+            .await
+            .expect("create edit session");
+
+        let outcome = runtime
+            .execute_edit_session_graph(
+                &session.session_id,
+                &graph,
+                inference::EmbeddingStartRequest {
+                    gguf_model_path: Some(embedding_model_path),
+                    ..inference::EmbeddingStartRequest::default()
+                },
+                event_sink,
+            )
+            .await
+            .expect("edit-session execution should still finish");
+        assert!(outcome.error.is_some());
+
+        let started_snapshot = started_snapshot
+            .lock()
+            .expect("started snapshot lock poisoned")
+            .clone()
+            .expect("workflow started snapshot");
+        let started_runtime = started_snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("active runtime snapshot at workflow start");
+        assert_eq!(started_runtime.status, RuntimeRegistryStatus::Ready);
+        assert_ne!(
+            started_runtime.runtime_instance_id.as_deref(),
+            Some(initial_runtime_instance_id.as_str()),
+            "registry should be refreshed to the prepared embedding runtime before execution starts"
+        );
     }
 
     #[tokio::test]
