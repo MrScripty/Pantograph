@@ -73,6 +73,10 @@ implementation progress in the runtime and diagnostics layers.
 - RAG indexing restore paths now also synchronize the shared runtime registry
   after restore attempts, so restore failures in the Tauri indexing adapter
   no longer return early with stale registry state.
+- Workflow runtime snapshot events now also preserve the backend-computed
+  producer model target when execution runs through Python-backed sidecars or
+  other runtime overrides, so diagnostics no longer fall back to the gateway's
+  active-model target for non-gateway producers.
 
 ### Active implementation stream
 

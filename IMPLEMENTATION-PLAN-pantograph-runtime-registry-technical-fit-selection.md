@@ -563,6 +563,10 @@ runtime callers.
   through a shared restore-and-sync helper, so restore failures in the final
   VLM-return path also converge the shared runtime registry instead of
   returning early with stale producer state.
+- 2026-04-14: Tauri workflow runtime snapshot events now emit the
+  backend-computed runtime model target from the embedded-runtime diagnostics
+  projection, so Python-sidecar and other override-based producer paths no
+  longer regress to the gateway's active-model target in diagnostics events.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
