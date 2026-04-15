@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## Current Implementation Snapshot
 
@@ -89,6 +89,11 @@ implementation progress in the runtime and diagnostics layers.
   Python-sidecar runtime id from a run, so producer-aware workflow traces no
   longer collapse mixed Python-runtime executions down to only the final
   producer.
+- Tauri now has a shared targeted reclaim adapter that maps backend-owned
+  runtime ids onto the correct host stop path for active-runtime and
+  dedicated-embedding producers before re-synchronizing the shared registry.
+  The remaining work is to route the last host reclaim call sites through that
+  adapter instead of ad hoc producer teardown.
 
 ### Active implementation stream
 
@@ -101,6 +106,8 @@ implementation progress in the runtime and diagnostics layers.
 
 - Finish any remaining runtime producer convergence that still emits divergent
   contracts
+- Route the remaining host reclaim call sites through the shared targeted
+  reclaim adapter
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
   backend-owned runtime-registry boundary

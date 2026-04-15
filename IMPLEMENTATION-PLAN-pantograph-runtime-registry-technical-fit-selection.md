@@ -3,7 +3,7 @@
 ## Status
 Active
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## Current Source-of-Truth Summary
 
@@ -105,8 +105,9 @@ The following Milestone 2 foundation slices have now landed in code:
 
 ### What has not landed yet
 
-- no shared reclaim path yet covers every runtime producer beyond the
-  gateway-backed embedded host path
+- remaining host reclaim call sites still need to route through the new shared
+  targeted reclaim adapter for active-runtime and dedicated-embedding
+  producers
 - no registry-driven cleanup or recovery worker exists yet
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
@@ -580,6 +581,12 @@ runtime callers.
   runtime trace metrics with every observed Python-sidecar runtime id from the
   run, and the Tauri workflow adapter forwards that override instead of
   recomputing trace metrics from only the final producer snapshot.
+- 2026-04-15: `src-tauri/src/llm/runtime_registry.rs` now exposes a shared
+  targeted reclaim adapter that maps backend-owned runtime ids onto the
+  correct Tauri composition stop path for either the active runtime producer
+  or the dedicated embedding producer before re-synchronizing the shared
+  registry. Milestone 3 still needs the remaining host reclaim call sites to
+  adopt that adapter so those flows stop relying on local producer teardown.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
