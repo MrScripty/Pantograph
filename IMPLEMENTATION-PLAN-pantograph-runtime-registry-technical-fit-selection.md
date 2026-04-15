@@ -108,7 +108,9 @@ The following Milestone 2 foundation slices have now landed in code:
 - remaining host reclaim call sites still need to route through the new shared
   targeted reclaim adapter for active-runtime and dedicated-embedding
   producers
-- no registry-driven cleanup or recovery worker exists yet
+- no registry-driven cleanup worker exists yet, and workflow-session stale
+  cleanup is currently exposed as an explicit backend service contract rather
+  than a background timer/worker
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
 ## Inputs
@@ -422,6 +424,10 @@ runtime callers.
 - [ ] Reconcile the shared runtime registry after every producer restore path,
   including edit-session embedding restore, so real producer transitions do
   not leave stale residency state behind
+- [x] Add a backend-owned workflow-session stale cleanup contract for idle,
+  unloaded, non-keep-alive sessions in `crates/pantograph-workflow-service`,
+  with thin embedded-runtime and Tauri transport wrappers only; any timer or
+  worker that invokes this cleanup remains a later bounded follow-up
 - [ ] Add admission checks using estimated RAM/VRAM with explicit safety margins
   and failure reasons
 - [ ] Add warmup/reuse orchestration for session create/run through explicit
@@ -589,6 +595,11 @@ runtime callers.
   synchronized runtime-registry snapshot reads and explicit targeted reclaim
   commands. Milestone 3 still needs any remaining host reclaim call sites to
   adopt that adapter so those flows stop relying on local producer teardown.
+- 2026-04-15: `crates/pantograph-workflow-service` now owns an explicit stale
+  workflow-session cleanup contract for idle, unloaded, non-keep-alive
+  sessions, with focused service tests plus thin embedded-runtime and Tauri
+  command wrappers. Milestone 3 still lacks a bounded backend-owned cleanup
+  worker or timer that invokes that contract automatically.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -596,6 +607,7 @@ runtime callers.
 - `cargo test -p pantograph-runtime-registry eviction_reservation_candidate_for_owners -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
+- `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - unit tests for admission acceptance/rejection, warmup reuse, release-on-

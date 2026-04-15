@@ -96,6 +96,10 @@ implementation progress in the runtime and diagnostics layers.
   reclaim commands through that shared path. The remaining work is to route
   the last host reclaim call sites through the same adapter instead of ad hoc
   producer teardown.
+- Workflow-session stale cleanup for idle, unloaded, non-keep-alive sessions
+  now lives in `crates/pantograph-workflow-service`, with thin embedded-runtime
+  and Tauri command wrappers. The remaining gap is a bounded backend-owned
+  cleanup worker or timer that invokes that contract automatically.
 
 ### Active implementation stream
 
@@ -110,6 +114,8 @@ implementation progress in the runtime and diagnostics layers.
   contracts
 - Route the remaining host reclaim call sites through the shared targeted
   reclaim adapter
+- Add a bounded backend-owned worker/timer that invokes the explicit stale
+  workflow-session cleanup contract
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
   backend-owned runtime-registry boundary
@@ -403,6 +409,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   contract family
 - Broader producer coverage over the backend-owned runtime-registry boundary
   beyond the current gateway-centric observation path
+- A bounded backend-owned cleanup worker/timer that invokes the new explicit
+  stale workflow-session cleanup contract without moving cleanup policy into
+  Tauri
 
 ## Cross-Cutting Delivery Work
 
