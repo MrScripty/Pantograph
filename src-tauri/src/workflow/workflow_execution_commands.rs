@@ -67,6 +67,7 @@ async fn emit_diagnostics_snapshots(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     channel: &Channel<WorkflowEvent>,
     runtime_snapshot_override: Option<inference::RuntimeLifecycleSnapshot>,
+    trace_runtime_metrics_override: Option<pantograph_workflow_service::WorkflowTraceRuntimeMetrics>,
     runtime_model_target_override: Option<String>,
 ) {
     let scheduler_snapshot = match workflow_service
@@ -117,6 +118,8 @@ async fn emit_diagnostics_snapshots(
         &gateway_mode_info,
         runtime_model_target_override.as_deref(),
     );
+    let trace_runtime_metrics = trace_runtime_metrics_override
+        .unwrap_or_else(|| diagnostics_projection.trace_runtime_metrics.clone());
     let (active_model_target, embedding_model_target) =
         runtime_event_model_targets(&diagnostics_projection, &gateway_mode_info);
     if let Some(snapshot) = runtime_snapshot_override.as_ref() {
@@ -145,7 +148,7 @@ async fn emit_diagnostics_snapshots(
                 trace_execution_id.clone(),
                 captured_at_ms,
                 None,
-                diagnostics_projection.trace_runtime_metrics.clone(),
+                trace_runtime_metrics.clone(),
                 active_model_target.clone(),
                 embedding_model_target.clone(),
                 Some(diagnostics_projection.active_runtime_snapshot.clone()),
@@ -183,7 +186,7 @@ async fn emit_diagnostics_snapshots(
         trace_execution_id,
         captured_at_ms,
         capabilities,
-        diagnostics_projection.trace_runtime_metrics,
+        trace_runtime_metrics,
         active_model_target,
         embedding_model_target,
         Some(diagnostics_projection.active_runtime_snapshot),
@@ -219,6 +222,7 @@ async fn run_session_graph_snapshot(
         workflow_service.inner(),
         diagnostics_store.inner(),
         &diagnostics_channel,
+        None,
         None,
         None,
     )
@@ -267,6 +271,7 @@ async fn run_session_graph_snapshot(
         diagnostics_store.inner(),
         &diagnostics_channel,
         Some(outcome.runtime_snapshot),
+        Some(outcome.trace_runtime_metrics),
         outcome.runtime_model_target,
     )
     .await;

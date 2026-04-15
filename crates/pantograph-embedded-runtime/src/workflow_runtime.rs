@@ -53,14 +53,11 @@ pub fn trace_runtime_metrics(
     snapshot: &inference::RuntimeLifecycleSnapshot,
     model_target: Option<&str>,
 ) -> WorkflowTraceRuntimeMetrics {
-    let runtime_id = snapshot
-        .runtime_id
-        .as_deref()
-        .map(canonical_runtime_id)
-        .filter(|runtime_id| !runtime_id.is_empty());
+    let observed_runtime_ids = observed_runtime_ids(snapshot, &[]);
+    let runtime_id = observed_runtime_ids.first().cloned();
     WorkflowTraceRuntimeMetrics {
         runtime_id: runtime_id.clone(),
-        observed_runtime_ids: runtime_id.into_iter().collect(),
+        observed_runtime_ids,
         runtime_instance_id: snapshot.runtime_instance_id.clone(),
         model_target: model_target.map(ToOwned::to_owned),
         warmup_started_at_ms: snapshot.warmup_started_at_ms,
@@ -69,6 +66,47 @@ pub fn trace_runtime_metrics(
         runtime_reused: snapshot.runtime_reused,
         lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
     }
+}
+
+pub fn trace_runtime_metrics_with_observed_runtime_ids(
+    snapshot: &inference::RuntimeLifecycleSnapshot,
+    model_target: Option<&str>,
+    additional_observed_runtime_ids: &[String],
+) -> WorkflowTraceRuntimeMetrics {
+    let observed_runtime_ids = observed_runtime_ids(snapshot, additional_observed_runtime_ids);
+    let runtime_id = observed_runtime_ids.first().cloned();
+    WorkflowTraceRuntimeMetrics {
+        runtime_id,
+        observed_runtime_ids,
+        runtime_instance_id: snapshot.runtime_instance_id.clone(),
+        model_target: model_target.map(ToOwned::to_owned),
+        warmup_started_at_ms: snapshot.warmup_started_at_ms,
+        warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
+        warmup_duration_ms: snapshot.warmup_duration_ms,
+        runtime_reused: snapshot.runtime_reused,
+        lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
+    }
+}
+
+fn observed_runtime_ids(
+    snapshot: &inference::RuntimeLifecycleSnapshot,
+    additional_observed_runtime_ids: &[String],
+) -> Vec<String> {
+    let mut observed_runtime_ids = snapshot
+        .runtime_id
+        .as_deref()
+        .map(canonical_runtime_id)
+        .filter(|runtime_id| !runtime_id.is_empty())
+        .into_iter()
+        .collect::<Vec<_>>();
+    for runtime_id in additional_observed_runtime_ids {
+        let runtime_id = canonical_runtime_id(runtime_id);
+        if runtime_id.is_empty() || observed_runtime_ids.contains(&runtime_id) {
+            continue;
+        }
+        observed_runtime_ids.push(runtime_id);
+    }
+    observed_runtime_ids
 }
 
 pub fn resolve_runtime_model_target(
@@ -121,6 +159,7 @@ mod tests {
 
     use super::{
         build_runtime_diagnostics_projection, resolve_runtime_model_target, trace_runtime_metrics,
+        trace_runtime_metrics_with_observed_runtime_ids,
     };
 
     #[test]
@@ -166,6 +205,36 @@ mod tests {
 
         assert_eq!(metrics.runtime_id.as_deref(), Some("llama_cpp"));
         assert_eq!(metrics.observed_runtime_ids, vec!["llama_cpp".to_string()]);
+    }
+
+    #[test]
+    fn trace_runtime_metrics_with_observed_runtime_ids_preserves_all_runtime_ids() {
+        let metrics = trace_runtime_metrics_with_observed_runtime_ids(
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("onnxruntime".to_string()),
+                runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: false,
+                last_error: None,
+            },
+            Some("/tmp/model.onnx"),
+            &[
+                "diffusers".to_string(),
+                "onnx-runtime".to_string(),
+                "diffusers".to_string(),
+            ],
+        );
+
+        assert_eq!(metrics.runtime_id.as_deref(), Some("onnx-runtime"));
+        assert_eq!(
+            metrics.observed_runtime_ids,
+            vec!["onnx-runtime".to_string(), "diffusers".to_string()]
+        );
+        assert_eq!(metrics.model_target.as_deref(), Some("/tmp/model.onnx"));
     }
 
     #[test]

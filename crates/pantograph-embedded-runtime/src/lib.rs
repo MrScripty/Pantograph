@@ -44,6 +44,7 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
     WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
     WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowTraceRuntimeMetrics,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -228,6 +229,7 @@ pub struct EmbeddedRuntime {
 #[derive(Debug, Clone)]
 pub struct EditSessionGraphExecutionOutcome {
     pub runtime_snapshot: inference::RuntimeLifecycleSnapshot,
+    pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
     pub runtime_model_target: Option<String>,
     pub error: Option<String>,
 }
@@ -771,20 +773,30 @@ impl EmbeddedRuntime {
 
         let execution_mode_info =
             HostRuntimeModeSnapshot::from_mode_info(&self.gateway.mode_info().await);
-        let recorded_python_runtime = python_runtime_execution_recorder.snapshot();
+        let recorded_python_runtimes = python_runtime_execution_recorder.snapshots();
+        let recorded_python_runtime = recorded_python_runtimes.last();
         let runtime_snapshot = if let Some(metadata) = recorded_python_runtime.as_ref() {
             metadata.snapshot.clone()
         } else {
             self.gateway.runtime_lifecycle_snapshot().await
         };
         let runtime_model_target = recorded_python_runtime
-            .and_then(|metadata| metadata.model_target)
+            .and_then(|metadata| metadata.model_target.clone())
             .or_else(|| {
                 workflow_runtime::resolve_runtime_model_target(
                     &execution_mode_info,
                     &runtime_snapshot,
                 )
             });
+        let observed_runtime_ids = recorded_python_runtimes
+            .iter()
+            .filter_map(|metadata| metadata.snapshot.runtime_id.clone())
+            .collect::<Vec<_>>();
+        let trace_runtime_metrics = workflow_runtime::trace_runtime_metrics_with_observed_runtime_ids(
+            &runtime_snapshot,
+            runtime_model_target.as_deref(),
+            &observed_runtime_ids,
+        );
         let restore_result = self.gateway.restore_inference_runtime(restore_config).await;
         self.reconcile_runtime_registry_from_gateway().await;
         if let Err(error) = restore_result {
@@ -796,6 +808,7 @@ impl EmbeddedRuntime {
 
         Ok(EditSessionGraphExecutionOutcome {
             runtime_snapshot,
+            trace_runtime_metrics,
             runtime_model_target,
             error: workflow_result.err(),
         })
@@ -2410,6 +2423,70 @@ mod tests {
         }
     }
 
+    fn multi_python_edit_session_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({ "text": "painted robot" }),
+                },
+                GraphNode {
+                    id: "text-input-2".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 0.0, y: 180.0 },
+                    data: serde_json::json!({ "text": "tiny waveform" }),
+                },
+                GraphNode {
+                    id: "diffusion-inference-1".to_string(),
+                    node_type: "diffusion-inference".to_string(),
+                    position: Position { x: 240.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "model_path": "/tmp/mock-diffusion-model",
+                        "backend_key": "diffusers",
+                        "model_type": "diffusion",
+                        "environment_ref": {
+                            "state": "ready",
+                            "env_ids": ["mock-python-env"]
+                        }
+                    }),
+                },
+                GraphNode {
+                    id: "onnx-inference-1".to_string(),
+                    node_type: "onnx-inference".to_string(),
+                    position: Position { x: 240.0, y: 180.0 },
+                    data: serde_json::json!({
+                        "model_path": "/tmp/mock-onnx-model",
+                        "backend_key": "onnxruntime",
+                        "model_type": "audio",
+                        "environment_ref": {
+                            "state": "ready",
+                            "env_ids": ["mock-onnx-env"]
+                        }
+                    }),
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: "e-prompt".to_string(),
+                    source: "text-input-1".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "diffusion-inference-1".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+                GraphEdge {
+                    id: "e-audio".to_string(),
+                    source: "text-input-2".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "onnx-inference-1".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+            ],
+            ..WorkflowGraph::default()
+        }
+    }
+
     fn runtime_diffusion_data_graph() -> node_engine::WorkflowGraph {
         node_engine::WorkflowGraph {
             id: "runtime-diffusion-data-graph".to_string(),
@@ -3899,6 +3976,70 @@ mod tests {
         assert_eq!(
             registry_runtime.runtime_instance_id,
             expected_observation.runtime_instance_id
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metrics() {
+        let temp = TempDir::new().expect("temp dir");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Arc::new(MockImagePythonRuntime {
+                requests: Mutex::new(Vec::new()),
+            }),
+        );
+
+        let graph = multi_python_edit_session_graph();
+        let session = runtime
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+            })
+            .await
+            .expect("create edit session");
+
+        let outcome = runtime
+            .execute_edit_session_graph(
+                &session.session_id,
+                &graph,
+                inference::EmbeddingStartRequest::default(),
+                Arc::new(node_engine::NullEventSink),
+            )
+            .await
+            .expect("edit-session execution");
+
+        assert_eq!(
+            outcome.trace_runtime_metrics.runtime_id.as_deref(),
+            Some("onnx-runtime")
+        );
+        assert_eq!(
+            outcome.trace_runtime_metrics.observed_runtime_ids,
+            vec!["onnx-runtime".to_string(), "diffusers".to_string()]
+        );
+        assert_eq!(
+            outcome.trace_runtime_metrics.model_target.as_deref(),
+            Some("/tmp/mock-onnx-model")
+        );
+        assert_eq!(
+            outcome.runtime_snapshot.runtime_id.as_deref(),
+            Some("onnx-runtime")
+        );
+        assert_eq!(
+            outcome.runtime_model_target.as_deref(),
+            Some("/tmp/mock-onnx-model")
         );
     }
 
