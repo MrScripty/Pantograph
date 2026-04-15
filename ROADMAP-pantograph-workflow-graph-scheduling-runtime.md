@@ -49,8 +49,8 @@ implementation progress in the runtime and diagnostics layers.
 - Recovery restart now reuses the backend-owned active runtime config,
   rehydrates the dedicated embedding sidecar when parallel embedding remains
   configured, and refreshes both RAG vectorizer state and registry snapshots
-  after restart. Alternate-port restart remains limited until the backend
-  restart contract carries a port override.
+  after restart. Alternate-port restart now also flows through the
+  backend-owned restart contract instead of remaining a host-only limitation.
 - Python-backed workflow producers are now treated as ephemeral execution
   runtimes in the convergence path, so completed task-adapter processes no
   longer leave stale ready-state registry observations or false reuse hints

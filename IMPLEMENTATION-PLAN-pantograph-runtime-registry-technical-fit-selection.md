@@ -530,9 +530,10 @@ runtime callers.
   config, restarts the saved inference mode, rehydrates the dedicated
   embedding sidecar when the host app config still requires parallel
   embedding, and clears or refreshes the RAG embedding URL plus runtime
-  registry snapshot after restart. Alternate-port recovery remains explicitly
-  limited until the backend restart config grows a standards-owned port
-  override contract.
+  registry snapshot after restart. Alternate-port recovery is now carried
+  through the backend-owned restart config so port selection remains part of
+  the normal `crates/inference` start contract instead of a Tauri-local
+  workaround.
 - 2026-04-14: Python-backed workflow producer observations now reconcile as
   ephemeral runtimes rather than loaded reusable runtimes, so the task
   executor no longer reports false live reuse for per-task adapter processes
@@ -662,10 +663,7 @@ refactor lands.
 5. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
    backend-owned registry refactor.
-6. If alternate-port recovery remains a roadmap requirement, widen the
-   backend-owned restart contract in `crates/inference` rather than
-   introducing host-only port override policy in Tauri.
-7. Re-plan immediately if Milestone 3 implementation pressures any of the
+6. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
 
