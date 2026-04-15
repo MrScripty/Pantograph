@@ -556,6 +556,10 @@ runtime callers.
   now also live in `crates/pantograph-embedded-runtime::runtime_registry`, so
   Tauri recovery, shutdown, and restore wrappers no longer decide when host
   mode-info must be resynchronized after those lifecycle transitions.
+- 2026-04-15: Recovery restart-plan derivation now also lives in
+  `crates/pantograph-embedded-runtime::runtime_recovery`, so Tauri recovery no
+  longer owns backend port-override application or the dedicated-embedding
+  restart decision for recovered inference runtimes.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
