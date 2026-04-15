@@ -13,8 +13,10 @@ use inference::process::ProcessSpawner;
 use inference::{
     BackendConfig, DedicatedEmbeddingRuntimeManager, EmbeddingMemoryMode as InferenceEmbeddingMode,
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError as InferenceGatewayError,
-    InferenceStartRequest, LlamaCppEmbeddingRuntime,
+    InferenceStartRequest,
 };
+#[cfg(test)]
+use inference::LlamaCppEmbeddingRuntime;
 
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 
@@ -70,6 +72,20 @@ impl InferenceGateway {
     /// **Important**: Call `init()` after construction to complete async setup.
     pub fn new(spawner: Arc<dyn ProcessSpawner>) -> Self {
         let inner = Arc::new(inference::InferenceGateway::new());
+        Self {
+            inner,
+            embedding_runtime: Arc::new(RwLock::new(DedicatedEmbeddingRuntimeManager::new())),
+            spawner,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_backend(
+        backend: Box<dyn inference::InferenceBackend>,
+        name: &str,
+        spawner: Arc<dyn ProcessSpawner>,
+    ) -> Self {
+        let inner = Arc::new(inference::InferenceGateway::with_backend(backend, name));
         Self {
             inner,
             embedding_runtime: Arc::new(RwLock::new(DedicatedEmbeddingRuntimeManager::new())),
