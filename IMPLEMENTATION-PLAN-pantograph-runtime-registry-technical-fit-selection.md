@@ -474,6 +474,9 @@ runtime callers.
   path so repeated session loads can converge on the same reservation inside
   the registry lock instead of depending on adapter-local duplicate-load
   guards.
+- 2026-04-14: Owner-key reservation reuse now also refreshes the live lease
+  fields and rechecks admission against other reservations only, so repeated
+  session loads do not keep stale retention, model-target, or claim data.
 - 2026-04-13: The registry now exposes ordered reservation-owner eviction
   candidates derived from backend-owned runtime pressure and retention policy
   so higher layers can consume one policy order instead of rebuilding unload
