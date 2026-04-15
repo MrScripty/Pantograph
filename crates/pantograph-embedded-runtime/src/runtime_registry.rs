@@ -4,6 +4,8 @@
 //! snapshots into `pantograph_runtime_registry::RuntimeObservation` values so
 //! host adapters do not own registry-observation mapping logic.
 
+use async_trait::async_trait;
+
 use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
@@ -17,6 +19,12 @@ use pantograph_runtime_registry::{
 pub enum HostRuntimeProducer {
     Active,
     Embedding,
+}
+
+#[async_trait]
+pub trait HostRuntimeRegistryController {
+    async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot;
+    async fn stop_runtime_producer(&self, producer: HostRuntimeProducer);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -230,10 +238,71 @@ pub fn reconcile_runtime_registry_snapshot_override(
     }))
 }
 
+pub async fn reclaim_runtime_and_reconcile_runtime_registry<C: HostRuntimeRegistryController>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    runtime_id: &str,
+) -> Result<
+    pantograph_runtime_registry::RuntimeReclaimDisposition,
+    pantograph_runtime_registry::RuntimeRegistryError,
+> {
+    let mode_info = controller.mode_info_snapshot().await;
+    let live_producer = live_host_runtime_producer(&mode_info, runtime_id);
+    let reclaim = registry.reclaim_runtime(runtime_id, live_producer.is_some())?;
+
+    if reclaim.action == pantograph_runtime_registry::RuntimeReclaimAction::StopProducer {
+        if let Some(producer) = live_producer {
+            controller.stop_runtime_producer(producer).await;
+        }
+    }
+
+    let mode_info = controller.mode_info_snapshot().await;
+    reconcile_runtime_registry_mode_info(registry, &mode_info);
+    Ok(reclaim)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
-    use pantograph_runtime_registry::RuntimeRegistryStatus;
+    use pantograph_runtime_registry::{
+        RuntimeReclaimDisposition, RuntimeRegistration, RuntimeRegistryStatus,
+        RuntimeRetentionReason,
+    };
+
+    #[derive(Default)]
+    struct MockHostRuntimeController {
+        mode_info: Mutex<HostRuntimeModeSnapshot>,
+        stopped_producers: Mutex<Vec<HostRuntimeProducer>>,
+    }
+
+    #[async_trait]
+    impl HostRuntimeRegistryController for MockHostRuntimeController {
+        async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+            self.mode_info
+                .lock()
+                .expect("mode info lock poisoned")
+                .clone()
+        }
+
+        async fn stop_runtime_producer(&self, producer: HostRuntimeProducer) {
+            self.stopped_producers
+                .lock()
+                .expect("stopped producers lock poisoned")
+                .push(producer);
+            let mut mode_info = self.mode_info.lock().expect("mode info lock poisoned");
+            match producer {
+                HostRuntimeProducer::Active => {
+                    mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
+                }
+                HostRuntimeProducer::Embedding => {
+                    mode_info.embedding_runtime =
+                        Some(inference::RuntimeLifecycleSnapshot::default());
+                }
+            }
+        }
+    }
 
     #[test]
     fn live_host_runtime_producer_matches_active_runtime_aliases() {
@@ -287,6 +356,171 @@ mod tests {
         );
 
         assert_eq!(producer, Some(HostRuntimeProducer::Embedding));
+    }
+
+    #[tokio::test]
+    async fn reclaim_runtime_and_reconcile_runtime_registry_stops_active_runtime_producer() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("PyTorch".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                active_model_target: Some("/models/main".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("PyTorch".to_string()),
+                    runtime_instance_id: Some("pytorch-1".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+        reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+
+        let reclaim =
+            reclaim_runtime_and_reconcile_runtime_registry(&controller, &registry, "pytorch")
+                .await
+                .expect("reclaim should succeed");
+
+        assert_eq!(
+            reclaim,
+            RuntimeReclaimDisposition::stop_producer("pytorch", RuntimeRegistryStatus::Stopping)
+        );
+        assert_eq!(
+            controller
+                .stopped_producers
+                .lock()
+                .expect("stopped producers lock poisoned")
+                .as_slice(),
+            &[HostRuntimeProducer::Active]
+        );
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("active runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
+    }
+
+    #[tokio::test]
+    async fn reclaim_runtime_and_reconcile_runtime_registry_stops_embedding_runtime_producer() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: None,
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama_cpp_embedding".to_string()),
+                    runtime_instance_id: Some("embedding-1".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+        reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+
+        let reclaim = reclaim_runtime_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            "llama.cpp.embedding",
+        )
+        .await
+        .expect("reclaim should succeed");
+
+        assert_eq!(
+            reclaim,
+            RuntimeReclaimDisposition::stop_producer(
+                "llama.cpp.embedding",
+                RuntimeRegistryStatus::Stopping,
+            )
+        );
+        assert_eq!(
+            controller
+                .stopped_producers
+                .lock()
+                .expect("stopped producers lock poisoned")
+                .as_slice(),
+            &[HostRuntimeProducer::Embedding]
+        );
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
+    }
+
+    #[tokio::test]
+    async fn reclaim_runtime_and_reconcile_runtime_registry_keeps_other_runtime_running() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: None,
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama_cpp_embedding".to_string()),
+                    runtime_instance_id: Some("embedding-2".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+        reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+        registry.register_runtime(RuntimeRegistration::new("onnxruntime", "ONNX Runtime"));
+        registry
+            .transition_runtime(
+                "onnxruntime",
+                pantograph_runtime_registry::RuntimeTransition::Ready {
+                    runtime_instance_id: Some("onnx-1".to_string()),
+                },
+            )
+            .expect("onnx runtime should be ready");
+
+        let reclaim =
+            reclaim_runtime_and_reconcile_runtime_registry(&controller, &registry, "onnx_runtime")
+                .await
+                .expect("reclaim should succeed");
+
+        assert_eq!(
+            reclaim,
+            RuntimeReclaimDisposition::no_action(
+                "onnx-runtime",
+                RuntimeRetentionReason::Evictable,
+                RuntimeRegistryStatus::Stopped,
+            )
+        );
+        assert!(controller
+            .stopped_producers
+            .lock()
+            .expect("stopped producers lock poisoned")
+            .is_empty());
     }
 
     #[test]

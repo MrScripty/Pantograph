@@ -1,14 +1,30 @@
 //! Tauri-side re-export of backend-owned runtime-registry helpers.
 
+use async_trait::async_trait;
+
 pub use pantograph_embedded_runtime::runtime_registry::{
-    live_host_runtime_producer, reconcile_runtime_registry_mode_info,
-    reconcile_runtime_registry_snapshot_override, HostRuntimeProducer,
+    live_host_runtime_producer, reclaim_runtime_and_reconcile_runtime_registry,
+    reconcile_runtime_registry_mode_info, reconcile_runtime_registry_snapshot_override,
+    HostRuntimeProducer, HostRuntimeRegistryController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
-    RuntimeReclaimAction, RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError,
-    SharedRuntimeRegistry,
+    RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError, SharedRuntimeRegistry,
 };
+
+#[async_trait]
+impl HostRuntimeRegistryController for crate::llm::gateway::InferenceGateway {
+    async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+        HostRuntimeModeSnapshot::from_mode_info(&self.mode_info().await)
+    }
+
+    async fn stop_runtime_producer(&self, producer: HostRuntimeProducer) {
+        match producer {
+            HostRuntimeProducer::Active => self.stop().await,
+            HostRuntimeProducer::Embedding => self.stop_embedding_server().await,
+        }
+    }
+}
 
 pub async fn sync_runtime_registry_from_gateway(
     gateway: &crate::llm::gateway::InferenceGateway,
@@ -41,20 +57,7 @@ pub async fn reclaim_runtime_and_sync_runtime_registry(
     registry: &RuntimeRegistry,
     runtime_id: &str,
 ) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
-    let mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
-    let live_producer = live_host_runtime_producer(&mode_info, runtime_id);
-    let reclaim = registry.reclaim_runtime(runtime_id, live_producer.is_some())?;
-
-    if reclaim.action == RuntimeReclaimAction::StopProducer {
-        match live_producer {
-            Some(HostRuntimeProducer::Active) => gateway.stop().await,
-            Some(HostRuntimeProducer::Embedding) => gateway.stop_embedding_server().await,
-            None => {}
-        }
-    }
-
-    sync_runtime_registry_from_gateway(gateway, registry).await;
-    Ok(reclaim)
+    reclaim_runtime_and_reconcile_runtime_registry(gateway, registry, runtime_id).await
 }
 
 #[cfg(test)]
