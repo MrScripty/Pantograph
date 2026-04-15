@@ -8,13 +8,13 @@ use node_engine::{
     CoreTaskExecutor, EventSink, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
 use pantograph_runtime_identity::{
-    backend_key_aliases, canonical_runtime_backend_key, canonical_runtime_id,
-    runtime_backend_key_aliases, runtime_display_name,
+    backend_key_aliases, canonical_runtime_backend_key, runtime_backend_key_aliases,
+    runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeReclaimAction, RuntimeRegistration, RuntimeReservationRequest,
-    RuntimeReservationRequirements, RuntimeRetentionDecision, RuntimeRetentionHint,
-    RuntimeTransition, RuntimeWarmupDecision, SharedRuntimeRegistry,
+    RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
+    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition,
+    RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -169,6 +169,25 @@ pub fn apply_runtime_extensions(
     snapshot: &RuntimeExtensionsSnapshot,
 ) {
     apply_runtime_extensions_for_execution(executor, snapshot, None, None, None);
+}
+
+#[async_trait]
+impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGateway {
+    async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+        HostRuntimeModeSnapshot::from_mode_info(&self.mode_info().await)
+    }
+
+    async fn stop_runtime_producer(&self, producer: runtime_registry::HostRuntimeProducer) {
+        match producer {
+            runtime_registry::HostRuntimeProducer::Active => self.stop().await,
+            runtime_registry::HostRuntimeProducer::Embedding => {
+                debug_assert!(
+                    false,
+                    "embedded inference gateway cannot stop a dedicated embedding producer"
+                );
+            }
+        }
+    }
 }
 
 pub fn apply_runtime_extensions_for_execution(
@@ -1337,28 +1356,13 @@ impl EmbeddedWorkflowHost {
             return Ok(());
         }
 
-        let mode_info = self.gateway.mode_info().await;
-        let active_runtime = mode_info.active_runtime.as_ref();
-        let active_runtime_id = active_runtime
-            .and_then(|snapshot| snapshot.runtime_id.as_deref())
-            .or(mode_info.backend_key.as_deref())
-            .or(mode_info.backend_name.as_deref())
-            .map(canonical_runtime_id);
-        let runtime_is_active = mode_info.ready
-            && active_runtime
-                .map(|snapshot| snapshot.active)
-                .unwrap_or(false)
-            && active_runtime_id.as_deref() == Some(disposition.runtime_id.as_str());
-
-        let reclaim = runtime_registry
-            .reclaim_runtime(&disposition.runtime_id, runtime_is_active)
+        runtime_registry::reclaim_runtime_and_reconcile_runtime_registry(
+            self.gateway.as_ref(),
+            runtime_registry,
+            &disposition.runtime_id,
+        )
+        .await
             .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
-
-        if reclaim.action == RuntimeReclaimAction::StopProducer {
-            self.gateway.stop().await;
-            let stopped_mode_info = self.gateway.mode_info().await;
-            Self::reconcile_active_runtime_mode_info(runtime_registry, &stopped_mode_info, true);
-        }
 
         Ok(())
     }

@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 
 pub use pantograph_embedded_runtime::runtime_registry::{
-    live_host_runtime_producer, reclaim_runtime_and_reconcile_runtime_registry,
-    reconcile_runtime_registry_mode_info, reconcile_runtime_registry_snapshot_override,
+    reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_mode_info,
+    reconcile_runtime_registry_snapshot_override,
     HostRuntimeProducer, HostRuntimeRegistryController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
@@ -76,6 +76,7 @@ mod tests {
     use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use inference::EmbeddingMemoryMode;
     use inference::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
+    use pantograph_embedded_runtime::runtime_registry::live_host_runtime_producer;
     use pantograph_runtime_registry::{
         RuntimeRegistration, RuntimeRetentionReason, RuntimeTransition,
     };
