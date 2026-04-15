@@ -70,6 +70,9 @@ implementation progress in the runtime and diagnostics layers.
   even when the restore attempt fails, so restore failures no longer leave
   the registry pinned to the pre-failure execution snapshot instead of the
   gateway's real post-failure state.
+- RAG indexing restore paths now also synchronize the shared runtime registry
+  after restore attempts, so restore failures in the Tauri indexing adapter
+  no longer return early with stale registry state.
 
 ### Active implementation stream
 

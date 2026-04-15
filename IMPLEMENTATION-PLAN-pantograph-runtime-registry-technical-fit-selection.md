@@ -559,6 +559,10 @@ runtime callers.
   converge registry state back to the gateway's real post-failure lifecycle
   facts instead of leaving the registry pinned to the pre-restore execution
   snapshot.
+- 2026-04-14: The Tauri RAG indexing adapter now restores inference mode
+  through a shared restore-and-sync helper, so restore failures in the final
+  VLM-return path also converge the shared runtime registry instead of
+  returning early with stale producer state.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
