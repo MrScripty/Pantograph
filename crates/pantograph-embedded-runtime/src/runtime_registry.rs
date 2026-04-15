@@ -27,6 +27,15 @@ pub trait HostRuntimeRegistryController {
     async fn stop_runtime_producer(&self, producer: HostRuntimeProducer);
 }
 
+#[async_trait]
+pub trait HostRuntimeRegistryLifecycleController: HostRuntimeRegistryController {
+    async fn stop_all_runtime_producers(&self);
+    async fn restore_runtime(
+        &self,
+        restore_config: Option<inference::BackendConfig>,
+    ) -> Result<(), inference::GatewayError>;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveRuntimeDescriptor {
     pub runtime_id: String,
@@ -254,6 +263,28 @@ pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController>(
     registry.snapshot()
 }
 
+pub async fn stop_all_runtime_producers_and_reconcile_runtime_registry<
+    C: HostRuntimeRegistryLifecycleController,
+>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+) {
+    controller.stop_all_runtime_producers().await;
+    sync_runtime_registry(controller, registry).await;
+}
+
+pub async fn restore_runtime_and_reconcile_runtime_registry<
+    C: HostRuntimeRegistryLifecycleController,
+>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    restore_config: Option<inference::BackendConfig>,
+) -> Result<(), inference::GatewayError> {
+    let result = controller.restore_runtime(restore_config).await;
+    sync_runtime_registry(controller, registry).await;
+    result
+}
+
 pub async fn reclaim_runtime_and_reconcile_runtime_registry<C: HostRuntimeRegistryController>(
     controller: &C,
     registry: &RuntimeRegistry,
@@ -288,10 +319,12 @@ mod tests {
         RuntimeRetentionReason,
     };
 
-    #[derive(Default)]
     struct MockHostRuntimeController {
         mode_info: Mutex<HostRuntimeModeSnapshot>,
         stopped_producers: Mutex<Vec<HostRuntimeProducer>>,
+        stop_all_calls: Mutex<u32>,
+        restore_calls: Mutex<Vec<Option<inference::BackendConfig>>>,
+        restore_should_fail: Mutex<bool>,
     }
 
     #[async_trait]
@@ -318,6 +351,50 @@ mod tests {
                         Some(inference::RuntimeLifecycleSnapshot::default());
                 }
             }
+        }
+    }
+
+    #[async_trait]
+    impl HostRuntimeRegistryLifecycleController for MockHostRuntimeController {
+        async fn stop_all_runtime_producers(&self) {
+            *self
+                .stop_all_calls
+                .lock()
+                .expect("stop-all calls lock poisoned") += 1;
+            let mut mode_info = self.mode_info.lock().expect("mode info lock poisoned");
+            mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
+            mode_info.embedding_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
+        }
+
+        async fn restore_runtime(
+            &self,
+            restore_config: Option<inference::BackendConfig>,
+        ) -> Result<(), inference::GatewayError> {
+            self.restore_calls
+                .lock()
+                .expect("restore calls lock poisoned")
+                .push(restore_config);
+            if *self
+                .restore_should_fail
+                .lock()
+                .expect("restore failure flag lock poisoned")
+            {
+                return Err(inference::GatewayError::NoBackend);
+            }
+            let mut mode_info = self.mode_info.lock().expect("mode info lock poisoned");
+            mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-restored".to_string()),
+                warmup_started_at_ms: Some(30),
+                warmup_completed_at_ms: Some(40),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            });
+            mode_info.embedding_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
+            Ok(())
         }
     }
 
@@ -397,6 +474,9 @@ mod tests {
                 embedding_runtime: None,
             }),
             stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
         };
         let registry = RuntimeRegistry::new();
         reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
@@ -449,6 +529,9 @@ mod tests {
                 embedding_runtime: None,
             }),
             stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
         };
         let registry = RuntimeRegistry::new();
 
@@ -492,6 +575,9 @@ mod tests {
                 }),
             }),
             stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
         };
         let registry = RuntimeRegistry::new();
         reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
@@ -550,6 +636,9 @@ mod tests {
                 }),
             }),
             stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
         };
         let registry = RuntimeRegistry::new();
         reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
@@ -795,6 +884,9 @@ mod tests {
                 }),
             }),
             stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
         };
         let registry = RuntimeRegistry::new();
 
@@ -808,5 +900,107 @@ mod tests {
             .runtimes
             .iter()
             .any(|runtime| runtime.runtime_id == "llama.cpp.embedding"));
+    }
+
+    #[tokio::test]
+    async fn stop_all_runtime_producers_and_reconcile_runtime_registry_syncs_after_stop_all() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-9".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp.embedding".to_string()),
+                    runtime_instance_id: Some("llama-embed-9".to_string()),
+                    warmup_started_at_ms: Some(11),
+                    warmup_completed_at_ms: Some(16),
+                    warmup_duration_ms: Some(5),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        };
+        let registry = RuntimeRegistry::new();
+        reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+
+        stop_all_runtime_producers_and_reconcile_runtime_registry(&controller, &registry).await;
+
+        assert_eq!(
+            *controller
+                .stop_all_calls
+                .lock()
+                .expect("stop-all calls lock poisoned"),
+            1
+        );
+        let snapshot = registry.snapshot();
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.status == RuntimeRegistryStatus::Stopped));
+    }
+
+    #[tokio::test]
+    async fn restore_runtime_and_reconcile_runtime_registry_syncs_after_restore() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        };
+        let registry = RuntimeRegistry::new();
+
+        restore_runtime_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            Some(inference::BackendConfig::default()),
+        )
+        .await
+        .expect("restore should succeed");
+
+        assert_eq!(
+            controller
+                .restore_calls
+                .lock()
+                .expect("restore calls lock poisoned")
+                .len(),
+            1
+        );
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("restored runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-restored")
+        );
     }
 }

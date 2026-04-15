@@ -190,6 +190,20 @@ impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGat
     }
 }
 
+#[async_trait]
+impl runtime_registry::HostRuntimeRegistryLifecycleController for inference::InferenceGateway {
+    async fn stop_all_runtime_producers(&self) {
+        self.stop().await;
+    }
+
+    async fn restore_runtime(
+        &self,
+        restore_config: Option<inference::BackendConfig>,
+    ) -> Result<(), inference::GatewayError> {
+        self.restore_inference_runtime(restore_config).await
+    }
+}
+
 pub fn apply_runtime_extensions_for_execution(
     executor: &mut WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,

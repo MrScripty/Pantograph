@@ -4,8 +4,9 @@ use async_trait::async_trait;
 
 pub use pantograph_embedded_runtime::runtime_registry::{
     reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
-    runtime_registry_snapshot, sync_runtime_registry, HostRuntimeProducer,
-    HostRuntimeRegistryController,
+    restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
+    stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
+    HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
@@ -26,6 +27,20 @@ impl HostRuntimeRegistryController for crate::llm::gateway::InferenceGateway {
     }
 }
 
+#[async_trait]
+impl HostRuntimeRegistryLifecycleController for crate::llm::gateway::InferenceGateway {
+    async fn stop_all_runtime_producers(&self) {
+        self.stop_all().await;
+    }
+
+    async fn restore_runtime(
+        &self,
+        restore_config: Option<inference::BackendConfig>,
+    ) -> Result<(), inference::GatewayError> {
+        self.restore_inference_runtime(restore_config).await
+    }
+}
+
 pub async fn sync_runtime_registry_from_gateway(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
@@ -37,8 +52,7 @@ pub async fn stop_all_and_sync_runtime_registry(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
 ) {
-    gateway.stop_all().await;
-    sync_runtime_registry_from_gateway(gateway, registry).await;
+    stop_all_runtime_producers_and_reconcile_runtime_registry(gateway, registry).await;
 }
 
 pub async fn restore_runtime_and_sync_runtime_registry(
@@ -46,9 +60,7 @@ pub async fn restore_runtime_and_sync_runtime_registry(
     registry: &RuntimeRegistry,
     restore_config: Option<inference::BackendConfig>,
 ) -> Result<(), inference::GatewayError> {
-    let result = gateway.restore_inference_runtime(restore_config).await;
-    sync_runtime_registry_from_gateway(gateway, registry).await;
-    result
+    restore_runtime_and_reconcile_runtime_registry(gateway, registry, restore_config).await
 }
 
 pub async fn reclaim_runtime_and_sync_runtime_registry(
