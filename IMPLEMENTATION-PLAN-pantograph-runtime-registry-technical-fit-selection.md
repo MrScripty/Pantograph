@@ -554,6 +554,11 @@ runtime callers.
   longer owns composite task execution and the backend regression test proves
   Python-sidecar producer observations still reconcile into the shared runtime
   registry on that path.
+- 2026-04-14: Edit-session embedding restore now always reconciles the shared
+  runtime registry after the restore attempt, so even failed restore paths
+  converge registry state back to the gateway's real post-failure lifecycle
+  facts instead of leaving the registry pinned to the pre-restore execution
+  snapshot.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

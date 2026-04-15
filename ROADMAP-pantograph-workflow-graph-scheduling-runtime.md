@@ -66,6 +66,10 @@ implementation progress in the runtime and diagnostics layers.
   `EmbeddedRuntime`, so Tauri no longer owns composite task-execution logic
   for that path and Python-sidecar producer observations still reconcile into
   the shared runtime registry during orchestration runs.
+- Edit-session embedding restore now reconciles the shared runtime registry
+  even when the restore attempt fails, so restore failures no longer leave
+  the registry pinned to the pre-failure execution snapshot instead of the
+  gateway's real post-failure state.
 
 ### Active implementation stream
 
