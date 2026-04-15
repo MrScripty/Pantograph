@@ -343,6 +343,21 @@ pub struct WorkflowSessionCloseResponse {
     pub ok: bool,
 }
 
+/// Stale workflow-session cleanup request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionStaleCleanupRequest {
+    pub idle_timeout_ms: u64,
+}
+
+/// Stale workflow-session cleanup response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionStaleCleanupResponse {
+    #[serde(default)]
+    pub cleaned_session_ids: Vec<String>,
+}
+
 /// Session lifecycle state exposed to clients.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -907,8 +922,15 @@ struct WorkflowSessionRecord {
     active_run: Option<WorkflowSessionActiveRun>,
     queue: Vec<WorkflowSessionQueuedRun>,
     access_tick: u64,
+    last_accessed_at_ms: u64,
     run_count: u64,
     preflight_cache: Option<WorkflowSessionPreflightCache>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowSessionStaleCleanupCandidate {
+    session_id: String,
+    last_accessed_at_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -977,6 +999,7 @@ impl WorkflowSessionStore {
         }
 
         let session_id = Uuid::new_v4().to_string();
+        let now_ms = unix_timestamp_ms();
         let state = WorkflowSessionRecord {
             workflow_id,
             usage_profile,
@@ -985,6 +1008,7 @@ impl WorkflowSessionStore {
             active_run: None,
             queue: Vec::new(),
             access_tick: self.next_tick(),
+            last_accessed_at_ms: now_ms,
             run_count: 0,
             preflight_cache: None,
         };
@@ -1032,7 +1056,16 @@ impl WorkflowSessionStore {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
         state.runtime_loaded = loaded;
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
+        Ok(())
+    }
+
+    fn touch_session(&mut self, session_id: &str) -> Result<(), WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        Self::mark_session_access(state, tick);
         Ok(())
     }
 
@@ -1079,7 +1112,7 @@ impl WorkflowSessionStore {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
         state.preflight_cache = Some(cache);
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
         Ok(())
     }
 
@@ -1154,7 +1187,7 @@ impl WorkflowSessionStore {
             })
             .unwrap_or(state.queue.len());
         state.queue.insert(insert_index, queued);
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
         Ok(queue_id)
     }
 
@@ -1204,7 +1237,7 @@ impl WorkflowSessionStore {
             dequeued_at_ms: unix_timestamp_ms(),
             priority: queued.priority,
         });
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
         Ok(Some(WorkflowSessionDequeuedRun {
             workflow_id: state.workflow_id.clone(),
             queued,
@@ -1235,7 +1268,7 @@ impl WorkflowSessionStore {
 
         let unload_runtime = state.runtime_loaded && !state.keep_alive;
         state.active_run = None;
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
         state.run_count = state.run_count.saturating_add(1);
         if unload_runtime {
             state.runtime_loaded = false;
@@ -1256,7 +1289,7 @@ impl WorkflowSessionStore {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
         state.keep_alive = keep_alive;
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
 
         let unload_workflow_id =
             if !keep_alive && state.runtime_loaded && state.active_run.is_none() {
@@ -1299,7 +1332,7 @@ impl WorkflowSessionStore {
                 queue_id, session_id
             )));
         }
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
         Ok(())
     }
 
@@ -1349,8 +1382,62 @@ impl WorkflowSessionStore {
             })
             .unwrap_or(state.queue.len());
         state.queue.insert(insert_index, queued);
-        state.access_tick = tick;
+        Self::mark_session_access(state, tick);
         Ok(())
+    }
+
+    fn stale_cleanup_candidates(
+        &self,
+        now_ms: u64,
+        idle_timeout_ms: u64,
+    ) -> Vec<WorkflowSessionStaleCleanupCandidate> {
+        let mut candidates = self
+            .active
+            .iter()
+            .filter(|(_, state)| {
+                !state.keep_alive
+                    && !state.runtime_loaded
+                    && state.active_run.is_none()
+                    && state.last_accessed_at_ms.saturating_add(idle_timeout_ms) <= now_ms
+            })
+            .map(|(session_id, state)| WorkflowSessionStaleCleanupCandidate {
+                session_id: session_id.clone(),
+                last_accessed_at_ms: state.last_accessed_at_ms,
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| {
+            left.last_accessed_at_ms
+                .cmp(&right.last_accessed_at_ms)
+                .then_with(|| left.session_id.cmp(&right.session_id))
+        });
+        candidates
+    }
+
+    fn close_stale_session_if_unchanged(
+        &mut self,
+        candidate: &WorkflowSessionStaleCleanupCandidate,
+        now_ms: u64,
+        idle_timeout_ms: u64,
+    ) -> bool {
+        let Some(state) = self.active.get(candidate.session_id.as_str()) else {
+            return false;
+        };
+        if state.keep_alive
+            || state.runtime_loaded
+            || state.active_run.is_some()
+            || state.last_accessed_at_ms != candidate.last_accessed_at_ms
+            || state.last_accessed_at_ms.saturating_add(idle_timeout_ms) > now_ms
+        {
+            return false;
+        }
+
+        self.active.remove(candidate.session_id.as_str());
+        true
+    }
+
+    fn mark_session_access(state: &mut WorkflowSessionRecord, tick: u64) {
+        state.access_tick = tick;
+        state.last_accessed_at_ms = unix_timestamp_ms();
     }
 
     fn close_session(
@@ -1700,9 +1787,10 @@ impl WorkflowService {
                 "session_id must be non-empty".to_string(),
             ));
         }
-        let store = self.session_store.lock().map_err(|_| {
+        let mut store = self.session_store.lock().map_err(|_| {
             WorkflowServiceError::Internal("session store lock poisoned".to_string())
         })?;
+        store.touch_session(session_id)?;
         let session = store.session_summary(session_id)?;
         Ok(WorkflowSessionStatusResponse { session })
     }
@@ -1717,9 +1805,10 @@ impl WorkflowService {
                 "session_id must be non-empty".to_string(),
             ));
         }
-        let store = self.session_store.lock().map_err(|_| {
+        let mut store = self.session_store.lock().map_err(|_| {
             WorkflowServiceError::Internal("session store lock poisoned".to_string())
         })?;
+        store.touch_session(session_id)?;
         let items = store.list_queue(session_id)?;
         Ok(WorkflowSessionQueueListResponse {
             session_id: session_id.to_string(),
@@ -1739,10 +1828,13 @@ impl WorkflowService {
         }
 
         {
-            let store = self.session_store.lock().map_err(|_| {
+            let mut store = self.session_store.lock().map_err(|_| {
                 WorkflowServiceError::Internal("session store lock poisoned".to_string())
             })?;
-            match store.session_summary(session_id) {
+            match store
+                .touch_session(session_id)
+                .and_then(|_| store.session_summary(session_id))
+            {
                 Ok(session) => {
                     let items = store.list_queue(session_id)?;
                     return Ok(WorkflowSchedulerSnapshotResponse {
@@ -1761,6 +1853,42 @@ impl WorkflowService {
         self.graph_session_store
             .get_scheduler_snapshot(session_id)
             .await
+    }
+
+    pub async fn workflow_cleanup_stale_sessions(
+        &self,
+        request: WorkflowSessionStaleCleanupRequest,
+    ) -> Result<WorkflowSessionStaleCleanupResponse, WorkflowServiceError> {
+        if request.idle_timeout_ms == 0 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "idle_timeout_ms must be greater than zero".to_string(),
+            ));
+        }
+
+        let now_ms = unix_timestamp_ms();
+        let candidates = {
+            let store = self.session_store.lock().map_err(|_| {
+                WorkflowServiceError::Internal("session store lock poisoned".to_string())
+            })?;
+            store.stale_cleanup_candidates(now_ms, request.idle_timeout_ms)
+        };
+
+        let mut cleaned_session_ids = Vec::new();
+        for candidate in candidates {
+            let cleaned = {
+                let mut store = self.session_store.lock().map_err(|_| {
+                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
+                })?;
+                store.close_stale_session_if_unchanged(&candidate, now_ms, request.idle_timeout_ms)
+            };
+            if cleaned {
+                cleaned_session_ids.push(candidate.session_id);
+            }
+        }
+
+        Ok(WorkflowSessionStaleCleanupResponse {
+            cleaned_session_ids,
+        })
     }
 
     pub async fn workflow_cancel_session_queue_item(
@@ -5146,6 +5274,151 @@ mod tests {
             .expect("get status");
         assert_eq!(status.session.session_kind, WorkflowSessionKind::Workflow);
         assert!(!status.session.keep_alive);
+    }
+
+    #[tokio::test]
+    async fn workflow_cleanup_stale_sessions_removes_idle_non_keep_alive_session() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        let response = service
+            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                idle_timeout_ms: 1_000,
+            })
+            .await
+            .expect("cleanup stale sessions");
+
+        assert_eq!(
+            response.cleaned_session_ids,
+            vec![created.session_id.clone()]
+        );
+        let err = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect_err("cleaned session should be removed");
+        assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_cleanup_stale_sessions_keeps_keep_alive_session() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        let response = service
+            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                idle_timeout_ms: 1_000,
+            })
+            .await
+            .expect("cleanup stale sessions");
+
+        assert!(response.cleaned_session_ids.is_empty());
+        let status = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("keep-alive session should remain accessible");
+        assert!(status.session.keep_alive);
+    }
+
+    #[tokio::test]
+    async fn workflow_cleanup_stale_sessions_respects_recent_status_reads() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("status read should refresh session access");
+
+        let response = service
+            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                idle_timeout_ms: 1_000,
+            })
+            .await
+            .expect("cleanup stale sessions");
+
+        assert!(response.cleaned_session_ids.is_empty());
+        let status = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("recently accessed session should remain accessible");
+        assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
     }
 
     #[tokio::test]

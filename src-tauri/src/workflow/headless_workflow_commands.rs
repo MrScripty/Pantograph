@@ -21,6 +21,7 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
     WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
+    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
     WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceRuntimeMetrics,
     WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
@@ -572,6 +573,16 @@ pub async fn workflow_list_session_queue(
 ) -> Result<WorkflowSessionQueueListResponse, String> {
     workflow_service
         .workflow_list_session_queue(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_cleanup_stale_sessions(
+    request: WorkflowSessionStaleCleanupRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSessionStaleCleanupResponse, String> {
+    workflow_service
+        .workflow_cleanup_stale_sessions(request)
         .await
         .map_err(workflow_error_json)
 }

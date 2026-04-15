@@ -43,8 +43,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
     WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
-    WorkflowTraceRuntimeMetrics,
+    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse, WorkflowSessionState,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceRuntimeMetrics,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -515,6 +515,15 @@ impl EmbeddedRuntime {
             .await
     }
 
+    pub async fn workflow_cleanup_stale_sessions(
+        &self,
+        request: WorkflowSessionStaleCleanupRequest,
+    ) -> Result<WorkflowSessionStaleCleanupResponse, WorkflowServiceError> {
+        self.workflow_service
+            .workflow_cleanup_stale_sessions(request)
+            .await
+    }
+
     pub async fn workflow_cancel_session_queue_item(
         &self,
         request: WorkflowSessionQueueCancelRequest,
@@ -792,11 +801,12 @@ impl EmbeddedRuntime {
             .iter()
             .filter_map(|metadata| metadata.snapshot.runtime_id.clone())
             .collect::<Vec<_>>();
-        let trace_runtime_metrics = workflow_runtime::trace_runtime_metrics_with_observed_runtime_ids(
-            &runtime_snapshot,
-            runtime_model_target.as_deref(),
-            &observed_runtime_ids,
-        );
+        let trace_runtime_metrics =
+            workflow_runtime::trace_runtime_metrics_with_observed_runtime_ids(
+                &runtime_snapshot,
+                runtime_model_target.as_deref(),
+                &observed_runtime_ids,
+            );
         let restore_result = self.gateway.restore_inference_runtime(restore_config).await;
         self.reconcile_runtime_registry_from_gateway().await;
         if let Err(error) = restore_result {
