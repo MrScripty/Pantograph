@@ -306,6 +306,32 @@ impl RuntimeRegistry {
             .ok_or(RuntimeRegistryError::ReservationNotFound(reservation_id))
     }
 
+    pub fn update_reservation_retention_hint_if_present(
+        &self,
+        reservation_id: u64,
+        retention_hint: RuntimeRetentionHint,
+    ) -> Result<Option<RuntimeReservationLease>, RuntimeRegistryError> {
+        let mut guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+        let Some(reservation) = guard.reservations.get_mut(&reservation_id) else {
+            return Ok(None);
+        };
+
+        reservation.retention_hint = retention_hint;
+        Ok(Some(reservation.clone().into_lease()))
+    }
+
+    pub fn update_reservation_retention_hint(
+        &self,
+        reservation_id: u64,
+        retention_hint: RuntimeRetentionHint,
+    ) -> Result<RuntimeReservationLease, RuntimeRegistryError> {
+        self.update_reservation_retention_hint_if_present(reservation_id, retention_hint)?
+            .ok_or(RuntimeRegistryError::ReservationNotFound(reservation_id))
+    }
+
     pub fn retention_disposition(
         &self,
         runtime_id: &str,
@@ -1366,6 +1392,48 @@ mod tests {
         registry
             .release_reservation(keep_alive.reservation_id)
             .expect("release keep-alive reservation");
+    }
+
+    #[test]
+    fn update_reservation_retention_hint_mutates_existing_lease() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtimes(vec![RuntimeObservation {
+            runtime_id: "shared-runtime".to_string(),
+            display_name: "shared-runtime".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("model-a".to_string()),
+            status: RuntimeRegistryStatus::Ready,
+            runtime_instance_id: Some("shared-runtime-1".to_string()),
+            last_error: None,
+        }]);
+
+        let lease = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "shared-runtime".to_string(),
+                workflow_id: "wf-update".to_string(),
+                reservation_owner_id: Some("session-update".to_string()),
+                usage_profile: Some("interactive".to_string()),
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("reservation should be created");
+
+        let updated = registry
+            .update_reservation_retention_hint(
+                lease.reservation_id,
+                RuntimeRetentionHint::KeepAlive,
+            )
+            .expect("retention hint should update");
+        assert_eq!(updated.retention_hint, RuntimeRetentionHint::KeepAlive);
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(
+            snapshot.reservations[0].retention_hint,
+            RuntimeRetentionHint::KeepAlive
+        );
     }
 
     #[test]

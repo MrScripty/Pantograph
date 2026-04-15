@@ -43,7 +43,7 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
     WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -535,9 +535,17 @@ impl EmbeddedRuntime {
         &self,
         request: WorkflowSessionKeepAliveRequest,
     ) -> Result<WorkflowSessionKeepAliveResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_set_session_keep_alive(&self.host(), request)
-            .await
+        let host = self.host();
+        let response = self
+            .workflow_service
+            .workflow_set_session_keep_alive(&host, request)
+            .await?;
+        host.sync_loaded_session_runtime_retention_hint(
+            &response.session_id,
+            response.keep_alive,
+            response.state,
+        )?;
+        Ok(response)
     }
 
     pub fn workflow_graph_save(
@@ -1078,6 +1086,47 @@ impl EmbeddedWorkflowHost {
         } else {
             reservations.remove(session_id);
         }
+
+        Ok(())
+    }
+
+    fn sync_loaded_session_runtime_retention_hint(
+        &self,
+        session_id: &str,
+        keep_alive: bool,
+        session_state: WorkflowSessionState,
+    ) -> Result<(), WorkflowServiceError> {
+        if session_state == WorkflowSessionState::IdleUnloaded {
+            return Ok(());
+        }
+
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return Ok(());
+        };
+
+        let reservation_id = {
+            let reservations = self.session_runtime_reservations.lock().map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "session runtime reservation lock poisoned".to_string(),
+                )
+            })?;
+            reservations.get(session_id).copied()
+        };
+
+        let Some(reservation_id) = reservation_id else {
+            return Ok(());
+        };
+
+        runtime_registry
+            .update_reservation_retention_hint_if_present(
+                reservation_id,
+                Self::runtime_retention_hint(if keep_alive {
+                    WorkflowSessionRetentionHint::KeepAlive
+                } else {
+                    WorkflowSessionRetentionHint::Ephemeral
+                }),
+            )
+            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
 
         Ok(())
     }
@@ -2405,6 +2454,71 @@ mod tests {
         assert_eq!(
             released_snapshot.runtimes[0].status,
             RuntimeRegistryStatus::Stopped
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sync_loaded_session_runtime_retention_hint_updates_running_session() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        runtime_registry.register_runtime(RuntimeRegistration::new("llama.cpp", "llama.cpp"));
+        runtime_registry
+            .transition_runtime(
+                "llama.cpp",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("llama-runtime-1".to_string()),
+                },
+            )
+            .expect("ready transition");
+
+        let lease = runtime_registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "llama.cpp".to_string(),
+                workflow_id: "runtime-text".to_string(),
+                reservation_owner_id: Some("session-running".to_string()),
+                usage_profile: Some("interactive".to_string()),
+                model_id: None,
+                pin_runtime: false,
+                requirements: None,
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("reservation should be created");
+        let host = runtime.host();
+        host.record_session_runtime_reservation("session-running", lease.reservation_id)
+            .expect("reservation id should be recorded");
+
+        host.sync_loaded_session_runtime_retention_hint(
+            "session-running",
+            true,
+            WorkflowSessionState::Running,
+        )
+        .expect("running session retention hint should update");
+
+        let snapshot = runtime_registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(
+            snapshot.reservations[0].retention_hint,
+            RuntimeRetentionHint::KeepAlive
         );
     }
 
