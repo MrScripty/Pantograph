@@ -46,6 +46,11 @@ implementation progress in the runtime and diagnostics layers.
 - Recovery stop-all paths now also reconcile the shared registry after tearing
   down producers, so failed clean-restart attempts do not leave stale
   embedding-runtime observations behind.
+- Recovery restart now reuses the backend-owned active runtime config,
+  rehydrates the dedicated embedding sidecar when parallel embedding remains
+  configured, and refreshes both RAG vectorizer state and registry snapshots
+  after restart. Alternate-port restart remains limited until the backend
+  restart contract carries a port override.
 
 ### Active implementation stream
 

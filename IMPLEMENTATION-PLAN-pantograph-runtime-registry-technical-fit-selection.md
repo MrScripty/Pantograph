@@ -526,6 +526,13 @@ runtime callers.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
+- 2026-04-14: Recovery restart now reuses the backend-owned active runtime
+  config, restarts the saved inference mode, rehydrates the dedicated
+  embedding sidecar when the host app config still requires parallel
+  embedding, and clears or refreshes the RAG embedding URL plus runtime
+  registry snapshot after restart. Alternate-port recovery remains explicitly
+  limited until the backend restart config grows a standards-owned port
+  override contract.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -646,6 +653,9 @@ refactor lands.
 5. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with the README and ADR boundary decisions now reflected in the
    backend-owned registry refactor.
+6. If alternate-port recovery remains a roadmap requirement, widen the
+   backend-owned restart contract in `crates/inference` rather than
+   introducing host-only port override policy in Tauri.
 6. Re-plan immediately if Milestone 3 implementation pressures any of the
    frozen ownership decisions, requires a different async ownership model, or
    forces contract changes larger than assumed.
