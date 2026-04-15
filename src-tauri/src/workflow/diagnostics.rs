@@ -7,7 +7,8 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
+use pantograph_embedded_runtime::workflow_runtime::capability_runtime_lifecycle_snapshot;
+use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
@@ -211,75 +212,6 @@ impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleS
             lifecycle_snapshot.normalized_lifecycle_decision_reason();
         lifecycle_snapshot
     }
-}
-
-fn runtime_capability_matches_required_backend(
-    capability: &pantograph_workflow_service::WorkflowRuntimeCapability,
-    required_backend_key: &str,
-) -> bool {
-    let required_backend_key = canonical_runtime_backend_key(required_backend_key);
-    canonical_runtime_backend_key(&capability.runtime_id) == required_backend_key
-        || capability
-            .backend_keys
-            .iter()
-            .any(|backend_key| canonical_runtime_backend_key(backend_key) == required_backend_key)
-}
-
-fn capability_runtime_lifecycle_snapshot(
-    capabilities: Option<&WorkflowCapabilitiesResponse>,
-) -> Option<DiagnosticsRuntimeLifecycleSnapshot> {
-    let capabilities = capabilities?;
-    let selected_runtime = capabilities
-        .runtime_capabilities
-        .iter()
-        .find(|capability| capability.selected)
-        .or_else(|| {
-            if capabilities.runtime_requirements.required_backends.len() != 1 {
-                return None;
-            }
-
-            let required_backend_key = &capabilities.runtime_requirements.required_backends[0];
-            capabilities
-                .runtime_capabilities
-                .iter()
-                .filter(|capability| {
-                    runtime_capability_matches_required_backend(capability, required_backend_key)
-                })
-                .max_by(|left, right| {
-                    (
-                        left.available && left.configured,
-                        left.available,
-                        left.configured,
-                    )
-                        .cmp(&(
-                            right.available && right.configured,
-                            right.available,
-                            right.configured,
-                        ))
-                        .then_with(|| left.runtime_id.cmp(&right.runtime_id))
-                })
-        })?;
-    let lifecycle_decision_reason = if selected_runtime.selected {
-        "selected_runtime_reported"
-    } else {
-        "required_runtime_reported"
-    };
-
-    Some(DiagnosticsRuntimeLifecycleSnapshot {
-        runtime_id: Some(canonical_runtime_id(&selected_runtime.runtime_id))
-            .filter(|runtime_id| !runtime_id.is_empty()),
-        runtime_instance_id: None,
-        warmup_started_at_ms: None,
-        warmup_completed_at_ms: None,
-        warmup_duration_ms: None,
-        runtime_reused: None,
-        lifecycle_decision_reason: Some(lifecycle_decision_reason.to_string()),
-        active: false,
-        last_error: selected_runtime
-            .unavailable_reason
-            .clone()
-            .filter(|reason| !reason.trim().is_empty()),
-    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -612,7 +544,10 @@ impl WorkflowDiagnosticsStore {
                 active_runtime: active_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from)
-                    .or_else(|| capability_runtime_lifecycle_snapshot(capabilities.as_ref())),
+                    .or_else(|| {
+                        capability_runtime_lifecycle_snapshot(capabilities.as_ref())
+                            .map(|snapshot| DiagnosticsRuntimeLifecycleSnapshot::from(&snapshot))
+                    }),
                 embedding_runtime: embedding_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from),
@@ -1028,7 +963,10 @@ fn apply_runtime_event(
             embedding_model_target: embedding_model_target.clone(),
             active_runtime: active_runtime_snapshot
                 .clone()
-                .or_else(|| capability_runtime_lifecycle_snapshot(capabilities.as_ref())),
+                .or_else(|| {
+                    capability_runtime_lifecycle_snapshot(capabilities.as_ref())
+                        .map(|snapshot| DiagnosticsRuntimeLifecycleSnapshot::from(&snapshot))
+                }),
             embedding_runtime: embedding_runtime_snapshot.clone(),
         };
     }
