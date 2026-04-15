@@ -549,6 +549,11 @@ runtime callers.
   through a shared recovery-manager service created at the composition root,
   so crash detection can start the existing backend-owned restart flow
   without relying on a manual recovery command first.
+- 2026-04-14: Orchestration data-graph execution now delegates to
+  `crates/pantograph-embedded-runtime`, so the Tauri orchestration adapter no
+  longer owns composite task execution and the backend regression test proves
+  Python-sidecar producer observations still reconcile into the shared runtime
+  registry on that path.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

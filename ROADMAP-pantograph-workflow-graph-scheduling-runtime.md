@@ -62,6 +62,10 @@ implementation progress in the runtime and diagnostics layers.
   manager from Tauri-owned composition state, so automatic recovery no longer
   depends on a separate manual recovery command to enter the existing restart
   flow.
+- Orchestration data-graph execution now delegates to the backend-owned
+  `EmbeddedRuntime`, so Tauri no longer owns composite task-execution logic
+  for that path and Python-sidecar producer observations still reconcile into
+  the shared runtime registry during orchestration runs.
 
 ### Active implementation stream
 
@@ -354,6 +358,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   `crates/pantograph-embedded-runtime`, leaving Tauri workflow commands to
   emit transport events and update stores without owning runtime trace fallback
   semantics.
+- Orchestration data-graph execution now also routes through
+  `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
+  to inject state and forward events instead of owning composite task
+  execution or registry-aware Python runtime observation handling.
 
 **Still missing:**
 
