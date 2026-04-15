@@ -610,10 +610,9 @@ impl EmbeddedRuntime {
             }
         }
 
-        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshot();
-        self.host().observe_python_runtime_execution_metadata(
-            python_runtime_execution_metadata.as_ref(),
-        )?;
+        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshots();
+        self.host()
+            .observe_python_runtime_execution_metadata(&python_runtime_execution_metadata)?;
 
         let mut outputs = EmbeddedWorkflowHost::collect_data_graph_outputs(
             graph_id,
@@ -1017,19 +1016,18 @@ impl EmbeddedWorkflowHost {
 
     fn observe_python_runtime_execution_metadata(
         &self,
-        metadata: Option<&task_executor::PythonRuntimeExecutionMetadata>,
+        metadata: &[task_executor::PythonRuntimeExecutionMetadata],
     ) -> Result<(), WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
             return Ok(());
         };
-        let Some(metadata) = metadata else {
-            return Ok(());
-        };
-        runtime_registry::reconcile_runtime_registry_snapshot_override(
-            runtime_registry.as_ref(),
-            &metadata.snapshot,
-            metadata.model_target.as_deref(),
-        );
+        for metadata in metadata {
+            runtime_registry::reconcile_runtime_registry_snapshot_override(
+                runtime_registry.as_ref(),
+                &metadata.snapshot,
+                metadata.model_target.as_deref(),
+            );
+        }
 
         Ok(())
     }
@@ -1870,8 +1868,8 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             }
         }
 
-        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshot();
-        self.observe_python_runtime_execution_metadata(python_runtime_execution_metadata.as_ref())?;
+        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshots();
+        self.observe_python_runtime_execution_metadata(&python_runtime_execution_metadata)?;
 
         run_result?;
         Self::collect_run_outputs(&node_outputs, &output_node_ids, output_targets)
@@ -2463,6 +2461,72 @@ mod tests {
         }
     }
 
+    fn multi_python_runtime_data_graph() -> node_engine::WorkflowGraph {
+        node_engine::WorkflowGraph {
+            id: "multi-python-runtime-data-graph".to_string(),
+            name: "Multi Python Runtime Data Graph".to_string(),
+            nodes: vec![
+                node_engine::GraphNode {
+                    id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({ "text": "painted robot" }),
+                    position: (0.0, 0.0),
+                },
+                node_engine::GraphNode {
+                    id: "text-input-2".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({ "text": "tiny waveform" }),
+                    position: (0.0, 180.0),
+                },
+                node_engine::GraphNode {
+                    id: "diffusion-inference-1".to_string(),
+                    node_type: "diffusion-inference".to_string(),
+                    data: serde_json::json!({
+                        "model_path": "/tmp/mock-diffusion-model",
+                        "backend_key": "diffusers",
+                        "model_type": "diffusion",
+                        "environment_ref": {
+                            "state": "ready",
+                            "env_ids": ["mock-python-env"]
+                        }
+                    }),
+                    position: (240.0, 0.0),
+                },
+                node_engine::GraphNode {
+                    id: "onnx-inference-1".to_string(),
+                    node_type: "onnx-inference".to_string(),
+                    data: serde_json::json!({
+                        "model_path": "/tmp/mock-onnx-model",
+                        "backend_key": "onnxruntime",
+                        "model_type": "audio",
+                        "environment_ref": {
+                            "state": "ready",
+                            "env_ids": ["mock-onnx-env"]
+                        }
+                    }),
+                    position: (240.0, 180.0),
+                },
+            ],
+            edges: vec![
+                node_engine::GraphEdge {
+                    id: "e-prompt".to_string(),
+                    source: "text-input-1".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "diffusion-inference-1".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+                node_engine::GraphEdge {
+                    id: "e-audio".to_string(),
+                    source: "text-input-2".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "onnx-inference-1".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+            ],
+            groups: Vec::new(),
+        }
+    }
+
     #[tokio::test]
     async fn test_runtime_run_and_session_execution() {
         let temp = TempDir::new().expect("temp dir");
@@ -2724,6 +2788,62 @@ mod tests {
         assert_eq!(pytorch.status, RuntimeRegistryStatus::Stopped);
         assert!(pytorch.runtime_instance_id.is_none());
         assert!(pytorch.models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn execute_data_graph_reconciles_multiple_python_sidecar_runtimes_into_registry() {
+        let temp = TempDir::new().expect("temp dir");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Arc::new(MockImagePythonRuntime {
+                requests: Mutex::new(Vec::new()),
+            }),
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        runtime
+            .execute_data_graph(
+                "multi-python-runtime-data-graph",
+                &multi_python_runtime_data_graph(),
+                &HashMap::new(),
+                Arc::new(node_engine::NullEventSink),
+            )
+            .await
+            .expect("data graph execution");
+
+        let snapshot = runtime_registry.snapshot();
+        let diffusers = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "diffusers")
+            .expect("diffusers runtime should be observed");
+        assert_eq!(diffusers.status, RuntimeRegistryStatus::Stopped);
+        assert!(diffusers.runtime_instance_id.is_none());
+        assert!(diffusers.models.is_empty());
+
+        let onnx = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "onnx-runtime")
+            .expect("onnx runtime should be observed");
+        assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
+        assert!(onnx.runtime_instance_id.is_none());
+        assert!(onnx.models.is_empty());
     }
 
     #[tokio::test]

@@ -63,15 +63,26 @@ pub struct PythonRuntimeExecutionMetadata {
 
 #[derive(Debug, Default)]
 pub struct PythonRuntimeExecutionRecorder {
-    state: Mutex<Option<PythonRuntimeExecutionMetadata>>,
+    state: Mutex<Vec<PythonRuntimeExecutionMetadata>>,
 }
 
 impl PythonRuntimeExecutionRecorder {
     pub fn record(&self, metadata: PythonRuntimeExecutionMetadata) {
-        *self.state.lock().expect("python runtime recorder lock") = Some(metadata);
+        self.state
+            .lock()
+            .expect("python runtime recorder lock")
+            .push(metadata);
     }
 
     pub fn snapshot(&self) -> Option<PythonRuntimeExecutionMetadata> {
+        self.state
+            .lock()
+            .expect("python runtime recorder lock")
+            .last()
+            .cloned()
+    }
+
+    pub fn snapshots(&self) -> Vec<PythonRuntimeExecutionMetadata> {
         self.state
             .lock()
             .expect("python runtime recorder lock")
