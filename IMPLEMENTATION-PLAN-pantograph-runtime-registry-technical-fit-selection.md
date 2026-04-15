@@ -415,7 +415,7 @@ runtime callers.
 - [ ] Keep admission, retention, and eviction policy in
   `crates/pantograph-runtime-registry`; adapters and gateway callers may invoke
   explicit registry operations but must not become policy owners
-- [ ] Reconcile the shared runtime registry after every producer restore path,
+- [x] Reconcile the shared runtime registry after every producer restore path,
   including edit-session embedding restore, so real producer transitions do
   not leave stale residency state behind
 - [x] Add a backend-owned workflow-session stale cleanup contract for idle,
