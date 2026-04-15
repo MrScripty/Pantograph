@@ -576,6 +576,10 @@ runtime callers.
   producer observation from a run instead of only the final sidecar snapshot,
   so mixed Python-runtime graphs reconcile each observed producer back into
   the shared runtime registry before the run returns.
+- 2026-04-14: Embedded-runtime edit-session outcomes now emit backend-owned
+  runtime trace metrics with every observed Python-sidecar runtime id from the
+  run, and the Tauri workflow adapter forwards that override instead of
+  recomputing trace metrics from only the final producer snapshot.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

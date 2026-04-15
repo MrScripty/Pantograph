@@ -85,6 +85,10 @@ implementation progress in the runtime and diagnostics layers.
   observations from a single run instead of keeping only the last one, so
   mixed Python-runtime graphs reconcile every observed producer back into the
   shared runtime registry.
+- Edit-session runtime trace metrics now also preserve every observed
+  Python-sidecar runtime id from a run, so producer-aware workflow traces no
+  longer collapse mixed Python-runtime executions down to only the final
+  producer.
 
 ### Active implementation stream
 
