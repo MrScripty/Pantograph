@@ -216,18 +216,29 @@ impl RuntimeRegistry {
             .lock()
             .expect("runtime registry state lock poisoned");
         if let Some(owner_id) = request.reservation_owner_id.as_deref() {
-            if let Some(existing_reservation) = guard
+            if let Some(existing_reservation_id) = guard
                 .reservations
                 .values()
                 .find(|reservation| reservation.reservation_owner_id.as_deref() == Some(owner_id))
+                .map(|reservation| reservation.reservation_id)
             {
-                if existing_reservation.runtime_id == runtime_id {
-                    return Ok(existing_reservation.clone().into_lease());
+                let existing_runtime_id = guard
+                    .reservations
+                    .get(&existing_reservation_id)
+                    .expect("existing reservation should still exist")
+                    .runtime_id
+                    .clone();
+                if existing_runtime_id == runtime_id {
+                    return update_existing_reservation_from_request(
+                        &mut guard,
+                        existing_reservation_id,
+                        request,
+                    );
                 }
 
                 return Err(RuntimeRegistryError::ReservationOwnerConflict {
                     owner_id: owner_id.to_string(),
-                    existing_runtime_id: existing_reservation.runtime_id.clone(),
+                    existing_runtime_id,
                     requested_runtime_id: runtime_id,
                 });
             }
@@ -245,7 +256,7 @@ impl RuntimeRegistry {
         }
 
         let claim = RuntimeReservationClaim::from_requirements(request.requirements.as_ref());
-        if let Some(failure) = admission_failure(record, claim, &guard.reservations) {
+        if let Some(failure) = admission_failure(record, claim, &guard.reservations, None) {
             return Err(RuntimeRegistryError::AdmissionRejected {
                 runtime_id,
                 failure,
@@ -799,14 +810,17 @@ fn admission_failure(
     record: &RuntimeRegistryRecord,
     claim: RuntimeReservationClaim,
     reservations: &BTreeMap<u64, RuntimeReservationRecord>,
+    excluded_reservation_id: Option<u64>,
 ) -> Option<RuntimeAdmissionFailure> {
     let budget = record.admission_budget.as_ref()?;
 
     if let Some(requested_ram_mb) = claim.ram_mb {
-        let reserved_ram_mb =
-            total_reserved_resource_mb(&record.runtime_id, reservations, |reservation| {
-                reservation.claim.ram_mb
-            });
+        let reserved_ram_mb = total_reserved_resource_mb(
+            &record.runtime_id,
+            reservations,
+            excluded_reservation_id,
+            |reservation| reservation.claim.ram_mb,
+        );
         let available_ram_mb = available_budget_mb(
             budget.total_ram_mb,
             budget.safety_margin_ram_mb,
@@ -824,10 +838,12 @@ fn admission_failure(
     }
 
     if let Some(requested_vram_mb) = claim.vram_mb {
-        let reserved_vram_mb =
-            total_reserved_resource_mb(&record.runtime_id, reservations, |reservation| {
-                reservation.claim.vram_mb
-            });
+        let reserved_vram_mb = total_reserved_resource_mb(
+            &record.runtime_id,
+            reservations,
+            excluded_reservation_id,
+            |reservation| reservation.claim.vram_mb,
+        );
         let available_vram_mb = available_budget_mb(
             budget.total_vram_mb,
             budget.safety_margin_vram_mb,
@@ -850,6 +866,7 @@ fn admission_failure(
 fn total_reserved_resource_mb<F>(
     runtime_id: &str,
     reservations: &BTreeMap<u64, RuntimeReservationRecord>,
+    excluded_reservation_id: Option<u64>,
     claim_mb: F,
 ) -> u64
 where
@@ -858,6 +875,7 @@ where
     reservations
         .values()
         .filter(|reservation| reservation.runtime_id == runtime_id)
+        .filter(|reservation| Some(reservation.reservation_id) != excluded_reservation_id)
         .filter_map(claim_mb)
         .sum()
 }
@@ -867,6 +885,48 @@ fn available_budget_mb(total_mb: Option<u64>, safety_margin_mb: u64, reserved_mb
         .unwrap_or(u64::MAX)
         .saturating_sub(safety_margin_mb)
         .saturating_sub(reserved_mb)
+}
+
+fn update_existing_reservation_from_request(
+    state: &mut RuntimeRegistryState,
+    reservation_id: u64,
+    request: RuntimeReservationRequest,
+) -> Result<RuntimeReservationLease, RuntimeRegistryError> {
+    let runtime_id = canonical_runtime_id(&request.runtime_id);
+    let claim = RuntimeReservationClaim::from_requirements(request.requirements.as_ref());
+    let record = state
+        .runtimes
+        .get(&runtime_id)
+        .ok_or_else(|| RuntimeRegistryError::RuntimeNotFound(runtime_id.clone()))?;
+
+    if matches!(
+        record.status,
+        RuntimeRegistryStatus::Stopping | RuntimeRegistryStatus::Failed
+    ) {
+        return Err(RuntimeRegistryError::ReservationRejected(runtime_id));
+    }
+
+    if let Some(failure) =
+        admission_failure(record, claim, &state.reservations, Some(reservation_id))
+    {
+        return Err(RuntimeRegistryError::AdmissionRejected {
+            runtime_id,
+            failure,
+        });
+    }
+
+    let reservation = state
+        .reservations
+        .get_mut(&reservation_id)
+        .expect("existing reservation should still exist");
+    reservation.workflow_id = request.workflow_id;
+    reservation.usage_profile = request.usage_profile;
+    reservation.model_id = request.model_id;
+    reservation.pin_runtime = request.pin_runtime;
+    reservation.retention_hint = request.retention_hint;
+    reservation.claim = claim;
+
+    Ok(reservation.clone().into_lease())
 }
 
 fn apply_runtime_observation(
@@ -1789,7 +1849,18 @@ mod tests {
             reused.reservation_owner_id.as_deref(),
             Some("session-owner")
         );
-        assert_eq!(registry.snapshot().reservations.len(), 1);
+        assert_eq!(reused.retention_hint, RuntimeRetentionHint::Ephemeral);
+        assert_eq!(reused.usage_profile, None);
+        assert_eq!(reused.model_id, None);
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(
+            snapshot.reservations[0].retention_hint,
+            RuntimeRetentionHint::Ephemeral
+        );
+        assert_eq!(snapshot.reservations[0].usage_profile, None);
+        assert_eq!(snapshot.reservations[0].model_id, None);
 
         let err = registry
             .acquire_reservation(RuntimeReservationRequest {
@@ -1812,6 +1883,90 @@ mod tests {
                 requested_runtime_id: "owner-runtime-b".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn owner_reservation_reuse_recomputes_admission_against_other_claims_only() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(
+            RuntimeRegistration::new("budget-runtime", "budget-runtime")
+                .with_admission_budget(RuntimeAdmissionBudget::new(Some(1024), Some(1024))),
+        );
+        registry
+            .transition_runtime(
+                "budget-runtime",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("budget-runtime-1".to_string()),
+                },
+            )
+            .expect("ready transition");
+
+        let first = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "budget-runtime".to_string(),
+                workflow_id: "wf-first".to_string(),
+                reservation_owner_id: Some("session-first".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_ram_mb: Some(700),
+                    estimated_peak_vram_mb: None,
+                    estimated_min_ram_mb: None,
+                    estimated_min_vram_mb: None,
+                }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("first reservation");
+
+        registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "budget-runtime".to_string(),
+                workflow_id: "wf-second".to_string(),
+                reservation_owner_id: Some("session-second".to_string()),
+                usage_profile: None,
+                model_id: Some("model-b".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_ram_mb: Some(200),
+                    estimated_peak_vram_mb: None,
+                    estimated_min_ram_mb: None,
+                    estimated_min_vram_mb: None,
+                }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect("second reservation");
+
+        let reused = registry
+            .acquire_reservation(RuntimeReservationRequest {
+                runtime_id: "budget-runtime".to_string(),
+                workflow_id: "wf-first".to_string(),
+                reservation_owner_id: Some("session-first".to_string()),
+                usage_profile: None,
+                model_id: Some("model-a-v2".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_ram_mb: Some(824),
+                    estimated_peak_vram_mb: None,
+                    estimated_min_ram_mb: None,
+                    estimated_min_vram_mb: None,
+                }),
+                retention_hint: RuntimeRetentionHint::KeepAlive,
+            })
+            .expect("owner reuse should exclude existing claim when rechecking admission");
+
+        assert_eq!(reused.reservation_id, first.reservation_id);
+        assert_eq!(reused.model_id.as_deref(), Some("model-a-v2"));
+        assert_eq!(reused.retention_hint, RuntimeRetentionHint::KeepAlive);
+
+        let snapshot = registry.snapshot();
+        let updated = snapshot
+            .reservations
+            .iter()
+            .find(|reservation| reservation.reservation_id == first.reservation_id)
+            .expect("updated reservation");
+        assert_eq!(updated.model_id.as_deref(), Some("model-a-v2"));
+        assert_eq!(updated.retention_hint, RuntimeRetentionHint::KeepAlive);
     }
 
     #[test]
