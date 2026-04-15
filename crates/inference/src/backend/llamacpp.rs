@@ -261,10 +261,11 @@ impl InferenceBackend for LlamaCppBackend {
                 BackendError::Config("model_path required for embedding mode".to_string())
             })?;
 
-            if self
-                .server
-                .matches_embedding_runtime(&model_path.to_string_lossy(), &device_config)
-            {
+            if self.server.matches_embedding_runtime(
+                &model_path.to_string_lossy(),
+                &device_config,
+                config.port_override,
+            ) {
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
                     lifecycle_decision_reason: Some("runtime_reused".to_string()),
@@ -272,7 +273,12 @@ impl InferenceBackend for LlamaCppBackend {
             }
 
             self.server
-                .start_sidecar_embedding(spawner, &model_path.to_string_lossy(), &device_config)
+                .start_sidecar_embedding(
+                    spawner,
+                    &model_path.to_string_lossy(),
+                    &device_config,
+                    config.port_override,
+                )
                 .await
                 .map_err(|e| {
                     if e.to_lowercase().contains("out of memory")
@@ -292,10 +298,11 @@ impl InferenceBackend for LlamaCppBackend {
                 BackendError::Config("model_path required for reranking mode".to_string())
             })?;
 
-            if self
-                .server
-                .matches_reranking_runtime(&model_path.to_string_lossy(), &device_config)
-            {
+            if self.server.matches_reranking_runtime(
+                &model_path.to_string_lossy(),
+                &device_config,
+                config.port_override,
+            ) {
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
                     lifecycle_decision_reason: Some("runtime_reused".to_string()),
@@ -303,7 +310,12 @@ impl InferenceBackend for LlamaCppBackend {
             }
 
             self.server
-                .start_sidecar_reranking(spawner, &model_path.to_string_lossy(), &device_config)
+                .start_sidecar_reranking(
+                    spawner,
+                    &model_path.to_string_lossy(),
+                    &device_config,
+                    config.port_override,
+                )
                 .await
                 .map_err(|e| {
                     if e.to_lowercase().contains("out of memory")
@@ -335,6 +347,7 @@ impl InferenceBackend for LlamaCppBackend {
                 &model_path.to_string_lossy(),
                 mmproj_path.as_deref(),
                 &device_config,
+                config.port_override,
             ) {
                 return Ok(BackendStartOutcome {
                     runtime_reused: Some(true),
@@ -348,6 +361,7 @@ impl InferenceBackend for LlamaCppBackend {
                     &model_path.to_string_lossy(),
                     mmproj_path.as_deref(),
                     &device_config,
+                    config.port_override,
                 )
                 .await
                 .map_err(|e| {
@@ -654,6 +668,42 @@ mod tests {
             )
             .await
             .expect_err("mismatched runtime should not be reused");
+
+        assert!(
+            matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),
+            "unexpected error: {error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_does_not_reuse_inference_runtime_when_port_differs() {
+        let mut backend = LlamaCppBackend::new();
+        backend.server.set_test_runtime_state(
+            ServerMode::SidecarInference {
+                port: 11434,
+                model_path: "/models/main.gguf".to_string(),
+                mmproj_path: None,
+                device: DeviceConfig {
+                    device: "Vulkan0".to_string(),
+                    gpu_layers: 40,
+                },
+            },
+            true,
+        );
+
+        let error = backend
+            .start(
+                &BackendConfig {
+                    model_path: Some(PathBuf::from("/models/main.gguf")),
+                    device: Some("Vulkan0".to_string()),
+                    gpu_layers: Some(40),
+                    port_override: Some(18080),
+                    ..BackendConfig::default()
+                },
+                Arc::new(NoopProcessSpawner),
+            )
+            .await
+            .expect_err("mismatched port should not be reused");
 
         assert!(
             matches!(error, BackendError::StartupFailed(ref message) if message.contains("spawn_sidecar")),

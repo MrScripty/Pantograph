@@ -278,6 +278,7 @@ impl RecoveryManager {
             .restart_runtime_config()
             .await
             .ok_or_else(|| "No active runtime configuration available for restart".to_string())?;
+        let restart_config = apply_recovery_port_override(restart_config, port_override);
         let app_config = app
             .try_state::<SharedAppConfig>()
             .map(|config| config.clone())
@@ -287,13 +288,6 @@ impl RecoveryManager {
 
         // Stop existing
         stop_gateway_for_recovery(app, gateway).await;
-
-        if let Some(port_override) = port_override {
-            log::warn!(
-                "Recovery requested alternate port {}, but backend restart config does not yet support port overrides; retrying with saved runtime config",
-                port_override
-            );
-        }
 
         gateway
             .start(&restart_config)
@@ -332,6 +326,17 @@ async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) {
     };
 
     stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref()).await;
+}
+
+fn apply_recovery_port_override(
+    mut restart_config: inference::BackendConfig,
+    port_override: Option<u16>,
+) -> inference::BackendConfig {
+    if let Some(port_override) = port_override {
+        restart_config.port_override = Some(port_override);
+    }
+
+    restart_config
 }
 
 fn dedicated_embedding_restart_needed(
@@ -422,7 +427,9 @@ impl Default for RecoveryManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{dedicated_embedding_restart_needed, port_from_base_url};
+    use super::{
+        apply_recovery_port_override, dedicated_embedding_restart_needed, port_from_base_url,
+    };
     use crate::config::{AppConfig, EmbeddingMemoryMode, ModelConfig};
     use crate::constants::ports;
 
@@ -470,6 +477,18 @@ mod tests {
         assert_eq!(port_from_base_url("http://127.0.0.1:8080"), 8080);
         assert_eq!(port_from_base_url("https://example.test"), 443);
         assert_eq!(port_from_base_url("not-a-url"), ports::SERVER);
+    }
+
+    #[test]
+    fn apply_recovery_port_override_sets_backend_owned_port_contract() {
+        let config = inference::BackendConfig {
+            model_name: Some("llava:13b".to_string()),
+            ..inference::BackendConfig::default()
+        };
+
+        let overridden = apply_recovery_port_override(config, Some(18080));
+        assert_eq!(overridden.port_override, Some(18080));
+        assert_eq!(overridden.model_name.as_deref(), Some("llava:13b"));
     }
 }
 

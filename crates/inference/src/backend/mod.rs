@@ -132,6 +132,12 @@ pub struct BackendInfo {
 pub struct BackendConfig {
     /// External OpenAI-compatible base URL (for remote or already-running hosts)
     pub external_url: Option<String>,
+    /// Optional host-selected port for managed HTTP sidecars.
+    ///
+    /// This remains backend-owned transport config rather than host-local
+    /// recovery policy so restart flows can preserve the requested port
+    /// through the normal backend start contract.
+    pub port_override: Option<u16>,
     /// Model file path (for llama.cpp GGUF files)
     pub model_path: Option<std::path::PathBuf>,
     /// Vision projection file path (for llama.cpp mmproj)

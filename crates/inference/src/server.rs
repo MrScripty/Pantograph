@@ -193,11 +193,12 @@ impl LlamaServer {
         model_path: &str,
         mmproj_path: Option<&str>,
         device: &DeviceConfig,
+        port_override: Option<u16>,
     ) -> Result<(), String> {
         // Stop any existing connection
         self.stop();
 
-        let port = ports::SERVER;
+        let port = port_override.unwrap_or(ports::SERVER);
 
         // Build arguments with device configuration
         let gpu_layers_str = device.gpu_layers.to_string();
@@ -268,11 +269,12 @@ impl LlamaServer {
         spawner: Arc<dyn ProcessSpawner>,
         model_path: &str,
         device: &DeviceConfig,
+        port_override: Option<u16>,
     ) -> Result<(), String> {
         // Stop any existing connection
         self.stop();
 
-        let port = ports::SERVER;
+        let port = port_override.unwrap_or(ports::SERVER);
 
         // Build arguments with device configuration
         let gpu_layers_str = device.gpu_layers.to_string();
@@ -333,10 +335,11 @@ impl LlamaServer {
         spawner: Arc<dyn ProcessSpawner>,
         model_path: &str,
         device: &DeviceConfig,
+        port_override: Option<u16>,
     ) -> Result<(), String> {
         self.stop();
 
-        let port = ports::SERVER;
+        let port = port_override.unwrap_or(ports::SERVER);
         let gpu_layers_str = device.gpu_layers.to_string();
         let port_str = port.to_string();
 
@@ -572,11 +575,14 @@ impl LlamaServer {
         model_path: &str,
         mmproj_path: Option<&str>,
         device: &DeviceConfig,
+        port_override: Option<u16>,
     ) -> bool {
+        let expected_port = port_override.unwrap_or(ports::SERVER);
         self.ready
             && matches!(
                 &self.mode,
                 ServerMode::SidecarInference {
+                    port: active_port,
                     model_path: active_model_path,
                     mmproj_path: active_mmproj_path,
                     device: active_device,
@@ -584,30 +590,49 @@ impl LlamaServer {
                 } if active_model_path == model_path
                     && active_mmproj_path.as_deref() == mmproj_path
                     && active_device == device
+                    && *active_port == expected_port
             )
     }
 
-    pub fn matches_embedding_runtime(&self, model_path: &str, device: &DeviceConfig) -> bool {
+    pub fn matches_embedding_runtime(
+        &self,
+        model_path: &str,
+        device: &DeviceConfig,
+        port_override: Option<u16>,
+    ) -> bool {
+        let expected_port = port_override.unwrap_or(ports::SERVER);
         self.ready
             && matches!(
                 &self.mode,
                 ServerMode::SidecarEmbedding {
+                    port: active_port,
                     model_path: active_model_path,
                     device: active_device,
                     ..
-                } if active_model_path == model_path && active_device == device
+                } if active_model_path == model_path
+                    && active_device == device
+                    && *active_port == expected_port
             )
     }
 
-    pub fn matches_reranking_runtime(&self, model_path: &str, device: &DeviceConfig) -> bool {
+    pub fn matches_reranking_runtime(
+        &self,
+        model_path: &str,
+        device: &DeviceConfig,
+        port_override: Option<u16>,
+    ) -> bool {
+        let expected_port = port_override.unwrap_or(ports::SERVER);
         self.ready
             && matches!(
                 &self.mode,
                 ServerMode::SidecarReranking {
+                    port: active_port,
                     model_path: active_model_path,
                     device: active_device,
                     ..
-                } if active_model_path == model_path && active_device == device
+                } if active_model_path == model_path
+                    && active_device == device
+                    && *active_port == expected_port
             )
     }
 
@@ -693,3 +718,59 @@ impl Drop for LlamaServer {
 }
 
 pub type SharedLlamaServer = Arc<RwLock<LlamaServer>>;
+
+#[cfg(test)]
+mod tests {
+    use super::{LlamaServer, ServerMode};
+    use crate::config::DeviceConfig;
+
+    #[test]
+    fn base_url_reflects_sidecar_port_override() {
+        let mut server = LlamaServer::new();
+        server.set_test_runtime_state(
+            ServerMode::SidecarInference {
+                port: 18080,
+                model_path: "/models/main.gguf".to_string(),
+                mmproj_path: None,
+                device: DeviceConfig {
+                    device: "auto".to_string(),
+                    gpu_layers: -1,
+                },
+            },
+            true,
+        );
+
+        assert_eq!(server.base_url().as_deref(), Some("http://127.0.0.1:18080"));
+    }
+
+    #[test]
+    fn inference_runtime_matcher_requires_matching_port() {
+        let mut server = LlamaServer::new();
+        let device = DeviceConfig {
+            device: "Vulkan0".to_string(),
+            gpu_layers: 40,
+        };
+        server.set_test_runtime_state(
+            ServerMode::SidecarInference {
+                port: 11434,
+                model_path: "/models/main.gguf".to_string(),
+                mmproj_path: Some("/models/vision.mmproj".to_string()),
+                device: device.clone(),
+            },
+            true,
+        );
+
+        assert!(server.matches_inference_runtime(
+            "/models/main.gguf",
+            Some("/models/vision.mmproj"),
+            &device,
+            Some(11434),
+        ));
+        assert!(!server.matches_inference_runtime(
+            "/models/main.gguf",
+            Some("/models/vision.mmproj"),
+            &device,
+            Some(18080),
+        ));
+    }
+}
