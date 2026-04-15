@@ -3,9 +3,9 @@
 use async_trait::async_trait;
 
 pub use pantograph_embedded_runtime::runtime_registry::{
-    reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_mode_info,
-    reconcile_runtime_registry_snapshot_override,
-    HostRuntimeProducer, HostRuntimeRegistryController,
+    reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
+    runtime_registry_snapshot, sync_runtime_registry, HostRuntimeProducer,
+    HostRuntimeRegistryController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
@@ -30,8 +30,7 @@ pub async fn sync_runtime_registry_from_gateway(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
 ) {
-    let mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
-    reconcile_runtime_registry_mode_info(registry, &mode_info);
+    sync_runtime_registry(gateway, registry).await;
 }
 
 pub async fn stop_all_and_sync_runtime_registry(
@@ -457,7 +456,7 @@ mod tests {
             reclaim,
             RuntimeReclaimDisposition::no_action(
                 "onnx-runtime",
-                RuntimeRetentionReason::Evictable,
+                RuntimeRetentionReason::Status(pantograph_runtime_registry::RuntimeRegistryStatus::Stopped),
                 pantograph_runtime_registry::RuntimeRegistryStatus::Stopped,
             )
         );

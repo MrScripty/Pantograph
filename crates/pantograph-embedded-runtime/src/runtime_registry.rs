@@ -12,7 +12,7 @@ use pantograph_runtime_identity::{
 };
 use pantograph_runtime_registry::{
     observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistry,
-    RuntimeRegistryRuntimeSnapshot,
+    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -198,6 +198,14 @@ pub fn reconcile_runtime_registry_mode_info(
     registry.observe_runtimes(observations_from_mode_info(mode_info))
 }
 
+pub async fn sync_runtime_registry<C: HostRuntimeRegistryController>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    let mode_info = controller.mode_info_snapshot().await;
+    reconcile_runtime_registry_mode_info(registry, &mode_info)
+}
+
 pub fn reconcile_active_runtime_mode_info(
     registry: &RuntimeRegistry,
     mode_info: &HostRuntimeModeSnapshot,
@@ -238,6 +246,14 @@ pub fn reconcile_runtime_registry_snapshot_override(
     }))
 }
 
+pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+) -> RuntimeRegistrySnapshot {
+    sync_runtime_registry(controller, registry).await;
+    registry.snapshot()
+}
+
 pub async fn reclaim_runtime_and_reconcile_runtime_registry<C: HostRuntimeRegistryController>(
     controller: &C,
     registry: &RuntimeRegistry,
@@ -247,6 +263,7 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<C: HostRuntimeRegist
     pantograph_runtime_registry::RuntimeRegistryError,
 > {
     let mode_info = controller.mode_info_snapshot().await;
+    reconcile_runtime_registry_mode_info(registry, &mode_info);
     let live_producer = live_host_runtime_producer(&mode_info, runtime_id);
     let reclaim = registry.reclaim_runtime(runtime_id, live_producer.is_some())?;
 
@@ -411,6 +428,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reclaim_runtime_and_reconcile_runtime_registry_syncs_before_reclaim() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("PyTorch".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                active_model_target: Some("/models/main".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("PyTorch".to_string()),
+                    runtime_instance_id: Some("pytorch-2".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+
+        let reclaim =
+            reclaim_runtime_and_reconcile_runtime_registry(&controller, &registry, "pytorch")
+                .await
+                .expect("reclaim should succeed");
+
+        assert_eq!(
+            reclaim,
+            RuntimeReclaimDisposition::stop_producer("pytorch", RuntimeRegistryStatus::Stopping)
+        );
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("active runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
+    }
+
+    #[tokio::test]
     async fn reclaim_runtime_and_reconcile_runtime_registry_stops_embedding_runtime_producer() {
         let controller = MockHostRuntimeController {
             mode_info: Mutex::new(HostRuntimeModeSnapshot {
@@ -512,7 +572,7 @@ mod tests {
             reclaim,
             RuntimeReclaimDisposition::no_action(
                 "onnx-runtime",
-                RuntimeRetentionReason::Evictable,
+                RuntimeRetentionReason::Status(RuntimeRegistryStatus::Stopped),
                 RuntimeRegistryStatus::Stopped,
             )
         );
@@ -701,5 +761,52 @@ mod tests {
             .find(|runtime| runtime.runtime_id == "pytorch")
             .expect("python runtime should be present in registry");
         assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
+    }
+
+    #[tokio::test]
+    async fn runtime_registry_snapshot_syncs_controller_mode_info() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-7".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp.embedding".to_string()),
+                    runtime_instance_id: Some("llama-embed-7".to_string()),
+                    warmup_started_at_ms: Some(11),
+                    warmup_completed_at_ms: Some(16),
+                    warmup_duration_ms: Some(5),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+
+        let snapshot = runtime_registry_snapshot(&controller, &registry).await;
+
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .any(|runtime| runtime.runtime_id == "llama_cpp"));
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .any(|runtime| runtime.runtime_id == "llama.cpp.embedding"));
     }
 }

@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{command, State};
 
 use crate::llm::runtime_registry::{
-    reclaim_runtime_and_sync_runtime_registry, sync_runtime_registry_from_gateway,
+    reclaim_runtime_and_sync_runtime_registry,
+    runtime_registry_snapshot as synced_runtime_registry_snapshot,
 };
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
@@ -15,12 +16,11 @@ pub struct RuntimeRegistryReclaimResponse {
     pub snapshot: pantograph_runtime_registry::RuntimeRegistrySnapshot,
 }
 
-async fn runtime_registry_snapshot(
+async fn runtime_registry_snapshot_response(
     gateway: &SharedGateway,
     runtime_registry: &SharedRuntimeRegistry,
 ) -> pantograph_runtime_registry::RuntimeRegistrySnapshot {
-    sync_runtime_registry_from_gateway(gateway, runtime_registry).await;
-    runtime_registry.snapshot()
+    synced_runtime_registry_snapshot(gateway.as_ref(), runtime_registry).await
 }
 
 async fn reclaim_runtime(
@@ -28,7 +28,6 @@ async fn reclaim_runtime(
     runtime_registry: &SharedRuntimeRegistry,
     runtime_id: &str,
 ) -> Result<RuntimeRegistryReclaimResponse, String> {
-    sync_runtime_registry_from_gateway(gateway, runtime_registry).await;
     let reclaim = reclaim_runtime_and_sync_runtime_registry(gateway, runtime_registry, runtime_id)
         .await
         .map_err(|error| error.to_string())?;
@@ -43,7 +42,7 @@ pub async fn get_runtime_registry_snapshot(
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
 ) -> Result<pantograph_runtime_registry::RuntimeRegistrySnapshot, String> {
-    Ok(runtime_registry_snapshot(gateway.inner(), runtime_registry.inner()).await)
+    Ok(runtime_registry_snapshot_response(gateway.inner(), runtime_registry.inner()).await)
 }
 
 #[command]
@@ -65,7 +64,7 @@ mod tests {
     use inference::{EmbeddingMemoryMode, LlamaCppEmbeddingRuntime};
     use tokio::sync::mpsc;
 
-    use super::{reclaim_runtime, runtime_registry_snapshot};
+    use super::{reclaim_runtime, runtime_registry_snapshot_response};
     use crate::llm::{InferenceGateway, RuntimeRegistry, SharedGateway, SharedRuntimeRegistry};
 
     struct MockProcessHandle;
@@ -122,7 +121,7 @@ mod tests {
         gateway.set_test_embedding_server(server).await;
 
         let runtime_registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
-        let snapshot = runtime_registry_snapshot(&gateway, &runtime_registry).await;
+        let snapshot = runtime_registry_snapshot_response(&gateway, &runtime_registry).await;
 
         let runtime = snapshot
             .runtimes
