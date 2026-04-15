@@ -36,6 +36,16 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn runtime_event_model_targets(
+    diagnostics_projection: &pantograph_embedded_runtime::workflow_runtime::RuntimeDiagnosticsProjection,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+) -> (Option<String>, Option<String>) {
+    (
+        diagnostics_projection.runtime_model_target.clone(),
+        gateway_mode_info.embedding_model_target.clone(),
+    )
+}
+
 fn send_diagnostics_projection(
     channel: &Channel<WorkflowEvent>,
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
@@ -107,6 +117,8 @@ async fn emit_diagnostics_snapshots(
         &gateway_mode_info,
         runtime_model_target_override.as_deref(),
     );
+    let (active_model_target, embedding_model_target) =
+        runtime_event_model_targets(&diagnostics_projection, &gateway_mode_info);
     if let Some(snapshot) = runtime_snapshot_override.as_ref() {
         reconcile_runtime_registry_snapshot_override(
             runtime_registry.as_ref(),
@@ -134,8 +146,8 @@ async fn emit_diagnostics_snapshots(
                 captured_at_ms,
                 None,
                 diagnostics_projection.trace_runtime_metrics.clone(),
-                gateway_mode_info.active_model_target.clone(),
-                gateway_mode_info.embedding_model_target.clone(),
+                active_model_target.clone(),
+                embedding_model_target.clone(),
                 Some(diagnostics_projection.active_runtime_snapshot.clone()),
                 embedding_runtime_snapshot,
                 Some(error.clone()),
@@ -172,8 +184,8 @@ async fn emit_diagnostics_snapshots(
         captured_at_ms,
         capabilities,
         diagnostics_projection.trace_runtime_metrics,
-        gateway_mode_info.active_model_target.clone(),
-        gateway_mode_info.embedding_model_target.clone(),
+        active_model_target,
+        embedding_model_target,
         Some(diagnostics_projection.active_runtime_snapshot),
         embedding_runtime_snapshot,
         runtime_error,
@@ -601,4 +613,106 @@ pub async fn remove_execution(
         .await
         .map(|_| ())
         .map_err(|e| e.to_envelope_json())
+}
+
+#[cfg(test)]
+mod tests {
+    use pantograph_embedded_runtime::workflow_runtime::RuntimeDiagnosticsProjection;
+
+    use super::*;
+
+    #[test]
+    fn runtime_event_model_targets_prefer_backend_runtime_override() {
+        let diagnostics_projection = RuntimeDiagnosticsProjection {
+            active_runtime_snapshot: inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("pytorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: false,
+                last_error: None,
+            },
+            trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("pytorch".to_string()),
+                observed_runtime_ids: vec!["pytorch".to_string()],
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                model_target: Some("/models/sidecar.safetensors".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            runtime_model_target: Some("/models/sidecar.safetensors".to_string()),
+        };
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: None,
+            embedding_runtime: None,
+        };
+
+        let (active_model_target, embedding_model_target) =
+            runtime_event_model_targets(&diagnostics_projection, &gateway_mode_info);
+
+        assert_eq!(
+            active_model_target.as_deref(),
+            Some("/models/sidecar.safetensors")
+        );
+        assert_eq!(
+            embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+    }
+
+    #[test]
+    fn runtime_event_model_targets_preserve_gateway_embedding_target_without_override() {
+        let diagnostics_projection = RuntimeDiagnosticsProjection {
+            active_runtime_snapshot: inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            },
+            trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                model_target: Some("/models/main.gguf".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            runtime_model_target: Some("/models/main.gguf".to_string()),
+        };
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: None,
+            embedding_runtime: None,
+        };
+
+        let (active_model_target, embedding_model_target) =
+            runtime_event_model_targets(&diagnostics_projection, &gateway_mode_info);
+
+        assert_eq!(active_model_target.as_deref(), Some("/models/main.gguf"));
+        assert_eq!(
+            embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+    }
 }
