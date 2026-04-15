@@ -10,14 +10,12 @@ pub use pantograph_runtime_registry::{
     SharedRuntimeRegistry,
 };
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HostRuntimeProducer {
     Active,
     Embedding,
 }
 
-#[allow(dead_code)]
 fn active_runtime_id(mode_info: &inference::ServerModeInfo) -> Option<String> {
     mode_info
         .active_runtime
@@ -28,7 +26,6 @@ fn active_runtime_id(mode_info: &inference::ServerModeInfo) -> Option<String> {
         .map(canonical_runtime_id)
 }
 
-#[allow(dead_code)]
 fn embedding_runtime_id(mode_info: &inference::ServerModeInfo) -> Option<String> {
     mode_info.embedding_runtime.as_ref().map(|snapshot| {
         snapshot
@@ -39,7 +36,6 @@ fn embedding_runtime_id(mode_info: &inference::ServerModeInfo) -> Option<String>
     })
 }
 
-#[allow(dead_code)]
 fn live_host_runtime_producer(
     mode_info: &inference::ServerModeInfo,
     runtime_id: &str,
@@ -96,7 +92,6 @@ pub async fn restore_runtime_and_sync_runtime_registry(
     result
 }
 
-#[allow(dead_code)]
 pub async fn reclaim_runtime_and_sync_runtime_registry(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
