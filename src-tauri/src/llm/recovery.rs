@@ -19,21 +19,9 @@ use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::startup::validate_external_server_url;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
-use pantograph_embedded_runtime::runtime_recovery::build_recovery_restart_plan;
-
-/// Recovery strategy to use
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RecoveryStrategy {
-    /// Simply restart the server
-    Restart,
-    /// Try an alternate port if the original is in use
-    AlternatePort,
-    /// Clean restart (kill any existing, then start fresh)
-    CleanRestart,
-    /// Give up after max attempts
-    Abandon,
-}
+use pantograph_embedded_runtime::runtime_recovery::{
+    build_recovery_restart_plan, recovery_backoff, recovery_strategy_for_attempt, RecoveryStrategy,
+};
 
 /// Recovery configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,18 +102,6 @@ impl RecoveryManager {
         self.attempt_count.store(0, Ordering::SeqCst);
     }
 
-    /// Calculate backoff delay for current attempt
-    fn calculate_backoff(&self, attempt: u32) -> Duration {
-        let base = self.config.backoff_base_ms;
-        let max = self.config.backoff_max_ms;
-
-        // Exponential backoff: base * 2^attempt
-        let delay_ms = base.saturating_mul(1u64 << attempt.min(10));
-        let capped_ms = delay_ms.min(max);
-
-        Duration::from_millis(capped_ms)
-    }
-
     /// Attempt to recover the server
     ///
     /// Returns the port the server is now running on if successful.
@@ -166,20 +142,13 @@ impl RecoveryManager {
             let attempt = self.attempt_count.fetch_add(1, Ordering::SeqCst);
 
             // Calculate and apply backoff
-            let backoff = self.calculate_backoff(attempt);
+            let backoff =
+                recovery_backoff(self.config.backoff_base_ms, self.config.backoff_max_ms, attempt);
             log::info!("Recovery attempt {} (waiting {:?})", attempt + 1, backoff);
             tokio::time::sleep(backoff).await;
 
             // Determine strategy based on attempt and config
-            strategy = if attempt == 0 {
-                RecoveryStrategy::Restart
-            } else if attempt == 1 && self.config.try_alternate_port {
-                RecoveryStrategy::AlternatePort
-            } else if attempt >= 2 {
-                RecoveryStrategy::CleanRestart
-            } else {
-                RecoveryStrategy::Restart
-            };
+            strategy = recovery_strategy_for_attempt(attempt, self.config.try_alternate_port);
 
             match self.try_recovery_strategy(app, gateway, &strategy).await {
                 Ok(port) => {
