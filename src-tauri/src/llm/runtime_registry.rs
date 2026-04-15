@@ -14,6 +14,14 @@ pub async fn sync_runtime_registry_from_gateway(
     reconcile_runtime_registry_mode_info(registry, &mode_info);
 }
 
+pub async fn stop_all_and_sync_runtime_registry(
+    gateway: &crate::llm::gateway::InferenceGateway,
+    registry: &RuntimeRegistry,
+) {
+    gateway.stop_all().await;
+    sync_runtime_registry_from_gateway(gateway, registry).await;
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -87,5 +95,44 @@ mod tests {
             .runtimes
             .iter()
             .any(|runtime| runtime.runtime_id == "llama.cpp.embedding"));
+    }
+
+    #[tokio::test]
+    async fn stop_all_and_sync_runtime_registry_stops_embedding_runtime_observation() {
+        let gateway = crate::llm::gateway::InferenceGateway::new(Arc::new(MockProcessSpawner));
+        gateway.init().await;
+
+        let mut server = inference::LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+        server.set_test_runtime_lifecycle_snapshot(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-6".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(20),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        });
+        gateway.set_test_embedding_server(server).await;
+
+        let registry = RuntimeRegistry::new();
+        sync_runtime_registry_from_gateway(&gateway, &registry).await;
+
+        stop_all_and_sync_runtime_registry(&gateway, &registry).await;
+
+        let snapshot = registry.snapshot();
+        let embedding_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(
+            embedding_runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        );
+        assert!(embedding_runtime.models.is_empty());
+        assert!(embedding_runtime.runtime_instance_id.is_none());
     }
 }

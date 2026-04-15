@@ -6,13 +6,14 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::constants::ports;
 use crate::llm::health_monitor::ServerEvent;
 use crate::llm::port_manager::{check_port_available, find_available_port};
-use crate::llm::SharedGateway;
+use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
 /// Recovery strategy to use
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -251,7 +252,7 @@ impl RecoveryManager {
             }
             RecoveryStrategy::CleanRestart => {
                 // First stop any existing server
-                gateway.stop_all().await;
+                stop_gateway_for_recovery(app, gateway).await;
                 tokio::time::sleep(Duration::from_millis(500)).await;
 
                 // Then restart
@@ -273,7 +274,7 @@ impl RecoveryManager {
         // In a full implementation, we'd store the last config and restore it
 
         // Stop existing
-        gateway.stop_all().await;
+        stop_gateway_for_recovery(app, gateway).await;
 
         // Start with stored config
         // Note: This requires the gateway to remember its last successful configuration
@@ -295,6 +296,18 @@ impl RecoveryManager {
     pub async fn last_error(&self) -> Option<String> {
         self.last_error.lock().await.clone()
     }
+}
+
+async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) {
+    let Some(runtime_registry) = app
+        .try_state::<SharedRuntimeRegistry>()
+        .map(|runtime_registry| runtime_registry.clone())
+    else {
+        gateway.stop_all().await;
+        return;
+    };
+
+    stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref()).await;
 }
 
 impl Default for RecoveryManager {
