@@ -552,6 +552,10 @@ runtime callers.
   runtime_registry`, so Tauri registry commands no longer decide when host
   mode-info reconciliation must happen before inspecting or reclaiming a
   runtime.
+- 2026-04-15: Runtime-registry stop-all and restore reconciliation semantics
+  now also live in `crates/pantograph-embedded-runtime::runtime_registry`, so
+  Tauri recovery, shutdown, and restore wrappers no longer decide when host
+  mode-info must be resynchronized after those lifecycle transitions.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.

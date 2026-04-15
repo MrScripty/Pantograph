@@ -420,6 +420,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   also lives in `crates/pantograph-embedded-runtime`, leaving the Tauri
   registry command surface to serialize backend-owned reconciliation results
   instead of deciding when host state must be synchronized first.
+- Runtime-registry stop-all and restore reconciliation behavior now also lives
+  in `crates/pantograph-embedded-runtime`, leaving Tauri recovery and shutdown
+  wrappers to invoke backend-owned lifecycle coordination instead of owning the
+  post-transition registry-sync rule locally.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task
