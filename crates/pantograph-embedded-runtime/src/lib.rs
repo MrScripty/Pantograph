@@ -786,13 +786,13 @@ impl EmbeddedRuntime {
                     &runtime_snapshot,
                 )
             });
-        if let Err(error) = self.gateway.restore_inference_runtime(restore_config).await {
+        let restore_result = self.gateway.restore_inference_runtime(restore_config).await;
+        self.reconcile_runtime_registry_from_gateway().await;
+        if let Err(error) = restore_result {
             log::warn!(
                 "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
                 error
             );
-        } else {
-            self.reconcile_runtime_registry_from_gateway().await;
         }
 
         Ok(EditSessionGraphExecutionOutcome {
@@ -1903,6 +1903,13 @@ mod tests {
         ready: bool,
     }
 
+    struct MockRestoreFailureBackend {
+        ready: bool,
+        inference_model_path: PathBuf,
+        embedding_model_path: PathBuf,
+        embedding_started: bool,
+    }
+
     struct MockProcessHandle;
 
     struct MockProcessSpawner;
@@ -1970,6 +1977,91 @@ mod tests {
             _config: &BackendConfig,
             _spawner: Arc<dyn ProcessSpawner>,
         ) -> Result<BackendStartOutcome, BackendError> {
+            self.ready = true;
+            Ok(BackendStartOutcome {
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("started_mock_runtime".to_string()),
+            })
+        }
+
+        fn stop(&mut self) {
+            self.ready = false;
+        }
+
+        fn is_ready(&self) -> bool {
+            self.ready
+        }
+
+        async fn health_check(&self) -> bool {
+            self.ready
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<
+            Pin<Box<dyn futures_util::Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+            BackendError,
+        > {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceBackend for MockRestoreFailureBackend {
+        fn name(&self) -> &'static str {
+            "Mock"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock backend that fails inference restore after embedding mode"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            let model_path = config.model_path.clone().unwrap_or_default();
+            if model_path == self.embedding_model_path {
+                self.embedding_started = true;
+                self.ready = true;
+                return Ok(BackendStartOutcome {
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("started_mock_embedding_runtime".to_string()),
+                });
+            }
+
+            if model_path == self.inference_model_path && self.embedding_started {
+                self.ready = false;
+                return Err(BackendError::StartupFailed(
+                    "mock restore failure after embedding mode".to_string(),
+                ));
+            }
+
             self.ready = true;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
@@ -3577,6 +3669,117 @@ mod tests {
             Some(restored_runtime_instance_id.as_str())
         );
         assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
+    }
+
+    #[tokio::test]
+    async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
+        let temp = TempDir::new().expect("temp dir");
+        let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
+
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp.path())
+                .build()
+                .await
+                .expect("build pumas api"),
+        );
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("rebuild model index");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let inference_model_path = temp.path().join("main.gguf");
+        std::fs::write(&inference_model_path, b"gguf").expect("write inference model");
+        let mmproj_path = temp.path().join("main.mmproj");
+        std::fs::write(&mmproj_path, b"mmproj").expect("write mmproj");
+
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(MockRestoreFailureBackend {
+                ready: false,
+                inference_model_path: inference_model_path.clone(),
+                embedding_model_path: embedding_model_path.clone(),
+                embedding_started: false,
+            }),
+            "llama.cpp",
+        ));
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&inference::BackendConfig {
+                model_path: Some(inference_model_path.clone()),
+                mmproj_path: Some(mmproj_path),
+                ..inference::BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start in inference mode");
+
+        let host_runtime_mode_info =
+            HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
+        extensions
+            .write()
+            .await
+            .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
+
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            gateway.clone(),
+            extensions,
+            Arc::new(WorkflowService::new()),
+            None,
+            Some(runtime_registry.clone()),
+            Some(host_runtime_mode_info),
+        )
+        .await;
+
+        let graph = edit_session_embedding_graph(&model_id);
+        let session = runtime
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+            })
+            .await
+            .expect("create edit session");
+
+        let outcome = runtime
+            .execute_edit_session_graph(
+                &session.session_id,
+                &graph,
+                inference::EmbeddingStartRequest {
+                    gguf_model_path: Some(embedding_model_path),
+                    ..inference::EmbeddingStartRequest::default()
+                },
+                Arc::new(node_engine::NullEventSink),
+            )
+            .await
+            .expect("edit-session execution should still complete when restore fails");
+        assert!(outcome.error.is_some());
+
+        let mode_info = gateway.mode_info().await;
+        let expected_observation = runtime_registry::active_runtime_observation(
+            &HostRuntimeModeSnapshot::from_mode_info(&mode_info),
+            true,
+        )
+        .expect("active runtime observation after failed restore");
+
+        let snapshot = runtime_registry.snapshot();
+        let registry_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == expected_observation.runtime_id)
+            .expect("active runtime should remain observable after failed restore");
+        assert_eq!(registry_runtime.status, expected_observation.status);
+        assert_eq!(
+            registry_runtime.runtime_instance_id,
+            expected_observation.runtime_instance_id
+        );
     }
 
     #[tokio::test]
