@@ -81,6 +81,10 @@ implementation progress in the runtime and diagnostics layers.
   targets for runtime overlays instead of rebuilding them from the current
   gateway mode, so post-run diagnostics remain consistent with the producer
   facts captured during execution.
+- Embedded workflow execution now preserves multiple Python-sidecar producer
+  observations from a single run instead of keeping only the last one, so
+  mixed Python-runtime graphs reconcile every observed producer back into the
+  shared runtime registry.
 
 ### Active implementation stream
 

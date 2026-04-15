@@ -572,6 +572,10 @@ runtime callers.
   diagnostics store, so later diagnostics queries do not overwrite
   Python-sidecar runtime overlays with the gateway's current active-model
   target.
+- 2026-04-14: Embedded-runtime Python execution recording now keeps every
+  producer observation from a run instead of only the final sidecar snapshot,
+  so mixed Python-runtime graphs reconcile each observed producer back into
+  the shared runtime registry before the run returns.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
