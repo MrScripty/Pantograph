@@ -302,6 +302,22 @@ fn stored_runtime_snapshots(
     ))
 }
 
+fn stored_runtime_model_targets(
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
+    workflow_id: Option<&str>,
+) -> Option<(Option<String>, Option<String>)> {
+    let workflow_id = workflow_id?;
+    let snapshot = diagnostics_store.snapshot();
+    if snapshot.runtime.workflow_id.as_deref() != Some(workflow_id) {
+        return None;
+    }
+
+    Some((
+        snapshot.runtime.active_model_target,
+        snapshot.runtime.embedding_model_target,
+    ))
+}
+
 fn workflow_diagnostics_snapshot_projection(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     session_id: Option<String>,
@@ -672,6 +688,8 @@ pub async fn workflow_get_diagnostics_snapshot(
     let mode_info = gateway.mode_info().await;
     let stored_runtime_snapshots =
         stored_runtime_snapshots(diagnostics_store.inner(), workflow_id.as_deref());
+    let stored_runtime_model_targets =
+        stored_runtime_model_targets(diagnostics_store.inner(), workflow_id.as_deref());
     let active_runtime_snapshot = if let Some(snapshot) = stored_runtime_snapshots
         .as_ref()
         .and_then(|(active_runtime, _)| active_runtime.clone())
@@ -688,6 +706,13 @@ pub async fn workflow_get_diagnostics_snapshot(
     } else {
         gateway.embedding_runtime_lifecycle_snapshot().await
     };
+    let active_model_target = stored_runtime_model_targets
+        .as_ref()
+        .and_then(|(active_model_target, _)| active_model_target.clone())
+        .or(mode_info.active_model_target);
+    let embedding_model_target = stored_runtime_model_targets
+        .and_then(|(_, embedding_model_target)| embedding_model_target)
+        .or(mode_info.embedding_model_target);
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store.inner(),
@@ -697,8 +722,8 @@ pub async fn workflow_get_diagnostics_snapshot(
         scheduler_snapshot_result,
         capabilities_result,
         runtime_trace_metrics,
-        mode_info.active_model_target,
-        mode_info.embedding_model_target,
+        active_model_target,
+        embedding_model_target,
         active_runtime_snapshot,
         embedding_runtime_snapshot,
         captured_at_ms,
@@ -726,7 +751,7 @@ mod tests {
 
     use super::{
         record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
-        stored_runtime_snapshots, stored_runtime_trace_metrics,
+        stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
         workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
         workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
     };
@@ -1428,6 +1453,64 @@ mod tests {
                 .as_ref()
                 .and_then(|snapshot| snapshot.lifecycle_decision_reason.as_deref()),
             Some("runtime_ready")
+        );
+    }
+
+    #[test]
+    fn stored_runtime_model_targets_return_recorded_runtime_targets() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("onnx-runtime".to_string()),
+                observed_runtime_ids: vec!["onnx-runtime".to_string()],
+                runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                model_target: Some("/tmp/model.onnx".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            Some("/tmp/model.onnx".to_string()),
+            Some("/models/embed.gguf".to_string()),
+            Some(inference::RuntimeLifecycleSnapshot::from(
+                &DiagnosticsRuntimeLifecycleSnapshot {
+                    runtime_id: Some("onnx-runtime".to_string()),
+                    runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: false,
+                    last_error: None,
+                },
+            )),
+            None,
+            120,
+        );
+
+        let (active_model_target, embedding_model_target) =
+            stored_runtime_model_targets(&diagnostics_store, Some("wf-1"))
+                .expect("stored runtime model targets should exist");
+
+        assert_eq!(active_model_target.as_deref(), Some("/tmp/model.onnx"));
+        assert_eq!(
+            embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
         );
     }
 
