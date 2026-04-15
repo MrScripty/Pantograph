@@ -358,7 +358,7 @@ pub async fn index_docs_with_switch(
             prepared.restore_config,
         )
         .await
-            .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
+        .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
     }
 
     channel

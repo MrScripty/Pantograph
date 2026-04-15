@@ -67,7 +67,9 @@ async fn emit_diagnostics_snapshots(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     channel: &Channel<WorkflowEvent>,
     runtime_snapshot_override: Option<inference::RuntimeLifecycleSnapshot>,
-    trace_runtime_metrics_override: Option<pantograph_workflow_service::WorkflowTraceRuntimeMetrics>,
+    trace_runtime_metrics_override: Option<
+        pantograph_workflow_service::WorkflowTraceRuntimeMetrics,
+    >,
     runtime_model_target_override: Option<String>,
 ) {
     let scheduler_snapshot = match workflow_service

@@ -10,13 +10,13 @@ use tokio::sync::RwLock;
 
 use inference::config::DeviceInfo as InferenceDeviceInfo;
 use inference::process::ProcessSpawner;
+#[cfg(test)]
+use inference::LlamaCppEmbeddingRuntime;
 use inference::{
     BackendConfig, DedicatedEmbeddingRuntimeManager, EmbeddingMemoryMode as InferenceEmbeddingMode,
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError as InferenceGatewayError,
     InferenceStartRequest,
 };
-#[cfg(test)]
-use inference::LlamaCppEmbeddingRuntime;
 
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 

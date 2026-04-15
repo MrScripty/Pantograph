@@ -115,8 +115,8 @@ pub async fn reclaim_runtime_and_sync_runtime_registry(
 
 #[cfg(test)]
 mod tests {
-    use std::pin::Pin;
     use std::path::PathBuf;
+    use std::pin::Pin;
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
@@ -226,10 +226,8 @@ mod tests {
         async fn chat_completion_stream(
             &self,
             _request_json: String,
-        ) -> Result<
-            Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
-            BackendError,
-        > {
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
             Ok(Box::pin(stream::empty()))
         }
 
