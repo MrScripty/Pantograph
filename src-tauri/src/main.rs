@@ -41,6 +41,8 @@ use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 use workflow::{ExecutionManager, SharedModelDependencyResolver};
 
+use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
+
 fn main() {
     // Initialize logging - shows logs in terminal when running in dev mode
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -406,9 +408,18 @@ fn main() {
                 // Stop the inference gateway when the window closes to avoid lingering processes
                 let app = window.app_handle();
                 if let Some(gateway) = app.try_state::<SharedGateway>() {
+                    let runtime_registry = app.try_state::<SharedRuntimeRegistry>().map(|state| state.clone());
                     tauri::async_runtime::block_on(async {
                         // Stop both main server and embedding server
-                        gateway.stop_all().await;
+                        if let Some(runtime_registry) = runtime_registry {
+                            stop_all_and_sync_runtime_registry(
+                                gateway.inner(),
+                                runtime_registry.as_ref(),
+                            )
+                            .await;
+                        } else {
+                            gateway.stop_all().await;
+                        }
                         log::info!("Stopped inference gateway and embedding server on window close");
                     });
                 }
