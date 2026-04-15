@@ -130,21 +130,33 @@ fn main() {
             let model_dependency_resolver = model_dependency_resolver.clone();
             let workflow_service = workflow_service.clone();
             move |app| {
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to get app data dir");
+                let workflow_session_cleanup_worker: workflow::commands::SharedWorkflowSessionStaleCleanupWorker =
+                    Arc::new(
+                        workflow_service
+                            .clone()
+                            .spawn_workflow_session_stale_cleanup_worker(
+                                pantograph_workflow_service::WorkflowSessionStaleCleanupWorkerConfig::default(
+                                ),
+                            )
+                            .expect("failed to start workflow-session stale cleanup worker"),
+                    );
+                app.manage(workflow_session_cleanup_worker);
 
-            // Clean up any lingering sidecar processes from previous runs
-            if let Err(err) = inference::LlamaServer::cleanup_stale_sidecar(&app_data_dir) {
-                log::warn!("Failed to clean up stale sidecar: {}", err);
-            }
+                let app_data_dir = app
+                    .path()
+                    .app_data_dir()
+                    .expect("Failed to get app data dir");
 
-            // Create process spawner and inference gateway
-            let spawner = llm::process_tauri::create_spawner(app.handle().clone());
-            let gateway: SharedGateway = Arc::new(InferenceGateway::new(spawner));
-            tauri::async_runtime::block_on(async { gateway.init().await });
-            app.manage(gateway);
+                // Clean up any lingering sidecar processes from previous runs
+                if let Err(err) = inference::LlamaServer::cleanup_stale_sidecar(&app_data_dir) {
+                    log::warn!("Failed to clean up stale sidecar: {}", err);
+                }
+
+                // Create process spawner and inference gateway
+                let spawner = llm::process_tauri::create_spawner(app.handle().clone());
+                let gateway: SharedGateway = Arc::new(InferenceGateway::new(spawner));
+                tauri::async_runtime::block_on(async { gateway.init().await });
+                app.manage(gateway);
 
             let dependency_event_app = app.handle().clone();
             model_dependency_resolver.set_activity_emitter(Arc::new(move |event| {
@@ -417,13 +429,22 @@ fn main() {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Stop the inference gateway when the window closes to avoid lingering processes
                 let app = window.app_handle();
-                if let Some(gateway) = app.try_state::<SharedGateway>() {
-                    let runtime_registry = app.try_state::<SharedRuntimeRegistry>().map(|state| state.clone());
-                    tauri::async_runtime::block_on(async {
+                let gateway = app.try_state::<SharedGateway>().map(|state| state.inner().clone());
+                let workflow_session_cleanup_worker = app
+                    .try_state::<workflow::commands::SharedWorkflowSessionStaleCleanupWorker>()
+                    .map(|state| state.inner().clone());
+                let runtime_registry = app
+                    .try_state::<SharedRuntimeRegistry>()
+                    .map(|state| state.clone());
+                tauri::async_runtime::block_on(async {
+                    if let Some(workflow_session_cleanup_worker) = workflow_session_cleanup_worker {
+                        workflow_session_cleanup_worker.shutdown().await;
+                    }
+                    if let Some(gateway) = gateway {
                         // Stop both main server and embedding server
                         if let Some(runtime_registry) = runtime_registry {
                             stop_all_and_sync_runtime_registry(
-                                gateway.inner(),
+                                gateway.as_ref(),
                                 runtime_registry.as_ref(),
                             )
                             .await;
@@ -431,8 +452,8 @@ fn main() {
                             gateway.stop_all().await;
                         }
                         log::info!("Stopped inference gateway and embedding server on window close");
-                    });
-                }
+                    }
+                });
             }
         })
         .run(tauri::generate_context!())

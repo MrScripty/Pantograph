@@ -358,6 +358,47 @@ pub struct WorkflowSessionStaleCleanupResponse {
     pub cleaned_session_ids: Vec<String>,
 }
 
+/// Background cleanup worker configuration for workflow sessions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSessionStaleCleanupWorkerConfig {
+    pub interval: Duration,
+    pub idle_timeout: Duration,
+}
+
+impl Default for WorkflowSessionStaleCleanupWorkerConfig {
+    fn default() -> Self {
+        Self {
+            interval: Duration::from_secs(60),
+            idle_timeout: Duration::from_secs(5 * 60),
+        }
+    }
+}
+
+/// Handle for a running stale workflow-session cleanup worker.
+pub struct WorkflowSessionStaleCleanupWorker {
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+    join_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+impl WorkflowSessionStaleCleanupWorker {
+    fn new(
+        shutdown_tx: tokio::sync::watch::Sender<bool>,
+        join_handle: tokio::task::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            shutdown_tx,
+            join_handle: tokio::sync::Mutex::new(Some(join_handle)),
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        let _ = self.shutdown_tx.send(true);
+        if let Some(join_handle) = self.join_handle.lock().await.take() {
+            let _ = join_handle.await;
+        }
+    }
+}
+
 /// Session lifecycle state exposed to clients.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -1889,6 +1930,50 @@ impl WorkflowService {
         Ok(WorkflowSessionStaleCleanupResponse {
             cleaned_session_ids,
         })
+    }
+
+    pub fn spawn_workflow_session_stale_cleanup_worker(
+        self: &Arc<Self>,
+        config: WorkflowSessionStaleCleanupWorkerConfig,
+    ) -> Result<WorkflowSessionStaleCleanupWorker, WorkflowServiceError> {
+        if config.interval.is_zero() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow-session stale cleanup interval must be greater than zero".to_string(),
+            ));
+        }
+        if config.idle_timeout.is_zero() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow-session stale cleanup idle timeout must be greater than zero".to_string(),
+            ));
+        }
+
+        let idle_timeout_ms = config.idle_timeout.as_millis().min(u128::from(u64::MAX)) as u64;
+        let interval = config.interval;
+        let service = Arc::clone(self);
+        let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+        let join_handle = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    changed = shutdown_rx.changed() => {
+                        if changed.is_err() || *shutdown_rx.borrow() {
+                            break;
+                        }
+                    }
+                    _ = tokio::time::sleep(interval) => {
+                        let _ = service
+                            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                                idle_timeout_ms,
+                            })
+                            .await;
+                    }
+                }
+            }
+        });
+
+        Ok(WorkflowSessionStaleCleanupWorker::new(
+            shutdown_tx,
+            join_handle,
+        ))
     }
 
     pub async fn workflow_cancel_session_queue_item(
@@ -5418,6 +5503,109 @@ mod tests {
             })
             .await
             .expect("recently accessed session should remain accessible");
+        assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
+    }
+
+    #[tokio::test]
+    async fn workflow_stale_cleanup_worker_removes_stale_sessions() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = Arc::new(WorkflowService::new());
+        let worker = service
+            .spawn_workflow_session_stale_cleanup_worker(WorkflowSessionStaleCleanupWorkerConfig {
+                interval: Duration::from_millis(10),
+                idle_timeout: Duration::from_millis(20),
+            })
+            .expect("spawn stale cleanup worker");
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                let removed = {
+                    let store = service
+                        .session_store
+                        .lock()
+                        .expect("session store lock poisoned");
+                    !store.active.contains_key(&created.session_id)
+                };
+                if removed {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("worker should remove stale workflow session");
+
+        worker.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn workflow_stale_cleanup_worker_shutdown_stops_future_cleanup() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = Arc::new(WorkflowService::new());
+        let worker = service
+            .spawn_workflow_session_stale_cleanup_worker(WorkflowSessionStaleCleanupWorkerConfig {
+                interval: Duration::from_secs(1),
+                idle_timeout: Duration::from_millis(20),
+            })
+            .expect("spawn stale cleanup worker");
+        worker.shutdown().await;
+        worker.shutdown().await;
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let status = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("shutdown worker should not remove stale sessions");
         assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
     }
 

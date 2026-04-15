@@ -56,7 +56,8 @@ pub use workflow::{
     WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
     WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
     WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse, WorkflowSessionState,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowSessionSummary,
-    WorkflowSessionUnloadReason,
+    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
+    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
+    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };

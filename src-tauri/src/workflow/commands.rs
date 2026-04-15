@@ -26,6 +26,9 @@ pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
 pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
 /// Shared headless workflow service state (session-aware).
 pub type SharedWorkflowService = Arc<pantograph_workflow_service::WorkflowService>;
+/// Shared backend-owned stale workflow-session cleanup worker.
+pub type SharedWorkflowSessionStaleCleanupWorker =
+    Arc<pantograph_workflow_service::WorkflowSessionStaleCleanupWorker>;
 /// Shared backend-owned diagnostics projection store.
 pub type SharedWorkflowDiagnosticsStore = Arc<super::diagnostics::WorkflowDiagnosticsStore>;
 /// Shared filesystem-backed workflow graph store.
