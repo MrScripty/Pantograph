@@ -538,6 +538,10 @@ runtime callers.
   workflow adapters no longer rebuild active/embedding snapshot fallback,
   model-target, and trace-runtime selection rules from stored overlays plus
   live gateway state.
+- 2026-04-15: Capability-based diagnostics lifecycle fallback now also lives
+  in `crates/pantograph-embedded-runtime::workflow_runtime`, so Tauri
+  diagnostics no longer own runtime-capability alias matching or selected-vs-
+  required fallback selection when no live lifecycle snapshot is present.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
@@ -633,6 +637,7 @@ runtime callers.
 - `cargo test -p pantograph-embedded-runtime test_session_runtime_unload_stops_active_gateway_runtime_when_evictable -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_reconciles_registry_after_embedding_prepare -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime workflow_runtime -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml runtime_snapshot_ -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_stale_cleanup_worker -- --nocapture`

@@ -51,6 +51,10 @@ implementation progress in the runtime and diagnostics layers.
   `crates/pantograph-embedded-runtime`, so Tauri workflow adapters consume a
   backend-owned fallback contract for active/embedding snapshots, model
   targets, and trace runtime metrics instead of rebuilding that logic locally.
+- Capability-based diagnostics lifecycle fallback now also lives in
+  `crates/pantograph-embedded-runtime`, so Tauri diagnostics no longer own
+  runtime-capability alias matching or selected-vs-required fallback
+  selection when no live lifecycle snapshot is present.
 - Recovery stop-all paths now also reconcile the shared registry after tearing
   down producers, so failed clean-restart attempts do not leave stale
   embedding-runtime observations behind.
