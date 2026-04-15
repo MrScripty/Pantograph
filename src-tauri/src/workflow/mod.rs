@@ -12,7 +12,6 @@
 //! │ NodeGraph.svelte│◄──────►│ workflow/                       │
 //! │ (display only)  │        │ ├── commands.rs (Tauri commands)│
 //! └─────────────────┘        │ ├── execution_manager.rs        │
-//!                            │ ├── task_executor.rs            │
 //!                            │ └── event_adapter.rs            │
 //!                            │                                 │
 //!                            │ node-engine crate:              │
@@ -38,7 +37,6 @@ pub mod orchestration;
 pub mod puma_lib_commands;
 pub mod python_runtime;
 pub mod registry;
-pub mod task_executor;
 pub mod types;
 pub mod validation;
 pub mod workflow_definition_commands;

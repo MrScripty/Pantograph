@@ -18,7 +18,6 @@ owner of that policy itself.
 | `effective_definition.rs` | Applies additive per-node `data.definition` overlays before legacy validation or candidate lookup reads port metadata. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
 | `validation.rs` | Legacy local validation helpers retained during migration; core validation is authoritative for new editing surfaces. |
-| `task_executor.rs` | Runtime execution path for workflow node execution once editing commits are accepted. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
 
@@ -44,18 +43,18 @@ while still handling desktop runtime execution concerns.
 ## Decision
 Delegate workflow graph editing, connection intent, undo/redo, and persistence
 to `pantograph-workflow-service`. Tauri commands now translate invoke payloads
-into core requests, return core graph snapshots to the GUI, and keep only the
-desktop-specific runtime execution path here. Execution still owns
-dependency-aware, process-backed Python execution for nodes such as
-`pytorch-inference`, `diffusion-inference`, `audio-generation`, and
-`onnx-inference`. Where legacy local validation or candidate lookup still
-exists, `effective_definition.rs` merges registry metadata with additive
-per-node `inputs`/`outputs` overlays so dynamic expand-setting ports behave the
-same way as the core service. Workflow diagnostics projections now adapt
-backend-owned `WorkflowTraceStore` snapshots from
-`pantograph-workflow-service`; Tauri retains only projection-only overlays such
-as retained event history, progress text, and runtime/scheduler snapshots. When
-the planned `RuntimeRegistry` is introduced, this directory should request
+into core requests, return core graph snapshots to the GUI, and delegate
+runtime execution through backend-owned helpers in
+`crates/pantograph-embedded-runtime`. Desktop-specific code still injects event
+channels, app state, and other host resources, but it no longer owns composite
+task execution for workflow/orchestration paths. Where legacy local validation
+or candidate lookup still exists, `effective_definition.rs` merges registry
+metadata with additive per-node `inputs`/`outputs` overlays so dynamic
+expand-setting ports behave the same way as the core service. Workflow
+diagnostics projections now adapt backend-owned `WorkflowTraceStore` snapshots
+from `pantograph-workflow-service`; Tauri retains only projection-only overlays
+such as retained event history, progress text, and runtime/scheduler snapshots.
+When the planned `RuntimeRegistry` is introduced, this directory should request
 registry-backed runtime operations through injected host state while keeping
 policy ownership outside the Tauri adapter boundary.
 
