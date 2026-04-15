@@ -108,9 +108,6 @@ The following Milestone 2 foundation slices have now landed in code:
 - remaining host reclaim call sites still need to route through the new shared
   targeted reclaim adapter for active-runtime and dedicated-embedding
   producers
-- no registry-driven cleanup worker exists yet, and workflow-session stale
-  cleanup is currently exposed as an explicit backend service contract rather
-  than a background timer/worker
 - no Pumas-driven technical-fit selector is integrated into workflow execution
 
 ## Inputs
@@ -428,6 +425,9 @@ runtime callers.
   unloaded, non-keep-alive sessions in `crates/pantograph-workflow-service`,
   with thin embedded-runtime and Tauri transport wrappers only; any timer or
   worker that invokes this cleanup remains a later bounded follow-up
+- [x] Add a bounded backend-owned workflow-session stale cleanup worker that
+  invokes the explicit cleanup contract on a timer while leaving Tauri as a
+  composition root that starts and stops the worker
 - [ ] Add admission checks using estimated RAM/VRAM with explicit safety margins
   and failure reasons
 - [ ] Add warmup/reuse orchestration for session create/run through explicit
@@ -598,8 +598,12 @@ runtime callers.
 - 2026-04-15: `crates/pantograph-workflow-service` now owns an explicit stale
   workflow-session cleanup contract for idle, unloaded, non-keep-alive
   sessions, with focused service tests plus thin embedded-runtime and Tauri
-  command wrappers. Milestone 3 still lacks a bounded backend-owned cleanup
-  worker or timer that invokes that contract automatically.
+  command wrappers as the prerequisite for backend-owned timed cleanup.
+- 2026-04-15: `crates/pantograph-workflow-service` now also owns a bounded
+  stale workflow-session cleanup worker with explicit interval and idle-timeout
+  configuration plus shutdown control, and Tauri now only starts/stops that
+  backend-owned worker at the composition root instead of owning cleanup-loop
+  policy directly.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -608,6 +612,7 @@ runtime callers.
 - `cargo test -p pantograph-embedded-runtime`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
+- `cargo test -p pantograph-workflow-service workflow_stale_cleanup_worker -- --nocapture`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - unit tests for admission acceptance/rejection, warmup reuse, release-on-
