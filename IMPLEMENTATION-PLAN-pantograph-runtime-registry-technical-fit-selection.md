@@ -425,14 +425,14 @@ runtime callers.
 - [x] Add a bounded backend-owned workflow-session stale cleanup worker that
   invokes the explicit cleanup contract on a timer while leaving Tauri as a
   composition root that starts and stops the worker
-- [ ] Add admission checks using estimated RAM/VRAM with explicit safety margins
+- [x] Add admission checks using estimated RAM/VRAM with explicit safety margins
   and failure reasons
-- [ ] Add warmup/reuse orchestration for session create/run through explicit
+- [x] Add warmup/reuse orchestration for session create/run through explicit
   registry-owned decisions plus explicit release paths after execution,
   cancellation, and failure
-- [ ] Extend `keep_alive` into a retention hint interpreted by registry policy
+- [x] Extend `keep_alive` into a retention hint interpreted by registry policy
   rather than raw direct ownership
-- [ ] Implement eviction v1 with active/reserved/pinned exclusion and
+- [x] Implement eviction v1 with active/reserved/pinned exclusion and
   deterministic candidate ordering
 - [ ] Keep async paths non-blocking: do not hold synchronous locks across
   blocking work or long-running awaits; if policy coordination becomes
