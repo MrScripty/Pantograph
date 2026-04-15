@@ -542,6 +542,11 @@ runtime callers.
   in `crates/pantograph-embedded-runtime::workflow_runtime`, so Tauri
   diagnostics no longer own runtime-capability alias matching or selected-vs-
   required fallback selection when no live lifecycle snapshot is present.
+- 2026-04-15: Diagnostics lifecycle snapshot normalization now also lives in
+  `crates/pantograph-embedded-runtime::workflow_runtime`, so Tauri
+  diagnostics no longer own runtime-id canonicalization or lifecycle-reason
+  inference when converting between diagnostics payloads and
+  `inference::RuntimeLifecycleSnapshot`.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
@@ -638,6 +643,7 @@ runtime callers.
 - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_reconciles_registry_after_embedding_prepare -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime workflow_runtime -- --nocapture`
 - `cargo test --manifest-path src-tauri/Cargo.toml runtime_snapshot_ -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml runtime_lifecycle_snapshot -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_stale_cleanup_worker -- --nocapture`
