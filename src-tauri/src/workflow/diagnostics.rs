@@ -7,8 +7,9 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use pantograph_embedded_runtime::workflow_runtime::capability_runtime_lifecycle_snapshot;
-use pantograph_runtime_identity::canonical_runtime_id;
+use pantograph_embedded_runtime::workflow_runtime::{
+    capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
+};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
@@ -177,27 +178,24 @@ pub struct DiagnosticsRuntimeLifecycleSnapshot {
 
 impl From<&inference::RuntimeLifecycleSnapshot> for DiagnosticsRuntimeLifecycleSnapshot {
     fn from(snapshot: &inference::RuntimeLifecycleSnapshot) -> Self {
+        let snapshot = normalized_runtime_lifecycle_snapshot(snapshot);
         Self {
-            runtime_id: snapshot
-                .runtime_id
-                .as_deref()
-                .map(canonical_runtime_id)
-                .filter(|runtime_id| !runtime_id.is_empty()),
-            runtime_instance_id: snapshot.runtime_instance_id.clone(),
+            runtime_id: snapshot.runtime_id,
+            runtime_instance_id: snapshot.runtime_instance_id,
             warmup_started_at_ms: snapshot.warmup_started_at_ms,
             warmup_completed_at_ms: snapshot.warmup_completed_at_ms,
             warmup_duration_ms: snapshot.warmup_duration_ms,
             runtime_reused: snapshot.runtime_reused,
-            lifecycle_decision_reason: snapshot.normalized_lifecycle_decision_reason(),
+            lifecycle_decision_reason: snapshot.lifecycle_decision_reason,
             active: snapshot.active,
-            last_error: snapshot.last_error.clone(),
+            last_error: snapshot.last_error,
         }
     }
 }
 
 impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleSnapshot {
     fn from(snapshot: &DiagnosticsRuntimeLifecycleSnapshot) -> Self {
-        let mut lifecycle_snapshot = Self {
+        let lifecycle_snapshot = Self {
             runtime_id: snapshot.runtime_id.clone(),
             runtime_instance_id: snapshot.runtime_instance_id.clone(),
             warmup_started_at_ms: snapshot.warmup_started_at_ms,
@@ -208,9 +206,7 @@ impl From<&DiagnosticsRuntimeLifecycleSnapshot> for inference::RuntimeLifecycleS
             active: snapshot.active,
             last_error: snapshot.last_error.clone(),
         };
-        lifecycle_snapshot.lifecycle_decision_reason =
-            lifecycle_snapshot.normalized_lifecycle_decision_reason();
-        lifecycle_snapshot
+        normalized_runtime_lifecycle_snapshot(&lifecycle_snapshot)
     }
 }
 
@@ -1747,6 +1743,28 @@ mod tests {
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
             Some("runtime_start_failed")
+        );
+    }
+
+    #[test]
+    fn inference_runtime_lifecycle_snapshot_from_diagnostics_canonicalizes_runtime_aliases() {
+        let snapshot =
+            inference::RuntimeLifecycleSnapshot::from(&DiagnosticsRuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("runtime-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            });
+
+        assert_eq!(snapshot.runtime_id.as_deref(), Some("pytorch"));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("runtime_reused")
         );
     }
 
