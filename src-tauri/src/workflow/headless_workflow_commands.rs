@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_embedded_runtime::{
-    workflow_runtime::{resolve_runtime_model_target, trace_runtime_metrics},
+    workflow_runtime::build_runtime_event_projection,
     EmbeddedRuntime, EmbeddedRuntimeConfig, HostRuntimeModeSnapshot, RagBackend, RagDocument,
 };
 use pantograph_workflow_service::{
@@ -682,48 +682,37 @@ pub async fn workflow_get_diagnostics_snapshot(
     } else {
         None
     };
-    let runtime_trace_metrics = if let Some(metrics) = stored_runtime_trace_metrics(
-        diagnostics_store.inner(),
-        session_id.as_deref(),
-        workflow_id.as_deref(),
-    ) {
-        metrics
-    } else {
-        let runtime_snapshot = gateway.runtime_lifecycle_snapshot().await;
-        let mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
-        trace_runtime_metrics(
-            &runtime_snapshot,
-            resolve_runtime_model_target(&mode_info, &runtime_snapshot).as_deref(),
-        )
-    };
-    let mode_info = gateway.mode_info().await;
     let stored_runtime_snapshots =
         stored_runtime_snapshots(diagnostics_store.inner(), workflow_id.as_deref());
     let stored_runtime_model_targets =
         stored_runtime_model_targets(diagnostics_store.inner(), workflow_id.as_deref());
-    let active_runtime_snapshot = if let Some(snapshot) = stored_runtime_snapshots
-        .as_ref()
-        .and_then(|(active_runtime, _)| active_runtime.clone())
-    {
-        Some(snapshot)
-    } else {
-        Some(gateway.runtime_lifecycle_snapshot().await)
-    };
-    let embedding_runtime_snapshot = if let Some(snapshot) = stored_runtime_snapshots
-        .as_ref()
-        .and_then(|(_, embedding_runtime)| embedding_runtime.clone())
-    {
-        Some(snapshot)
-    } else {
-        gateway.embedding_runtime_lifecycle_snapshot().await
-    };
-    let active_model_target = stored_runtime_model_targets
-        .as_ref()
-        .and_then(|(active_model_target, _)| active_model_target.clone())
-        .or(mode_info.active_model_target);
-    let embedding_model_target = stored_runtime_model_targets
-        .and_then(|(_, embedding_model_target)| embedding_model_target)
-        .or(mode_info.embedding_model_target);
+    let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
+    let gateway_mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+    let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
+    let runtime_projection = build_runtime_event_projection(
+        stored_runtime_snapshots
+            .as_ref()
+            .and_then(|(active_runtime, _)| active_runtime.as_ref()),
+        stored_runtime_snapshots
+            .as_ref()
+            .and_then(|(_, embedding_runtime)| embedding_runtime.as_ref()),
+        stored_runtime_model_targets
+            .as_ref()
+            .and_then(|(active_model_target, _)| active_model_target.as_deref()),
+        stored_runtime_model_targets
+            .as_ref()
+            .and_then(|(_, embedding_model_target)| embedding_model_target.as_deref()),
+        stored_runtime_trace_metrics(
+            diagnostics_store.inner(),
+            session_id.as_deref(),
+            workflow_id.as_deref(),
+        ),
+        None,
+        &gateway_snapshot,
+        live_embedding_runtime_snapshot.as_ref(),
+        &gateway_mode_info,
+        None,
+    );
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store.inner(),
@@ -732,11 +721,11 @@ pub async fn workflow_get_diagnostics_snapshot(
         workflow_name,
         scheduler_snapshot_result,
         capabilities_result,
-        runtime_trace_metrics,
-        active_model_target,
-        embedding_model_target,
-        active_runtime_snapshot,
-        embedding_runtime_snapshot,
+        runtime_projection.trace_runtime_metrics,
+        runtime_projection.active_model_target,
+        runtime_projection.embedding_model_target,
+        Some(runtime_projection.active_runtime_snapshot),
+        runtime_projection.embedding_runtime_snapshot,
         captured_at_ms,
     ))
 }

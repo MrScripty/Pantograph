@@ -12,6 +12,15 @@ pub struct RuntimeDiagnosticsProjection {
     pub runtime_model_target: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct RuntimeEventProjection {
+    pub active_runtime_snapshot: inference::RuntimeLifecycleSnapshot,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+}
+
 pub async fn sync_embedding_emit_metadata_flags(
     executor: &mut WorkflowExecutor,
 ) -> Result<(), NodeEngineError> {
@@ -131,25 +140,63 @@ pub fn build_runtime_diagnostics_projection(
     gateway_mode_info: &HostRuntimeModeSnapshot,
     runtime_model_target_override: Option<&str>,
 ) -> RuntimeDiagnosticsProjection {
-    let active_runtime_snapshot = runtime_snapshot_override
-        .cloned()
-        .unwrap_or_else(|| gateway_snapshot.clone());
-    let runtime_model_target = runtime_snapshot_override
-        .and_then(|snapshot| {
-            runtime_model_target_override
-                .map(ToOwned::to_owned)
-                .or_else(|| resolve_runtime_model_target(gateway_mode_info, snapshot))
-        })
-        .or_else(|| resolve_runtime_model_target(gateway_mode_info, gateway_snapshot));
-    let trace_runtime_metrics = trace_runtime_metrics(
-        runtime_snapshot_override.unwrap_or(gateway_snapshot),
-        runtime_model_target.as_deref(),
+    let projection = build_runtime_event_projection(
+        None,
+        None,
+        None,
+        None,
+        None,
+        runtime_snapshot_override,
+        gateway_snapshot,
+        None,
+        gateway_mode_info,
+        runtime_model_target_override,
     );
 
     RuntimeDiagnosticsProjection {
+        active_runtime_snapshot: projection.active_runtime_snapshot,
+        trace_runtime_metrics: projection.trace_runtime_metrics,
+        runtime_model_target: projection.active_model_target,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_runtime_event_projection(
+    stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_active_model_target: Option<&str>,
+    stored_embedding_model_target: Option<&str>,
+    stored_trace_runtime_metrics: Option<WorkflowTraceRuntimeMetrics>,
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+    embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+    runtime_model_target_override: Option<&str>,
+) -> RuntimeEventProjection {
+    let active_runtime_snapshot = runtime_snapshot_override
+        .cloned()
+        .or_else(|| stored_active_runtime_snapshot.cloned())
+        .unwrap_or_else(|| gateway_snapshot.clone());
+    let embedding_runtime_snapshot = stored_embedding_runtime_snapshot
+        .cloned()
+        .or_else(|| embedding_runtime_snapshot.cloned());
+    let active_model_target = runtime_model_target_override
+        .map(ToOwned::to_owned)
+        .or_else(|| stored_active_model_target.map(ToOwned::to_owned))
+        .or_else(|| resolve_runtime_model_target(gateway_mode_info, &active_runtime_snapshot));
+    let embedding_model_target = stored_embedding_model_target
+        .map(ToOwned::to_owned)
+        .or_else(|| gateway_mode_info.embedding_model_target.clone());
+    let trace_runtime_metrics = stored_trace_runtime_metrics.unwrap_or_else(|| {
+        trace_runtime_metrics(&active_runtime_snapshot, active_model_target.as_deref())
+    });
+
+    RuntimeEventProjection {
         active_runtime_snapshot,
+        embedding_runtime_snapshot,
         trace_runtime_metrics,
-        runtime_model_target,
+        active_model_target,
+        embedding_model_target,
     }
 }
 
@@ -158,7 +205,8 @@ mod tests {
     use crate::HostRuntimeModeSnapshot;
 
     use super::{
-        build_runtime_diagnostics_projection, resolve_runtime_model_target, trace_runtime_metrics,
+        build_runtime_diagnostics_projection, build_runtime_event_projection,
+        resolve_runtime_model_target, trace_runtime_metrics,
         trace_runtime_metrics_with_observed_runtime_ids,
     };
 
@@ -330,6 +378,151 @@ mod tests {
                 .lifecycle_decision_reason
                 .as_deref(),
             Some("runtime_reused")
+        );
+    }
+
+    #[test]
+    fn build_runtime_event_projection_prefers_stored_runtime_over_gateway_snapshot() {
+        let stored_active_runtime_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("onnx-runtime".to_string()),
+            runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+            warmup_started_at_ms: None,
+            warmup_completed_at_ms: None,
+            warmup_duration_ms: None,
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: false,
+            last_error: None,
+        };
+        let stored_embedding_runtime_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-3".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(20),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            active: true,
+            last_error: None,
+        };
+        let gateway_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_instance_id: Some("llama-cpp-main-1".to_string()),
+            warmup_started_at_ms: Some(1),
+            warmup_completed_at_ms: Some(2),
+            warmup_duration_ms: Some(1),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        };
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: None,
+            embedding_runtime: None,
+        };
+
+        let projection = build_runtime_event_projection(
+            Some(&stored_active_runtime_snapshot),
+            Some(&stored_embedding_runtime_snapshot),
+            Some("/models/sidecar.onnx"),
+            Some("/models/embed.gguf"),
+            None,
+            None,
+            &gateway_snapshot,
+            None,
+            &gateway_mode_info,
+            None,
+        );
+
+        assert_eq!(
+            projection.active_runtime_snapshot.runtime_id.as_deref(),
+            Some("onnx-runtime")
+        );
+        assert_eq!(
+            projection
+                .embedding_runtime_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_id.as_deref()),
+            Some("llama.cpp.embedding")
+        );
+        assert_eq!(
+            projection.active_model_target.as_deref(),
+            Some("/models/sidecar.onnx")
+        );
+        assert_eq!(
+            projection.embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+        assert_eq!(
+            projection.trace_runtime_metrics.runtime_id.as_deref(),
+            Some("onnx-runtime")
+        );
+    }
+
+    #[test]
+    fn build_runtime_event_projection_preserves_live_embedding_snapshot_without_stored_override() {
+        let gateway_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_instance_id: Some("llama-cpp-main-2".to_string()),
+            warmup_started_at_ms: Some(1),
+            warmup_completed_at_ms: Some(3),
+            warmup_duration_ms: Some(2),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        };
+        let live_embedding_runtime_snapshot = inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama_cpp_embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-7".to_string()),
+            warmup_started_at_ms: Some(4),
+            warmup_completed_at_ms: Some(7),
+            warmup_duration_ms: Some(3),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            active: true,
+            last_error: None,
+        };
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: None,
+            embedding_runtime: None,
+        };
+
+        let projection = build_runtime_event_projection(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &gateway_snapshot,
+            Some(&live_embedding_runtime_snapshot),
+            &gateway_mode_info,
+            None,
+        );
+
+        assert_eq!(
+            projection.active_model_target.as_deref(),
+            Some("/models/main.gguf")
+        );
+        assert_eq!(
+            projection.embedding_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+        assert_eq!(
+            projection
+                .embedding_runtime_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_instance_id.as_deref()),
+            Some("llama-cpp-embedding-7")
         );
     }
 }
