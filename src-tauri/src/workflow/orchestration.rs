@@ -8,15 +8,16 @@ use node_engine::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{command, ipc::Channel, AppHandle, State};
 use tokio::sync::RwLock;
 
+use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::events::WorkflowEvent;
 use super::SharedExecutionManager;
 use crate::agent::rag::SharedRagManager;
-use crate::llm::gateway::SharedGateway;
+use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+use pantograph_embedded_runtime::EmbeddedRuntime;
 
 // Re-export types from node_engine for use by other modules
 pub use node_engine::{OrchestrationGraphMetadata, OrchestrationStore};
@@ -24,26 +25,23 @@ pub use node_engine::{OrchestrationGraphMetadata, OrchestrationStore};
 /// Shared orchestration store type.
 pub type SharedOrchestrationStore = Arc<RwLock<OrchestrationStore>>;
 
-/// Data graph executor that uses CompositeTaskExecutor (Tauri host + core).
+/// Data graph executor that delegates execution to the backend-owned embedded runtime.
 pub struct PantographDataGraphExecutor {
     store: SharedOrchestrationStore,
-    gateway: SharedGateway,
-    rag_manager: SharedRagManager,
-    project_root: PathBuf,
+    runtime: Arc<EmbeddedRuntime>,
+    event_sink: Arc<dyn EventSink>,
 }
 
 impl PantographDataGraphExecutor {
     pub fn new(
         store: SharedOrchestrationStore,
-        gateway: SharedGateway,
-        rag_manager: SharedRagManager,
-        project_root: PathBuf,
+        runtime: Arc<EmbeddedRuntime>,
+        event_sink: Arc<dyn EventSink>,
     ) -> Self {
         Self {
             store,
-            gateway,
-            rag_manager,
-            project_root,
+            runtime,
+            event_sink,
         }
     }
 }
@@ -54,125 +52,19 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         &self,
         graph_id: &str,
         inputs: HashMap<String, Value>,
-        event_sink: &dyn EventSink,
+        _event_sink: &dyn EventSink,
     ) -> EngineResult<HashMap<String, Value>> {
-        use node_engine::{Context, DemandEngine};
-
-        // Get the data graph from the store
         let store = self.store.read().await;
         let graph = store.get_data_graph(graph_id).ok_or_else(|| {
             node_engine::NodeEngineError::failed(format!("Data graph '{}' not found", graph_id))
         })?;
-
-        // Clone what we need before releasing the lock
         let graph = graph.clone();
         drop(store);
 
-        // Create composite task executor: Tauri-specific (rag-search) + core (everything else)
-        let core = Arc::new(
-            node_engine::CoreTaskExecutor::new()
-                .with_project_root(self.project_root.clone())
-                .with_gateway(self.gateway.inner_arc()),
-        );
-        let host = Arc::new(super::task_executor::TauriTaskExecutor::new(
-            self.rag_manager.clone(),
-        ));
-        let task_executor = node_engine::CompositeTaskExecutor::new(
-            Some(host as Arc<dyn node_engine::TaskExecutor>),
-            core,
-        );
-
-        // Create graph-flow context and demand engine
-        let context = Context::new();
-        let execution_id = format!("data-graph-{}-{}", graph_id, uuid::Uuid::new_v4());
-        let mut demand_engine = DemandEngine::new(&execution_id);
-
-        // Find input nodes (nodes with type "text-input" or that have input port names matching our inputs)
-        // and inject the input values into their data
-        let mut modified_graph = graph.clone();
-        for (port_name, value) in &inputs {
-            // Find nodes that might accept this input
-            // Strategy 1: Look for input nodes with matching data field
-            for node in &mut modified_graph.nodes {
-                if node.node_type == "text-input" {
-                    // If the input port matches, set the text value
-                    if port_name == "text" || port_name == "input" {
-                        if let Some(obj) = node.data.as_object_mut() {
-                            obj.insert("text".to_string(), value.clone());
-                        } else {
-                            node.data = serde_json::json!({ "text": value });
-                        }
-                    }
-                }
-                // Strategy 2: Inject as node data for any node whose output port matches
-                // This allows orchestration to feed data to specific nodes
-                if let Some(obj) = node.data.as_object_mut() {
-                    obj.insert(format!("_input_{}", port_name), value.clone());
-                }
-            }
-        }
-
-        // Find terminal nodes (nodes with no outgoing edges) - these are our output nodes
-        let terminal_nodes: Vec<String> = modified_graph
-            .nodes
-            .iter()
-            .filter(|node| !modified_graph.edges.iter().any(|e| e.source == node.id))
-            .map(|n| n.id.clone())
-            .collect();
-
-        // Execute the workflow by demanding outputs from terminal nodes
-        let mut outputs = HashMap::new();
-        for terminal_id in &terminal_nodes {
-            // Demand execution from this terminal node
-            let extensions = node_engine::ExecutorExtensions::new();
-            let result = demand_engine
-                .demand(
-                    terminal_id,
-                    &modified_graph,
-                    &task_executor,
-                    &context,
-                    event_sink,
-                    &extensions,
-                )
-                .await;
-
-            match result {
-                Ok(node_outputs) => {
-                    // Collect all outputs from this terminal node
-                    for (output_port, output_value) in node_outputs {
-                        // Use format "nodeId.portName" for disambiguation
-                        outputs.insert(
-                            format!("{}.{}", terminal_id, output_port),
-                            output_value.clone(),
-                        );
-                        // Also store just the port name for simple access
-                        outputs.insert(output_port, output_value);
-                    }
-                }
-                Err(e) => {
-                    // Log the error but continue with other terminal nodes
-                    log::error!(
-                        "Error executing terminal node '{}' in data graph '{}': {}",
-                        terminal_id,
-                        graph_id,
-                        e
-                    );
-                    outputs.insert(
-                        format!("{}.error", terminal_id),
-                        Value::String(e.to_string()),
-                    );
-                }
-            }
-        }
-
-        // Also include metadata about successful execution
-        outputs.insert("_graph_id".to_string(), Value::String(graph_id.to_string()));
-        outputs.insert(
-            "_terminal_nodes".to_string(),
-            Value::Array(terminal_nodes.into_iter().map(Value::String).collect()),
-        );
-
-        Ok(outputs)
+        self.runtime
+            .execute_data_graph(graph_id, &graph, &inputs, self.event_sink.clone())
+            .await
+            .map_err(|error| node_engine::NodeEngineError::failed(error.to_string()))
     }
 
     fn get_data_graph(&self, graph_id: &str) -> Option<WorkflowGraph> {
@@ -468,12 +360,15 @@ pub async fn register_data_graph(
 /// Execute an orchestration graph.
 #[command]
 pub async fn execute_orchestration(
-    _app: AppHandle,
+    app: AppHandle,
     orchestration_id: String,
     initial_data: HashMap<String, Value>,
     orchestration_store: State<'_, SharedOrchestrationStore>,
     gateway: State<'_, SharedGateway>,
+    runtime_registry: State<'_, SharedRuntimeRegistry>,
+    extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
+    workflow_service: State<'_, SharedWorkflowService>,
     _execution_manager: State<'_, SharedExecutionManager>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<OrchestrationResult, String> {
@@ -485,30 +380,34 @@ pub async fn execute_orchestration(
         .ok_or_else(|| format!("Orchestration '{}' not found", orchestration_id))?;
     drop(store);
 
-    // Get project root from environment or use current directory
-    let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-    // Create the data graph executor with composite task execution
-    let data_executor = PantographDataGraphExecutor::new(
-        orchestration_store.inner().clone(),
-        gateway.inner().clone(),
-        rag_manager.inner().clone(),
-        project_root,
+    let runtime = Arc::new(
+        super::headless_workflow_commands::build_runtime(
+            &app,
+            gateway.inner(),
+            runtime_registry.inner(),
+            extensions.inner(),
+            workflow_service.inner(),
+            Some(rag_manager.inner()),
+        )
+        .await?,
     );
 
-    // Create the orchestration executor
-    let executor = OrchestrationExecutor::new(data_executor);
-
-    // Create an event adapter for the channel
-    let event_sink = super::event_adapter::TauriEventAdapter::new(
+    let event_sink = Arc::new(super::event_adapter::TauriEventAdapter::new(
         channel,
         &orchestration_id,
         Arc::new(super::diagnostics::WorkflowDiagnosticsStore::default()),
+    ));
+
+    let data_executor = PantographDataGraphExecutor::new(
+        orchestration_store.inner().clone(),
+        runtime,
+        event_sink.clone(),
     );
 
-    // Execute the orchestration
+    let executor = OrchestrationExecutor::new(data_executor);
+
     let result = executor
-        .execute(&graph, initial_data, &event_sink)
+        .execute(&graph, initial_data, event_sink.as_ref())
         .await
         .map_err(|e| e.to_string())?;
 

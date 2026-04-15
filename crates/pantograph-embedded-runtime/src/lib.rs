@@ -548,6 +548,82 @@ impl EmbeddedRuntime {
         Ok(response)
     }
 
+    pub async fn execute_data_graph(
+        &self,
+        graph_id: &str,
+        graph: &WorkflowGraph,
+        inputs: &HashMap<String, serde_json::Value>,
+        event_sink: Arc<dyn EventSink>,
+    ) -> Result<HashMap<String, serde_json::Value>, WorkflowServiceError> {
+        let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
+        let execution_id = format!("data-graph-{}-{}", graph_id, Uuid::new_v4());
+        let workflow_event_sink = event_sink.clone();
+        let core = Arc::new(
+            CoreTaskExecutor::new()
+                .with_project_root(self.config.project_root.clone())
+                .with_gateway(self.gateway.clone())
+                .with_event_sink(event_sink.clone())
+                .with_execution_id(execution_id.clone()),
+        );
+        let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
+            self.rag_backend.clone(),
+            self.python_runtime.clone(),
+        ));
+        let task_executor = node_engine::CompositeTaskExecutor::new(
+            Some(host as Arc<dyn node_engine::TaskExecutor>),
+            core,
+        );
+        let python_runtime_execution_recorder =
+            Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
+        let mut graph = graph.clone();
+        let terminal_nodes = EmbeddedWorkflowHost::terminal_data_graph_node_ids(&graph);
+        EmbeddedWorkflowHost::apply_data_graph_inputs(&mut graph, inputs);
+
+        let mut executor = WorkflowExecutor::new(execution_id.clone(), graph, event_sink);
+        apply_runtime_extensions_for_execution(
+            &mut executor,
+            &runtime_ext,
+            Some(workflow_event_sink),
+            Some(execution_id),
+            Some(python_runtime_execution_recorder.clone()),
+        );
+
+        let mut node_outputs = HashMap::new();
+        let mut terminal_errors = HashMap::new();
+        for terminal_id in &terminal_nodes {
+            match executor.demand(terminal_id, &task_executor).await {
+                Ok(outputs) => {
+                    node_outputs.insert(terminal_id.clone(), outputs);
+                }
+                Err(error) => {
+                    log::error!(
+                        "Error executing terminal node '{}' in data graph '{}': {}",
+                        terminal_id,
+                        graph_id,
+                        error
+                    );
+                    terminal_errors.insert(
+                        format!("{}.error", terminal_id),
+                        serde_json::Value::String(error.to_string()),
+                    );
+                }
+            }
+        }
+
+        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshot();
+        self.host().observe_python_runtime_execution_metadata(
+            python_runtime_execution_metadata.as_ref(),
+        )?;
+
+        let mut outputs = EmbeddedWorkflowHost::collect_data_graph_outputs(
+            graph_id,
+            &terminal_nodes,
+            &node_outputs,
+        );
+        outputs.extend(terminal_errors);
+        Ok(outputs)
+    }
+
     pub fn workflow_graph_save(
         &self,
         request: WorkflowGraphSaveRequest,
@@ -1479,6 +1555,75 @@ impl EmbeddedWorkflowHost {
         Ok(outputs)
     }
 
+    fn apply_data_graph_inputs(
+        graph: &mut WorkflowGraph,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) {
+        for (port_name, value) in inputs {
+            for node in &mut graph.nodes {
+                if node.node_type == "text-input" && (port_name == "text" || port_name == "input") {
+                    if let Some(obj) = node.data.as_object_mut() {
+                        obj.insert("text".to_string(), value.clone());
+                    } else {
+                        node.data = serde_json::json!({ "text": value });
+                    }
+                }
+
+                if let Some(obj) = node.data.as_object_mut() {
+                    obj.insert(format!("_input_{}", port_name), value.clone());
+                }
+            }
+        }
+    }
+
+    fn terminal_data_graph_node_ids(graph: &WorkflowGraph) -> Vec<String> {
+        graph
+            .nodes
+            .iter()
+            .filter(|node| !graph.edges.iter().any(|edge| edge.source == node.id))
+            .map(|node| node.id.clone())
+            .collect()
+    }
+
+    fn collect_data_graph_outputs(
+        graph_id: &str,
+        terminal_nodes: &[String],
+        node_outputs: &HashMap<String, HashMap<String, serde_json::Value>>,
+    ) -> HashMap<String, serde_json::Value> {
+        let mut outputs = HashMap::new();
+
+        for terminal_id in terminal_nodes {
+            let Some(terminal_outputs) = node_outputs.get(terminal_id) else {
+                continue;
+            };
+
+            for (output_port, output_value) in terminal_outputs {
+                outputs.insert(
+                    format!("{}.{}", terminal_id, output_port),
+                    output_value.clone(),
+                );
+                outputs.insert(output_port.clone(), output_value.clone());
+            }
+        }
+
+        outputs.insert(
+            "_graph_id".to_string(),
+            serde_json::Value::String(graph_id.to_string()),
+        );
+        outputs.insert(
+            "_terminal_nodes".to_string(),
+            serde_json::Value::Array(
+                terminal_nodes
+                    .iter()
+                    .cloned()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        );
+
+        outputs
+    }
+
     fn fallback_runtime_unload_candidate(
         candidates: &[WorkflowSessionRuntimeUnloadCandidate],
     ) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
@@ -2175,6 +2320,57 @@ mod tests {
         }
     }
 
+    fn runtime_diffusion_data_graph() -> node_engine::WorkflowGraph {
+        node_engine::WorkflowGraph {
+            id: "runtime-diffusion-data-graph".to_string(),
+            name: "Runtime Diffusion Data Graph".to_string(),
+            nodes: vec![
+                node_engine::GraphNode {
+                    id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({ "text": "a tiny painted robot" }),
+                    position: (0.0, 0.0),
+                },
+                node_engine::GraphNode {
+                    id: "diffusion-inference-1".to_string(),
+                    node_type: "diffusion-inference".to_string(),
+                    data: serde_json::json!({
+                        "model_path": "/tmp/mock-diffusion-model",
+                        "model_type": "diffusion",
+                        "environment_ref": {
+                            "state": "ready",
+                            "env_ids": ["mock-python-env"]
+                        }
+                    }),
+                    position: (240.0, 0.0),
+                },
+                node_engine::GraphNode {
+                    id: "image-output-1".to_string(),
+                    node_type: "image-output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (520.0, 0.0),
+                },
+            ],
+            edges: vec![
+                node_engine::GraphEdge {
+                    id: "e-prompt".to_string(),
+                    source: "text-input-1".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "diffusion-inference-1".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+                node_engine::GraphEdge {
+                    id: "e-image".to_string(),
+                    source: "diffusion-inference-1".to_string(),
+                    source_handle: "image".to_string(),
+                    target: "image-output-1".to_string(),
+                    target_handle: "image".to_string(),
+                },
+            ],
+            groups: Vec::new(),
+        }
+    }
+
     #[tokio::test]
     async fn test_runtime_run_and_session_execution() {
         let temp = TempDir::new().expect("temp dir");
@@ -2365,6 +2561,66 @@ mod tests {
             })
             .await
             .expect("workflow run");
+
+        let snapshot = runtime_registry.snapshot();
+        let pytorch = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("python runtime should be observed");
+        assert_eq!(pytorch.display_name, "PyTorch (Python sidecar)");
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Stopped);
+        assert!(pytorch.runtime_instance_id.is_none());
+        assert!(pytorch.models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn execute_data_graph_reconciles_python_sidecar_runtime_into_registry() {
+        let temp = TempDir::new().expect("temp dir");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Arc::new(MockImagePythonRuntime {
+                requests: Mutex::new(Vec::new()),
+            }),
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        let outputs = runtime
+            .execute_data_graph(
+                "runtime-diffusion-data-graph",
+                &runtime_diffusion_data_graph(),
+                &HashMap::from([(
+                    "text".to_string(),
+                    serde_json::json!("a tiny painted robot"),
+                )]),
+                Arc::new(node_engine::NullEventSink),
+            )
+            .await
+            .expect("data graph execution");
+
+        assert_eq!(
+            outputs.get("image"),
+            Some(&serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ=="))
+        );
+        assert_eq!(
+            outputs.get("_graph_id"),
+            Some(&serde_json::json!("runtime-diffusion-data-graph"))
+        );
 
         let snapshot = runtime_registry.snapshot();
         let pytorch = snapshot
