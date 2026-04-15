@@ -33,7 +33,7 @@ use llm::{
     start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm, stop_health_monitor,
     stop_llm, switch_backend, trigger_recovery, undo_component_change, update_svelte_docs,
     validate_component, InferenceGateway, RuntimeRegistry, SharedAppConfig, SharedGateway,
-    SharedRuntimeRegistry,
+    SharedHealthMonitor, SharedRecoveryManager, SharedRuntimeRegistry,
 };
 use project_root::resolve_project_root;
 use std::sync::Arc;
@@ -94,6 +94,10 @@ fn main() {
     let node_registry: workflow::commands::SharedNodeRegistry =
         Arc::new(node_engine::NodeRegistry::with_builtins());
     let runtime_registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+    let health_monitor: SharedHealthMonitor =
+        Arc::new(llm::health_monitor::HealthMonitor::default());
+    let recovery_manager: SharedRecoveryManager =
+        Arc::new(llm::recovery::RecoveryManager::default());
 
     // Create shared executor extensions (populated async in .setup())
     let shared_extensions: workflow::commands::SharedExtensions =
@@ -116,6 +120,8 @@ fn main() {
         .manage(orchestration_store)
         .manage(node_registry)
         .manage(runtime_registry)
+        .manage(health_monitor)
+        .manage(recovery_manager)
         .manage(shared_extensions.clone())
         .manage(model_dependency_resolver.clone())
         .setup({

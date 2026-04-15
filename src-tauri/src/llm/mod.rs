@@ -15,4 +15,6 @@ pub mod types;
 pub use backend::{EmbeddingStartRequest, InferenceStartRequest};
 pub use commands::*;
 pub use gateway::{InferenceGateway, SharedGateway};
+pub use health_monitor::SharedHealthMonitor;
+pub use recovery::SharedRecoveryManager;
 pub use runtime_registry::{RuntimeRegistry, SharedRuntimeRegistry};

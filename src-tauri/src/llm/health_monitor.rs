@@ -10,6 +10,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
+use crate::llm::recovery::SharedRecoveryManager;
 use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
@@ -240,15 +241,18 @@ impl HealthMonitor {
                 if config.emit_every_check || state_changed {
                     if state_changed && !current_healthy {
                         // Server just became unhealthy
+                        let failure_reason = result
+                            .error
+                            .clone()
+                            .unwrap_or_else(|| "Unknown error".to_string());
                         let event = ServerEvent::ServerCrashed {
-                            error: result
-                                .error
-                                .clone()
-                                .unwrap_or_else(|| "Unknown error".to_string()),
+                            error: failure_reason.clone(),
                         };
                         if let Err(e) = app.emit("server-health", &event) {
                             log::warn!("Failed to emit server crashed event: {}", e);
                         }
+
+                        maybe_start_auto_recovery(&app, &gateway, &failure_reason).await;
                     }
 
                     let event = ServerEvent::HealthUpdate {
@@ -353,6 +357,29 @@ async fn sync_runtime_registry(app: &AppHandle, gateway: &SharedGateway) {
     };
 
     sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
+}
+
+async fn maybe_start_auto_recovery(app: &AppHandle, gateway: &SharedGateway, failure_reason: &str) {
+    let Some(recovery_manager) = app.try_state::<SharedRecoveryManager>() else {
+        return;
+    };
+    let recovery_manager = (*recovery_manager).clone();
+
+    if recovery_manager.is_recovering() {
+        return;
+    }
+
+    let app = app.clone();
+    let gateway = gateway.clone();
+    let failure_reason = failure_reason.to_string();
+    tokio::spawn(async move {
+        if let Err(error) = recovery_manager
+            .recover(&app, &gateway, &failure_reason)
+            .await
+        {
+            log::warn!("Automatic recovery failed: {}", error);
+        }
+    });
 }
 
 impl Default for HealthMonitor {
