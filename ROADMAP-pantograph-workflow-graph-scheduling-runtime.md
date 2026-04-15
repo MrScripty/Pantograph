@@ -77,6 +77,10 @@ implementation progress in the runtime and diagnostics layers.
   producer model target when execution runs through Python-backed sidecars or
   other runtime overrides, so diagnostics no longer fall back to the gateway's
   active-model target for non-gateway producers.
+- Headless diagnostics snapshot reads now also preserve stored producer model
+  targets for runtime overlays instead of rebuilding them from the current
+  gateway mode, so post-run diagnostics remain consistent with the producer
+  facts captured during execution.
 
 ### Active implementation stream
 

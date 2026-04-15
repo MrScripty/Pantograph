@@ -567,6 +567,11 @@ runtime callers.
   backend-computed runtime model target from the embedded-runtime diagnostics
   projection, so Python-sidecar and other override-based producer paths no
   longer regress to the gateway's active-model target in diagnostics events.
+- 2026-04-14: Headless workflow diagnostics snapshot reads now prefer the
+  stored producer-aware runtime model targets already recorded in the
+  diagnostics store, so later diagnostics queries do not overwrite
+  Python-sidecar runtime overlays with the gateway's current active-model
+  target.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
