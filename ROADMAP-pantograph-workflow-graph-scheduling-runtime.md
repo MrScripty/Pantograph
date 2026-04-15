@@ -428,6 +428,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   `crates/pantograph-embedded-runtime`, leaving Tauri recovery to drive retry
   orchestration and app wiring without owning backend port-override or
   dedicated-embedding restart policy.
+- Recovery retry-strategy and exponential-backoff policy now also live in
+  `crates/pantograph-embedded-runtime`, leaving Tauri recovery to orchestrate
+  host effects without owning attempt sequencing or retry-delay math.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task

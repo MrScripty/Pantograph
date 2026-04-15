@@ -19,7 +19,7 @@ packages.
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities. |
-| `runtime_recovery.rs` | Owns backend-side recovery restart planning such as backend port overrides and dedicated-embedding restart policy. |
+| `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry backoff, backend port overrides, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, sync, reclaim, stop-all, and restore coordination. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, and runtime diagnostics projection. |
 
@@ -99,6 +99,8 @@ embedded-runtime crate.
   post-transition registry convergence.
 - Recovery restart-plan derivation must stay in backend Rust so wrappers do not
   drift on backend port-override or dedicated-embedding restart policy.
+- Recovery retry-strategy and backoff derivation must stay in backend Rust so
+  wrappers do not drift on attempt sequencing or retry-delay policy.
 - Embedding workflow graph inspection and Puma-Lib model-id resolution for
   runtime mode preparation must stay in backend Rust so adapters do not drift
   on workflow validation rules or required wiring.
