@@ -93,8 +93,10 @@ The following Milestone 2 foundation slices have now landed in code:
 - backend/server command synchronization that refreshes registry state after
   backend switches, runtime starts, runtime stops, external attachment, and
   status reads
-- health-monitor and manual-recovery synchronization that refreshes registry
-  state from host-owned runtime health observation paths
+- health-monitor and recovery synchronization that refreshes registry state
+  from host-owned runtime health observation paths and now also lets
+  health-monitor crash detection trigger the shared recovery manager through
+  Tauri-owned composition state
 - recovery stop-all paths now reuse the shared gateway-to-registry sync helper
   so failed or abandoned restarts do not leave stale runtime-residency state
   behind
@@ -543,6 +545,10 @@ runtime callers.
   the shared stop-and-sync runtime-registry adapter, so the last user-driven
   shutdown path no longer bypasses registry reconciliation when both main and
   embedding producers are stopped together.
+- 2026-04-14: The Tauri health monitor now owns automatic recovery triggering
+  through a shared recovery-manager service created at the composition root,
+  so crash detection can start the existing backend-owned restart flow
+  without relying on a manual recovery command first.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

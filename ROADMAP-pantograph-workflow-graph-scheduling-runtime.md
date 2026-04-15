@@ -58,6 +58,10 @@ implementation progress in the runtime and diagnostics layers.
 - Window-close teardown now also uses the shared stop-and-sync registry
   adapter, closing the remaining obvious host-owned shutdown path that had
   still stopped producers without reconciling the backend-owned registry.
+- Health-monitor crash detection now also triggers the shared recovery
+  manager from Tauri-owned composition state, so automatic recovery no longer
+  depends on a separate manual recovery command to enter the existing restart
+  flow.
 
 ### Active implementation stream
 
