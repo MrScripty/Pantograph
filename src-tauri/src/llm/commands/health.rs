@@ -2,28 +2,29 @@
 //!
 //! Commands for health checking and recovery management.
 
-use std::sync::Arc;
 use tauri::{command, AppHandle, Manager, State};
 
 use super::shared::sync_runtime_registry_from_gateway;
-use crate::llm::health_monitor::{
-    HealthCheckResult, HealthMonitor, HealthMonitorConfig, SharedHealthMonitor,
-};
-use crate::llm::recovery::{RecoveryConfig, RecoveryError, RecoveryManager, SharedRecoveryManager};
+use crate::llm::health_monitor::{HealthCheckResult, SharedHealthMonitor};
+use crate::llm::recovery::{RecoveryConfig, RecoveryError, SharedRecoveryManager};
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+
+fn shared_health_monitor(app: &AppHandle) -> Result<SharedHealthMonitor, String> {
+    app.try_state::<SharedHealthMonitor>()
+        .map(|state| (*state).clone())
+        .ok_or_else(|| "Health monitor not initialized".to_string())
+}
+
+fn shared_recovery_manager(app: &AppHandle) -> Result<SharedRecoveryManager, String> {
+    app.try_state::<SharedRecoveryManager>()
+        .map(|state| (*state).clone())
+        .ok_or_else(|| "Recovery manager not initialized".to_string())
+}
 
 /// Start health monitoring
 #[command]
 pub async fn start_health_monitor(app: AppHandle) -> Result<(), String> {
-    // Get or create health monitor
-    let monitor: Arc<HealthMonitor> = match app.try_state::<SharedHealthMonitor>() {
-        Some(m) => (*m).clone(),
-        None => {
-            let monitor = Arc::new(HealthMonitor::new(HealthMonitorConfig::default()));
-            app.manage(monitor.clone());
-            monitor
-        }
-    };
+    let monitor = shared_health_monitor(&app)?;
 
     if monitor.is_running() {
         return Err("Health monitor already running".to_string());
@@ -47,9 +48,8 @@ pub async fn stop_health_monitor(app: AppHandle) -> Result<(), String> {
 /// Get the last health check result
 #[command]
 pub async fn get_health_status(app: AppHandle) -> Result<Option<HealthCheckResult>, String> {
-    let monitor = match app.try_state::<SharedHealthMonitor>() {
-        Some(m) => m,
-        None => return Ok(None),
+    let Some(monitor) = app.try_state::<SharedHealthMonitor>() else {
+        return Ok(None);
     };
 
     Ok(monitor.last_result().await)
@@ -58,13 +58,8 @@ pub async fn get_health_status(app: AppHandle) -> Result<Option<HealthCheckResul
 /// Trigger an immediate health check
 #[command]
 pub async fn check_health_now(app: AppHandle) -> Result<Option<HealthCheckResult>, String> {
-    let monitor = match app.try_state::<SharedHealthMonitor>() {
-        Some(m) => m,
-        None => {
-            // Create a temporary monitor for one-shot check
-            let temp = HealthMonitor::new(HealthMonitorConfig::default());
-            return Ok(temp.check_now(&app).await);
-        }
+    let Some(monitor) = app.try_state::<SharedHealthMonitor>() else {
+        return Ok(None);
     };
 
     Ok(monitor.check_now(&app).await)
@@ -81,9 +76,8 @@ pub fn is_health_monitor_running(app: AppHandle) -> bool {
 /// Get recovery configuration
 #[command]
 pub async fn get_recovery_config(app: AppHandle) -> Result<RecoveryConfig, String> {
-    let manager = match app.try_state::<SharedRecoveryManager>() {
-        Some(m) => m,
-        None => return Ok(RecoveryConfig::default()),
+    let Some(manager) = app.try_state::<SharedRecoveryManager>() else {
+        return Ok(RecoveryConfig::default());
     };
 
     Ok(manager.config().clone())
@@ -112,15 +106,7 @@ pub async fn trigger_recovery(
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
 ) -> Result<u16, String> {
-    // Get or create recovery manager
-    let manager: Arc<RecoveryManager> = match app.try_state::<SharedRecoveryManager>() {
-        Some(m) => (*m).clone(),
-        None => {
-            let manager = Arc::new(RecoveryManager::new(RecoveryConfig::default()));
-            app.manage(manager.clone());
-            manager
-        }
-    };
+    let manager = shared_recovery_manager(&app)?;
 
     let result = manager
         .recover(&app, &gateway, "Manual recovery triggered")
@@ -134,9 +120,7 @@ pub async fn trigger_recovery(
 /// Reset recovery state (after manual intervention)
 #[command]
 pub fn reset_recovery_state(app: AppHandle) -> Result<(), String> {
-    let manager = app
-        .try_state::<SharedRecoveryManager>()
-        .ok_or("Recovery manager not initialized")?;
+    let manager = shared_recovery_manager(&app)?;
 
     manager.reset();
     Ok(())
