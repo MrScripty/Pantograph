@@ -104,7 +104,8 @@ app.manage(gateway);
   state.
 - Long-lived host services such as health monitoring and recovery must be
   started and stopped by the app composition root or another explicit owner,
-  not by arbitrary UI calls.
+  not by arbitrary UI calls. Command handlers may invoke those managed
+  services, but they must not create replacement service instances on demand.
 - Compatibility policy is additive: command surfaces may grow, but existing
   backend-owned status shapes should remain stable unless an explicit contract
   change is approved.
