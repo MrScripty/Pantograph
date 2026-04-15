@@ -547,6 +547,11 @@ runtime callers.
   diagnostics no longer own runtime-id canonicalization or lifecycle-reason
   inference when converting between diagnostics payloads and
   `inference::RuntimeLifecycleSnapshot`.
+- 2026-04-15: Runtime-registry sync-before-snapshot and sync-before-reclaim
+  semantics now also live in `crates/pantograph-embedded-runtime::
+  runtime_registry`, so Tauri registry commands no longer decide when host
+  mode-info reconciliation must happen before inspecting or reclaiming a
+  runtime.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
