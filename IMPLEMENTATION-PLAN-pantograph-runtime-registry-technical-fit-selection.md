@@ -533,6 +533,11 @@ runtime callers.
   registry snapshot after restart. Alternate-port recovery remains explicitly
   limited until the backend restart config grows a standards-owned port
   override contract.
+- 2026-04-14: Python-backed workflow producer observations now reconcile as
+  ephemeral runtimes rather than loaded reusable runtimes, so the task
+  executor no longer reports false live reuse for per-task adapter processes
+  and the shared runtime registry settles those producer snapshots back to
+  `stopped` after task completion instead of leaving stale ready state behind.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`

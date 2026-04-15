@@ -51,6 +51,10 @@ implementation progress in the runtime and diagnostics layers.
   configured, and refreshes both RAG vectorizer state and registry snapshots
   after restart. Alternate-port restart remains limited until the backend
   restart contract carries a port override.
+- Python-backed workflow producers are now treated as ephemeral execution
+  runtimes in the convergence path, so completed task-adapter processes no
+  longer leave stale ready-state registry observations or false reuse hints
+  after the run has already exited.
 
 ### Active implementation stream
 
