@@ -43,6 +43,9 @@ implementation progress in the runtime and diagnostics layers.
 - Edit-session embedding execution now also reconciles the shared registry
   after restoring inference mode, so registry snapshots track the restored
   runtime instance instead of the pre-restore producer state.
+- Recovery stop-all paths now also reconcile the shared registry after tearing
+  down producers, so failed clean-restart attempts do not leave stale
+  embedding-runtime observations behind.
 
 ### Active implementation stream
 

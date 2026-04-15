@@ -95,6 +95,9 @@ The following Milestone 2 foundation slices have now landed in code:
   status reads
 - health-monitor and manual-recovery synchronization that refreshes registry
   state from host-owned runtime health observation paths
+- recovery stop-all paths now reuse the shared gateway-to-registry sync helper
+  so failed or abandoned restarts do not leave stale runtime-residency state
+  behind
 - headless workflow adapter synchronization that refreshes registry state
   before embedded-runtime capability and diagnostics snapshot reads
 
@@ -514,6 +517,9 @@ runtime callers.
   runtime registry after restoring inference mode, and the backend regression
   test verifies that registry state tracks the restored runtime instance rather
   than leaving the pre-restore instance id stale.
+- 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
+  producers through the shared stop-and-sync adapter, so failed recovery does
+  not leave dedicated embedding runtime observations stuck in ready state.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -625,9 +631,9 @@ refactor lands.
 2. Add warmup/reuse plus retention-hint interpretation inside the registry boundary
    without moving those decisions into gateway or adapter layers.
 3. Continue reconciling the shared runtime registry after any remaining
-   producer restore or stop paths beyond the landed edit-session, RAG, and
-   shutdown slices so registry truth stays aligned with real runtime
-   transitions.
+   producer restore or stop paths beyond the landed edit-session, RAG,
+   shutdown, and recovery slices so registry truth stays aligned with real
+   runtime transitions.
 4. Consume the new backend-owned eviction candidate ordering from registry
    policy rather than rebuilding candidate selection in workflow service or
    adapters.
