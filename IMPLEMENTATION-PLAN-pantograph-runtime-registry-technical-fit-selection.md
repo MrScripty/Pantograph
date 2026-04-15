@@ -457,6 +457,9 @@ runtime callers.
   `keep_alive` state and forwards it through embedded-runtime into registry
   reservation records, while direct retention policy remains to be implemented
   inside the registry boundary.
+- 2026-04-14: Embedded-runtime now also updates the live registry reservation
+  hint when `keep_alive` changes on a session that remains loaded, so running
+  sessions no longer keep stale ephemeral retention after a keep-alive toggle.
 - 2026-04-13: `crates/pantograph-runtime-registry` now exposes deterministic
   eviction candidates with active-reservation and pinned-model exclusion so the
   next retention/eviction slice can consume a backend-owned ordering primitive.
