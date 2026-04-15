@@ -96,6 +96,10 @@ implementation progress in the runtime and diagnostics layers.
   reclaim commands through that shared path. The remaining work is to route
   the last host reclaim call sites through the same adapter instead of ad hoc
   producer teardown.
+- Host-runtime producer matching for targeted reclaim now also lives in
+  `crates/pantograph-embedded-runtime`, leaving the Tauri runtime-registry
+  wrapper to consume backend-owned active-vs-embedding matching instead of
+  keeping a separate host-local matcher.
 - Workflow-session stale cleanup for idle, unloaded, non-keep-alive sessions
   now lives in `crates/pantograph-workflow-service`, and a bounded backend-
   owned cleanup worker now invokes that contract on a timer while Tauri only
