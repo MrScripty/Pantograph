@@ -585,7 +585,9 @@ runtime callers.
   targeted reclaim adapter that maps backend-owned runtime ids onto the
   correct Tauri composition stop path for either the active runtime producer
   or the dedicated embedding producer before re-synchronizing the shared
-  registry. Milestone 3 still needs the remaining host reclaim call sites to
+  registry. `src-tauri/src/llm/commands/registry.rs` now uses that adapter for
+  synchronized runtime-registry snapshot reads and explicit targeted reclaim
+  commands. Milestone 3 still needs any remaining host reclaim call sites to
   adopt that adapter so those flows stop relying on local producer teardown.
 
 **Verification:**

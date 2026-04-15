@@ -91,9 +91,11 @@ implementation progress in the runtime and diagnostics layers.
   producer.
 - Tauri now has a shared targeted reclaim adapter that maps backend-owned
   runtime ids onto the correct host stop path for active-runtime and
-  dedicated-embedding producers before re-synchronizing the shared registry.
-  The remaining work is to route the last host reclaim call sites through that
-  adapter instead of ad hoc producer teardown.
+  dedicated-embedding producers before re-synchronizing the shared registry,
+  and the host now exposes synchronized runtime-registry snapshot and targeted
+  reclaim commands through that shared path. The remaining work is to route
+  the last host reclaim call sites through the same adapter instead of ad hoc
+  producer teardown.
 
 ### Active implementation stream
 
