@@ -599,6 +599,11 @@ runtime callers.
   lives in `crates/pantograph-embedded-runtime::runtime_registry`, and the
   Tauri runtime-registry wrapper now consumes that backend-owned helper
   instead of maintaining a separate host-local active-vs-embedding matcher.
+- 2026-04-15: Targeted reclaim sequencing and producer-stop dispatch now also
+  live behind a backend-owned host-controller trait in
+  `crates/pantograph-embedded-runtime::runtime_registry`, leaving the Tauri
+  wrapper to implement host stop primitives instead of owning reclaim
+  sequencing locally.
 - 2026-04-15: `crates/pantograph-workflow-service` now owns an explicit stale
   workflow-session cleanup contract for idle, unloaded, non-keep-alive
   sessions, with focused service tests plus thin embedded-runtime and Tauri
@@ -615,6 +620,7 @@ runtime callers.
 - `cargo test -p pantograph-runtime-registry eviction_reservation_candidate_for_owners -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime`
 - `cargo test -p pantograph-embedded-runtime live_host_runtime_producer -- --nocapture`
+- `cargo test -p pantograph-embedded-runtime reclaim_runtime_and_reconcile_runtime_registry -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_stale_cleanup_worker -- --nocapture`

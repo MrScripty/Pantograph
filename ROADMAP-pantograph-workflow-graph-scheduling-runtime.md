@@ -100,6 +100,9 @@ implementation progress in the runtime and diagnostics layers.
   `crates/pantograph-embedded-runtime`, leaving the Tauri runtime-registry
   wrapper to consume backend-owned active-vs-embedding matching instead of
   keeping a separate host-local matcher.
+- Targeted reclaim sequencing now also lives in
+  `crates/pantograph-embedded-runtime`, with Tauri implementing only the host
+  stop primitives needed by the backend-owned reclaim coordinator.
 - Workflow-session stale cleanup for idle, unloaded, non-keep-alive sessions
   now lives in `crates/pantograph-workflow-service`, and a bounded backend-
   owned cleanup worker now invokes that contract on a timer while Tauri only
