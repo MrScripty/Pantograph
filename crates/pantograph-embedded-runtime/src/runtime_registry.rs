@@ -13,6 +13,12 @@ use pantograph_runtime_registry::{
     RuntimeRegistryRuntimeSnapshot,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostRuntimeProducer {
+    Active,
+    Embedding,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveRuntimeDescriptor {
     pub runtime_id: String,
@@ -49,6 +55,55 @@ pub fn active_runtime_descriptor(mode_info: &HostRuntimeModeSnapshot) -> ActiveR
         backend_keys,
         runtime_instance_id,
     }
+}
+
+pub fn active_runtime_id(mode_info: &HostRuntimeModeSnapshot) -> Option<String> {
+    mode_info
+        .active_runtime
+        .as_ref()
+        .and_then(|snapshot| snapshot.runtime_id.as_deref())
+        .or(mode_info.backend_key.as_deref())
+        .or(mode_info.backend_name.as_deref())
+        .map(canonical_runtime_id)
+}
+
+pub fn embedding_runtime_id(mode_info: &HostRuntimeModeSnapshot) -> Option<String> {
+    mode_info.embedding_runtime.as_ref().map(|snapshot| {
+        snapshot
+            .runtime_id
+            .as_deref()
+            .map(canonical_runtime_id)
+            .unwrap_or_else(|| "llama.cpp.embedding".to_string())
+    })
+}
+
+pub fn live_host_runtime_producer(
+    mode_info: &HostRuntimeModeSnapshot,
+    runtime_id: &str,
+) -> Option<HostRuntimeProducer> {
+    let runtime_id = canonical_runtime_id(runtime_id);
+
+    if mode_info
+        .active_runtime
+        .as_ref()
+        .map(|snapshot| snapshot.active)
+        .unwrap_or(false)
+        && active_runtime_id(mode_info).as_deref() == Some(runtime_id.as_str())
+    {
+        return Some(HostRuntimeProducer::Active);
+    }
+
+    if mode_info
+        .embedding_runtime
+        .as_ref()
+        .map(|snapshot| snapshot.active)
+        .unwrap_or(false)
+        && embedding_runtime_id(mode_info).as_deref() == Some(runtime_id.as_str())
+    {
+        return Some(HostRuntimeProducer::Embedding);
+    }
+
+    None
 }
 
 pub fn active_runtime_observation(
@@ -179,6 +234,60 @@ pub fn reconcile_runtime_registry_snapshot_override(
 mod tests {
     use super::*;
     use pantograph_runtime_registry::RuntimeRegistryStatus;
+
+    #[test]
+    fn live_host_runtime_producer_matches_active_runtime_aliases() {
+        let producer = live_host_runtime_producer(
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("PyTorch".to_string()),
+                backend_key: Some("pytorch".to_string()),
+                active_model_target: None,
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("pytorch".to_string()),
+                    runtime_instance_id: Some("torch-main-1".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            "PyTorch",
+        );
+
+        assert_eq!(producer, Some(HostRuntimeProducer::Active));
+    }
+
+    #[test]
+    fn live_host_runtime_producer_matches_embedding_runtime_aliases() {
+        let producer = live_host_runtime_producer(
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: None,
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp.embedding".to_string()),
+                    runtime_instance_id: Some("llama-embed-1".to_string()),
+                    warmup_started_at_ms: Some(11),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(9),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            },
+            "llama_cpp_embedding",
+        );
+
+        assert_eq!(producer, Some(HostRuntimeProducer::Embedding));
+    }
 
     #[test]
     fn reconcile_mode_info_registers_active_and_embedding_runtimes() {

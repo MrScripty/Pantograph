@@ -1,70 +1,14 @@
 //! Tauri-side re-export of backend-owned runtime-registry helpers.
 
 pub use pantograph_embedded_runtime::runtime_registry::{
-    reconcile_runtime_registry_mode_info, reconcile_runtime_registry_snapshot_override,
+    live_host_runtime_producer, reconcile_runtime_registry_mode_info,
+    reconcile_runtime_registry_snapshot_override, HostRuntimeProducer,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
-use pantograph_runtime_identity::canonical_runtime_id;
 pub use pantograph_runtime_registry::{
     RuntimeReclaimAction, RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError,
     SharedRuntimeRegistry,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HostRuntimeProducer {
-    Active,
-    Embedding,
-}
-
-fn active_runtime_id(mode_info: &inference::ServerModeInfo) -> Option<String> {
-    mode_info
-        .active_runtime
-        .as_ref()
-        .and_then(|snapshot| snapshot.runtime_id.as_deref())
-        .or(mode_info.backend_key.as_deref())
-        .or(mode_info.backend_name.as_deref())
-        .map(canonical_runtime_id)
-}
-
-fn embedding_runtime_id(mode_info: &inference::ServerModeInfo) -> Option<String> {
-    mode_info.embedding_runtime.as_ref().map(|snapshot| {
-        snapshot
-            .runtime_id
-            .as_deref()
-            .map(canonical_runtime_id)
-            .unwrap_or_else(|| "llama.cpp.embedding".to_string())
-    })
-}
-
-fn live_host_runtime_producer(
-    mode_info: &inference::ServerModeInfo,
-    runtime_id: &str,
-) -> Option<HostRuntimeProducer> {
-    let runtime_id = canonical_runtime_id(runtime_id);
-
-    if mode_info.ready
-        && mode_info
-            .active_runtime
-            .as_ref()
-            .map(|snapshot| snapshot.active)
-            .unwrap_or(false)
-        && active_runtime_id(mode_info).as_deref() == Some(runtime_id.as_str())
-    {
-        return Some(HostRuntimeProducer::Active);
-    }
-
-    if mode_info
-        .embedding_runtime
-        .as_ref()
-        .map(|snapshot| snapshot.active)
-        .unwrap_or(false)
-        && embedding_runtime_id(mode_info).as_deref() == Some(runtime_id.as_str())
-    {
-        return Some(HostRuntimeProducer::Embedding);
-    }
-
-    None
-}
 
 pub async fn sync_runtime_registry_from_gateway(
     gateway: &crate::llm::gateway::InferenceGateway,
@@ -97,7 +41,7 @@ pub async fn reclaim_runtime_and_sync_runtime_registry(
     registry: &RuntimeRegistry,
     runtime_id: &str,
 ) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
-    let mode_info = gateway.mode_info().await;
+    let mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let live_producer = live_host_runtime_producer(&mode_info, runtime_id);
     let reclaim = registry.reclaim_runtime(runtime_id, live_producer.is_some())?;
 
@@ -360,15 +304,20 @@ mod tests {
             }),
         };
 
+        let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
+
         assert_eq!(
-            live_host_runtime_producer(&mode_info, "pytorch"),
+            live_host_runtime_producer(&host_runtime_mode_info, "pytorch"),
             Some(HostRuntimeProducer::Active)
         );
         assert_eq!(
-            live_host_runtime_producer(&mode_info, "llama.cpp.embedding"),
+            live_host_runtime_producer(&host_runtime_mode_info, "llama.cpp.embedding"),
             Some(HostRuntimeProducer::Embedding)
         );
-        assert_eq!(live_host_runtime_producer(&mode_info, "onnx-runtime"), None);
+        assert_eq!(
+            live_host_runtime_producer(&host_runtime_mode_info, "onnx-runtime"),
+            None
+        );
     }
 
     #[tokio::test]
