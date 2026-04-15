@@ -47,6 +47,10 @@ implementation progress in the runtime and diagnostics layers.
   immediately after switching into embedding mode, so workflow-start
   diagnostics and runtime policy observe the prepared producer instead of the
   pre-switch inference runtime.
+- Producer-aware workflow diagnostics runtime assembly now also lives in
+  `crates/pantograph-embedded-runtime`, so Tauri workflow adapters consume a
+  backend-owned fallback contract for active/embedding snapshots, model
+  targets, and trace runtime metrics instead of rebuilding that logic locally.
 - Recovery stop-all paths now also reconcile the shared registry after tearing
   down producers, so failed clean-restart attempts do not leave stale
   embedding-runtime observations behind.

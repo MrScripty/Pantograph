@@ -533,6 +533,11 @@ runtime callers.
   runtime registry immediately after embedding-mode preparation, so registry
   snapshots observed at workflow start reflect the prepared producer instance
   instead of the pre-switch inference runtime.
+- 2026-04-15: Producer-aware workflow diagnostics runtime assembly now also
+  lives in `crates/pantograph-embedded-runtime::workflow_runtime`, so Tauri
+  workflow adapters no longer rebuild active/embedding snapshot fallback,
+  model-target, and trace-runtime selection rules from stored overlays plus
+  live gateway state.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
@@ -627,6 +632,7 @@ runtime callers.
 - `cargo test -p pantograph-embedded-runtime reclaim_runtime_and_reconcile_runtime_registry -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime test_session_runtime_unload_stops_active_gateway_runtime_when_evictable -- --nocapture`
 - `cargo test -p pantograph-embedded-runtime execute_edit_session_graph_reconciles_registry_after_embedding_prepare -- --nocapture`
+- `cargo test -p pantograph-embedded-runtime workflow_runtime -- --nocapture`
 - `cargo test -p pantograph-workflow-service loaded_runtime_capacity_limit_clamps_to_valid_session_bounds -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_cleanup_stale_sessions -- --nocapture`
 - `cargo test -p pantograph-workflow-service workflow_stale_cleanup_worker -- --nocapture`
