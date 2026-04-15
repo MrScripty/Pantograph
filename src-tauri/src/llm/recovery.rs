@@ -9,11 +9,16 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
+use crate::agent::rag::SharedRagManager;
+use crate::config::{AppConfig, EmbeddingMemoryMode};
 use crate::constants::ports;
 use crate::llm::health_monitor::ServerEvent;
 use crate::llm::port_manager::{check_port_available, find_available_port};
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
-use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
+use crate::llm::startup::validate_external_server_url;
+use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
+use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 
 /// Recovery strategy to use
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,24 +272,43 @@ impl RecoveryManager {
         &self,
         app: &AppHandle,
         gateway: &SharedGateway,
-        _port_override: Option<u16>,
+        port_override: Option<u16>,
     ) -> Result<u16, String> {
-        // Get last known configuration from gateway
-        // For now, we'll use a simplified restart that just starts inference
-        // In a full implementation, we'd store the last config and restore it
+        let restart_config = gateway
+            .restart_runtime_config()
+            .await
+            .ok_or_else(|| "No active runtime configuration available for restart".to_string())?;
+        let app_config = app
+            .try_state::<SharedAppConfig>()
+            .map(|config| config.clone())
+            .ok_or_else(|| "Application config not initialized".to_string())?;
+        let app_config = app_config.read().await.clone();
+        let restart_embedding = dedicated_embedding_restart_needed(&app_config, &restart_config);
 
         // Stop existing
         stop_gateway_for_recovery(app, gateway).await;
 
-        // Start with stored config
-        // Note: This requires the gateway to remember its last successful configuration
-        // For now, this is a placeholder - the actual implementation would need
-        // to store and restore the full server configuration
+        if let Some(port_override) = port_override {
+            log::warn!(
+                "Recovery requested alternate port {}, but backend restart config does not yet support port overrides; retrying with saved runtime config",
+                port_override
+            );
+        }
 
-        Err(
-            "Restart not fully implemented - manual restart required. Use the UI to reconnect."
-                .to_string(),
-        )
+        gateway
+            .start(&restart_config)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        if restart_embedding {
+            restart_dedicated_embedding_runtime(app, gateway, &app_config).await?;
+        } else {
+            sync_rag_embedding_url(app, gateway).await;
+        }
+
+        sync_runtime_registry_after_recovery_restart(app, gateway).await;
+
+        Ok(recovery_port_from_gateway(gateway).await)
     }
 
     /// Get the configuration
@@ -310,9 +334,142 @@ async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) {
     stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref()).await;
 }
 
+fn dedicated_embedding_restart_needed(
+    app_config: &AppConfig,
+    restart_config: &inference::BackendConfig,
+) -> bool {
+    app_config.models.embedding_model_path.is_some()
+        && app_config.embedding_memory_mode != EmbeddingMemoryMode::Sequential
+        && restart_config.external_url.is_none()
+        && !restart_config.embedding_mode
+        && !restart_config.reranking_mode
+}
+
+async fn restart_dedicated_embedding_runtime(
+    app: &AppHandle,
+    gateway: &SharedGateway,
+    app_config: &AppConfig,
+) -> Result<(), String> {
+    let Some(embedding_model_path) = app_config.models.embedding_model_path.as_deref() else {
+        sync_rag_embedding_url(app, gateway).await;
+        return Ok(());
+    };
+
+    let resolved_embedding_path = resolve_embedding_model_path(embedding_model_path)?;
+    let devices = list_devices(app.clone()).await.unwrap_or_default();
+
+    gateway
+        .start_embedding_server(
+            &resolved_embedding_path.to_string_lossy(),
+            app_config.embedding_memory_mode.clone(),
+            &devices,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    sync_rag_embedding_url(app, gateway).await;
+    Ok(())
+}
+
+async fn sync_rag_embedding_url(app: &AppHandle, gateway: &SharedGateway) {
+    let Some(rag_manager) = app
+        .try_state::<SharedRagManager>()
+        .map(|rag_manager| rag_manager.clone())
+    else {
+        return;
+    };
+
+    let mut rag_guard = rag_manager.write().await;
+    if let Some(url) = gateway.embedding_url().await {
+        rag_guard.set_embedding_url(url);
+    } else {
+        rag_guard.clear_embedding_url();
+    }
+}
+
+async fn sync_runtime_registry_after_recovery_restart(app: &AppHandle, gateway: &SharedGateway) {
+    let Some(runtime_registry) = app
+        .try_state::<SharedRuntimeRegistry>()
+        .map(|runtime_registry| runtime_registry.clone())
+    else {
+        return;
+    };
+
+    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
+}
+
+async fn recovery_port_from_gateway(gateway: &SharedGateway) -> u16 {
+    gateway
+        .base_url()
+        .await
+        .as_deref()
+        .map(port_from_base_url)
+        .unwrap_or(ports::SERVER)
+}
+
+fn port_from_base_url(base_url: &str) -> u16 {
+    validate_external_server_url(base_url)
+        .ok()
+        .and_then(|normalized| reqwest::Url::parse(&normalized).ok())
+        .and_then(|url| url.port_or_known_default())
+        .unwrap_or(ports::SERVER)
+}
+
 impl Default for RecoveryManager {
     fn default() -> Self {
         Self::new(RecoveryConfig::default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{dedicated_embedding_restart_needed, port_from_base_url};
+    use crate::config::{AppConfig, EmbeddingMemoryMode, ModelConfig};
+    use crate::constants::ports;
+
+    #[test]
+    fn dedicated_embedding_restart_requires_parallel_inference_runtime() {
+        let app_config = AppConfig {
+            models: ModelConfig {
+                embedding_model_path: Some("/models/embed.gguf".to_string()),
+                ..ModelConfig::default()
+            },
+            embedding_memory_mode: EmbeddingMemoryMode::CpuParallel,
+            ..AppConfig::default()
+        };
+
+        let inference_config = inference::BackendConfig {
+            model_name: Some("llava:13b".to_string()),
+            ..inference::BackendConfig::default()
+        };
+        assert!(dedicated_embedding_restart_needed(
+            &app_config,
+            &inference_config
+        ));
+
+        let external_config = inference::BackendConfig {
+            external_url: Some("http://127.0.0.1:1234".to_string()),
+            ..inference::BackendConfig::default()
+        };
+        assert!(!dedicated_embedding_restart_needed(
+            &app_config,
+            &external_config
+        ));
+
+        let embedding_mode_config = inference::BackendConfig {
+            embedding_mode: true,
+            ..inference::BackendConfig::default()
+        };
+        assert!(!dedicated_embedding_restart_needed(
+            &app_config,
+            &embedding_mode_config
+        ));
+    }
+
+    #[test]
+    fn port_from_base_url_uses_known_default_when_port_missing() {
+        assert_eq!(port_from_base_url("http://127.0.0.1:8080"), 8080);
+        assert_eq!(port_from_base_url("https://example.test"), 443);
+        assert_eq!(port_from_base_url("not-a-url"), ports::SERVER);
     }
 }
 

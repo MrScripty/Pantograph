@@ -544,6 +544,14 @@ impl InferenceGateway {
         self.last_inference_config.read().await.clone()
     }
 
+    /// Get the saved config for the currently active runtime, if any.
+    ///
+    /// Recovery flows should read this before stopping the runtime when they
+    /// intend to restart the exact active mode.
+    pub async fn restart_runtime_config(&self) -> Option<BackendConfig> {
+        self.current_runtime_config.read().await.clone()
+    }
+
     /// Restore the last non-embedding inference runtime when available.
     pub async fn restore_inference_runtime(
         &self,
@@ -1617,5 +1625,29 @@ mod tests {
         assert!(prepared.restore_config.is_none());
         assert_eq!(prepared.base_url.as_deref(), Some("http://127.0.0.1:11434"));
         assert_eq!(after.runtime_instance_id, before.runtime_instance_id);
+    }
+
+    #[tokio::test]
+    async fn test_restart_runtime_config_reads_active_runtime_config_until_stop() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "Ollama");
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+        let config = BackendConfig {
+            model_name: Some("llava:13b".to_string()),
+            ..BackendConfig::default()
+        };
+        gateway
+            .start(&config)
+            .await
+            .expect("gateway should start in inference mode");
+
+        let restart_config = gateway
+            .restart_runtime_config()
+            .await
+            .expect("active runtime config should be available");
+        assert_eq!(restart_config.model_name.as_deref(), Some("llava:13b"));
+
+        gateway.stop().await;
+        assert!(gateway.restart_runtime_config().await.is_none());
     }
 }

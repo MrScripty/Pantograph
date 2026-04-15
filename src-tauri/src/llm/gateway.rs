@@ -265,6 +265,11 @@ impl InferenceGateway {
         self.inner.restore_inference_runtime(restore_config).await
     }
 
+    /// Get the saved restart config for the active runtime before teardown.
+    pub async fn restart_runtime_config(&self) -> Option<BackendConfig> {
+        self.inner.restart_runtime_config().await
+    }
+
     /// Get server mode info for the frontend.
     pub async fn mode_info(&self) -> ServerModeInfo {
         let mut mode_info = self.inner.mode_info().await;

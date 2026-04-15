@@ -69,6 +69,13 @@ impl RagManager {
         self.status.vectorizer_url = Some(url);
     }
 
+    /// Clear the embedding server URL when no runtime is available.
+    pub fn clear_embedding_url(&mut self) {
+        self.embedding_url = None;
+        self.status.vectorizer_url = None;
+        self.status.vectorizer_available = false;
+    }
+
     /// Get the current status
     pub fn status(&self) -> &RagStatus {
         &self.status
