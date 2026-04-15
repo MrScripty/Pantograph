@@ -3,8 +3,10 @@
 use super::shared::{get_project_data_dir, SharedAppConfig};
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
-use crate::llm::commands::shared::sync_runtime_registry_from_gateway;
 use crate::llm::gateway::SharedGateway;
+use crate::llm::runtime_registry::{
+    restore_runtime_and_sync_runtime_registry, sync_runtime_registry_from_gateway,
+};
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::SharedRuntimeRegistry;
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
@@ -230,16 +232,18 @@ pub async fn index_docs_with_switch(
         None => {
             // Backend has no HTTP API (e.g., Candle)
             // Restore VLM mode if needed and return error
-            if let Err(error) = gateway
-                .restore_inference_runtime(prepared.restore_config.clone())
-                .await
+            if let Err(error) = restore_runtime_and_sync_runtime_registry(
+                gateway.inner(),
+                runtime_registry.inner(),
+                prepared.restore_config.clone(),
+            )
+            .await
             {
                 log::warn!(
                     "Failed to restore VLM mode after RAG embedding startup fallback: {}",
                     error
                 );
             }
-            sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
             return Err(format!(
                 "The {} backend does not support RAG indexing through the GUI. \
                  It runs in-process without an HTTP API. \
@@ -319,16 +323,18 @@ pub async fn index_docs_with_switch(
                 })
                 .ok();
 
-            if let Err(error) = gateway
-                .restore_inference_runtime(prepared.restore_config.clone())
-                .await
+            if let Err(error) = restore_runtime_and_sync_runtime_registry(
+                gateway.inner(),
+                runtime_registry.inner(),
+                prepared.restore_config.clone(),
+            )
+            .await
             {
                 log::warn!(
                     "Failed to restore VLM mode after RAG indexing failure: {}",
                     error
                 );
             }
-            sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
 
             return Err(e.to_string());
         }
@@ -346,11 +352,13 @@ pub async fn index_docs_with_switch(
             })
             .ok();
 
-        gateway
-            .restore_inference_runtime(prepared.restore_config)
-            .await
+        restore_runtime_and_sync_runtime_registry(
+            gateway.inner(),
+            runtime_registry.inner(),
+            prepared.restore_config,
+        )
+        .await
             .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
-        sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
     }
 
     channel

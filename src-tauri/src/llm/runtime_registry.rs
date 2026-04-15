@@ -22,6 +22,16 @@ pub async fn stop_all_and_sync_runtime_registry(
     sync_runtime_registry_from_gateway(gateway, registry).await;
 }
 
+pub async fn restore_runtime_and_sync_runtime_registry(
+    gateway: &crate::llm::gateway::InferenceGateway,
+    registry: &RuntimeRegistry,
+    restore_config: Option<inference::BackendConfig>,
+) -> Result<(), inference::GatewayError> {
+    let result = gateway.restore_inference_runtime(restore_config).await;
+    sync_runtime_registry_from_gateway(gateway, registry).await;
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
