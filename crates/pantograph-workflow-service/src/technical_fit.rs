@@ -190,6 +190,38 @@ impl WorkflowTechnicalFitDecision {
 }
 
 impl WorkflowService {
+    pub(crate) fn technical_fit_session_context(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowTechnicalFitSessionContext, WorkflowServiceError> {
+        let session_id = session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+
+        let store = self.session_store_guard()?;
+        let session = store.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let total_queued_run_count = store
+            .active
+            .values()
+            .map(|state| state.queue_len() as u64)
+            .sum::<u64>();
+        Ok(WorkflowTechnicalFitSessionContext {
+            workflow_id: session.workflow_id.clone(),
+            usage_profile: session.usage_profile.clone(),
+            queue_pressure: WorkflowTechnicalFitQueuePressure {
+                current_session_queue_depth: Some(session.queue_len() as u64),
+                total_queued_run_count: Some(total_queued_run_count),
+                loaded_runtime_count: Some(store.loaded_session_count() as u64),
+                loaded_runtime_capacity: Some(store.max_loaded_sessions as u64),
+            },
+        })
+    }
+
     pub async fn workflow_technical_fit_request<H: WorkflowHost>(
         &self,
         host: &H,

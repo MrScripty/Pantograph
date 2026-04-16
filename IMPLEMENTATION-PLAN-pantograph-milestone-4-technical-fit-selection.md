@@ -292,7 +292,7 @@ fit logic lands.
 - [ ] Extract technical-fit contracts and selector implementation out of
       `crates/pantograph-runtime-registry/src/lib.rs` into focused module files
       so the registry facade remains composition-oriented.
-- [ ] Extract workflow-service selection-request normalization,
+- [x] Extract workflow-service selection-request normalization,
       override-precedence helpers, and related preflight/execution glue out of
       `crates/pantograph-workflow-service/src/workflow.rs` into focused modules.
 - [x] Extract embedded-runtime candidate gathering and runtime-state projection
@@ -420,6 +420,9 @@ Update during implementation:
 - 2026-04-16: Moved the workflow-service technical-fit request/session entry
   points into `technical_fit.rs`, leaving `workflow.rs` focused on core service
   orchestration while preserving the public service API.
+- 2026-04-16: Moved workflow-service technical-fit session context and queue
+  pressure assembly into `technical_fit.rs`, closing the remaining service-side
+  Milestone 2 extraction still living in `workflow.rs`.
 - 2026-04-16: Moved the embedded-runtime host-side technical-fit entrypoint and
   runtime snapshot/candidate assembly into `technical_fit.rs`, leaving
   `lib.rs` as a thinner workflow-host facade while preserving the public host

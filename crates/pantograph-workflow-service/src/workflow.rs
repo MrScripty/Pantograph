@@ -22,9 +22,7 @@ use crate::graph::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     WorkflowSessionKind,
 };
-use crate::technical_fit::{
-    WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSessionContext,
-};
+use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
 
 /// Node/port value binding used for workflow inputs and outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -965,9 +963,9 @@ struct WorkflowSessionPreflightCache {
 }
 
 #[derive(Debug, Clone)]
-struct WorkflowSessionRecord {
-    workflow_id: String,
-    usage_profile: Option<String>,
+pub(crate) struct WorkflowSessionRecord {
+    pub(crate) workflow_id: String,
+    pub(crate) usage_profile: Option<String>,
     keep_alive: bool,
     runtime_loaded: bool,
     active_run: Option<WorkflowSessionActiveRun>,
@@ -976,6 +974,12 @@ struct WorkflowSessionRecord {
     last_accessed_at_ms: u64,
     run_count: u64,
     preflight_cache: Option<WorkflowSessionPreflightCache>,
+}
+
+impl WorkflowSessionRecord {
+    pub(crate) fn queue_len(&self) -> usize {
+        self.queue.len()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1012,11 +1016,11 @@ struct WorkflowSessionRunFinishState {
 }
 
 #[derive(Debug)]
-struct WorkflowSessionStore {
+pub(crate) struct WorkflowSessionStore {
     max_sessions: usize,
-    max_loaded_sessions: usize,
+    pub(crate) max_loaded_sessions: usize,
     tick: u64,
-    active: HashMap<String, WorkflowSessionRecord>,
+    pub(crate) active: HashMap<String, WorkflowSessionRecord>,
 }
 
 impl WorkflowSessionStore {
@@ -1067,7 +1071,7 @@ impl WorkflowSessionStore {
         Ok(session_id)
     }
 
-    fn loaded_session_count(&self) -> usize {
+    pub(crate) fn loaded_session_count(&self) -> usize {
         self.active
             .values()
             .filter(|state| state.runtime_loaded)
@@ -1562,9 +1566,7 @@ impl WorkflowService {
         &self,
         max_loaded_sessions: Option<usize>,
     ) -> Result<(), WorkflowServiceError> {
-        let mut store = self.session_store.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session store lock poisoned".to_string())
-        })?;
+        let mut store = self.session_store_guard()?;
         store.max_loaded_sessions = max_loaded_sessions
             .unwrap_or(store.max_sessions)
             .max(1)
@@ -1572,38 +1574,12 @@ impl WorkflowService {
         Ok(())
     }
 
-    pub(crate) fn technical_fit_session_context(
+    pub(crate) fn session_store_guard(
         &self,
-        session_id: &str,
-    ) -> Result<WorkflowTechnicalFitSessionContext, WorkflowServiceError> {
-        let session_id = session_id.trim();
-        if session_id.is_empty() {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "session_id must be non-empty".to_string(),
-            ));
-        }
-
-        let store = self.session_store.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session store lock poisoned".to_string())
-        })?;
-        let session = store.active.get(session_id).ok_or_else(|| {
-            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
-        })?;
-        let total_queued_run_count = store
-            .active
-            .values()
-            .map(|state| state.queue.len() as u64)
-            .sum::<u64>();
-        Ok(WorkflowTechnicalFitSessionContext {
-            workflow_id: session.workflow_id.clone(),
-            usage_profile: session.usage_profile.clone(),
-            queue_pressure: crate::technical_fit::WorkflowTechnicalFitQueuePressure {
-                current_session_queue_depth: Some(session.queue.len() as u64),
-                total_queued_run_count: Some(total_queued_run_count),
-                loaded_runtime_count: Some(store.loaded_session_count() as u64),
-                loaded_runtime_capacity: Some(store.max_loaded_sessions as u64),
-            },
-        })
+    ) -> Result<std::sync::MutexGuard<'_, WorkflowSessionStore>, WorkflowServiceError> {
+        self.session_store
+            .lock()
+            .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))
     }
 
     async fn ensure_session_runtime_loaded<H: WorkflowHost>(

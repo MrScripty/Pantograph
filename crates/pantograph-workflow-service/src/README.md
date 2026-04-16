@@ -11,9 +11,10 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
 ## Contents
 - `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
 - `technical_fit.rs`: host-agnostic technical-fit request and decision DTOs plus
-  normalization helpers and workflow-service request/session entrypoints that
-  freeze how workflow and session context is projected into backend runtime
-  selection without owning the selector policy.
+  normalization helpers, session queue-pressure/context assembly, and
+  workflow-service request/session entrypoints that freeze how workflow and
+  session context is projected into backend runtime selection without owning
+  the selector policy.
 - `capabilities.rs`: shared workflow capability/validation utilities used by all adapters.
 - `trace.rs`: host-agnostic workflow trace and metrics DTOs used to freeze
   backend-owned diagnostics contracts before adapter-specific projections and
