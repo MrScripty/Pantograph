@@ -461,6 +461,11 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` into
   `src-tauri/src/workflow/headless_diagnostics.rs`, reducing command-file
   ownership pressure while keeping backend-owned semantics intact.
+- 2026-04-16: Extracted shared embedded-runtime construction out of
+  `src-tauri/src/workflow/headless_workflow_commands.rs` into
+  `src-tauri/src/workflow/headless_runtime.rs` so headless workflow,
+  workflow-execution, and orchestration entry points reuse one host-runtime
+  composition path instead of coupling that wiring to one command module.
 
 ## Commit Cadence Notes
 

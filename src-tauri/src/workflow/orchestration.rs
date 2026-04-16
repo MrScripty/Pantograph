@@ -381,7 +381,7 @@ pub async fn execute_orchestration(
     drop(store);
 
     let runtime = Arc::new(
-        super::headless_workflow_commands::build_runtime(
+        super::headless_runtime::build_runtime(
             &app,
             gateway.inner(),
             runtime_registry.inner(),

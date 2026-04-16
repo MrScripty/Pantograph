@@ -3,13 +3,8 @@
 //! This module now acts as a thin transport wrapper over the backend-owned
 //! Pantograph embedded runtime.
 
-use std::path::PathBuf;
-use std::sync::Arc;
-
-use async_trait::async_trait;
 use pantograph_embedded_runtime::{
-    workflow_runtime::build_runtime_event_projection, EmbeddedRuntime, EmbeddedRuntimeConfig,
-    HostRuntimeModeSnapshot, RagBackend, RagDocument,
+    workflow_runtime::build_runtime_event_projection, HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
@@ -25,12 +20,11 @@ use pantograph_workflow_service::{
     WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceSnapshotRequest,
     WorkflowTraceSnapshotResponse,
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
-use crate::project_root::resolve_project_root;
 
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
@@ -40,68 +34,10 @@ use super::headless_diagnostics::{
     stored_runtime_trace_metrics, workflow_clear_diagnostics_history_response,
     workflow_diagnostics_snapshot_projection, workflow_scheduler_snapshot_response,
 };
+pub(crate) use super::headless_runtime::build_runtime;
 
 fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
-}
-
-fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))
-}
-
-struct TauriRagBackend {
-    rag_manager: SharedRagManager,
-}
-
-#[async_trait]
-impl RagBackend for TauriRagBackend {
-    async fn search_as_docs(&self, query: &str, limit: usize) -> Result<Vec<RagDocument>, String> {
-        let guard = self.rag_manager.read().await;
-        let docs = guard
-            .search_as_docs(query, limit)
-            .await
-            .map_err(|err| err.to_string())?;
-        Ok(docs
-            .into_iter()
-            .map(|doc| RagDocument {
-                id: doc.id,
-                title: doc.title,
-                section: doc.section,
-                summary: doc.summary,
-                content: doc.content,
-            })
-            .collect())
-    }
-}
-
-pub(super) async fn build_runtime(
-    app: &AppHandle,
-    gateway: &SharedGateway,
-    runtime_registry: &SharedRuntimeRegistry,
-    extensions: &SharedExtensions,
-    workflow_service: &SharedWorkflowService,
-    rag_manager: Option<&SharedRagManager>,
-) -> Result<EmbeddedRuntime, String> {
-    let config = EmbeddedRuntimeConfig::new(app_data_dir(app)?, resolve_project_root()?);
-    let host_runtime_mode_info =
-        HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
-    let rag_backend = rag_manager.cloned().map(|manager| {
-        Arc::new(TauriRagBackend {
-            rag_manager: manager,
-        }) as Arc<dyn RagBackend>
-    });
-    Ok(EmbeddedRuntime::hosted_with_default_python_runtime(
-        config,
-        gateway.inner_arc(),
-        extensions.clone(),
-        workflow_service.clone(),
-        rag_backend,
-        Some(runtime_registry.clone()),
-        Some(host_runtime_mode_info),
-    )
-    .await)
 }
 
 pub async fn workflow_run(

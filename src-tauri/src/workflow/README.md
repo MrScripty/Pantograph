@@ -21,6 +21,7 @@ owner of that policy itself.
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
 | `headless_diagnostics.rs` | Backend-owned diagnostics projection and trace/scheduler snapshot adaptation for headless workflow transport. |
+| `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
 
 ## Problem
 Pantograph’s standalone GUI still needs a native bridge, but graph editing can
@@ -57,6 +58,10 @@ from `pantograph-workflow-service`; `headless_diagnostics.rs` owns that
 projection glue so `headless_workflow_commands.rs` stays focused on request
 orchestration. Tauri retains only projection-only overlays such as retained
 event history, progress text, and runtime/scheduler snapshots.
+`headless_runtime.rs` owns the desktop-side resource composition needed to
+construct `pantograph-embedded-runtime` instances for headless workflow,
+session, and orchestration entry points, keeping that host wiring out of
+individual command files.
 When the planned `RuntimeRegistry` is introduced, this directory should request
 registry-backed runtime operations through injected host state while keeping
 policy ownership outside the Tauri adapter boundary. Execution-path runtime

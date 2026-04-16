@@ -18,7 +18,7 @@ use pantograph_workflow_service::{
     WorkflowGraphUpdateNodePositionRequest,
 };
 use std::sync::Arc;
-use tauri::{AppHandle, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, State};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -77,7 +77,7 @@ async fn emit_diagnostics_snapshots(
     );
     let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
 
-    let runtime = super::headless_workflow_commands::build_runtime(
+    let runtime = super::headless_runtime::build_runtime(
         app,
         gateway,
         runtime_registry,
@@ -204,7 +204,7 @@ async fn run_session_graph_snapshot(
     let guard = config.read().await;
     let device = guard.device.clone();
     drop(guard);
-    let runtime = super::headless_workflow_commands::build_runtime(
+    let runtime = super::headless_runtime::build_runtime(
         &app,
         gateway.inner(),
         runtime_registry.inner(),
