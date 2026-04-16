@@ -11,7 +11,7 @@ use crate::workflow::diagnostics::{
     DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
     WorkflowDiagnosticsSnapshotRequest,
 };
-use crate::workflow::headless_workflow_commands::{
+use crate::workflow::headless_diagnostics_transport::{
     workflow_diagnostics_snapshot_response, workflow_trace_snapshot_response,
 };
 use pantograph_workflow_service::{WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse};

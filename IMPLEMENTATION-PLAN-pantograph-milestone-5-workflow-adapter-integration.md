@@ -342,7 +342,7 @@ Milestone 5 behavior work expands them further.
 - [ ] Extract workflow trace request/contract, trace state-machine/store, and
       runtime/scheduler merge helpers out of
       `crates/pantograph-workflow-service/src/trace.rs` into focused modules.
-- [ ] Extract Tauri headless workflow runtime-building, diagnostics snapshot,
+- [x] Extract Tauri headless workflow runtime-building, diagnostics snapshot,
       and trace/debug helpers out of
       `src-tauri/src/workflow/headless_workflow_commands.rs`.
 - [ ] Extract Tauri diagnostics projection/store responsibilities out of
@@ -350,10 +350,10 @@ Milestone 5 behavior work expands them further.
 - [ ] Reduce `src-tauri/src/workflow/commands.rs` and
       `workflow_execution_commands.rs` to thin command-group façades over those
       focused helpers.
-- [ ] Keep extracted workflow/runtime policy in backend Rust crates and limit
+- [x] Keep extracted workflow/runtime policy in backend Rust crates and limit
       Tauri extractions to transport routing, boundary parsing, and projection
       helpers only.
-- [ ] Update touched `README.md` files for any new directories or shifted
+- [x] Update touched `README.md` files for any new directories or shifted
       responsibilities.
 
 **Verification:**
@@ -466,6 +466,12 @@ Update during implementation:
   `src-tauri/src/workflow/headless_runtime.rs` so headless workflow,
   workflow-execution, and orchestration entry points reuse one host-runtime
   composition path instead of coupling that wiring to one command module.
+- 2026-04-16: Extracted diagnostics snapshot, trace snapshot, and
+  clear-history transport responses out of
+  `src-tauri/src/workflow/headless_workflow_commands.rs` into
+  `src-tauri/src/workflow/headless_diagnostics_transport.rs`, so workflow
+  command wrappers and runtime debug commands share a focused diagnostics
+  boundary instead of importing the broader headless workflow adapter.
 
 ## Commit Cadence Notes
 
@@ -493,6 +499,10 @@ Update during implementation:
 - Standards review passes completed across the draft and the plan corrected to
   reflect boundary ownership, refactor-first sequencing, and source-of-truth
   linkage needs.
+- Milestone 2 extraction work has already split headless diagnostics helpers,
+  shared headless runtime construction, and diagnostics transport responses out
+  of `headless_workflow_commands.rs` while keeping runtime policy backend-
+  owned.
 
 ### Deviations
 
