@@ -753,10 +753,17 @@ business logic into adapters.
   while keeping adapters thin
 - [ ] Keep workflow service and host adapters aligned with service-independence
   standards
-- [ ] Ensure runtime-not-ready and admission-failure paths stay deterministic
+- [x] Ensure runtime-not-ready and admission-failure paths stay deterministic
   and machine-consumable
 - [ ] Verify binding/adapter surfaces remain transport wrappers rather than
   policy owners
+
+**Progress:**
+- 2026-04-15: Embedded workflow host now maps runtime-registry admission and
+  runtime-unavailable failures to `WorkflowServiceError::RuntimeNotReady` and
+  owner-conflict failures to `WorkflowServiceError::InvalidRequest`, so Tauri
+  workflow execution no longer collapses those backend registry decisions into
+  `internal_error` envelopes.
 
 **Verification:**
 - `cargo check --manifest-path src-tauri/Cargo.toml`
@@ -764,7 +771,7 @@ business logic into adapters.
 - acceptance check proving producer semantics survive adapter binding and
   execution
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 6: Diagnostics, Documentation, And Rollout Safety
 

@@ -101,6 +101,10 @@ embedded-runtime crate.
 - Execution-path runtime snapshot override reconciliation must stay in backend
   Rust so workflow adapters do not drift on when Python-sidecar or
   embedding-path execution facts become shared registry observations.
+- Workflow-facing runtime-registry coordination failures must be mapped in
+  backend Rust onto stable workflow-service error codes so adapters do not
+  collapse admission or runtime-unavailable decisions into generic internal
+  failures.
 - Runtime-registry unhealthy projection from host health assessment must stay
   in backend Rust so adapters do not drift on when a failed runtime transitions
   from observed-ready lifecycle into registry `unhealthy` state.

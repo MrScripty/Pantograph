@@ -84,6 +84,9 @@ helpers in `crates/pantograph-embedded-runtime`, not by local Tauri sequencing.
 - Workflow command handlers may coordinate with the future `RuntimeRegistry`,
   but they must not become the long-lived owner of runtime residency or
   admission state.
+- Workflow command handlers must preserve backend-owned workflow error
+  envelopes for registry admission and runtime-unavailable failures rather than
+  rewriting them into generic transport/internal errors.
 - Legacy local validation must treat `node.data.definition` as an additive
   overlay on top of registry metadata, not as an unchecked replacement for the
   node type contract.

@@ -432,6 +432,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   semantics. Execution-path runtime snapshot override reconciliation now also
   lives there, so Tauri no longer decides when producer-specific execution
   facts should update shared registry state.
+- Registry admission and runtime-unavailable failures from workflow execution
+  now cross the workflow boundary as deterministic `runtime_not_ready` or
+  `invalid_request` envelopes instead of being collapsed into generic
+  `internal_error` adapter failures.
 - Diagnostics lifecycle snapshot normalization now also lives in
   `crates/pantograph-embedded-runtime`, leaving Tauri diagnostics to serialize
   backend-owned runtime lifecycle facts instead of canonicalizing runtime ids
