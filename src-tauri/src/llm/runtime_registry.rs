@@ -8,10 +8,10 @@ use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessmentSnapshot
 #[cfg(test)]
 use pantograph_embedded_runtime::runtime_registry::sync_runtime_registry_with_health_assessments;
 pub use pantograph_embedded_runtime::runtime_registry::{
-    reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
-    restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
-    stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
-    HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
+    reclaim_runtime_and_reconcile_runtime_registry, restore_runtime_and_reconcile_runtime_registry,
+    runtime_registry_snapshot, stop_all_runtime_producers_and_reconcile_runtime_registry,
+    sync_runtime_registry, HostRuntimeProducer, HostRuntimeRegistryController,
+    HostRuntimeRegistryLifecycleController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{

@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent::rag::SharedRagManager;
-use crate::llm::runtime_registry::reconcile_runtime_registry_snapshot_override;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
 use pantograph_embedded_runtime::{
-    workflow_runtime::build_runtime_event_projection, HostRuntimeModeSnapshot,
+    workflow_runtime::build_runtime_event_projection_with_registry_override,
+    HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
@@ -105,7 +105,8 @@ async fn emit_diagnostics_snapshots(
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let gateway_mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-    let runtime_projection = build_runtime_event_projection(
+    let runtime_projection = build_runtime_event_projection_with_registry_override(
+        Some(runtime_registry.as_ref()),
         None,
         None,
         None,
@@ -117,13 +118,6 @@ async fn emit_diagnostics_snapshots(
         &gateway_mode_info,
         runtime_model_target_override.as_deref(),
     );
-    if let Some(snapshot) = runtime_snapshot_override.as_ref() {
-        reconcile_runtime_registry_snapshot_override(
-            runtime_registry.as_ref(),
-            snapshot,
-            runtime_projection.active_model_target.as_deref(),
-        );
-    }
 
     let runtime = match super::headless_workflow_commands::build_runtime(
         app,

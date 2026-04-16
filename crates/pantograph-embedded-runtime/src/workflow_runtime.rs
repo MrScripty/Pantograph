@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::HostRuntimeModeSnapshot;
 use node_engine::{NodeEngineError, WorkflowExecutor};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
+use pantograph_runtime_registry::RuntimeRegistry;
 use pantograph_workflow_service::{WorkflowCapabilitiesResponse, WorkflowTraceRuntimeMetrics};
 
 #[derive(Debug, Clone)]
@@ -250,6 +251,58 @@ pub fn build_runtime_diagnostics_projection(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub fn build_runtime_event_projection_with_registry_override(
+    runtime_registry: Option<&RuntimeRegistry>,
+    stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_active_model_target: Option<&str>,
+    stored_embedding_model_target: Option<&str>,
+    stored_trace_runtime_metrics: Option<WorkflowTraceRuntimeMetrics>,
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+    embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+    runtime_model_target_override: Option<&str>,
+) -> RuntimeEventProjection {
+    let projection = build_runtime_event_projection(
+        stored_active_runtime_snapshot,
+        stored_embedding_runtime_snapshot,
+        stored_active_model_target,
+        stored_embedding_model_target,
+        stored_trace_runtime_metrics,
+        runtime_snapshot_override,
+        gateway_snapshot,
+        embedding_runtime_snapshot,
+        gateway_mode_info,
+        runtime_model_target_override,
+    );
+    reconcile_runtime_projection_registry_override(
+        runtime_registry,
+        runtime_snapshot_override,
+        projection.active_model_target.as_deref(),
+    );
+    projection
+}
+
+fn reconcile_runtime_projection_registry_override(
+    runtime_registry: Option<&RuntimeRegistry>,
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    runtime_model_target: Option<&str>,
+) {
+    let (Some(runtime_registry), Some(runtime_snapshot_override)) =
+        (runtime_registry, runtime_snapshot_override)
+    else {
+        return;
+    };
+
+    crate::runtime_registry::reconcile_runtime_registry_snapshot_override(
+        runtime_registry,
+        runtime_snapshot_override,
+        runtime_model_target,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn build_runtime_event_projection(
     stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
     stored_embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
@@ -292,10 +345,12 @@ pub fn build_runtime_event_projection(
 #[cfg(test)]
 mod tests {
     use crate::HostRuntimeModeSnapshot;
+    use pantograph_runtime_registry::RuntimeRegistry;
     use pantograph_workflow_service::WorkflowCapabilitiesResponse;
 
     use super::{
         build_runtime_diagnostics_projection, build_runtime_event_projection,
+        build_runtime_event_projection_with_registry_override,
         capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
         resolve_runtime_model_target, trace_runtime_metrics,
         trace_runtime_metrics_with_observed_runtime_ids,
@@ -745,6 +800,59 @@ mod tests {
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
             Some("required_runtime_reported")
+        );
+    }
+
+    #[test]
+    fn build_runtime_event_projection_with_registry_override_reconciles_execution_runtime() {
+        let registry = RuntimeRegistry::new();
+        let projection = build_runtime_event_projection_with_registry_override(
+            Some(&registry),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            &inference::RuntimeLifecycleSnapshot::default(),
+            None,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: None,
+                embedding_runtime: None,
+            },
+            Some("/models/sidecar.safetensors"),
+        );
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("execution runtime should be reconciled into the registry");
+
+        assert_eq!(
+            projection.active_model_target.as_deref(),
+            Some("/models/sidecar.safetensors")
+        );
+        assert_eq!(runtime.models.len(), 1);
+        assert_eq!(runtime.models[0].model_id, "/models/sidecar.safetensors");
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("python-runtime:pytorch:default")
         );
     }
 }
