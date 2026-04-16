@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 
-use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessment;
+use pantograph_embedded_runtime::runtime_health::{
+    RuntimeHealthAssessment, RuntimeHealthAssessmentSnapshot,
+};
 pub use pantograph_embedded_runtime::runtime_registry::{
     reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
     restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
@@ -26,6 +28,10 @@ impl HostRuntimeRegistryController for crate::llm::gateway::InferenceGateway {
             HostRuntimeProducer::Active => self.stop().await,
             HostRuntimeProducer::Embedding => self.stop_embedding_server().await,
         }
+    }
+
+    async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
+        self.runtime_health_assessment_snapshot().await
     }
 }
 
@@ -340,6 +346,59 @@ mod tests {
             }),
         )
         .await;
+
+        let snapshot = registry.snapshot();
+        let embedding_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(
+            embedding_runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Unhealthy
+        );
+        assert_eq!(
+            embedding_runtime.last_error.as_deref(),
+            Some("Connection refused")
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_runtime_registry_from_gateway_preserves_gateway_stored_health_assessments() {
+        let gateway = crate::llm::gateway::InferenceGateway::new(Arc::new(MockProcessSpawner));
+        gateway.init().await;
+
+        let mut server = inference::LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+        server.set_test_runtime_lifecycle_snapshot(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-8".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(20),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        });
+        gateway.set_test_embedding_server(server).await;
+        gateway
+            .set_runtime_health_assessments(
+                None,
+                Some(RuntimeHealthAssessment {
+                    healthy: false,
+                    state: RuntimeHealthState::Unhealthy {
+                        reason: "Connection refused".to_string(),
+                    },
+                    response_time_ms: None,
+                    error: Some("Connection refused".to_string()),
+                    consecutive_failures: 3,
+                }),
+            )
+            .await;
+
+        let registry = RuntimeRegistry::new();
+        sync_runtime_registry_from_gateway(&gateway, &registry).await;
 
         let snapshot = registry.snapshot();
         let embedding_runtime = snapshot

@@ -6,7 +6,10 @@
 
 use async_trait::async_trait;
 
-use crate::runtime_health::{RuntimeHealthAssessment, RuntimeHealthState};
+use crate::runtime_health::{
+    RuntimeHealthAssessment, RuntimeHealthAssessmentRecord, RuntimeHealthAssessmentSnapshot,
+    RuntimeHealthState,
+};
 use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
@@ -26,6 +29,9 @@ pub enum HostRuntimeProducer {
 pub trait HostRuntimeRegistryController {
     async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot;
     async fn stop_runtime_producer(&self, producer: HostRuntimeProducer);
+    async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
+        RuntimeHealthAssessmentSnapshot::default()
+    }
 }
 
 #[async_trait]
@@ -267,16 +273,21 @@ pub fn reconcile_runtime_registry_mode_info_with_health_assessments(
     ))
 }
 
-pub async fn sync_runtime_registry<C: HostRuntimeRegistryController>(
+pub async fn sync_runtime_registry<C: HostRuntimeRegistryController + Sync>(
     controller: &C,
     registry: &RuntimeRegistry,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
     let mode_info = controller.mode_info_snapshot().await;
-    reconcile_runtime_registry_mode_info(registry, &mode_info)
+    let health_assessments = controller.runtime_health_assessment_snapshot().await;
+    reconcile_runtime_registry_mode_info_with_health_snapshot(
+        registry,
+        &mode_info,
+        &health_assessments,
+    )
 }
 
 pub async fn sync_runtime_registry_with_active_health_assessment<
-    C: HostRuntimeRegistryController,
+    C: HostRuntimeRegistryController + Sync,
 >(
     controller: &C,
     registry: &RuntimeRegistry,
@@ -285,7 +296,9 @@ pub async fn sync_runtime_registry_with_active_health_assessment<
     sync_runtime_registry_with_health_assessments(controller, registry, assessment, None).await
 }
 
-pub async fn sync_runtime_registry_with_health_assessments<C: HostRuntimeRegistryController>(
+pub async fn sync_runtime_registry_with_health_assessments<
+    C: HostRuntimeRegistryController + Sync,
+>(
     controller: &C,
     registry: &RuntimeRegistry,
     active_assessment: Option<&RuntimeHealthAssessment>,
@@ -315,6 +328,43 @@ fn observation_with_health_assessment(
     }
 
     observation
+}
+
+pub fn reconcile_runtime_registry_mode_info_with_health_snapshot(
+    registry: &RuntimeRegistry,
+    mode_info: &HostRuntimeModeSnapshot,
+    health_assessments: &RuntimeHealthAssessmentSnapshot,
+) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    reconcile_runtime_registry_mode_info_with_health_assessments(
+        registry,
+        mode_info,
+        matched_runtime_health_assessment(
+            active_runtime_observation(mode_info, true).as_ref(),
+            health_assessments.active.as_ref(),
+        ),
+        matched_runtime_health_assessment(
+            embedding_runtime_observation(mode_info).as_ref(),
+            health_assessments.embedding.as_ref(),
+        ),
+    )
+}
+
+fn matched_runtime_health_assessment<'a>(
+    observation: Option<&RuntimeObservation>,
+    record: Option<&'a RuntimeHealthAssessmentRecord>,
+) -> Option<&'a RuntimeHealthAssessment> {
+    let observation = observation?;
+    let record = record?;
+
+    if observation.runtime_id != record.runtime_id {
+        return None;
+    }
+
+    if observation.runtime_instance_id != record.runtime_instance_id {
+        return None;
+    }
+
+    Some(&record.assessment)
 }
 
 pub fn reconcile_active_runtime_mode_info(
@@ -357,7 +407,7 @@ pub fn reconcile_runtime_registry_snapshot_override(
     }))
 }
 
-pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController>(
+pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController + Sync>(
     controller: &C,
     registry: &RuntimeRegistry,
 ) -> RuntimeRegistrySnapshot {
@@ -366,7 +416,7 @@ pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController>(
 }
 
 pub async fn stop_all_runtime_producers_and_reconcile_runtime_registry<
-    C: HostRuntimeRegistryLifecycleController,
+    C: HostRuntimeRegistryLifecycleController + Sync,
 >(
     controller: &C,
     registry: &RuntimeRegistry,
@@ -376,7 +426,7 @@ pub async fn stop_all_runtime_producers_and_reconcile_runtime_registry<
 }
 
 pub async fn restore_runtime_and_reconcile_runtime_registry<
-    C: HostRuntimeRegistryLifecycleController,
+    C: HostRuntimeRegistryLifecycleController + Sync,
 >(
     controller: &C,
     registry: &RuntimeRegistry,
@@ -387,7 +437,9 @@ pub async fn restore_runtime_and_reconcile_runtime_registry<
     result
 }
 
-pub async fn reclaim_runtime_and_reconcile_runtime_registry<C: HostRuntimeRegistryController>(
+pub async fn reclaim_runtime_and_reconcile_runtime_registry<
+    C: HostRuntimeRegistryController + Sync,
+>(
     controller: &C,
     registry: &RuntimeRegistry,
     runtime_id: &str,
@@ -1105,6 +1157,86 @@ mod tests {
             runtime.runtime_instance_id.as_deref(),
             Some("llama-main-restored")
         );
+    }
+
+    struct HealthAwareHostRuntimeController {
+        mode_info: HostRuntimeModeSnapshot,
+        health_assessments: RuntimeHealthAssessmentSnapshot,
+    }
+
+    #[async_trait]
+    impl HostRuntimeRegistryController for HealthAwareHostRuntimeController {
+        async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+            self.mode_info.clone()
+        }
+
+        async fn stop_runtime_producer(&self, _producer: HostRuntimeProducer) {}
+
+        async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
+            self.health_assessments.clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn sync_runtime_registry_uses_controller_health_assessment_snapshot() {
+        let controller = HealthAwareHostRuntimeController {
+            mode_info: HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-10".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp.embedding".to_string()),
+                    runtime_instance_id: Some("llama-embed-10".to_string()),
+                    warmup_started_at_ms: Some(11),
+                    warmup_completed_at_ms: Some(16),
+                    warmup_duration_ms: Some(5),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            },
+            health_assessments: RuntimeHealthAssessmentSnapshot {
+                active: None,
+                embedding: Some(crate::runtime_health::RuntimeHealthAssessmentRecord {
+                    runtime_id: "llama.cpp.embedding".to_string(),
+                    runtime_instance_id: Some("llama-embed-10".to_string()),
+                    assessment: RuntimeHealthAssessment {
+                        healthy: false,
+                        state: RuntimeHealthState::Unhealthy {
+                            reason: "Connection refused".to_string(),
+                        },
+                        response_time_ms: None,
+                        error: Some("Connection refused".to_string()),
+                        consecutive_failures: 3,
+                    },
+                }),
+            },
+        };
+        let registry = RuntimeRegistry::new();
+
+        sync_runtime_registry(&controller, &registry).await;
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Unhealthy);
+        assert_eq!(runtime.last_error.as_deref(), Some("Connection refused"));
     }
 
     #[test]

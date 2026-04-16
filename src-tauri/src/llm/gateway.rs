@@ -17,6 +17,9 @@ use inference::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError as InferenceGatewayError,
     InferenceStartRequest,
 };
+use pantograph_embedded_runtime::runtime_health::{
+    runtime_health_assessment_record, RuntimeHealthAssessment, RuntimeHealthAssessmentSnapshot,
+};
 
 use crate::config::{DeviceInfo, EmbeddingMemoryMode, ServerModeInfo};
 
@@ -41,6 +44,8 @@ pub struct InferenceGateway {
     embedding_runtime: Arc<RwLock<DedicatedEmbeddingRuntimeManager>>,
     /// Process spawner (shared with inner gateway and embedding runtime)
     spawner: Arc<dyn ProcessSpawner>,
+    /// Latest host-observed runtime health assessments for registry convergence.
+    runtime_health_assessments: Arc<RwLock<RuntimeHealthAssessmentSnapshot>>,
 }
 
 fn to_inference_embedding_mode(mode: &EmbeddingMemoryMode) -> InferenceEmbeddingMode {
@@ -76,6 +81,9 @@ impl InferenceGateway {
             inner,
             embedding_runtime: Arc::new(RwLock::new(DedicatedEmbeddingRuntimeManager::new())),
             spawner,
+            runtime_health_assessments: Arc::new(RwLock::new(
+                RuntimeHealthAssessmentSnapshot::default(),
+            )),
         }
     }
 
@@ -90,6 +98,9 @@ impl InferenceGateway {
             inner,
             embedding_runtime: Arc::new(RwLock::new(DedicatedEmbeddingRuntimeManager::new())),
             spawner,
+            runtime_health_assessments: Arc::new(RwLock::new(
+                RuntimeHealthAssessmentSnapshot::default(),
+            )),
         }
     }
 
@@ -112,16 +123,19 @@ impl InferenceGateway {
     ///
     /// Delegates to the core gateway which uses the injected `ProcessSpawner`.
     pub async fn start(&self, config: &BackendConfig) -> Result<(), GatewayError> {
+        self.clear_runtime_health_assessments().await;
         self.inner.start(config).await.map_err(GatewayError::Inner)
     }
 
     /// Stop the current backend.
     pub async fn stop(&self) {
+        self.clear_runtime_health_assessments().await;
         self.inner.stop().await;
     }
 
     /// Stop the dedicated embedding runtime (if running).
     pub async fn stop_embedding_server(&self) {
+        self.clear_runtime_health_assessments().await;
         self.embedding_runtime.write().await.stop();
     }
 
@@ -143,6 +157,7 @@ impl InferenceGateway {
         mode: EmbeddingMemoryMode,
         devices: &[DeviceInfo],
     ) -> Result<(), GatewayError> {
+        self.clear_runtime_health_assessments().await;
         if mode == EmbeddingMemoryMode::Sequential {
             log::info!("Sequential embedding mode: no dedicated embedding runtime needed");
             return Ok(());
@@ -219,11 +234,13 @@ impl InferenceGateway {
         &self,
         request: EmbeddingStartRequest,
     ) -> Result<EmbeddingRuntimePreparation, InferenceGatewayError> {
+        self.clear_runtime_health_assessments().await;
         self.inner.prepare_embedding_runtime(request).await
     }
 
     /// Switch to a different backend.
     pub async fn switch_backend(&self, name: &str) -> Result<(), GatewayError> {
+        self.clear_runtime_health_assessments().await;
         self.inner
             .switch_backend(name)
             .await
@@ -283,6 +300,7 @@ impl InferenceGateway {
         &self,
         restore_config: Option<BackendConfig>,
     ) -> Result<(), InferenceGatewayError> {
+        self.clear_runtime_health_assessments().await;
         self.inner.restore_inference_runtime(restore_config).await
     }
 
@@ -298,6 +316,40 @@ impl InferenceGateway {
         mode_info.embedding_runtime = embedding_runtime.runtime_lifecycle_snapshot();
         mode_info.embedding_model_target = embedding_runtime.model_target();
         mode_info
+    }
+
+    pub async fn set_runtime_health_assessments(
+        &self,
+        active: Option<RuntimeHealthAssessment>,
+        embedding: Option<RuntimeHealthAssessment>,
+    ) {
+        let active_snapshot = self.runtime_lifecycle_snapshot().await;
+        let embedding_snapshot = self.embedding_runtime_lifecycle_snapshot().await;
+
+        *self.runtime_health_assessments.write().await = RuntimeHealthAssessmentSnapshot {
+            active: runtime_health_assessment_record(
+                active_snapshot.runtime_id.as_deref(),
+                active_snapshot.runtime_instance_id.as_deref(),
+                active,
+            ),
+            embedding: runtime_health_assessment_record(
+                embedding_snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.runtime_id.as_deref()),
+                embedding_snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.runtime_instance_id.as_deref()),
+                embedding,
+            ),
+        };
+    }
+
+    pub async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
+        self.runtime_health_assessments.read().await.clone()
+    }
+
+    async fn clear_runtime_health_assessments(&self) {
+        *self.runtime_health_assessments.write().await = RuntimeHealthAssessmentSnapshot::default();
     }
 }
 

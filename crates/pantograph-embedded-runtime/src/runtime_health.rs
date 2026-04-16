@@ -4,6 +4,7 @@
 //! interpretation must stay in backend Rust so adapters do not drift on
 //! failure-threshold behavior.
 
+use pantograph_runtime_identity::canonical_runtime_id;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,6 +34,36 @@ pub struct RuntimeHealthAssessment {
     pub response_time_ms: Option<u64>,
     pub error: Option<String>,
     pub consecutive_failures: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeHealthAssessmentRecord {
+    pub runtime_id: String,
+    pub runtime_instance_id: Option<String>,
+    pub assessment: RuntimeHealthAssessment,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeHealthAssessmentSnapshot {
+    pub active: Option<RuntimeHealthAssessmentRecord>,
+    pub embedding: Option<RuntimeHealthAssessmentRecord>,
+}
+
+pub fn runtime_health_assessment_record(
+    runtime_id: Option<&str>,
+    runtime_instance_id: Option<&str>,
+    assessment: Option<RuntimeHealthAssessment>,
+) -> Option<RuntimeHealthAssessmentRecord> {
+    let runtime_id = runtime_id
+        .map(canonical_runtime_id)
+        .filter(|runtime_id| !runtime_id.is_empty())?;
+    let assessment = assessment?;
+
+    Some(RuntimeHealthAssessmentRecord {
+        runtime_id,
+        runtime_instance_id: runtime_instance_id.map(ToOwned::to_owned),
+        assessment,
+    })
 }
 
 pub fn assess_runtime_health_probe(
@@ -78,7 +109,10 @@ pub fn assess_runtime_health_probe(
 
 #[cfg(test)]
 mod tests {
-    use super::{assess_runtime_health_probe, RuntimeHealthProbe, RuntimeHealthState};
+    use super::{
+        assess_runtime_health_probe, runtime_health_assessment_record, RuntimeHealthProbe,
+        RuntimeHealthState,
+    };
 
     #[test]
     fn successful_probe_resets_failures_and_reports_healthy() {
@@ -162,5 +196,25 @@ mod tests {
             }
         );
         assert_eq!(assessment.consecutive_failures, 1);
+    }
+
+    #[test]
+    fn runtime_health_assessment_record_canonicalizes_runtime_id() {
+        let record = runtime_health_assessment_record(
+            Some("PyTorch"),
+            Some("pytorch-1"),
+            Some(assess_runtime_health_probe(
+                RuntimeHealthProbe::Healthy {
+                    response_time_ms: 42,
+                },
+                0,
+                3,
+            )),
+        )
+        .expect("record should build");
+
+        assert_eq!(record.runtime_id, "pytorch");
+        assert_eq!(record.runtime_instance_id.as_deref(), Some("pytorch-1"));
+        assert!(record.assessment.healthy);
     }
 }

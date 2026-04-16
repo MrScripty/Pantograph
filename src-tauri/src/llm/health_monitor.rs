@@ -11,9 +11,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
 use crate::llm::recovery::SharedRecoveryManager;
-use crate::llm::runtime_registry::{
-    sync_runtime_registry_from_gateway, sync_runtime_registry_from_gateway_health_assessments,
-};
+use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::runtime_health::{
     assess_runtime_health_probe, RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState,
@@ -149,6 +147,7 @@ impl HealthMonitor {
                     *consecutive_failures.write().await = 0;
                     *embedding_consecutive_failures.write().await = 0;
                     *last_result.write().await = None;
+                    gateway.set_runtime_health_assessments(None, None).await;
                     sync_runtime_registry(&app, &gateway).await;
                     previous_healthy = true;
                     tokio::time::sleep(config.check_interval).await;
@@ -187,13 +186,10 @@ impl HealthMonitor {
 
                 let Some(assessment) = active_assessment.clone() else {
                     *last_result.write().await = None;
-                    sync_runtime_registry_with_health_assessments(
-                        &app,
-                        &gateway,
-                        None,
-                        embedding_assessment.as_ref(),
-                    )
-                    .await;
+                    gateway
+                        .set_runtime_health_assessments(None, embedding_assessment.clone())
+                        .await;
+                    sync_runtime_registry(&app, &gateway).await;
                     previous_healthy = true;
                     tokio::time::sleep(config.check_interval).await;
                     continue;
@@ -233,13 +229,13 @@ impl HealthMonitor {
 
                 // Update state
                 *last_result.write().await = Some(result);
-                sync_runtime_registry_with_health_assessments(
-                    &app,
-                    &gateway,
-                    Some(&assessment),
-                    embedding_assessment.as_ref(),
-                )
-                .await;
+                gateway
+                    .set_runtime_health_assessments(
+                        Some(assessment.clone()),
+                        embedding_assessment.clone(),
+                    )
+                    .await;
+                sync_runtime_registry(&app, &gateway).await;
                 previous_healthy = current_healthy;
 
                 tokio::time::sleep(config.check_interval).await;
@@ -309,13 +305,11 @@ impl HealthMonitor {
 
         let Some(assessment) = active_assessment else {
             *self.last_result.write().await = None;
-            sync_runtime_registry_with_health_assessments(
-                app,
-                gateway.inner(),
-                None,
-                embedding_assessment.as_ref(),
-            )
-            .await;
+            gateway
+                .inner()
+                .set_runtime_health_assessments(None, embedding_assessment.clone())
+                .await;
+            sync_runtime_registry(app, gateway.inner()).await;
             return None;
         };
 
@@ -323,13 +317,11 @@ impl HealthMonitor {
 
         // Update stored result
         *self.last_result.write().await = Some(result.clone());
-        sync_runtime_registry_with_health_assessments(
-            app,
-            gateway.inner(),
-            Some(&assessment),
-            embedding_assessment.as_ref(),
-        )
-        .await;
+        gateway
+            .inner()
+            .set_runtime_health_assessments(Some(assessment.clone()), embedding_assessment.clone())
+            .await;
+        sync_runtime_registry(app, gateway.inner()).await;
 
         Some(result)
     }
@@ -341,25 +333,6 @@ async fn sync_runtime_registry(app: &AppHandle, gateway: &SharedGateway) {
     };
 
     sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
-}
-
-async fn sync_runtime_registry_with_health_assessments(
-    app: &AppHandle,
-    gateway: &SharedGateway,
-    active_assessment: Option<&RuntimeHealthAssessment>,
-    embedding_assessment: Option<&RuntimeHealthAssessment>,
-) {
-    let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() else {
-        return;
-    };
-
-    sync_runtime_registry_from_gateway_health_assessments(
-        gateway.as_ref(),
-        runtime_registry.as_ref(),
-        active_assessment,
-        embedding_assessment,
-    )
-    .await;
 }
 
 async fn maybe_start_auto_recovery(app: &AppHandle, gateway: &SharedGateway, failure_reason: &str) {
