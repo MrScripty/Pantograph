@@ -751,6 +751,9 @@ and local runtime state.
   override precedence, ranks candidates with registry snapshot residency and
   warmup facts, and emits conservative fallback reasons when automatic
   selection cannot be made safely.
+- 2026-04-16: `pantograph-embedded-runtime` now calls that selector from its
+  backend technical-fit bridge and projects the backend-owned decision back to
+  workflow-service instead of leaving the host seam unimplemented.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason

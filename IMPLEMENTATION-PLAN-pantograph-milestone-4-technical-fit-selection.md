@@ -352,7 +352,7 @@ and execution without turning orchestration or adapters into policy owners.
       execution flows.
 - [ ] Preserve explicit `model_id` and `backend_key` overrides with the frozen,
       deterministic precedence contract.
-- [ ] Add embedded-runtime candidate collection and live-runtime snapshot
+- [x] Add embedded-runtime candidate collection and live-runtime snapshot
       projection that call into the registry selector instead of recomputing
       policy locally.
 - [ ] Ensure workflow preflight and runtime-not-ready reporting surface the same
@@ -368,7 +368,7 @@ and execution without turning orchestration or adapters into policy owners.
 - Review confirms workflow-service remains host-agnostic and Tauri remains an
   adapter only
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Documentation, Diagnostics, And Hardening
 
@@ -432,6 +432,10 @@ Update during implementation:
   override precedence, enriches candidate ranking with runtime-snapshot
   residency/warmup facts, and emits conservative fallback decisions when the
   registry lacks enough data for a stronger automatic selection.
+- 2026-04-16: Wired the embedded-runtime technical-fit bridge to call the
+  backend runtime-registry selector and project the resulting decision back
+  into workflow-service contracts instead of returning an unimplemented host
+  seam.
 
 
 ## Commit Cadence Notes

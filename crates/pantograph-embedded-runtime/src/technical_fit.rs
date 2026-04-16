@@ -1,9 +1,10 @@
 use pantograph_runtime_registry::{
-    RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSourceKind,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourcePressure,
-    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitWarmupState,
+    select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
+    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
     WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
@@ -23,9 +24,10 @@ pub(crate) async fn workflow_technical_fit_decision(
         .runtime_registry
         .as_ref()
         .map(|registry| registry.snapshot());
-    let _runtime_request =
+    let runtime_request =
         build_runtime_technical_fit_request(request, runtime_snapshot, &runtime_capabilities);
-    Ok(None)
+    let decision = select_runtime_technical_fit(&runtime_request);
+    Ok(Some(project_workflow_technical_fit_decision(&decision)))
 }
 
 pub fn build_runtime_technical_fit_request(
@@ -357,6 +359,50 @@ mod tests {
                 reasons: vec![WorkflowTechnicalFitReason {
                     code: WorkflowTechnicalFitReasonCode::QueuePressure,
                     candidate_id: Some("candidate-a".to_string()),
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn runtime_selector_decision_projects_back_into_workflow_contracts() {
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+                estimated_min_vram_mb: Some(2048),
+                estimated_min_ram_mb: Some(4096),
+                estimation_confidence: "high".to_string(),
+                required_models: Vec::new(),
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            },
+            Some(pantograph_workflow_service::WorkflowTechnicalFitOverride {
+                model_id: None,
+                backend_key: Some("llama.cpp".to_string()),
+            }),
+            None,
+            None,
+            None,
+        );
+
+        let runtime_request =
+            build_runtime_technical_fit_request(&workflow_request, None, &[runtime_capability()]);
+        let registry_decision = select_runtime_technical_fit(&runtime_request);
+        let workflow_decision = project_workflow_technical_fit_decision(&registry_decision);
+
+        assert_eq!(
+            workflow_decision,
+            WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ExplicitOverride,
+                selected_candidate_id: Some("llama_cpp".to_string()),
+                selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![WorkflowTechnicalFitReason {
+                    code: WorkflowTechnicalFitReasonCode::ExplicitBackendOverride,
+                    candidate_id: Some("llama_cpp".to_string()),
                 }],
             }
         );
