@@ -1,7 +1,10 @@
 use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::{Deserialize, Serialize};
 
-use crate::workflow::WorkflowRuntimeRequirements;
+use crate::workflow::{
+    validate_workflow_id, WorkflowHost, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowServiceError,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -38,6 +41,13 @@ pub struct WorkflowTechnicalFitQueuePressure {
     pub loaded_runtime_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loaded_runtime_capacity: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowTechnicalFitSessionContext {
+    pub workflow_id: String,
+    pub usage_profile: Option<String>,
+    pub queue_pressure: WorkflowTechnicalFitQueuePressure,
 }
 
 impl WorkflowTechnicalFitQueuePressure {
@@ -176,6 +186,47 @@ impl WorkflowTechnicalFitDecision {
             selected_model_id: normalize_trimmed_string(self.selected_model_id.as_deref()),
             reasons: self.reasons.clone(),
         }
+    }
+}
+
+impl WorkflowService {
+    pub async fn workflow_technical_fit_request<H: WorkflowHost>(
+        &self,
+        host: &H,
+        workflow_id: &str,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
+    ) -> Result<WorkflowTechnicalFitRequest, WorkflowServiceError> {
+        validate_workflow_id(workflow_id)?;
+        host.validate_workflow(workflow_id).await?;
+        let capabilities = host.workflow_capabilities(workflow_id).await?;
+        Ok(build_workflow_technical_fit_request(
+            workflow_id,
+            &capabilities.runtime_requirements,
+            override_selection,
+            None,
+            None,
+            None,
+        ))
+    }
+
+    pub async fn workflow_session_technical_fit_request<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
+    ) -> Result<WorkflowTechnicalFitRequest, WorkflowServiceError> {
+        let session_context = self.technical_fit_session_context(session_id)?;
+        let capabilities = host
+            .workflow_capabilities(&session_context.workflow_id)
+            .await?;
+        Ok(build_workflow_technical_fit_request(
+            &session_context.workflow_id,
+            &capabilities.runtime_requirements,
+            override_selection,
+            Some(session_id.trim()),
+            session_context.usage_profile.as_deref(),
+            Some(session_context.queue_pressure),
+        ))
     }
 }
 

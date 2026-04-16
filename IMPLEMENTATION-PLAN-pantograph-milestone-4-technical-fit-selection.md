@@ -310,7 +310,7 @@ fit logic lands.
 - `cargo check -p pantograph-embedded-runtime`
 - Review confirms no core technical-fit policy migrated into Tauri adapters
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: Implement Registry-Owned Technical-Fit Policy
 
@@ -417,6 +417,9 @@ Update during implementation:
   workflow-service request context into runtime-registry selector input and
   projects backend selector decisions back into workflow-service DTOs without
   moving policy into Tauri or workflow adapters.
+- 2026-04-16: Moved the workflow-service technical-fit request/session entry
+  points into `technical_fit.rs`, leaving `workflow.rs` focused on core service
+  orchestration while preserving the public service API.
 
 
 ## Commit Cadence Notes
