@@ -125,6 +125,9 @@ app.manage(gateway);
   registry, this layer must route that projection through
   `crates/pantograph-embedded-runtime::runtime_registry` rather than mutating
   registry state from host-local policy.
+- Dedicated embedding runtime health polling may reuse host HTTP transport, but
+  any active-vs-embedding unhealthy projection still belongs to backend
+  `runtime_registry` helpers rather than to Tauri-local branching.
 - When this directory synchronizes registry state from the shared gateway, it
   must use the richer Tauri `mode_info()` snapshot rather than the narrower
   core-gateway view, and it should convert that snapshot into the backend-owned

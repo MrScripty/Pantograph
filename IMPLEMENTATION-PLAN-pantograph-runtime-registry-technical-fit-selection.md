@@ -573,6 +573,10 @@ runtime callers.
   so failed HTTP health checks can project the active runtime into registry
   `unhealthy` state instead of leaving the shared registry pinned to
   lifecycle-derived `ready`.
+- 2026-04-15: Dedicated embedding runtime health checks now also flow through
+  `crates/pantograph-embedded-runtime::runtime_registry`, so embedding-sidecar
+  failures can converge the shared registry to `unhealthy` instead of leaving
+  that producer pinned to the last lifecycle-derived `ready` snapshot.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.

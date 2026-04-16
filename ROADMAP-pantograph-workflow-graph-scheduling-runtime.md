@@ -439,6 +439,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   through `crates/pantograph-embedded-runtime`, so failed health checks can
   mark the active runtime `unhealthy` in the shared registry instead of
   leaving registry state at the last lifecycle-derived ready snapshot.
+- Dedicated embedding runtime health checks now also route through
+  `crates/pantograph-embedded-runtime`, so embedding-sidecar failures converge
+  registry state to `unhealthy` through the same backend-owned producer
+  contract instead of a Tauri-local special case.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task
@@ -447,11 +451,11 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 **Still missing:**
 
 - Remaining health-check, reconnect, and degraded-state hardening for all
-  runtime producers beyond the current gateway-centric path
+  runtime producers beyond the current gateway plus dedicated-embedding path
 - Full convergence of all runtime producers on one registry-ready capability
   contract family
 - Broader producer coverage over the backend-owned runtime-registry boundary
-  beyond the current gateway-centric observation path
+  beyond the current gateway plus dedicated-embedding observation path
 
 ## Cross-Cutting Delivery Work
 
