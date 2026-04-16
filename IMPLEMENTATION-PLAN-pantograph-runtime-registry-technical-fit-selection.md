@@ -790,7 +790,9 @@ refactor lands.
   backend-owned runtime mode facts, the latest health-monitor observation,
   recovery-manager state, and the latest workflow runtime/scheduler
   diagnostics for internal GUI debugging without moving lifecycle policy into
-  Tauri.
+  Tauri. The same command now also accepts optional workflow/session filters so
+  targeted debug reads reuse the shared workflow diagnostics projection rather
+  than a separate adapter-local reconstruction path.
 
 **Status:** In progress
 
