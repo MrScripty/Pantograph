@@ -2,15 +2,16 @@
 
 use async_trait::async_trait;
 
-use pantograph_embedded_runtime::runtime_health::{
-    RuntimeHealthAssessment, RuntimeHealthAssessmentSnapshot,
-};
+#[cfg(test)]
+use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessment;
+use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessmentSnapshot;
+#[cfg(test)]
+use pantograph_embedded_runtime::runtime_registry::sync_runtime_registry_with_health_assessments;
 pub use pantograph_embedded_runtime::runtime_registry::{
     reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
     restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
-    sync_runtime_registry_with_health_assessments, HostRuntimeProducer,
-    HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
+    HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
@@ -56,6 +57,7 @@ pub async fn sync_runtime_registry_from_gateway(
     sync_runtime_registry(gateway, registry).await;
 }
 
+#[cfg(test)]
 pub async fn sync_runtime_registry_from_gateway_health_assessments(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
