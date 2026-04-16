@@ -234,7 +234,7 @@ async fn workflow_scheduler_snapshot_response(
         .map_err(workflow_error_json)
 }
 
-fn workflow_trace_snapshot_response(
+pub fn workflow_trace_snapshot_response(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     request: WorkflowTraceSnapshotRequest,
 ) -> Result<WorkflowTraceSnapshotResponse, String> {

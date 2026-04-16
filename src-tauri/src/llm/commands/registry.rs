@@ -11,7 +11,10 @@ use crate::workflow::diagnostics::{
     DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
     WorkflowDiagnosticsSnapshotRequest,
 };
-use crate::workflow::headless_workflow_commands::workflow_diagnostics_snapshot_response;
+use crate::workflow::headless_workflow_commands::{
+    workflow_diagnostics_snapshot_response, workflow_trace_snapshot_response,
+};
+use pantograph_workflow_service::{WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse};
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
 
@@ -47,17 +50,24 @@ pub struct RuntimeDebugSnapshot {
     pub recovery: Option<RuntimeRecoveryDebugState>,
     pub workflow_runtime_diagnostics: Option<DiagnosticsRuntimeSnapshot>,
     pub workflow_scheduler_diagnostics: Option<DiagnosticsSchedulerSnapshot>,
+    pub workflow_trace: Option<WorkflowTraceSnapshotResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeDebugSnapshotRequest {
     #[serde(default)]
+    pub execution_id: Option<String>,
+    #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
     #[serde(default)]
     pub workflow_name: Option<String>,
+    #[serde(default)]
+    pub include_trace: Option<bool>,
+    #[serde(default)]
+    pub include_completed: Option<bool>,
 }
 
 async fn runtime_registry_snapshot_response(
@@ -73,6 +83,7 @@ async fn runtime_debug_snapshot_response(
     health_monitor: Option<&SharedHealthMonitor>,
     recovery_manager: Option<&SharedRecoveryManager>,
     workflow_diagnostics: Option<WorkflowDiagnosticsProjection>,
+    workflow_trace: Option<WorkflowTraceSnapshotResponse>,
 ) -> RuntimeDebugSnapshot {
     let mode_info = synced_server_mode_info(gateway, runtime_registry).await;
     let health_monitor_running = health_monitor
@@ -106,6 +117,7 @@ async fn runtime_debug_snapshot_response(
         recovery,
         workflow_runtime_diagnostics,
         workflow_scheduler_diagnostics,
+        workflow_trace,
     }
 }
 
@@ -144,7 +156,7 @@ pub async fn get_runtime_debug_snapshot(
     let recovery_manager = app
         .try_state::<SharedRecoveryManager>()
         .map(|manager| (*manager).clone());
-    let workflow_diagnostics = app
+    let workflow_diagnostics_store = app
         .try_state::<SharedWorkflowDiagnosticsStore>()
         .map(|store| (*store).clone());
     let workflow_service = app
@@ -154,11 +166,17 @@ pub async fn get_runtime_debug_snapshot(
         .try_state::<SharedExtensions>()
         .map(|extensions| (*extensions).clone());
     let workflow_request = request.unwrap_or_default();
-    let has_workflow_filter = workflow_request.session_id.is_some()
-        || workflow_request.workflow_id.is_some()
-        || workflow_request.workflow_name.is_some();
+    let execution_id_filter = workflow_request.execution_id.clone();
+    let session_id_filter = workflow_request.session_id.clone();
+    let workflow_id_filter = workflow_request.workflow_id.clone();
+    let workflow_name_filter = workflow_request.workflow_name.clone();
+    let include_trace = workflow_request.include_trace.unwrap_or(false);
+    let include_completed = workflow_request.include_completed;
+    let has_workflow_filter = session_id_filter.is_some()
+        || workflow_id_filter.is_some()
+        || workflow_name_filter.is_some();
     let workflow_diagnostics = match (
-        workflow_diagnostics,
+        workflow_diagnostics_store.clone(),
         workflow_service,
         extensions,
         has_workflow_filter,
@@ -172,15 +190,32 @@ pub async fn get_runtime_debug_snapshot(
                 &service,
                 &store,
                 WorkflowDiagnosticsSnapshotRequest {
-                    session_id: workflow_request.session_id,
-                    workflow_id: workflow_request.workflow_id,
-                    workflow_name: workflow_request.workflow_name,
+                    session_id: session_id_filter.clone(),
+                    workflow_id: workflow_id_filter.clone(),
+                    workflow_name: workflow_name_filter.clone(),
                 },
             )
             .await?,
         ),
         (Some(store), _, _, _) => Some(store.snapshot()),
         _ => None,
+    };
+    let workflow_trace = if include_trace {
+        workflow_diagnostics_store
+            .map(|store| {
+                workflow_trace_snapshot_response(
+                    &store,
+                    WorkflowTraceSnapshotRequest {
+                        execution_id: execution_id_filter,
+                        session_id: session_id_filter,
+                        workflow_id: workflow_id_filter,
+                        include_completed,
+                    },
+                )
+            })
+            .transpose()?
+    } else {
+        None
     };
 
     Ok(runtime_debug_snapshot_response(
@@ -189,6 +224,7 @@ pub async fn get_runtime_debug_snapshot(
         health_monitor.as_ref(),
         recovery_manager.as_ref(),
         workflow_diagnostics,
+        workflow_trace,
     )
     .await)
 }
@@ -225,7 +261,7 @@ mod tests {
     use chrono::Utc;
     use pantograph_workflow_service::{
         graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowSessionState,
-        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     };
 
     struct MockProcessHandle;
@@ -441,6 +477,14 @@ mod tests {
             Some("workflow-debug")
         );
         let workflow_diagnostics_projection = workflow_diagnostics.snapshot();
+        let workflow_trace = workflow_diagnostics
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("execution-debug".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: Some(true),
+            })
+            .expect("workflow trace snapshot");
 
         let response = runtime_debug_snapshot_response(
             &gateway,
@@ -448,6 +492,7 @@ mod tests {
             Some(&health_monitor),
             Some(&recovery_manager),
             Some(workflow_diagnostics_projection),
+            Some(workflow_trace),
         )
         .await;
 
@@ -509,23 +554,36 @@ mod tests {
                 .and_then(|scheduler| scheduler.session_id.as_deref()),
             Some("session-debug")
         );
+        assert_eq!(
+            response
+                .workflow_trace
+                .as_ref()
+                .map(|trace| trace.traces.len()),
+            Some(1)
+        );
     }
 
     #[test]
     fn runtime_debug_snapshot_request_serializes_optional_workflow_filters() {
         let request = RuntimeDebugSnapshotRequest {
+            execution_id: Some("execution-1".to_string()),
             session_id: Some("session-1".to_string()),
             workflow_id: Some("workflow-1".to_string()),
             workflow_name: Some("Workflow 1".to_string()),
+            include_trace: Some(true),
+            include_completed: Some(false),
         };
 
         let value = serde_json::to_value(request).expect("serialize runtime debug request");
         assert_eq!(
             value,
             serde_json::json!({
+                "execution_id": "execution-1",
                 "session_id": "session-1",
                 "workflow_id": "workflow-1",
-                "workflow_name": "Workflow 1"
+                "workflow_name": "Workflow 1",
+                "include_trace": true,
+                "include_completed": false
             })
         );
     }
