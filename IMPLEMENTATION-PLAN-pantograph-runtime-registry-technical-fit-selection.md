@@ -736,6 +736,10 @@ and local runtime state.
   request and decision DTOs plus workflow/session normalization helpers, which
   freezes the service-to-host boundary without moving runtime policy into the
   service crate.
+- 2026-04-16: `pantograph-embedded-runtime` now bridges workflow technical-fit
+  requests into runtime-registry selector input and owns the projection back to
+  workflow-service DTOs, so future selectors can stay in backend Rust without
+  adapter-local contract drift.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason

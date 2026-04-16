@@ -266,13 +266,13 @@ selector spreads across runtime and workflow code.
       selections, including deterministic precedence and fallback semantics.
 - [x] Define which technical factors are legal selector inputs and explicitly
       exclude answer-quality or prompt-semantic scoring.
-- [ ] Define the workflow-service to embedded-runtime to runtime-registry flow:
+- [x] Define the workflow-service to embedded-runtime to runtime-registry flow:
       workflow-service normalizes request intent, embedded-runtime gathers
       feasible candidates and live runtime facts, runtime-registry owns the
       selection policy.
-- [ ] Record any Tauri or binding surfaces that consume the resulting decision
+- [x] Record any Tauri or binding surfaces that consume the resulting decision
       as transport-only wrappers.
-- [ ] Update the umbrella runtime-registry plan so this dedicated file is the
+- [x] Update the umbrella runtime-registry plan so this dedicated file is the
       explicit Milestone 4 source of truth.
 
 **Verification:**
@@ -281,7 +281,7 @@ selector spreads across runtime and workflow code.
 - Serialization/DTO tests for any new machine-consumed technical-fit structs
 - Review confirms no answer-quality claims enter API/docs/decision reasons
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 2: Refactor Immediate Insertion Points To Compliance
 
@@ -413,6 +413,10 @@ Update during implementation:
   contracts plus service-owned normalization helpers so workflow and session
   context can be projected into the runtime layer without moving selector
   policy into `pantograph-workflow-service`.
+- 2026-04-16: Added the embedded-runtime technical-fit bridge that converts
+  workflow-service request context into runtime-registry selector input and
+  projects backend selector decisions back into workflow-service DTOs without
+  moving policy into Tauri or workflow adapters.
 
 
 ## Commit Cadence Notes

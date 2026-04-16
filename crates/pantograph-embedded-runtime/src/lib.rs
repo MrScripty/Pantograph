@@ -44,7 +44,8 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
     WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
     WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse, WorkflowSessionState,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTraceRuntimeMetrics,
+    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitRequest, WorkflowTraceRuntimeMetrics,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -59,6 +60,7 @@ pub mod runtime_health;
 pub mod runtime_recovery;
 pub mod runtime_registry;
 pub mod task_executor;
+pub mod technical_fit;
 pub mod workflow_runtime;
 
 pub use host_runtime::HostRuntimeModeSnapshot;
@@ -1870,6 +1872,23 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         }
 
         Ok(Self::fallback_runtime_unload_candidate(candidates))
+    }
+
+    async fn workflow_technical_fit_decision(
+        &self,
+        request: &WorkflowTechnicalFitRequest,
+    ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+        let runtime_capabilities = self.runtime_capabilities().await?;
+        let runtime_snapshot = self
+            .runtime_registry
+            .as_ref()
+            .map(|registry| registry.snapshot());
+        let _runtime_request = technical_fit::build_runtime_technical_fit_request(
+            request,
+            runtime_snapshot,
+            &runtime_capabilities,
+        );
+        Ok(None)
     }
 
     async fn run_workflow(

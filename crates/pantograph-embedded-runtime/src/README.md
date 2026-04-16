@@ -15,6 +15,7 @@ packages.
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
+| `technical_fit.rs` | Bridges host-agnostic workflow technical-fit requests into backend runtime-registry selector input and projects selector decisions back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
@@ -87,6 +88,9 @@ embedded-runtime crate.
 - Any registry interaction from this crate must remain a narrow translation of
   session lifecycle into explicit registry operations, not an alternate policy
   engine.
+- Technical-fit bridging in this crate must stay a translation layer from
+  workflow-service request context into runtime-registry selector input; factor
+  scoring and final policy ownership remain outside this crate.
 - Producer-specific runtime capability mapping must stay in backend Rust so
   adapters do not drift on runtime ids, install state, or backend-key aliases.
 - Gateway and producer observation mapping for the shared runtime registry must
@@ -200,6 +204,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Embedded hosted-runtime shutdown, live gateway sync, and restore paths should
   also reuse this crate's shared runtime-registry lifecycle helpers rather than
   recomposing raw gateway calls with local reconcile steps.
+- Workflow technical-fit calls may also reuse this crate's request-projection
+  helpers, but transport adapters must not build registry selector input or
+  project selector reasons on their own.
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.
