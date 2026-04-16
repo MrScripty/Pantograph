@@ -1,10 +1,14 @@
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::HostRuntimeModeSnapshot;
 use node_engine::{NodeEngineError, WorkflowExecutor};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use pantograph_runtime_registry::RuntimeRegistry;
-use pantograph_workflow_service::{WorkflowCapabilitiesResponse, WorkflowTraceRuntimeMetrics};
+use pantograph_workflow_service::{
+    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
+    WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeDiagnosticsProjection {
@@ -20,6 +24,102 @@ pub struct RuntimeEventProjection {
     pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
     pub active_model_target: Option<String>,
     pub embedding_model_target: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowExecutionSchedulerSnapshot {
+    pub workflow_id: Option<String>,
+    pub trace_execution_id: String,
+    pub session_id: String,
+    pub captured_at_ms: u64,
+    pub session: WorkflowSessionSummary,
+    pub items: Vec<WorkflowSessionQueueItem>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowExecutionRuntimeSnapshot {
+    pub workflow_id: String,
+    pub trace_execution_id: String,
+    pub captured_at_ms: u64,
+    pub capabilities: Option<WorkflowCapabilitiesResponse>,
+    pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: inference::RuntimeLifecycleSnapshot,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowExecutionDiagnosticsSnapshot {
+    pub scheduler: WorkflowExecutionSchedulerSnapshot,
+    pub runtime: WorkflowExecutionRuntimeSnapshot,
+}
+
+pub fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
+pub fn build_workflow_execution_diagnostics_snapshot(
+    runtime_registry: Option<&RuntimeRegistry>,
+    scheduler_snapshot: &WorkflowSchedulerSnapshotResponse,
+    captured_at_ms: u64,
+    runtime_capabilities: Option<WorkflowCapabilitiesResponse>,
+    runtime_error: Option<String>,
+    trace_runtime_metrics_override: Option<WorkflowTraceRuntimeMetrics>,
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+    embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+    runtime_model_target_override: Option<&str>,
+) -> WorkflowExecutionDiagnosticsSnapshot {
+    let workflow_id = scheduler_snapshot.workflow_id.clone();
+    let runtime_workflow_id = workflow_id
+        .clone()
+        .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
+    let trace_execution_id = scheduler_snapshot
+        .trace_execution_id
+        .clone()
+        .unwrap_or_else(|| scheduler_snapshot.session_id.clone());
+    let runtime_projection = build_runtime_event_projection_with_registry_override(
+        runtime_registry,
+        None,
+        None,
+        None,
+        None,
+        trace_runtime_metrics_override,
+        runtime_snapshot_override,
+        gateway_snapshot,
+        embedding_runtime_snapshot,
+        gateway_mode_info,
+        runtime_model_target_override,
+    );
+
+    WorkflowExecutionDiagnosticsSnapshot {
+        scheduler: WorkflowExecutionSchedulerSnapshot {
+            workflow_id,
+            trace_execution_id: trace_execution_id.clone(),
+            session_id: scheduler_snapshot.session_id.clone(),
+            captured_at_ms,
+            session: scheduler_snapshot.session.clone(),
+            items: scheduler_snapshot.items.clone(),
+        },
+        runtime: WorkflowExecutionRuntimeSnapshot {
+            workflow_id: runtime_workflow_id,
+            trace_execution_id,
+            captured_at_ms,
+            capabilities: runtime_capabilities,
+            trace_runtime_metrics: runtime_projection.trace_runtime_metrics,
+            active_model_target: runtime_projection.active_model_target,
+            embedding_model_target: runtime_projection.embedding_model_target,
+            active_runtime_snapshot: runtime_projection.active_runtime_snapshot,
+            embedding_runtime_snapshot: runtime_projection.embedding_runtime_snapshot,
+            error: runtime_error,
+        },
+    }
 }
 
 pub async fn sync_embedding_emit_metadata_flags(
@@ -346,13 +446,17 @@ pub fn build_runtime_event_projection(
 mod tests {
     use crate::HostRuntimeModeSnapshot;
     use pantograph_runtime_registry::RuntimeRegistry;
-    use pantograph_workflow_service::WorkflowCapabilitiesResponse;
+    use pantograph_workflow_service::graph::WorkflowSessionKind;
+    use pantograph_workflow_service::{
+        WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
+        WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+    };
 
     use super::{
         build_runtime_diagnostics_projection, build_runtime_event_projection,
         build_runtime_event_projection_with_registry_override,
-        capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
-        resolve_runtime_model_target, trace_runtime_metrics,
+        build_workflow_execution_diagnostics_snapshot, capability_runtime_lifecycle_snapshot,
+        normalized_runtime_lifecycle_snapshot, resolve_runtime_model_target, trace_runtime_metrics,
         trace_runtime_metrics_with_observed_runtime_ids,
     };
 
@@ -800,6 +904,149 @@ mod tests {
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
             Some("required_runtime_reported")
+        );
+    }
+
+    #[test]
+    fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_and_runtime_facts()
+     {
+        let registry = RuntimeRegistry::new();
+        let snapshot = build_workflow_execution_diagnostics_snapshot(
+            Some(&registry),
+            &WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-123".to_string()),
+                session_id: "session-123".to_string(),
+                trace_execution_id: Some("exec-456".to_string()),
+                session: WorkflowSessionSummary {
+                    session_id: "session-123".to_string(),
+                    workflow_id: "wf-123".to_string(),
+                    session_kind: WorkflowSessionKind::Workflow,
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                    state: WorkflowSessionState::Running,
+                    queued_runs: 0,
+                    run_count: 1,
+                },
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("exec-456".to_string()),
+                    enqueued_at_ms: Some(11),
+                    dequeued_at_ms: Some(12),
+                    priority: 0,
+                    status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+                }],
+            },
+            999,
+            Some(WorkflowCapabilitiesResponse {
+                max_input_bindings: 4,
+                max_output_targets: 2,
+                max_value_bytes: 1000,
+                runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
+                    estimated_peak_vram_mb: None,
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: None,
+                    estimated_min_ram_mb: None,
+                    estimation_confidence: "high".to_string(),
+                    required_models: vec!["model-a".to_string()],
+                    required_backends: vec!["pytorch".to_string()],
+                    required_extensions: Vec::new(),
+                },
+                models: Vec::new(),
+                runtime_capabilities: Vec::new(),
+            }),
+            Some("runtime capability probe failed".to_string()),
+            Some(WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("pytorch".to_string()),
+                observed_runtime_ids: vec!["pytorch".to_string(), "diffusers".to_string()],
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                model_target: Some("/models/sidecar.safetensors".to_string()),
+                warmup_started_at_ms: Some(5),
+                warmup_completed_at_ms: Some(9),
+                warmup_duration_ms: Some(4),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            }),
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                warmup_started_at_ms: Some(5),
+                warmup_completed_at_ms: Some(9),
+                warmup_duration_ms: Some(4),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            },
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama_cpp_embedding".to_string()),
+                runtime_instance_id: Some("embed-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: None,
+                embedding_runtime: None,
+            },
+            Some("/models/sidecar.safetensors"),
+        );
+
+        assert_eq!(snapshot.scheduler.workflow_id.as_deref(), Some("wf-123"));
+        assert_eq!(snapshot.scheduler.trace_execution_id, "exec-456");
+        assert_eq!(snapshot.scheduler.session_id, "session-123");
+        assert_eq!(snapshot.scheduler.captured_at_ms, 999);
+        assert_eq!(snapshot.runtime.workflow_id, "wf-123");
+        assert_eq!(snapshot.runtime.trace_execution_id, "exec-456");
+        assert_eq!(snapshot.runtime.captured_at_ms, 999);
+        assert_eq!(
+            snapshot.runtime.error.as_deref(),
+            Some("runtime capability probe failed")
+        );
+        assert_eq!(
+            snapshot.runtime.active_model_target.as_deref(),
+            Some("/models/sidecar.safetensors")
+        );
+        assert_eq!(
+            snapshot
+                .runtime
+                .embedding_runtime_snapshot
+                .as_ref()
+                .and_then(|runtime| runtime.runtime_id.as_deref()),
+            Some("llama_cpp_embedding")
+        );
+        assert_eq!(
+            snapshot.runtime.trace_runtime_metrics.observed_runtime_ids,
+            vec!["pytorch".to_string(), "diffusers".to_string()]
+        );
+
+        let registry_runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("execution override should reconcile into registry");
+        assert_eq!(
+            registry_runtime.runtime_instance_id.as_deref(),
+            Some("python-runtime:pytorch:default")
         );
     }
 
