@@ -431,6 +431,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Recovery retry-strategy and exponential-backoff policy now also live in
   `crates/pantograph-embedded-runtime`, leaving Tauri recovery to orchestrate
   host effects without owning attempt sequencing or retry-delay math.
+- Health-check probe assessment and degraded/unhealthy threshold policy now
+  also live in `crates/pantograph-embedded-runtime`, leaving the Tauri health
+  monitor to own polling cadence, HTTP transport, and event emission without
+  re-encoding failure-count progression locally.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task

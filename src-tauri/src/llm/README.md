@@ -12,7 +12,7 @@ runtime contracts exposed by `crates/inference`.
 | `gateway.rs` | Tauri-facing wrapper around `inference::InferenceGateway` that adapts app-state wiring and startup helpers without replacing the backend facade. |
 | `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, and runtime-status queries. |
 | `runtime_registry.rs` | Tauri adapter that translates backend lifecycle facts into the backend-owned runtime-registry crate. |
-| `health_monitor.rs` | App-owned health polling loop for the currently configured runtime connection paths. |
+| `health_monitor.rs` | App-owned health polling loop that maps HTTP probe results onto backend-owned health assessment and emits desktop events. |
 | `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
 | `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
 | `process_tauri.rs` | Tauri-specific process spawning bridge used when the app must launch managed runtimes. |
@@ -118,6 +118,9 @@ app.manage(gateway);
   single producer-specific runtime snapshots into backend-owned registry
   observations, but it must not become the owner of lifecycle or retention
   policy.
+- `health_monitor.rs` may own polling cadence, HTTP transport, and desktop
+  event emission, but degraded/unhealthy threshold interpretation must come
+  from `crates/pantograph-embedded-runtime::runtime_health`.
 - When this directory synchronizes registry state from the shared gateway, it
   must use the richer Tauri `mode_info()` snapshot rather than the narrower
   core-gateway view, and it should convert that snapshot into the backend-owned

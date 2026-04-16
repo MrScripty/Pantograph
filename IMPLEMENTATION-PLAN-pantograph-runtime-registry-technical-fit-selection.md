@@ -563,6 +563,11 @@ runtime callers.
 - 2026-04-15: Recovery retry-strategy and exponential-backoff policy now also
   live in `crates/pantograph-embedded-runtime::runtime_recovery`, so Tauri
   recovery no longer owns attempt-to-strategy mapping or retry-delay math.
+- 2026-04-15: Health-check probe assessment and degraded/unhealthy threshold
+  interpretation now also live in
+  `crates/pantograph-embedded-runtime::runtime_health`, so Tauri health
+  polling no longer owns failure-count progression or status-transition
+  policy.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
