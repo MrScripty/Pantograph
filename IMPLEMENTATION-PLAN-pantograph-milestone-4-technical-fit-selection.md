@@ -295,7 +295,7 @@ fit logic lands.
 - [ ] Extract workflow-service selection-request normalization,
       override-precedence helpers, and related preflight/execution glue out of
       `crates/pantograph-workflow-service/src/workflow.rs` into focused modules.
-- [ ] Extract embedded-runtime candidate gathering and runtime-state projection
+- [x] Extract embedded-runtime candidate gathering and runtime-state projection
       helpers out of `crates/pantograph-embedded-runtime/src/lib.rs` into the
       appropriate focused runtime modules.
 - [ ] Add `README.md` coverage for any new `src/` directories created during the
@@ -420,6 +420,10 @@ Update during implementation:
 - 2026-04-16: Moved the workflow-service technical-fit request/session entry
   points into `technical_fit.rs`, leaving `workflow.rs` focused on core service
   orchestration while preserving the public service API.
+- 2026-04-16: Moved the embedded-runtime host-side technical-fit entrypoint and
+  runtime snapshot/candidate assembly into `technical_fit.rs`, leaving
+  `lib.rs` as a thinner workflow-host facade while preserving the public host
+  behavior.
 
 
 ## Commit Cadence Notes

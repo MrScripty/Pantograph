@@ -6,12 +6,27 @@ use pantograph_runtime_registry::{
     RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
-    WorkflowTechnicalFitDecision, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
-    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
+    WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeSourceKind, WorkflowServiceError, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
+    WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };
 
-use crate::workflow_runtime::unix_timestamp_ms;
+use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
+
+pub(crate) async fn workflow_technical_fit_decision(
+    host: &EmbeddedWorkflowHost,
+    request: &WorkflowTechnicalFitRequest,
+) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+    let runtime_capabilities = host.runtime_capabilities().await?;
+    let runtime_snapshot = host
+        .runtime_registry
+        .as_ref()
+        .map(|registry| registry.snapshot());
+    let _runtime_request =
+        build_runtime_technical_fit_request(request, runtime_snapshot, &runtime_capabilities);
+    Ok(None)
+}
 
 pub fn build_runtime_technical_fit_request(
     request: &WorkflowTechnicalFitRequest,

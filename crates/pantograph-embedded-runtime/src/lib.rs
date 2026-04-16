@@ -1878,17 +1878,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         &self,
         request: &WorkflowTechnicalFitRequest,
     ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
-        let runtime_capabilities = self.runtime_capabilities().await?;
-        let runtime_snapshot = self
-            .runtime_registry
-            .as_ref()
-            .map(|registry| registry.snapshot());
-        let _runtime_request = technical_fit::build_runtime_technical_fit_request(
-            request,
-            runtime_snapshot,
-            &runtime_capabilities,
-        );
-        Ok(None)
+        technical_fit::workflow_technical_fit_decision(self, request).await
     }
 
     async fn run_workflow(

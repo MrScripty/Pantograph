@@ -740,6 +740,9 @@ and local runtime state.
   requests into runtime-registry selector input and owns the projection back to
   workflow-service DTOs, so future selectors can stay in backend Rust without
   adapter-local contract drift.
+- 2026-04-16: `pantograph-embedded-runtime` now also keeps the host-side
+  technical-fit assembly path in `technical_fit.rs`, reducing the Milestone 4
+  insertion pressure on `lib.rs` before selector behavior lands.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason
