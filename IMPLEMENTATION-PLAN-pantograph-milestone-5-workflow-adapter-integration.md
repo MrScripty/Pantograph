@@ -148,7 +148,9 @@ The immediate Milestone 5 insertion points already exceed coding-standards
 decomposition thresholds and should not absorb more behavior without planned
 refactor:
 
-- `crates/pantograph-workflow-service/src/trace.rs` is approximately 2284 lines
+- `crates/pantograph-workflow-service/src/trace.rs` was approximately 2284
+  lines before the Milestone 5 trace decomposition and should remain a focused
+  `trace/` module tree rather than regressing into a catch-all file
 - `crates/pantograph-workflow-service/src/workflow.rs` is approximately 6017
   lines
 - `src-tauri/src/workflow/headless_workflow_commands.rs` is approximately 1688
@@ -339,7 +341,7 @@ before more workflow integration changes land.
 Milestone 5 behavior work expands them further.
 
 **Tasks:**
-- [ ] Extract workflow trace request/contract, trace state-machine/store, and
+- [x] Extract workflow trace request/contract, trace state-machine/store, and
       runtime/scheduler merge helpers out of
       `crates/pantograph-workflow-service/src/trace.rs` into focused modules.
 - [x] Extract Tauri headless workflow runtime-building, diagnostics snapshot,
@@ -363,7 +365,7 @@ Milestone 5 behavior work expands them further.
 - Review confirms no business logic moved from backend into Tauri during the
   extraction
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 3: Harden Backend-Owned Workflow Diagnostics And Trace Transport
 
@@ -522,6 +524,11 @@ Update during implementation:
   from the general workflow command root and leaves `workflow_execution_commands.rs`
   as a facade over focused helpers, reducing both remaining oversized Tauri
   command insertion points called out by this milestone.
+- Milestone 2 extraction work now also replaces
+  `crates/pantograph-workflow-service/src/trace.rs` with a focused `trace/`
+  module tree that separates backend-owned trace contracts, request
+  validation, in-memory trace state ownership, and runtime/scheduler merge
+  helpers without moving diagnostics policy into adapter code.
 
 ### Deviations
 

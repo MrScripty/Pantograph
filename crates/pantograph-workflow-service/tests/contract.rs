@@ -353,6 +353,7 @@ fn workflow_trace_contract_snapshot() {
             },
             "runtime": {
                 "runtime_id": "llama_cpp",
+                "observed_runtime_ids": ["llama_cpp"],
                 "runtime_instance_id": "runtime-1",
                 "model_target": "llava:13b",
                 "warmup_started_at_ms": 95,

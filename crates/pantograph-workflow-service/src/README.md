@@ -16,10 +16,10 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
   assessment glue that freeze how workflow and session context is projected
   into backend runtime selection without owning the selector policy.
 - `capabilities.rs`: shared workflow capability/validation utilities used by all adapters.
-- `trace.rs`: host-agnostic workflow trace and metrics DTOs used to freeze
-  backend-owned diagnostics contracts before adapter-specific projections and
-  to keep trace request validation and in-memory trace ownership in the Rust
-  service boundary.
+- `trace/`: host-agnostic workflow trace modules that separate backend-owned
+  contracts and request validation, in-memory trace state/store ownership, and
+  runtime/scheduler snapshot merge helpers so diagnostics transport stays
+  additive at adapter boundaries.
 
 ## Headless Workflow API
 
