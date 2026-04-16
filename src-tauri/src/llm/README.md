@@ -102,6 +102,9 @@ app.manage(gateway);
 - Command handlers return backend-owned runtime status and capability facts; the
   GUI should treat those as authoritative over local inference about runtime
   state.
+- Runtime-debug command surfaces may aggregate synced registry, lifecycle,
+  health, and recovery facts for internal debugging, but that aggregation must
+  remain transport-only and must not redefine runtime policy in the host layer.
 - Long-lived host services such as health monitoring and recovery must be
   started and stopped by the app composition root or another explicit owner,
   not by arbitrary UI calls. Command handlers may invoke those managed

@@ -17,7 +17,9 @@ The accurate status is:
 - runtime-registry Milestone 2, Runtime Registry Foundation: completed
 - runtime-registry Milestone 3, Admission, Warmup, Retention, And Eviction:
   in progress
-- runtime-registry Milestones 4-6: not started
+- runtime-registry Milestones 4-5: not started
+- runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
+  Safety: in progress
 - current next milestone: Milestone 3, Admission, Warmup, Retention, And
   Eviction
 - stop rule remains active for later milestones: runtime-registry work must
@@ -765,7 +767,7 @@ business logic into adapters.
 refactor lands.
 
 **Tasks:**
-- [ ] Expose runtime-registry snapshots and recent decision diagnostics for
+- [x] Expose runtime-registry snapshots and recent decision diagnostics for
   internal/UI debugging
 - [ ] Add rollout toggles only if needed, with explicit config/default
   semantics
@@ -782,7 +784,14 @@ refactor lands.
 - manual smoke verification for startup, shutdown, recovery, and diagnostics
   visibility
 
-**Status:** Not started
+**Progress:**
+- 2026-04-15: `src-tauri` now exposes an aggregate runtime debug snapshot
+  command that synchronizes the shared runtime registry before returning
+  backend-owned runtime mode facts, the latest health-monitor observation, and
+  recovery-manager state for internal GUI debugging without moving lifecycle
+  policy into Tauri.
+
+**Status:** In progress
 
 ## Current Implementation Guidance
 

@@ -101,6 +101,10 @@ implementation progress in the runtime and diagnostics layers.
   Python-sidecar runtime id from a run, so producer-aware workflow traces no
   longer collapse mixed Python-runtime executions down to only the final
   producer.
+- Tauri now also exposes an aggregate runtime debug snapshot command that
+  synchronizes the shared runtime registry before returning runtime mode,
+  health, and recovery facts, so the GUI can inspect current runtime posture
+  without rebuilding that view from multiple transport calls.
 - Tauri now has a shared targeted reclaim adapter that maps backend-owned
   runtime ids onto the correct host stop path for active-runtime and
   dedicated-embedding producers before re-synchronizing the shared registry,
@@ -249,6 +253,9 @@ adding more scheduling or graph complexity.
   ids and producer/runtime snapshots.
 - Workflow-service and Tauri diagnostics now derive and normalize runtime data
   through shared identity helpers instead of drifting local alias rules.
+- The host now exposes an aggregate runtime debug snapshot command that returns
+  synced registry, lifecycle, health, and recovery state for internal GUI
+  debugging.
 - Runtime and capability contracts are materially more machine-consumable than
   at roadmap creation time.
 
