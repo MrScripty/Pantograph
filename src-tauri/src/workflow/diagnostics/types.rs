@@ -307,6 +307,24 @@ pub struct WorkflowDiagnosticsSnapshotRequest {
     pub workflow_name: Option<String>,
 }
 
+impl WorkflowDiagnosticsSnapshotRequest {
+    pub(crate) fn normalized(&self) -> Self {
+        Self {
+            session_id: normalize_optional_filter(&self.session_id),
+            workflow_id: normalize_optional_filter(&self.workflow_id),
+            workflow_name: normalize_optional_filter(&self.workflow_name),
+        }
+    }
+}
+
+fn normalize_optional_filter(value: &Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
 pub(crate) fn diagnostics_run_status(status: WorkflowTraceStatus) -> DiagnosticsRunStatus {
     match status {
         WorkflowTraceStatus::Queued | WorkflowTraceStatus::Running => DiagnosticsRunStatus::Running,

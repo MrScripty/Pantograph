@@ -22,6 +22,20 @@ fn sample_graph() -> pantograph_workflow_service::WorkflowGraph {
 }
 
 #[test]
+fn workflow_diagnostics_snapshot_request_normalizes_blank_filters() {
+    let normalized = WorkflowDiagnosticsSnapshotRequest {
+        session_id: Some("  session-1  ".to_string()),
+        workflow_id: Some("   ".to_string()),
+        workflow_name: Some("\tWorkflow 1\t".to_string()),
+    }
+    .normalized();
+
+    assert_eq!(normalized.session_id.as_deref(), Some("session-1"));
+    assert_eq!(normalized.workflow_id, None);
+    assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
+}
+
+#[test]
 fn record_workflow_event_tracks_run_and_node_timing() {
     let store = WorkflowDiagnosticsStore::default();
     store.set_execution_metadata(

@@ -21,9 +21,8 @@ use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWo
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
 pub(crate) use super::headless_diagnostics::workflow_trace_snapshot_response;
 use super::headless_diagnostics::{
-    normalize_optional_request_value, stored_runtime_model_targets, stored_runtime_snapshots,
-    stored_runtime_trace_metrics, workflow_clear_diagnostics_history_response,
-    workflow_diagnostics_snapshot_projection,
+    stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
+    workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
 };
 use super::headless_runtime::build_runtime;
 
@@ -59,9 +58,10 @@ pub async fn workflow_diagnostics_snapshot_response(
 ) -> Result<WorkflowDiagnosticsProjection, String> {
     sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
     let captured_at_ms = unix_timestamp_ms();
-    let session_id = normalize_optional_request_value(request.session_id.as_deref());
-    let workflow_id = normalize_optional_request_value(request.workflow_id.as_deref());
-    let workflow_name = normalize_optional_request_value(request.workflow_name.as_deref());
+    let request = request.normalized();
+    let session_id = request.session_id;
+    let workflow_id = request.workflow_id;
+    let workflow_name = request.workflow_name;
     let scheduler_snapshot_result = if let Some(session_id) = session_id.as_deref() {
         Some(
             workflow_service

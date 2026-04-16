@@ -170,13 +170,6 @@ pub(crate) fn workflow_clear_diagnostics_history_response(
     diagnostics_store.clear_history()
 }
 
-pub(crate) fn normalize_optional_request_value(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
 pub(crate) fn stored_runtime_trace_metrics(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     session_id: Option<&str>,

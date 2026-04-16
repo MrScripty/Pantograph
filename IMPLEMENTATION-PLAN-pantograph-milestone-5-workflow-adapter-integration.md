@@ -533,6 +533,10 @@ Update during implementation:
   the Tauri diagnostics boundary: when backend scheduler snapshots omit
   `trace_execution_id`, the adapter keeps scheduler/runtime state as
   overlay-only and does not invent a run id from `session_id`.
+- Milestone 3 boundary cleanup now routes diagnostics snapshot filter
+  normalization through `WorkflowDiagnosticsSnapshotRequest` so the Tauri
+  transport reuses one request-normalization rule instead of trimming fields in
+  scattered command helpers.
 
 ### Deviations
 
