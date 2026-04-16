@@ -347,7 +347,7 @@ Milestone 5 behavior work expands them further.
       `src-tauri/src/workflow/headless_workflow_commands.rs`.
 - [x] Extract Tauri diagnostics projection/store responsibilities out of
       `src-tauri/src/workflow/diagnostics.rs` into focused modules by concern.
-- [ ] Reduce `src-tauri/src/workflow/commands.rs` and
+- [x] Reduce `src-tauri/src/workflow/commands.rs` and
       `workflow_execution_commands.rs` to thin command-group façades over those
       focused helpers.
 - [x] Keep extracted workflow/runtime policy in backend Rust crates and limit
@@ -477,6 +477,12 @@ Update during implementation:
   contracts, trace/projection helpers, store state, and preserved tests, so
   diagnostics projection and retained overlay logic no longer accumulate in one
   oversized Tauri transport file.
+- 2026-04-16: Split Tauri execution/edit-session command registration out of
+  `src-tauri/src/workflow/commands.rs` into
+  `src-tauri/src/workflow/workflow_execution_tauri_commands.rs`, and reduced
+  `workflow_execution_commands.rs` to a thin facade over focused runtime and
+  edit-session helpers in `workflow_execution_runtime.rs` and
+  `workflow_edit_session.rs`.
 
 ## Commit Cadence Notes
 
@@ -512,6 +518,10 @@ Update during implementation:
   by concern, reducing one of the largest remaining Tauri-owned diagnostics
   insertion points without moving canonical trace or runtime policy out of the
   backend crates.
+- Milestone 2 extraction work now also removes the edit-session execution block
+  from the general workflow command root and leaves `workflow_execution_commands.rs`
+  as a facade over focused helpers, reducing both remaining oversized Tauri
+  command insertion points called out by this milestone.
 
 ### Deviations
 

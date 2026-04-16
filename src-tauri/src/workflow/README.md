@@ -12,8 +12,11 @@ owner of that policy itself.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `commands.rs` | Tauri command registration for workflow editing and execution APIs. |
-| `workflow_execution_commands.rs` | Thin Tauri wrappers that delegate graph edits to core and execute runtime snapshots for desktop event streaming. |
+| `commands.rs` | Shared Tauri workflow state aliases plus non-execution command registration entrypoints. |
+| `workflow_execution_tauri_commands.rs` | Tauri execution/edit-session command entrypoints that forward to focused execution and graph-session helpers. |
+| `workflow_execution_commands.rs` | Thin execution command-group facade that reuses focused runtime and edit-session helpers. |
+| `workflow_execution_runtime.rs` | Desktop execution orchestration and diagnostics-emission helpers for edit-session workflow runs. |
+| `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
 | `connection_intent.rs` | Legacy local connection-intent implementation retained during migration; core now owns the canonical policy. |
 | `effective_definition.rs` | Applies additive per-node `data.definition` overlays before legacy validation or candidate lookup reads port metadata. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
@@ -67,6 +70,11 @@ text, and runtime/scheduler snapshots.
 construct `pantograph-embedded-runtime` instances for headless workflow,
 session, and orchestration entry points, keeping that host wiring out of
 individual command files.
+`workflow_execution_tauri_commands.rs` now owns the Tauri-facing execution
+entrypoints, while `workflow_execution_commands.rs` remains a thin command-
+group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`
+so edit-session graph operations and runtime execution sequencing stop growing
+inside the general command root.
 `headless_diagnostics_transport.rs` owns the host-facing diagnostics snapshot,
 trace snapshot, and clear-history responses so runtime debug commands and
 workflow command wrappers do not depend on the broader headless workflow
