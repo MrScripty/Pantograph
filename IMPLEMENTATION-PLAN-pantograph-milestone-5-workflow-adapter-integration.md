@@ -345,7 +345,7 @@ Milestone 5 behavior work expands them further.
 - [x] Extract Tauri headless workflow runtime-building, diagnostics snapshot,
       and trace/debug helpers out of
       `src-tauri/src/workflow/headless_workflow_commands.rs`.
-- [ ] Extract Tauri diagnostics projection/store responsibilities out of
+- [x] Extract Tauri diagnostics projection/store responsibilities out of
       `src-tauri/src/workflow/diagnostics.rs` into focused modules by concern.
 - [ ] Reduce `src-tauri/src/workflow/commands.rs` and
       `workflow_execution_commands.rs` to thin command-group façades over those
@@ -472,6 +472,11 @@ Update during implementation:
   `src-tauri/src/workflow/headless_diagnostics_transport.rs`, so workflow
   command wrappers and runtime debug commands share a focused diagnostics
   boundary instead of importing the broader headless workflow adapter.
+- 2026-04-16: Decomposed `src-tauri/src/workflow/diagnostics.rs` into a
+  dedicated `src-tauri/src/workflow/diagnostics/` module tree split across
+  contracts, trace/projection helpers, store state, and preserved tests, so
+  diagnostics projection and retained overlay logic no longer accumulate in one
+  oversized Tauri transport file.
 
 ## Commit Cadence Notes
 
@@ -503,6 +508,10 @@ Update during implementation:
   shared headless runtime construction, and diagnostics transport responses out
   of `headless_workflow_commands.rs` while keeping runtime policy backend-
   owned.
+- Milestone 2 extraction work now also splits the workflow diagnostics module
+  by concern, reducing one of the largest remaining Tauri-owned diagnostics
+  insertion points without moving canonical trace or runtime policy out of the
+  backend crates.
 
 ### Deviations
 

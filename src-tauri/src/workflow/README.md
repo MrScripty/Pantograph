@@ -20,6 +20,7 @@ owner of that policy itself.
 | `validation.rs` | Legacy local validation helpers retained during migration; core validation is authoritative for new editing surfaces. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
+| `diagnostics/` | Backend-owned diagnostics contracts, trace projection helpers, and in-memory overlay/store state for workflow UI snapshots. |
 | `headless_diagnostics.rs` | Backend-owned diagnostics projection and trace/scheduler snapshot adaptation for headless workflow transport. |
 | `headless_diagnostics_transport.rs` | Host-facing diagnostics, trace, and history snapshot responses shared by workflow commands and runtime debug surfaces. |
 | `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
@@ -55,10 +56,13 @@ or candidate lookup still exists, `effective_definition.rs` merges registry
 metadata with additive per-node `inputs`/`outputs` overlays so dynamic
 expand-setting ports behave the same way as the core service. Workflow
 diagnostics projections now adapt backend-owned `WorkflowTraceStore` snapshots
-from `pantograph-workflow-service`; `headless_diagnostics.rs` owns that
-projection glue so `headless_workflow_commands.rs` stays focused on request
-orchestration. Tauri retains only projection-only overlays such as retained
-event history, progress text, and runtime/scheduler snapshots.
+from `pantograph-workflow-service`; the `diagnostics/` module now splits
+contracts, trace/projection helpers, and retained overlay/store state by
+concern so diagnostics logic does not accumulate in one transport file.
+`headless_diagnostics.rs` owns the headless projection glue so
+`headless_workflow_commands.rs` stays focused on request orchestration. Tauri
+retains only projection-only overlays such as retained event history, progress
+text, and runtime/scheduler snapshots.
 `headless_runtime.rs` owns the desktop-side resource composition needed to
 construct `pantograph-embedded-runtime` instances for headless workflow,
 session, and orchestration entry points, keeping that host wiring out of
