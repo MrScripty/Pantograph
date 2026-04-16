@@ -13,8 +13,8 @@ use pantograph_runtime_identity::{
 };
 use pantograph_runtime_registry::{
     RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
-    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition,
-    RuntimeWarmupDecision, SharedRuntimeRegistry,
+    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision,
+    SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -438,16 +438,20 @@ impl EmbeddedRuntime {
             return;
         };
 
-        let mode_info = HostRuntimeModeSnapshot::from_mode_info(&self.gateway.mode_info().await);
-        runtime_registry::reconcile_runtime_registry_mode_info(
-            runtime_registry.as_ref(),
-            &mode_info,
-        );
+        runtime_registry::sync_runtime_registry(self.gateway.as_ref(), runtime_registry.as_ref())
+            .await;
     }
 
     pub async fn shutdown(&self) {
-        self.gateway.stop().await;
-        self.reconcile_runtime_registry_from_gateway().await;
+        if let Some(runtime_registry) = self.runtime_registry.as_ref() {
+            runtime_registry::stop_all_runtime_producers_and_reconcile_runtime_registry(
+                self.gateway.as_ref(),
+                runtime_registry.as_ref(),
+            )
+            .await;
+        } else {
+            self.gateway.stop().await;
+        }
     }
 
     fn host(&self) -> EmbeddedWorkflowHost {
@@ -843,8 +847,16 @@ impl EmbeddedRuntime {
                 runtime_model_target.as_deref(),
                 &observed_runtime_ids,
             );
-        let restore_result = self.gateway.restore_inference_runtime(restore_config).await;
-        self.reconcile_runtime_registry_from_gateway().await;
+        let restore_result = if let Some(runtime_registry) = self.runtime_registry.as_ref() {
+            runtime_registry::restore_runtime_and_reconcile_runtime_registry(
+                self.gateway.as_ref(),
+                runtime_registry.as_ref(),
+                restore_config,
+            )
+            .await
+        } else {
+            self.gateway.restore_inference_runtime(restore_config).await
+        };
         if let Err(error) = restore_result {
             log::warn!(
                 "Workflow executed in embedding mode but failed to restore previous inference mode: {}",
@@ -1379,7 +1391,7 @@ impl EmbeddedWorkflowHost {
             &disposition.runtime_id,
         )
         .await
-            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+        .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
 
         Ok(())
     }
