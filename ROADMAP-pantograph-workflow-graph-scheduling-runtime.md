@@ -429,7 +429,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Runtime diagnostics projection for workflow execution now lives in
   `crates/pantograph-embedded-runtime`, leaving Tauri workflow commands to
   emit transport events and update stores without owning runtime trace fallback
-  semantics.
+  semantics. Execution-path runtime snapshot override reconciliation now also
+  lives there, so Tauri no longer decides when producer-specific execution
+  facts should update shared registry state.
 - Diagnostics lifecycle snapshot normalization now also lives in
   `crates/pantograph-embedded-runtime`, leaving Tauri diagnostics to serialize
   backend-owned runtime lifecycle facts instead of canonicalizing runtime ids

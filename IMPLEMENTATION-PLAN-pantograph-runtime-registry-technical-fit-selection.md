@@ -549,6 +549,11 @@ runtime callers.
   diagnostics no longer own runtime-id canonicalization or lifecycle-reason
   inference when converting between diagnostics payloads and
   `inference::RuntimeLifecycleSnapshot`.
+- 2026-04-15: Workflow execution diagnostics now also reconcile runtime
+  snapshot overrides into the shared registry through
+  `crates/pantograph-embedded-runtime::workflow_runtime`, so the Tauri
+  execution adapter no longer decides when Python-sidecar or embedding-path
+  execution facts should be projected into registry state.
 - 2026-04-15: Runtime-registry sync-before-snapshot and sync-before-reclaim
   semantics now also live in `crates/pantograph-embedded-runtime::
   runtime_registry`, so Tauri registry commands no longer decide when host

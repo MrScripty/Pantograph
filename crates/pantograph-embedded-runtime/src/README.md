@@ -22,7 +22,7 @@ packages.
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry backoff, backend port overrides, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
-| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, and runtime diagnostics projection. |
+| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path runtime-registry override reconciliation. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,
@@ -98,6 +98,9 @@ embedded-runtime crate.
 - Runtime-registry stop-all and restore reconciliation semantics must stay in
   backend Rust so shutdown, restart, and restore wrappers do not drift on
   post-transition registry convergence.
+- Execution-path runtime snapshot override reconciliation must stay in backend
+  Rust so workflow adapters do not drift on when Python-sidecar or
+  embedding-path execution facts become shared registry observations.
 - Runtime-registry unhealthy projection from host health assessment must stay
   in backend Rust so adapters do not drift on when a failed runtime transitions
   from observed-ready lifecycle into registry `unhealthy` state.

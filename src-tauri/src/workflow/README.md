@@ -56,7 +56,9 @@ from `pantograph-workflow-service`; Tauri retains only projection-only overlays
 such as retained event history, progress text, and runtime/scheduler snapshots.
 When the planned `RuntimeRegistry` is introduced, this directory should request
 registry-backed runtime operations through injected host state while keeping
-policy ownership outside the Tauri adapter boundary.
+policy ownership outside the Tauri adapter boundary. Execution-path runtime
+snapshot overrides should be projected into the shared registry by backend
+helpers in `crates/pantograph-embedded-runtime`, not by local Tauri sequencing.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
