@@ -7,6 +7,7 @@
 use async_trait::async_trait;
 
 use crate::HostRuntimeModeSnapshot;
+use crate::runtime_health::{RuntimeHealthAssessment, RuntimeHealthState};
 use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
@@ -161,6 +162,26 @@ pub fn active_runtime_observation(
     })
 }
 
+pub fn active_runtime_observation_with_health_assessment(
+    mode_info: &HostRuntimeModeSnapshot,
+    include_stopped: bool,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> Option<RuntimeObservation> {
+    let mut observation = active_runtime_observation(mode_info, include_stopped)?;
+
+    if let Some(RuntimeHealthAssessment {
+        state: RuntimeHealthState::Unhealthy { reason },
+        error,
+        ..
+    }) = assessment
+    {
+        observation.status = pantograph_runtime_registry::RuntimeRegistryStatus::Unhealthy;
+        observation.last_error = error.clone().or_else(|| Some(reason.clone()));
+    }
+
+    Some(observation)
+}
+
 pub fn embedding_runtime_observation(
     mode_info: &HostRuntimeModeSnapshot,
 ) -> Option<RuntimeObservation> {
@@ -187,9 +208,18 @@ pub fn embedding_runtime_observation(
 }
 
 pub fn observations_from_mode_info(mode_info: &HostRuntimeModeSnapshot) -> Vec<RuntimeObservation> {
+    observations_from_mode_info_with_active_health_assessment(mode_info, None)
+}
+
+pub fn observations_from_mode_info_with_active_health_assessment(
+    mode_info: &HostRuntimeModeSnapshot,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> Vec<RuntimeObservation> {
     let mut observations = Vec::new();
 
-    if let Some(observation) = active_runtime_observation(mode_info, true) {
+    if let Some(observation) =
+        active_runtime_observation_with_health_assessment(mode_info, true, assessment)
+    {
         observations.push(observation);
     }
 
@@ -204,7 +234,17 @@ pub fn reconcile_runtime_registry_mode_info(
     registry: &RuntimeRegistry,
     mode_info: &HostRuntimeModeSnapshot,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
-    registry.observe_runtimes(observations_from_mode_info(mode_info))
+    reconcile_runtime_registry_mode_info_with_active_health_assessment(registry, mode_info, None)
+}
+
+pub fn reconcile_runtime_registry_mode_info_with_active_health_assessment(
+    registry: &RuntimeRegistry,
+    mode_info: &HostRuntimeModeSnapshot,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    registry.observe_runtimes(observations_from_mode_info_with_active_health_assessment(
+        mode_info, assessment,
+    ))
 }
 
 pub async fn sync_runtime_registry<C: HostRuntimeRegistryController>(
@@ -213,6 +253,19 @@ pub async fn sync_runtime_registry<C: HostRuntimeRegistryController>(
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
     let mode_info = controller.mode_info_snapshot().await;
     reconcile_runtime_registry_mode_info(registry, &mode_info)
+}
+
+pub async fn sync_runtime_registry_with_active_health_assessment<
+    C: HostRuntimeRegistryController,
+>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    let mode_info = controller.mode_info_snapshot().await;
+    reconcile_runtime_registry_mode_info_with_active_health_assessment(
+        registry, &mode_info, assessment,
+    )
 }
 
 pub fn reconcile_active_runtime_mode_info(
@@ -314,6 +367,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::runtime_health::{RuntimeHealthAssessment, RuntimeHealthState};
     use pantograph_runtime_registry::{
         RuntimeReclaimDisposition, RuntimeRegistration, RuntimeRegistryStatus,
         RuntimeRetentionReason,
@@ -1002,5 +1056,91 @@ mod tests {
             runtime.runtime_instance_id.as_deref(),
             Some("llama-main-restored")
         );
+    }
+
+    #[test]
+    fn reconcile_mode_info_marks_active_runtime_unhealthy_from_health_assessment() {
+        let registry = RuntimeRegistry::new();
+
+        let snapshots = reconcile_runtime_registry_mode_info_with_active_health_assessment(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-unhealthy".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            Some(&RuntimeHealthAssessment {
+                healthy: false,
+                state: RuntimeHealthState::Unhealthy {
+                    reason: "Request timeout".to_string(),
+                },
+                response_time_ms: None,
+                error: Some("Request timeout".to_string()),
+                consecutive_failures: 3,
+            }),
+        );
+
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].runtime_id, "llama_cpp");
+        assert_eq!(snapshots[0].status, RuntimeRegistryStatus::Unhealthy);
+        assert_eq!(snapshots[0].last_error.as_deref(), Some("Request timeout"));
+        assert_eq!(
+            snapshots[0].runtime_instance_id.as_deref(),
+            Some("llama-main-unhealthy")
+        );
+    }
+
+    #[test]
+    fn reconcile_mode_info_keeps_ready_runtime_when_health_is_only_degraded() {
+        let registry = RuntimeRegistry::new();
+
+        let snapshots = reconcile_runtime_registry_mode_info_with_active_health_assessment(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-ready".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            Some(&RuntimeHealthAssessment {
+                healthy: true,
+                state: RuntimeHealthState::Degraded {
+                    reason: "HTTP 503".to_string(),
+                },
+                response_time_ms: Some(42),
+                error: Some("HTTP 503".to_string()),
+                consecutive_failures: 1,
+            }),
+        );
+
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].runtime_id, "llama_cpp");
+        assert_eq!(snapshots[0].status, RuntimeRegistryStatus::Ready);
+        assert_eq!(snapshots[0].last_error, None);
     }
 }

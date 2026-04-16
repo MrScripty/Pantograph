@@ -4,10 +4,12 @@ use async_trait::async_trait;
 
 pub use pantograph_embedded_runtime::runtime_registry::{
     reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
+    sync_runtime_registry_with_active_health_assessment,
     restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
 };
+use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessment;
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
     RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError, SharedRuntimeRegistry,
@@ -46,6 +48,14 @@ pub async fn sync_runtime_registry_from_gateway(
     registry: &RuntimeRegistry,
 ) {
     sync_runtime_registry(gateway, registry).await;
+}
+
+pub async fn sync_runtime_registry_from_gateway_health_assessment(
+    gateway: &crate::llm::gateway::InferenceGateway,
+    registry: &RuntimeRegistry,
+    assessment: Option<&RuntimeHealthAssessment>,
+) {
+    sync_runtime_registry_with_active_health_assessment(gateway, registry, assessment).await;
 }
 
 pub async fn stop_all_and_sync_runtime_registry(

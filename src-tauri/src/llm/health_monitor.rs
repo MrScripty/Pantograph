@@ -11,7 +11,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
 use crate::llm::recovery::SharedRecoveryManager;
-use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
+use crate::llm::runtime_registry::{
+    sync_runtime_registry_from_gateway, sync_runtime_registry_from_gateway_health_assessment,
+};
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::runtime_health::{
     assess_runtime_health_probe, RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState,
@@ -162,12 +164,14 @@ impl HealthMonitor {
                 let elapsed_ms = start.elapsed().as_millis() as u64;
 
                 let probe = probe_from_http_result(check_result, elapsed_ms);
-                let result = {
+                let (assessment, result) = {
                     let mut failures = consecutive_failures.write().await;
                     let assessment =
                         assess_runtime_health_probe(probe, *failures, config.failure_threshold);
                     *failures = assessment.consecutive_failures;
-                    health_check_result_from_assessment(assessment, Utc::now())
+                    let result =
+                        health_check_result_from_assessment(assessment.clone(), Utc::now());
+                    (assessment, result)
                 };
 
                 // Detect state changes
@@ -202,7 +206,8 @@ impl HealthMonitor {
 
                 // Update state
                 *last_result.write().await = Some(result);
-                sync_runtime_registry(&app, &gateway).await;
+                sync_runtime_registry_with_health_assessment(&app, &gateway, Some(&assessment))
+                    .await;
                 previous_healthy = current_healthy;
 
                 tokio::time::sleep(config.check_interval).await;
@@ -249,17 +254,18 @@ impl HealthMonitor {
         let resp = client.get(&url).send().await;
         let elapsed_ms = start.elapsed().as_millis() as u64;
         let probe = probe_from_http_result(resp, elapsed_ms);
-        let result = {
+        let (assessment, result) = {
             let mut failures = self.consecutive_failures.write().await;
             let assessment =
                 assess_runtime_health_probe(probe, *failures, self.config.failure_threshold);
             *failures = assessment.consecutive_failures;
-            health_check_result_from_assessment(assessment, Utc::now())
+            let result = health_check_result_from_assessment(assessment.clone(), Utc::now());
+            (assessment, result)
         };
 
         // Update stored result
         *self.last_result.write().await = Some(result.clone());
-        sync_runtime_registry(app, gateway.inner()).await;
+        sync_runtime_registry_with_health_assessment(app, gateway.inner(), Some(&assessment)).await;
 
         Some(result)
     }
@@ -271,6 +277,23 @@ async fn sync_runtime_registry(app: &AppHandle, gateway: &SharedGateway) {
     };
 
     sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
+}
+
+async fn sync_runtime_registry_with_health_assessment(
+    app: &AppHandle,
+    gateway: &SharedGateway,
+    assessment: Option<&RuntimeHealthAssessment>,
+) {
+    let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() else {
+        return;
+    };
+
+    sync_runtime_registry_from_gateway_health_assessment(
+        gateway.as_ref(),
+        runtime_registry.as_ref(),
+        assessment,
+    )
+    .await;
 }
 
 async fn maybe_start_auto_recovery(app: &AppHandle, gateway: &SharedGateway, failure_reason: &str) {
