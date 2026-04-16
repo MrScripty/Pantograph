@@ -262,6 +262,11 @@ impl HealthMonitor {
         self.last_result.read().await.clone()
     }
 
+    #[cfg(test)]
+    pub(crate) async fn set_test_last_result(&self, result: Option<HealthCheckResult>) {
+        *self.last_result.write().await = result;
+    }
+
     /// Get current consecutive failure count
     pub async fn consecutive_failures(&self) -> u32 {
         *self.consecutive_failures.read().await
