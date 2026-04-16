@@ -12,9 +12,9 @@ use pantograph_runtime_identity::{
     runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeRegistration, RuntimeReservationRequest, RuntimeReservationRequirements,
-    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision,
-    SharedRuntimeRegistry,
+    RuntimeRegistration, RuntimeRegistryError, RuntimeReservationRequest,
+    RuntimeReservationRequirements, RuntimeRetentionDecision, RuntimeRetentionHint,
+    RuntimeTransition, RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -1192,6 +1192,25 @@ impl EmbeddedWorkflowHost {
         }
     }
 
+    fn workflow_service_error_from_runtime_registry(
+        error: RuntimeRegistryError,
+    ) -> WorkflowServiceError {
+        match error {
+            RuntimeRegistryError::RuntimeNotFound(_)
+            | RuntimeRegistryError::ReservationRejected(_)
+            | RuntimeRegistryError::AdmissionRejected { .. } => {
+                WorkflowServiceError::RuntimeNotReady(error.to_string())
+            }
+            RuntimeRegistryError::ReservationOwnerConflict { .. } => {
+                WorkflowServiceError::InvalidRequest(error.to_string())
+            }
+            RuntimeRegistryError::ReservationNotFound(_)
+            | RuntimeRegistryError::InvalidTransition { .. } => {
+                WorkflowServiceError::Internal(error.to_string())
+            }
+        }
+    }
+
     fn reconcile_active_runtime_mode_info(
         runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
         mode_info: &inference::ServerModeInfo,
@@ -1271,7 +1290,7 @@ impl EmbeddedWorkflowHost {
                     WorkflowSessionRetentionHint::Ephemeral
                 }),
             )
-            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+            .map_err(Self::workflow_service_error_from_runtime_registry)?;
 
         Ok(())
     }
@@ -1288,7 +1307,7 @@ impl EmbeddedWorkflowHost {
 
                 let disposition = runtime_registry
                     .warmup_disposition(runtime_id)
-                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+                    .map_err(Self::workflow_service_error_from_runtime_registry)?;
                 match disposition.decision {
                     RuntimeWarmupDecision::ReuseLoadedRuntime => return Ok(()),
                     RuntimeWarmupDecision::StartRuntime => {
@@ -1303,7 +1322,7 @@ impl EmbeddedWorkflowHost {
                                     runtime_instance_id,
                                 },
                             )
-                            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+                            .map_err(Self::workflow_service_error_from_runtime_registry)?;
                         return Ok(());
                     }
                     RuntimeWarmupDecision::WaitForTransition => {
@@ -1334,7 +1353,7 @@ impl EmbeddedWorkflowHost {
     ) -> Result<(), WorkflowServiceError> {
         match runtime_registry
             .warmup_disposition(runtime_id)
-            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?
+            .map_err(Self::workflow_service_error_from_runtime_registry)?
             .decision
         {
             RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
@@ -1344,7 +1363,7 @@ impl EmbeddedWorkflowHost {
 
                 match runtime_registry
                     .warmup_disposition(runtime_id)
-                    .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?
+                    .map_err(Self::workflow_service_error_from_runtime_registry)?
                     .decision
                 {
                     RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
@@ -1363,7 +1382,7 @@ impl EmbeddedWorkflowHost {
                             },
                         )
                         .map(|_| ())
-                        .map_err(|error| WorkflowServiceError::Internal(error.to_string())),
+                        .map_err(Self::workflow_service_error_from_runtime_registry),
                 }
             }
             RuntimeWarmupDecision::WaitForTransition => {
@@ -1391,7 +1410,7 @@ impl EmbeddedWorkflowHost {
             &disposition.runtime_id,
         )
         .await
-        .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+        .map_err(Self::workflow_service_error_from_runtime_registry)?;
 
         Ok(())
     }
@@ -1435,7 +1454,7 @@ impl EmbeddedWorkflowHost {
                 requirements,
                 retention_hint: Self::runtime_retention_hint(retention_hint),
             })
-            .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+            .map_err(Self::workflow_service_error_from_runtime_registry)?;
 
         let previous_reservation_id =
             self.record_session_runtime_reservation(session_id, lease.reservation_id)?;
@@ -1447,9 +1466,7 @@ impl EmbeddedWorkflowHost {
             if previous_reservation_id != Some(lease.reservation_id) {
                 let disposition = runtime_registry
                     .release_reservation_if_present(lease.reservation_id)
-                    .map_err(|release_error| {
-                        WorkflowServiceError::Internal(release_error.to_string())
-                    })?;
+                    .map_err(Self::workflow_service_error_from_runtime_registry)?;
                 self.apply_runtime_retention_disposition(runtime_registry.as_ref(), disposition)
                     .await?;
             }
@@ -1479,7 +1496,7 @@ impl EmbeddedWorkflowHost {
         if let Some(reservation_id) = reservation_id {
             let disposition = runtime_registry
                 .release_reservation_if_present(reservation_id)
-                .map_err(|error| WorkflowServiceError::Internal(error.to_string()))?;
+                .map_err(Self::workflow_service_error_from_runtime_registry)?;
             self.apply_runtime_retention_disposition(runtime_registry.as_ref(), disposition)
                 .await?;
         }
@@ -4294,5 +4311,44 @@ mod tests {
         assert_eq!(requirements.estimated_peak_ram_mb, Some(1024));
         assert_eq!(requirements.estimated_min_vram_mb, Some(1536));
         assert_eq!(requirements.estimated_min_ram_mb, Some(768));
+    }
+
+    #[test]
+    fn runtime_registry_admission_errors_map_to_runtime_not_ready() {
+        let error = EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry(
+            RuntimeRegistryError::AdmissionRejected {
+                runtime_id: "pytorch".to_string(),
+                failure: pantograph_runtime_registry::RuntimeAdmissionFailure::InsufficientRam {
+                    requested_mb: 1024,
+                    available_mb: 0,
+                    reserved_mb: 2048,
+                    total_mb: 2048,
+                    safety_margin_mb: 0,
+                },
+            },
+        );
+
+        assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+        assert_eq!(
+            error.code(),
+            pantograph_workflow_service::WorkflowErrorCode::RuntimeNotReady
+        );
+    }
+
+    #[test]
+    fn runtime_registry_owner_conflicts_map_to_invalid_request() {
+        let error = EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry(
+            RuntimeRegistryError::ReservationOwnerConflict {
+                owner_id: "session-a".to_string(),
+                existing_runtime_id: "llama_cpp".to_string(),
+                requested_runtime_id: "pytorch".to_string(),
+            },
+        );
+
+        assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
+        assert_eq!(
+            error.code(),
+            pantograph_workflow_service::WorkflowErrorCode::InvalidRequest
+        );
     }
 }
