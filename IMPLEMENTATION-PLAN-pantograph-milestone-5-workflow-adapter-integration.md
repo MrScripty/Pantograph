@@ -375,7 +375,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
 **Tasks:**
 - [ ] Normalize diagnostics and trace snapshot boundary validation into shared
       backend-owned request helpers where raw adapter input still leaks through.
-- [ ] Ensure scheduler snapshot, runtime snapshot, and trace snapshot transport
+- [x] Ensure scheduler snapshot, runtime snapshot, and trace snapshot transport
       keeps backend-owned execution/session identity semantics when identifiers
       are absent or ambiguous.
 - [ ] Ensure Tauri diagnostics overlays remain additive UI/transport state and
@@ -395,7 +395,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
 - Cross-layer acceptance checks per `TESTING-STANDARDS.md`
 - Interop review against `INTEROP-STANDARDS.md`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Binding And Adapter Consistency Review
 
@@ -529,6 +529,10 @@ Update during implementation:
   module tree that separates backend-owned trace contracts, request
   validation, in-memory trace state ownership, and runtime/scheduler merge
   helpers without moving diagnostics policy into adapter code.
+- Milestone 3 transport hardening now preserves ambiguous scheduler identity at
+  the Tauri diagnostics boundary: when backend scheduler snapshots omit
+  `trace_execution_id`, the adapter keeps scheduler/runtime state as
+  overlay-only and does not invent a run id from `session_id`.
 
 ### Deviations
 

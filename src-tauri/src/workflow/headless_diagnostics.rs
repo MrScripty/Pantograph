@@ -23,7 +23,7 @@ pub(crate) fn record_headless_scheduler_snapshot(
     requested_workflow_name: Option<String>,
     snapshot_result: Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
     captured_at_ms: u64,
-) -> String {
+) -> Option<String> {
     diagnostics_store.set_execution_metadata(
         requested_session_id,
         requested_workflow_id.clone(),
@@ -32,11 +32,7 @@ pub(crate) fn record_headless_scheduler_snapshot(
 
     match snapshot_result {
         Ok(snapshot) => {
-            let observed_execution_id = snapshot
-                .trace_execution_id
-                .clone()
-                .unwrap_or_else(|| requested_session_id.to_string());
-            if observed_execution_id != requested_session_id {
+            if let Some(observed_execution_id) = snapshot.trace_execution_id.clone() {
                 diagnostics_store.set_execution_metadata(
                     &observed_execution_id,
                     snapshot
@@ -45,29 +41,38 @@ pub(crate) fn record_headless_scheduler_snapshot(
                         .or_else(|| requested_workflow_id.clone()),
                     requested_workflow_name,
                 );
+                diagnostics_store.record_scheduler_snapshot(
+                    snapshot.workflow_id,
+                    observed_execution_id.clone(),
+                    snapshot.session_id,
+                    captured_at_ms,
+                    Some(snapshot.session),
+                    snapshot.items,
+                    None,
+                );
+                Some(observed_execution_id)
+            } else {
+                diagnostics_store.update_scheduler_snapshot(
+                    snapshot.workflow_id,
+                    Some(snapshot.session_id),
+                    Some(snapshot.session),
+                    snapshot.items,
+                    None,
+                    captured_at_ms,
+                );
+                None
             }
-            diagnostics_store.record_scheduler_snapshot(
-                snapshot.workflow_id,
-                observed_execution_id.clone(),
-                snapshot.session_id,
-                captured_at_ms,
-                Some(snapshot.session),
-                snapshot.items,
-                None,
-            );
-            observed_execution_id
         }
         Err(error) => {
-            diagnostics_store.record_scheduler_snapshot(
+            diagnostics_store.update_scheduler_snapshot(
                 requested_workflow_id,
-                requested_session_id.to_string(),
-                requested_session_id.to_string(),
-                captured_at_ms,
+                Some(requested_session_id.to_string()),
                 None,
                 Vec::new(),
                 Some(error.to_envelope_json()),
+                captured_at_ms,
             );
-            requested_session_id.to_string()
+            None
         }
     }
 }
@@ -251,10 +256,10 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
     embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     captured_at_ms: u64,
 ) -> WorkflowDiagnosticsProjection {
-    let mut trace_execution_id = session_id.clone();
+    let mut trace_execution_id = None;
 
     if let Some(session_id) = session_id.as_deref() {
-        trace_execution_id = Some(record_headless_scheduler_snapshot(
+        trace_execution_id = record_headless_scheduler_snapshot(
             diagnostics_store.as_ref(),
             session_id,
             workflow_id.clone(),
@@ -265,7 +270,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
                 ))
             }),
             captured_at_ms,
-        ));
+        );
     } else {
         diagnostics_store.update_scheduler_snapshot(
             None,
@@ -308,4 +313,98 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
     }
 
     diagnostics_store.snapshot()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use pantograph_workflow_service::{
+        graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowRuntimeRequirements,
+        WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
+        WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+        WorkflowTraceRuntimeMetrics,
+    };
+
+    use super::{stored_runtime_trace_metrics, workflow_diagnostics_snapshot_projection};
+    use crate::workflow::diagnostics::WorkflowDiagnosticsStore;
+
+    fn running_session_summary() -> WorkflowSessionSummary {
+        WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-1".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 2,
+        }
+    }
+
+    fn capability_response() -> WorkflowCapabilitiesResponse {
+        WorkflowCapabilitiesResponse {
+            max_input_bindings: 4,
+            max_output_targets: 2,
+            max_value_bytes: 2_048,
+            runtime_requirements: WorkflowRuntimeRequirements::default(),
+            models: Vec::new(),
+            runtime_capabilities: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn workflow_diagnostics_snapshot_projection_preserves_ambiguous_scheduler_identity() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        let projection = workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: None,
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: None,
+                    priority: 5,
+                    status: WorkflowSessionQueueItemStatus::Pending,
+                }],
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
+                runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:34b".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            Some("llava:34b".to_string()),
+            None,
+            None,
+            None,
+            120,
+        );
+
+        assert_eq!(
+            projection.scheduler.session_id.as_deref(),
+            Some("session-1")
+        );
+        assert_eq!(projection.scheduler.trace_execution_id, None);
+        assert!(projection.run_order.is_empty());
+        assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
+        assert!(
+            stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1"))
+                .is_none()
+        );
+    }
 }

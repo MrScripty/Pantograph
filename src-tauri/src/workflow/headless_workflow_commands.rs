@@ -361,7 +361,7 @@ mod tests {
             120,
         );
 
-        assert_eq!(execution_id, "run-1");
+        assert_eq!(execution_id.as_deref(), Some("run-1"));
         let trace = diagnostics_store
             .trace_snapshot(WorkflowTraceSnapshotRequest {
                 execution_id: Some("run-1".to_string()),
@@ -382,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn headless_scheduler_snapshot_helper_falls_back_to_session_identity_on_error() {
+    fn headless_scheduler_snapshot_helper_keeps_error_overlay_without_invented_run_identity() {
         let diagnostics_store = WorkflowDiagnosticsStore::default();
 
         let execution_id = record_headless_scheduler_snapshot(
@@ -396,25 +396,19 @@ mod tests {
             120,
         );
 
-        assert_eq!(execution_id, "session-1");
-        let trace = diagnostics_store
-            .trace_snapshot(WorkflowTraceSnapshotRequest {
-                execution_id: Some("session-1".to_string()),
-                session_id: None,
-                workflow_id: None,
-                include_completed: None,
-            })
-            .expect("trace snapshot")
-            .traces
-            .into_iter()
-            .next()
-            .expect("scheduler trace");
-        assert_eq!(trace.execution_id, "session-1");
-        assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(execution_id, None);
+        let projection = diagnostics_store.snapshot();
+        assert_eq!(projection.scheduler.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(
-            trace.queue.scheduler_decision_reason.as_deref(),
-            Some("scheduler_snapshot_failed")
+            projection.scheduler.session_id.as_deref(),
+            Some("session-1")
         );
+        assert_eq!(projection.scheduler.trace_execution_id, None);
+        assert_eq!(
+            projection.scheduler.last_error.as_deref(),
+            Some("{\"code\":\"invalid_request\",\"message\":\"session missing\"}")
+        );
+        assert!(projection.run_order.is_empty());
     }
 
     #[test]
@@ -541,7 +535,7 @@ mod tests {
             }),
             120,
         );
-        assert_eq!(execution_id, "run-1");
+        assert_eq!(execution_id.as_deref(), Some("run-1"));
 
         record_headless_runtime_snapshot(
             &diagnostics_store,
@@ -664,7 +658,7 @@ mod tests {
             }),
             120,
         );
-        assert_eq!(execution_id, "run-1");
+        assert_eq!(execution_id.as_deref(), Some("run-1"));
 
         let snapshot = workflow_trace_snapshot_response(
             &diagnostics_store,
@@ -711,7 +705,7 @@ mod tests {
             }),
             120,
         );
-        assert_eq!(execution_id, "run-1");
+        assert_eq!(execution_id.as_deref(), Some("run-1"));
 
         let snapshot = workflow_trace_snapshot_response(
             &diagnostics_store,
