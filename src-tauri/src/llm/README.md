@@ -107,7 +107,8 @@ app.manage(gateway);
   debugging, but that aggregation must remain transport-only and must not
   redefine runtime policy in the host layer. When workflow-specific filters are
   needed, this layer should reuse the shared workflow diagnostics projection
-  helper rather than building a second local diagnostics path.
+  helper that also backs workflow diagnostics command reads rather than
+  building a second local diagnostics path.
 - Long-lived host services such as health monitoring and recovery must be
   started and stopped by the app composition root or another explicit owner,
   not by arbitrary UI calls. Command handlers may invoke those managed
