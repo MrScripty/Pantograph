@@ -771,6 +771,11 @@ business logic into adapters.
   owner-conflict failures to `WorkflowServiceError::InvalidRequest`, so Tauri
   workflow execution no longer collapses those backend registry decisions into
   `internal_error` envelopes.
+- 2026-04-15: Execution-time scheduler/runtime diagnostics snapshot
+  assembly now also lives in `crates/pantograph-embedded-runtime::workflow_runtime`,
+  so `src-tauri/src/workflow/workflow_execution_commands.rs` no longer owns
+  trace-execution-id fallback, runtime-workflow-id derivation, or registry-aware
+  runtime snapshot projection when forwarding execution diagnostics events.
 
 **Verification:**
 - `cargo check --manifest-path src-tauri/Cargo.toml`

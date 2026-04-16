@@ -101,6 +101,11 @@ implementation progress in the runtime and diagnostics layers.
   Python-sidecar runtime id from a run, so producer-aware workflow traces no
   longer collapse mixed Python-runtime executions down to only the final
   producer.
+- Execution-time scheduler/runtime diagnostics snapshot assembly now also
+  lives in `crates/pantograph-embedded-runtime::workflow_runtime`, so the
+  Tauri workflow execution adapter no longer derives trace execution ids,
+  runtime workflow ids, or registry-aware runtime snapshot projections when
+  emitting execution diagnostics events.
 - Tauri now also exposes an aggregate runtime debug snapshot command that
   synchronizes the shared runtime registry before returning runtime mode,
   health, recovery, and latest workflow diagnostics facts, so the GUI can
