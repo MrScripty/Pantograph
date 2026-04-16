@@ -443,6 +443,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   `crates/pantograph-embedded-runtime`, so embedding-sidecar failures converge
   registry state to `unhealthy` through the same backend-owned producer
   contract instead of a Tauri-local special case.
+- Ordinary runtime-registry synchronization now also consumes the latest
+  gateway-stored backend health overlays, so later mode-info refreshes do not
+  reset active or dedicated-embedding runtimes from assessed `unhealthy` back
+  to lifecycle-derived ready.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task

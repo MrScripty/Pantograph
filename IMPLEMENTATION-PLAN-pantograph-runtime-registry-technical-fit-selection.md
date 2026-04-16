@@ -577,6 +577,10 @@ runtime callers.
   `crates/pantograph-embedded-runtime::runtime_registry`, so embedding-sidecar
   failures can converge the shared registry to `unhealthy` instead of leaving
   that producer pinned to the last lifecycle-derived `ready` snapshot.
+- 2026-04-15: Ordinary runtime-registry synchronization now also consumes the
+  latest gateway-stored backend health snapshot matched by runtime id plus
+  runtime instance id, so later mode-info refreshes no longer erase active or
+  dedicated-embedding `unhealthy` state back to lifecycle-derived `ready`.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.

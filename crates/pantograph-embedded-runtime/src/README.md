@@ -104,6 +104,9 @@ embedded-runtime crate.
 - Runtime-registry unhealthy projection for the dedicated embedding producer
   must stay in backend Rust so host polling loops do not invent a separate
   embedding-runtime failure policy.
+- Ordinary runtime-registry synchronization must consume the latest matching
+  host-provided health snapshot in backend Rust so later mode-info refreshes do
+  not erase a previously assessed `unhealthy` runtime back to lifecycle-ready.
 - Recovery restart-plan derivation must stay in backend Rust so wrappers do not
   drift on backend port-override or dedicated-embedding restart policy.
 - Health probe assessment and degraded/unhealthy threshold interpretation must

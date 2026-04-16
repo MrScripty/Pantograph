@@ -128,6 +128,10 @@ app.manage(gateway);
 - Dedicated embedding runtime health polling may reuse host HTTP transport, but
   any active-vs-embedding unhealthy projection still belongs to backend
   `runtime_registry` helpers rather than to Tauri-local branching.
+- When this layer persists host-observed health overlays for later registry
+  synchronization, it must treat them as backend-owned facts keyed by runtime
+  id plus runtime instance id and clear them on lifecycle-changing transitions
+  rather than inventing a Tauri-local health state machine.
 - When this directory synchronizes registry state from the shared gateway, it
   must use the richer Tauri `mode_info()` snapshot rather than the narrower
   core-gateway view, and it should convert that snapshot into the backend-owned
