@@ -4,8 +4,14 @@ use crate::config::ServerModeInfo;
 use crate::llm::commands::shared::synced_server_mode_info;
 use crate::llm::health_monitor::{HealthCheckResult, SharedHealthMonitor};
 use crate::llm::recovery::{RecoveryConfig, SharedRecoveryManager};
-use crate::workflow::commands::SharedWorkflowDiagnosticsStore;
-use crate::workflow::diagnostics::{DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot};
+use crate::workflow::commands::{
+    SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService,
+};
+use crate::workflow::diagnostics::{
+    DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
+    WorkflowDiagnosticsSnapshotRequest,
+};
+use crate::workflow::headless_workflow_commands::workflow_diagnostics_snapshot_response;
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
 
@@ -43,6 +49,17 @@ pub struct RuntimeDebugSnapshot {
     pub workflow_scheduler_diagnostics: Option<DiagnosticsSchedulerSnapshot>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeDebugSnapshotRequest {
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub workflow_id: Option<String>,
+    #[serde(default)]
+    pub workflow_name: Option<String>,
+}
+
 async fn runtime_registry_snapshot_response(
     gateway: &SharedGateway,
     runtime_registry: &SharedRuntimeRegistry,
@@ -55,7 +72,7 @@ async fn runtime_debug_snapshot_response(
     runtime_registry: &SharedRuntimeRegistry,
     health_monitor: Option<&SharedHealthMonitor>,
     recovery_manager: Option<&SharedRecoveryManager>,
-    workflow_diagnostics: Option<&SharedWorkflowDiagnosticsStore>,
+    workflow_diagnostics: Option<WorkflowDiagnosticsProjection>,
 ) -> RuntimeDebugSnapshot {
     let mode_info = synced_server_mode_info(gateway, runtime_registry).await;
     let health_monitor_running = health_monitor
@@ -74,14 +91,12 @@ async fn runtime_debug_snapshot_response(
         }),
         None => None,
     };
-    let (workflow_runtime_diagnostics, workflow_scheduler_diagnostics) = match workflow_diagnostics
-    {
-        Some(store) => {
-            let projection = store.snapshot();
-            (Some(projection.runtime), Some(projection.scheduler))
-        }
-        None => (None, None),
-    };
+    let workflow_runtime_diagnostics = workflow_diagnostics
+        .as_ref()
+        .map(|projection| projection.runtime.clone());
+    let workflow_scheduler_diagnostics = workflow_diagnostics
+        .as_ref()
+        .map(|projection| projection.scheduler.clone());
 
     RuntimeDebugSnapshot {
         mode_info,
@@ -118,6 +133,7 @@ pub async fn get_runtime_registry_snapshot(
 
 #[command]
 pub async fn get_runtime_debug_snapshot(
+    request: Option<RuntimeDebugSnapshotRequest>,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
@@ -131,13 +147,48 @@ pub async fn get_runtime_debug_snapshot(
     let workflow_diagnostics = app
         .try_state::<SharedWorkflowDiagnosticsStore>()
         .map(|store| (*store).clone());
+    let workflow_service = app
+        .try_state::<SharedWorkflowService>()
+        .map(|service| (*service).clone());
+    let extensions = app
+        .try_state::<SharedExtensions>()
+        .map(|extensions| (*extensions).clone());
+    let workflow_request = request.unwrap_or_default();
+    let has_workflow_filter = workflow_request.session_id.is_some()
+        || workflow_request.workflow_id.is_some()
+        || workflow_request.workflow_name.is_some();
+    let workflow_diagnostics = match (
+        workflow_diagnostics,
+        workflow_service,
+        extensions,
+        has_workflow_filter,
+    ) {
+        (Some(store), Some(service), Some(extensions), true) => Some(
+            workflow_diagnostics_snapshot_response(
+                &app,
+                gateway.inner(),
+                runtime_registry.inner(),
+                &extensions,
+                &service,
+                &store,
+                WorkflowDiagnosticsSnapshotRequest {
+                    session_id: workflow_request.session_id,
+                    workflow_id: workflow_request.workflow_id,
+                    workflow_name: workflow_request.workflow_name,
+                },
+            )
+            .await?,
+        ),
+        (Some(store), _, _, _) => Some(store.snapshot()),
+        _ => None,
+    };
 
     Ok(runtime_debug_snapshot_response(
         gateway.inner(),
         runtime_registry.inner(),
         health_monitor.as_ref(),
         recovery_manager.as_ref(),
-        workflow_diagnostics.as_ref(),
+        workflow_diagnostics,
     )
     .await)
 }
@@ -163,6 +214,7 @@ mod tests {
 
     use super::{
         reclaim_runtime, runtime_debug_snapshot_response, runtime_registry_snapshot_response,
+        RuntimeDebugSnapshotRequest,
     };
     use crate::llm::health_monitor::{
         HealthCheckResult, HealthMonitor, HealthMonitorConfig, HealthStatus, SharedHealthMonitor,
@@ -388,13 +440,14 @@ mod tests {
             scheduler_projection.scheduler.workflow_id.as_deref(),
             Some("workflow-debug")
         );
+        let workflow_diagnostics_projection = workflow_diagnostics.snapshot();
 
         let response = runtime_debug_snapshot_response(
             &gateway,
             &runtime_registry,
             Some(&health_monitor),
             Some(&recovery_manager),
-            Some(&workflow_diagnostics),
+            Some(workflow_diagnostics_projection),
         )
         .await;
 
@@ -455,6 +508,25 @@ mod tests {
                 .as_ref()
                 .and_then(|scheduler| scheduler.session_id.as_deref()),
             Some("session-debug")
+        );
+    }
+
+    #[test]
+    fn runtime_debug_snapshot_request_serializes_optional_workflow_filters() {
+        let request = RuntimeDebugSnapshotRequest {
+            session_id: Some("session-1".to_string()),
+            workflow_id: Some("workflow-1".to_string()),
+            workflow_name: Some("Workflow 1".to_string()),
+        };
+
+        let value = serde_json::to_value(request).expect("serialize runtime debug request");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "session_id": "session-1",
+                "workflow_id": "workflow-1",
+                "workflow_name": "Workflow 1"
+            })
         );
     }
 }

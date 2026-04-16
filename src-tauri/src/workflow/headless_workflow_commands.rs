@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pantograph_embedded_runtime::{
-    workflow_runtime::build_runtime_event_projection,
-    EmbeddedRuntime, EmbeddedRuntimeConfig, HostRuntimeModeSnapshot, RagBackend, RagDocument,
+    workflow_runtime::build_runtime_event_projection, EmbeddedRuntime, EmbeddedRuntimeConfig,
+    HostRuntimeModeSnapshot, RagBackend, RagDocument,
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
@@ -646,7 +646,28 @@ pub async fn workflow_get_diagnostics_snapshot(
     workflow_service: State<'_, SharedWorkflowService>,
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
 ) -> Result<WorkflowDiagnosticsProjection, String> {
-    sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
+    workflow_diagnostics_snapshot_response(
+        &app,
+        gateway.inner(),
+        runtime_registry.inner(),
+        extensions.inner(),
+        workflow_service.inner(),
+        diagnostics_store.inner(),
+        request,
+    )
+    .await
+}
+
+pub async fn workflow_diagnostics_snapshot_response(
+    app: &AppHandle,
+    gateway: &SharedGateway,
+    runtime_registry: &SharedRuntimeRegistry,
+    extensions: &SharedExtensions,
+    workflow_service: &SharedWorkflowService,
+    diagnostics_store: &SharedWorkflowDiagnosticsStore,
+    request: WorkflowDiagnosticsSnapshotRequest,
+) -> Result<WorkflowDiagnosticsProjection, String> {
+    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
     let captured_at_ms = super::workflow_execution_commands::unix_timestamp_ms();
     let session_id = normalize_optional_request_value(request.session_id.as_deref());
     let workflow_id = normalize_optional_request_value(request.workflow_id.as_deref());
@@ -664,11 +685,11 @@ pub async fn workflow_get_diagnostics_snapshot(
     };
     let capabilities_result = if let Some(workflow_id) = workflow_id.as_ref() {
         let runtime = build_runtime(
-            &app,
-            gateway.inner(),
-            runtime_registry.inner(),
-            extensions.inner(),
-            workflow_service.inner(),
+            app,
+            gateway,
+            runtime_registry,
+            extensions,
+            workflow_service,
             None,
         )
         .await?;
@@ -683,9 +704,9 @@ pub async fn workflow_get_diagnostics_snapshot(
         None
     };
     let stored_runtime_snapshots =
-        stored_runtime_snapshots(diagnostics_store.inner(), workflow_id.as_deref());
+        stored_runtime_snapshots(diagnostics_store, workflow_id.as_deref());
     let stored_runtime_model_targets =
-        stored_runtime_model_targets(diagnostics_store.inner(), workflow_id.as_deref());
+        stored_runtime_model_targets(diagnostics_store, workflow_id.as_deref());
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let gateway_mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
@@ -703,7 +724,7 @@ pub async fn workflow_get_diagnostics_snapshot(
             .as_ref()
             .and_then(|(_, embedding_model_target)| embedding_model_target.as_deref()),
         stored_runtime_trace_metrics(
-            diagnostics_store.inner(),
+            diagnostics_store,
             session_id.as_deref(),
             workflow_id.as_deref(),
         ),
@@ -715,7 +736,7 @@ pub async fn workflow_get_diagnostics_snapshot(
     );
 
     Ok(workflow_diagnostics_snapshot_projection(
-        diagnostics_store.inner(),
+        diagnostics_store,
         session_id,
         workflow_id,
         workflow_name,
