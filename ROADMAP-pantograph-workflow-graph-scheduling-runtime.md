@@ -435,6 +435,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   also live in `crates/pantograph-embedded-runtime`, leaving the Tauri health
   monitor to own polling cadence, HTTP transport, and event emission without
   re-encoding failure-count progression locally.
+- Health-monitor-driven runtime-registry synchronization now also routes
+  through `crates/pantograph-embedded-runtime`, so failed health checks can
+  mark the active runtime `unhealthy` in the shared registry instead of
+  leaving registry state at the last lifecycle-derived ready snapshot.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task

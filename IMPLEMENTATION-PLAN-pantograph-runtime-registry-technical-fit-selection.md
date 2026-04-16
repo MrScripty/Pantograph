@@ -568,6 +568,11 @@ runtime callers.
   `crates/pantograph-embedded-runtime::runtime_health`, so Tauri health
   polling no longer owns failure-count progression or status-transition
   policy.
+- 2026-04-15: Runtime-registry synchronization from health-monitor checks now
+  also flows through `crates/pantograph-embedded-runtime::runtime_registry`,
+  so failed HTTP health checks can project the active runtime into registry
+  `unhealthy` state instead of leaving the shared registry pinned to
+  lifecycle-derived `ready`.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.

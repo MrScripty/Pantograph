@@ -121,6 +121,10 @@ app.manage(gateway);
 - `health_monitor.rs` may own polling cadence, HTTP transport, and desktop
   event emission, but degraded/unhealthy threshold interpretation must come
   from `crates/pantograph-embedded-runtime::runtime_health`.
+- When health polling needs to project runtime failure into the shared runtime
+  registry, this layer must route that projection through
+  `crates/pantograph-embedded-runtime::runtime_registry` rather than mutating
+  registry state from host-local policy.
 - When this directory synchronizes registry state from the shared gateway, it
   must use the richer Tauri `mode_info()` snapshot rather than the narrower
   core-gateway view, and it should convert that snapshot into the backend-owned
