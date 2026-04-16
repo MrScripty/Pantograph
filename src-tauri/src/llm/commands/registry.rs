@@ -4,6 +4,8 @@ use crate::config::ServerModeInfo;
 use crate::llm::commands::shared::synced_server_mode_info;
 use crate::llm::health_monitor::{HealthCheckResult, SharedHealthMonitor};
 use crate::llm::recovery::{RecoveryConfig, SharedRecoveryManager};
+use crate::workflow::commands::SharedWorkflowDiagnosticsStore;
+use crate::workflow::diagnostics::{DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot};
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
 
@@ -37,6 +39,8 @@ pub struct RuntimeDebugSnapshot {
     pub health_monitor_running: bool,
     pub last_health_check: Option<HealthCheckResult>,
     pub recovery: Option<RuntimeRecoveryDebugState>,
+    pub workflow_runtime_diagnostics: Option<DiagnosticsRuntimeSnapshot>,
+    pub workflow_scheduler_diagnostics: Option<DiagnosticsSchedulerSnapshot>,
 }
 
 async fn runtime_registry_snapshot_response(
@@ -51,6 +55,7 @@ async fn runtime_debug_snapshot_response(
     runtime_registry: &SharedRuntimeRegistry,
     health_monitor: Option<&SharedHealthMonitor>,
     recovery_manager: Option<&SharedRecoveryManager>,
+    workflow_diagnostics: Option<&SharedWorkflowDiagnosticsStore>,
 ) -> RuntimeDebugSnapshot {
     let mode_info = synced_server_mode_info(gateway, runtime_registry).await;
     let health_monitor_running = health_monitor
@@ -69,6 +74,14 @@ async fn runtime_debug_snapshot_response(
         }),
         None => None,
     };
+    let (workflow_runtime_diagnostics, workflow_scheduler_diagnostics) = match workflow_diagnostics
+    {
+        Some(store) => {
+            let projection = store.snapshot();
+            (Some(projection.runtime), Some(projection.scheduler))
+        }
+        None => (None, None),
+    };
 
     RuntimeDebugSnapshot {
         mode_info,
@@ -76,6 +89,8 @@ async fn runtime_debug_snapshot_response(
         health_monitor_running,
         last_health_check,
         recovery,
+        workflow_runtime_diagnostics,
+        workflow_scheduler_diagnostics,
     }
 }
 
@@ -113,12 +128,16 @@ pub async fn get_runtime_debug_snapshot(
     let recovery_manager = app
         .try_state::<SharedRecoveryManager>()
         .map(|manager| (*manager).clone());
+    let workflow_diagnostics = app
+        .try_state::<SharedWorkflowDiagnosticsStore>()
+        .map(|store| (*store).clone());
 
     Ok(runtime_debug_snapshot_response(
         gateway.inner(),
         runtime_registry.inner(),
         health_monitor.as_ref(),
         recovery_manager.as_ref(),
+        workflow_diagnostics.as_ref(),
     )
     .await)
 }
@@ -150,7 +169,12 @@ mod tests {
     };
     use crate::llm::recovery::{RecoveryManager, SharedRecoveryManager};
     use crate::llm::{InferenceGateway, RuntimeRegistry, SharedGateway, SharedRuntimeRegistry};
+    use crate::workflow::diagnostics::SharedWorkflowDiagnosticsStore;
     use chrono::Utc;
+    use pantograph_workflow_service::{
+        graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowSessionState,
+        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+    };
 
     struct MockProcessHandle;
 
@@ -302,12 +326,75 @@ mod tests {
             }))
             .await;
         let recovery_manager: SharedRecoveryManager = Arc::new(RecoveryManager::default());
+        let workflow_diagnostics: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
+        workflow_diagnostics.record_runtime_snapshot(
+            "workflow-debug".to_string(),
+            "execution-debug".to_string(),
+            123,
+            Some(WorkflowCapabilitiesResponse {
+                max_input_bindings: 1,
+                max_output_targets: 1,
+                max_value_bytes: 1024,
+                runtime_requirements: Default::default(),
+                models: Vec::new(),
+                runtime_capabilities: Vec::new(),
+            }),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
+                runtime_instance_id: Some("llama-cpp-embedding-12".to_string()),
+                model_target: Some("/models/embed.gguf".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            Some("/models/embed.gguf".to_string()),
+            Some("/models/embed.gguf".to_string()),
+            Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-12".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            None,
+            None,
+        );
+        let scheduler_projection = workflow_diagnostics.record_scheduler_snapshot(
+            Some("workflow-debug".to_string()),
+            "execution-debug".to_string(),
+            "session-debug".to_string(),
+            456,
+            Some(WorkflowSessionSummary {
+                session_id: "session-debug".to_string(),
+                workflow_id: "workflow-debug".to_string(),
+                session_kind: WorkflowSessionKind::Workflow,
+                usage_profile: None,
+                keep_alive: false,
+                state: WorkflowSessionState::Running,
+                queued_runs: 0,
+                run_count: 1,
+            }),
+            Vec::new(),
+            None,
+        );
+        assert_eq!(
+            scheduler_projection.scheduler.workflow_id.as_deref(),
+            Some("workflow-debug")
+        );
 
         let response = runtime_debug_snapshot_response(
             &gateway,
             &runtime_registry,
             Some(&health_monitor),
             Some(&recovery_manager),
+            Some(&workflow_diagnostics),
         )
         .await;
 
@@ -346,6 +433,28 @@ mod tests {
                 .as_ref()
                 .and_then(|recovery| recovery.last_error.as_deref()),
             None
+        );
+        assert_eq!(
+            response
+                .workflow_runtime_diagnostics
+                .as_ref()
+                .and_then(|runtime| runtime.workflow_id.as_deref()),
+            Some("workflow-debug")
+        );
+        assert_eq!(
+            response
+                .workflow_runtime_diagnostics
+                .as_ref()
+                .and_then(|runtime| runtime.active_runtime.as_ref())
+                .and_then(|runtime| runtime.lifecycle_decision_reason.as_deref()),
+            Some("runtime_ready")
+        );
+        assert_eq!(
+            response
+                .workflow_scheduler_diagnostics
+                .as_ref()
+                .and_then(|scheduler| scheduler.session_id.as_deref()),
+            Some("session-debug")
         );
     }
 }
