@@ -13,6 +13,9 @@ use tokio::sync::RwLock;
 use crate::llm::recovery::SharedRecoveryManager;
 use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+use pantograph_embedded_runtime::runtime_health::{
+    assess_runtime_health_probe, RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState,
+};
 
 /// Health check result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,79 +161,13 @@ impl HealthMonitor {
                 let check_result = client.get(&url).send().await;
                 let elapsed_ms = start.elapsed().as_millis() as u64;
 
-                let result = match check_result {
-                    Ok(resp) if resp.status().is_success() => {
-                        // Reset failure count on success
-                        *consecutive_failures.write().await = 0;
-
-                        HealthCheckResult {
-                            healthy: true,
-                            status: HealthStatus::Healthy,
-                            response_time_ms: Some(elapsed_ms),
-                            error: None,
-                            timestamp: Utc::now(),
-                            consecutive_failures: 0,
-                        }
-                    }
-                    Ok(resp) => {
-                        // Non-success status code
-                        let mut failures = consecutive_failures.write().await;
-                        *failures += 1;
-                        let fail_count = *failures;
-
-                        let reason = format!("HTTP {}", resp.status());
-                        let status = if fail_count >= config.failure_threshold {
-                            HealthStatus::Unhealthy {
-                                reason: reason.clone(),
-                            }
-                        } else {
-                            HealthStatus::Degraded {
-                                reason: reason.clone(),
-                            }
-                        };
-
-                        HealthCheckResult {
-                            healthy: fail_count < config.failure_threshold,
-                            status,
-                            response_time_ms: Some(elapsed_ms),
-                            error: Some(reason),
-                            timestamp: Utc::now(),
-                            consecutive_failures: fail_count,
-                        }
-                    }
-                    Err(e) => {
-                        // Request failed
-                        let mut failures = consecutive_failures.write().await;
-                        *failures += 1;
-                        let fail_count = *failures;
-
-                        let reason = if e.is_timeout() {
-                            "Request timeout".to_string()
-                        } else if e.is_connect() {
-                            "Connection refused".to_string()
-                        } else {
-                            e.to_string()
-                        };
-
-                        let status = if fail_count >= config.failure_threshold {
-                            HealthStatus::Unhealthy {
-                                reason: reason.clone(),
-                            }
-                        } else {
-                            HealthStatus::Degraded {
-                                reason: reason.clone(),
-                            }
-                        };
-
-                        HealthCheckResult {
-                            healthy: fail_count < config.failure_threshold,
-                            status,
-                            response_time_ms: None,
-                            error: Some(reason),
-                            timestamp: Utc::now(),
-                            consecutive_failures: fail_count,
-                        }
-                    }
+                let probe = probe_from_http_result(check_result, elapsed_ms);
+                let result = {
+                    let mut failures = consecutive_failures.write().await;
+                    let assessment =
+                        assess_runtime_health_probe(probe, *failures, config.failure_threshold);
+                    *failures = assessment.consecutive_failures;
+                    health_check_result_from_assessment(assessment, Utc::now())
                 };
 
                 // Detect state changes
@@ -311,36 +248,13 @@ impl HealthMonitor {
 
         let resp = client.get(&url).send().await;
         let elapsed_ms = start.elapsed().as_millis() as u64;
-
-        let result = match resp {
-            Ok(r) if r.status().is_success() => HealthCheckResult {
-                healthy: true,
-                status: HealthStatus::Healthy,
-                response_time_ms: Some(elapsed_ms),
-                error: None,
-                timestamp: Utc::now(),
-                consecutive_failures: 0,
-            },
-            Ok(r) => HealthCheckResult {
-                healthy: false,
-                status: HealthStatus::Unhealthy {
-                    reason: format!("HTTP {}", r.status()),
-                },
-                response_time_ms: Some(elapsed_ms),
-                error: Some(format!("HTTP {}", r.status())),
-                timestamp: Utc::now(),
-                consecutive_failures: 1,
-            },
-            Err(e) => HealthCheckResult {
-                healthy: false,
-                status: HealthStatus::Unhealthy {
-                    reason: e.to_string(),
-                },
-                response_time_ms: None,
-                error: Some(e.to_string()),
-                timestamp: Utc::now(),
-                consecutive_failures: 1,
-            },
+        let probe = probe_from_http_result(resp, elapsed_ms);
+        let result = {
+            let mut failures = self.consecutive_failures.write().await;
+            let assessment =
+                assess_runtime_health_probe(probe, *failures, self.config.failure_threshold);
+            *failures = assessment.consecutive_failures;
+            health_check_result_from_assessment(assessment, Utc::now())
         };
 
         // Update stored result
@@ -390,3 +304,116 @@ impl Default for HealthMonitor {
 
 /// Shared health monitor type for Tauri state
 pub type SharedHealthMonitor = Arc<HealthMonitor>;
+
+fn probe_from_http_result(
+    result: Result<reqwest::Response, reqwest::Error>,
+    elapsed_ms: u64,
+) -> RuntimeHealthProbe {
+    match result {
+        Ok(response) if response.status().is_success() => RuntimeHealthProbe::Healthy {
+            response_time_ms: elapsed_ms,
+        },
+        Ok(response) => RuntimeHealthProbe::Failed {
+            reason: format!("HTTP {}", response.status()),
+            response_time_ms: Some(elapsed_ms),
+        },
+        Err(error) => RuntimeHealthProbe::Failed {
+            reason: health_failure_reason(&error),
+            response_time_ms: None,
+        },
+    }
+}
+
+fn health_failure_reason(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        "Request timeout".to_string()
+    } else if error.is_connect() {
+        "Connection refused".to_string()
+    } else {
+        error.to_string()
+    }
+}
+
+fn health_check_result_from_assessment(
+    assessment: RuntimeHealthAssessment,
+    timestamp: DateTime<Utc>,
+) -> HealthCheckResult {
+    let status = match assessment.state {
+        RuntimeHealthState::Healthy => HealthStatus::Healthy,
+        RuntimeHealthState::Degraded { reason } => HealthStatus::Degraded { reason },
+        RuntimeHealthState::Unhealthy { reason } => HealthStatus::Unhealthy { reason },
+    };
+
+    HealthCheckResult {
+        healthy: assessment.healthy,
+        status,
+        response_time_ms: assessment.response_time_ms,
+        error: assessment.error,
+        timestamp,
+        consecutive_failures: assessment.consecutive_failures,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use pantograph_embedded_runtime::runtime_health::{
+        RuntimeHealthAssessment, RuntimeHealthState,
+    };
+
+    use super::{health_check_result_from_assessment, HealthStatus};
+
+    #[test]
+    fn health_check_result_maps_degraded_backend_state() {
+        let result = health_check_result_from_assessment(
+            RuntimeHealthAssessment {
+                healthy: true,
+                state: RuntimeHealthState::Degraded {
+                    reason: "HTTP 503".to_string(),
+                },
+                response_time_ms: Some(55),
+                error: Some("HTTP 503".to_string()),
+                consecutive_failures: 2,
+            },
+            Utc::now(),
+        );
+
+        assert!(result.healthy);
+        assert_eq!(
+            result.status,
+            HealthStatus::Degraded {
+                reason: "HTTP 503".to_string(),
+            }
+        );
+        assert_eq!(result.response_time_ms, Some(55));
+        assert_eq!(result.error.as_deref(), Some("HTTP 503"));
+        assert_eq!(result.consecutive_failures, 2);
+    }
+
+    #[test]
+    fn health_check_result_maps_unhealthy_backend_state() {
+        let result = health_check_result_from_assessment(
+            RuntimeHealthAssessment {
+                healthy: false,
+                state: RuntimeHealthState::Unhealthy {
+                    reason: "Connection refused".to_string(),
+                },
+                response_time_ms: None,
+                error: Some("Connection refused".to_string()),
+                consecutive_failures: 3,
+            },
+            Utc::now(),
+        );
+
+        assert!(!result.healthy);
+        assert_eq!(
+            result.status,
+            HealthStatus::Unhealthy {
+                reason: "Connection refused".to_string(),
+            }
+        );
+        assert_eq!(result.response_time_ms, None);
+        assert_eq!(result.error.as_deref(), Some("Connection refused"));
+        assert_eq!(result.consecutive_failures, 3);
+    }
+}
