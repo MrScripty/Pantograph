@@ -794,6 +794,12 @@ refactor lands.
   and both the runtime debug command and workflow diagnostics command now reuse
   the same backend-owned workflow diagnostics projection helper rather than
   maintaining separate adapter-local assembly paths.
+- 2026-04-15: The aggregate runtime debug snapshot now also supports opt-in
+  workflow trace reads with execution/workflow/session filters and completed-run
+  selection. The transport command reuses the same backend-owned workflow trace
+  snapshot helper that backs headless workflow trace reads, so trace assembly
+  stays inside the shared Rust diagnostics boundary instead of splitting into a
+  second adapter-local path.
 
 **Status:** In progress
 

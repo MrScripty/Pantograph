@@ -108,7 +108,9 @@ app.manage(gateway);
   redefine runtime policy in the host layer. When workflow-specific filters are
   needed, this layer should reuse the shared workflow diagnostics projection
   helper that also backs workflow diagnostics command reads rather than
-  building a second local diagnostics path.
+  building a second local diagnostics path. Optional workflow trace reads must
+  likewise reuse the shared backend workflow trace snapshot helper so Tauri
+  does not start owning trace assembly or fallback logic.
 - Long-lived host services such as health monitoring and recovery must be
   started and stopped by the app composition root or another explicit owner,
   not by arbitrary UI calls. Command handlers may invoke those managed

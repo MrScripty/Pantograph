@@ -108,7 +108,10 @@ implementation progress in the runtime and diagnostics layers.
   transport calls. That debug surface now also accepts optional workflow and
   session filters, and both the workflow diagnostics and runtime debug command
   paths now reuse the same shared workflow diagnostics projection helper
-  instead of maintaining separate local projection paths.
+  instead of maintaining separate local projection paths. The same debug
+  surface now also supports opt-in workflow trace reads with execution,
+  session, and workflow filters plus completed-run selection while reusing the
+  shared backend workflow trace snapshot helper.
 - Tauri now has a shared targeted reclaim adapter that maps backend-owned
   runtime ids onto the correct host stop path for active-runtime and
   dedicated-embedding producers before re-synchronizing the shared registry,
@@ -261,7 +264,9 @@ adding more scheduling or graph complexity.
   synced registry, lifecycle, health, recovery, and latest workflow
   diagnostics state for internal GUI debugging, including targeted
   workflow/session-scoped reads through the shared diagnostics projection
-  helper reused by both diagnostics command surfaces.
+  helper reused by both diagnostics command surfaces. That same debug surface
+  can now include filtered workflow trace snapshots on demand through the
+  shared backend trace helper rather than building trace payloads in Tauri.
 - Runtime and capability contracts are materially more machine-consumable than
   at roadmap creation time.
 
