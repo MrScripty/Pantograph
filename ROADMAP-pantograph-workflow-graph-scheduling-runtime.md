@@ -447,6 +447,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   gateway-stored backend health overlays, so later mode-info refreshes do not
   reset active or dedicated-embedding runtimes from assessed `unhealthy` back
   to lifecycle-derived ready.
+- Tauri server command return paths now also route through one shared
+  sync-and-return helper, so command-level early returns such as
+  `start_sidecar_inference` embedding-path resolution warnings no longer leave
+  registry state stale after the main runtime already started.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task

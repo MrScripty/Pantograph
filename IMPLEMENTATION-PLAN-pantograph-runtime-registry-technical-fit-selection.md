@@ -581,6 +581,10 @@ runtime callers.
   latest gateway-stored backend health snapshot matched by runtime id plus
   runtime instance id, so later mode-info refreshes no longer erase active or
   dedicated-embedding `unhealthy` state back to lifecycle-derived `ready`.
+- 2026-04-15: Tauri server command return paths now also route through one
+  shared sync-and-return helper, so `start_sidecar_inference` no longer skips
+  runtime-registry convergence when embedding-model resolution fails after the
+  main inference runtime has already started.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
