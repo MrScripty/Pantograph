@@ -64,7 +64,8 @@ Runtime capability rule:
   capabilities to clients
 - `workflow_preflight` reports runtime warnings and blocking runtime issues
 - `run_workflow_session` reuses a session-scoped runtime preflight cache keyed
-  by graph fingerprint and runtime capability fingerprint
+  by graph fingerprint, runtime capability fingerprint, and normalized
+  technical-fit override selection
 - execution never triggers runtime installation implicitly
 - when the service asks a host to load session runtime resources, it now passes
   a backend-owned retention hint derived from session `keep_alive` state so
@@ -125,6 +126,9 @@ Primary contract types:
 - Technical-fit request normalization also belongs here: this crate may shape
   workflow and session context into a backend-owned selector request contract,
   but it must not become the owner of runtime policy or candidate scoring.
+- Additive `override_selection` fields on workflow preflight, direct run, and
+  session-run requests are also owned here so adapters can forward explicit
+  backend/model intent without reconstructing selector policy locally.
 - Workflow preflight and runtime-not-ready reporting may also consume the
   backend-owned technical-fit decision here so hosts surface one selector
   result instead of drifting between preflight and execution-time runtime

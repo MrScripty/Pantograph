@@ -203,11 +203,12 @@ impl WorkflowService {
         host: &H,
         workflow_id: &str,
         capabilities: &WorkflowHostCapabilities,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
     ) -> Result<WorkflowRuntimePreflightAssessment, WorkflowServiceError> {
         let request = build_workflow_technical_fit_request(
             workflow_id,
             &capabilities.runtime_requirements,
-            None,
+            override_selection,
             None,
             None,
             None,
@@ -221,12 +222,13 @@ impl WorkflowService {
         host: &H,
         session_id: &str,
         capabilities: &WorkflowHostCapabilities,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
     ) -> Result<WorkflowRuntimePreflightAssessment, WorkflowServiceError> {
         let session_context = self.technical_fit_session_context(session_id)?;
         let request = build_workflow_technical_fit_request(
             &session_context.workflow_id,
             &capabilities.runtime_requirements,
-            None,
+            override_selection,
             Some(session_id.trim()),
             session_context.usage_profile.as_deref(),
             Some(session_context.queue_pressure),

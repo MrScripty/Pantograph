@@ -152,6 +152,7 @@ async fn workflow_run_contract_snapshot() {
                     node_id: "vector-output-1".to_string(),
                     port_id: "vector".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 run_id: Some("run-123".to_string()),
             },
@@ -499,6 +500,7 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
                     node_id: "vector-output-1".to_string(),
                     port_id: "stream".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 run_id: None,
             },
@@ -528,6 +530,7 @@ async fn workflow_preflight_contract_snapshot() {
                     node_id: "vector-output-1".to_string(),
                     port_id: "vector".to_string(),
                 }]),
+                override_selection: None,
             },
         )
         .await

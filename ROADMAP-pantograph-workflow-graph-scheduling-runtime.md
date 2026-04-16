@@ -186,8 +186,9 @@ The opportunity is still depth rather than surface-area expansion:
   `crates/pantograph-workflow-service/src/workflow.rs` is intentionally simple
 - first-class workflow event semantics are not fully preserved end-to-end yet
 - KV cache workflow nodes are scaffolded but not backed by a real cache store
-- runtime preflight is stronger than before, but runtime residency and
-  technical-fit policy are still conservative
+- runtime preflight and backend-owned technical-fit selection are stronger than
+  before, but runtime residency pressure, recovery verification, and selector
+  hardening are still conservative
 
 ## Strategic Principles
 

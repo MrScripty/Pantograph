@@ -2428,6 +2428,7 @@ mod tests {
                 node_id: "vector-output-1".to_string(),
                 port_id: "vector".to_string(),
             }]),
+            override_selection: None,
             timeout_ms: None,
             run_id: None,
         };

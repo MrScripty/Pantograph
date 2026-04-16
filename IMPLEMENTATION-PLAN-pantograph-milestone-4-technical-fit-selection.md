@@ -350,14 +350,14 @@ and execution without turning orchestration or adapters into policy owners.
 - [x] Add workflow-service request-normalization paths that derive one
       backend-owned technical-fit request for both preflight and run/session
       execution flows.
-- [ ] Preserve explicit `model_id` and `backend_key` overrides with the frozen,
+- [x] Preserve explicit `model_id` and `backend_key` overrides with the frozen,
       deterministic precedence contract.
 - [x] Add embedded-runtime candidate collection and live-runtime snapshot
       projection that call into the registry selector instead of recomputing
       policy locally.
 - [x] Ensure workflow preflight and runtime-not-ready reporting surface the same
       selector decision/reason semantics as execution where applicable.
-- [ ] Keep any Tauri or binding integration limited to validated input parsing
+- [x] Keep any Tauri or binding integration limited to validated input parsing
       and transport of backend-owned decision DTOs.
 
 **Verification:**
@@ -368,7 +368,7 @@ and execution without turning orchestration or adapters into policy owners.
 - Review confirms workflow-service remains host-agnostic and Tauri remains an
   adapter only
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Documentation, Diagnostics, And Hardening
 
@@ -445,6 +445,11 @@ Update during implementation:
   `technical_fit_decision` preflight field, and kept a legacy capability-based
   fallback only for hosts that still return `None` from the technical-fit
   bridge.
+- 2026-04-16: Extended the workflow-service request contracts for preflight,
+  direct runs, and session runs with additive `override_selection`, carried the
+  normalized override through session queue caching, and verified that Tauri,
+  UniFFI, and Rustler bindings remain parse-and-forward transport wrappers
+  instead of technical-fit policy owners.
 
 
 ## Commit Cadence Notes
@@ -472,6 +477,9 @@ Update during implementation:
 
 - Dedicated Milestone 4 plan created.
 - Standards review passes recorded against the active coding standards.
+- Backend-owned technical-fit selection is now wired through workflow
+  preflight, direct runs, and session runs with additive explicit override
+  support and transport-only adapter boundaries.
 
 ### Deviations
 
@@ -479,10 +487,11 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Implement Milestone 1 of this dedicated plan before any further Milestone 4
-  feature work lands.
-- Keep the umbrella runtime-registry plan and roadmap in sync as Milestone 4
-  implementation progresses.
+- Start Milestone 5 hardening work around diagnostics, replay/recovery
+  verification, and source-of-truth upkeep without moving selector policy into
+  adapters.
+- Keep the umbrella runtime-registry plan and roadmap synchronized with the
+  completed Milestone 4 state before starting the next runtime milestone.
 
 ### Verification Summary
 
@@ -494,6 +503,10 @@ Update during implementation:
 - Repository inspection confirmed oversized immediate insertion points in
   `pantograph-runtime-registry`, `pantograph-workflow-service`, and
   `pantograph-embedded-runtime` that require planned extraction.
+- Focused verification now also covers workflow-service contract tests plus
+  direct-run/session/preflight override propagation and downstream crate
+  compilation for embedded runtime, frontend HTTP adapter, Rustler, and the
+  workflow-service example target.
 
 ### Traceability Links
 

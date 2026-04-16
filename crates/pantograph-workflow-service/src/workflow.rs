@@ -22,7 +22,9 @@ use crate::graph::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     WorkflowSessionKind,
 };
-use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
+use crate::technical_fit::{
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride, WorkflowTechnicalFitRequest,
+};
 
 /// Node/port value binding used for workflow inputs and outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -50,6 +52,8 @@ pub struct WorkflowRunRequest {
     pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]
     pub output_targets: Option<Vec<WorkflowOutputTarget>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_selection: Option<WorkflowTechnicalFitOverride>,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
     #[serde(default)]
@@ -234,6 +238,8 @@ pub struct WorkflowPreflightRequest {
     pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]
     pub output_targets: Option<Vec<WorkflowOutputTarget>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_selection: Option<WorkflowTechnicalFitOverride>,
 }
 
 /// Input surface reference used by preflight diagnostics.
@@ -324,6 +330,8 @@ pub struct WorkflowSessionRunRequest {
     pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]
     pub output_targets: Option<Vec<WorkflowOutputTarget>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_selection: Option<WorkflowTechnicalFitOverride>,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
     #[serde(default)]
@@ -943,6 +951,7 @@ struct WorkflowSessionQueuedRun {
     enqueued_at_ms: u64,
     inputs: Vec<WorkflowPortBinding>,
     output_targets: Option<Vec<WorkflowOutputTarget>>,
+    override_selection: Option<WorkflowTechnicalFitOverride>,
     timeout_ms: Option<u64>,
     priority: i32,
     enqueued_tick: u64,
@@ -961,6 +970,7 @@ struct WorkflowSessionActiveRun {
 struct WorkflowSessionPreflightCache {
     graph_fingerprint: String,
     runtime_capability_fingerprint: String,
+    override_selection: Option<WorkflowTechnicalFitOverride>,
     blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
 }
 
@@ -1229,6 +1239,10 @@ impl WorkflowSessionStore {
             enqueued_at_ms: unix_timestamp_ms(),
             inputs: request.inputs.clone(),
             output_targets: request.output_targets.clone(),
+            override_selection: request
+                .override_selection
+                .as_ref()
+                .and_then(WorkflowTechnicalFitOverride::normalized),
             timeout_ms: request.timeout_ms,
             priority: request.priority.unwrap_or(0),
             enqueued_tick: tick,
@@ -1676,6 +1690,7 @@ impl WorkflowService {
         host: &H,
         session_id: &str,
         workflow_id: &str,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
     ) -> Result<WorkflowSessionPreflightCache, WorkflowServiceError> {
         let graph_fingerprint = host.workflow_graph_fingerprint(workflow_id).await?;
         let runtime_capabilities = host.runtime_capabilities().await?;
@@ -1689,6 +1704,7 @@ impl WorkflowService {
             if let Some(cached) = store.cached_preflight(session_id)? {
                 if cached.graph_fingerprint == graph_fingerprint
                     && cached.runtime_capability_fingerprint == runtime_capability_fingerprint
+                    && cached.override_selection == override_selection
                 {
                     return Ok(cached);
                 }
@@ -1697,11 +1713,17 @@ impl WorkflowService {
 
         let capabilities = host.workflow_capabilities(workflow_id).await?;
         let runtime_preflight = self
-            .workflow_session_runtime_preflight_assessment(host, session_id, &capabilities)
+            .workflow_session_runtime_preflight_assessment(
+                host,
+                session_id,
+                &capabilities,
+                override_selection.clone(),
+            )
             .await?;
         let cache = WorkflowSessionPreflightCache {
             graph_fingerprint,
             runtime_capability_fingerprint,
+            override_selection,
             blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
         };
 
@@ -1795,7 +1817,12 @@ impl WorkflowService {
         }
 
         let preflight_cache = match self
-            .ensure_session_runtime_preflight(host, &session_id, &queued_run.workflow_id)
+            .ensure_session_runtime_preflight(
+                host,
+                &session_id,
+                &queued_run.workflow_id,
+                queued_run.queued.override_selection.clone(),
+            )
             .await
         {
             Ok(cache) => cache,
@@ -1814,6 +1841,7 @@ impl WorkflowService {
                     workflow_id: queued_run.workflow_id,
                     inputs: queued_run.queued.inputs,
                     output_targets: queued_run.queued.output_targets,
+                    override_selection: queued_run.queued.override_selection,
                     timeout_ms: queued_run.queued.timeout_ms,
                     run_id: queued_run.queued.run_id,
                 },
@@ -2139,6 +2167,10 @@ impl WorkflowService {
         if let Some(targets) = request.output_targets.as_ref() {
             validate_output_targets(targets)?;
         }
+        let override_selection = request
+            .override_selection
+            .as_ref()
+            .and_then(WorkflowTechnicalFitOverride::normalized);
 
         let max_input_bindings = host.max_input_bindings();
         let max_output_targets = host.max_output_targets();
@@ -2154,9 +2186,14 @@ impl WorkflowService {
             cache.blocking_runtime_issues.clone()
         } else {
             let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
-            self.workflow_runtime_preflight_assessment(host, &request.workflow_id, &capabilities)
-                .await?
-                .blocking_runtime_issues
+            self.workflow_runtime_preflight_assessment(
+                host,
+                &request.workflow_id,
+                &capabilities,
+                override_selection,
+            )
+            .await?
+            .blocking_runtime_issues
         };
 
         if !blocking_runtime_issues.is_empty() {
@@ -2345,7 +2382,15 @@ impl WorkflowService {
             .unwrap_or_default();
 
         let runtime_preflight = self
-            .workflow_runtime_preflight_assessment(host, &request.workflow_id, &capabilities)
+            .workflow_runtime_preflight_assessment(
+                host,
+                &request.workflow_id,
+                &capabilities,
+                request
+                    .override_selection
+                    .as_ref()
+                    .and_then(WorkflowTechnicalFitOverride::normalized),
+            )
             .await?;
         let warnings = collect_preflight_warnings(
             &io,
@@ -3414,6 +3459,7 @@ mod tests {
         workflow_capabilities_calls: Arc<AtomicUsize>,
         runtime_capabilities_calls: Arc<AtomicUsize>,
         graph_fingerprint: Arc<Mutex<String>>,
+        technical_fit_requests: Arc<Mutex<Vec<WorkflowTechnicalFitRequest>>>,
     }
 
     #[async_trait]
@@ -3527,6 +3573,29 @@ mod tests {
             Ok(vec![ready_runtime_capability()])
         }
 
+        async fn workflow_io(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
+            Ok(WorkflowIoResponse {
+                inputs: Vec::new(),
+                outputs: vec![WorkflowIoNode {
+                    node_id: "text-output-1".to_string(),
+                    node_type: "text-output".to_string(),
+                    name: Some("Output".to_string()),
+                    description: None,
+                    ports: vec![WorkflowIoPort {
+                        port_id: "text".to_string(),
+                        name: Some("Text".to_string()),
+                        description: None,
+                        data_type: Some("string".to_string()),
+                        required: Some(false),
+                        multiple: Some(false),
+                    }],
+                }],
+            })
+        }
+
         async fn run_workflow(
             &self,
             _workflow_id: &str,
@@ -3540,6 +3609,17 @@ mod tests {
                 port_id: "text".to_string(),
                 value: serde_json::json!("ok"),
             }])
+        }
+
+        async fn workflow_technical_fit_decision(
+            &self,
+            request: &WorkflowTechnicalFitRequest,
+        ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+            self.technical_fit_requests
+                .lock()
+                .expect("technical-fit requests lock poisoned")
+                .push(request.clone());
+            Ok(None)
         }
     }
 
@@ -3943,6 +4023,10 @@ mod tests {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
             }]),
+            override_selection: Some(WorkflowTechnicalFitOverride {
+                model_id: Some("model-a".to_string()),
+                backend_key: Some("llama.cpp".to_string()),
+            }),
             timeout_ms: None,
             run_id: Some("run-1".to_string()),
         };
@@ -3951,6 +4035,8 @@ mod tests {
         assert_eq!(json["workflow_id"], "wf-1");
         assert_eq!(json["inputs"][0]["node_id"], "input-1");
         assert_eq!(json["output_targets"][0]["port_id"], "text");
+        assert_eq!(json["override_selection"]["model_id"], "model-a");
+        assert_eq!(json["override_selection"]["backend_key"], "llama.cpp");
     }
 
     #[test]
@@ -4035,6 +4121,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: Some("run-xyz".to_string()),
                 },
@@ -4063,6 +4150,7 @@ mod tests {
                         value: serde_json::json!("runtime-error object"),
                     }],
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4105,6 +4193,7 @@ mod tests {
                     workflow_id: "wf-1".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4130,6 +4219,7 @@ mod tests {
                     workflow_id: "wf-1".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4155,6 +4245,7 @@ mod tests {
                     workflow_id: "wf-1".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: Some(0),
                     run_id: None,
                 },
@@ -4179,6 +4270,7 @@ mod tests {
                     workflow_id: "wf-timeout".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: Some(25),
                     run_id: None,
                 },
@@ -4206,6 +4298,7 @@ mod tests {
                         value: serde_json::json!("bad"),
                     }],
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4232,6 +4325,7 @@ mod tests {
                         value: serde_json::json!("this is too large"),
                     }],
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4696,6 +4790,7 @@ mod tests {
                         node_id: target_node.node_id.clone(),
                         port_id: target_port.port_id.clone(),
                     }]),
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4723,6 +4818,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "stream".to_string(),
                     }]),
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4748,6 +4844,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4784,6 +4881,7 @@ mod tests {
                         },
                     ],
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                 },
@@ -4810,6 +4908,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "stream".to_string(),
                     }]),
+                    override_selection: None,
                 },
             )
             .await
@@ -4848,6 +4947,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    override_selection: None,
                 },
             )
             .await
@@ -4911,6 +5011,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    override_selection: None,
                 },
             )
             .await
@@ -4962,6 +5063,7 @@ mod tests {
                             port_id: "text".to_string(),
                         },
                     ]),
+                    override_selection: None,
                 },
             )
             .await
@@ -4969,6 +5071,48 @@ mod tests {
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
         assert!(err.to_string().contains("duplicate target"));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_normalizes_override_selection_into_technical_fit_request() {
+        let technical_fit_requests = Arc::new(Mutex::new(Vec::new()));
+        let host = CountingPreflightHost {
+            workflow_capabilities_calls: Arc::new(AtomicUsize::new(0)),
+            runtime_capabilities_calls: Arc::new(AtomicUsize::new(0)),
+            graph_fingerprint: Arc::new(Mutex::new("graph-a".to_string())),
+            technical_fit_requests: technical_fit_requests.clone(),
+        };
+        let service = WorkflowService::new();
+
+        let response = service
+            .workflow_preflight(
+                &host,
+                WorkflowPreflightRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: Some(WorkflowTechnicalFitOverride {
+                        model_id: Some(" model-a ".to_string()),
+                        backend_key: Some("llama.cpp".to_string()),
+                    }),
+                },
+            )
+            .await
+            .expect("preflight response");
+
+        assert!(response.can_run);
+
+        let requests = technical_fit_requests
+            .lock()
+            .expect("technical-fit requests lock poisoned");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].override_selection,
+            Some(WorkflowTechnicalFitOverride {
+                model_id: Some("model-a".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+            })
+        );
     }
 
     #[test]
@@ -5136,6 +5280,7 @@ mod tests {
                         node_id: "text-output-1".to_string(),
                         port_id: "text".to_string(),
                     }]),
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: Some("session-run-1".to_string()),
                     priority: None,
@@ -5167,6 +5312,7 @@ mod tests {
                     session_id: created.session_id,
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                     priority: None,
@@ -5228,6 +5374,7 @@ mod tests {
                     session_id: created.session_id,
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                     priority: None,
@@ -5346,6 +5493,7 @@ mod tests {
                     session_id: third_session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                     priority: None,
@@ -5372,10 +5520,12 @@ mod tests {
         let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
         let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
         let graph_fingerprint = Arc::new(Mutex::new("graph-a".to_string()));
+        let technical_fit_requests = Arc::new(Mutex::new(Vec::new()));
         let host = CountingPreflightHost {
             workflow_capabilities_calls: workflow_capabilities_calls.clone(),
             runtime_capabilities_calls: runtime_capabilities_calls.clone(),
             graph_fingerprint: graph_fingerprint.clone(),
+            technical_fit_requests,
         };
         let service = WorkflowService::with_max_sessions(1);
 
@@ -5398,6 +5548,7 @@ mod tests {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                     priority: None,
@@ -5414,6 +5565,7 @@ mod tests {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                     priority: None,
@@ -5439,6 +5591,7 @@ mod tests {
                     session_id: created.session_id,
                     inputs: Vec::new(),
                     output_targets: None,
+                    override_selection: None,
                     timeout_ms: None,
                     run_id: None,
                     priority: None,
@@ -5451,6 +5604,95 @@ mod tests {
             2,
             "graph change should invalidate cached preflight"
         );
+    }
+
+    #[tokio::test]
+    async fn workflow_session_runtime_preflight_cache_invalidates_on_override_selection_change() {
+        let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
+        let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
+        let technical_fit_requests = Arc::new(Mutex::new(Vec::new()));
+        let host = CountingPreflightHost {
+            workflow_capabilities_calls: workflow_capabilities_calls.clone(),
+            runtime_capabilities_calls: runtime_capabilities_calls.clone(),
+            graph_fingerprint: Arc::new(Mutex::new("graph-a".to_string())),
+            technical_fit_requests: technical_fit_requests.clone(),
+        };
+        let service = WorkflowService::with_max_sessions(1);
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: Some(WorkflowTechnicalFitOverride {
+                        model_id: None,
+                        backend_key: Some("llama.cpp".to_string()),
+                    }),
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("first run");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id,
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: Some(WorkflowTechnicalFitOverride {
+                        model_id: Some("model-a".to_string()),
+                        backend_key: Some("llama.cpp".to_string()),
+                    }),
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("second run");
+
+        let requests = technical_fit_requests
+            .lock()
+            .expect("technical-fit requests lock poisoned");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(
+            requests[0].override_selection,
+            Some(WorkflowTechnicalFitOverride {
+                model_id: None,
+                backend_key: Some("llama_cpp".to_string()),
+            })
+        );
+        assert_eq!(
+            requests[1].override_selection,
+            Some(WorkflowTechnicalFitOverride {
+                model_id: Some("model-a".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+            })
+        );
+        assert_eq!(
+            workflow_capabilities_calls.load(Ordering::SeqCst),
+            2,
+            "override changes should invalidate cached preflight"
+        );
+        assert_eq!(runtime_capabilities_calls.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]
@@ -5949,6 +6191,7 @@ mod tests {
                         session_id: created.session_id.clone(),
                         inputs: Vec::new(),
                         output_targets: None,
+                        override_selection: None,
                         timeout_ms: None,
                         run_id: Some("queued-run-1".to_string()),
                         priority: None,
@@ -6001,6 +6244,7 @@ mod tests {
                             session_id: created.session_id.clone(),
                             inputs: Vec::new(),
                             output_targets: None,
+                            override_selection: None,
                             timeout_ms: None,
                             run_id: Some(run_id.to_string()),
                             priority: None,
@@ -6045,6 +6289,7 @@ mod tests {
             session_id: created.session_id.clone(),
             inputs: Vec::new(),
             output_targets: None,
+            override_selection: None,
             timeout_ms: None,
             run_id: Some("queued-run-1".to_string()),
             priority: None,

@@ -3,12 +3,13 @@
 ## Status
 Active
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Current Source-of-Truth Summary
 
-This plan is no longer "planning only." Milestone 2 is now complete and the
-next work moves to admission, warmup, retention, and eviction.
+This plan is no longer "planning only." Milestones 1 through 4 are now
+implemented in code and the next work moves to workflow/adapter hardening plus
+diagnostics.
 
 The accurate status is:
 
@@ -16,12 +17,13 @@ The accurate status is:
 - runtime-registry Milestone 1, Freeze Boundaries And Ownership: completed
 - runtime-registry Milestone 2, Runtime Registry Foundation: completed
 - runtime-registry Milestone 3, Admission, Warmup, Retention, And Eviction:
-  in progress
-- runtime-registry Milestones 4-5: not started
+  completed
+- runtime-registry Milestone 4, Technical-Fit Selection Integration:
+  completed
+- runtime-registry Milestone 5, Workflow And Adapter Integration: in progress
 - runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
   Safety: in progress
-- current next milestone: Milestone 3, Admission, Warmup, Retention, And
-  Eviction
+- current next milestone: Milestone 5, Workflow And Adapter Integration
 - stop rule remains active for later milestones: runtime-registry work must
   preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
@@ -763,20 +765,25 @@ and local runtime state.
   input in that selector so queue depth, loaded-runtime saturation, and
   reservation headroom participate in deterministic candidate ordering and
   reason-code generation.
+- 2026-04-16: `pantograph-workflow-service` now also carries additive explicit
+  technical-fit overrides through workflow preflight, direct run, and session
+  run request DTOs, includes the normalized override in session preflight cache
+  keys, and keeps those overrides backend-owned instead of reconstructing them
+  in adapters.
 
 **Tasks:**
-- [ ] Define Pantograph’s candidate-consumption contract and decision reason
+- [x] Define Pantograph’s candidate-consumption contract and decision reason
   payload
-- [ ] Select using technical-fit factors only:
+- [x] Select using technical-fit factors only:
   - required context length
   - task/runtime requirements
   - current residency and reuse value
   - warmup cost
   - budget pressure
   - workflow/session queue pressure
-- [ ] Preserve explicit `model_id` / `backend_key` overrides with deterministic
+- [x] Preserve explicit `model_id` / `backend_key` overrides with deterministic
   precedence
-- [ ] Add conservative fallback behavior when candidate data is partial or
+- [x] Add conservative fallback behavior when candidate data is partial or
   unavailable
 
 **Verification:**
@@ -787,7 +794,7 @@ and local runtime state.
 - contract review confirms no answer-quality claims are encoded in the API or
   docs
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Workflow And Adapter Integration
 
@@ -815,6 +822,11 @@ business logic into adapters.
   so `src-tauri/src/workflow/workflow_execution_commands.rs` no longer owns
   trace-execution-id fallback, runtime-workflow-id derivation, or registry-aware
   runtime snapshot projection when forwarding execution diagnostics events.
+- 2026-04-16: Tauri workflow commands, UniFFI runtime bindings, and Rustler
+  workflow bindings were reviewed against the new technical-fit decision and
+  override DTOs; they remain boundary-local parsers/serializers that forward
+  backend-owned request and response contracts without recreating selector
+  policy.
 
 **Verification:**
 - `cargo check --manifest-path src-tauri/Cargo.toml`

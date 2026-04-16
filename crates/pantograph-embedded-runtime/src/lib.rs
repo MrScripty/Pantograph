@@ -2710,6 +2710,7 @@ mod tests {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 run_id: Some("run-1".to_string()),
             })
@@ -2739,6 +2740,7 @@ mod tests {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 priority: None,
                 run_id: Some("run-2".to_string()),
@@ -2798,6 +2800,7 @@ mod tests {
                     node_id: "image-output-1".to_string(),
                     port_id: "image".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 run_id: Some("diffusion-run-1".to_string()),
             })
@@ -2860,6 +2863,7 @@ mod tests {
                     node_id: "image-output-1".to_string(),
                     port_id: "image".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 run_id: Some("diffusion-run-2".to_string()),
             })
@@ -3415,6 +3419,7 @@ mod tests {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
                 }]),
+                override_selection: None,
                 timeout_ms: None,
                 priority: None,
                 run_id: Some("run-queued".to_string()),
@@ -3643,6 +3648,7 @@ mod tests {
                 workflow_id: "runtime-text".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
+                override_selection: None,
             })
             .await
             .expect("workflow preflight");
