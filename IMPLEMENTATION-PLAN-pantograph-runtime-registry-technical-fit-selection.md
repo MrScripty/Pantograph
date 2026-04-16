@@ -754,6 +754,11 @@ and local runtime state.
 - 2026-04-16: `pantograph-embedded-runtime` now calls that selector from its
   backend technical-fit bridge and projects the backend-owned decision back to
   workflow-service instead of leaving the host seam unimplemented.
+- 2026-04-16: `pantograph-workflow-service` now uses that backend-owned
+  technical-fit seam for workflow preflight and direct run runtime-readiness
+  assessment, exposes an additive `technical_fit_decision` field in preflight
+  responses, and falls back to the legacy capability scan only when a host
+  still returns no backend decision.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason

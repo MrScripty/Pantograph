@@ -347,7 +347,7 @@ refactored module boundaries.
 and execution without turning orchestration or adapters into policy owners.
 
 **Tasks:**
-- [ ] Add workflow-service request-normalization paths that derive one
+- [x] Add workflow-service request-normalization paths that derive one
       backend-owned technical-fit request for both preflight and run/session
       execution flows.
 - [ ] Preserve explicit `model_id` and `backend_key` overrides with the frozen,
@@ -355,7 +355,7 @@ and execution without turning orchestration or adapters into policy owners.
 - [x] Add embedded-runtime candidate collection and live-runtime snapshot
       projection that call into the registry selector instead of recomputing
       policy locally.
-- [ ] Ensure workflow preflight and runtime-not-ready reporting surface the same
+- [x] Ensure workflow preflight and runtime-not-ready reporting surface the same
       selector decision/reason semantics as execution where applicable.
 - [ ] Keep any Tauri or binding integration limited to validated input parsing
       and transport of backend-owned decision DTOs.
@@ -436,6 +436,11 @@ Update during implementation:
   backend runtime-registry selector and project the resulting decision back
   into workflow-service contracts instead of returning an unimplemented host
   seam.
+- 2026-04-16: Wired workflow-service preflight and direct run runtime-readiness
+  assessment through the backend-owned technical-fit seam, added an additive
+  `technical_fit_decision` preflight field, and kept a legacy capability-based
+  fallback only for hosts that still return `None` from the technical-fit
+  bridge.
 
 
 ## Commit Cadence Notes

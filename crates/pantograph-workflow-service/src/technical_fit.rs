@@ -2,7 +2,8 @@ use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
-    validate_workflow_id, WorkflowHost, WorkflowRuntimeRequirements, WorkflowService,
+    evaluate_runtime_preflight, validate_workflow_id, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowRuntimeCapability, WorkflowRuntimeIssue, WorkflowRuntimeRequirements, WorkflowService,
     WorkflowServiceError,
 };
 
@@ -48,6 +49,13 @@ pub(crate) struct WorkflowTechnicalFitSessionContext {
     pub workflow_id: String,
     pub usage_profile: Option<String>,
     pub queue_pressure: WorkflowTechnicalFitQueuePressure,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowRuntimePreflightAssessment {
+    pub technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
+    pub runtime_warnings: Vec<WorkflowRuntimeIssue>,
+    pub blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
 }
 
 impl WorkflowTechnicalFitQueuePressure {
@@ -190,6 +198,70 @@ impl WorkflowTechnicalFitDecision {
 }
 
 impl WorkflowService {
+    pub(crate) async fn workflow_runtime_preflight_assessment<H: WorkflowHost>(
+        &self,
+        host: &H,
+        workflow_id: &str,
+        capabilities: &WorkflowHostCapabilities,
+    ) -> Result<WorkflowRuntimePreflightAssessment, WorkflowServiceError> {
+        let request = build_workflow_technical_fit_request(
+            workflow_id,
+            &capabilities.runtime_requirements,
+            None,
+            None,
+            None,
+            None,
+        );
+        self.runtime_preflight_assessment(host, &request, capabilities)
+            .await
+    }
+
+    pub(crate) async fn workflow_session_runtime_preflight_assessment<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        capabilities: &WorkflowHostCapabilities,
+    ) -> Result<WorkflowRuntimePreflightAssessment, WorkflowServiceError> {
+        let session_context = self.technical_fit_session_context(session_id)?;
+        let request = build_workflow_technical_fit_request(
+            &session_context.workflow_id,
+            &capabilities.runtime_requirements,
+            None,
+            Some(session_id.trim()),
+            session_context.usage_profile.as_deref(),
+            Some(session_context.queue_pressure),
+        );
+        self.runtime_preflight_assessment(host, &request, capabilities)
+            .await
+    }
+
+    async fn runtime_preflight_assessment<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: &WorkflowTechnicalFitRequest,
+        capabilities: &WorkflowHostCapabilities,
+    ) -> Result<WorkflowRuntimePreflightAssessment, WorkflowServiceError> {
+        let technical_fit_decision = host.workflow_technical_fit_decision(request).await?;
+        Ok(match technical_fit_decision.as_ref() {
+            Some(decision) => workflow_runtime_preflight_from_decision(
+                decision,
+                &capabilities.runtime_requirements.required_backends,
+                &capabilities.runtime_capabilities,
+            ),
+            None => {
+                let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
+                    &capabilities.runtime_requirements.required_backends,
+                    &capabilities.runtime_capabilities,
+                );
+                WorkflowRuntimePreflightAssessment {
+                    technical_fit_decision: None,
+                    runtime_warnings,
+                    blocking_runtime_issues,
+                }
+            }
+        })
+    }
+
     pub(crate) fn technical_fit_session_context(
         &self,
         session_id: &str,
@@ -260,6 +332,186 @@ impl WorkflowService {
             Some(session_context.queue_pressure),
         ))
     }
+}
+
+fn workflow_runtime_preflight_from_decision(
+    decision: &WorkflowTechnicalFitDecision,
+    required_backends: &[String],
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+) -> WorkflowRuntimePreflightAssessment {
+    let decision = decision.normalized();
+    let required_backend_key = decision
+        .selected_backend_key
+        .clone()
+        .or_else(|| {
+            required_backends
+                .iter()
+                .find_map(|backend_key| normalize_backend_key(Some(backend_key)))
+        })
+        .unwrap_or_else(|| "runtime".to_string());
+
+    let runtime = find_runtime_capability_for_decision(
+        &decision,
+        &required_backend_key,
+        runtime_capabilities,
+    );
+    let runtime_id = decision
+        .selected_runtime_id
+        .clone()
+        .or_else(|| runtime.as_ref().map(|runtime| runtime.runtime_id.clone()))
+        .or_else(|| decision.selected_candidate_id.clone())
+        .unwrap_or_else(|| required_backend_key.clone());
+    let display_name = runtime
+        .as_ref()
+        .map(|runtime| runtime.display_name.clone())
+        .or_else(|| decision.selected_backend_key.clone())
+        .unwrap_or_else(|| required_backend_key.clone());
+
+    let mut runtime_warnings = Vec::new();
+    let mut blocking_runtime_issues = Vec::new();
+
+    if decision.selected_runtime_id.is_some() {
+        if decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback
+            || decision.reasons.iter().any(|reason| {
+                matches!(
+                    reason.code,
+                    WorkflowTechnicalFitReasonCode::MissingCandidateData
+                        | WorkflowTechnicalFitReasonCode::MissingRuntimeState
+                        | WorkflowTechnicalFitReasonCode::ConservativeFallback
+                )
+            })
+        {
+            runtime_warnings.push(WorkflowRuntimeIssue {
+                runtime_id,
+                display_name,
+                required_backend_key,
+                message: describe_technical_fit_warning(&decision),
+            });
+        }
+    } else {
+        let issue = WorkflowRuntimeIssue {
+            runtime_id,
+            display_name,
+            required_backend_key,
+            message: describe_technical_fit_blocking_issue(&decision),
+        };
+        runtime_warnings.push(issue.clone());
+        blocking_runtime_issues.push(issue);
+    }
+
+    WorkflowRuntimePreflightAssessment {
+        technical_fit_decision: Some(decision),
+        runtime_warnings,
+        blocking_runtime_issues,
+    }
+}
+
+fn find_runtime_capability_for_decision(
+    decision: &WorkflowTechnicalFitDecision,
+    required_backend_key: &str,
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+) -> Option<WorkflowRuntimeCapability> {
+    let selected_runtime_id = decision.selected_runtime_id.as_deref();
+    let selected_backend_key = decision
+        .selected_backend_key
+        .as_deref()
+        .unwrap_or(required_backend_key);
+    let normalized_backend_key = canonical_runtime_backend_key(selected_backend_key);
+
+    runtime_capabilities
+        .iter()
+        .find(|runtime| {
+            selected_runtime_id == Some(runtime.runtime_id.as_str())
+                || canonical_runtime_backend_key(&runtime.runtime_id) == normalized_backend_key
+                || runtime.backend_keys.iter().any(|backend_key| {
+                    canonical_runtime_backend_key(backend_key) == normalized_backend_key
+                })
+        })
+        .cloned()
+}
+
+fn describe_technical_fit_warning(decision: &WorkflowTechnicalFitDecision) -> String {
+    let target = decision
+        .selected_backend_key
+        .as_deref()
+        .or(decision.selected_runtime_id.as_deref())
+        .or(decision.selected_candidate_id.as_deref())
+        .unwrap_or("runtime");
+    if decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback {
+        format!(
+            "technical-fit selected '{}' conservatively because candidate or runtime state is partial",
+            target
+        )
+    } else {
+        format!(
+            "technical-fit selected '{}' with backend-owned runtime facts",
+            target
+        )
+    }
+}
+
+fn describe_technical_fit_blocking_issue(decision: &WorkflowTechnicalFitDecision) -> String {
+    let target = decision
+        .selected_backend_key
+        .as_deref()
+        .or(decision.selected_runtime_id.as_deref())
+        .or(decision.selected_candidate_id.as_deref())
+        .unwrap_or("runtime");
+
+    if decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::ExplicitBackendOverride
+        )
+    }) {
+        return format!(
+            "technical-fit could not satisfy the explicit backend override for '{}'",
+            target
+        );
+    }
+
+    if decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::ExplicitModelOverride
+        )
+    }) {
+        return format!(
+            "technical-fit could not satisfy the explicit model override for '{}'",
+            target
+        );
+    }
+
+    if decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::RequiredContextLength
+        )
+    }) {
+        return format!(
+            "technical-fit found no candidate for '{}' with sufficient context length",
+            target
+        );
+    }
+
+    if decision.reasons.iter().any(|reason| {
+        matches!(
+            reason.code,
+            WorkflowTechnicalFitReasonCode::MissingRuntimeState
+                | WorkflowTechnicalFitReasonCode::MissingCandidateData
+                | WorkflowTechnicalFitReasonCode::ConservativeFallback
+        )
+    }) {
+        return format!(
+            "technical-fit could not select a ready runtime for '{}' because runtime or candidate state is incomplete",
+            target
+        );
+    }
+
+    format!(
+        "technical-fit could not select a ready runtime for '{}'",
+        target
+    )
 }
 
 fn normalize_runtime_requirements(

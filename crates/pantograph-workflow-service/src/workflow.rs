@@ -255,6 +255,8 @@ pub struct WorkflowPreflightResponse {
     #[serde(default)]
     pub warnings: Vec<String>,
     pub graph_fingerprint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     #[serde(default)]
     pub runtime_warnings: Vec<WorkflowRuntimeIssue>,
     #[serde(default)]
@@ -1694,14 +1696,13 @@ impl WorkflowService {
         }
 
         let capabilities = host.workflow_capabilities(workflow_id).await?;
-        let (_, blocking_runtime_issues) = evaluate_runtime_preflight(
-            &capabilities.runtime_requirements.required_backends,
-            &runtime_capabilities,
-        );
+        let runtime_preflight = self
+            .workflow_session_runtime_preflight_assessment(host, session_id, &capabilities)
+            .await?;
         let cache = WorkflowSessionPreflightCache {
             graph_fingerprint,
             runtime_capability_fingerprint,
-            blocking_runtime_issues,
+            blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
         };
 
         let mut store = self.session_store.lock().map_err(|_| {
@@ -2153,11 +2154,9 @@ impl WorkflowService {
             cache.blocking_runtime_issues.clone()
         } else {
             let capabilities = host.workflow_capabilities(&request.workflow_id).await?;
-            evaluate_runtime_preflight(
-                &capabilities.runtime_requirements.required_backends,
-                &capabilities.runtime_capabilities,
-            )
-            .1
+            self.workflow_runtime_preflight_assessment(host, &request.workflow_id, &capabilities)
+                .await?
+                .blocking_runtime_issues
         };
 
         if !blocking_runtime_issues.is_empty() {
@@ -2345,22 +2344,26 @@ impl WorkflowService {
             .map(|targets| collect_invalid_output_targets(targets, &io))
             .unwrap_or_default();
 
-        let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
-            &capabilities.runtime_requirements.required_backends,
-            &capabilities.runtime_capabilities,
+        let runtime_preflight = self
+            .workflow_runtime_preflight_assessment(host, &request.workflow_id, &capabilities)
+            .await?;
+        let warnings = collect_preflight_warnings(
+            &io,
+            &runtime_preflight.runtime_warnings,
+            &runtime_preflight.blocking_runtime_issues,
         );
-        let warnings = collect_preflight_warnings(&io, &runtime_warnings, &blocking_runtime_issues);
         let can_run = missing_required_inputs.is_empty()
             && invalid_targets.is_empty()
-            && blocking_runtime_issues.is_empty();
+            && runtime_preflight.blocking_runtime_issues.is_empty();
 
         Ok(WorkflowPreflightResponse {
             missing_required_inputs,
             invalid_targets,
             warnings,
             graph_fingerprint,
-            runtime_warnings,
-            blocking_runtime_issues,
+            technical_fit_decision: runtime_preflight.technical_fit_decision,
+            runtime_warnings: runtime_preflight.runtime_warnings,
+            blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
             can_run,
         })
     }
@@ -2754,7 +2757,7 @@ fn collect_preflight_warnings(
     warnings
 }
 
-fn evaluate_runtime_preflight(
+pub(crate) fn evaluate_runtime_preflight(
     required_backends: &[String],
     runtime_capabilities: &[WorkflowRuntimeCapability],
 ) -> (Vec<WorkflowRuntimeIssue>, Vec<WorkflowRuntimeIssue>) {
@@ -3211,6 +3214,10 @@ fn extract_nested_trimmed_str(data: &serde_json::Value, path: &[&str]) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::technical_fit::{
+        WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
+        WorkflowTechnicalFitSelectionMode,
+    };
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -3221,6 +3228,7 @@ mod tests {
         capabilities: WorkflowHostCapabilities,
         omit_requested_target_output: bool,
         emit_invalid_output_binding: bool,
+        technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     }
 
     impl MockWorkflowHost {
@@ -3251,6 +3259,7 @@ mod tests {
                 },
                 omit_requested_target_output: false,
                 emit_invalid_output_binding: false,
+                technical_fit_decision: None,
             }
         }
 
@@ -3267,6 +3276,17 @@ mod tests {
         fn with_invalid_output_binding(max_input_bindings: usize, max_value_bytes: usize) -> Self {
             Self {
                 emit_invalid_output_binding: true,
+                ..Self::new(max_input_bindings, max_value_bytes)
+            }
+        }
+
+        fn with_technical_fit_decision(
+            max_input_bindings: usize,
+            max_value_bytes: usize,
+            technical_fit_decision: WorkflowTechnicalFitDecision,
+        ) -> Self {
+            Self {
+                technical_fit_decision: Some(technical_fit_decision),
                 ..Self::new(max_input_bindings, max_value_bytes)
             }
         }
@@ -3357,6 +3377,7 @@ mod tests {
 
     struct PreflightHost {
         capabilities: WorkflowHostCapabilities,
+        technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
     }
 
     impl PreflightHost {
@@ -3370,6 +3391,17 @@ mod tests {
                     models: Vec::new(),
                     runtime_capabilities: Vec::new(),
                 },
+                technical_fit_decision: None,
+            }
+        }
+
+        fn with_technical_fit_decision(
+            capabilities: WorkflowHostCapabilities,
+            technical_fit_decision: WorkflowTechnicalFitDecision,
+        ) -> Self {
+            Self {
+                capabilities,
+                technical_fit_decision: Some(technical_fit_decision),
             }
         }
     }
@@ -3743,6 +3775,13 @@ mod tests {
             })
         }
 
+        async fn workflow_technical_fit_decision(
+            &self,
+            _request: &WorkflowTechnicalFitRequest,
+        ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+            Ok(self.technical_fit_decision.clone())
+        }
+
         async fn run_workflow(
             &self,
             _workflow_id: &str,
@@ -3866,6 +3905,13 @@ mod tests {
                     }],
                 }],
             })
+        }
+
+        async fn workflow_technical_fit_decision(
+            &self,
+            _request: &WorkflowTechnicalFitRequest,
+        ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+            Ok(self.technical_fit_decision.clone())
         }
 
         async fn run_workflow(
@@ -4025,6 +4071,51 @@ mod tests {
             .expect_err("expected runtime error");
 
         assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
+        let host = MockWorkflowHost::with_technical_fit_decision(
+            10,
+            256,
+            WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selected_candidate_id: None,
+                selected_runtime_id: None,
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![
+                    WorkflowTechnicalFitReason::new(
+                        WorkflowTechnicalFitReasonCode::MissingRuntimeState,
+                        None,
+                    ),
+                    WorkflowTechnicalFitReason::new(
+                        WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                        None,
+                    ),
+                ],
+            },
+        );
+        let service = WorkflowService::new();
+
+        let err = service
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("technical-fit decision should block run");
+
+        assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+        assert!(err
+            .to_string()
+            .contains("technical-fit could not select a ready runtime"));
     }
 
     #[tokio::test]
@@ -4770,6 +4861,80 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("does not declare required metadata")));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_surfaces_backend_technical_fit_decision() {
+        let host = PreflightHost::with_technical_fit_decision(
+            WorkflowHostCapabilities {
+                max_input_bindings: 16,
+                max_output_targets: 16,
+                max_value_bytes: 4096,
+                runtime_requirements: WorkflowRuntimeRequirements {
+                    estimated_peak_vram_mb: None,
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: None,
+                    estimated_min_ram_mb: None,
+                    estimation_confidence: "estimated".to_string(),
+                    required_models: Vec::new(),
+                    required_backends: vec!["llama_cpp".to_string()],
+                    required_extensions: Vec::new(),
+                },
+                models: Vec::new(),
+                runtime_capabilities: Vec::new(),
+            },
+            WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selected_candidate_id: Some("llama_cpp".to_string()),
+                selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![WorkflowTechnicalFitReason::new(
+                    WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                    Some("llama_cpp"),
+                )],
+            },
+        );
+        let service = WorkflowService::new();
+
+        let response = service
+            .workflow_preflight(
+                &host,
+                WorkflowPreflightRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                },
+            )
+            .await
+            .expect("preflight response");
+
+        assert!(response.can_run);
+        assert_eq!(
+            response.technical_fit_decision,
+            Some(WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selected_candidate_id: Some("llama_cpp".to_string()),
+                selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![WorkflowTechnicalFitReason {
+                    code: WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                    candidate_id: Some("llama_cpp".to_string()),
+                }],
+            })
+        );
+        assert!(response.blocking_runtime_issues.is_empty());
+        assert!(response.runtime_warnings.iter().any(|issue| issue
+            .message
+            .contains("selected 'llama_cpp' conservatively")));
     }
 
     #[tokio::test]
