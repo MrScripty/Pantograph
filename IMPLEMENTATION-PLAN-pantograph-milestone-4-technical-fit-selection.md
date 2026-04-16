@@ -409,6 +409,10 @@ Update during implementation:
   factor, and decision contracts in `pantograph-runtime-registry` so later
   workflow integration can share one selector vocabulary without routing logic
   leaking into adapters.
+- 2026-04-16: Added host-agnostic workflow technical-fit request and decision
+  contracts plus service-owned normalization helpers so workflow and session
+  context can be projected into the runtime layer without moving selector
+  policy into `pantograph-workflow-service`.
 
 
 ## Commit Cadence Notes

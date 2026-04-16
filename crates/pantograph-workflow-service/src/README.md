@@ -10,6 +10,9 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
 
 ## Contents
 - `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
+- `technical_fit.rs`: host-agnostic technical-fit request and decision DTOs plus
+  normalization helpers that freeze how workflow and session context is projected
+  into backend runtime selection without owning the selector policy.
 - `capabilities.rs`: shared workflow capability/validation utilities used by all adapters.
 - `trace.rs`: host-agnostic workflow trace and metrics DTOs used to freeze
   backend-owned diagnostics contracts before adapter-specific projections and
@@ -99,6 +102,8 @@ Primary contract types:
 - `WorkflowTraceRuntimeMetrics`
 - `WorkflowTraceSnapshotRequest`
 - `WorkflowTraceSnapshotResponse`
+- `WorkflowTechnicalFitRequest`
+- `WorkflowTechnicalFitDecision`
 - `WorkflowTraceStore`
 
 ## Capability Ownership
@@ -115,6 +120,9 @@ Primary contract types:
 - Session capacity and loaded-runtime capacity may now diverge here, which
   makes runtime rebalance reachable without conflating "how many sessions may
   exist" with "how many runtimes may stay loaded".
+- Technical-fit request normalization also belongs here: this crate may shape
+  workflow and session context into a backend-owned selector request contract,
+  but it must not become the owner of runtime policy or candidate scoring.
 - Graph edit sessions, graph persistence contracts, revision-aware connection
   intent, and undo/redo semantics are backend-owned in this crate.
 - Workflow trace and metrics contract ownership is backend-owned in this crate;

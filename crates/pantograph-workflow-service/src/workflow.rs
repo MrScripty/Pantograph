@@ -22,6 +22,10 @@ use crate::graph::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     WorkflowSessionKind,
 };
+use crate::technical_fit::{
+    build_workflow_technical_fit_request, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitRequest,
+};
 
 /// Node/port value binding used for workflow inputs and outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -919,6 +923,13 @@ pub trait WorkflowHost: Send + Sync {
                 .then_with(|| left.run_count.cmp(&right.run_count))
                 .then_with(|| left.session_id.cmp(&right.session_id))
         }))
+    }
+
+    async fn workflow_technical_fit_decision(
+        &self,
+        _request: &WorkflowTechnicalFitRequest,
+    ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
+        Ok(None)
     }
 }
 
@@ -2229,6 +2240,73 @@ impl WorkflowService {
             outputs,
             timing_ms: started.elapsed().as_millis(),
         })
+    }
+
+    pub async fn workflow_technical_fit_request<H: WorkflowHost>(
+        &self,
+        host: &H,
+        workflow_id: &str,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
+    ) -> Result<WorkflowTechnicalFitRequest, WorkflowServiceError> {
+        validate_workflow_id(workflow_id)?;
+        host.validate_workflow(workflow_id).await?;
+        let capabilities = host.workflow_capabilities(workflow_id).await?;
+        Ok(build_workflow_technical_fit_request(
+            workflow_id,
+            &capabilities.runtime_requirements,
+            override_selection,
+            None,
+            None,
+            None,
+        ))
+    }
+
+    pub async fn workflow_session_technical_fit_request<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        override_selection: Option<WorkflowTechnicalFitOverride>,
+    ) -> Result<WorkflowTechnicalFitRequest, WorkflowServiceError> {
+        let session_id = session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+
+        let (workflow_id, usage_profile, queue_pressure) = {
+            let store = self.session_store.lock().map_err(|_| {
+                WorkflowServiceError::Internal("session store lock poisoned".to_string())
+            })?;
+            let session = store.active.get(session_id).ok_or_else(|| {
+                WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+            })?;
+            let total_queued_run_count = store
+                .active
+                .values()
+                .map(|state| state.queue.len() as u64)
+                .sum::<u64>();
+            (
+                session.workflow_id.clone(),
+                session.usage_profile.clone(),
+                WorkflowTechnicalFitQueuePressure {
+                    current_session_queue_depth: Some(session.queue.len() as u64),
+                    total_queued_run_count: Some(total_queued_run_count),
+                    loaded_runtime_count: Some(store.loaded_session_count() as u64),
+                    loaded_runtime_capacity: Some(store.max_loaded_sessions as u64),
+                },
+            )
+        };
+
+        let capabilities = host.workflow_capabilities(&workflow_id).await?;
+        Ok(build_workflow_technical_fit_request(
+            &workflow_id,
+            &capabilities.runtime_requirements,
+            override_selection,
+            Some(session_id),
+            usage_profile.as_deref(),
+            Some(queue_pressure),
+        ))
     }
 
     pub async fn workflow_get_capabilities<H: WorkflowHost>(

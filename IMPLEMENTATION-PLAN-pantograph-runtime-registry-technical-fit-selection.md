@@ -732,6 +732,10 @@ and local runtime state.
   request, candidate, override, factor, reason-code, and decision DTOs, which
   freezes the backend selector vocabulary before workflow and host integration
   begins.
+- 2026-04-16: `pantograph-workflow-service` now owns host-agnostic technical-fit
+  request and decision DTOs plus workflow/session normalization helpers, which
+  freezes the service-to-host boundary without moving runtime policy into the
+  service crate.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason

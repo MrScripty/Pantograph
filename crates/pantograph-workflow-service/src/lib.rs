@@ -10,6 +10,7 @@ extern crate workflow_nodes;
 
 pub mod capabilities;
 pub mod graph;
+pub mod technical_fit;
 pub mod trace;
 pub mod workflow;
 
@@ -32,6 +33,11 @@ pub use graph::{
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+};
+pub use technical_fit::{
+    build_workflow_technical_fit_request, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
+    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
