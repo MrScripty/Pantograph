@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::llm::recovery::SharedRecoveryManager;
 use crate::llm::runtime_registry::{
-    sync_runtime_registry_from_gateway, sync_runtime_registry_from_gateway_health_assessment,
+    sync_runtime_registry_from_gateway, sync_runtime_registry_from_gateway_health_assessments,
 };
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::runtime_health::{
@@ -97,6 +97,7 @@ pub struct HealthMonitor {
     running: Arc<AtomicBool>,
     last_result: Arc<RwLock<Option<HealthCheckResult>>>,
     consecutive_failures: Arc<RwLock<u32>>,
+    embedding_consecutive_failures: Arc<RwLock<u32>>,
 }
 
 impl HealthMonitor {
@@ -106,6 +107,7 @@ impl HealthMonitor {
             running: Arc::new(AtomicBool::new(false)),
             last_result: Arc::new(RwLock::new(None)),
             consecutive_failures: Arc::new(RwLock::new(0)),
+            embedding_consecutive_failures: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -119,6 +121,7 @@ impl HealthMonitor {
         let running = self.running.clone();
         let last_result = self.last_result.clone();
         let consecutive_failures = self.consecutive_failures.clone();
+        let embedding_consecutive_failures = self.embedding_consecutive_failures.clone();
         let config = self.config.clone();
 
         log::info!(
@@ -139,11 +142,12 @@ impl HealthMonitor {
                     }
                 };
 
-                // Check if we have an active server
-                let base_url = gateway.base_url().await;
-                if base_url.is_none() {
-                    // No server running, reset state
+                let active_base_url = gateway.base_url().await;
+                let embedding_base_url = gateway.dedicated_embedding_base_url().await;
+
+                if active_base_url.is_none() && embedding_base_url.is_none() {
                     *consecutive_failures.write().await = 0;
+                    *embedding_consecutive_failures.write().await = 0;
                     *last_result.write().await = None;
                     sync_runtime_registry(&app, &gateway).await;
                     previous_healthy = true;
@@ -151,28 +155,51 @@ impl HealthMonitor {
                     continue;
                 }
 
-                let url = format!("{}/health", base_url.unwrap());
-                let start = std::time::Instant::now();
-
-                // Perform health check
-                let client = reqwest::Client::builder()
-                    .timeout(config.request_timeout)
-                    .build()
-                    .unwrap_or_default();
-
-                let check_result = client.get(&url).send().await;
-                let elapsed_ms = start.elapsed().as_millis() as u64;
-
-                let probe = probe_from_http_result(check_result, elapsed_ms);
-                let (assessment, result) = {
-                    let mut failures = consecutive_failures.write().await;
-                    let assessment =
-                        assess_runtime_health_probe(probe, *failures, config.failure_threshold);
-                    *failures = assessment.consecutive_failures;
-                    let result =
-                        health_check_result_from_assessment(assessment.clone(), Utc::now());
-                    (assessment, result)
+                let active_assessment = if let Some(base_url) = active_base_url.as_deref() {
+                    Some(
+                        assess_runtime_health_url(
+                            &format!("{}/health", base_url),
+                            config.request_timeout,
+                            config.failure_threshold,
+                            &consecutive_failures,
+                        )
+                        .await,
+                    )
+                } else {
+                    *consecutive_failures.write().await = 0;
+                    None
                 };
+
+                let embedding_assessment = if let Some(base_url) = embedding_base_url.as_deref() {
+                    Some(
+                        assess_runtime_health_url(
+                            &format!("{}/health", base_url),
+                            config.request_timeout,
+                            config.failure_threshold,
+                            &embedding_consecutive_failures,
+                        )
+                        .await,
+                    )
+                } else {
+                    *embedding_consecutive_failures.write().await = 0;
+                    None
+                };
+
+                let Some(assessment) = active_assessment.clone() else {
+                    *last_result.write().await = None;
+                    sync_runtime_registry_with_health_assessments(
+                        &app,
+                        &gateway,
+                        None,
+                        embedding_assessment.as_ref(),
+                    )
+                    .await;
+                    previous_healthy = true;
+                    tokio::time::sleep(config.check_interval).await;
+                    continue;
+                };
+
+                let result = health_check_result_from_assessment(assessment.clone(), Utc::now());
 
                 // Detect state changes
                 let current_healthy = result.healthy;
@@ -206,8 +233,13 @@ impl HealthMonitor {
 
                 // Update state
                 *last_result.write().await = Some(result);
-                sync_runtime_registry_with_health_assessment(&app, &gateway, Some(&assessment))
-                    .await;
+                sync_runtime_registry_with_health_assessments(
+                    &app,
+                    &gateway,
+                    Some(&assessment),
+                    embedding_assessment.as_ref(),
+                )
+                .await;
                 previous_healthy = current_healthy;
 
                 tokio::time::sleep(config.check_interval).await;
@@ -242,30 +274,62 @@ impl HealthMonitor {
     /// Manually trigger a health check (outside of the regular interval)
     pub async fn check_now(&self, app: &AppHandle) -> Option<HealthCheckResult> {
         let gateway = app.try_state::<SharedGateway>()?;
-        let base_url = gateway.base_url().await?;
-        let url = format!("{}/health", base_url);
+        let active_base_url = gateway.base_url().await;
+        let embedding_base_url = gateway.dedicated_embedding_base_url().await;
 
-        let start = std::time::Instant::now();
-        let client = reqwest::Client::builder()
-            .timeout(self.config.request_timeout)
-            .build()
-            .ok()?;
-
-        let resp = client.get(&url).send().await;
-        let elapsed_ms = start.elapsed().as_millis() as u64;
-        let probe = probe_from_http_result(resp, elapsed_ms);
-        let (assessment, result) = {
-            let mut failures = self.consecutive_failures.write().await;
-            let assessment =
-                assess_runtime_health_probe(probe, *failures, self.config.failure_threshold);
-            *failures = assessment.consecutive_failures;
-            let result = health_check_result_from_assessment(assessment.clone(), Utc::now());
-            (assessment, result)
+        let active_assessment = if let Some(base_url) = active_base_url.as_deref() {
+            Some(
+                assess_runtime_health_url(
+                    &format!("{}/health", base_url),
+                    self.config.request_timeout,
+                    self.config.failure_threshold,
+                    &self.consecutive_failures,
+                )
+                .await,
+            )
+        } else {
+            *self.consecutive_failures.write().await = 0;
+            None
         };
+
+        let embedding_assessment = if let Some(base_url) = embedding_base_url.as_deref() {
+            Some(
+                assess_runtime_health_url(
+                    &format!("{}/health", base_url),
+                    self.config.request_timeout,
+                    self.config.failure_threshold,
+                    &self.embedding_consecutive_failures,
+                )
+                .await,
+            )
+        } else {
+            *self.embedding_consecutive_failures.write().await = 0;
+            None
+        };
+
+        let Some(assessment) = active_assessment else {
+            *self.last_result.write().await = None;
+            sync_runtime_registry_with_health_assessments(
+                app,
+                gateway.inner(),
+                None,
+                embedding_assessment.as_ref(),
+            )
+            .await;
+            return None;
+        };
+
+        let result = health_check_result_from_assessment(assessment.clone(), Utc::now());
 
         // Update stored result
         *self.last_result.write().await = Some(result.clone());
-        sync_runtime_registry_with_health_assessment(app, gateway.inner(), Some(&assessment)).await;
+        sync_runtime_registry_with_health_assessments(
+            app,
+            gateway.inner(),
+            Some(&assessment),
+            embedding_assessment.as_ref(),
+        )
+        .await;
 
         Some(result)
     }
@@ -279,19 +343,21 @@ async fn sync_runtime_registry(app: &AppHandle, gateway: &SharedGateway) {
     sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
 }
 
-async fn sync_runtime_registry_with_health_assessment(
+async fn sync_runtime_registry_with_health_assessments(
     app: &AppHandle,
     gateway: &SharedGateway,
-    assessment: Option<&RuntimeHealthAssessment>,
+    active_assessment: Option<&RuntimeHealthAssessment>,
+    embedding_assessment: Option<&RuntimeHealthAssessment>,
 ) {
     let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() else {
         return;
     };
 
-    sync_runtime_registry_from_gateway_health_assessment(
+    sync_runtime_registry_from_gateway_health_assessments(
         gateway.as_ref(),
         runtime_registry.as_ref(),
-        assessment,
+        active_assessment,
+        embedding_assessment,
     )
     .await;
 }
@@ -327,6 +393,28 @@ impl Default for HealthMonitor {
 
 /// Shared health monitor type for Tauri state
 pub type SharedHealthMonitor = Arc<HealthMonitor>;
+
+async fn assess_runtime_health_url(
+    url: &str,
+    request_timeout: Duration,
+    failure_threshold: u32,
+    failures: &Arc<RwLock<u32>>,
+) -> RuntimeHealthAssessment {
+    let start = std::time::Instant::now();
+    let client = reqwest::Client::builder()
+        .timeout(request_timeout)
+        .build()
+        .unwrap_or_default();
+
+    let check_result = client.get(url).send().await;
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let probe = probe_from_http_result(check_result, elapsed_ms);
+
+    let mut failures = failures.write().await;
+    let assessment = assess_runtime_health_probe(probe, *failures, failure_threshold);
+    *failures = assessment.consecutive_failures;
+    assessment
+}
 
 fn probe_from_http_result(
     result: Result<reqwest::Response, reqwest::Error>,

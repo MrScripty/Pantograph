@@ -6,8 +6,8 @@
 
 use async_trait::async_trait;
 
-use crate::HostRuntimeModeSnapshot;
 use crate::runtime_health::{RuntimeHealthAssessment, RuntimeHealthState};
+use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
@@ -167,19 +167,8 @@ pub fn active_runtime_observation_with_health_assessment(
     include_stopped: bool,
     assessment: Option<&RuntimeHealthAssessment>,
 ) -> Option<RuntimeObservation> {
-    let mut observation = active_runtime_observation(mode_info, include_stopped)?;
-
-    if let Some(RuntimeHealthAssessment {
-        state: RuntimeHealthState::Unhealthy { reason },
-        error,
-        ..
-    }) = assessment
-    {
-        observation.status = pantograph_runtime_registry::RuntimeRegistryStatus::Unhealthy;
-        observation.last_error = error.clone().or_else(|| Some(reason.clone()));
-    }
-
-    Some(observation)
+    active_runtime_observation(mode_info, include_stopped)
+        .map(|observation| observation_with_health_assessment(observation, assessment))
 }
 
 pub fn embedding_runtime_observation(
@@ -207,23 +196,41 @@ pub fn embedding_runtime_observation(
     })
 }
 
+pub fn embedding_runtime_observation_with_health_assessment(
+    mode_info: &HostRuntimeModeSnapshot,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> Option<RuntimeObservation> {
+    embedding_runtime_observation(mode_info)
+        .map(|observation| observation_with_health_assessment(observation, assessment))
+}
+
 pub fn observations_from_mode_info(mode_info: &HostRuntimeModeSnapshot) -> Vec<RuntimeObservation> {
-    observations_from_mode_info_with_active_health_assessment(mode_info, None)
+    observations_from_mode_info_with_health_assessments(mode_info, None, None)
 }
 
 pub fn observations_from_mode_info_with_active_health_assessment(
     mode_info: &HostRuntimeModeSnapshot,
     assessment: Option<&RuntimeHealthAssessment>,
 ) -> Vec<RuntimeObservation> {
+    observations_from_mode_info_with_health_assessments(mode_info, assessment, None)
+}
+
+pub fn observations_from_mode_info_with_health_assessments(
+    mode_info: &HostRuntimeModeSnapshot,
+    active_assessment: Option<&RuntimeHealthAssessment>,
+    embedding_assessment: Option<&RuntimeHealthAssessment>,
+) -> Vec<RuntimeObservation> {
     let mut observations = Vec::new();
 
     if let Some(observation) =
-        active_runtime_observation_with_health_assessment(mode_info, true, assessment)
+        active_runtime_observation_with_health_assessment(mode_info, true, active_assessment)
     {
         observations.push(observation);
     }
 
-    if let Some(observation) = embedding_runtime_observation(mode_info) {
+    if let Some(observation) =
+        embedding_runtime_observation_with_health_assessment(mode_info, embedding_assessment)
+    {
         observations.push(observation);
     }
 
@@ -234,7 +241,7 @@ pub fn reconcile_runtime_registry_mode_info(
     registry: &RuntimeRegistry,
     mode_info: &HostRuntimeModeSnapshot,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
-    reconcile_runtime_registry_mode_info_with_active_health_assessment(registry, mode_info, None)
+    reconcile_runtime_registry_mode_info_with_health_assessments(registry, mode_info, None, None)
 }
 
 pub fn reconcile_runtime_registry_mode_info_with_active_health_assessment(
@@ -242,8 +249,21 @@ pub fn reconcile_runtime_registry_mode_info_with_active_health_assessment(
     mode_info: &HostRuntimeModeSnapshot,
     assessment: Option<&RuntimeHealthAssessment>,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
-    registry.observe_runtimes(observations_from_mode_info_with_active_health_assessment(
-        mode_info, assessment,
+    reconcile_runtime_registry_mode_info_with_health_assessments(
+        registry, mode_info, assessment, None,
+    )
+}
+
+pub fn reconcile_runtime_registry_mode_info_with_health_assessments(
+    registry: &RuntimeRegistry,
+    mode_info: &HostRuntimeModeSnapshot,
+    active_assessment: Option<&RuntimeHealthAssessment>,
+    embedding_assessment: Option<&RuntimeHealthAssessment>,
+) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    registry.observe_runtimes(observations_from_mode_info_with_health_assessments(
+        mode_info,
+        active_assessment,
+        embedding_assessment,
     ))
 }
 
@@ -262,10 +282,39 @@ pub async fn sync_runtime_registry_with_active_health_assessment<
     registry: &RuntimeRegistry,
     assessment: Option<&RuntimeHealthAssessment>,
 ) -> Vec<RuntimeRegistryRuntimeSnapshot> {
+    sync_runtime_registry_with_health_assessments(controller, registry, assessment, None).await
+}
+
+pub async fn sync_runtime_registry_with_health_assessments<C: HostRuntimeRegistryController>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    active_assessment: Option<&RuntimeHealthAssessment>,
+    embedding_assessment: Option<&RuntimeHealthAssessment>,
+) -> Vec<RuntimeRegistryRuntimeSnapshot> {
     let mode_info = controller.mode_info_snapshot().await;
-    reconcile_runtime_registry_mode_info_with_active_health_assessment(
-        registry, &mode_info, assessment,
+    reconcile_runtime_registry_mode_info_with_health_assessments(
+        registry,
+        &mode_info,
+        active_assessment,
+        embedding_assessment,
     )
+}
+
+fn observation_with_health_assessment(
+    mut observation: RuntimeObservation,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> RuntimeObservation {
+    if let Some(RuntimeHealthAssessment {
+        state: RuntimeHealthState::Unhealthy { reason },
+        error,
+        ..
+    }) = assessment
+    {
+        observation.status = pantograph_runtime_registry::RuntimeRegistryStatus::Unhealthy;
+        observation.last_error = error.clone().or_else(|| Some(reason.clone()));
+    }
+
+    observation
 }
 
 pub fn reconcile_active_runtime_mode_info(
@@ -1142,5 +1191,63 @@ mod tests {
         assert_eq!(snapshots[0].runtime_id, "llama_cpp");
         assert_eq!(snapshots[0].status, RuntimeRegistryStatus::Ready);
         assert_eq!(snapshots[0].last_error, None);
+    }
+
+    #[test]
+    fn reconcile_mode_info_marks_embedding_runtime_unhealthy_from_health_assessment() {
+        let registry = RuntimeRegistry::new();
+
+        let snapshots = reconcile_runtime_registry_mode_info_with_health_assessments(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-ready".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp.embedding".to_string()),
+                    runtime_instance_id: Some("llama-embed-unhealthy".to_string()),
+                    warmup_started_at_ms: Some(11),
+                    warmup_completed_at_ms: Some(16),
+                    warmup_duration_ms: Some(5),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+            },
+            None,
+            Some(&RuntimeHealthAssessment {
+                healthy: false,
+                state: RuntimeHealthState::Unhealthy {
+                    reason: "Connection refused".to_string(),
+                },
+                response_time_ms: None,
+                error: Some("Connection refused".to_string()),
+                consecutive_failures: 3,
+            }),
+        );
+
+        let embedding = snapshots
+            .iter()
+            .find(|snapshot| snapshot.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(embedding.status, RuntimeRegistryStatus::Unhealthy);
+        assert_eq!(embedding.last_error.as_deref(), Some("Connection refused"));
+        assert_eq!(
+            embedding.runtime_instance_id.as_deref(),
+            Some("llama-embed-unhealthy")
+        );
     }
 }

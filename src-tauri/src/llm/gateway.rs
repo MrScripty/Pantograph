@@ -181,6 +181,11 @@ impl InferenceGateway {
         None
     }
 
+    /// Get the URL of the dedicated embedding runtime only.
+    pub async fn dedicated_embedding_base_url(&self) -> Option<String> {
+        self.embedding_runtime.read().await.base_url()
+    }
+
     /// Check if the dedicated embedding runtime is ready.
     pub async fn is_embedding_server_ready(&self) -> bool {
         self.embedding_runtime.read().await.is_ready()

@@ -2,14 +2,14 @@
 
 use async_trait::async_trait;
 
+use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessment;
 pub use pantograph_embedded_runtime::runtime_registry::{
     reclaim_runtime_and_reconcile_runtime_registry, reconcile_runtime_registry_snapshot_override,
-    sync_runtime_registry_with_active_health_assessment,
     restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
-    HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
+    sync_runtime_registry_with_health_assessments, HostRuntimeProducer,
+    HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
 };
-use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessment;
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
     RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError, SharedRuntimeRegistry,
@@ -50,12 +50,19 @@ pub async fn sync_runtime_registry_from_gateway(
     sync_runtime_registry(gateway, registry).await;
 }
 
-pub async fn sync_runtime_registry_from_gateway_health_assessment(
+pub async fn sync_runtime_registry_from_gateway_health_assessments(
     gateway: &crate::llm::gateway::InferenceGateway,
     registry: &RuntimeRegistry,
-    assessment: Option<&RuntimeHealthAssessment>,
+    active_assessment: Option<&RuntimeHealthAssessment>,
+    embedding_assessment: Option<&RuntimeHealthAssessment>,
 ) {
-    sync_runtime_registry_with_active_health_assessment(gateway, registry, assessment).await;
+    sync_runtime_registry_with_health_assessments(
+        gateway,
+        registry,
+        active_assessment,
+        embedding_assessment,
+    )
+    .await;
 }
 
 pub async fn stop_all_and_sync_runtime_registry(
@@ -97,6 +104,9 @@ mod tests {
     use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use inference::EmbeddingMemoryMode;
     use inference::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
+    use pantograph_embedded_runtime::runtime_health::{
+        RuntimeHealthAssessment, RuntimeHealthState,
+    };
     use pantograph_embedded_runtime::runtime_registry::live_host_runtime_producer;
     use pantograph_runtime_registry::{
         RuntimeRegistration, RuntimeRetentionReason, RuntimeTransition,
@@ -293,6 +303,60 @@ mod tests {
         assert!(embedding_runtime.runtime_instance_id.is_none());
     }
 
+    #[tokio::test]
+    async fn sync_runtime_registry_from_gateway_health_assessments_marks_embedding_runtime_unhealthy(
+    ) {
+        let gateway = crate::llm::gateway::InferenceGateway::new(Arc::new(MockProcessSpawner));
+        gateway.init().await;
+
+        let mut server = inference::LlamaCppEmbeddingRuntime::new(EmbeddingMemoryMode::CpuParallel);
+        server.set_test_ready_state(Box::new(MockProcessHandle), "/models/embed.gguf");
+        server.set_test_runtime_lifecycle_snapshot(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            runtime_instance_id: Some("llama-cpp-embedding-7".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(20),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        });
+        gateway.set_test_embedding_server(server).await;
+
+        let registry = RuntimeRegistry::new();
+        sync_runtime_registry_from_gateway_health_assessments(
+            &gateway,
+            &registry,
+            None,
+            Some(&RuntimeHealthAssessment {
+                healthy: false,
+                state: RuntimeHealthState::Unhealthy {
+                    reason: "Connection refused".to_string(),
+                },
+                response_time_ms: None,
+                error: Some("Connection refused".to_string()),
+                consecutive_failures: 3,
+            }),
+        )
+        .await;
+
+        let snapshot = registry.snapshot();
+        let embedding_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama.cpp.embedding")
+            .expect("embedding runtime snapshot");
+        assert_eq!(
+            embedding_runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Unhealthy
+        );
+        assert_eq!(
+            embedding_runtime.last_error.as_deref(),
+            Some("Connection refused")
+        );
+    }
+
     #[test]
     fn live_host_runtime_producer_matches_active_and_embedding_runtime_aliases() {
         let mode_info = inference::ServerModeInfo {
@@ -478,7 +542,9 @@ mod tests {
             reclaim,
             RuntimeReclaimDisposition::no_action(
                 "onnx-runtime",
-                RuntimeRetentionReason::Status(pantograph_runtime_registry::RuntimeRegistryStatus::Stopped),
+                RuntimeRetentionReason::Status(
+                    pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+                ),
                 pantograph_runtime_registry::RuntimeRegistryStatus::Stopped,
             )
         );
