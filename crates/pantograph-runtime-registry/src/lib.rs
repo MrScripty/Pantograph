@@ -31,11 +31,12 @@ pub use state::{
     RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
 };
 pub use technical_fit::{
-    RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSourceKind,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourcePressure,
-    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitWarmupState,
+    select_runtime_technical_fit, RuntimeTechnicalFitCandidate,
+    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitWarmupState,
 };
 pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupReason};
 

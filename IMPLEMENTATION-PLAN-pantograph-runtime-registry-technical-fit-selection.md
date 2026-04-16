@@ -746,6 +746,11 @@ and local runtime state.
 - 2026-04-16: `pantograph-embedded-runtime` now also keeps the host-side
   technical-fit assembly path in `technical_fit.rs`, reducing the Milestone 4
   insertion pressure on `lib.rs` before selector behavior lands.
+- 2026-04-16: `pantograph-runtime-registry` now also exposes a backend-owned
+  selector entrypoint that normalizes request input, preserves explicit
+  override precedence, ranks candidates with registry snapshot residency and
+  warmup facts, and emits conservative fallback reasons when automatic
+  selection cannot be made safely.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason

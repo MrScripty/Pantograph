@@ -29,8 +29,8 @@ desktop app wiring.
 - `snapshot.rs`: deterministic machine-readable snapshot contracts for runtime
   state inspection.
 - `technical_fit.rs`: backend-owned technical-fit request, candidate, factor,
-  and decision contracts that freeze selector inputs and machine-consumable
-  reason codes before workflow integration lands.
+  selector, and decision contracts that freeze selector inputs plus
+  machine-consumable reason codes before workflow integration lands.
 - `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
   runtime registry status for host execution orchestration.
 - `reclaim.rs`: backend-owned reclaim disposition contracts that tell hosts
@@ -66,6 +66,10 @@ desktop app wiring.
 - Technical-fit factor, override, and reason-code contracts are also owned here
   so later workflow integration consumes one backend selector vocabulary rather
   than inventing adapter-local routing semantics.
+- Technical-fit selection is also computed here from normalized request input,
+  explicit override precedence, and live runtime snapshot facts so workflow and
+  host layers do not drift on candidate ranking or conservative fallback
+  behavior.
 - Reclaim sequencing is also computed here so hosts can ask whether an
   evictable runtime still needs a real producer stop or can be converged to
   `stopped` inside the registry without re-deriving that policy from raw

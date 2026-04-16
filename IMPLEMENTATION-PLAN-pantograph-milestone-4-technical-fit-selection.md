@@ -289,7 +289,7 @@ selector spreads across runtime and workflow code.
 fit logic lands.
 
 **Tasks:**
-- [ ] Extract technical-fit contracts and selector implementation out of
+- [x] Extract technical-fit contracts and selector implementation out of
       `crates/pantograph-runtime-registry/src/lib.rs` into focused module files
       so the registry facade remains composition-oriented.
 - [x] Extract workflow-service selection-request normalization,
@@ -298,9 +298,9 @@ fit logic lands.
 - [x] Extract embedded-runtime candidate gathering and runtime-state projection
       helpers out of `crates/pantograph-embedded-runtime/src/lib.rs` into the
       appropriate focused runtime modules.
-- [ ] Add `README.md` coverage for any new `src/` directories created during the
+- [x] Add `README.md` coverage for any new `src/` directories created during the
       extraction, and update existing README contents if responsibilities shift.
-- [ ] Preserve public facade behavior while moving implementation into smaller,
+- [x] Preserve public facade behavior while moving implementation into smaller,
       ownership-aligned modules.
 
 **Verification:**
@@ -310,7 +310,7 @@ fit logic lands.
 - `cargo check -p pantograph-embedded-runtime`
 - Review confirms no core technical-fit policy migrated into Tauri adapters
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 3: Implement Registry-Owned Technical-Fit Policy
 
@@ -318,7 +318,7 @@ fit logic lands.
 refactored module boundaries.
 
 **Tasks:**
-- [ ] Normalize candidate and override inputs at the boundary and convert them
+- [x] Normalize candidate and override inputs at the boundary and convert them
       into trusted backend-owned technical-fit DTOs.
 - [ ] Implement deterministic selection using only approved technical factors:
       required context length, task/runtime requirements, current residency and
@@ -339,7 +339,7 @@ refactored module boundaries.
 - Contract review confirms reason payloads remain machine-consumable and
   verifiable
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Integrate Workflow Service And Embedded Runtime
 
@@ -427,6 +427,11 @@ Update during implementation:
   runtime snapshot/candidate assembly into `technical_fit.rs`, leaving
   `lib.rs` as a thinner workflow-host facade while preserving the public host
   behavior.
+- 2026-04-16: Added the first runtime-registry selector entrypoint in
+  `technical_fit.rs`, which now normalizes request input, preserves explicit
+  override precedence, enriches candidate ranking with runtime-snapshot
+  residency/warmup facts, and emits conservative fallback decisions when the
+  registry lacks enough data for a stronger automatic selection.
 
 
 ## Commit Cadence Notes

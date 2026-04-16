@@ -1,9 +1,11 @@
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 use serde::{Deserialize, Serialize};
 
-use crate::snapshot::RuntimeRegistrySnapshot;
+use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
+use crate::state::RuntimeRegistryStatus;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -276,6 +278,139 @@ impl RuntimeTechnicalFitDecision {
     }
 }
 
+pub fn select_runtime_technical_fit(
+    request: &RuntimeTechnicalFitRequest,
+) -> RuntimeTechnicalFitDecision {
+    let normalized = request.normalized();
+    let mut candidates = normalized.candidates.clone();
+    let mut reasons = Vec::new();
+
+    if let Some(override_selection) = normalized.override_selection.as_ref() {
+        if !candidates
+            .iter()
+            .any(|candidate| candidate_matches_override(candidate, override_selection))
+        {
+            candidates.push(override_fallback_candidate(override_selection));
+        }
+
+        if let Some(candidate) = candidates
+            .iter()
+            .filter(|candidate| candidate_matches_override(candidate, override_selection))
+            .min_by(|left, right| compare_candidate_ids(left, right))
+        {
+            if override_selection.model_id.is_some() {
+                reasons.push(RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::ExplicitModelOverride,
+                    Some(candidate.candidate_id.as_str()),
+                ));
+            }
+            if override_selection.backend_key.is_some() {
+                reasons.push(RuntimeTechnicalFitReason::new(
+                    RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
+                    Some(candidate.candidate_id.as_str()),
+                ));
+            }
+            return decision_from_candidate(
+                RuntimeTechnicalFitSelectionMode::ExplicitOverride,
+                candidate,
+                reasons,
+            );
+        }
+    }
+
+    let mut eligible_candidates = candidates
+        .iter()
+        .filter(|candidate| candidate_is_eligible(candidate, &normalized))
+        .collect::<Vec<_>>();
+    eligible_candidates.sort_by(|left, right| compare_candidates(left, right, &normalized));
+
+    if let Some(selected_candidate) = eligible_candidates.first().copied() {
+        reasons.push(RuntimeTechnicalFitReason::new(
+            RuntimeTechnicalFitReasonCode::RuntimeRequirements,
+            Some(selected_candidate.candidate_id.as_str()),
+        ));
+
+        if uses_factor(&normalized, RuntimeTechnicalFitFactor::ResidencyReuse)
+            && candidate_residency_rank(selected_candidate, &normalized) > 0
+        {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::ResidencyReuse,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
+        }
+
+        if uses_factor(&normalized, RuntimeTechnicalFitFactor::WarmupCost)
+            && candidate_warmup_rank(selected_candidate, &normalized) > 0
+        {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::WarmupCost,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
+        }
+
+        if eligible_candidates.iter().skip(1).any(|candidate| {
+            compare_candidate_priority(selected_candidate, candidate, &normalized).is_eq()
+        }) {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::DeterministicTieBreak,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
+        }
+
+        return decision_from_candidate(
+            RuntimeTechnicalFitSelectionMode::Automatic,
+            selected_candidate,
+            reasons,
+        );
+    }
+
+    let fallback_candidate = candidates
+        .iter()
+        .min_by(|left, right| compare_candidate_ids(left, right));
+    if fallback_candidate.is_none() {
+        reasons.push(RuntimeTechnicalFitReason::new(
+            RuntimeTechnicalFitReasonCode::MissingCandidateData,
+            None,
+        ));
+    } else {
+        if candidates
+            .iter()
+            .any(|candidate| candidate_has_missing_state(candidate, &normalized))
+        {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::MissingRuntimeState,
+                fallback_candidate.map(|candidate| candidate.candidate_id.as_str()),
+            ));
+        }
+        reasons.push(RuntimeTechnicalFitReason::new(
+            RuntimeTechnicalFitReasonCode::MissingCandidateData,
+            fallback_candidate.map(|candidate| candidate.candidate_id.as_str()),
+        ));
+    }
+    reasons.push(RuntimeTechnicalFitReason::new(
+        RuntimeTechnicalFitReasonCode::ConservativeFallback,
+        fallback_candidate.map(|candidate| candidate.candidate_id.as_str()),
+    ));
+
+    if let Some(candidate) = fallback_candidate {
+        decision_from_candidate(
+            RuntimeTechnicalFitSelectionMode::ConservativeFallback,
+            candidate,
+            reasons,
+        )
+    } else {
+        RuntimeTechnicalFitDecision {
+            selection_mode: RuntimeTechnicalFitSelectionMode::ConservativeFallback,
+            selected_candidate_id: None,
+            selected_runtime_id: None,
+            selected_backend_key: None,
+            selected_model_id: None,
+            reasons,
+        }
+        .normalized()
+    }
+}
+
 fn normalize_runtime_id(value: Option<&str>) -> Option<String> {
     let value = normalize_trimmed_string(value)?;
     let normalized = canonical_runtime_id(&value);
@@ -346,16 +481,301 @@ fn derive_candidate_id(
     }
 }
 
+fn override_fallback_candidate(
+    override_selection: &RuntimeTechnicalFitOverride,
+) -> RuntimeTechnicalFitCandidate {
+    RuntimeTechnicalFitCandidate {
+        candidate_id: derive_candidate_id(
+            None,
+            override_selection.backend_key.as_deref(),
+            override_selection.model_id.as_deref(),
+        ),
+        runtime_id: None,
+        backend_key: override_selection.backend_key.clone(),
+        model_id: override_selection.model_id.clone(),
+        source_kind: RuntimeTechnicalFitCandidateSourceKind::OverrideFallback,
+        context_window_tokens: None,
+        residency_state: None,
+        warmup_state: None,
+        supports_runtime_requirements: true,
+    }
+    .normalized()
+}
+
+fn decision_from_candidate(
+    selection_mode: RuntimeTechnicalFitSelectionMode,
+    candidate: &RuntimeTechnicalFitCandidate,
+    reasons: Vec<RuntimeTechnicalFitReason>,
+) -> RuntimeTechnicalFitDecision {
+    RuntimeTechnicalFitDecision {
+        selection_mode,
+        selected_candidate_id: Some(candidate.candidate_id.clone()),
+        selected_runtime_id: candidate.runtime_id.clone(),
+        selected_backend_key: candidate.backend_key.clone(),
+        selected_model_id: candidate.model_id.clone(),
+        reasons,
+    }
+    .normalized()
+}
+
+fn candidate_matches_override(
+    candidate: &RuntimeTechnicalFitCandidate,
+    override_selection: &RuntimeTechnicalFitOverride,
+) -> bool {
+    let model_matches =
+        override_selection.model_id.is_none() || candidate.model_id == override_selection.model_id;
+    let backend_matches = override_selection.backend_key.is_none()
+        || candidate.backend_key == override_selection.backend_key;
+    model_matches && backend_matches
+}
+
+fn compare_candidates(
+    left: &RuntimeTechnicalFitCandidate,
+    right: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> Ordering {
+    compare_candidate_priority(left, right, request)
+        .then_with(|| compare_candidate_ids(left, right))
+}
+
+fn compare_candidate_priority(
+    left: &RuntimeTechnicalFitCandidate,
+    right: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> Ordering {
+    candidate_residency_rank(left, request)
+        .cmp(&candidate_residency_rank(right, request))
+        .reverse()
+        .then_with(|| {
+            candidate_warmup_rank(left, request)
+                .cmp(&candidate_warmup_rank(right, request))
+                .reverse()
+        })
+}
+
+fn compare_candidate_ids(
+    left: &RuntimeTechnicalFitCandidate,
+    right: &RuntimeTechnicalFitCandidate,
+) -> Ordering {
+    left.candidate_id.cmp(&right.candidate_id)
+}
+
+fn candidate_is_eligible(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    let runtime_snapshot = candidate_runtime_snapshot(candidate, request);
+
+    (!uses_factor(request, RuntimeTechnicalFitFactor::RuntimeRequirements)
+        || candidate.supports_runtime_requirements)
+        && candidate_matches_required_models(candidate, runtime_snapshot, request)
+        && candidate_matches_required_backends(candidate, runtime_snapshot, request)
+        && candidate_meets_context_length(candidate, request)
+}
+
+fn candidate_matches_required_models(
+    candidate: &RuntimeTechnicalFitCandidate,
+    runtime_snapshot: Option<&RuntimeRegistryRuntimeSnapshot>,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    if request.required_model_ids.is_empty() {
+        return true;
+    }
+
+    if let Some(model_id) = candidate.model_id.as_deref() {
+        return request
+            .required_model_ids
+            .iter()
+            .any(|required| required == model_id);
+    }
+
+    let Some(runtime_snapshot) = runtime_snapshot else {
+        return false;
+    };
+
+    request.required_model_ids.iter().all(|required| {
+        runtime_snapshot
+            .models
+            .iter()
+            .any(|model| model.model_id == *required)
+    })
+}
+
+fn candidate_matches_required_backends(
+    candidate: &RuntimeTechnicalFitCandidate,
+    runtime_snapshot: Option<&RuntimeRegistryRuntimeSnapshot>,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    if request.required_backend_keys.is_empty() {
+        return true;
+    }
+
+    let candidate_backend_matches = candidate.backend_key.as_deref().map(|backend_key| {
+        request
+            .required_backend_keys
+            .iter()
+            .any(|required| required == backend_key)
+    });
+
+    if candidate_backend_matches == Some(true) {
+        return true;
+    }
+
+    let Some(runtime_snapshot) = runtime_snapshot else {
+        return false;
+    };
+
+    request.required_backend_keys.iter().all(|required| {
+        runtime_snapshot
+            .backend_keys
+            .iter()
+            .any(|backend_key| backend_key == required)
+    })
+}
+
+fn candidate_meets_context_length(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    let Some(required_context_window_tokens) = request.required_context_window_tokens else {
+        return true;
+    };
+
+    let Some(context_window_tokens) = candidate.context_window_tokens else {
+        return false;
+    };
+
+    context_window_tokens >= required_context_window_tokens
+}
+
+fn candidate_has_missing_state(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> bool {
+    candidate_runtime_snapshot(candidate, request).is_none()
+        && candidate.runtime_id.is_some()
+        && (candidate.residency_state.is_none() || candidate.warmup_state.is_none())
+}
+
+fn candidate_residency_rank(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> u8 {
+    if !uses_factor(request, RuntimeTechnicalFitFactor::ResidencyReuse) {
+        return 0;
+    }
+
+    match candidate
+        .residency_state
+        .or_else(|| snapshot_residency_state(candidate_runtime_snapshot(candidate, request)))
+    {
+        Some(RuntimeTechnicalFitResidencyState::Active) => 3,
+        Some(RuntimeTechnicalFitResidencyState::Reserved) => 2,
+        Some(RuntimeTechnicalFitResidencyState::Loaded) => 1,
+        Some(RuntimeTechnicalFitResidencyState::Unloaded) | None => 0,
+    }
+}
+
+fn candidate_warmup_rank(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> u8 {
+    if !uses_factor(request, RuntimeTechnicalFitFactor::WarmupCost) {
+        return 0;
+    }
+
+    match candidate
+        .warmup_state
+        .or_else(|| snapshot_warmup_state(candidate_runtime_snapshot(candidate, request)))
+    {
+        Some(RuntimeTechnicalFitWarmupState::Ready) => 2,
+        Some(RuntimeTechnicalFitWarmupState::Warm) => 1,
+        Some(RuntimeTechnicalFitWarmupState::Cold) | None => 0,
+    }
+}
+
+fn candidate_runtime_snapshot<'a>(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &'a RuntimeTechnicalFitRequest,
+) -> Option<&'a RuntimeRegistryRuntimeSnapshot> {
+    let runtime_id = candidate.runtime_id.as_deref()?;
+    request
+        .runtime_snapshot
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.runtime_id == runtime_id)
+}
+
+fn snapshot_residency_state(
+    runtime_snapshot: Option<&RuntimeRegistryRuntimeSnapshot>,
+) -> Option<RuntimeTechnicalFitResidencyState> {
+    let runtime_snapshot = runtime_snapshot?;
+    match runtime_snapshot.status {
+        RuntimeRegistryStatus::Busy => Some(RuntimeTechnicalFitResidencyState::Active),
+        RuntimeRegistryStatus::Ready => {
+            if runtime_snapshot.active_reservation_ids.is_empty() {
+                Some(RuntimeTechnicalFitResidencyState::Loaded)
+            } else {
+                Some(RuntimeTechnicalFitResidencyState::Reserved)
+            }
+        }
+        RuntimeRegistryStatus::Warming => Some(RuntimeTechnicalFitResidencyState::Reserved),
+        RuntimeRegistryStatus::Stopped
+        | RuntimeRegistryStatus::Stopping
+        | RuntimeRegistryStatus::Unhealthy
+        | RuntimeRegistryStatus::Failed => Some(RuntimeTechnicalFitResidencyState::Unloaded),
+    }
+}
+
+fn snapshot_warmup_state(
+    runtime_snapshot: Option<&RuntimeRegistryRuntimeSnapshot>,
+) -> Option<RuntimeTechnicalFitWarmupState> {
+    let runtime_snapshot = runtime_snapshot?;
+    match runtime_snapshot.status {
+        RuntimeRegistryStatus::Busy | RuntimeRegistryStatus::Ready => {
+            Some(RuntimeTechnicalFitWarmupState::Ready)
+        }
+        RuntimeRegistryStatus::Warming => Some(RuntimeTechnicalFitWarmupState::Warm),
+        RuntimeRegistryStatus::Stopped
+        | RuntimeRegistryStatus::Stopping
+        | RuntimeRegistryStatus::Unhealthy
+        | RuntimeRegistryStatus::Failed => Some(RuntimeTechnicalFitWarmupState::Cold),
+    }
+}
+
+fn uses_factor(request: &RuntimeTechnicalFitRequest, factor: RuntimeTechnicalFitFactor) -> bool {
+    request.legal_factors.contains(&factor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::snapshot::RuntimeRegistrySnapshot;
+    use crate::snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
+    use crate::state::RuntimeRegistryStatus;
 
     fn empty_snapshot() -> RuntimeRegistrySnapshot {
         RuntimeRegistrySnapshot {
             generated_at_ms: 123,
             runtimes: Vec::new(),
             reservations: Vec::new(),
+        }
+    }
+
+    fn runtime_snapshot(
+        runtime_id: &str,
+        backend_keys: Vec<&str>,
+        status: RuntimeRegistryStatus,
+    ) -> RuntimeRegistryRuntimeSnapshot {
+        RuntimeRegistryRuntimeSnapshot {
+            runtime_id: runtime_id.to_string(),
+            display_name: runtime_id.to_string(),
+            backend_keys: backend_keys.into_iter().map(ToOwned::to_owned).collect(),
+            status,
+            runtime_instance_id: Some(format!("{runtime_id}-instance")),
+            last_error: None,
+            last_transition_at_ms: 123,
+            active_reservation_ids: Vec::new(),
+            models: Vec::new(),
         }
     }
 
@@ -467,5 +887,166 @@ mod tests {
                 candidate_id: Some("candidate-1".to_string()),
             }]
         );
+    }
+
+    #[test]
+    fn selector_prefers_explicit_override_over_hotter_candidate() {
+        let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+            runtime_snapshot: RuntimeRegistrySnapshot {
+                generated_at_ms: 123,
+                runtimes: vec![
+                    runtime_snapshot("runtime-a", vec!["llama_cpp"], RuntimeRegistryStatus::Busy),
+                    runtime_snapshot("runtime-b", vec!["ollama"], RuntimeRegistryStatus::Ready),
+                ],
+                reservations: Vec::new(),
+            },
+            workflow_id: Some("workflow-a".to_string()),
+            required_model_ids: Vec::new(),
+            required_backend_keys: Vec::new(),
+            required_extensions: Vec::new(),
+            required_context_window_tokens: None,
+            override_selection: Some(RuntimeTechnicalFitOverride {
+                model_id: None,
+                backend_key: Some("ollama".to_string()),
+            }),
+            legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+            candidates: vec![
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-a".to_string(),
+                    runtime_id: Some("runtime-a".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasFeasible,
+                    context_window_tokens: Some(8192),
+                    residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
+                    warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
+                    supports_runtime_requirements: true,
+                },
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-b".to_string(),
+                    runtime_id: Some("runtime-b".to_string()),
+                    backend_key: Some("ollama".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasFeasible,
+                    context_window_tokens: Some(8192),
+                    residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
+                    warmup_state: Some(RuntimeTechnicalFitWarmupState::Warm),
+                    supports_runtime_requirements: true,
+                },
+            ],
+            resource_pressure: None,
+        });
+
+        assert_eq!(
+            decision,
+            RuntimeTechnicalFitDecision {
+                selection_mode: RuntimeTechnicalFitSelectionMode::ExplicitOverride,
+                selected_candidate_id: Some("runtime-b".to_string()),
+                selected_runtime_id: Some("runtime-b".to_string()),
+                selected_backend_key: Some("ollama".to_string()),
+                selected_model_id: None,
+                reasons: vec![RuntimeTechnicalFitReason {
+                    code: RuntimeTechnicalFitReasonCode::ExplicitBackendOverride,
+                    candidate_id: Some("runtime-b".to_string()),
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
+        let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+            runtime_snapshot: RuntimeRegistrySnapshot {
+                generated_at_ms: 123,
+                runtimes: vec![
+                    runtime_snapshot("runtime-b", vec!["llama_cpp"], RuntimeRegistryStatus::Ready),
+                    runtime_snapshot("runtime-a", vec!["llama_cpp"], RuntimeRegistryStatus::Ready),
+                ],
+                reservations: Vec::new(),
+            },
+            workflow_id: Some("workflow-a".to_string()),
+            required_model_ids: Vec::new(),
+            required_backend_keys: vec!["llama_cpp".to_string()],
+            required_extensions: Vec::new(),
+            required_context_window_tokens: None,
+            override_selection: None,
+            legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+            candidates: vec![
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-b".to_string(),
+                    runtime_id: Some("runtime-b".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: true,
+                },
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-a".to_string(),
+                    runtime_id: Some("runtime-a".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: true,
+                },
+            ],
+            resource_pressure: None,
+        });
+
+        assert_eq!(
+            decision.selection_mode,
+            RuntimeTechnicalFitSelectionMode::Automatic
+        );
+        assert_eq!(decision.selected_candidate_id.as_deref(), Some("runtime-a"));
+        assert_eq!(decision.selected_runtime_id.as_deref(), Some("runtime-a"));
+        assert!(decision.reasons.iter().any(|reason| {
+            reason.code == RuntimeTechnicalFitReasonCode::DeterministicTieBreak
+                && reason.candidate_id.as_deref() == Some("runtime-a")
+        }));
+    }
+
+    #[test]
+    fn selector_falls_back_conservatively_when_required_context_is_missing() {
+        let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+            runtime_snapshot: empty_snapshot(),
+            workflow_id: Some("workflow-a".to_string()),
+            required_model_ids: Vec::new(),
+            required_backend_keys: vec!["llama_cpp".to_string()],
+            required_extensions: Vec::new(),
+            required_context_window_tokens: Some(8192),
+            override_selection: None,
+            legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+            candidates: vec![RuntimeTechnicalFitCandidate {
+                candidate_id: "runtime-a".to_string(),
+                runtime_id: Some("runtime-a".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                model_id: None,
+                source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                context_window_tokens: None,
+                residency_state: None,
+                warmup_state: None,
+                supports_runtime_requirements: true,
+            }],
+            resource_pressure: None,
+        });
+
+        assert_eq!(
+            decision.selection_mode,
+            RuntimeTechnicalFitSelectionMode::ConservativeFallback
+        );
+        assert_eq!(decision.selected_candidate_id.as_deref(), Some("runtime-a"));
+        assert!(decision.reasons.iter().any(|reason| {
+            reason.code == RuntimeTechnicalFitReasonCode::MissingRuntimeState
+                && reason.candidate_id.as_deref() == Some("runtime-a")
+        }));
+        assert!(decision.reasons.iter().any(|reason| {
+            reason.code == RuntimeTechnicalFitReasonCode::ConservativeFallback
+                && reason.candidate_id.as_deref() == Some("runtime-a")
+        }));
     }
 }
