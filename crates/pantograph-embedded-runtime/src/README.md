@@ -190,6 +190,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Tauri and other adapters may reuse this crate's runtime-registry translation
   helpers, but they must not own separate gateway-to-registry observation
   mapping logic.
+- Embedded hosted-runtime shutdown, live gateway sync, and restore paths should
+  also reuse this crate's shared runtime-registry lifecycle helpers rather than
+  recomposing raw gateway calls with local reconcile steps.
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.

@@ -451,6 +451,9 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   sync-and-return helper, so command-level early returns such as
   `start_sidecar_inference` embedding-path resolution warnings no longer leave
   registry state stale after the main runtime already started.
+- Embedded-runtime hosted shutdown, live gateway sync, and edit-session
+  restore paths now also route through the shared backend registry lifecycle
+  helpers, reducing one more internal host-specific sequencing fork.
 - Orchestration data-graph execution now also routes through
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task

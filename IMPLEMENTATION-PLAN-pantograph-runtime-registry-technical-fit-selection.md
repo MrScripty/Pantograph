@@ -585,6 +585,10 @@ runtime callers.
   shared sync-and-return helper, so `start_sidecar_inference` no longer skips
   runtime-registry convergence when embedding-model resolution fails after the
   main inference runtime has already started.
+- 2026-04-15: Embedded-runtime hosted shutdown, live gateway sync, and
+  edit-session restore paths now also reuse the shared backend-owned
+  runtime-registry lifecycle helpers instead of composing raw gateway calls
+  with separate local reconcile steps.
 - 2026-04-14: Recovery clean-restart and restart-stop paths now stop all
   producers through the shared stop-and-sync adapter, so failed recovery does
   not leave dedicated embedding runtime observations stuck in ready state.
