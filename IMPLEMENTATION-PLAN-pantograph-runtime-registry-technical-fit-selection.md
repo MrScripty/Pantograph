@@ -787,9 +787,10 @@ refactor lands.
 **Progress:**
 - 2026-04-15: `src-tauri` now exposes an aggregate runtime debug snapshot
   command that synchronizes the shared runtime registry before returning
-  backend-owned runtime mode facts, the latest health-monitor observation, and
-  recovery-manager state for internal GUI debugging without moving lifecycle
-  policy into Tauri.
+  backend-owned runtime mode facts, the latest health-monitor observation,
+  recovery-manager state, and the latest workflow runtime/scheduler
+  diagnostics for internal GUI debugging without moving lifecycle policy into
+  Tauri.
 
 **Status:** In progress
 
