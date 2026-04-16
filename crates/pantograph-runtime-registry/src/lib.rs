@@ -5,6 +5,7 @@ mod reservation;
 mod retention;
 mod snapshot;
 mod state;
+pub mod technical_fit;
 mod warmup;
 
 use admission::RuntimeReservationClaim;
@@ -28,6 +29,13 @@ pub use snapshot::{RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot};
 use state::RuntimeTransition as Transition;
 pub use state::{
     RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
+};
+pub use technical_fit::{
+    RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSourceKind,
+    RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor, RuntimeTechnicalFitOverride,
+    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
+    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourcePressure,
+    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitWarmupState,
 };
 pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupReason};
 

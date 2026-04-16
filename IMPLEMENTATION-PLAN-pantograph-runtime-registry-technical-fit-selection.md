@@ -722,8 +722,16 @@ runtime callers.
 
 ### Milestone 4: Technical-Fit Selection Integration
 
+**Detailed plan:** `IMPLEMENTATION-PLAN-pantograph-milestone-4-technical-fit-selection.md` is the dedicated source of truth for Milestone 4 sequencing, standards compliance, and immediate refactor scope.
+
 **Goal:** Choose the best run-time technical fit from Pumas feasible candidates
 and local runtime state.
+
+**Progress:**
+- 2026-04-16: `pantograph-runtime-registry` now owns normalized technical-fit
+  request, candidate, override, factor, reason-code, and decision DTOs, which
+  freezes the backend selector vocabulary before workflow and host integration
+  begins.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason
@@ -748,7 +756,7 @@ and local runtime state.
 - contract review confirms no answer-quality claims are encoded in the API or
   docs
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Workflow And Adapter Integration
 

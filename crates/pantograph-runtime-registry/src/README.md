@@ -28,6 +28,9 @@ desktop app wiring.
   reservation release and runtime retention inspection paths.
 - `snapshot.rs`: deterministic machine-readable snapshot contracts for runtime
   state inspection.
+- `technical_fit.rs`: backend-owned technical-fit request, candidate, factor,
+  and decision contracts that freeze selector inputs and machine-consumable
+  reason codes before workflow integration lands.
 - `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
   runtime registry status for host execution orchestration.
 - `reclaim.rs`: backend-owned reclaim disposition contracts that tell hosts
@@ -60,6 +63,9 @@ desktop app wiring.
 - Warmup/reuse lifecycle classification is also computed here so callers can
   decide whether to start, reuse, or wait without rebuilding status semantics
   in host adapters.
+- Technical-fit factor, override, and reason-code contracts are also owned here
+  so later workflow integration consumes one backend selector vocabulary rather
+  than inventing adapter-local routing semantics.
 - Reclaim sequencing is also computed here so hosts can ask whether an
   evictable runtime still needs a real producer stop or can be converged to
   `stopped` inside the registry without re-deriving that policy from raw
@@ -106,5 +112,8 @@ desktop app wiring.
 - Hosts may ask the registry to begin reclaim for an evictable runtime; the
   returned action tells them whether a live producer still needs to be stopped
   before they reconcile the final stopped observation.
+- Hosts may also pass normalized technical-fit inputs and candidate facts into
+  this crate, but they must not invent alternate factor names, override
+  precedence semantics, or selector reason codes locally.
 - New fields in public snapshot/lease structs should be additive unless a
   deliberate migration is recorded.
