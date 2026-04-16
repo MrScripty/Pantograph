@@ -141,8 +141,9 @@ implementation progress in the runtime and diagnostics layers.
 
 ### Next gate before more implementation breadth
 
-- Finish any remaining runtime producer convergence that still emits divergent
-  contracts
+- Use the completed Milestone 3 runtime-registry boundary as the baseline while
+  finishing any remaining runtime producer convergence that still emits
+  divergent contracts
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
   backend-owned runtime-registry boundary
@@ -390,6 +391,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 - Diagnostics preserve concrete runtime producers and lifecycle snapshots.
 - External capability handling is materially less placeholder-driven than at the
   start of this roadmap.
+- Runtime-registry Milestone 3 closeout is complete: backend Rust owns
+  admission, warmup, retention, and eviction behavior, Tauri remains a
+  composition/transport boundary for those paths, and the current cleanup and
+  warmup timing loops are explicitly bounded and documented.
 - Execution-specific Python-sidecar runtime snapshots can now be reconciled
   into the shared runtime registry without replacing gateway-observed runtimes.
 - Direct embedded/headless workflow runs now reconcile Python-sidecar runtime

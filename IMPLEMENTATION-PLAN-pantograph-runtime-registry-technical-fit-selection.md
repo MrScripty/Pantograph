@@ -414,7 +414,7 @@ runtime callers.
 **Goal:** Make runtime placement budget-aware and concurrency-safe.
 
 **Tasks:**
-- [ ] Keep admission, retention, and eviction policy in
+- [x] Keep admission, retention, and eviction policy in
   `crates/pantograph-runtime-registry`; adapters and gateway callers may invoke
   explicit registry operations but must not become policy owners
 - [x] Reconcile the shared runtime registry after every producer restore path,
@@ -436,14 +436,14 @@ runtime callers.
   rather than raw direct ownership
 - [x] Implement eviction v1 with active/reserved/pinned exclusion and
   deterministic candidate ordering
-- [ ] Keep async paths non-blocking: do not hold synchronous locks across
+- [x] Keep async paths non-blocking: do not hold synchronous locks across
   blocking work or long-running awaits; if policy coordination becomes
   long-lived or await-heavy, introduce an explicit async owner/message path
   instead of stretching the current synchronous critical section model
-- [ ] Bound and document any new admission, retention, or cleanup queues/timers
+- [x] Bound and document any new admission, retention, or cleanup queues/timers
   before they are introduced so ownership, cancellation, and overflow behavior
   stay explicit
-- [ ] Preserve standards-aligned layering while implementing Milestone 3:
+- [x] Preserve standards-aligned layering while implementing Milestone 3:
   backend/runtime crates own policy and lifecycle behavior, `src-tauri`
   remains a composition/transport boundary, and new async coordination must
   follow the single-owner and non-blocking rules from
@@ -680,6 +680,13 @@ runtime callers.
   configuration plus shutdown control, and Tauri now only starts/stops that
   backend-owned worker at the composition root instead of owning cleanup-loop
   policy directly.
+- 2026-04-15: Milestone 3 close-out audit confirmed that admission, warmup,
+  retention, and eviction decisions now stay inside backend Rust boundaries,
+  Tauri runtime and workflow surfaces only invoke backend-owned helpers, the
+  remaining `session_runtime_reservations` mutex scopes do not cross awaits,
+  and the only new timed ownership introduced by this milestone is explicitly
+  bounded by warmup poll/timeout constants plus the backend-owned stale
+  cleanup worker interval, idle-timeout, and shutdown controls.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -711,7 +718,7 @@ runtime callers.
 - README/ADR update review for any newly introduced directory boundary or
   machine-consumed contract changes per `DOCUMENTATION-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 4: Technical-Fit Selection Integration
 
