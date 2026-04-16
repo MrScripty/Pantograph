@@ -348,17 +348,18 @@ mod tests {
 
     #[test]
     fn normalized_runtime_lifecycle_snapshot_canonicalizes_runtime_aliases() {
-        let snapshot = normalized_runtime_lifecycle_snapshot(&inference::RuntimeLifecycleSnapshot {
-            runtime_id: Some("PyTorch".to_string()),
-            runtime_instance_id: Some("pytorch-1".to_string()),
-            warmup_started_at_ms: None,
-            warmup_completed_at_ms: None,
-            warmup_duration_ms: None,
-            runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("runtime_reused".to_string()),
-            active: true,
-            last_error: None,
-        });
+        let snapshot =
+            normalized_runtime_lifecycle_snapshot(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("pytorch-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            });
 
         assert_eq!(snapshot.runtime_id.as_deref(), Some("pytorch"));
         assert_eq!(
@@ -369,17 +370,18 @@ mod tests {
 
     #[test]
     fn normalized_runtime_lifecycle_snapshot_infers_backend_owned_default_reason() {
-        let snapshot = normalized_runtime_lifecycle_snapshot(&inference::RuntimeLifecycleSnapshot {
-            runtime_id: Some("llama.cpp".to_string()),
-            runtime_instance_id: Some("llama-cpp-1".to_string()),
-            warmup_started_at_ms: Some(10),
-            warmup_completed_at_ms: Some(20),
-            warmup_duration_ms: Some(10),
-            runtime_reused: Some(false),
-            lifecycle_decision_reason: None,
-            active: true,
-            last_error: None,
-        });
+        let snapshot =
+            normalized_runtime_lifecycle_snapshot(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-cpp-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: None,
+                active: true,
+                last_error: None,
+            });
 
         assert_eq!(snapshot.runtime_id.as_deref(), Some("llama_cpp"));
         assert_eq!(

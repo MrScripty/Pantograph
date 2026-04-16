@@ -36,7 +36,8 @@ pub fn build_recovery_restart_plan(
     has_embedding_model: bool,
     embedding_runs_parallel: bool,
 ) -> Result<RecoveryRestartPlan, RecoveryRestartPlanError> {
-    let mut restart_config = restart_config.ok_or(RecoveryRestartPlanError::MissingRuntimeConfig)?;
+    let mut restart_config =
+        restart_config.ok_or(RecoveryRestartPlanError::MissingRuntimeConfig)?;
     if let Some(port_override) = port_override {
         restart_config.port_override = Some(port_override);
     }
@@ -155,14 +156,26 @@ mod tests {
 
     #[test]
     fn recovery_backoff_uses_exponential_growth_with_cap() {
-        assert_eq!(recovery_backoff(1_000, 30_000, 0), Duration::from_millis(1_000));
-        assert_eq!(recovery_backoff(1_000, 30_000, 1), Duration::from_millis(2_000));
-        assert_eq!(recovery_backoff(1_000, 30_000, 6), Duration::from_millis(30_000));
+        assert_eq!(
+            recovery_backoff(1_000, 30_000, 0),
+            Duration::from_millis(1_000)
+        );
+        assert_eq!(
+            recovery_backoff(1_000, 30_000, 1),
+            Duration::from_millis(2_000)
+        );
+        assert_eq!(
+            recovery_backoff(1_000, 30_000, 6),
+            Duration::from_millis(30_000)
+        );
     }
 
     #[test]
     fn recovery_strategy_for_attempt_prefers_alternate_port_on_second_try() {
-        assert_eq!(recovery_strategy_for_attempt(0, true), RecoveryStrategy::Restart);
+        assert_eq!(
+            recovery_strategy_for_attempt(0, true),
+            RecoveryStrategy::Restart
+        );
         assert_eq!(
             recovery_strategy_for_attempt(1, true),
             RecoveryStrategy::AlternatePort
