@@ -348,6 +348,30 @@ pub fn select_runtime_technical_fit(
             ));
         }
 
+        if queue_pressure_applies(&normalized)
+            && eligible_candidates.iter().skip(1).any(|candidate| {
+                candidate_queue_pressure_rank(selected_candidate, &normalized)
+                    > candidate_queue_pressure_rank(candidate, &normalized)
+            })
+        {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::QueuePressure,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
+        }
+
+        if budget_pressure_applies(&normalized)
+            && eligible_candidates.iter().skip(1).any(|candidate| {
+                candidate_budget_pressure_rank(selected_candidate, &normalized)
+                    > candidate_budget_pressure_rank(candidate, &normalized)
+            })
+        {
+            reasons.push(RuntimeTechnicalFitReason::new(
+                RuntimeTechnicalFitReasonCode::BudgetPressure,
+                Some(selected_candidate.candidate_id.as_str()),
+            ));
+        }
+
         if eligible_candidates.iter().skip(1).any(|candidate| {
             compare_candidate_priority(selected_candidate, candidate, &normalized).is_eq()
         }) {
@@ -551,6 +575,16 @@ fn compare_candidate_priority(
                 .cmp(&candidate_warmup_rank(right, request))
                 .reverse()
         })
+        .then_with(|| {
+            candidate_queue_pressure_rank(left, request)
+                .cmp(&candidate_queue_pressure_rank(right, request))
+                .reverse()
+        })
+        .then_with(|| {
+            candidate_budget_pressure_rank(left, request)
+                .cmp(&candidate_budget_pressure_rank(right, request))
+                .reverse()
+        })
 }
 
 fn compare_candidate_ids(
@@ -694,6 +728,38 @@ fn candidate_warmup_rank(
     }
 }
 
+fn candidate_queue_pressure_rank(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> u16 {
+    if !queue_pressure_applies(request) {
+        return 0;
+    }
+
+    runtime_headroom_rank(candidate, request)
+}
+
+fn candidate_budget_pressure_rank(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> u16 {
+    if !budget_pressure_applies(request) {
+        return 0;
+    }
+
+    runtime_headroom_rank(candidate, request)
+}
+
+fn runtime_headroom_rank(
+    candidate: &RuntimeTechnicalFitCandidate,
+    request: &RuntimeTechnicalFitRequest,
+) -> u16 {
+    let active_reservation_count = candidate_runtime_snapshot(candidate, request)
+        .map(|runtime| runtime.active_reservation_ids.len())
+        .unwrap_or(usize::MAX);
+    u16::MAX.saturating_sub(active_reservation_count.min(u16::MAX as usize) as u16)
+}
+
 fn candidate_runtime_snapshot<'a>(
     candidate: &RuntimeTechnicalFitCandidate,
     request: &'a RuntimeTechnicalFitRequest,
@@ -747,6 +813,28 @@ fn uses_factor(request: &RuntimeTechnicalFitRequest, factor: RuntimeTechnicalFit
     request.legal_factors.contains(&factor)
 }
 
+fn queue_pressure_applies(request: &RuntimeTechnicalFitRequest) -> bool {
+    uses_factor(request, RuntimeTechnicalFitFactor::QueuePressure)
+        && request
+            .resource_pressure
+            .as_ref()
+            .and_then(|pressure| pressure.queued_run_count)
+            .unwrap_or(0)
+            > 0
+}
+
+fn budget_pressure_applies(request: &RuntimeTechnicalFitRequest) -> bool {
+    uses_factor(request, RuntimeTechnicalFitFactor::BudgetPressure)
+        && request.resource_pressure.as_ref().is_some_and(|pressure| {
+            pressure.estimated_peak_vram_mb.is_some()
+                || pressure.estimated_peak_ram_mb.is_some()
+                || pressure
+                    .loaded_runtime_count
+                    .zip(pressure.loaded_runtime_capacity)
+                    .is_some_and(|(count, capacity)| count >= capacity)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -765,6 +853,7 @@ mod tests {
         runtime_id: &str,
         backend_keys: Vec<&str>,
         status: RuntimeRegistryStatus,
+        active_reservation_count: usize,
     ) -> RuntimeRegistryRuntimeSnapshot {
         RuntimeRegistryRuntimeSnapshot {
             runtime_id: runtime_id.to_string(),
@@ -774,7 +863,7 @@ mod tests {
             runtime_instance_id: Some(format!("{runtime_id}-instance")),
             last_error: None,
             last_transition_at_ms: 123,
-            active_reservation_ids: Vec::new(),
+            active_reservation_ids: (0..active_reservation_count as u64).collect(),
             models: Vec::new(),
         }
     }
@@ -895,8 +984,13 @@ mod tests {
             runtime_snapshot: RuntimeRegistrySnapshot {
                 generated_at_ms: 123,
                 runtimes: vec![
-                    runtime_snapshot("runtime-a", vec!["llama_cpp"], RuntimeRegistryStatus::Busy),
-                    runtime_snapshot("runtime-b", vec!["ollama"], RuntimeRegistryStatus::Ready),
+                    runtime_snapshot(
+                        "runtime-a",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Busy,
+                        1,
+                    ),
+                    runtime_snapshot("runtime-b", vec!["ollama"], RuntimeRegistryStatus::Ready, 0),
                 ],
                 reservations: Vec::new(),
             },
@@ -959,8 +1053,18 @@ mod tests {
             runtime_snapshot: RuntimeRegistrySnapshot {
                 generated_at_ms: 123,
                 runtimes: vec![
-                    runtime_snapshot("runtime-b", vec!["llama_cpp"], RuntimeRegistryStatus::Ready),
-                    runtime_snapshot("runtime-a", vec!["llama_cpp"], RuntimeRegistryStatus::Ready),
+                    runtime_snapshot(
+                        "runtime-b",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Ready,
+                        0,
+                    ),
+                    runtime_snapshot(
+                        "runtime-a",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Ready,
+                        0,
+                    ),
                 ],
                 reservations: Vec::new(),
             },
@@ -1047,6 +1151,148 @@ mod tests {
         assert!(decision.reasons.iter().any(|reason| {
             reason.code == RuntimeTechnicalFitReasonCode::ConservativeFallback
                 && reason.candidate_id.as_deref() == Some("runtime-a")
+        }));
+    }
+
+    #[test]
+    fn selector_prefers_more_headroom_under_queue_pressure() {
+        let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+            runtime_snapshot: RuntimeRegistrySnapshot {
+                generated_at_ms: 123,
+                runtimes: vec![
+                    runtime_snapshot(
+                        "runtime-hot",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Ready,
+                        3,
+                    ),
+                    runtime_snapshot(
+                        "runtime-cool",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Ready,
+                        1,
+                    ),
+                ],
+                reservations: Vec::new(),
+            },
+            workflow_id: Some("workflow-a".to_string()),
+            required_model_ids: Vec::new(),
+            required_backend_keys: vec!["llama_cpp".to_string()],
+            required_extensions: Vec::new(),
+            required_context_window_tokens: None,
+            override_selection: None,
+            legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+            candidates: vec![
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-hot".to_string(),
+                    runtime_id: Some("runtime-hot".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: true,
+                },
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-cool".to_string(),
+                    runtime_id: Some("runtime-cool".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: true,
+                },
+            ],
+            resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
+                queued_run_count: Some(4),
+                loaded_runtime_count: Some(2),
+                loaded_runtime_capacity: Some(4),
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+            }),
+        });
+
+        assert_eq!(
+            decision.selected_candidate_id.as_deref(),
+            Some("runtime-cool")
+        );
+        assert!(decision.reasons.iter().any(|reason| {
+            reason.code == RuntimeTechnicalFitReasonCode::QueuePressure
+                && reason.candidate_id.as_deref() == Some("runtime-cool")
+        }));
+    }
+
+    #[test]
+    fn selector_prefers_more_headroom_under_budget_pressure() {
+        let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+            runtime_snapshot: RuntimeRegistrySnapshot {
+                generated_at_ms: 123,
+                runtimes: vec![
+                    runtime_snapshot(
+                        "runtime-tight",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Busy,
+                        2,
+                    ),
+                    runtime_snapshot(
+                        "runtime-roomy",
+                        vec!["llama_cpp"],
+                        RuntimeRegistryStatus::Busy,
+                        0,
+                    ),
+                ],
+                reservations: Vec::new(),
+            },
+            workflow_id: Some("workflow-a".to_string()),
+            required_model_ids: Vec::new(),
+            required_backend_keys: vec!["llama_cpp".to_string()],
+            required_extensions: Vec::new(),
+            required_context_window_tokens: None,
+            override_selection: None,
+            legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+            candidates: vec![
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-tight".to_string(),
+                    runtime_id: Some("runtime-tight".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: true,
+                },
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "runtime-roomy".to_string(),
+                    runtime_id: Some("runtime-roomy".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: true,
+                },
+            ],
+            resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
+                queued_run_count: Some(0),
+                loaded_runtime_count: Some(2),
+                loaded_runtime_capacity: Some(2),
+                estimated_peak_vram_mb: Some(4096),
+                estimated_peak_ram_mb: Some(8192),
+            }),
+        });
+
+        assert_eq!(
+            decision.selected_candidate_id.as_deref(),
+            Some("runtime-roomy")
+        );
+        assert!(decision.reasons.iter().any(|reason| {
+            reason.code == RuntimeTechnicalFitReasonCode::BudgetPressure
+                && reason.candidate_id.as_deref() == Some("runtime-roomy")
         }));
     }
 }

@@ -70,6 +70,10 @@ desktop app wiring.
   explicit override precedence, and live runtime snapshot facts so workflow and
   host layers do not drift on candidate ranking or conservative fallback
   behavior.
+- Technical-fit resource-pressure interpretation is also computed here so queue
+  depth, loaded-runtime saturation, and reservation headroom affect candidate
+  ordering through one backend-owned selector instead of adapter-local tie
+  breakers.
 - Reclaim sequencing is also computed here so hosts can ask whether an
   evictable runtime still needs a real producer stop or can be converged to
   `stopped` inside the registry without re-deriving that policy from raw

@@ -759,6 +759,10 @@ and local runtime state.
   assessment, exposes an additive `technical_fit_decision` field in preflight
   responses, and falls back to the legacy capability scan only when a host
   still returns no backend decision.
+- 2026-04-16: `pantograph-runtime-registry` now also consumes resource-pressure
+  input in that selector so queue depth, loaded-runtime saturation, and
+  reservation headroom participate in deterministic candidate ordering and
+  reason-code generation.
 
 **Tasks:**
 - [ ] Define Pantograph’s candidate-consumption contract and decision reason

@@ -320,16 +320,16 @@ refactored module boundaries.
 **Tasks:**
 - [x] Normalize candidate and override inputs at the boundary and convert them
       into trusted backend-owned technical-fit DTOs.
-- [ ] Implement deterministic selection using only approved technical factors:
+- [x] Implement deterministic selection using only approved technical factors:
       required context length, task/runtime requirements, current residency and
       reuse value, warmup cost, budget pressure, and workflow/session queue
       pressure.
-- [ ] Implement deterministic tie-breaking and stable reason-code generation.
-- [ ] Implement conservative fallback behavior when candidate data or runtime
+- [x] Implement deterministic tie-breaking and stable reason-code generation.
+- [x] Implement conservative fallback behavior when candidate data or runtime
       state is partial, stale, or unavailable.
-- [ ] Ensure selection consumes immutable runtime-registry snapshot input rather
+- [x] Ensure selection consumes immutable runtime-registry snapshot input rather
       than holding mutable registry state across async work.
-- [ ] Keep the selector reusable by both preflight and execution paths.
+- [x] Keep the selector reusable by both preflight and execution paths.
 
 **Verification:**
 - `cargo test -p pantograph-runtime-registry`
@@ -339,7 +339,7 @@ refactored module boundaries.
 - Contract review confirms reason payloads remain machine-consumable and
   verifiable
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 4: Integrate Workflow Service And Embedded Runtime
 
@@ -432,6 +432,10 @@ Update during implementation:
   override precedence, enriches candidate ranking with runtime-snapshot
   residency/warmup facts, and emits conservative fallback decisions when the
   registry lacks enough data for a stronger automatic selection.
+- 2026-04-16: Extended the runtime-registry selector to consume queue and
+  budget pressure from backend-owned resource-pressure input, use reservation
+  headroom as a deterministic pressure-sensitive tie break, and emit the
+  matching queue/budget reason codes from the shared selector contract.
 - 2026-04-16: Wired the embedded-runtime technical-fit bridge to call the
   backend runtime-registry selector and project the resulting decision back
   into workflow-service contracts instead of returning an unimplemented host
