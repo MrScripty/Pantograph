@@ -21,9 +21,11 @@ The accurate status is:
 - runtime-registry Milestone 4, Technical-Fit Selection Integration:
   completed
 - runtime-registry Milestone 5, Workflow And Adapter Integration: in progress
+  in `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 - runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
   Safety: in progress
 - current next milestone: Milestone 5, Workflow And Adapter Integration
+  tracked in `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 - stop rule remains active for later milestones: runtime-registry work must
   preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
@@ -800,6 +802,9 @@ and local runtime state.
 
 **Goal:** Integrate registry-driven runtime selection without reintroducing
 business logic into adapters.
+
+Detailed source of truth:
+`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 
 **Tasks:**
 - [ ] Wire registry decisions through Tauri workflow host/task-execution paths

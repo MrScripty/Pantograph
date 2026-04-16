@@ -20,6 +20,7 @@ owner of that policy itself.
 | `validation.rs` | Legacy local validation helpers retained during migration; core validation is authoritative for new editing surfaces. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
+| `headless_diagnostics.rs` | Backend-owned diagnostics projection and trace/scheduler snapshot adaptation for headless workflow transport. |
 
 ## Problem
 Pantograph’s standalone GUI still needs a native bridge, but graph editing can
@@ -52,8 +53,10 @@ or candidate lookup still exists, `effective_definition.rs` merges registry
 metadata with additive per-node `inputs`/`outputs` overlays so dynamic
 expand-setting ports behave the same way as the core service. Workflow
 diagnostics projections now adapt backend-owned `WorkflowTraceStore` snapshots
-from `pantograph-workflow-service`; Tauri retains only projection-only overlays
-such as retained event history, progress text, and runtime/scheduler snapshots.
+from `pantograph-workflow-service`; `headless_diagnostics.rs` owns that
+projection glue so `headless_workflow_commands.rs` stays focused on request
+orchestration. Tauri retains only projection-only overlays such as retained
+event history, progress text, and runtime/scheduler snapshots.
 When the planned `RuntimeRegistry` is introduced, this directory should request
 registry-backed runtime operations through injected host state while keeping
 policy ownership outside the Tauri adapter boundary. Execution-path runtime

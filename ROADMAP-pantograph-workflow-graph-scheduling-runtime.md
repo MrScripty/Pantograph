@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Current Implementation Snapshot
 
@@ -19,6 +19,13 @@ implementation progress in the runtime and diagnostics layers.
 7. Runtime adapter unification: In progress
 
 ## Current Source-of-Truth Summary
+
+Runtime adapter unification and workflow-adapter hardening now have a dedicated
+Milestone 5 implementation plan in
+`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`.
+The roadmap remains the cross-target summary, while milestone-level workflow
+adapter sequencing and standards constraints are tracked in that dedicated
+plan.
 
 ### Completed groundwork already in the repo
 

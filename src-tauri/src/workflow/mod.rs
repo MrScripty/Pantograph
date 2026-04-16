@@ -30,6 +30,7 @@ pub mod event_adapter;
 pub mod events;
 pub mod execution_manager;
 pub mod groups;
+mod headless_diagnostics;
 pub mod headless_workflow_commands;
 pub mod model_dependencies;
 pub mod model_dependency_commands;
