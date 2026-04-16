@@ -1,7 +1,7 @@
 //! LLM server lifecycle management commands.
 
 use super::config::list_devices;
-use super::shared::{sync_runtime_registry_from_gateway, SharedAppConfig};
+use super::shared::{synced_server_mode_info, SharedAppConfig};
 use crate::agent::rag::SharedRagManager;
 use crate::config::{EmbeddingMemoryMode, ServerModeInfo};
 use crate::llm::startup::{
@@ -11,14 +11,6 @@ use crate::llm::startup::{
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use tauri::{command, AppHandle, State};
-
-async fn synced_server_mode_info(
-    gateway: &SharedGateway,
-    runtime_registry: &SharedRuntimeRegistry,
-) -> ServerModeInfo {
-    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
-    gateway.mode_info().await
-}
 
 #[command]
 pub async fn connect_to_server(
@@ -230,7 +222,7 @@ mod tests {
     use pantograph_runtime_registry::{RuntimeRegistry, RuntimeRegistryStatus};
     use tokio::sync::mpsc;
 
-    use super::synced_server_mode_info;
+    use crate::llm::commands::shared::synced_server_mode_info;
     use crate::llm::gateway::InferenceGateway;
     use crate::llm::startup::validate_external_server_url;
     use crate::llm::{SharedGateway, SharedRuntimeRegistry};
