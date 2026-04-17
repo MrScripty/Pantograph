@@ -892,6 +892,152 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
 }
 
 #[test]
+fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
+    let store = WorkflowDiagnosticsStore::default();
+
+    store.record_scheduler_snapshot(
+        Some("wf-1".to_string()),
+        "exec-1".to_string(),
+        "session-1".to_string(),
+        1_000,
+        Some(pantograph_workflow_service::WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-1".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: pantograph_workflow_service::WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 1,
+        }),
+        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+            queue_id: "queue-1".to_string(),
+            run_id: Some("exec-1".to_string()),
+            enqueued_at_ms: Some(900),
+            dequeued_at_ms: Some(930),
+            priority: 1,
+            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+        }],
+        None,
+    );
+    store.record_runtime_snapshot(
+        "wf-1".to_string(),
+        "exec-1".to_string(),
+        1_010,
+        None,
+        pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+            runtime_id: Some("llama.cpp".to_string()),
+            observed_runtime_ids: vec!["llama.cpp".to_string()],
+            runtime_instance_id: Some("llama-cpp-1".to_string()),
+            model_target: Some("/models/first.gguf".to_string()),
+            warmup_started_at_ms: Some(880),
+            warmup_completed_at_ms: Some(890),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+        },
+        Some("/models/first.gguf".to_string()),
+        None,
+        Some(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_instance_id: Some("llama-cpp-1".to_string()),
+            warmup_started_at_ms: Some(880),
+            warmup_completed_at_ms: Some(890),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        }),
+        None,
+        None,
+    );
+
+    store.record_scheduler_snapshot(
+        Some("wf-1".to_string()),
+        "exec-1".to_string(),
+        "session-1".to_string(),
+        1_100,
+        Some(pantograph_workflow_service::WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-1".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: pantograph_workflow_service::WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 1,
+        }),
+        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+            queue_id: "queue-1".to_string(),
+            run_id: Some("exec-1".to_string()),
+            enqueued_at_ms: Some(900),
+            dequeued_at_ms: Some(940),
+            priority: 1,
+            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+        }],
+        None,
+    );
+
+    store.record_runtime_snapshot(
+        "wf-1".to_string(),
+        "exec-1".to_string(),
+        1_120,
+        None,
+        pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+            runtime_id: Some("llama.cpp".to_string()),
+            observed_runtime_ids: vec!["llama.cpp".to_string(), "llama_cpp".to_string()],
+            runtime_instance_id: Some("llama-cpp-1".to_string()),
+            model_target: Some("/models/replayed.gguf".to_string()),
+            warmup_started_at_ms: Some(880),
+            warmup_completed_at_ms: Some(890),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
+        },
+        Some("/models/replayed.gguf".to_string()),
+        None,
+        Some(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_instance_id: Some("llama-cpp-1".to_string()),
+            warmup_started_at_ms: Some(880),
+            warmup_completed_at_ms: Some(890),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(true),
+            lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            active: true,
+            last_error: None,
+        }),
+        None,
+        None,
+    );
+
+    let trace_snapshot = store
+        .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
+            execution_id: Some("exec-1".to_string()),
+            session_id: None,
+            workflow_id: None,
+            include_completed: Some(true),
+        })
+        .expect("trace snapshot");
+
+    assert_eq!(trace_snapshot.traces.len(), 1);
+    let trace = &trace_snapshot.traces[0];
+    assert_eq!(trace.execution_id, "exec-1");
+    assert_eq!(trace.session_id.as_deref(), Some("session-1"));
+    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+    assert_eq!(trace.queue.dequeued_at_ms, Some(930));
+    assert_eq!(
+        trace.runtime.observed_runtime_ids,
+        vec!["llama.cpp".to_string(), "llama_cpp".to_string()]
+    );
+    assert_eq!(
+        trace.runtime.model_target.as_deref(),
+        Some("/models/replayed.gguf")
+    );
+}
+
+#[test]
 fn cancelled_workflow_event_maps_to_cancelled_trace_status() {
     let store = WorkflowDiagnosticsStore::default();
 

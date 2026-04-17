@@ -203,6 +203,10 @@ let snapshot = workflow_service
   session id, adapters must preserve that backend-owned `session_id` on trace
   summaries and diagnostics projections rather than inferring the relationship
   in TypeScript.
+- After restart, restore, cleanup, or replay-shaped transitions, this
+  directory must resynchronize diagnostics and runtime-registry views from the
+  backend-owned trace store and runtime-registry snapshot rather than keeping
+  adapter-local recovery bookkeeping as a second source of truth.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

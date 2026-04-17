@@ -152,6 +152,10 @@ Primary contract types:
   transition, this crate resets attempt-scoped trace state before recording the
   new attempt so retry or replay flows do not leak stale node, queue, or
   runtime facts into the restarted run.
+- When backend scheduler or runtime snapshots replay for the same execution id
+  during recovery or restore, this crate updates the canonical trace in place
+  instead of materializing duplicate runs, leaving adapters free to reread one
+  backend-owned execution record after reconciliation.
 - Canonical trace summaries can now represent explicit cancelled run and node
   states when upstream adapters emit a cancellation outcome instead of a
   generic failure.

@@ -429,15 +429,15 @@ aligned with the same backend-owned contracts.
 coverage, and accurate source-of-truth updates.
 
 **Tasks:**
-- [ ] Add replay/recovery/idempotency verification for diagnostics/trace state
+- [x] Add replay/recovery/idempotency verification for diagnostics/trace state
       where session restart, cleanup, or runtime recovery overlaps with
       retained workflow traces.
-- [ ] Update `src-tauri/src/workflow/README.md`,
+- [x] Update `src-tauri/src/workflow/README.md`,
       `crates/pantograph-workflow-service/src/README.md`, and any newly created
       module READMEs to reflect final Milestone 5 ownership boundaries.
-- [ ] Update the umbrella runtime-registry plan and roadmap wording so
+- [x] Update the umbrella runtime-registry plan and roadmap wording so
       completed/in-progress milestone status remains accurate.
-- [ ] Validate any checked-in debug fixtures or persisted snapshot examples with
+- [x] Validate any checked-in debug fixtures or persisted snapshot examples with
       repo tooling if Milestone 5 introduces them.
 
 **Verification:**
@@ -446,7 +446,7 @@ coverage, and accurate source-of-truth updates.
 - Replay/recovery checks required by `TESTING-STANDARDS.md`
 - Final compile/test pass for touched crates and adapter boundaries
 
-**Status:** Not started
+**Status:** Completed
 
 ## Execution Notes
 
@@ -573,6 +573,13 @@ Update during implementation:
   it now also centralizes non-2xx workflow error-envelope parsing in one
   transport helper and documents that HTTP failures must translate through
   backend-owned workflow error envelopes rather than adapter-local taxonomies.
+- Milestone 5 close-out now includes explicit diagnostics-store replay
+  idempotency coverage proving that repeated backend scheduler/runtime snapshot
+  reconciliation updates a single canonical execution trace in place, plus
+  final README and source-of-truth updates that lock restart/restore ownership
+  to backend trace-store and runtime-registry state instead of Tauri-local
+  bookkeeping. No new persisted debug fixtures were introduced during this
+  milestone, so no additional fixture validation hook was required.
 
 ### Deviations
 
