@@ -392,7 +392,7 @@ impl WorkflowEvent {
     }
 }
 
-pub(super) fn is_cancelled_error_message(error: &str) -> bool {
+pub(crate) fn is_cancelled_error_message(error: &str) -> bool {
     let normalized = error.trim().to_ascii_lowercase();
     normalized.contains("cancelled") || normalized.contains("canceled")
 }

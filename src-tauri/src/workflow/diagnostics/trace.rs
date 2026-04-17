@@ -8,6 +8,7 @@ use super::types::{
     diagnostics_node_status, diagnostics_run_status, DiagnosticsNodeTrace, DiagnosticsRunTrace,
     DiagnosticsTraceRuntimeMetrics,
 };
+use crate::workflow::events::is_cancelled_error_message;
 use crate::workflow::events::WorkflowEvent;
 
 pub(crate) fn graph_trace_context(graph: &WorkflowGraph) -> WorkflowTraceGraphContext {
@@ -52,11 +53,21 @@ pub(crate) fn node_engine_workflow_trace_event(
             execution_id,
             error,
             ..
-        } => WorkflowTraceEvent::RunFailed {
-            execution_id: execution_id.clone(),
-            workflow_id: Some(workflow_id.clone()),
-            error: error.clone(),
-        },
+        } => {
+            if is_cancelled_error_message(error) {
+                WorkflowTraceEvent::RunCancelled {
+                    execution_id: execution_id.clone(),
+                    workflow_id: Some(workflow_id.clone()),
+                    error: error.clone(),
+                }
+            } else {
+                WorkflowTraceEvent::RunFailed {
+                    execution_id: execution_id.clone(),
+                    workflow_id: Some(workflow_id.clone()),
+                    error: error.clone(),
+                }
+            }
+        }
         node_engine::WorkflowEvent::WaitingForInput {
             workflow_id,
             execution_id,

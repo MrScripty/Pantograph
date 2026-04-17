@@ -16,6 +16,8 @@ owner of that policy itself.
 | `workflow_execution_tauri_commands.rs` | Tauri execution/edit-session command entrypoints that forward to focused execution and graph-session helpers. |
 | `workflow_execution_commands.rs` | Thin execution command-group facade that reuses focused runtime and edit-session helpers. |
 | `workflow_execution_runtime.rs` | Desktop execution orchestration and diagnostics-emission helpers for edit-session workflow runs. |
+| `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
+| `event_adapter/` | Focused translation and diagnostics-bridge helpers behind the stable event-adapter facade. |
 | `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
 | `connection_intent.rs` | Legacy local connection-intent implementation retained during migration; core now owns the canonical policy. |
 | `effective_definition.rs` | Applies additive per-node `data.definition` overlays before legacy validation or candidate lookup reads port metadata. |
@@ -70,6 +72,10 @@ text, and runtime/scheduler snapshots.
 construct `pantograph-embedded-runtime` instances for headless workflow,
 session, and orchestration entry points, keeping that host wiring out of
 individual command files.
+`event_adapter/` now splits pure node-engine-to-Tauri event translation from
+diagnostics-store bridge logic so event-contract completion work does not grow
+inside one oversized adapter file or blur the transport-versus-backend
+ownership boundary.
 `workflow_execution_tauri_commands.rs` now owns the Tauri-facing execution
 entrypoints, while `workflow_execution_commands.rs` remains a thin command-
 group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`

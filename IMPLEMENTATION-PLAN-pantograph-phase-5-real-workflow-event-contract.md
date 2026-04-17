@@ -299,7 +299,7 @@ logic.
 - [ ] Extract `node-engine` workflow event vocabulary and helper logic from the
       current oversized `events.rs` and `engine.rs` hot spots into focused
       modules without changing the public facade.
-- [ ] Extract Tauri event translation and diagnostics-bridge helpers from the
+- [x] Extract Tauri event translation and diagnostics-bridge helpers from the
       current oversized `src-tauri/src/workflow/event_adapter.rs`.
 - [ ] Extract GUI execution-event handling from the oversized
       `createWorkflowStores.ts` and `WorkflowToolbar.svelte` paths into
@@ -427,6 +427,12 @@ Update during implementation:
   `crates/node-engine/src/engine/`, moving graph-mutation and incremental-run
   event helpers behind focused internal modules so later workflow-event
   completion work no longer needs to deepen `engine.rs` directly.
+- 2026-04-17: Third Milestone 1 decomposition slice landed in
+  `src-tauri/src/workflow/event_adapter/`, separating pure node-engine event
+  translation from diagnostics-store bridge logic while keeping the stable
+  `workflow::event_adapter` facade intact. The same slice also aligned
+  cancellation-shaped node-engine failures with backend trace projection so the
+  translated `Cancelled` event and diagnostics status remain consistent.
 
 ## Commit Cadence Notes
 
