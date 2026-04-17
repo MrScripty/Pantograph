@@ -4006,6 +4006,7 @@ mod tests {
     #[tokio::test]
     async fn execute_edit_session_graph_reconciles_registry_after_restore() {
         let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
         let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
 
         let pumas_api = Arc::new(
@@ -4117,6 +4118,163 @@ mod tests {
             Some(restored_runtime_instance_id.as_str())
         );
         assert_eq!(registry_runtime.status, RuntimeRegistryStatus::Ready);
+    }
+
+    #[tokio::test]
+    async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_diagnostics_ready()
+    {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+        let (model_id, embedding_model_path) = write_imported_embedding_model(temp.path());
+
+        let pumas_api = Arc::new(
+            pumas_library::PumasApi::builder(temp.path())
+                .build()
+                .await
+                .expect("build pumas api"),
+        );
+        pumas_api
+            .rebuild_model_index()
+            .await
+            .expect("rebuild model index");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let inference_model_path = temp.path().join("main.gguf");
+        std::fs::write(&inference_model_path, b"gguf").expect("write inference model");
+        let mmproj_path = temp.path().join("main.mmproj");
+        std::fs::write(&mmproj_path, b"mmproj").expect("write mmproj");
+
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        ));
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&inference::BackendConfig {
+                model_path: Some(inference_model_path),
+                mmproj_path: Some(mmproj_path),
+                ..inference::BackendConfig::default()
+            })
+            .await
+            .expect("gateway should start in inference mode");
+
+        let host_runtime_mode_info =
+            HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+        let extensions = Arc::new(RwLock::new(ExecutorExtensions::new()));
+        extensions
+            .write()
+            .await
+            .set(node_engine::extension_keys::PUMAS_API, pumas_api.clone());
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            gateway.clone(),
+            extensions,
+            Arc::new(WorkflowService::with_capacity_limits(4, 1)),
+            None,
+            Some(runtime_registry.clone()),
+            Some(host_runtime_mode_info),
+        )
+        .await;
+
+        let graph = edit_session_embedding_graph(&model_id);
+        let edit_session = runtime
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+            })
+            .await
+            .expect("create edit session");
+
+        let outcome = runtime
+            .execute_edit_session_graph(
+                &edit_session.session_id,
+                &graph,
+                inference::EmbeddingStartRequest {
+                    gguf_model_path: Some(embedding_model_path),
+                    ..inference::EmbeddingStartRequest::default()
+                },
+                Arc::new(node_engine::NullEventSink),
+            )
+            .await
+            .expect("edit-session execution should restore runtime even when node demand fails");
+        assert!(outcome.error.is_some());
+
+        let restored_runtime_instance_id = gateway
+            .mode_info()
+            .await
+            .active_runtime
+            .as_ref()
+            .and_then(|snapshot| snapshot.runtime_instance_id.clone())
+            .expect("restored runtime instance id");
+        let restored_runtime = runtime_registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("restored runtime should remain registered");
+        assert_eq!(restored_runtime.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(
+            restored_runtime.runtime_instance_id.as_deref(),
+            Some(restored_runtime_instance_id.as_str())
+        );
+
+        let loaded = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create loaded session");
+
+        let diagnostics_provider = EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
+            gateway.clone(),
+            runtime_registry.clone(),
+        );
+        let diagnostics = diagnostics_provider
+            .scheduler_runtime_registry_diagnostics(&WorkflowSchedulerRuntimeDiagnosticsRequest {
+                session_id: "queued-session".to_string(),
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: false,
+                runtime_loaded: false,
+                next_admission_queue_id: Some("queue-after-restore".to_string()),
+                reclaim_candidates: vec![WorkflowSessionRuntimeUnloadCandidate {
+                    session_id: loaded.session_id.clone(),
+                    workflow_id: "runtime-text".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    required_backends: Vec::new(),
+                    required_models: Vec::new(),
+                    keep_alive: true,
+                    access_tick: 1,
+                    run_count: 0,
+                }],
+            })
+            .await
+            .expect("scheduler diagnostics provider should succeed")
+            .expect("runtime registry diagnostics should be present");
+
+        assert_eq!(
+            diagnostics,
+            WorkflowSchedulerRuntimeRegistryDiagnostics {
+                target_runtime_id: Some("llama_cpp".to_string()),
+                reclaim_candidate_session_id: Some(loaded.session_id),
+                reclaim_candidate_runtime_id: Some("llama_cpp".to_string()),
+                next_warmup_decision: Some(
+                    WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime,
+                ),
+                next_warmup_reason: Some(WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady),
+            }
+        );
     }
 
     #[tokio::test]

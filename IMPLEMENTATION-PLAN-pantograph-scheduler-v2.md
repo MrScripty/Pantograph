@@ -613,6 +613,10 @@ and source-of-truth alignment.
   queued scheduler work.
 - Extended that cleanup recovery coverage to the background stale-session
   worker so autonomous cleanup preserves queued scheduler work as well.
+- Added hosted embedded-runtime recovery coverage proving that, after an
+  embedding workflow restores the inference runtime, the backend-owned
+  scheduler runtime-registry diagnostics provider still reports reclaim and
+  `reuse_loaded_runtime` facts for the next admission request.
 
 **Status:** In progress
 
