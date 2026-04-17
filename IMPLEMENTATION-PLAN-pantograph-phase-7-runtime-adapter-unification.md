@@ -531,6 +531,10 @@ Update during implementation:
   decisions into a backend-owned recovery attempt plan so Tauri recovery loops
   only provide host port-availability facts instead of branching on reconnect
   policy locally.
+- 2026-04-17: Extracted runtime-registry sync, snapshot, reclaim, stop-all, and
+  restore orchestration into a dedicated backend lifecycle module so
+  `runtime_registry.rs` can stay focused on observation translation and
+  execution-path reconciliation while Phase 7 continues.
 
 ## Commit Cadence Notes
 
