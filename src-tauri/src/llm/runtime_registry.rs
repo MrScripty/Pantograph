@@ -15,6 +15,7 @@ pub use pantograph_embedded_runtime::runtime_registry::{
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
 };
+use pantograph_embedded_runtime::workflow_runtime::WorkflowExecutionDiagnosticsController;
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
     RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError, SharedRuntimeRegistry,
@@ -49,6 +50,19 @@ impl HostRuntimeRegistryLifecycleController for crate::llm::gateway::InferenceGa
         restore_config: Option<inference::BackendConfig>,
     ) -> Result<(), inference::GatewayError> {
         self.restore_inference_runtime(restore_config).await
+    }
+}
+
+#[async_trait]
+impl WorkflowExecutionDiagnosticsController for crate::llm::gateway::InferenceGateway {
+    async fn active_runtime_lifecycle_snapshot(&self) -> inference::RuntimeLifecycleSnapshot {
+        self.runtime_lifecycle_snapshot().await
+    }
+
+    async fn embedding_runtime_lifecycle_snapshot(
+        &self,
+    ) -> Option<inference::RuntimeLifecycleSnapshot> {
+        self.embedding_runtime_lifecycle_snapshot().await
     }
 }
 

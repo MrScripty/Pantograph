@@ -6,7 +6,7 @@ use crate::agent::rag::SharedRagManager;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
-use pantograph_embedded_runtime::workflow_runtime::build_workflow_execution_diagnostics_snapshot;
+use pantograph_embedded_runtime::workflow_runtime::build_workflow_execution_diagnostics_snapshot_with_registry_sync;
 pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
@@ -63,12 +63,6 @@ async fn emit_diagnostics_snapshots(
     };
 
     let captured_at_ms = unix_timestamp_ms();
-    let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
-    let gateway_mode_info = pantograph_embedded_runtime::HostRuntimeModeSnapshot::from_mode_info(
-        &gateway.mode_info().await,
-    );
-    let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-
     let runtime = super::headless_runtime::build_runtime(
         app,
         gateway,
@@ -104,7 +98,8 @@ async fn emit_diagnostics_snapshots(
         Err(error) => (None, Some(error)),
     };
 
-    let snapshot = build_workflow_execution_diagnostics_snapshot(
+    let snapshot = build_workflow_execution_diagnostics_snapshot_with_registry_sync(
+        gateway.as_ref(),
         Some(runtime_registry.as_ref()),
         &scheduler_snapshot,
         captured_at_ms,
@@ -112,11 +107,9 @@ async fn emit_diagnostics_snapshots(
         runtime_error,
         trace_runtime_metrics_override,
         runtime_snapshot_override.as_ref(),
-        &gateway_snapshot,
-        live_embedding_runtime_snapshot.as_ref(),
-        &gateway_mode_info,
         runtime_model_target_override.as_deref(),
-    );
+    )
+    .await;
 
     let scheduler_event = WorkflowEvent::scheduler_snapshot(
         snapshot.scheduler.workflow_id,

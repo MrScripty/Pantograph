@@ -405,16 +405,16 @@ dedicated embedding, and execution-observed runtime producers.
 non-gateway producer paths.
 
 **Tasks:**
-- [ ] Move remaining producer observation translation and post-restore
+- [x] Move remaining producer observation translation and post-restore
       reconciliation rules into backend-owned runtime helpers where Tauri still
       owns too much sequencing.
-- [ ] Ensure execution-path runtime observations preserve producer identity,
+- [x] Ensure execution-path runtime observations preserve producer identity,
       unhealthy state, and runtime-instance matching across restore/recovery
       transitions.
-- [ ] Close remaining direct-host or workflow-execution paths that still update
+- [x] Close remaining direct-host or workflow-execution paths that still update
       registry state through adapter-local logic instead of the shared backend
       registry boundary.
-- [ ] Add deterministic tests for restore, reclaim, recovery restart, and
+- [x] Add deterministic tests for restore, reclaim, recovery restart, and
       overlapping execution-observation scenarios that previously differed by
       producer family.
 
@@ -423,7 +423,7 @@ non-gateway producer paths.
   recovery sequencing
 - `cargo check` for all touched crates and Tauri transport modules
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 5: Documentation, Acceptance, And Source-Of-Truth Reconciliation
 
@@ -590,6 +590,10 @@ Update during implementation:
 - 2026-04-17: Added Tauri adapter regressions for the shared post-transition
   registry helper so successful and failed host transitions both keep the
   runtime registry aligned at the wrapper boundary.
+- 2026-04-17: Continued Milestone 4 by moving workflow-execution diagnostics
+  sync-before-snapshot sequencing behind a shared backend helper so
+  `workflow_execution_runtime.rs` no longer owns a separate registry-refresh
+  order before execution snapshot projection.
 
 ## Commit Cadence Notes
 

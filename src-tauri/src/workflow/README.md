@@ -87,6 +87,10 @@ helpers in `crates/pantograph-embedded-runtime`, not by local Tauri sequencing.
 Stored diagnostics-runtime replay and runtime-event projection sequencing
 should likewise stay in backend helpers so the Tauri diagnostics transport
 remains a thin caller.
+Workflow execution diagnostics emission must likewise route through a backend
+helper that synchronizes the shared runtime registry before projecting the
+execution snapshot, so `workflow_execution_runtime.rs` does not own a second
+sync-before-snapshot sequence.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.

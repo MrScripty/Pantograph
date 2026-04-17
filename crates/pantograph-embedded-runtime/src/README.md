@@ -171,6 +171,9 @@ embedded-runtime crate.
 - Diagnostics-path sync-before-projection sequencing must stay in backend Rust
   so headless workflow adapters do not own the order in which gateway-backed
   registry sync and runtime-event projection occur.
+- Workflow-execution diagnostics sync-before-snapshot sequencing must stay in
+  backend Rust so interactive execution adapters do not own the order in which
+  gateway-backed registry sync and execution snapshot projection occur.
 - Post-transition runtime-registry reconciliation must stay in backend
   lifecycle helpers so recovery and other host transitions do not drift on
   whether failed or successful transitions still publish the latest registry
