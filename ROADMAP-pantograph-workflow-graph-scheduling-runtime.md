@@ -8,39 +8,51 @@ Last updated: 2026-04-17
 ## Current Implementation Snapshot
 
 This roadmap is no longer purely proposed work. Pantograph already has active
-implementation progress in the runtime and diagnostics layers.
+implementation progress across the runtime, diagnostics, scheduler, and trace
+layers.
 
-1. Metrics/trace spine: In progress
-2. Parallel demand execution: Not started
+1. Metrics/trace spine: Complete
+2. Parallel demand execution: In progress
 3. KV cache implementation: Not started
 4. Scheduler V2: Complete
-5. Real workflow event contract: Partial prerequisite groundwork only
+5. Real workflow event contract: In progress
 6. Incremental graph execution: Not started
 7. Runtime adapter unification: Complete
 
 ## Current Source-of-Truth Summary
 
-Runtime adapter unification and workflow-adapter hardening now have a dedicated
-Milestone 5 implementation plan in
+Metrics/trace spine now has a reconciled dedicated implementation plan in
+`IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`, and that plan now
+marks Milestones 1 through 6 complete while keeping the remaining follow-up
+hardening work explicit. Runtime adapter unification and workflow-adapter
+hardening now have a dedicated Milestone 5 implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`,
 and the diagnostics/documentation/rollout-safety close-out now has a dedicated
 Milestone 6 implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
 Scheduler V2 planning now also has a dedicated implementation plan in
-`IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`. The roadmap remains the
-cross-target summary, while milestone-level runtime-adapter sequencing,
-Scheduler V2 execution constraints, and close-out details are tracked in those
-dedicated plans. Milestone 5 transport hardening, binding review,
-recovery/idempotency verification, source-of-truth close-out, and the
-Milestone 6 diagnostics, documentation, and rollout-safety reconciliation are
-complete. Scheduler V2 milestone 5 close-out is now also complete: transport
-projection, cleanup recovery, restore/reclaim recovery, and source-of-truth
-reconciliation are landed, and canonical scheduler snapshots now expose
-backend-owned earliest-known admission ETA bounds plus fairness-driven queue-
-head bypass visibility. Phase 7 runtime-adapter unification is now also
-complete: backend Rust owns producer health, capability, reconciliation, and
-workflow-execution diagnostics sequencing across gateway, dedicated-embedding,
-and execution-observed runtime paths, and the roadmap/plan/README set is
+`IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`.
+Parallel demand execution now has a dedicated standards-reviewed plan in
+`IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`, and
+real workflow event contract completion now has a dedicated
+standards-reviewed plan in
+`IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`.
+The roadmap remains the cross-target summary, while milestone-level
+metrics/trace follow-up work, runtime-adapter sequencing, Scheduler V2
+execution constraints, workflow-event completion sequencing, and parallel
+execution refactor details are tracked in those dedicated plans.
+
+Milestone 5 transport hardening, binding review, recovery/idempotency
+verification, source-of-truth close-out, and the Milestone 6 diagnostics,
+documentation, and rollout-safety reconciliation are complete. Scheduler V2
+milestone 5 close-out is now also complete: transport projection, cleanup
+recovery, restore/reclaim recovery, and source-of-truth reconciliation are
+landed, and canonical scheduler snapshots now expose backend-owned
+earliest-known admission ETA bounds plus fairness-driven queue-head bypass
+visibility. Phase 7 runtime-adapter unification is now also complete: backend
+Rust owns producer health, capability, reconciliation, and workflow-execution
+diagnostics sequencing across gateway, dedicated-embedding, and
+execution-observed runtime paths, and the roadmap/plan/README set is
 reconciled as the final source of truth.
 
 ### Completed groundwork already in the repo
@@ -169,19 +181,22 @@ reconciled as the final source of truth.
 
 ### Active implementation stream
 
-- Runtime adapter unification and runtime producer convergence
-- Metrics/trace hardening for runtime lifecycle visibility
-- Contract normalization across workflow service, Tauri diagnostics, embedded
-  runtime wiring, and gateway lifecycle reporting
-- Scheduler V2 close-out and remaining runtime-policy work that build on the
-  completed runtime-registry and diagnostics/documentation boundaries
+- Metrics/trace follow-up hardening for the remaining runtime producers and
+  diagnostics command paths
+- Workflow event contract completion planning and backend-owned transport
+  parity preparation
+- Parallel demand execution planning and `node-engine` decomposition prep
+- Future incremental execution work that will build on the completed
+  metrics/trace, scheduler, and runtime-registry boundaries
 
 ### Next gate before more implementation breadth
 
 - Keep roadmap/plan status aligned with implementation reality
-- Build scheduler-v2 and later runtime-policy work on the now-frozen
-  backend-owned runtime-registry boundary instead of reopening completed
-  adapter-boundary refactors
+- Finish the dedicated Phase 5 and Phase 2 implementation plans before
+  widening execution or graph-surface changes
+- Build later workflow, scheduler, and incremental-execution work on the
+  now-frozen backend-owned runtime-registry and metrics/trace boundaries
+  instead of reopening completed adapter-boundary refactors
 
 ## Objective
 
@@ -290,6 +305,10 @@ cross-cutting delivery work rather than an eighth roadmap point.
 **Goal:** Make execution, queueing, and runtime behavior measurable before
 adding more scheduling or graph complexity.
 
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+
 **Progress to date:**
 
 - Backend-owned diagnostics projection exists in Rust rather than TypeScript.
@@ -307,16 +326,24 @@ adding more scheduling or graph complexity.
 - Runtime and capability contracts are materially more machine-consumable than
   at roadmap creation time.
 
-**Still missing:**
+**Follow-up hardening still open:**
 
-- Full run-level and per-node metric coverage across all execution paths
-- Complete queue-state, residency, and eviction inspection surfaces
-- Full event-contract parity for waiting, graph-modified, and incremental-run
-  semantics
+- Converge the remaining runtime hosts on the same authoritative
+  `WorkflowTraceRuntimeMetrics` producer contract.
+- Extend adapter-boundary diagnostics and snapshot-path acceptance coverage for
+  the remaining command and transport surfaces.
+- Replace the remaining centralized cancellation-message classifier once every
+  producer can emit explicit machine-readable cancellation outcomes.
+- Decide whether deeper metrics inspection should stay in diagnostics or move
+  into a dedicated trace/metrics module.
 
 ### Phase 2: Parallel Demand Execution
 
-**Status:** Not started
+**Status:** In progress
+
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`
 
 **Goal:** Improve workflow execution latency for independent branches and
 prepare the engine for metric-informed scheduling.
@@ -415,7 +442,11 @@ session scheduler that makes better admission and reuse decisions.
 
 ### Phase 5: Real Workflow Event Contract
 
-**Status:** Partial prerequisite groundwork only
+**Status:** In progress
+
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 
 **Goal:** Stop degrading engine semantics at the adapter boundary and give the
 frontend and headless hosts a stable event language for interactive and

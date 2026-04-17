@@ -15,7 +15,8 @@ and keeps execution dispatch aligned with the contracts published by
 | `descriptor.rs` | Node descriptor contracts consumed by the graph and runtime layers. |
 | `engine.rs` | Workflow engine entry points and orchestration helpers. |
 | `error.rs` | Shared engine and execution error types. |
-| `events.rs` | Runtime event contracts emitted during workflow execution. |
+| `events.rs` | Stable facade for workflow event contracts and sink implementations. |
+| `events/` | Focused event contract, sink, and test modules behind the stable facade. |
 | `extensions.rs` | Extension points used to add engine behavior without mutating the core API. |
 | `groups.rs` | Group/node graph helpers. |
 | `model_dependencies.rs` | Model dependency typing used by execution preflight and runtime selection. |
