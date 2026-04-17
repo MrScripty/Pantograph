@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-16
+Last updated: 2026-04-17
 
 ## Current Implementation Snapshot
 
@@ -33,7 +33,10 @@ Scheduler V2 execution constraints, and close-out details are tracked in those
 dedicated plans. Milestone 5 transport hardening, binding review,
 recovery/idempotency verification, source-of-truth close-out, and the
 Milestone 6 diagnostics, documentation, and rollout-safety reconciliation are
-complete.
+complete. Scheduler V2 milestone 5 close-out is now also complete: transport
+projection, cleanup recovery, restore/reclaim recovery, and source-of-truth
+reconciliation are landed, while later scheduler phases remain focused on
+policy breadth such as ETA, richer error surfaces, and final fairness work.
 
 ### Completed groundwork already in the repo
 
@@ -151,6 +154,13 @@ complete.
   now lives in `crates/pantograph-workflow-service`, and a bounded backend-
   owned cleanup worker now invokes that contract on a timer while Tauri only
   starts and stops the worker at the composition root.
+- Headless scheduler diagnostics transport now preserves additive backend-owned
+  `runtime_registry` facts instead of rebuilding or collapsing runtime
+  admission posture in Tauri.
+- Scheduler recovery coverage now spans direct stale cleanup, the background
+  cleanup worker, restore-after-embedding transitions, and keep-alive-driven
+  reclaim/unload transitions through the backend-owned diagnostics-provider
+  boundary.
 
 ### Active implementation stream
 
@@ -158,8 +168,8 @@ complete.
 - Metrics/trace hardening for runtime lifecycle visibility
 - Contract normalization across workflow service, Tauri diagnostics, embedded
   runtime wiring, and gateway lifecycle reporting
-- Scheduler and later runtime-policy work that builds on the completed
-  runtime-registry and Milestone 6 close-out boundaries
+- Scheduler V2 close-out and remaining runtime-policy work that build on the
+  completed runtime-registry and diagnostics/documentation boundaries
 
 ### Next gate before more implementation breadth
 
@@ -354,6 +364,12 @@ session scheduler that makes better admission and reuse decisions.
 - Queue items and trace queue metrics now also expose additive backend-owned
   `scheduler_admission_outcome` values, so queued versus admitted visibility
   no longer depends on adapter-local inference from item status
+- Headless workflow diagnostics transport now also preserves additive
+  backend-owned scheduler `runtime_registry` diagnostics instead of
+  re-deriving runtime admission posture in Tauri
+- Scheduler recovery coverage now explicitly exercises stale cleanup, cleanup
+  worker execution, restore-after-embedding runtime reconciliation, and
+  reclaim-driven warmup posture at the backend diagnostics-provider boundary
 - The backend-owned scheduler policy now also applies the first starvation-
   protection promotion rule, so long-waiting queued runs can surface a stable
   `starvation_protection` reason when they legitimately overtake newer higher-
@@ -378,9 +394,10 @@ session scheduler that makes better admission and reuse decisions.
 
 **Dependency note:**
 
-- Do not start Scheduler V2 implementation until the remaining runtime-producer
-  convergence work is closed and the metrics/trace spine is strong enough to
-  make scheduler policy observable.
+- Keep the remaining Scheduler V2 work layered on the completed backend-owned
+  runtime-registry boundary and current metrics/trace surfaces; do not reopen
+  adapter-boundary ownership or move scheduler truth into Tauri while the
+  later ETA/error-surface work is still pending.
 
 ### Phase 5: Real Workflow Event Contract
 
@@ -562,8 +579,8 @@ that has already landed and the safest next dependency order from here.
 1. Finish runtime adapter unification and remaining producer-convergence work
 2. Complete metrics/trace spine hardening so scheduler and registry policy are
    observable
-3. Begin scheduler-v2 foundation on top of the completed runtime-registry
-   boundary
+3. Finish Scheduler V2 close-out and remaining policy breadth on top of the
+   completed runtime-registry boundary
 4. Implement parallel demand execution in `node-engine`
 5. Finish the real workflow event contract end-to-end
 6. Implement incremental graph execution

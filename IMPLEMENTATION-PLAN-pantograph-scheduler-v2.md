@@ -592,11 +592,11 @@ and source-of-truth alignment.
       commands, and transport-visible decision/error payloads
 - [x] Add replay/recovery/idempotency coverage for scheduler interactions with
       reclaim, cleanup, and restart paths where relevant
-- [ ] Update roadmap, READMEs, and ADR text if ownership or accepted
+- [x] Update roadmap, READMEs, and ADR text if ownership or accepted
       consequences changed during implementation
-- [ ] Validate any new checked-in fixtures or structured examples through the
+- [x] Validate any new checked-in fixtures or structured examples through the
       repo's existing tooling expectations
-- [ ] Record completion status and any intentionally deferred follow-up work in
+- [x] Record completion status and any intentionally deferred follow-up work in
       this plan
 
 **Verification:**
@@ -621,8 +621,22 @@ and source-of-truth alignment.
   runtime unload stops the last loaded runtime, the same backend-owned
   diagnostics provider flips the next admission posture to
   `start_runtime`/`no_loaded_instance`.
+- Refreshed the roadmap to remove stale pre-implementation Scheduler V2
+  wording, record the now-landed transport and recovery coverage, and align
+  the recommended execution order with Scheduler V2 already being underway.
+- Reviewed the touched scheduler/runtime ownership READMEs and ADR references
+  during close-out; no additional wording changes were required because the
+  current backend-vs-adapter boundary text remained accurate after the
+  standards-oriented refactors.
+- Milestone 5 did not introduce new checked-in fixtures or structured examples
+  outside the existing backend tests, so no additional fixture-specific
+  validation or regeneration steps were required during close-out.
+- Remaining Scheduler V2 work is intentionally deferred to later milestones:
+  queue ETA exposure, richer stable scheduler error payloads, and any further
+  fairness-policy breadth beyond the currently landed starvation and
+  warm-affinity rules.
 
-**Status:** In progress
+**Status:** Complete
 
 ## Execution Notes
 
