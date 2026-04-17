@@ -29,7 +29,7 @@ use pantograph_runtime_identity::{
 };
 use pantograph_runtime_registry::{
     observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
-    RuntimeRegistry, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
+    RuntimeRegistry, RuntimeRegistryError, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
     RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
 };
 
@@ -104,6 +104,16 @@ pub fn active_runtime_reservation_request(
         requirements,
         retention_hint,
     }
+}
+
+pub fn sync_runtime_reservation_retention_hint(
+    registry: &RuntimeRegistry,
+    reservation_id: u64,
+    retention_hint: RuntimeRetentionHint,
+) -> Result<(), RuntimeRegistryError> {
+    registry
+        .update_reservation_retention_hint_if_present(reservation_id, retention_hint)
+        .map(|_| ())
 }
 
 pub fn reconcile_runtime_registry_snapshot_override(
@@ -1015,6 +1025,53 @@ mod tests {
             .expect("active runtime should be registered");
         assert_eq!(runtime.display_name, "llama.cpp");
         assert_eq!(runtime.backend_keys, vec!["llama_cpp".to_string()]);
+    }
+
+    #[test]
+    fn sync_runtime_reservation_retention_hint_updates_existing_reservation() {
+        let registry = RuntimeRegistry::new();
+        let lease = registry
+            .acquire_reservation(active_runtime_reservation_request(
+                &registry,
+                &HostRuntimeModeSnapshot {
+                    backend_name: Some("llama.cpp".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    active_model_target: Some("/models/main.gguf".to_string()),
+                    embedding_model_target: None,
+                    active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                        runtime_id: Some("llama.cpp".to_string()),
+                        runtime_instance_id: Some("llama-main-hint".to_string()),
+                        warmup_started_at_ms: Some(1),
+                        warmup_completed_at_ms: Some(2),
+                        warmup_duration_ms: Some(1),
+                        runtime_reused: Some(false),
+                        lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                        active: true,
+                        last_error: None,
+                    }),
+                    embedding_runtime: None,
+                },
+                "wf-1",
+                Some("session-1"),
+                Some("interactive"),
+                None,
+                RuntimeRetentionHint::Ephemeral,
+            ))
+            .expect("reservation should be created");
+
+        sync_runtime_reservation_retention_hint(
+            &registry,
+            lease.reservation_id,
+            RuntimeRetentionHint::KeepAlive,
+        )
+        .expect("retention hint should update");
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.reservations.len(), 1);
+        assert_eq!(
+            snapshot.reservations[0].retention_hint,
+            RuntimeRetentionHint::KeepAlive
+        );
     }
 
     #[tokio::test]

@@ -1368,16 +1368,16 @@ impl EmbeddedWorkflowHost {
             return Ok(());
         };
 
-        runtime_registry
-            .update_reservation_retention_hint_if_present(
-                reservation_id,
-                Self::runtime_retention_hint(if keep_alive {
-                    WorkflowSessionRetentionHint::KeepAlive
-                } else {
-                    WorkflowSessionRetentionHint::Ephemeral
-                }),
-            )
-            .map_err(Self::workflow_service_error_from_runtime_registry)?;
+        runtime_registry::sync_runtime_reservation_retention_hint(
+            runtime_registry.as_ref(),
+            reservation_id,
+            Self::runtime_retention_hint(if keep_alive {
+                WorkflowSessionRetentionHint::KeepAlive
+            } else {
+                WorkflowSessionRetentionHint::Ephemeral
+            }),
+        )
+        .map_err(Self::workflow_service_error_from_runtime_registry)?;
 
         Ok(())
     }

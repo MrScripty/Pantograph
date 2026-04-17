@@ -132,6 +132,9 @@ embedded-runtime crate.
 - Reservation release plus retention-driven reclaim sequencing must stay in
   shared backend registry helpers so workflow execution does not own a second
   release-and-evict policy path outside the registry lifecycle boundary.
+- Reservation retention-hint mutation must stay in shared backend registry
+  helpers so workflow execution does not depend directly on the lower-level
+  registry update call when session keep-alive policy changes.
 - Active-runtime registration used by scheduler diagnostics and reservation
   paths must stay in shared backend registry helpers so workflow execution does
   not re-derive registration shape in multiple call sites.

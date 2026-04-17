@@ -559,6 +559,9 @@ Update during implementation:
   sequencing behind a shared backend lifecycle helper so the embedded workflow
   host no longer stitches together release, disposition inspection, and runtime
   reclaim behavior locally.
+- 2026-04-17: Moved reservation retention-hint mutation behind a shared backend
+  registry helper so workflow keep-alive updates no longer call the lower-level
+  registry update API directly from the embedded workflow host.
 
 ## Commit Cadence Notes
 
