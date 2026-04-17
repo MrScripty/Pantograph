@@ -33,6 +33,10 @@ The accurate implementation baseline at the current checkpoint is:
 - `WorkflowSessionQueueItem` now also carries additive canonical
   `queue_position` diagnostics, so scheduler snapshots expose backend-owned
   ordering facts instead of forcing adapters or trace readers to infer them
+- the explicit scheduler policy now also owns the first backend starvation-
+  protection rule, allowing long-waiting queued runs to accumulate canonical
+  promotion credit and surface `starvation_protection` when they legitimately
+  overtake newer higher-priority work
 - `crates/pantograph-workflow-service/src/workflow.rs` still owns the current
   workflow-service facade, runtime orchestration, and session command entry
   points, but it no longer has to be the long-term home for scheduler DTOs and
@@ -447,8 +451,10 @@ policy, fairness, and machine-consumable decision semantics.
   `WorkflowSessionQueueItem`.
 - Queue items now also expose additive canonical `queue_position` diagnostics
   for running and pending items.
-- Remaining Milestone 3 work is the deeper policy expansion: fairness,
-  starvation protection, and runtime-affinity-oriented admission inputs.
+- The first starvation-protection promotion rule is now backend-owned in the
+  scheduler policy and covered by unit plus workflow-service tests.
+- Remaining Milestone 3 work is the deeper policy expansion: broader fairness
+  policy and runtime-affinity-oriented admission inputs.
 
 **Status:** In progress
 

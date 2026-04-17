@@ -33,8 +33,9 @@ future fairness, affinity, and diagnostics policy.
 Create a focused `scheduler/` boundary inside `pantograph-workflow-service`.
 `contracts.rs` freezes the workflow-facing scheduler DTOs, while `store.rs`
 owns the in-memory queue and session state that `WorkflowService` delegates to.
-`policy.rs` makes the current priority/FIFO queue behavior explicit instead of
-leaving it as ad hoc branching inside the store. `workflow.rs` remains the
+`policy.rs` makes the current priority/FIFO queue behavior explicit and now
+also owns the first starvation-protection promotion rule instead of leaving
+that behavior as ad hoc branching inside the store. `workflow.rs` remains the
 public application-service facade and orchestration entrypoint, but it no
 longer needs to be the long-term home for scheduler contracts or queue
 mutation logic.

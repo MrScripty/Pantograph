@@ -121,6 +121,7 @@ pub enum WorkflowSchedulerDecisionReason {
     HighestPriorityFirst,
     FifoPriorityTieBreak,
     WaitingForHigherPriority,
+    StarvationProtection,
     AdmittedForExecution,
 }
 
@@ -142,6 +143,7 @@ impl WorkflowSchedulerDecisionReason {
             WorkflowSchedulerDecisionReason::WaitingForHigherPriority => {
                 "waiting_for_higher_priority"
             }
+            WorkflowSchedulerDecisionReason::StarvationProtection => "starvation_protection",
             WorkflowSchedulerDecisionReason::AdmittedForExecution => "admitted_for_execution",
         }
     }

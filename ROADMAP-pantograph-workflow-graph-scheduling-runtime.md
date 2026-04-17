@@ -351,6 +351,10 @@ session scheduler that makes better admission and reuse decisions.
   backend-owned scheduler policy object, and queue items now expose additive
   machine-consumable scheduler decision reasons plus canonical
   `queue_position` ordering diagnostics
+- The backend-owned scheduler policy now also applies the first starvation-
+  protection promotion rule, so long-waiting queued runs can surface a stable
+  `starvation_protection` reason when they legitimately overtake newer higher-
+  priority work
 - Add scheduler policy objects instead of encoding all queue behavior directly
   in one service module
 - Introduce explicit runtime affinity and warm-session reuse decisions by

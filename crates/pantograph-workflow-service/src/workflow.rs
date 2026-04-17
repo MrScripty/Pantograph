@@ -35,16 +35,16 @@ use crate::graph::WorkflowSessionKind;
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
     WorkflowSchedulerDecisionReason, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
-    WorkflowSessionStaleCleanupResponse, WorkflowSessionStaleCleanupWorker,
-    WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
-    WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    WorkflowSchedulerSnapshotResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRuntimeUnloadCandidate,
+    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
+    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
+    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -5628,6 +5628,111 @@ mod tests {
         assert_eq!(running_items[0].queue_position, Some(0));
         assert_eq!(running_items[1].queue_id, second_queue_id);
         assert_eq!(running_items[1].queue_position, Some(1));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_queue_promotes_starved_runs_before_newer_higher_priority_runs() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let low_priority_queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("older-low-priority".to_string()),
+                        priority: Some(0),
+                    },
+                )
+                .expect("enqueue low priority run")
+        };
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            for run_id in [
+                "newer-high-priority-1",
+                "newer-high-priority-2",
+                "newer-high-priority-3",
+                "newer-high-priority-4",
+            ] {
+                store
+                    .enqueue_run(
+                        &created.session_id,
+                        &WorkflowSessionRunRequest {
+                            session_id: created.session_id.clone(),
+                            inputs: Vec::new(),
+                            output_targets: None,
+                            override_selection: None,
+                            timeout_ms: None,
+                            run_id: Some(run_id.to_string()),
+                            priority: Some(2),
+                        },
+                    )
+                    .expect("enqueue higher priority run");
+            }
+        }
+
+        let pending_items = {
+            let store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .list_queue(&created.session_id)
+                .expect("list starved queue items")
+        };
+        assert_eq!(pending_items.len(), 5);
+        assert_eq!(pending_items[0].queue_id, low_priority_queue_id);
+        assert_eq!(pending_items[0].queue_position, Some(0));
+        assert_eq!(
+            pending_items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::StarvationProtection)
+        );
+        assert_eq!(
+            pending_items[1].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::FifoPriorityTieBreak)
+        );
+
+        let running_items = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .begin_queued_run(&created.session_id, &low_priority_queue_id)
+                .expect("admit starved queue item");
+            store
+                .list_queue(&created.session_id)
+                .expect("list running queue items")
+        };
+        assert_eq!(running_items[0].queue_id, low_priority_queue_id);
+        assert_eq!(
+            running_items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
+        );
     }
 
     #[tokio::test]
