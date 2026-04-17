@@ -2493,6 +2493,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+    use tokio::sync::Notify;
 
     struct MockWorkflowHost {
         capabilities: WorkflowHostCapabilities,
@@ -2598,6 +2599,36 @@ mod tests {
                     runtime_capabilities: Vec::new(),
                 },
             }
+        }
+    }
+
+    #[derive(Clone)]
+    struct BlockingRunHost {
+        capabilities: WorkflowHostCapabilities,
+        started_runs: Arc<AtomicUsize>,
+        first_run_started: Arc<Notify>,
+        release_first_run: Arc<Notify>,
+    }
+
+    impl BlockingRunHost {
+        fn new() -> Self {
+            Self {
+                capabilities: MockWorkflowHost::new(8, 1024).capabilities,
+                started_runs: Arc::new(AtomicUsize::new(0)),
+                first_run_started: Arc::new(Notify::new()),
+                release_first_run: Arc::new(Notify::new()),
+            }
+        }
+
+        async fn wait_for_first_run_started(&self) {
+            if self.started_runs.load(Ordering::SeqCst) > 0 {
+                return;
+            }
+            self.first_run_started.notified().await;
+        }
+
+        fn release_first_run(&self) {
+            self.release_first_run.notify_waiters();
         }
     }
 
@@ -2930,6 +2961,47 @@ mod tests {
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for BlockingRunHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("blocking-run-graph".to_string())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            if self.started_runs.fetch_add(1, Ordering::SeqCst) == 0 {
+                self.first_run_started.notify_waiters();
+                self.release_first_run.notified().await;
+            }
+
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
         }
     }
 
@@ -5094,6 +5166,117 @@ mod tests {
         assert!(!unloads
             .iter()
             .any(|session_id| session_id == &shared_backend.session_id));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
+        let host = BlockingRunHost::new();
+        let service = WorkflowService::with_capacity_limits(2, 1);
+
+        let first = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-first".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create first session");
+        let second = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-second".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create second session");
+
+        let first_service = service.clone();
+        let first_host = host.clone();
+        let first_session_id = first.session_id.clone();
+        let first_run = tokio::spawn(async move {
+            first_service
+                .run_workflow_session(
+                    &first_host,
+                    WorkflowSessionRunRequest {
+                        session_id: first_session_id,
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("run-first".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .await
+        });
+
+        host.wait_for_first_run_started().await;
+
+        let second_service = service.clone();
+        let second_host = host.clone();
+        let second_session_id = second.session_id.clone();
+        let mut second_run = tokio::spawn(async move {
+            second_service
+                .run_workflow_session(
+                    &second_host,
+                    WorkflowSessionRunRequest {
+                        session_id: second_session_id,
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("run-second".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: second.session_id.clone(),
+            })
+            .await
+            .expect("scheduler snapshot while waiting");
+
+        assert_eq!(snapshot.session.state, WorkflowSessionState::IdleUnloaded);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(
+            snapshot.items[0].status,
+            WorkflowSessionQueueItemStatus::Pending
+        );
+        assert_eq!(
+            snapshot.items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity)
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), &mut second_run)
+                .await
+                .is_err(),
+            "second run should remain queued until capacity becomes available"
+        );
+
+        host.release_first_run();
+
+        let first_response = first_run
+            .await
+            .expect("first run join")
+            .expect("first run response");
+        let second_response = second_run
+            .await
+            .expect("second run join")
+            .expect("second run response");
+
+        assert_eq!(first_response.outputs.len(), 1);
+        assert_eq!(second_response.outputs.len(), 1);
     }
 
     #[tokio::test]

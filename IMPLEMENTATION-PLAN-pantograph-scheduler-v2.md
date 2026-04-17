@@ -554,7 +554,7 @@ and observable diagnostics without violating ownership boundaries.
 **Tasks:**
 - [ ] Consume backend-owned runtime-registry facts for runtime-affinity,
       residency pressure, reclaim candidates, and warm reuse decisions
-- [ ] Improve rebalance behavior when loaded-session capacity is exhausted
+- [x] Improve rebalance behavior when loaded-session capacity is exhausted
 - [x] Add queue ETA and admission diagnostics derived from canonical scheduler
       state
 - [x] Preserve additive trace integration so scheduler decisions remain
@@ -651,6 +651,10 @@ Update during implementation:
   keeping runtime-capacity and next-admission visibility machine-consumable in
   trace snapshots instead of leaving those fields trapped in transport-local
   diagnostics state.
+- 2026-04-17: Changed workflow-session admission so runs no longer dequeue into
+  an immediate `SchedulerBusy` failure when loaded-session capacity is fully
+  occupied by active work; the selected candidate now stays queued with
+  `waiting_for_runtime_capacity` until a real rebalance or release path opens.
 
 ## Commit Cadence Notes
 

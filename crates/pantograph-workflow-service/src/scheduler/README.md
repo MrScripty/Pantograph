@@ -56,6 +56,10 @@ Scheduler snapshots now also expose additive backend-owned diagnostics for
 loaded-session pressure, reclaimable runtime counts, and next-admission
 prediction so Tauri and other adapters can forward canonical scheduler facts
 without reconstructing queue policy client-side.
+When loaded-session capacity is saturated by active runs with no reclaimable
+idle runtime, the selected candidate now stays queued with the explicit
+`waiting_for_runtime_capacity` reason instead of being admitted and then
+failing immediately with a capacity error.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.

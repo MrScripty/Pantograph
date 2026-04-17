@@ -434,6 +434,15 @@ impl WorkflowSessionStore {
         queue_id: &str,
     ) -> Result<Option<WorkflowSessionDequeuedRun>, WorkflowServiceError> {
         let tick = self.next_tick();
+        let capacity_blocked = {
+            let state = self.active.get(session_id).ok_or_else(|| {
+                WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+            })?;
+            !state.runtime_loaded
+                && state.active_run.is_none()
+                && self.loaded_session_count() >= self.max_loaded_sessions
+                && self.runtime_unload_candidates(session_id).is_empty()
+        };
         let state = self.active.get_mut(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
@@ -453,6 +462,23 @@ impl WorkflowSessionStore {
         let policy = PriorityThenFifoSchedulerPolicy;
         policy.refresh_queue(&mut state.queue);
         let admission_input = Self::admission_input_from_state(state);
+        if capacity_blocked {
+            if let Some(admitted_queue_id) = policy
+                .predicted_admission_decision(&admission_input)
+                .and_then(|decision| decision.admitted_queue_id)
+            {
+                if let Some(queued) = state
+                    .queue
+                    .iter_mut()
+                    .find(|queued| queued.queue_id == admitted_queue_id)
+                {
+                    queued.scheduler_decision_reason =
+                        WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity;
+                }
+            }
+            Self::mark_session_access(state, tick);
+            return Ok(None);
+        }
         let decision = policy.admission_decision(&admission_input, queue_id)?;
         let Some(admitted_queue_id) = decision.admitted_queue_id.as_deref() else {
             return Ok(None);
