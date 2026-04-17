@@ -26,6 +26,9 @@ LLM gateway, process management, and Tauri command handlers for model and server
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.
 - Maintain predictable naming so callers can discover related modules quickly.
+- Command handlers that affect embedding-runtime availability should reuse the
+  shared host-side RAG sync helper instead of caching embedding endpoints with
+  command-local logic.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.

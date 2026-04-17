@@ -3,12 +3,12 @@
 use super::shared::{get_project_data_dir, SharedAppConfig};
 use crate::agent::rag::{DatabaseInfo, IndexingProgress, RagStatus, SharedRagManager};
 use crate::agent::DocsManager;
-use crate::llm::gateway::SharedGateway;
 use crate::llm::runtime_registry::{
     restore_runtime_and_sync_runtime_registry, sync_runtime_registry_from_gateway,
 };
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::SharedRuntimeRegistry;
+use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use tauri::{command, ipc::Channel, AppHandle, State};
 
@@ -37,10 +37,13 @@ impl From<IndexingProgress> for IndexingEvent {
 #[command]
 pub async fn get_rag_status(
     _app: AppHandle,
+    gateway: State<'_, SharedGateway>,
     rag_manager: State<'_, SharedRagManager>,
 ) -> Result<RagStatus, String> {
     let project_data_dir = get_project_data_dir()?;
     let docs_manager = DocsManager::new(project_data_dir);
+
+    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
 
     let mut manager = rag_manager.write().await;
     manager.update_docs_status(&docs_manager);
@@ -221,13 +224,15 @@ pub async fn index_docs_with_switch(
         .await
         .map_err(|e| format!("Failed to start embedding server: {}", e))?;
     sync_runtime_registry_from_gateway(gateway.inner(), runtime_registry.inner()).await;
+    let embedding_url =
+        sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
     let restore_vlm = prepared.restore_config.is_some();
     log::info!("Restore VLM after indexing: {}", restore_vlm);
     log::info!("Current backend for embedding: {}", prepared.backend_name);
 
     // Update RAG manager with embedding URL from the gateway
     // All backends now expose an HTTP API (llama.cpp sidecar, Ollama daemon, Candle's Axum server)
-    let embedding_url = match prepared.base_url.clone() {
+    let embedding_url = match embedding_url {
         Some(url) => url,
         None => {
             // Backend has no HTTP API (e.g., Candle)
@@ -244,6 +249,7 @@ pub async fn index_docs_with_switch(
                     error
                 );
             }
+            sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
             return Err(format!(
                 "The {} backend does not support RAG indexing through the GUI. \
                  It runs in-process without an HTTP API. \
@@ -253,10 +259,6 @@ pub async fn index_docs_with_switch(
         }
     };
     log::info!("Embedding URL set: {:?}", embedding_url);
-    {
-        let mut rag_guard = rag_manager.write().await;
-        rag_guard.set_embedding_url(embedding_url);
-    }
 
     // Load docs and index
     let project_data_dir = get_project_data_dir()?;
@@ -335,6 +337,7 @@ pub async fn index_docs_with_switch(
                     error
                 );
             }
+            sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
 
             return Err(e.to_string());
         }
@@ -359,6 +362,7 @@ pub async fn index_docs_with_switch(
         )
         .await
         .map_err(|e| format!("Failed to restore VLM mode: {}", e))?;
+        sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
     }
 
     channel
