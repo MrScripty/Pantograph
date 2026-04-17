@@ -118,6 +118,7 @@ pub enum WorkflowEvent {
     #[serde(rename_all = "camelCase")]
     GraphModified {
         workflow_id: String,
+        execution_id: String,
         dirty_tasks: Vec<String>,
     },
 

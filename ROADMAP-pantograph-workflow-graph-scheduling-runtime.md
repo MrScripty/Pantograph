@@ -421,11 +421,17 @@ incremental runs.
 
 - Diagnostics and runtime-state reporting are more structured than before.
 - Runtime-state reconstruction from workflow capabilities is more consistent.
+- `WaitingForInput`, `IncrementalExecutionStarted`, and `GraphModified`
+  transport vocabulary now exist across the engine, Tauri adapter, and
+  diagnostics/trace projection path, and `GraphModified` now preserves a real
+  execution id instead of borrowing the workflow id at the adapter boundary.
 
 **Still missing:**
 
-- First-class `WaitingForInput` and `GraphModified` workflow events end-to-end
-- Explicit incremental-execution-started and stale-event rejection semantics
+- Backend-owned emission coverage for the remaining interactive and graph-
+  mutation paths that still do not produce the event vocabulary consistently
+- Explicit stale-event rejection semantics keyed to canonical execution/session
+  identity across backend and frontend consumers
 - Full adapter parity between backend-owned events and frontend consumers
 
 ### Phase 6: Incremental Graph Execution

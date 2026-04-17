@@ -18,7 +18,6 @@ type PortValue = serde_json::Value;
 /// and sends them through a Tauri channel to the frontend.
 pub struct TauriEventAdapter {
     channel: Channel<TauriWorkflowEvent>,
-    workflow_id: String,
     diagnostics_store: SharedWorkflowDiagnosticsStore,
 }
 
@@ -29,9 +28,9 @@ impl TauriEventAdapter {
         workflow_id: impl Into<String>,
         diagnostics_store: SharedWorkflowDiagnosticsStore,
     ) -> Self {
+        let _ = workflow_id.into();
         Self {
             channel,
-            workflow_id: workflow_id.into(),
             diagnostics_store,
         }
     }
@@ -57,10 +56,7 @@ fn translated_execution_id(event: &TauriWorkflowEvent) -> &str {
     }
 }
 
-fn translate_node_event(
-    adapter_workflow_id: &str,
-    event: node_engine::WorkflowEvent,
-) -> TauriWorkflowEvent {
+fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent {
     match event {
         node_engine::WorkflowEvent::WorkflowStarted {
             workflow_id,
@@ -180,10 +176,11 @@ fn translate_node_event(
 
         node_engine::WorkflowEvent::GraphModified {
             workflow_id,
+            execution_id,
             dirty_tasks,
         } => TauriWorkflowEvent::GraphModified {
             workflow_id,
-            execution_id: adapter_workflow_id.to_string(),
+            execution_id,
             graph: None,
             dirty_tasks,
         },
@@ -202,11 +199,10 @@ fn translate_node_event(
 
 fn translate_node_event_with_diagnostics(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
-    adapter_workflow_id: &str,
     event: node_engine::WorkflowEvent,
     timestamp_ms: u64,
 ) -> (TauriWorkflowEvent, TauriWorkflowEvent) {
-    let tauri_event = translate_node_event(adapter_workflow_id, event);
+    let tauri_event = translate_node_event(event);
     let diagnostics_snapshot = diagnostics_store.record_workflow_event(&tauri_event, timestamp_ms);
     let diagnostics_event = TauriWorkflowEvent::diagnostics_snapshot(
         translated_execution_id(&tauri_event).to_string(),
@@ -220,7 +216,6 @@ impl EventSink for TauriEventAdapter {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), EventError> {
         let (tauri_event, diagnostics_event) = translate_node_event_with_diagnostics(
             &self.diagnostics_store,
-            &self.workflow_id,
             event,
             super::workflow_execution_commands::unix_timestamp_ms(),
         );
@@ -252,7 +247,6 @@ mod tests {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
         let (event, diagnostics_event) = translate_node_event_with_diagnostics(
             &diagnostics_store,
-            "adapter-workflow",
             node_engine::WorkflowEvent::WorkflowStarted {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
@@ -290,7 +284,6 @@ mod tests {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
         let _ = translate_node_event_with_diagnostics(
             &diagnostics_store,
-            "adapter-workflow",
             node_engine::WorkflowEvent::WorkflowStarted {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
@@ -300,7 +293,6 @@ mod tests {
 
         let (_, diagnostics_event) = translate_node_event_with_diagnostics(
             &diagnostics_store,
-            "adapter-workflow",
             node_engine::WorkflowEvent::TaskProgress {
                 task_id: "node-a".to_string(),
                 execution_id: "exec-1".to_string(),
@@ -326,7 +318,6 @@ mod tests {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
         let (event, diagnostics_event) = translate_node_event_with_diagnostics(
             &diagnostics_store,
-            "adapter-workflow",
             node_engine::WorkflowEvent::WorkflowFailed {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
@@ -355,6 +346,49 @@ mod tests {
                     trace.status,
                     crate::workflow::diagnostics::DiagnosticsRunStatus::Cancelled
                 );
+            }
+            other => panic!("unexpected diagnostics event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn translated_graph_modified_event_preserves_engine_execution_id() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::GraphModified {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-graph".to_string(),
+                dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            },
+            130,
+        );
+
+        match &event {
+            super::TauriWorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+                ..
+            } => {
+                assert_eq!(workflow_id, "wf-1");
+                assert_eq!(execution_id, "exec-graph");
+                assert_eq!(
+                    dirty_tasks,
+                    &vec!["node-a".to_string(), "node-b".to_string()]
+                );
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        assert_eq!(translated_execution_id(&event), "exec-graph");
+        match diagnostics_event {
+            super::TauriWorkflowEvent::DiagnosticsSnapshot {
+                execution_id,
+                snapshot,
+            } => {
+                assert_eq!(execution_id, "exec-graph");
+                assert_eq!(snapshot.run_order, vec!["exec-graph".to_string()]);
             }
             other => panic!("unexpected diagnostics event: {other:?}"),
         }
