@@ -516,6 +516,9 @@ Update during implementation:
   Python-sidecar executions now carry a backend-owned unhealthy assessment into
   registry reconciliation instead of relying on lifecycle snapshot errors
   alone.
+- 2026-04-17: Moved Python-sidecar runtime capability construction into the
+  shared backend capability helper module so the execution-observed producer
+  family no longer depends on `EmbeddedWorkflowHost`-local capability shaping.
 
 ## Commit Cadence Notes
 

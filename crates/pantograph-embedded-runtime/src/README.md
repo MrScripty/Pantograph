@@ -20,7 +20,7 @@ packages.
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
-| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities. |
+| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including dedicated embedding and Python-sidecar capability builders. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry backoff, backend port overrides, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
@@ -102,6 +102,9 @@ embedded-runtime crate.
   scoring and final policy ownership remain outside this crate.
 - Producer-specific runtime capability mapping must stay in backend Rust so
   adapters do not drift on runtime ids, install state, or backend-key aliases.
+- Python-sidecar capability shaping must stay in the shared backend capability
+  helper module rather than being rebuilt inside `EmbeddedWorkflowHost` or
+  Tauri adapters.
 - Gateway and producer observation mapping for the shared runtime registry must
   stay in backend Rust so adapters do not drift on runtime-id, backend-key, or
   lifecycle-status translation.

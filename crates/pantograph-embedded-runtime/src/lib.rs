@@ -7,10 +7,7 @@ use async_trait::async_trait;
 use node_engine::{
     CoreTaskExecutor, EventSink, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
-use pantograph_runtime_identity::{
-    backend_key_aliases, canonical_runtime_backend_key, runtime_backend_key_aliases,
-    runtime_display_name,
-};
+use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
     RuntimeRegistration, RuntimeRegistryError, RuntimeReservationRequest,
     RuntimeReservationRequirements, RuntimeRetentionDecision, RuntimeRetentionHint,
@@ -1228,10 +1225,6 @@ impl EmbeddedWorkflowHost {
         })
     }
 
-    fn python_runtime_backend_keys(display_name: &str, runtime_id: &str) -> Vec<String> {
-        runtime_backend_key_aliases(display_name, runtime_id)
-    }
-
     fn observe_python_runtime_execution_metadata(
         &self,
         metadata: &[task_executor::PythonRuntimeExecutionMetadata],
@@ -1249,58 +1242,6 @@ impl EmbeddedWorkflowHost {
         }
 
         Ok(())
-    }
-
-    fn python_runtime_capabilities(
-        executable_probe: Result<PathBuf, String>,
-        selected_backend_key: &str,
-    ) -> Vec<WorkflowRuntimeCapability> {
-        let (available, unavailable_reason) = match executable_probe {
-            Ok(_) => (true, None),
-            Err(reason) => (false, Some(reason)),
-        };
-        [
-            (
-                runtime_display_name("pytorch").unwrap_or("PyTorch (Python sidecar)"),
-                "pytorch",
-            ),
-            (
-                runtime_display_name("diffusers").unwrap_or("Diffusers (Python sidecar)"),
-                "diffusers",
-            ),
-            (
-                runtime_display_name("onnx-runtime").unwrap_or("ONNX Runtime (Python sidecar)"),
-                "onnx-runtime",
-            ),
-            (
-                runtime_display_name("stable_audio").unwrap_or("Stable Audio (Python sidecar)"),
-                "stable_audio",
-            ),
-        ]
-        .into_iter()
-        .map(|(display_name, runtime_id)| {
-            let backend_keys = Self::python_runtime_backend_keys(display_name, runtime_id);
-            WorkflowRuntimeCapability {
-                runtime_id: runtime_id.to_string(),
-                display_name: display_name.to_string(),
-                install_state: if available {
-                    WorkflowRuntimeInstallState::SystemProvided
-                } else {
-                    WorkflowRuntimeInstallState::Missing
-                },
-                available,
-                configured: available,
-                can_install: false,
-                can_remove: false,
-                source_kind: WorkflowRuntimeSourceKind::System,
-                selected: Self::runtime_matches_backend(&backend_keys, selected_backend_key),
-                supports_external_connection: false,
-                backend_keys,
-                missing_files: Vec::new(),
-                unavailable_reason: unavailable_reason.clone(),
-            }
-        })
-        .collect()
     }
 
     fn trimmed_optional(value: Option<&str>) -> Option<String> {
@@ -1957,7 +1898,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
                 Self::host_runtime_capability(backend, &selected_backend_key)
             }),
         );
-        runtimes.extend(Self::python_runtime_capabilities(
+        runtimes.extend(runtime_capabilities::python_runtime_capabilities(
             python_runtime::resolve_python_executable_for_env_ids(&[]),
             &selected_backend_key,
         ));
@@ -3943,68 +3884,6 @@ mod tests {
             .expect("candidate should exist");
 
         assert_eq!(selected.session_id, "session-b");
-    }
-
-    #[test]
-    fn python_runtime_capabilities_report_python_backed_engines() {
-        let capabilities = EmbeddedWorkflowHost::python_runtime_capabilities(
-            Ok(PathBuf::from("/usr/bin/python3")),
-            "pytorch",
-        );
-
-        assert_eq!(capabilities.len(), 4);
-
-        let pytorch = capabilities
-            .iter()
-            .find(|capability| capability.runtime_id == "pytorch")
-            .expect("pytorch capability");
-        assert!(pytorch.available);
-        assert!(pytorch.configured);
-        assert_eq!(pytorch.source_kind, WorkflowRuntimeSourceKind::System);
-        assert!(pytorch.selected);
-        assert!(!pytorch.supports_external_connection);
-        assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
-        assert!(pytorch.backend_keys.contains(&"torch".to_string()));
-
-        let diffusion = capabilities
-            .iter()
-            .find(|capability| capability.runtime_id == "diffusers")
-            .expect("diffusers capability");
-        assert!(diffusion.backend_keys.contains(&"diffusers".to_string()));
-
-        let onnx = capabilities
-            .iter()
-            .find(|capability| capability.runtime_id == "onnx-runtime")
-            .expect("onnx capability");
-        assert!(onnx.backend_keys.contains(&"onnx-runtime".to_string()));
-
-        let stable_audio = capabilities
-            .iter()
-            .find(|capability| capability.runtime_id == "stable_audio")
-            .expect("stable audio capability");
-        assert!(stable_audio
-            .backend_keys
-            .contains(&"stable_audio".to_string()));
-    }
-
-    #[test]
-    fn python_runtime_capabilities_keep_unavailable_reason() {
-        let capabilities = EmbeddedWorkflowHost::python_runtime_capabilities(
-            Err("python executable is not configured".to_string()),
-            "llama_cpp",
-        );
-
-        assert_eq!(capabilities.len(), 4);
-        for capability in capabilities {
-            assert!(!capability.available);
-            assert!(!capability.configured);
-            assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::System);
-            assert!(!capability.selected);
-            assert_eq!(
-                capability.unavailable_reason.as_deref(),
-                Some("python executable is not configured")
-            );
-        }
     }
 
     #[test]
