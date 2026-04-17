@@ -87,6 +87,34 @@ test('claimWorkflowExecutionIdFromEvent pins the started execution id for transi
   );
 });
 
+test('claimWorkflowExecutionIdFromEvent pins the first execution-scoped event id', () => {
+  assert.equal(
+    claimWorkflowExecutionIdFromEvent(
+      {
+        type: 'GraphModified',
+        data: {
+          execution_id: 'run-graph-1',
+        },
+      },
+      null,
+    ),
+    'run-graph-1',
+  );
+});
+
+test('claimWorkflowExecutionIdFromEvent ignores events without an execution id', () => {
+  assert.equal(
+    claimWorkflowExecutionIdFromEvent(
+      {
+        type: 'SchedulerSnapshot',
+        data: {},
+      },
+      null,
+    ),
+    null,
+  );
+});
+
 test('claimWorkflowExecutionIdFromEvent does not replace an existing execution id', () => {
   assert.equal(
     claimWorkflowExecutionIdFromEvent(

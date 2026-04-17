@@ -580,6 +580,10 @@ Update during implementation:
   to backend trace-store and runtime-registry state instead of Tauri-local
   bookkeeping. No new persisted debug fixtures were introduced during this
   milestone, so no additional fixture validation hook was required.
+- Frontend execution-ownership filtering now claims the active run from the
+  first execution-scoped workflow event instead of pre-pinning session-backed
+  UI to the edit-session id, tightening stale-event rejection semantics at the
+  consumer boundary without moving workflow policy out of Rust-owned services.
 
 ### Deviations
 

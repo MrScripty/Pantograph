@@ -19,7 +19,7 @@ export function claimWorkflowExecutionIdFromEvent(
     return currentExecutionId;
   }
 
-  return event.type === 'Started' ? getWorkflowEventExecutionId(event) : null;
+  return getWorkflowEventExecutionId(event);
 }
 
 export function isWorkflowEventRelevantToExecution(

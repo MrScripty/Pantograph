@@ -58,9 +58,11 @@ graph can disable pan, drag, selection, and reconnect behavior until the
 external drag completes. Selection persistence also moved into the shared store
 contract so backend graph snapshots reapply the current selected-node ids
 instead of dropping selection metadata on every sync. Toolbar event consumers
-now also scope node-state updates to the execution id that was active when a
-session-owned run started so stale events from an older edit session do not
-overwrite the current graph state after session switches.
+now claim execution ownership from the first execution-scoped workflow event
+instead of pre-pinning to the edit-session id, so session-backed runs keep
+accepting valid scheduler/runtime or incremental events until the backend
+publishes the real run id and stale events from older runs still stop at the
+execution-id boundary.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -95,8 +97,9 @@ overwrite the current graph state after session switches.
   selection, or reconnect gestures.
 - Store-backed graph rematerialization must preserve the selected node ids that
   the consumer last acknowledged through selection change events.
-- Session-owned execution UI must ignore workflow events whose `execution_id`
-  no longer matches the run that owns the active toolbar subscription.
+- Session-owned execution UI must claim the active run from the first workflow
+  event that carries a non-empty `execution_id`, then ignore later events whose
+  `execution_id` no longer matches that run.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

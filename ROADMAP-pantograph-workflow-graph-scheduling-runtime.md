@@ -425,6 +425,10 @@ incremental runs.
   transport vocabulary now exist across the engine, Tauri adapter, and
   diagnostics/trace projection path, and `GraphModified` now preserves a real
   execution id instead of borrowing the workflow id at the adapter boundary.
+- Frontend execution-ownership helpers now claim the active run from the first
+  execution-scoped workflow event instead of pre-pinning session-backed runs
+  to the edit-session id, so valid scheduler/runtime and incremental events are
+  not dropped before the backend emits `Started`.
 
 **Still missing:**
 

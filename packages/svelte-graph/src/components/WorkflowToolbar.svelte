@@ -29,7 +29,7 @@
 
     isExecuting.set(true);
     stores.workflow.resetExecutionStates();
-    activeExecutionId = $currentSessionId;
+    activeExecutionId = null;
 
     currentUnsubscribe = backend.subscribeEvents(handleWorkflowEvent);
 
