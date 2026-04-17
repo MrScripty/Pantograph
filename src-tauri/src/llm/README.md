@@ -12,6 +12,7 @@ runtime contracts exposed by `crates/inference`.
 | `gateway.rs` | Tauri-facing wrapper around `inference::InferenceGateway` that adapts app-state wiring and startup helpers without replacing the backend facade. |
 | `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, and runtime-status queries. |
 | `runtime_registry.rs` | Tauri adapter that translates backend lifecycle facts into the backend-owned runtime-registry crate. |
+| `rag_sync.rs` | Host-only helper that keeps the Tauri RAG consumer aligned with gateway-owned embedding runtime availability. |
 | `health_monitor.rs` | App-owned health polling loop that maps HTTP probe results onto backend-owned health assessment and emits desktop events. |
 | `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
 | `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
@@ -32,6 +33,9 @@ desktop composition layer.
   admission, retention, or eviction policy.
 - Health/recovery helpers must consume backend facts rather than deriving their
   own runtime truth model.
+- Host-owned consumers that cache embedding endpoints, such as the RAG manager,
+  must refresh from gateway facts after runtime lifecycle changes rather than
+  persisting adapter-local availability guesses.
 - Startup and config mapping must stay compatible with existing GUI command
   surfaces until an explicit contract change is approved.
 
@@ -60,6 +64,9 @@ does not own runtime policy.
   do not redefine runtime lifecycle truth.
 - Health and recovery flows must operate through shared gateway-backed state,
   not independent adapter-local state machines.
+- Host-owned caches of embedding runtime availability must be synchronized from
+  gateway facts whenever lifecycle commands or recovery change the active
+  embedding producer.
 - Runtime-registry injection passes through this layer, but runtime residency
   and admission policy must not be implemented in command handlers or other
   Tauri transport modules.

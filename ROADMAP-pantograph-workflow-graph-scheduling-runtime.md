@@ -593,6 +593,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   sync-and-return helper, so command-level early returns such as
   `start_sidecar_inference` embedding-path resolution warnings no longer leave
   registry state stale after the main runtime already started.
+- Tauri host lifecycle commands, recovery, and agent startup now also refresh
+  the RAG manager's embedding endpoint from shared gateway facts, so failed or
+  mode-switching embedding producer transitions no longer leave host-local
+  vector-search consumers pointed at stale runtime URLs.
 - Embedded-runtime hosted shutdown, live gateway sync, and edit-session
   restore paths now also route through the shared backend registry lifecycle
   helpers, reducing one more internal host-specific sequencing fork.

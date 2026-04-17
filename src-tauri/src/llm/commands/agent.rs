@@ -8,8 +8,8 @@ use crate::agent::{
     AgentEvent, AgentEventType, AgentRequest, AgentResponse, ComponentUpdate, FileAction,
     FileChange, Position, Size, WriteTracker,
 };
-use crate::llm::gateway::SharedGateway;
 use crate::llm::types::*;
+use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway};
 use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
@@ -106,12 +106,12 @@ pub async fn run_agent(
 
     // Ensure RAG manager has the embedding URL before agent runs
     // This is needed for vector search to work when compile errors occur
-    let vector_search_available = if let Some(url) = gateway.embedding_url().await {
-        let mut rag = rag_manager.write().await;
-        rag.set_embedding_url(url.clone());
+    let vector_search_available = if let Some(url) =
+        sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await
+    {
         log::info!("[run_agent] Set embedding URL in RAG manager: {}", url);
         // Check if vector search is fully available (embedding URL + indexed vectors)
-        rag.is_search_available()
+        rag_manager.write().await.is_search_available()
     } else {
         log::warn!("[run_agent] No embedding URL available - vector search will not work");
         false

@@ -8,7 +8,7 @@ use crate::llm::startup::{
     build_configured_embedding_request, build_configured_inference_request,
     build_explicit_llamacpp_inference_request, build_external_inference_request,
 };
-use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use tauri::{command, AppHandle, State};
 
@@ -16,6 +16,7 @@ use tauri::{command, AppHandle, State};
 pub async fn connect_to_server(
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
+    rag_manager: State<'_, SharedRagManager>,
     url: String,
 ) -> Result<ServerModeInfo, String> {
     let external_backend_key = gateway
@@ -41,6 +42,7 @@ pub async fn connect_to_server(
         .start(&backend_config)
         .await
         .map_err(|e| e.to_string())?;
+    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
 
     Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
 }
@@ -50,6 +52,7 @@ pub async fn start_sidecar_llm(
     _app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
+    rag_manager: State<'_, SharedRagManager>,
     config: State<'_, SharedAppConfig>,
     model_path: String,
     mmproj_path: String,
@@ -75,6 +78,7 @@ pub async fn start_sidecar_llm(
         .start(&backend_config)
         .await
         .map_err(|e| e.to_string())?;
+    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
 
     Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
 }
@@ -91,8 +95,10 @@ pub async fn get_llm_status(
 pub async fn stop_llm(
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
+    rag_manager: State<'_, SharedRagManager>,
 ) -> Result<ServerModeInfo, String> {
     gateway.stop().await;
+    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
     Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
 }
 
@@ -138,6 +144,7 @@ pub async fn start_sidecar_inference(
                         emb_path,
                         e
                     );
+                    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
                     return Ok(
                         synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await,
                     );
@@ -156,10 +163,10 @@ pub async fn start_sidecar_inference(
                 .await
             {
                 Ok(()) => {
-                    // Set embedding URL in RAG manager so search() will work
-                    if let Some(url) = gateway.embedding_url().await {
-                        let mut rag = rag_manager.write().await;
-                        rag.set_embedding_url(url);
+                    if sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner())
+                        .await
+                        .is_some()
+                    {
                         log::info!("Embedding server started and RAG manager configured");
                     }
                 }
@@ -176,6 +183,8 @@ pub async fn start_sidecar_inference(
         }
     }
 
+    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
+
     Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
 }
 
@@ -184,6 +193,7 @@ pub async fn start_sidecar_embedding(
     _app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
+    rag_manager: State<'_, SharedRagManager>,
     config: State<'_, SharedAppConfig>,
 ) -> Result<ServerModeInfo, String> {
     let config_guard = config.read().await;
@@ -201,6 +211,7 @@ pub async fn start_sidecar_embedding(
         .map_err(|e| e.to_string())?;
 
     log::info!("Started sidecar in embedding mode");
+    sync_rag_embedding_url_from_gateway(gateway.inner(), rag_manager.inner()).await;
     Ok(synced_server_mode_info(gateway.inner(), runtime_registry.inner()).await)
 }
 

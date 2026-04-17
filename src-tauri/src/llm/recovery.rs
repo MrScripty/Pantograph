@@ -17,6 +17,7 @@ use crate::llm::port_manager::{check_port_available, find_available_port};
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
 use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::startup::validate_external_server_url;
+use crate::llm::sync_rag_embedding_url_from_gateway;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use pantograph_embedded_runtime::runtime_recovery::{
@@ -335,12 +336,7 @@ async fn sync_rag_embedding_url(app: &AppHandle, gateway: &SharedGateway) {
         return;
     };
 
-    let mut rag_guard = rag_manager.write().await;
-    if let Some(url) = gateway.embedding_url().await {
-        rag_guard.set_embedding_url(url);
-    } else {
-        rag_guard.clear_embedding_url();
-    }
+    sync_rag_embedding_url_from_gateway(gateway, &rag_manager).await;
 }
 
 async fn sync_runtime_registry_after_recovery_restart(app: &AppHandle, gateway: &SharedGateway) {
