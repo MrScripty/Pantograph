@@ -587,6 +587,9 @@ Update during implementation:
 - 2026-04-17: Continued Milestone 4 by adding a backend lifecycle helper for
   “run transition, then reconcile registry” sequencing so Tauri recovery no
   longer performs a separate post-restart registry sync step.
+- 2026-04-17: Added Tauri adapter regressions for the shared post-transition
+  registry helper so successful and failed host transitions both keep the
+  runtime registry aligned at the wrapper boundary.
 
 ## Commit Cadence Notes
 

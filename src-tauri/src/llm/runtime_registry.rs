@@ -626,6 +626,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_runtime_transition_and_sync_runtime_registry_reconciles_after_success() {
+        let gateway = crate::llm::gateway::InferenceGateway::with_test_backend(
+            Box::new(MockInferenceBackend::new()),
+            "PyTorch",
+            Arc::new(MockProcessSpawner),
+        );
+        gateway.init().await;
+
+        let registry = RuntimeRegistry::new();
+        let gateway_ref = &gateway;
+        run_runtime_transition_and_sync_runtime_registry(&gateway, &registry, |_| async move {
+            gateway_ref
+                .start(&BackendConfig::default())
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok::<(), String>(())
+        })
+        .await
+        .expect("transition should succeed");
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("runtime snapshot");
+        assert_eq!(
+            runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Ready
+        );
+        assert!(runtime.runtime_instance_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn run_runtime_transition_and_sync_runtime_registry_reconciles_after_failure() {
+        let gateway = crate::llm::gateway::InferenceGateway::with_test_backend(
+            Box::new(MockInferenceBackend::new()),
+            "PyTorch",
+            Arc::new(MockProcessSpawner),
+        );
+        gateway.init().await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let registry = RuntimeRegistry::new();
+        sync_runtime_registry_from_gateway(&gateway, &registry).await;
+
+        let gateway_ref = &gateway;
+        let error =
+            run_runtime_transition_and_sync_runtime_registry(&gateway, &registry, |_| async move {
+                gateway_ref.stop().await;
+                Err::<(), _>("transition failed")
+            })
+            .await
+            .expect_err("transition should fail");
+
+        assert_eq!(error, "transition failed");
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("runtime snapshot");
+        assert_eq!(
+            runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        );
+        assert!(runtime.runtime_instance_id.is_none());
+    }
+
+    #[tokio::test]
     async fn reclaim_runtime_and_sync_runtime_registry_keeps_other_live_producers_running() {
         let gateway = crate::llm::gateway::InferenceGateway::new(Arc::new(MockProcessSpawner));
         gateway.init().await;

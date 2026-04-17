@@ -76,6 +76,9 @@ does not own runtime policy.
 - Recovery orchestration may perform host-specific restart steps here, but the
   “run transition, then reconcile registry” sequencing must stay in backend
   lifecycle helpers rather than as a separate adapter-local sync step.
+- Adapter-level registry tests in this directory should pin that shared
+  transition helper for both successful and failed host transitions so Tauri
+  wrappers cannot silently reintroduce post-transition registry drift.
 
 ## Revisit Triggers
 - A non-Tauri app root needs the same runtime composition logic and this
