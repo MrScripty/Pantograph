@@ -163,18 +163,18 @@ easier to regress.
 spreads.
 
 **Tasks:**
-- [ ] Define engine-level metric/event DTOs and run-level trace summary
+- [x] Define engine-level metric/event DTOs and run-level trace summary
       contracts.
-- [ ] Define runtime lifecycle metric DTOs and scheduler/queue timing payloads.
-- [ ] Freeze serde tag/casing and field semantics for any Rust-to-Tauri trace
+- [x] Define runtime lifecycle metric DTOs and scheduler/queue timing payloads.
+- [x] Freeze serde tag/casing and field semantics for any Rust-to-Tauri trace
       DTOs before adapter work starts.
-- [ ] Add request-shape validation helpers for trace snapshot filters so later
+- [x] Add request-shape validation helpers for trace snapshot filters so later
       Tauri commands can validate at the boundary without inventing frontend
       policy.
-- [ ] Record facade-preservation decision: preserve current workflow/session
+- [x] Record facade-preservation decision: preserve current workflow/session
       public facades and extend them additively.
-- [ ] Record lifecycle ownership for trace buffers, retention, and cleanup.
-- [ ] Identify touched directories that require README or ADR updates and record
+- [x] Record lifecycle ownership for trace buffers, retention, and cleanup.
+- [x] Identify touched directories that require README or ADR updates and record
       the expected traceability artifacts up front.
 
 **Verification:**
@@ -183,7 +183,7 @@ spreads.
 - Documentation traceability review against `DOCUMENTATION-STANDARDS.md`
 - Contract serialization tests for new DTO casing/tag behavior
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 2: Engine Metrics Foundation
 
@@ -191,13 +191,13 @@ spreads.
 records.
 
 **Tasks:**
-- [ ] Add node execution timing capture around task demand/execution paths.
-- [ ] Add per-run aggregation hooks for total wall time, node counts, and
+- [x] Add node execution timing capture around task demand/execution paths.
+- [x] Add per-run aggregation hooks for total wall time, node counts, and
       failure/cancel completion states.
-- [ ] Ensure engine events include stable execution/task identifiers needed for
+- [x] Ensure engine events include stable execution/task identifiers needed for
       trace attribution.
-- [ ] Add low-overhead internal metrics structures rather than ad hoc logging.
-- [ ] Perform decomposition review if any new metrics module crosses file-size
+- [x] Add low-overhead internal metrics structures rather than ad hoc logging.
+- [x] Perform decomposition review if any new metrics module crosses file-size
       or responsibility thresholds from `CODING-STANDARDS.md`.
 
 **Verification:**
@@ -206,7 +206,7 @@ records.
 - Overhead review to ensure metrics collection does not materially alter
   baseline behavior
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 3: Workflow Service Trace Aggregation
 
@@ -214,14 +214,14 @@ records.
 scheduling context.
 
 **Tasks:**
-- [ ] Add run/session trace collectors in
+- [x] Add run/session trace collectors in
       `crates/pantograph-workflow-service`.
-- [ ] Record queue admission time, dequeue time, execution start, execution
+- [x] Record queue admission time, dequeue time, execution start, execution
       finish, and cancel/unload transitions.
-- [ ] Add snapshot/read APIs for recent run traces and queue timing summaries.
-- [ ] Keep aggregation in the service/application layer rather than Tauri
+- [x] Add snapshot/read APIs for recent run traces and queue timing summaries.
+- [x] Keep aggregation in the service/application layer rather than Tauri
       transport code.
-- [ ] Add duplicate-event/idempotency safeguards where aggregation consumes
+- [x] Add duplicate-event/idempotency safeguards where aggregation consumes
       repeatable or replayable event streams.
 
 **Verification:**
@@ -230,7 +230,7 @@ scheduling context.
   history retention, and duplicate-event handling
 - Concurrency review against `CONCURRENCY-STANDARDS.md`
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 4: Runtime Lifecycle Metrics
 
@@ -238,15 +238,15 @@ scheduling context.
 backend-owned runtime layers.
 
 **Tasks:**
-- [ ] Add runtime lifecycle timing hooks in
+- [x] Add runtime lifecycle timing hooks in
       `crates/pantograph-embedded-runtime` and `crates/inference`.
-- [ ] Capture warmup/load/reuse/failure/eviction decision reasons as structured
+- [x] Capture warmup/load/reuse/failure/eviction decision reasons as structured
       records.
-- [ ] Attach runtime lifecycle metrics to the workflow trace summary without
+- [x] Attach runtime lifecycle metrics to the workflow trace summary without
       moving runtime policy into adapters.
-- [ ] Ensure runtime metrics are attributable to workflow run/session
+- [x] Ensure runtime metrics are attributable to workflow run/session
       identifiers where applicable.
-- [ ] Perform decomposition review if runtime trace modules exceed size or
+- [x] Perform decomposition review if runtime trace modules exceed size or
       responsibility thresholds.
 
 **Verification:**
@@ -254,7 +254,7 @@ backend-owned runtime layers.
 - Targeted tests for runtime warmup/reuse/failure timing paths
 - Contract review confirming runtime decision payloads are machine-consumable
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 5: Adapter And Diagnostics Integration
 
@@ -262,15 +262,15 @@ backend-owned runtime layers.
 frontend business logic.
 
 **Tasks:**
-- [ ] Extend `src-tauri/src/workflow/event_adapter.rs` and related commands to
+- [x] Extend `src-tauri/src/workflow/event_adapter.rs` and related commands to
       forward trace/metrics snapshots.
-- [ ] Preserve event semantics needed for diagnostics views and future scheduler
+- [x] Preserve event semantics needed for diagnostics views and future scheduler
       work.
-- [ ] Keep any GUI work read-only: render backend trace state, do not compute
+- [x] Keep any GUI work read-only: render backend trace state, do not compute
       or reconcile it in TypeScript.
-- [ ] Update matching TypeScript consumer contracts in the same slice for any
+- [x] Update matching TypeScript consumer contracts in the same slice for any
       new Tauri-exposed DTOs.
-- [ ] Validate any new snapshot/filter request payloads at the Tauri command
+- [x] Validate any new snapshot/filter request payloads at the Tauri command
       boundary.
 
 **Verification:**
@@ -278,22 +278,22 @@ frontend business logic.
 - Targeted Tauri contract tests for snapshot/event transport
 - `npm run typecheck` for matching TS consumer contracts
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 6: Hardening, Docs, And Acceptance Coverage
 
 **Goal:** Close the phase with standards-compliant tests and documentation.
 
 **Tasks:**
-- [ ] Add cross-layer acceptance checks from workflow run start through trace
+- [x] Add cross-layer acceptance checks from workflow run start through trace
       snapshot consumption.
-- [ ] Add cancellation, retry/recovery, and replay/idempotency checks for trace
+- [x] Add cancellation, retry/recovery, and replay/idempotency checks for trace
       consistency.
-- [ ] Update README files for touched backend directories with ownership and
+- [x] Update README files for touched backend directories with ownership and
       contract notes.
-- [ ] Add or update ADR/docs if metrics ownership or event contracts materially
+- [x] Add or update ADR/docs if metrics ownership or event contracts materially
       change architecture.
-- [ ] If JSON fixtures or trace snapshot examples are committed, add fast
+- [x] If JSON fixtures or trace snapshot examples are committed, add fast
       validation per `TOOLING-STANDARDS.md`.
 
 **Verification:**
@@ -304,7 +304,7 @@ frontend business logic.
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 - Artifact validation review against `TOOLING-STANDARDS.md`
 
-**Status:** Not started
+**Status:** Completed
 
 ## Execution Notes
 
@@ -480,138 +480,25 @@ Update during implementation:
 
 ### Completed
 
-- Plan updated with standards corrections and Milestone 1 scope
-- First Milestone 1 slice implemented in `pantograph-workflow-service`
-- Second Milestone 1 slice implemented in `pantograph-workflow-service`
-- Third Milestone 1 slice implemented in `src-tauri/src/workflow`
-- Fourth Milestone 1 slice implemented across `src-tauri` and service contract
-  mirrors
-- Fifth Milestone 1 slice implemented across `pantograph-workflow-service` and
-  `src-tauri/src/workflow`
-- Sixth Milestone 1 slice implemented across `crates/inference`,
-  `pantograph-workflow-service`, and `src-tauri`
-- Seventh Milestone 1 slice implemented across
-  `pantograph-workflow-service` and `src-tauri`
-- Eighth Milestone 1 slice implemented across
-  `pantograph-workflow-service`, `src-tauri`, and TypeScript contract mirrors
-- Ninth Milestone 1 slice implemented in `pantograph-workflow-service`
-- Tenth implementation slice added in `src-tauri/src/workflow`
-- Eleventh implementation slice added in `src-tauri/src/workflow`
-- Twelfth implementation slice added across `pantograph-workflow-service`,
-  `src-tauri`, and TypeScript workflow contract mirrors
-- Thirteenth implementation slice added in `pantograph-workflow-service`
-- Fourteenth implementation slice added in `src-tauri/src/workflow`
-- Fifteenth implementation slice added in `src-tauri/src/workflow`
-- Sixteenth implementation slice added in touched README ownership notes
-- Seventeenth implementation slice added in `src-tauri/src/workflow`
-- Eighteenth implementation slice added across `src-tauri` diagnostics and
-  read-only GUI consumers
-- Nineteenth implementation slice added in `src-tauri/src/llm` so the
-  dedicated embedding sidecar now records backend-owned lifecycle snapshots and
-  reuse decisions in Rust
-- Twentieth implementation slice added in `crates/inference` so backend start
-  paths now report reuse outcomes to the gateway, preserving reused-runtime
-  attribution for adapter-specific cases such as Ollama daemon attachment
-- Twenty-first implementation slice added in
-  `crates/inference/src/backend/pytorch.rs` so identical model/device start
-  requests reuse the already-loaded PyTorch runtime instead of forcing a reload
-- Twenty-second implementation slice added across `crates/inference`,
-  `src-tauri/src/llm`, and `src-tauri/src/workflow` so runtime lifecycle
-  snapshots now preserve backend-owned structured decision reasons end to end
-- Twenty-third implementation slice added in `src-tauri/src/llm/commands` so
-  the embedding runtime lifecycle command is exercised directly against a
-  backend-owned snapshot instead of relying only on lower-level gateway tests
-- Twenty-fourth implementation slice added in
-  `src-tauri/src/workflow/headless_workflow_commands.rs` so the read-only
-  scheduler and trace snapshot command paths are exercised directly against
-  backend-owned service and diagnostics stores
-- Twenty-fifth implementation slice added in
-  `src-tauri/src/workflow/headless_workflow_commands.rs` so diagnostics
-  projection refresh logic is exercised directly against backend-owned
-  scheduler snapshots, capability responses, and runtime lifecycle metrics
-- Twenty-sixth implementation slice added in
-  `src-tauri/src/workflow/event_adapter.rs` so node-engine event transport is
-  covered through a pure Rust translation helper that preserves producer
-  execution identity and emits backend-owned diagnostics snapshot events
-- Twenty-seventh implementation slice added in
-  `crates/pantograph-workflow-service/src/trace.rs` so a restarted
-  `RunStarted` on the same execution id resets prior attempt-specific node,
-  queue, and runtime state after terminal failure without erasing in-flight
-  duplicate-start state
-- Twenty-eighth implementation slice added across
-  `crates/pantograph-workflow-service`, `src-tauri/src/workflow`, and matching
-  frontend diagnostics types so cancellation-shaped workflow failures now flow
-  through an explicit cancelled run contract instead of collapsing into generic
-  failed state
-- Twenty-ninth implementation slice added across
-  `crates/pantograph-workflow-service`, `src-tauri/src/workflow`, and matching
-  frontend diagnostics types so canonical trace summaries now retain
-  backend-owned `session_id` attribution and session-scoped trace snapshot
-  filters work when execution ids differ from session ids
-- Thirtieth implementation slice added in
-  `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless trace
-  snapshot helper and diagnostics projection path are covered for backend-owned
-  `session_id` attribution at the adapter boundary
-- Thirty-first implementation slice added in
-  `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless
-  clear-history reader path is exercised directly and keeps scheduler/runtime
-  snapshots while dropping retained run history
-- Thirty-second implementation slice added in
-  `src-tauri/src/workflow/event_adapter.rs` so workflow event transport is
-  covered through the real `tauri::ipc::Channel` send path instead of only the
-  lower-level translation helper
-- Thirty-third implementation slice added across `crates/inference/src/server.rs`,
-  `crates/inference/src/backend/llamacpp.rs`, and `crates/inference/src/README.md`
-  so matching llama.cpp sidecar starts now reuse the active runtime with
-  structured lifecycle reasons and direct backend tests
-- Thirty-fourth implementation slice added across
-  `crates/pantograph-runtime-registry/src/lib.rs`,
-  `src-tauri/src/llm/runtime_registry.rs`, and
-  `src-tauri/src/workflow/workflow_execution_commands.rs` so execution-specific
-  Python-sidecar runtime snapshots can be reconciled into the shared runtime
-  registry without stopping gateway-observed runtimes
-- Thirty-fifth implementation slice added in
-  `crates/pantograph-embedded-runtime/src/lib.rs` and
-  `crates/pantograph-embedded-runtime/src/README.md` so direct embedded/headless
-  workflow runs also reconcile Python-sidecar execution snapshots into the
-  shared runtime registry instead of leaving that producer path Tauri-only
-- Thirty-sixth implementation slice added across
-  `crates/pantograph-runtime-identity/src/lib.rs`,
-  `crates/pantograph-embedded-runtime/src/lib.rs`, and
-  `src-tauri/src/llm/runtime_registry.rs` so shared runtime display-name and
-  backend-alias mapping now lives in one backend-owned Rust helper instead of
-  drifting between host-specific producer adapters
-- Thirty-seventh implementation slice added across
-  `crates/pantograph-runtime-registry/src/observation.rs`,
-  `crates/pantograph-embedded-runtime/src/lib.rs`, and
-  `src-tauri/src/llm/runtime_registry.rs` so lifecycle-snapshot status
-  classification now comes from one backend-owned registry helper instead of
-  duplicated host-local warmup/error mapping
-- Thirty-eighth implementation slice added across
-  `crates/inference/src/types.rs` and
-  `src-tauri/src/workflow/workflow_execution_commands.rs` so default lifecycle
-  decision-reason normalization now lives with the backend-owned lifecycle
-  snapshot contract instead of an adapter-local trace helper
-- Thirty-ninth implementation slice added in
-  `src-tauri/src/workflow/diagnostics.rs` so diagnostics runtime snapshots now
-  consume backend-owned lifecycle decision-reason normalization instead of
-  cloning potentially incomplete adapter input
-- Fortieth implementation slice added in
-  `crates/inference/src/gateway.rs` so inference-gateway lifecycle snapshots
-  now derive default start-success and start-failure reasons from the
-  backend-owned snapshot contract instead of reconstructing them inline
-- Forty-first implementation slice added across
-  `src-tauri/src/workflow/diagnostics.rs` and
-  `src-tauri/src/workflow/headless_workflow_commands.rs` so diagnostics-backed
-  runtime snapshot round-trips now preserve backend-owned lifecycle reason
-  normalization when headless paths reconstruct inference snapshots
-- Forty-second implementation slice added across
-  `crates/pantograph-embedded-runtime/src/task_executor.rs`,
-  `src-tauri/src/llm/runtime_registry.rs`,
-  `src-tauri/src/workflow/headless_workflow_commands.rs`, and
-  `crates/pantograph-workflow-service/src/trace.rs` so Python-sidecar runtime
-  producer paths now emit the shared lifecycle reason contract with explicit
-  reuse facts instead of Python-specific reason strings
+- Milestone 1 completed: contracts, ownership boundaries, serde/tagging rules,
+  trace snapshot request validation, retention ownership, and traceability
+  notes were frozen before the later producer and adapter slices expanded.
+- Milestone 2 completed: `node-engine` now emits additive producer-owned run
+  and task timing through canonical workflow events, including stable execution
+  and task identifiers plus backend-owned timestamps.
+- Milestone 3 completed: `pantograph-workflow-service` owns canonical run
+  trace aggregation, queue timing, snapshot reads, session attribution, and
+  duplicate/replay safeguards for terminal and restart-shaped transitions.
+- Milestone 4 completed: runtime lifecycle metrics, reuse facts, warmup
+  timings, and structured decision reasons now flow through backend-owned
+  inference/runtime contracts into the canonical trace summary.
+- Milestone 5 completed: Tauri workflow commands, diagnostics, and event
+  adapters now transport backend-owned trace/runtime data read-only, preserve
+  attribution semantics, and validate trace snapshot requests at the boundary.
+- Milestone 6 completed: targeted recovery, cancellation, replay, clear-
+  history, duplicate-terminal, restart, and cancellation-restart acceptance
+  coverage has been added across the service, diagnostics store, and adapter
+  layers, with touched README/plan documentation kept in sync.
 
 ### Deviations
 
