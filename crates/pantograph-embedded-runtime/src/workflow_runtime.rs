@@ -324,6 +324,32 @@ pub fn build_runtime_event_projection_with_registry_override(
     projection
 }
 
+pub fn reconcile_runtime_registry_stored_projection_overrides(
+    runtime_registry: Option<&RuntimeRegistry>,
+    stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_active_model_target: Option<&str>,
+    stored_embedding_model_target: Option<&str>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+) {
+    let Some(runtime_registry) = runtime_registry else {
+        return;
+    };
+
+    reconcile_stored_runtime_registry_projection_override(
+        runtime_registry,
+        stored_active_runtime_snapshot,
+        stored_active_model_target,
+        gateway_mode_info,
+    );
+    reconcile_stored_runtime_registry_projection_override(
+        runtime_registry,
+        stored_embedding_runtime_snapshot,
+        stored_embedding_model_target,
+        gateway_mode_info,
+    );
+}
+
 fn reconcile_runtime_projection_registry_override(
     runtime_registry: Option<&RuntimeRegistry>,
     runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
@@ -339,6 +365,40 @@ fn reconcile_runtime_projection_registry_override(
         runtime_registry,
         runtime_snapshot_override,
         runtime_model_target,
+    );
+}
+
+fn reconcile_stored_runtime_registry_projection_override(
+    runtime_registry: &RuntimeRegistry,
+    stored_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_model_target: Option<&str>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+) {
+    let Some(stored_runtime_snapshot) = stored_runtime_snapshot else {
+        return;
+    };
+    let Some(stored_runtime_id) = stored_runtime_snapshot
+        .runtime_id
+        .as_deref()
+        .map(canonical_runtime_id)
+        .filter(|runtime_id| !runtime_id.is_empty())
+    else {
+        return;
+    };
+
+    let matches_live_host_runtime = crate::runtime_registry::active_runtime_id(gateway_mode_info)
+        .as_deref()
+        == Some(stored_runtime_id.as_str())
+        || crate::runtime_registry::embedding_runtime_id(gateway_mode_info).as_deref()
+            == Some(stored_runtime_id.as_str());
+    if matches_live_host_runtime {
+        return;
+    }
+
+    crate::runtime_registry::reconcile_runtime_registry_snapshot_override(
+        runtime_registry,
+        stored_runtime_snapshot,
+        stored_model_target,
     );
 }
 
@@ -396,8 +456,8 @@ mod tests {
         build_runtime_diagnostics_projection, build_runtime_event_projection,
         build_runtime_event_projection_with_registry_override,
         build_workflow_execution_diagnostics_snapshot, normalized_runtime_lifecycle_snapshot,
-        resolve_runtime_model_target, trace_runtime_metrics,
-        trace_runtime_metrics_with_observed_runtime_ids,
+        reconcile_runtime_registry_stored_projection_overrides, resolve_runtime_model_target,
+        trace_runtime_metrics, trace_runtime_metrics_with_observed_runtime_ids,
     };
 
     #[test]
@@ -958,5 +1018,172 @@ mod tests {
             runtime.runtime_instance_id.as_deref(),
             Some("python-runtime:pytorch:default")
         );
+    }
+
+    #[test]
+    fn reconcile_runtime_registry_stored_projection_overrides_replays_non_live_runtime_snapshot() {
+        let registry = RuntimeRegistry::new();
+        crate::runtime_registry::reconcile_runtime_registry_mode_info(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-live".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+        );
+
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-live".to_string()),
+                warmup_started_at_ms: Some(1),
+                warmup_completed_at_ms: Some(2),
+                warmup_duration_ms: Some(1),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        };
+
+        reconcile_runtime_registry_stored_projection_overrides(
+            Some(&registry),
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:restored".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(12),
+                warmup_duration_ms: Some(2),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            None,
+            Some("/models/restored.safetensors"),
+            None,
+            &gateway_mode_info,
+        );
+
+        let snapshot = registry.snapshot();
+        let gateway_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("gateway runtime should remain present");
+        assert_eq!(
+            gateway_runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-live")
+        );
+
+        let restored_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("stored sidecar runtime should be replayed");
+        assert_eq!(
+            restored_runtime.runtime_instance_id.as_deref(),
+            Some("python-runtime:pytorch:restored")
+        );
+        assert_eq!(restored_runtime.models.len(), 1);
+        assert_eq!(
+            restored_runtime.models[0].model_id,
+            "/models/restored.safetensors"
+        );
+    }
+
+    #[test]
+    fn reconcile_runtime_registry_stored_projection_overrides_skips_live_host_runtime_ids() {
+        let registry = RuntimeRegistry::new();
+        crate::runtime_registry::reconcile_runtime_registry_mode_info(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-live".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+        );
+
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-live".to_string()),
+                warmup_started_at_ms: Some(1),
+                warmup_completed_at_ms: Some(2),
+                warmup_duration_ms: Some(1),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        };
+
+        reconcile_runtime_registry_stored_projection_overrides(
+            Some(&registry),
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-stale".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(12),
+                warmup_duration_ms: Some(2),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            None,
+            Some("/models/stale.gguf"),
+            None,
+            &gateway_mode_info,
+        );
+
+        let snapshot = registry.snapshot();
+        let live_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("live gateway runtime should remain present");
+        assert_eq!(
+            live_runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-live")
+        );
+        assert_eq!(live_runtime.models.len(), 1);
+        assert_eq!(live_runtime.models[0].model_id, "/models/main.gguf");
     }
 }

@@ -125,6 +125,10 @@ embedded-runtime crate.
   embedding-path execution facts become shared registry observations, and so
   execution-local snapshots do not erase a matching producer's existing
   backend-owned `unhealthy` registry state.
+- Restore-time replay of stored non-live runtime snapshots into the shared
+  registry must stay in backend Rust so diagnostics paths can rehydrate
+  execution-observed producer state without overriding live gateway or
+  embedding producer observations.
 - Workflow-facing runtime-registry coordination failures must be mapped in
   backend Rust onto stable workflow-service error codes so adapters do not
   collapse admission or runtime-unavailable decisions into generic internal

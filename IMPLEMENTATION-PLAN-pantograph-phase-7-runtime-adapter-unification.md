@@ -423,7 +423,7 @@ non-gateway producer paths.
   recovery sequencing
 - `cargo check` for all touched crates and Tauri transport modules
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Documentation, Acceptance, And Source-Of-Truth Reconciliation
 
@@ -523,6 +523,10 @@ Update during implementation:
   shared backend capability helper module so diagnostics and workflow fallback
   paths reuse the same backend-owned capability contract instead of
   `workflow_runtime.rs`-local selection logic.
+- 2026-04-17: Added backend-owned restore-time replay for stored non-live
+  runtime snapshots so diagnostics snapshot rebuilds can rehydrate
+  execution-observed producer state into the shared registry without
+  overwriting live gateway or dedicated-embedding observations.
 
 ## Commit Cadence Notes
 
