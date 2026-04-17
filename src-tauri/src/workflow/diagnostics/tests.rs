@@ -172,6 +172,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
+        None,
         6_000,
     );
 
@@ -213,6 +214,45 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
         Some(WorkflowSessionKind::Workflow)
     );
     assert_eq!(snapshot.scheduler.items.len(), 1);
+}
+
+#[test]
+fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
+    let store = WorkflowDiagnosticsStore::default();
+    let diagnostics = pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics {
+        loaded_session_count: 1,
+        max_loaded_sessions: 2,
+        reclaimable_loaded_session_count: 1,
+        runtime_capacity_pressure:
+            pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
+        active_run_blocks_admission: true,
+        next_admission_queue_id: Some("queue-1".to_string()),
+        next_admission_after_runs: Some(1),
+        next_admission_reason: Some(
+            pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
+        ),
+    };
+
+    let snapshot = store.update_scheduler_snapshot(
+        Some("wf-runtime".to_string()),
+        Some("session-1".to_string()),
+        Some(pantograph_workflow_service::WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-runtime".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: pantograph_workflow_service::WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 3,
+        }),
+        Vec::new(),
+        Some(diagnostics.clone()),
+        None,
+        6_000,
+    );
+
+    assert_eq!(snapshot.scheduler.diagnostics, Some(diagnostics));
 }
 
 #[test]
@@ -672,6 +712,7 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
+        None,
     );
     assert_eq!(
         projection.scheduler.trace_execution_id.as_deref(),
@@ -735,6 +776,7 @@ fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
+        None,
     );
 
     assert_eq!(projection.scheduler.workflow_id.as_deref(), Some("wf-1"));
@@ -776,6 +818,7 @@ fn clear_history_preserves_runtime_and_scheduler_snapshots() {
         Some("exec-1".to_string()),
         None,
         Vec::new(),
+        None,
         None,
         2_100,
     );
@@ -838,6 +881,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
+        None,
         None,
     );
 
@@ -937,6 +981,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
+        None,
     );
     store.record_runtime_snapshot(
         "wf-1".to_string(),
@@ -997,6 +1042,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
+        None,
         None,
     );
 

@@ -555,7 +555,7 @@ and observable diagnostics without violating ownership boundaries.
 - [ ] Consume backend-owned runtime-registry facts for runtime-affinity,
       residency pressure, reclaim candidates, and warm reuse decisions
 - [ ] Improve rebalance behavior when loaded-session capacity is exhausted
-- [ ] Add queue ETA and admission diagnostics derived from canonical scheduler
+- [x] Add queue ETA and admission diagnostics derived from canonical scheduler
       state
 - [ ] Preserve additive trace integration so scheduler decisions remain
       observable through the metrics/trace spine
@@ -569,7 +569,7 @@ and observable diagnostics without violating ownership boundaries.
   trace contracts
 - No scheduler policy is added to Tauri or other wrappers
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Close-Out, Acceptance, And Source-Of-Truth Reconciliation
 
@@ -641,6 +641,11 @@ Update during implementation:
   non-starved admission candidates, plus focused policy and workflow-service
   coverage for positive reuse, starvation guardrails, and out-of-window
   rejection cases.
+- 2026-04-17: Added additive backend-owned scheduler snapshot diagnostics for
+  loaded-session pressure, reclaimable-capacity visibility, and next-admission
+  prediction, then threaded those canonical fields through embedded-runtime and
+  Tauri diagnostics/event transport without moving scheduler policy ownership
+  out of Rust.
 
 ## Commit Cadence Notes
 

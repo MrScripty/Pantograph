@@ -471,6 +471,7 @@ mod tests {
             }),
             Vec::new(),
             None,
+            None,
         );
         assert_eq!(
             scheduler_projection.scheduler.workflow_id.as_deref(),
@@ -631,6 +632,7 @@ mod tests {
                 scheduler_decision_reason: None,
                 status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
             }],
+            None,
             None,
         );
         let workflow_diagnostics_projection = workflow_diagnostics.snapshot();

@@ -226,6 +226,8 @@ pub struct WorkflowSchedulerSnapshotResponse {
     pub session: WorkflowSessionSummary,
     #[serde(default)]
     pub items: Vec<WorkflowSessionQueueItem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
 }
 
 pub(crate) fn scheduler_snapshot_trace_execution_id(
@@ -309,6 +311,33 @@ pub enum WorkflowSessionUnloadReason {
     CapacityRebalance,
     KeepAliveDisabled,
     SessionClosed,
+}
+
+/// Scheduler-visible runtime capacity posture for the current session.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSchedulerRuntimeCapacityPressure {
+    Available,
+    RebalanceRequired,
+    Saturated,
+}
+
+/// Additive backend-owned scheduler diagnostics derived from canonical queue
+/// and loaded-session state.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerSnapshotDiagnostics {
+    pub loaded_session_count: usize,
+    pub max_loaded_sessions: usize,
+    pub reclaimable_loaded_session_count: usize,
+    pub runtime_capacity_pressure: WorkflowSchedulerRuntimeCapacityPressure,
+    pub active_run_blocks_admission: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_admission_queue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_admission_after_runs: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_admission_reason: Option<WorkflowSchedulerDecisionReason>,
 }
 
 /// Idle session runtime candidate that may be unloaded under capacity pressure.

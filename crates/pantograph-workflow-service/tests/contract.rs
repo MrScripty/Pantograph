@@ -350,6 +350,7 @@ fn workflow_trace_contract_snapshot() {
                 "enqueued_at_ms": 90,
                 "dequeued_at_ms": 100,
                 "queue_wait_ms": 10,
+                "scheduler_admission_outcome": "admitted",
                 "scheduler_decision_reason": "dequeued_fifo"
             },
             "runtime": {
@@ -413,6 +414,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             scheduler_decision_reason: None,
             status: WorkflowSessionQueueItemStatus::Running,
         }],
+        diagnostics: None,
     };
 
     let value = serde_json::to_value(response).expect("serialize scheduler snapshot");

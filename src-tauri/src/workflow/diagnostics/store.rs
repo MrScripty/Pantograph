@@ -204,6 +204,7 @@ impl WorkflowDiagnosticsStore {
         captured_at_ms: u64,
         session: Option<WorkflowSessionSummary>,
         items: Vec<WorkflowSessionQueueItem>,
+        diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
         error: Option<String>,
     ) -> WorkflowDiagnosticsProjection {
         let event = WorkflowEvent::scheduler_snapshot(
@@ -213,6 +214,7 @@ impl WorkflowDiagnosticsStore {
             captured_at_ms,
             session,
             items,
+            diagnostics,
             error,
         );
         self.record_workflow_event(&event, captured_at_ms)
@@ -261,6 +263,7 @@ impl WorkflowDiagnosticsStore {
         session_id: Option<String>,
         session: Option<WorkflowSessionSummary>,
         items: Vec<WorkflowSessionQueueItem>,
+        diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
         last_error: Option<String>,
         captured_at_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
@@ -276,6 +279,7 @@ impl WorkflowDiagnosticsStore {
                 captured_at_ms: Some(captured_at_ms),
                 session,
                 items,
+                diagnostics,
                 last_error,
             },
             None => DiagnosticsSchedulerSnapshot::default(),
@@ -417,6 +421,7 @@ fn apply_scheduler_event(
         session_id,
         session,
         items,
+        diagnostics,
         error,
         ..
     } = event
@@ -428,6 +433,7 @@ fn apply_scheduler_event(
             captured_at_ms: Some(timestamp_ms),
             session: session.clone(),
             items: items.clone(),
+            diagnostics: diagnostics.clone(),
             last_error: error.clone(),
         };
     }

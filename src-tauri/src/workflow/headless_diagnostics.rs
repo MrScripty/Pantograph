@@ -48,6 +48,7 @@ pub(crate) fn record_headless_scheduler_snapshot(
                     captured_at_ms,
                     Some(snapshot.session),
                     snapshot.items,
+                    snapshot.diagnostics,
                     None,
                 );
                 Some(observed_execution_id)
@@ -57,6 +58,7 @@ pub(crate) fn record_headless_scheduler_snapshot(
                     Some(snapshot.session_id),
                     Some(snapshot.session),
                     snapshot.items,
+                    snapshot.diagnostics,
                     None,
                     captured_at_ms,
                 );
@@ -69,6 +71,7 @@ pub(crate) fn record_headless_scheduler_snapshot(
                 Some(requested_session_id.to_string()),
                 None,
                 Vec::new(),
+                None,
                 Some(error.to_envelope_json()),
                 captured_at_ms,
             );
@@ -271,6 +274,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             None,
             Vec::new(),
             None,
+            None,
             captured_at_ms,
         );
     }
@@ -371,6 +375,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Pending,
                 }],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {

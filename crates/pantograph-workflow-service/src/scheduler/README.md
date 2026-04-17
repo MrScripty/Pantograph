@@ -52,6 +52,10 @@ instead of a generic execution label. Admission selection now also has one
 bounded fairness override for warm reuse: inside the highest-priority,
 non-starved band, a compatible warm candidate may bypass at most the next cold
 candidate, but it still cannot jump starved or higher-priority work.
+Scheduler snapshots now also expose additive backend-owned diagnostics for
+loaded-session pressure, reclaimable runtime counts, and next-admission
+prediction so Tauri and other adapters can forward canonical scheduler facts
+without reconstructing queue policy client-side.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.

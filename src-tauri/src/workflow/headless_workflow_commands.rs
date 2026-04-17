@@ -360,6 +360,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             }),
             120,
         );
@@ -538,6 +539,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             }),
             120,
         );
@@ -664,6 +666,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             }),
             120,
         );
@@ -714,6 +717,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             }),
             120,
         );
@@ -811,6 +815,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
@@ -864,6 +869,7 @@ mod tests {
                 trace_execution_id: Some("run-1".to_string()),
                 session: running_session_summary(),
                 items: vec![],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
@@ -913,6 +919,7 @@ mod tests {
                 trace_execution_id: Some("run-1".to_string()),
                 session: running_session_summary(),
                 items: vec![],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
@@ -979,6 +986,7 @@ mod tests {
                 trace_execution_id: Some("run-1".to_string()),
                 session: running_session_summary(),
                 items: vec![],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
@@ -1037,6 +1045,7 @@ mod tests {
                 trace_execution_id: Some("run-1".to_string()),
                 session: running_session_summary(),
                 items: vec![],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
@@ -1095,6 +1104,7 @@ mod tests {
                 trace_execution_id: Some("run-1".to_string()),
                 session: running_session_summary(),
                 items: vec![],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {
@@ -1146,6 +1156,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics::default(),
@@ -1202,6 +1213,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
             })),
             Some(Ok(capability_response())),
             WorkflowTraceRuntimeMetrics {

@@ -5,6 +5,7 @@ mod store;
 pub(crate) use contracts::scheduler_snapshot_trace_execution_id;
 pub use contracts::{
     WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
+    WorkflowSchedulerRuntimeCapacityPressure, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,

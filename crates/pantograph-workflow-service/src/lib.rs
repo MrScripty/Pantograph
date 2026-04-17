@@ -35,7 +35,10 @@ pub use graph::{
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
-pub use scheduler::select_runtime_unload_candidate_by_affinity;
+pub use scheduler::{
+    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerRuntimeCapacityPressure,
+    WorkflowSchedulerSnapshotDiagnostics,
+};
 pub use technical_fit::{
     build_workflow_technical_fit_request, WorkflowTechnicalFitDecision,
     WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,

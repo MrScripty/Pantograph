@@ -7,8 +7,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowSessionQueueItem, WorkflowSessionSummary,
-    WorkflowTraceRuntimeMetrics,
+    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotDiagnostics, WorkflowSessionQueueItem,
+    WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
 };
 
 use super::diagnostics::{DiagnosticsRuntimeLifecycleSnapshot, WorkflowDiagnosticsProjection};
@@ -189,6 +189,8 @@ pub enum WorkflowEvent {
         session: Option<WorkflowSessionSummary>,
         /// Queue items visible at capture time
         items: Vec<WorkflowSessionQueueItem>,
+        /// Additive backend-owned scheduler diagnostics
+        diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
         /// Error encountered while collecting the scheduler snapshot
         error: Option<String>,
     },
@@ -363,6 +365,7 @@ impl WorkflowEvent {
         captured_at_ms: u64,
         session: Option<WorkflowSessionSummary>,
         items: Vec<WorkflowSessionQueueItem>,
+        diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
         error: Option<String>,
     ) -> Self {
         Self::SchedulerSnapshot {
@@ -372,6 +375,7 @@ impl WorkflowEvent {
             captured_at_ms,
             session,
             items,
+            diagnostics,
             error,
         }
     }

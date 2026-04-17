@@ -15,7 +15,8 @@ use super::policy::{
 };
 use super::{
     PriorityThenFifoSchedulerPolicy, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+    WorkflowSchedulerDecisionReason, WorkflowSchedulerRuntimeCapacityPressure,
+    WorkflowSchedulerSnapshotDiagnostics, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
     WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionState, WorkflowSessionSummary,
 };
 
@@ -340,6 +341,46 @@ impl WorkflowSessionStore {
             });
         }
         Ok(items)
+    }
+
+    pub(crate) fn scheduler_snapshot_diagnostics(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let reclaimable_loaded_session_count = self.runtime_unload_candidates(session_id).len();
+        let loaded_session_count = self.loaded_session_count();
+        let active_run_blocks_admission = state.active_run.is_some();
+
+        let mut admission_input = Self::admission_input_from_state(state);
+        admission_input.has_active_run = false;
+        let predicted_admission =
+            PriorityThenFifoSchedulerPolicy.predicted_admission_decision(&admission_input);
+
+        let runtime_capacity_pressure = if loaded_session_count < self.max_loaded_sessions {
+            WorkflowSchedulerRuntimeCapacityPressure::Available
+        } else if reclaimable_loaded_session_count > 0 {
+            WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired
+        } else {
+            WorkflowSchedulerRuntimeCapacityPressure::Saturated
+        };
+
+        Ok(WorkflowSchedulerSnapshotDiagnostics {
+            loaded_session_count,
+            max_loaded_sessions: self.max_loaded_sessions,
+            reclaimable_loaded_session_count,
+            runtime_capacity_pressure,
+            active_run_blocks_admission,
+            next_admission_queue_id: predicted_admission
+                .as_ref()
+                .and_then(|decision| decision.admitted_queue_id.clone()),
+            next_admission_after_runs: predicted_admission
+                .as_ref()
+                .map(|_| usize::from(active_run_blocks_admission)),
+            next_admission_reason: predicted_admission.and_then(|decision| decision.reason),
+        })
     }
 
     pub(crate) fn enqueue_run(

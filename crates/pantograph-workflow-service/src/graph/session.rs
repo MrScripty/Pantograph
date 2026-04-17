@@ -463,6 +463,7 @@ impl GraphSessionStore {
             trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
             session: state.session_summary(session_id),
             items,
+            diagnostics: None,
         })
     }
 

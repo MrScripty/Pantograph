@@ -1141,12 +1141,14 @@ impl WorkflowService {
             {
                 Ok(session) => {
                     let items = store.list_queue(session_id)?;
+                    let diagnostics = store.scheduler_snapshot_diagnostics(session_id)?;
                     return Ok(WorkflowSchedulerSnapshotResponse {
                         workflow_id: Some(session.workflow_id.clone()),
                         session_id: session_id.to_string(),
                         trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
                         session,
                         items,
+                        diagnostics: Some(diagnostics),
                     });
                 }
                 Err(WorkflowServiceError::SessionNotFound(_)) => {}
@@ -2485,6 +2487,7 @@ mod tests {
         WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
         WorkflowTechnicalFitSelectionMode,
     };
+    use crate::WorkflowSchedulerRuntimeCapacityPressure;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -5790,6 +5793,141 @@ mod tests {
         assert_eq!(
             snapshot.items[0].status,
             WorkflowSessionQueueItemStatus::Pending
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_exposes_next_admission_diagnostics() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_capacity_limits(2, 1);
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue run")
+        };
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("scheduler snapshot");
+        let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
+
+        assert_eq!(diagnostics.loaded_session_count, 0);
+        assert_eq!(diagnostics.max_loaded_sessions, 1);
+        assert_eq!(diagnostics.reclaimable_loaded_session_count, 0);
+        assert_eq!(
+            diagnostics.runtime_capacity_pressure,
+            WorkflowSchedulerRuntimeCapacityPressure::Available
+        );
+        assert!(!diagnostics.active_run_blocks_admission);
+        assert_eq!(
+            diagnostics.next_admission_queue_id.as_deref(),
+            Some(queue_id.as_str())
+        );
+        assert_eq!(diagnostics.next_admission_after_runs, Some(0));
+        assert_eq!(
+            diagnostics.next_admission_reason,
+            Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed(
+    ) {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_capacity_limits(3, 1);
+        let _loaded = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-loaded".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create loaded session");
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-queued".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create queued session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue run");
+        }
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("scheduler snapshot");
+        let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
+
+        assert_eq!(diagnostics.loaded_session_count, 1);
+        assert_eq!(diagnostics.max_loaded_sessions, 1);
+        assert_eq!(diagnostics.reclaimable_loaded_session_count, 1);
+        assert_eq!(
+            diagnostics.runtime_capacity_pressure,
+            WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired
+        );
+        assert_eq!(
+            snapshot.session.state,
+            WorkflowSessionState::IdleUnloaded,
+            "the queued session should still be unloaded before admission"
         );
     }
 

@@ -77,6 +77,17 @@ pub fn select_runtime_unload_candidate_by_affinity(
 }
 
 impl PriorityThenFifoSchedulerPolicy {
+    pub(crate) fn predicted_admission_decision(
+        &self,
+        input: &WorkflowSessionAdmissionInput,
+    ) -> Option<WorkflowSessionAdmissionDecision> {
+        let candidate = self.select_admission_candidate(input)?;
+        Some(WorkflowSessionAdmissionDecision {
+            admitted_queue_id: Some(candidate.queue_id.clone()),
+            reason: Some(self.admission_reason(input, candidate)),
+        })
+    }
+
     pub(crate) fn select_runtime_unload_candidate(
         &self,
         target: &WorkflowSessionRuntimeSelectionTarget,

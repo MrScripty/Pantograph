@@ -125,6 +125,7 @@ async fn emit_diagnostics_snapshots(
         snapshot.scheduler.captured_at_ms,
         Some(snapshot.scheduler.session),
         snapshot.scheduler.items,
+        snapshot.scheduler.diagnostics,
         None,
     );
     diagnostics_store.record_workflow_event(&scheduler_event, captured_at_ms);
