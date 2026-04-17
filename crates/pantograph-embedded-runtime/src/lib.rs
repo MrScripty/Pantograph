@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use node_engine::{
     CoreTaskExecutor, EventSink, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
 };
-use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
+use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_runtime_registry::{
     RuntimeRegistryError, RuntimeReservationRequirements, RuntimeRetentionHint,
     SharedRuntimeRegistry,
@@ -31,16 +31,15 @@ use pantograph_workflow_service::{
     WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunOptions,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
-    WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
-    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowService, WorkflowServiceError,
-    WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
-    WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
-    WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowRuntimeRequirements, WorkflowSchedulerDiagnosticsProvider,
+    WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerRuntimeRegistryDiagnostics,
+    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
     WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
     WorkflowSessionStaleCleanupResponse, WorkflowSessionState, WorkflowSessionStatusRequest,
     WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
@@ -1086,68 +1085,6 @@ impl EmbeddedWorkflowHost {
             .cloned()
     }
 
-    fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
-        match binary_id {
-            inference::ManagedBinaryId::LlamaCpp => backend_key_aliases("llama.cpp", "llama_cpp"),
-            inference::ManagedBinaryId::Ollama => backend_key_aliases("Ollama", "ollama"),
-        }
-    }
-
-    fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) -> bool {
-        backend_keys
-            .iter()
-            .any(|backend_key| canonical_runtime_backend_key(backend_key) == selected_backend_key)
-    }
-
-    fn runtime_supports_external_connection(
-        available_backends: &[inference::BackendInfo],
-        backend_keys: &[String],
-    ) -> bool {
-        let normalized_backend_keys = backend_keys
-            .iter()
-            .map(|backend_key| inference::backend::canonical_backend_key(backend_key))
-            .collect::<HashSet<_>>();
-
-        available_backends.iter().any(|backend| {
-            normalized_backend_keys.contains(&backend.backend_key)
-                && backend.capabilities.external_connection
-        })
-    }
-
-    fn is_python_sidecar_backend(backend: &inference::BackendInfo) -> bool {
-        backend.backend_key == "pytorch"
-    }
-
-    fn host_runtime_capability(
-        backend: &inference::BackendInfo,
-        selected_backend_key: &str,
-    ) -> Option<WorkflowRuntimeCapability> {
-        if backend.runtime_binary_id.is_some() || Self::is_python_sidecar_backend(backend) {
-            return None;
-        }
-
-        let backend_keys = backend_key_aliases(&backend.name, &backend.backend_key);
-        Some(WorkflowRuntimeCapability {
-            runtime_id: backend.backend_key.clone(),
-            display_name: backend.name.clone(),
-            install_state: if backend.available {
-                WorkflowRuntimeInstallState::SystemProvided
-            } else {
-                WorkflowRuntimeInstallState::Missing
-            },
-            available: backend.available,
-            configured: backend.available,
-            can_install: backend.can_install,
-            can_remove: false,
-            source_kind: WorkflowRuntimeSourceKind::Host,
-            selected: Self::runtime_matches_backend(&backend_keys, selected_backend_key),
-            supports_external_connection: backend.capabilities.external_connection,
-            backend_keys,
-            missing_files: Vec::new(),
-            unavailable_reason: backend.unavailable_reason.clone(),
-        })
-    }
-
     fn observe_python_runtime_execution_metadata(
         &self,
         metadata: &[task_executor::PythonRuntimeExecutionMetadata],
@@ -1673,49 +1610,17 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         let selected_backend_key =
             canonical_runtime_backend_key(&self.gateway.current_backend_name().await);
         let available_backends = self.gateway.available_backends();
-        let mut runtimes = inference::list_binary_capabilities(&self.app_data_dir)
-            .map_err(WorkflowServiceError::RuntimeNotReady)?
-            .into_iter()
-            .map(|runtime| {
-                let backend_keys = Self::runtime_backend_keys(runtime.id);
-                WorkflowRuntimeCapability {
-                    runtime_id: runtime.id.key().to_string(),
-                    display_name: runtime.display_name,
-                    install_state: match runtime.install_state {
-                        inference::ManagedBinaryInstallState::Installed => {
-                            WorkflowRuntimeInstallState::Installed
-                        }
-                        inference::ManagedBinaryInstallState::SystemProvided => {
-                            WorkflowRuntimeInstallState::SystemProvided
-                        }
-                        inference::ManagedBinaryInstallState::Missing => {
-                            WorkflowRuntimeInstallState::Missing
-                        }
-                        inference::ManagedBinaryInstallState::Unsupported => {
-                            WorkflowRuntimeInstallState::Unsupported
-                        }
-                    },
-                    available: runtime.available,
-                    configured: runtime.available,
-                    can_install: runtime.can_install,
-                    can_remove: runtime.can_remove,
-                    source_kind: WorkflowRuntimeSourceKind::Managed,
-                    selected: Self::runtime_matches_backend(&backend_keys, &selected_backend_key),
-                    supports_external_connection: Self::runtime_supports_external_connection(
-                        &available_backends,
-                        &backend_keys,
-                    ),
-                    backend_keys,
-                    missing_files: runtime.missing_files,
-                    unavailable_reason: runtime.unavailable_reason,
-                }
-            })
-            .collect::<Vec<_>>();
-        runtimes.extend(
-            available_backends.iter().filter_map(|backend| {
-                Self::host_runtime_capability(backend, &selected_backend_key)
-            }),
+        let managed_runtimes = inference::list_binary_capabilities(&self.app_data_dir)
+            .map_err(WorkflowServiceError::RuntimeNotReady)?;
+        let mut runtimes = runtime_capabilities::managed_runtime_capabilities(
+            &managed_runtimes,
+            &available_backends,
+            &selected_backend_key,
         );
+        runtimes.extend(runtime_capabilities::host_runtime_capabilities(
+            &available_backends,
+            &selected_backend_key,
+        ));
         runtimes.extend(runtime_capabilities::python_runtime_capabilities(
             python_runtime::resolve_python_executable_for_env_ids(&[]),
             &selected_backend_key,
@@ -1915,7 +1820,8 @@ mod tests {
         RuntimeReservationRequest, RuntimeTransition,
     };
     use pantograph_workflow_service::{
-        GraphEdge, GraphNode, Position, WorkflowGraph, WorkflowSchedulerRuntimeWarmupDecision,
+        GraphEdge, GraphNode, Position, WorkflowGraph, WorkflowRuntimeInstallState,
+        WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
         WorkflowSchedulerRuntimeWarmupReason,
     };
     use std::path::Path;
@@ -3701,40 +3607,6 @@ mod tests {
             .expect("candidate should exist");
 
         assert_eq!(selected.session_id, "session-b");
-    }
-
-    #[test]
-    fn host_runtime_capability_reports_candle_backend() {
-        let capability = EmbeddedWorkflowHost::host_runtime_capability(
-            &inference::BackendInfo {
-                name: "Candle".to_string(),
-                backend_key: "candle".to_string(),
-                description: "In-process Candle inference".to_string(),
-                capabilities: inference::BackendCapabilities {
-                    external_connection: false,
-                    ..inference::BackendCapabilities::default()
-                },
-                default_start_mode: inference::backend::BackendDefaultStartMode::Embedding,
-                active: true,
-                available: true,
-                unavailable_reason: None,
-                can_install: false,
-                runtime_binary_id: None,
-            },
-            "candle",
-        )
-        .expect("candle host capability");
-
-        assert_eq!(capability.runtime_id, "candle");
-        assert_eq!(capability.display_name, "Candle");
-        assert_eq!(
-            capability.install_state,
-            WorkflowRuntimeInstallState::SystemProvided
-        );
-        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Host);
-        assert!(capability.selected);
-        assert!(capability.backend_keys.contains(&"candle".to_string()));
-        assert!(capability.backend_keys.contains(&"Candle".to_string()));
     }
 
     #[tokio::test]

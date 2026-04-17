@@ -14,6 +14,47 @@ use pantograph_workflow_service::{
     WorkflowRuntimeSourceKind,
 };
 
+pub fn managed_runtime_capabilities(
+    runtimes: &[inference::ManagedBinaryCapability],
+    available_backends: &[inference::BackendInfo],
+    selected_backend_key: &str,
+) -> Vec<WorkflowRuntimeCapability> {
+    runtimes
+        .iter()
+        .map(|runtime| {
+            let backend_keys = runtime_backend_keys(runtime.id);
+            WorkflowRuntimeCapability {
+                runtime_id: runtime.id.key().to_string(),
+                display_name: runtime.display_name.clone(),
+                install_state: managed_runtime_install_state(runtime.install_state),
+                available: runtime.available,
+                configured: runtime.available,
+                can_install: runtime.can_install,
+                can_remove: runtime.can_remove,
+                source_kind: WorkflowRuntimeSourceKind::Managed,
+                selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+                supports_external_connection: runtime_supports_external_connection(
+                    available_backends,
+                    &backend_keys,
+                ),
+                backend_keys,
+                missing_files: runtime.missing_files.clone(),
+                unavailable_reason: runtime.unavailable_reason.clone(),
+            }
+        })
+        .collect()
+}
+
+pub fn host_runtime_capabilities(
+    backends: &[inference::BackendInfo],
+    selected_backend_key: &str,
+) -> Vec<WorkflowRuntimeCapability> {
+    backends
+        .iter()
+        .filter_map(|backend| host_runtime_capability(backend, selected_backend_key))
+        .collect()
+}
+
 pub fn dedicated_embedding_runtime_capabilities(
     snapshot: Option<inference::RuntimeLifecycleSnapshot>,
 ) -> Vec<WorkflowRuntimeCapability> {
@@ -173,6 +214,77 @@ fn runtime_capability_matches_required_backend(
             .any(|backend_key| canonical_runtime_backend_key(backend_key) == required_backend_key)
 }
 
+fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
+    match binary_id {
+        inference::ManagedBinaryId::LlamaCpp => backend_key_aliases("llama.cpp", "llama_cpp"),
+        inference::ManagedBinaryId::Ollama => backend_key_aliases("Ollama", "ollama"),
+    }
+}
+
+fn runtime_supports_external_connection(
+    available_backends: &[inference::BackendInfo],
+    backend_keys: &[String],
+) -> bool {
+    let normalized_backend_keys = backend_keys
+        .iter()
+        .map(|backend_key| inference::backend::canonical_backend_key(backend_key))
+        .collect::<std::collections::HashSet<_>>();
+
+    available_backends.iter().any(|backend| {
+        normalized_backend_keys.contains(&backend.backend_key)
+            && backend.capabilities.external_connection
+    })
+}
+
+fn is_python_sidecar_backend(backend: &inference::BackendInfo) -> bool {
+    backend.backend_key == "pytorch"
+}
+
+fn host_runtime_capability(
+    backend: &inference::BackendInfo,
+    selected_backend_key: &str,
+) -> Option<WorkflowRuntimeCapability> {
+    if backend.runtime_binary_id.is_some() || is_python_sidecar_backend(backend) {
+        return None;
+    }
+
+    let backend_keys = backend_key_aliases(&backend.name, &backend.backend_key);
+    Some(WorkflowRuntimeCapability {
+        runtime_id: backend.backend_key.clone(),
+        display_name: backend.name.clone(),
+        install_state: if backend.available {
+            WorkflowRuntimeInstallState::SystemProvided
+        } else {
+            WorkflowRuntimeInstallState::Missing
+        },
+        available: backend.available,
+        configured: backend.available,
+        can_install: backend.can_install,
+        can_remove: false,
+        source_kind: WorkflowRuntimeSourceKind::Host,
+        selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+        supports_external_connection: backend.capabilities.external_connection,
+        backend_keys,
+        missing_files: Vec::new(),
+        unavailable_reason: backend.unavailable_reason.clone(),
+    })
+}
+
+fn managed_runtime_install_state(
+    install_state: inference::ManagedBinaryInstallState,
+) -> WorkflowRuntimeInstallState {
+    match install_state {
+        inference::ManagedBinaryInstallState::Installed => WorkflowRuntimeInstallState::Installed,
+        inference::ManagedBinaryInstallState::SystemProvided => {
+            WorkflowRuntimeInstallState::SystemProvided
+        }
+        inference::ManagedBinaryInstallState::Missing => WorkflowRuntimeInstallState::Missing,
+        inference::ManagedBinaryInstallState::Unsupported => {
+            WorkflowRuntimeInstallState::Unsupported
+        }
+    }
+}
+
 fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) -> bool {
     backend_keys
         .iter()
@@ -182,6 +294,7 @@ fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use inference::backend::{BackendCapabilities, BackendDefaultStartMode};
 
     #[test]
     fn dedicated_embedding_runtime_capability_reports_dedicated_runtime() {
@@ -301,6 +414,84 @@ mod tests {
                 Some("python executable is not configured")
             );
         }
+    }
+
+    #[test]
+    fn host_runtime_capabilities_report_candle_backend() {
+        let capabilities = host_runtime_capabilities(
+            &[inference::BackendInfo {
+                name: "Candle".to_string(),
+                backend_key: "candle".to_string(),
+                description: "In-process Candle inference".to_string(),
+                capabilities: BackendCapabilities {
+                    external_connection: false,
+                    ..BackendCapabilities::default()
+                },
+                default_start_mode: BackendDefaultStartMode::Embedding,
+                active: true,
+                available: true,
+                unavailable_reason: None,
+                can_install: false,
+                runtime_binary_id: None,
+            }],
+            "candle",
+        );
+
+        assert_eq!(capabilities.len(), 1);
+        let capability = &capabilities[0];
+        assert_eq!(capability.runtime_id, "candle");
+        assert_eq!(capability.display_name, "Candle");
+        assert_eq!(
+            capability.install_state,
+            WorkflowRuntimeInstallState::SystemProvided
+        );
+        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Host);
+        assert!(capability.selected);
+        assert!(capability.backend_keys.contains(&"candle".to_string()));
+        assert!(capability.backend_keys.contains(&"Candle".to_string()));
+    }
+
+    #[test]
+    fn managed_runtime_capabilities_preserve_external_connection_support() {
+        let capabilities = managed_runtime_capabilities(
+            &[inference::ManagedBinaryCapability {
+                id: inference::ManagedBinaryId::LlamaCpp,
+                display_name: "llama.cpp".to_string(),
+                install_state: inference::ManagedBinaryInstallState::Installed,
+                available: true,
+                can_install: false,
+                can_remove: true,
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+            &[inference::BackendInfo {
+                name: "llama.cpp".to_string(),
+                backend_key: "llama_cpp".to_string(),
+                description: "Managed llama.cpp runtime".to_string(),
+                capabilities: BackendCapabilities {
+                    external_connection: true,
+                    ..BackendCapabilities::default()
+                },
+                default_start_mode: BackendDefaultStartMode::Inference,
+                active: false,
+                available: true,
+                unavailable_reason: None,
+                can_install: true,
+                runtime_binary_id: Some(inference::ManagedBinaryId::LlamaCpp),
+            }],
+            "llama_cpp",
+        );
+
+        assert_eq!(capabilities.len(), 1);
+        let capability = &capabilities[0];
+        assert_eq!(capability.runtime_id, "llama_cpp");
+        assert_eq!(capability.source_kind, WorkflowRuntimeSourceKind::Managed);
+        assert!(capability.selected);
+        assert!(capability.supports_external_connection);
+        assert_eq!(
+            capability.install_state,
+            WorkflowRuntimeInstallState::Installed
+        );
     }
 
     #[test]

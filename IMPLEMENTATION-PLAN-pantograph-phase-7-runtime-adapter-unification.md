@@ -566,6 +566,10 @@ Update during implementation:
   shared backend registry helper so reclaim-candidate lookup and warmup
   decision/reason translation no longer live inline in the diagnostics
   provider.
+- 2026-04-17: Continued Milestone 3 by moving managed-runtime and host-runtime
+  capability shaping into the shared backend capability module so
+  `EmbeddedWorkflowHost` no longer owns those `WorkflowRuntimeCapability`
+  translations inline.
 
 ## Commit Cadence Notes
 
