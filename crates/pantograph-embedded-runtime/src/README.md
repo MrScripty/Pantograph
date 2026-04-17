@@ -14,6 +14,7 @@ packages.
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
+| `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
 | `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
@@ -79,6 +80,9 @@ embedded-runtime crate.
 - Pantograph-specific runtime orchestration stays in this crate, not in generic
   node packages.
 - Python-backed nodes execute through the runtime adapter boundary.
+- Python runtime execution metadata and recorder state stay in backend Rust so
+  workflow diagnostics and registry projection do not depend on Tauri-local or
+  executor-local ad hoc payloads.
 - Dependency preflight and runtime execution must agree on executable model
   paths for the same resolved model.
 - Pantograph must preserve workflow-facing field names even when the underlying

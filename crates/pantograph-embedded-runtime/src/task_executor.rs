@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -22,6 +22,9 @@ use pantograph_runtime_identity::canonical_engine_backend_key;
 use crate::python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
     PythonStreamHandler,
+};
+pub use crate::python_runtime_execution::{
+    PythonRuntimeExecutionMetadata, PythonRuntimeExecutionRecorder,
 };
 use crate::rag::RagBackend;
 
@@ -53,41 +56,6 @@ pub mod runtime_extension_keys {
     /// Recorder for Python-backed runtime execution metadata captured during a run.
     pub const PYTHON_RUNTIME_EXECUTION_RECORDER: &str =
         "pantograph_python_runtime_execution_recorder";
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct PythonRuntimeExecutionMetadata {
-    pub snapshot: inference::RuntimeLifecycleSnapshot,
-    pub model_target: Option<String>,
-}
-
-#[derive(Debug, Default)]
-pub struct PythonRuntimeExecutionRecorder {
-    state: Mutex<Vec<PythonRuntimeExecutionMetadata>>,
-}
-
-impl PythonRuntimeExecutionRecorder {
-    pub fn record(&self, metadata: PythonRuntimeExecutionMetadata) {
-        self.state
-            .lock()
-            .expect("python runtime recorder lock")
-            .push(metadata);
-    }
-
-    pub fn snapshot(&self) -> Option<PythonRuntimeExecutionMetadata> {
-        self.state
-            .lock()
-            .expect("python runtime recorder lock")
-            .last()
-            .cloned()
-    }
-
-    pub fn snapshots(&self) -> Vec<PythonRuntimeExecutionMetadata> {
-        self.state
-            .lock()
-            .expect("python runtime recorder lock")
-            .clone()
-    }
 }
 
 impl TauriTaskExecutor {

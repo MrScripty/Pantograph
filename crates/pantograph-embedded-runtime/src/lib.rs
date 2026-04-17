@@ -58,6 +58,7 @@ pub mod embedding_workflow;
 pub mod host_runtime;
 pub mod model_dependencies;
 pub mod python_runtime;
+mod python_runtime_execution;
 pub mod rag;
 pub mod runtime_capabilities;
 pub mod runtime_health;

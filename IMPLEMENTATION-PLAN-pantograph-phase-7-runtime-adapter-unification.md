@@ -507,6 +507,11 @@ Update during implementation:
   dedicated embedded-runtime module so later producer-convergence changes can
   land behind backend Rust boundaries instead of expanding Tauri transport
   files.
+- 2026-04-17: Continued the Milestone 2 decomposition pass by moving Python
+  runtime execution metadata and recorder ownership out of `task_executor.rs`
+  into a dedicated backend module, keeping execution-observed producer facts
+  reusable by diagnostics and registry code without expanding the executor
+  facade.
 
 ## Commit Cadence Notes
 
