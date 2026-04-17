@@ -1240,10 +1240,11 @@ impl EmbeddedWorkflowHost {
             return Ok(());
         };
         for metadata in metadata {
-            runtime_registry::reconcile_runtime_registry_snapshot_override(
+            runtime_registry::reconcile_runtime_registry_snapshot_override_with_health_assessment(
                 runtime_registry.as_ref(),
                 &metadata.snapshot,
                 metadata.model_target.as_deref(),
+                metadata.health_assessment.as_ref(),
             );
         }
 

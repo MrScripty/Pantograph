@@ -1,9 +1,11 @@
+use crate::runtime_health::RuntimeHealthAssessment;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PythonRuntimeExecutionMetadata {
     pub snapshot: inference::RuntimeLifecycleSnapshot,
     pub model_target: Option<String>,
+    pub health_assessment: Option<RuntimeHealthAssessment>,
 }
 
 #[derive(Debug, Default)]

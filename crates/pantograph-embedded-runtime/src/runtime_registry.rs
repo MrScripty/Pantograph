@@ -124,6 +124,17 @@ pub fn reconcile_runtime_registry_snapshot_override(
     snapshot: &inference::RuntimeLifecycleSnapshot,
     model_id: Option<&str>,
 ) -> Option<RuntimeRegistryRuntimeSnapshot> {
+    reconcile_runtime_registry_snapshot_override_with_health_assessment(
+        registry, snapshot, model_id, None,
+    )
+}
+
+pub fn reconcile_runtime_registry_snapshot_override_with_health_assessment(
+    registry: &RuntimeRegistry,
+    snapshot: &inference::RuntimeLifecycleSnapshot,
+    model_id: Option<&str>,
+    assessment: Option<&RuntimeHealthAssessment>,
+) -> Option<RuntimeRegistryRuntimeSnapshot> {
     let runtime_id = snapshot
         .runtime_id
         .as_deref()
@@ -134,8 +145,7 @@ pub fn reconcile_runtime_registry_snapshot_override(
         .to_string();
     let backend_keys = runtime_backend_key_aliases(&display_name, &runtime_id);
 
-    let observation = preserve_matching_unhealthy_runtime(
-        registry,
+    let observation = crate::runtime_registry_observations::observation_with_health_assessment(
         RuntimeObservation {
             runtime_id,
             display_name: display_name.clone(),
@@ -150,7 +160,10 @@ pub fn reconcile_runtime_registry_snapshot_override(
             runtime_instance_id: snapshot.runtime_instance_id.clone(),
             last_error: snapshot.last_error.clone(),
         },
+        assessment,
     );
+
+    let observation = preserve_matching_unhealthy_runtime(registry, observation);
 
     Some(registry.observe_runtime(observation))
 }
@@ -823,6 +836,44 @@ mod tests {
 
         assert_eq!(pytorch.status, RuntimeRegistryStatus::Unhealthy);
         assert_eq!(pytorch.last_error.as_deref(), Some("probe timeout"));
+        assert_eq!(pytorch.models[0].model_id, "/models/retry.safetensors");
+    }
+
+    #[test]
+    fn reconcile_snapshot_override_marks_runtime_unhealthy_from_assessment() {
+        let registry = RuntimeRegistry::new();
+
+        let pytorch = reconcile_runtime_registry_snapshot_override_with_health_assessment(
+            &registry,
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: false,
+                last_error: Some("python sidecar crashed".to_string()),
+            },
+            Some("/models/retry.safetensors"),
+            Some(&RuntimeHealthAssessment {
+                healthy: false,
+                state: RuntimeHealthState::Unhealthy {
+                    reason: "python sidecar crashed".to_string(),
+                },
+                response_time_ms: None,
+                error: Some("python sidecar crashed".to_string()),
+                consecutive_failures: 1,
+            }),
+        )
+        .expect("python snapshot should be reconciled");
+
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Unhealthy);
+        assert_eq!(
+            pytorch.last_error.as_deref(),
+            Some("python sidecar crashed")
+        );
         assert_eq!(pytorch.models[0].model_id, "/models/retry.safetensors");
     }
 

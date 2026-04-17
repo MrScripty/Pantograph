@@ -512,6 +512,10 @@ Update during implementation:
   into a dedicated backend module, keeping execution-observed producer facts
   reusable by diagnostics and registry code without expanding the executor
   facade.
+- 2026-04-17: Extended the execution-observed Python runtime path so failed
+  Python-sidecar executions now carry a backend-owned unhealthy assessment into
+  registry reconciliation instead of relying on lifecycle snapshot errors
+  alone.
 
 ## Commit Cadence Notes
 

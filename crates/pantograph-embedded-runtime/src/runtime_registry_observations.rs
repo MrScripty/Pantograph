@@ -238,7 +238,7 @@ pub fn reconcile_active_runtime_mode_info(
         .map(|observation| registry.observe_runtime(observation))
 }
 
-fn observation_with_health_assessment(
+pub(crate) fn observation_with_health_assessment(
     mut observation: RuntimeObservation,
     assessment: Option<&RuntimeHealthAssessment>,
 ) -> RuntimeObservation {

@@ -27,6 +27,7 @@ pub use crate::python_runtime_execution::{
     PythonRuntimeExecutionMetadata, PythonRuntimeExecutionRecorder,
 };
 use crate::rag::RagBackend;
+use crate::runtime_health::unhealthy_runtime_health_assessment;
 
 /// Host task executor that handles only Pantograph host-dependent nodes.
 ///
@@ -291,6 +292,7 @@ impl TauriTaskExecutor {
                 last_error: None,
             },
             model_target: Self::python_runtime_model_target(&request.inputs),
+            health_assessment: None,
         }
     }
 
@@ -1381,6 +1383,8 @@ impl TauriTaskExecutor {
                     failed.snapshot.last_error = Some(error.clone());
                     failed.snapshot.lifecycle_decision_reason =
                         failed.snapshot.normalized_lifecycle_decision_reason();
+                    failed.health_assessment =
+                        Some(unhealthy_runtime_health_assessment(error.clone()));
                     recorder.record(failed);
                 }
                 NodeEngineError::ExecutionFailed(error)
@@ -1489,6 +1493,7 @@ mod tests {
         ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
         ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
     };
+    use std::sync::Mutex;
 
     #[test]
     fn canonical_backend_key_accepts_llama_cpp_alias() {
@@ -2006,6 +2011,7 @@ mod tests {
         );
         assert!(!metadata.snapshot.active);
         assert_eq!(metadata.model_target.as_deref(), Some("/tmp/model.onnx"));
+        assert_eq!(metadata.health_assessment, None);
     }
 
     #[tokio::test]
@@ -2080,6 +2086,67 @@ mod tests {
             Some("runtime_ready")
         );
         assert!(!metadata.snapshot.active);
+        assert_eq!(metadata.health_assessment, None);
+    }
+
+    struct FailingPythonAdapter;
+
+    #[async_trait]
+    impl PythonRuntimeAdapter for FailingPythonAdapter {
+        async fn execute_node(
+            &self,
+            _request: PythonNodeExecutionRequest,
+        ) -> std::result::Result<HashMap<String, serde_json::Value>, String> {
+            Err("python sidecar crashed".to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn python_runtime_recorder_marks_failed_execution_unhealthy() {
+        let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+            requirements: ModelDependencyRequirements {
+                backend_key: Some("pytorch".to_string()),
+                ..make_requirements(DependencyValidationState::Resolved)
+            },
+            status: make_status(DependencyState::Ready, None),
+            model_ref: None,
+        });
+        let executor = TauriTaskExecutor::with_python_runtime(None, Arc::new(FailingPythonAdapter));
+        let mut extensions = ExecutorExtensions::new();
+        extensions.set(extension_keys::MODEL_DEPENDENCY_RESOLVER, resolver);
+        let recorder = install_python_runtime_recorder(&mut extensions);
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "model_path".to_string(),
+            serde_json::json!("/tmp/model.safetensors"),
+        );
+        inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
+        inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+        let error = executor
+            .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
+            .await
+            .expect_err("python execution should fail");
+
+        match error {
+            NodeEngineError::ExecutionFailed(message) => {
+                assert!(message.contains("python sidecar crashed"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+
+        let metadata = recorder.snapshot().expect("python runtime metadata");
+        assert!(!metadata.snapshot.active);
+        assert_eq!(
+            metadata.snapshot.last_error.as_deref(),
+            Some("python sidecar crashed")
+        );
+        let assessment = metadata
+            .health_assessment
+            .expect("failed execution health assessment");
+        assert!(!assessment.healthy);
+        assert_eq!(assessment.error.as_deref(), Some("python sidecar crashed"));
     }
 
     #[tokio::test]

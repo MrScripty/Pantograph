@@ -66,6 +66,19 @@ pub fn runtime_health_assessment_record(
     })
 }
 
+pub fn unhealthy_runtime_health_assessment(reason: impl Into<String>) -> RuntimeHealthAssessment {
+    let reason = reason.into();
+    RuntimeHealthAssessment {
+        healthy: false,
+        state: RuntimeHealthState::Unhealthy {
+            reason: reason.clone(),
+        },
+        response_time_ms: None,
+        error: Some(reason),
+        consecutive_failures: 1,
+    }
+}
+
 pub fn assess_runtime_health_probe(
     probe: RuntimeHealthProbe,
     previous_failures: u32,
@@ -110,8 +123,8 @@ pub fn assess_runtime_health_probe(
 #[cfg(test)]
 mod tests {
     use super::{
-        assess_runtime_health_probe, runtime_health_assessment_record, RuntimeHealthProbe,
-        RuntimeHealthState,
+        assess_runtime_health_probe, runtime_health_assessment_record,
+        unhealthy_runtime_health_assessment, RuntimeHealthProbe, RuntimeHealthState,
     };
 
     #[test]
@@ -216,5 +229,20 @@ mod tests {
         assert_eq!(record.runtime_id, "pytorch");
         assert_eq!(record.runtime_instance_id.as_deref(), Some("pytorch-1"));
         assert!(record.assessment.healthy);
+    }
+
+    #[test]
+    fn unhealthy_runtime_health_assessment_builds_unhealthy_state() {
+        let assessment = unhealthy_runtime_health_assessment("python adapter failed");
+
+        assert!(!assessment.healthy);
+        assert_eq!(
+            assessment.state,
+            RuntimeHealthState::Unhealthy {
+                reason: "python adapter failed".to_string(),
+            }
+        );
+        assert_eq!(assessment.error.as_deref(), Some("python adapter failed"));
+        assert_eq!(assessment.consecutive_failures, 1);
     }
 }
