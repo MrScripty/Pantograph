@@ -555,6 +555,10 @@ Update during implementation:
   backend registry helper so admission checks and reservation acquisition reuse
   one payload contract instead of rebuilding runtime-id, owner-id, and model
   target fields separately.
+- 2026-04-17: Moved reservation release plus retention-driven reclaim
+  sequencing behind a shared backend lifecycle helper so the embedded workflow
+  host no longer stitches together release, disposition inspection, and runtime
+  reclaim behavior locally.
 
 ## Commit Cadence Notes
 

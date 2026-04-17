@@ -129,6 +129,9 @@ embedded-runtime crate.
   transition sequencing for active runtimes must stay in shared backend
   registry helpers so workflow execution does not own a separate warmup policy
   loop.
+- Reservation release plus retention-driven reclaim sequencing must stay in
+  shared backend registry helpers so workflow execution does not own a second
+  release-and-evict policy path outside the registry lifecycle boundary.
 - Active-runtime registration used by scheduler diagnostics and reservation
   paths must stay in shared backend registry helpers so workflow execution does
   not re-derive registration shape in multiple call sites.

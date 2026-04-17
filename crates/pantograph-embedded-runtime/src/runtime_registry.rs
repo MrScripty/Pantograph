@@ -7,6 +7,7 @@
 use crate::runtime_health::RuntimeHealthAssessment;
 pub use crate::runtime_registry_lifecycle::{
     consume_active_runtime_warmup_disposition, reclaim_runtime_and_reconcile_runtime_registry,
+    release_reservation_and_reconcile_runtime_registry,
     restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     sync_runtime_registry_with_active_health_assessment,
@@ -204,7 +205,7 @@ mod tests {
     };
     use pantograph_runtime_registry::{
         RuntimeReclaimDisposition, RuntimeRegistration, RuntimeRegistryStatus,
-        RuntimeRetentionReason,
+        RuntimeRetentionHint, RuntimeRetentionReason,
     };
 
     struct MockHostRuntimeController {
@@ -558,6 +559,79 @@ mod tests {
             .lock()
             .expect("stopped producers lock poisoned")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn release_reservation_and_reconcile_runtime_registry_reclaims_evicted_runtime() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-release".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        };
+        let registry = RuntimeRegistry::new();
+        reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+        let lease = registry
+            .acquire_reservation(active_runtime_reservation_request(
+                &registry,
+                &controller.mode_info_snapshot().await,
+                "wf-1",
+                Some("session-release"),
+                Some("interactive"),
+                None,
+                RuntimeRetentionHint::Ephemeral,
+            ))
+            .expect("reservation should be created");
+
+        let disposition = release_reservation_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            lease.reservation_id,
+        )
+        .await
+        .expect("release should succeed")
+        .expect("disposition should be returned");
+
+        assert_eq!(
+            disposition.decision,
+            pantograph_runtime_registry::RuntimeRetentionDecision::Evict
+        );
+        assert_eq!(disposition.runtime_id, "llama_cpp");
+        assert_eq!(
+            controller
+                .stopped_producers
+                .lock()
+                .expect("stopped producers lock poisoned")
+                .as_slice(),
+            &[HostRuntimeProducer::Active]
+        );
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("runtime should remain registered");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
+        assert!(runtime.runtime_instance_id.is_none());
     }
 
     #[test]

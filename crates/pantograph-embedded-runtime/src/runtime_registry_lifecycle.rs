@@ -14,8 +14,8 @@ use crate::runtime_registry::HostRuntimeProducer;
 use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_registry::{
     RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError,
-    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot, RuntimeTransition,
-    RuntimeWarmupDecision,
+    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot, RuntimeRetentionDecision,
+    RuntimeRetentionDisposition, RuntimeTransition, RuntimeWarmupDecision,
 };
 
 #[async_trait]
@@ -237,4 +237,27 @@ pub async fn reclaim_runtime_and_reconcile_runtime_registry<
     let mode_info = controller.mode_info_snapshot().await;
     crate::runtime_registry::reconcile_runtime_registry_mode_info(registry, &mode_info);
     Ok(reclaim)
+}
+
+pub async fn release_reservation_and_reconcile_runtime_registry<
+    C: HostRuntimeRegistryController + Sync,
+>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    reservation_id: u64,
+) -> Result<Option<RuntimeRetentionDisposition>, RuntimeRegistryError> {
+    let disposition = registry.release_reservation_if_present(reservation_id)?;
+
+    if let Some(disposition) = disposition.as_ref() {
+        if disposition.decision == RuntimeRetentionDecision::Evict {
+            reclaim_runtime_and_reconcile_runtime_registry(
+                controller,
+                registry,
+                &disposition.runtime_id,
+            )
+            .await?;
+        }
+    }
+
+    Ok(disposition)
 }

@@ -9,8 +9,8 @@ use node_engine::{
 };
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
-    RuntimeRegistryError, RuntimeReservationRequirements, RuntimeRetentionDecision,
-    RuntimeRetentionHint, RuntimeWarmupDecision, SharedRuntimeRegistry,
+    RuntimeRegistryError, RuntimeReservationRequirements, RuntimeRetentionHint,
+    RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -1398,29 +1398,6 @@ impl EmbeddedWorkflowHost {
         .map_err(Self::workflow_service_error_from_runtime_warmup_coordination)
     }
 
-    async fn apply_runtime_retention_disposition(
-        &self,
-        runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
-        disposition: Option<pantograph_runtime_registry::RuntimeRetentionDisposition>,
-    ) -> Result<(), WorkflowServiceError> {
-        let Some(disposition) = disposition else {
-            return Ok(());
-        };
-        if disposition.decision != RuntimeRetentionDecision::Evict {
-            return Ok(());
-        }
-
-        runtime_registry::reclaim_runtime_and_reconcile_runtime_registry(
-            self.gateway.as_ref(),
-            runtime_registry,
-            &disposition.runtime_id,
-        )
-        .await
-        .map_err(Self::workflow_service_error_from_runtime_registry)?;
-
-        Ok(())
-    }
-
     async fn reserve_loaded_session_runtime(
         &self,
         session_id: &str,
@@ -1462,11 +1439,13 @@ impl EmbeddedWorkflowHost {
         {
             self.restore_session_runtime_reservation(session_id, previous_reservation_id)?;
             if previous_reservation_id != Some(lease.reservation_id) {
-                let disposition = runtime_registry
-                    .release_reservation_if_present(lease.reservation_id)
-                    .map_err(Self::workflow_service_error_from_runtime_registry)?;
-                self.apply_runtime_retention_disposition(runtime_registry.as_ref(), disposition)
-                    .await?;
+                runtime_registry::release_reservation_and_reconcile_runtime_registry(
+                    self.gateway.as_ref(),
+                    runtime_registry.as_ref(),
+                    lease.reservation_id,
+                )
+                .await
+                .map_err(Self::workflow_service_error_from_runtime_registry)?;
             }
             return Err(error);
         }
@@ -1492,11 +1471,13 @@ impl EmbeddedWorkflowHost {
         };
 
         if let Some(reservation_id) = reservation_id {
-            let disposition = runtime_registry
-                .release_reservation_if_present(reservation_id)
-                .map_err(Self::workflow_service_error_from_runtime_registry)?;
-            self.apply_runtime_retention_disposition(runtime_registry.as_ref(), disposition)
-                .await?;
+            runtime_registry::release_reservation_and_reconcile_runtime_registry(
+                self.gateway.as_ref(),
+                runtime_registry.as_ref(),
+                reservation_id,
+            )
+            .await
+            .map_err(Self::workflow_service_error_from_runtime_registry)?;
         }
 
         Ok(())
@@ -2000,7 +1981,7 @@ mod tests {
     use inference::{RerankRequest, RerankResponse};
     use pantograph_runtime_registry::{
         RuntimeRegistration, RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
-        RuntimeTransition,
+        RuntimeReservationRequest, RuntimeTransition,
     };
     use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use std::path::Path;
