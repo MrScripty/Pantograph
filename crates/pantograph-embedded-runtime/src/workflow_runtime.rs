@@ -373,15 +373,11 @@ pub fn reconcile_runtime_registry_stored_projection_overrides(
         return;
     };
 
-    reconcile_stored_runtime_registry_projection_override(
+    crate::runtime_registry::reconcile_runtime_registry_stored_projection_overrides(
         runtime_registry,
         stored_active_runtime_snapshot,
-        stored_active_model_target,
-        gateway_mode_info,
-    );
-    reconcile_stored_runtime_registry_projection_override(
-        runtime_registry,
         stored_embedding_runtime_snapshot,
+        stored_active_model_target,
         stored_embedding_model_target,
         gateway_mode_info,
     );
@@ -402,40 +398,6 @@ fn reconcile_runtime_projection_registry_override(
         runtime_registry,
         runtime_snapshot_override,
         runtime_model_target,
-    );
-}
-
-fn reconcile_stored_runtime_registry_projection_override(
-    runtime_registry: &RuntimeRegistry,
-    stored_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
-    stored_model_target: Option<&str>,
-    gateway_mode_info: &HostRuntimeModeSnapshot,
-) {
-    let Some(stored_runtime_snapshot) = stored_runtime_snapshot else {
-        return;
-    };
-    let Some(stored_runtime_id) = stored_runtime_snapshot
-        .runtime_id
-        .as_deref()
-        .map(canonical_runtime_id)
-        .filter(|runtime_id| !runtime_id.is_empty())
-    else {
-        return;
-    };
-
-    let matches_live_host_runtime = crate::runtime_registry::active_runtime_id(gateway_mode_info)
-        .as_deref()
-        == Some(stored_runtime_id.as_str())
-        || crate::runtime_registry::embedding_runtime_id(gateway_mode_info).as_deref()
-            == Some(stored_runtime_id.as_str());
-    if matches_live_host_runtime {
-        return;
-    }
-
-    crate::runtime_registry::reconcile_runtime_registry_snapshot_override(
-        runtime_registry,
-        stored_runtime_snapshot,
-        stored_model_target,
     );
 }
 

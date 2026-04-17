@@ -573,6 +573,10 @@ Update during implementation:
 - 2026-04-17: Added backend parity coverage for managed, host,
   dedicated-embedding, and Python-sidecar capability builders so Milestone 3
   now pins the shared runtime-capability contract across producer families.
+- 2026-04-17: Began Milestone 4 by moving stored-runtime replay and live-host
+  runtime skip rules behind a shared backend registry helper so
+  `workflow_runtime.rs` no longer owns a separate post-restore registry
+  reconciliation path.
 
 ## Commit Cadence Notes
 

@@ -153,6 +153,10 @@ embedded-runtime crate.
   embedding-path execution facts become shared registry observations, and so
   execution-local snapshots do not erase a matching producer's existing
   backend-owned `unhealthy` registry state.
+- Stored-runtime replay and live-host-runtime skip rules for diagnostics and
+  restore projections must stay in shared backend registry helpers so workflow
+  diagnostics code does not own a second post-restore registry reconciliation
+  path.
 - Restore-time replay of stored non-live runtime snapshots into the shared
   registry must stay in backend Rust so diagnostics paths can rehydrate
   execution-observed producer state without overriding live gateway or
