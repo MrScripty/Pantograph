@@ -564,6 +564,11 @@ Update during implementation:
   JSON boundaries. The first cleanup slice aligns UniFFI with Rustler by
   centralizing request parsing and response serialization instead of repeating
   ad hoc `serde_json` handling across each exported workflow helper.
+- Milestone 4 Rustler cleanup now mirrors the same transport-only boundary
+  shape as UniFFI by centralizing host-backed and scheduler-backed workflow
+  wrapper execution around shared JSON parse/serialize helpers, while the
+  Rustler README now identifies `pantograph-workflow-service` as the contract
+  owner and documents the full optional frontend-HTTP export surface.
 
 ### Deviations
 

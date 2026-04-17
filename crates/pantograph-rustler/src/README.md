@@ -17,9 +17,15 @@ Default (`no features`):
 `frontend-http` feature:
 - `frontend_http_workflow_run/3`
 - `frontend_http_workflow_get_capabilities/3`
+- `frontend_http_workflow_preflight/3`
 - `frontend_http_workflow_create_session/3`
 - `frontend_http_workflow_run_session/3`
-- `frontend_http_workflow_close_session/1`
+- `frontend_http_workflow_close_session/3`
+- `frontend_http_workflow_get_session_status/1`
+- `frontend_http_workflow_list_session_queue/1`
+- `frontend_http_workflow_cancel_session_queue_item/1`
+- `frontend_http_workflow_reprioritize_session_queue_item/1`
+- `frontend_http_workflow_set_session_keep_alive/3`
 
 ## Dependencies
 - Internal: `pantograph-workflow-service`, `node-engine`.
@@ -29,3 +35,7 @@ Default (`no features`):
 ## Notes
 
 - Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.
+- The request and response JSON contracts are owned by
+  `pantograph-workflow-service`; the Rustler layer only parses boundary JSON,
+  delegates to the Rust service/adapter crates, and returns backend-owned
+  response or error-envelope JSON back to the BEAM.

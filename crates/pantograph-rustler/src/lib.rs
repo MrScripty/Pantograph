@@ -499,20 +499,56 @@ fn build_frontend_http_host(
 }
 
 #[cfg(feature = "frontend-http")]
+fn workflow_run_host_request<Request, Response, Fut>(
+    base_url: String,
+    request_json: String,
+    pumas_resource: Option<ResourceArc<PumasApiResource>>,
+    execute: impl FnOnce(FrontendHttpWorkflowHost, Request) -> Fut,
+) -> NifResult<String>
+where
+    Request: serde::de::DeserializeOwned,
+    Response: serde::Serialize,
+    Fut: std::future::Future<Output = Result<Response, WorkflowServiceError>>,
+{
+    let request: Request = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+    let host = build_frontend_http_host(base_url, pumas_resource)?;
+    let response = runtime
+        .block_on(execute(host, request))
+        .map_err(map_workflow_service_error)?;
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
+fn workflow_run_scheduler_request<Request, Response, Fut>(
+    request_json: String,
+    execute: impl FnOnce(Request) -> Fut,
+) -> NifResult<String>
+where
+    Request: serde::de::DeserializeOwned,
+    Response: serde::Serialize,
+    Fut: std::future::Future<Output = Result<Response, WorkflowServiceError>>,
+{
+    let request: Request = workflow_parse_request(&request_json)?;
+    let runtime = workflow_runtime()?;
+    let response = runtime
+        .block_on(execute(request))
+        .map_err(map_workflow_service_error)?;
+    workflow_serialize_response(&response)
+}
+
+#[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_run_impl(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowRunRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async { WORKFLOW_SERVICE.workflow_run(&host, request).await })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+    workflow_run_host_request::<WorkflowRunRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move { WORKFLOW_SERVICE.workflow_run(&host, request).await },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -531,19 +567,16 @@ fn frontend_http_workflow_get_capabilities_impl(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowCapabilitiesRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async {
+    workflow_run_host_request::<WorkflowCapabilitiesRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move {
             WORKFLOW_SERVICE
                 .workflow_get_capabilities(&host, request)
                 .await
-        })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+        },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -562,15 +595,12 @@ fn frontend_http_workflow_preflight_impl(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowPreflightRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async { WORKFLOW_SERVICE.workflow_preflight(&host, request).await })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+    workflow_run_host_request::<WorkflowPreflightRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move { WORKFLOW_SERVICE.workflow_preflight(&host, request).await },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -589,19 +619,16 @@ fn frontend_http_workflow_create_session_impl(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowSessionCreateRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async {
+    workflow_run_host_request::<WorkflowSessionCreateRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move {
             WORKFLOW_SERVICE
                 .create_workflow_session(&host, request)
                 .await
-        })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+        },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -620,15 +647,12 @@ fn frontend_http_workflow_run_session_impl(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowSessionRunRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async { WORKFLOW_SERVICE.run_workflow_session(&host, request).await })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+    workflow_run_host_request::<WorkflowSessionRunRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move { WORKFLOW_SERVICE.run_workflow_session(&host, request).await },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -637,19 +661,16 @@ fn frontend_http_workflow_close_session_impl(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowSessionCloseRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async {
+    workflow_run_host_request::<WorkflowSessionCloseRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move {
             WORKFLOW_SERVICE
                 .close_workflow_session(&host, request)
                 .await
-        })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+        },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -674,14 +695,9 @@ fn frontend_http_workflow_close_session(
 
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_get_session_status_impl(request_json: String) -> NifResult<String> {
-    let request: WorkflowSessionStatusRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let response = runtime
-        .block_on(async { WORKFLOW_SERVICE.workflow_get_session_status(request).await })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+    workflow_run_scheduler_request::<WorkflowSessionStatusRequest, _, _>(request_json, |request| {
+        async move { WORKFLOW_SERVICE.workflow_get_session_status(request).await }
+    })
 }
 
 #[cfg(feature = "frontend-http")]
@@ -692,14 +708,9 @@ fn frontend_http_workflow_get_session_status(request_json: String) -> NifResult<
 
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_list_session_queue_impl(request_json: String) -> NifResult<String> {
-    let request: WorkflowSessionQueueListRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let response = runtime
-        .block_on(async { WORKFLOW_SERVICE.workflow_list_session_queue(request).await })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+    workflow_run_scheduler_request::<WorkflowSessionQueueListRequest, _, _>(request_json, |request| {
+        async move { WORKFLOW_SERVICE.workflow_list_session_queue(request).await }
+    })
 }
 
 #[cfg(feature = "frontend-http")]
@@ -712,18 +723,11 @@ fn frontend_http_workflow_list_session_queue(request_json: String) -> NifResult<
 fn frontend_http_workflow_cancel_session_queue_item_impl(
     request_json: String,
 ) -> NifResult<String> {
-    let request: WorkflowSessionQueueCancelRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let response = runtime
-        .block_on(async {
-            WORKFLOW_SERVICE
-                .workflow_cancel_session_queue_item(request)
-                .await
-        })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+    workflow_run_scheduler_request::<WorkflowSessionQueueCancelRequest, _, _>(request_json, |request| async move {
+        WORKFLOW_SERVICE
+            .workflow_cancel_session_queue_item(request)
+            .await
+    })
 }
 
 #[cfg(feature = "frontend-http")]
@@ -736,18 +740,14 @@ fn frontend_http_workflow_cancel_session_queue_item(request_json: String) -> Nif
 fn frontend_http_workflow_reprioritize_session_queue_item_impl(
     request_json: String,
 ) -> NifResult<String> {
-    let request: WorkflowSessionQueueReprioritizeRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let response = runtime
-        .block_on(async {
+    workflow_run_scheduler_request::<WorkflowSessionQueueReprioritizeRequest, _, _>(
+        request_json,
+        |request| async move {
             WORKFLOW_SERVICE
                 .workflow_reprioritize_session_queue_item(request)
                 .await
-        })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+        },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -764,19 +764,16 @@ fn frontend_http_workflow_set_session_keep_alive_impl(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    let request: WorkflowSessionKeepAliveRequest = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(async {
+    workflow_run_host_request::<WorkflowSessionKeepAliveRequest, _, _>(
+        base_url,
+        request_json,
+        pumas_resource,
+        |host, request| async move {
             WORKFLOW_SERVICE
                 .workflow_set_session_keep_alive(&host, request)
                 .await
-        })
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
+        },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
