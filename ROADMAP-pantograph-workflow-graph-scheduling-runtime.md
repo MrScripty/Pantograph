@@ -13,7 +13,7 @@ implementation progress in the runtime and diagnostics layers.
 1. Metrics/trace spine: In progress
 2. Parallel demand execution: Not started
 3. KV cache implementation: Not started
-4. Scheduler V2: In progress
+4. Scheduler V2: Complete
 5. Real workflow event contract: Partial prerequisite groundwork only
 6. Incremental graph execution: Not started
 7. Runtime adapter unification: In progress
@@ -36,8 +36,8 @@ Milestone 6 diagnostics, documentation, and rollout-safety reconciliation are
 complete. Scheduler V2 milestone 5 close-out is now also complete: transport
 projection, cleanup recovery, restore/reclaim recovery, and source-of-truth
 reconciliation are landed, and canonical scheduler snapshots now expose
-backend-owned earliest-known admission ETA bounds, while later scheduler
-phases remain focused on final fairness breadth.
+backend-owned earliest-known admission ETA bounds plus fairness-driven queue-
+head bypass visibility.
 
 ### Completed groundwork already in the repo
 
@@ -281,7 +281,7 @@ cross-cutting delivery work rather than an eighth roadmap point.
 
 ### Phase 1: Metrics/Trace Spine
 
-**Status:** In progress
+**Status:** Complete
 
 **Goal:** Make execution, queueing, and runtime behavior measurable before
 adding more scheduling or graph complexity.
@@ -587,14 +587,13 @@ This replaces the original purely hypothetical sequence. It reflects the code
 that has already landed and the safest next dependency order from here.
 
 1. Finish runtime adapter unification and remaining producer-convergence work
-2. Complete metrics/trace spine hardening so scheduler and registry policy are
-   observable
-3. Finish Scheduler V2 close-out and remaining policy breadth on top of the
-   completed runtime-registry boundary
+2. Complete metrics/trace spine hardening so runtime, scheduler, and registry
+   policy stay observable as later roadmap work lands
+3. Finish the real workflow event contract end-to-end on top of the now-frozen
+   scheduler and runtime-registry boundaries
 4. Implement parallel demand execution in `node-engine`
-5. Finish the real workflow event contract end-to-end
-6. Implement incremental graph execution
-7. Implement KV cache as a real reusable runtime primitive
+5. Implement incremental graph execution
+6. Implement KV cache as a real reusable runtime primitive
 
 ## Dependencies and Sequencing Notes
 

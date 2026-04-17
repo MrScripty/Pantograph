@@ -645,9 +645,9 @@ and source-of-truth alignment.
 - Milestone 5 did not introduce new checked-in fixtures or structured examples
   outside the existing backend tests, so no additional fixture-specific
   validation or regeneration steps were required during close-out.
-- Remaining Scheduler V2 work is intentionally deferred to later milestones:
-  further fairness-policy breadth beyond the currently landed starvation and
-  warm-affinity rules.
+- Scheduler V2 is complete at the current roadmap scope. Later roadmap phases
+  should treat the scheduler contracts and policy boundaries landed here as
+  frozen unless a new re-plan explicitly approves additional scheduler work.
 
 **Status:** Complete
 
@@ -746,6 +746,8 @@ Update during implementation:
 
 - Dedicated Scheduler V2 source-of-truth planning file created
 - Roadmap cross-reference updated to point at this plan
+- Scheduler V2 implementation slices are complete through Milestone 5 close-out
+  plus the post-close-out bounded ETA and fairness-observability additions
 
 ### Deviations
 
@@ -753,9 +755,9 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Reconcile Scheduler V2 dependency readiness against the current metrics/trace
-  spine and any remaining runtime-producer convergence tasks before
-  implementation starts
+- No internal Scheduler V2 follow-up is currently scheduled. Later roadmap
+  phases should build on this boundary rather than reopening scheduler policy
+  ownership without an explicit re-plan.
 
 ### Verification Summary
 
@@ -765,7 +767,7 @@ Update during implementation:
 
 ### Traceability Links
 
-- Module README updated: Pending Scheduler V2 implementation boundary
+- Module README updated: `crates/pantograph-workflow-service/src/scheduler/README.md`
 - ADR added/updated: N/A at planning time
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A at planning
   time
