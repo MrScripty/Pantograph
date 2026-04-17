@@ -10,7 +10,8 @@ use pantograph_runtime_identity::{
     runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_workflow_service::{
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeSourceKind,
+    WorkflowCapabilitiesResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
+    WorkflowRuntimeSourceKind,
 };
 
 pub fn dedicated_embedding_runtime_capabilities(
@@ -101,6 +102,75 @@ pub fn python_runtime_capabilities(
         }
     })
     .collect()
+}
+
+pub fn capability_runtime_lifecycle_snapshot(
+    capabilities: Option<&WorkflowCapabilitiesResponse>,
+) -> Option<inference::RuntimeLifecycleSnapshot> {
+    let capabilities = capabilities?;
+    let selected_runtime = capabilities
+        .runtime_capabilities
+        .iter()
+        .find(|capability| capability.selected)
+        .or_else(|| {
+            if capabilities.runtime_requirements.required_backends.len() != 1 {
+                return None;
+            }
+
+            let required_backend_key = &capabilities.runtime_requirements.required_backends[0];
+            capabilities
+                .runtime_capabilities
+                .iter()
+                .filter(|capability| {
+                    runtime_capability_matches_required_backend(capability, required_backend_key)
+                })
+                .max_by(|left, right| {
+                    (
+                        left.available && left.configured,
+                        left.available,
+                        left.configured,
+                    )
+                        .cmp(&(
+                            right.available && right.configured,
+                            right.available,
+                            right.configured,
+                        ))
+                        .then_with(|| left.runtime_id.cmp(&right.runtime_id))
+                })
+        })?;
+    let lifecycle_decision_reason = if selected_runtime.selected {
+        "selected_runtime_reported"
+    } else {
+        "required_runtime_reported"
+    };
+
+    Some(inference::RuntimeLifecycleSnapshot {
+        runtime_id: Some(canonical_runtime_id(&selected_runtime.runtime_id))
+            .filter(|runtime_id| !runtime_id.is_empty()),
+        runtime_instance_id: None,
+        warmup_started_at_ms: None,
+        warmup_completed_at_ms: None,
+        warmup_duration_ms: None,
+        runtime_reused: None,
+        lifecycle_decision_reason: Some(lifecycle_decision_reason.to_string()),
+        active: false,
+        last_error: selected_runtime
+            .unavailable_reason
+            .clone()
+            .filter(|reason| !reason.trim().is_empty()),
+    })
+}
+
+fn runtime_capability_matches_required_backend(
+    capability: &WorkflowRuntimeCapability,
+    required_backend_key: &str,
+) -> bool {
+    let required_backend_key = canonical_runtime_backend_key(required_backend_key);
+    canonical_runtime_backend_key(&capability.runtime_id) == required_backend_key
+        || capability
+            .backend_keys
+            .iter()
+            .any(|backend_key| canonical_runtime_backend_key(backend_key) == required_backend_key)
 }
 
 fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) -> bool {
@@ -231,5 +301,92 @@ mod tests {
                 Some("python executable is not configured")
             );
         }
+    }
+
+    #[test]
+    fn capability_runtime_lifecycle_snapshot_prefers_selected_runtime() {
+        let snapshot = capability_runtime_lifecycle_snapshot(Some(&WorkflowCapabilitiesResponse {
+            max_input_bindings: 4,
+            max_output_targets: 2,
+            max_value_bytes: 1000,
+            runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "high".to_string(),
+                required_models: vec!["model-a".to_string()],
+                required_backends: vec!["pytorch".to_string()],
+                required_extensions: Vec::new(),
+            },
+            models: Vec::new(),
+            runtime_capabilities: vec![pantograph_workflow_service::WorkflowRuntimeCapability {
+                runtime_id: "PyTorch".to_string(),
+                display_name: "PyTorch (Python sidecar)".to_string(),
+                install_state:
+                    pantograph_workflow_service::WorkflowRuntimeInstallState::SystemProvided,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
+                selected: true,
+                supports_external_connection: false,
+                backend_keys: vec!["torch".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+        }))
+        .expect("selected capability snapshot");
+
+        assert_eq!(snapshot.runtime_id.as_deref(), Some("pytorch"));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("selected_runtime_reported")
+        );
+        assert!(!snapshot.active);
+    }
+
+    #[test]
+    fn capability_runtime_lifecycle_snapshot_matches_required_backend_alias() {
+        let snapshot = capability_runtime_lifecycle_snapshot(Some(&WorkflowCapabilitiesResponse {
+            max_input_bindings: 4,
+            max_output_targets: 2,
+            max_value_bytes: 1000,
+            runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "high".to_string(),
+                required_models: vec!["model-a".to_string()],
+                required_backends: vec!["onnxruntime".to_string()],
+                required_extensions: Vec::new(),
+            },
+            models: Vec::new(),
+            runtime_capabilities: vec![pantograph_workflow_service::WorkflowRuntimeCapability {
+                runtime_id: "onnx-runtime".to_string(),
+                display_name: "ONNX Runtime".to_string(),
+                install_state:
+                    pantograph_workflow_service::WorkflowRuntimeInstallState::SystemProvided,
+                available: true,
+                configured: true,
+                can_install: false,
+                can_remove: false,
+                source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
+                selected: false,
+                supports_external_connection: false,
+                backend_keys: vec!["ONNX Runtime".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+        }))
+        .expect("required backend snapshot");
+
+        assert_eq!(snapshot.runtime_id.as_deref(), Some("onnx-runtime"));
+        assert_eq!(
+            snapshot.lifecycle_decision_reason.as_deref(),
+            Some("required_runtime_reported")
+        );
     }
 }

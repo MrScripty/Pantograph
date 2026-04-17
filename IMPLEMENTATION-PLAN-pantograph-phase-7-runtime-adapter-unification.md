@@ -397,7 +397,7 @@ dedicated embedding, and execution-observed runtime producers.
 - Manual interop review against `INTEROP-STANDARDS.md` and
   `LANGUAGE-BINDINGS-STANDARDS.md` for additive payload compatibility
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Broaden Backend-Owned Registry Boundary Coverage
 
@@ -519,6 +519,10 @@ Update during implementation:
 - 2026-04-17: Moved Python-sidecar runtime capability construction into the
   shared backend capability helper module so the execution-observed producer
   family no longer depends on `EmbeddedWorkflowHost`-local capability shaping.
+- 2026-04-17: Moved capability-driven lifecycle fallback selection into the
+  shared backend capability helper module so diagnostics and workflow fallback
+  paths reuse the same backend-owned capability contract instead of
+  `workflow_runtime.rs`-local selection logic.
 
 ## Commit Cadence Notes
 
