@@ -448,6 +448,9 @@ incremental runs.
 - The existing GUI now also maps backend-owned `IncrementalExecutionStarted`
   and `GraphModified` events onto node execution state, so incremental reruns
   and dirty-subgraph invalidation no longer stop at transport-only parity.
+- The shared graph package now also mirrors the backend-owned `Cancelled`
+  workflow event and the existing GUI closes out cancelled runs through that
+  contract instead of depending on failure-only handling.
 - The app diagnostics consumer now also tracks run execution identity
   separately from editable-session ownership, so session-backed diagnostics
   filtering no longer rejects backend-owned run events before the session UI

@@ -138,6 +138,12 @@
         cleanupExecution();
         break;
       }
+      case 'Cancelled': {
+        const cancelledData = event.data as { error: string };
+        console.warn('Workflow cancelled:', cancelledData.error);
+        cleanupExecution();
+        break;
+      }
     }
   }
 

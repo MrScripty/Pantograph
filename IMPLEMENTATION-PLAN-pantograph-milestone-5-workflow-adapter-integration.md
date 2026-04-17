@@ -608,6 +608,9 @@ Update during implementation:
   and `GraphModified` events into node execution state, closing another
   frontend parity gap without moving graph invalidation or incremental-run
   policy out of Rust-owned execution layers.
+- The shared graph package now also mirrors the backend-owned `Cancelled`
+  workflow event and the existing GUI closes out cancelled runs through that
+  contract instead of relying on failure-only handling.
 
 ### Deviations
 
