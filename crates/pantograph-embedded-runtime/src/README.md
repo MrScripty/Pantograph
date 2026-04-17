@@ -84,10 +84,11 @@ embedded-runtime crate.
 - Python runtime execution metadata and recorder state stay in backend Rust so
   workflow diagnostics and registry projection do not depend on Tauri-local or
   executor-local ad hoc payloads.
-- Failed Python runtime executions may also carry a backend-owned unhealthy
-  assessment so execution-observed producer failures converge on the shared
-  runtime-registry `unhealthy` contract instead of remaining snapshot-only
-  errors.
+- Failed Python runtime executions may also carry a backend-owned health
+  assessment so execution-observed producer failures reuse the shared degraded
+  versus unhealthy threshold contract, only escalating matching registry
+  observations to `unhealthy` when the backend threshold is crossed instead of
+  remaining snapshot-only errors.
 - Dependency preflight and runtime execution must agree on executable model
   paths for the same resolved model.
 - Pantograph must preserve workflow-facing field names even when the underlying

@@ -772,6 +772,44 @@ mod tests {
         assert_eq!(pytorch.models[0].model_id, "/models/retry.safetensors");
     }
 
+    #[test]
+    fn reconcile_snapshot_override_keeps_failed_status_when_health_is_only_degraded() {
+        let registry = RuntimeRegistry::new();
+
+        let pytorch = reconcile_runtime_registry_snapshot_override_with_health_assessment(
+            &registry,
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: false,
+                last_error: Some("python sidecar crashed".to_string()),
+            },
+            Some("/models/retry.safetensors"),
+            Some(&RuntimeHealthAssessment {
+                healthy: true,
+                state: RuntimeHealthState::Degraded {
+                    reason: "python sidecar crashed".to_string(),
+                },
+                response_time_ms: None,
+                error: Some("python sidecar crashed".to_string()),
+                consecutive_failures: 1,
+            }),
+        )
+        .expect("python snapshot should be reconciled");
+
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Failed);
+        assert_eq!(
+            pytorch.last_error.as_deref(),
+            Some("python sidecar crashed")
+        );
+        assert!(pytorch.models.is_empty());
+    }
+
     #[tokio::test]
     async fn runtime_registry_snapshot_syncs_controller_mode_info() {
         let controller = MockHostRuntimeController {

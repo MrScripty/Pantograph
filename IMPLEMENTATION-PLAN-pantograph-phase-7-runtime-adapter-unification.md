@@ -535,6 +535,10 @@ Update during implementation:
   restore orchestration into a dedicated backend lifecycle module so
   `runtime_registry.rs` can stay focused on observation translation and
   execution-path reconciliation while Phase 7 continues.
+- 2026-04-17: Extended execution-observed Python-sidecar failures to reuse the
+  shared backend degraded-versus-unhealthy threshold contract, with recorder
+  state carrying consecutive-failure progression per runtime instance and only
+  thresholded failures escalating registry reconciliation to `unhealthy`.
 
 ## Commit Cadence Notes
 

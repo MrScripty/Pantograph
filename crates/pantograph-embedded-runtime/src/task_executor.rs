@@ -27,7 +27,7 @@ pub use crate::python_runtime_execution::{
     PythonRuntimeExecutionMetadata, PythonRuntimeExecutionRecorder,
 };
 use crate::rag::RagBackend;
-use crate::runtime_health::unhealthy_runtime_health_assessment;
+use crate::runtime_health::failed_runtime_health_assessment;
 
 /// Host task executor that handles only Pantograph host-dependent nodes.
 ///
@@ -62,6 +62,7 @@ pub mod runtime_extension_keys {
 impl TauriTaskExecutor {
     const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
     const FNV64_PRIME: u64 = 0x0000_0100_0000_01B3;
+    const PYTHON_RUNTIME_FAILURE_THRESHOLD: u32 = 3;
 
     fn canonical_backend_key(value: Option<&str>) -> Option<String> {
         canonical_engine_backend_key(value)
@@ -1379,12 +1380,18 @@ impl TauriTaskExecutor {
             .map_err(|error| {
                 if let Some(recorder) = recorder.as_ref() {
                     let mut failed = runtime_metadata.clone();
+                    let previous_failures = recorder.previous_consecutive_failures(
+                        failed.snapshot.runtime_instance_id.as_deref(),
+                    );
                     failed.snapshot.active = false;
                     failed.snapshot.last_error = Some(error.clone());
                     failed.snapshot.lifecycle_decision_reason =
                         failed.snapshot.normalized_lifecycle_decision_reason();
-                    failed.health_assessment =
-                        Some(unhealthy_runtime_health_assessment(error.clone()));
+                    failed.health_assessment = Some(failed_runtime_health_assessment(
+                        error.clone(),
+                        previous_failures,
+                        Self::PYTHON_RUNTIME_FAILURE_THRESHOLD,
+                    ));
                     recorder.record(failed);
                 }
                 NodeEngineError::ExecutionFailed(error)
@@ -2102,7 +2109,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn python_runtime_recorder_marks_failed_execution_unhealthy() {
+    async fn python_runtime_recorder_progresses_failed_execution_health_state() {
         let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
             requirements: ModelDependencyRequirements {
                 backend_key: Some("pytorch".to_string()),
@@ -2124,29 +2131,76 @@ mod tests {
         inputs.insert("backend_key".to_string(), serde_json::json!("pytorch"));
         inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
-        let error = executor
-            .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
-            .await
-            .expect_err("python execution should fail");
+        for _ in 0..3 {
+            let error = executor
+                .execute_task(
+                    "pytorch-inference-1",
+                    inputs.clone(),
+                    &Context::new(),
+                    &extensions,
+                )
+                .await
+                .expect_err("python execution should fail");
 
-        match error {
-            NodeEngineError::ExecutionFailed(message) => {
-                assert!(message.contains("python sidecar crashed"));
+            match error {
+                NodeEngineError::ExecutionFailed(message) => {
+                    assert!(message.contains("python sidecar crashed"));
+                }
+                other => panic!("unexpected error variant: {other:?}"),
             }
-            other => panic!("unexpected error variant: {other:?}"),
         }
 
-        let metadata = recorder.snapshot().expect("python runtime metadata");
-        assert!(!metadata.snapshot.active);
+        let snapshots = recorder.snapshots();
+        assert_eq!(snapshots.len(), 3);
+
+        let first_assessment = snapshots[0]
+            .health_assessment
+            .clone()
+            .expect("first failed execution health assessment");
+        assert!(first_assessment.healthy);
+        assert_eq!(first_assessment.consecutive_failures, 1);
         assert_eq!(
-            metadata.snapshot.last_error.as_deref(),
+            first_assessment.state,
+            crate::runtime_health::RuntimeHealthState::Degraded {
+                reason: "python sidecar crashed".to_string(),
+            }
+        );
+
+        let second_assessment = snapshots[1]
+            .health_assessment
+            .clone()
+            .expect("second failed execution health assessment");
+        assert!(second_assessment.healthy);
+        assert_eq!(second_assessment.consecutive_failures, 2);
+        assert_eq!(
+            second_assessment.state,
+            crate::runtime_health::RuntimeHealthState::Degraded {
+                reason: "python sidecar crashed".to_string(),
+            }
+        );
+
+        let third = snapshots.last().expect("third runtime metadata");
+        assert!(!third.snapshot.active);
+        assert_eq!(
+            third.snapshot.last_error.as_deref(),
             Some("python sidecar crashed")
         );
-        let assessment = metadata
+        let third_assessment = third
             .health_assessment
-            .expect("failed execution health assessment");
-        assert!(!assessment.healthy);
-        assert_eq!(assessment.error.as_deref(), Some("python sidecar crashed"));
+            .clone()
+            .expect("third failed execution health assessment");
+        assert!(!third_assessment.healthy);
+        assert_eq!(
+            third_assessment.error.as_deref(),
+            Some("python sidecar crashed")
+        );
+        assert_eq!(third_assessment.consecutive_failures, 3);
+        assert_eq!(
+            third_assessment.state,
+            crate::runtime_health::RuntimeHealthState::Unhealthy {
+                reason: "python sidecar crashed".to_string(),
+            }
+        );
     }
 
     #[tokio::test]

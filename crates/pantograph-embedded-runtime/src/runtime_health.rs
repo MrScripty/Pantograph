@@ -79,6 +79,21 @@ pub fn unhealthy_runtime_health_assessment(reason: impl Into<String>) -> Runtime
     }
 }
 
+pub fn failed_runtime_health_assessment(
+    reason: impl Into<String>,
+    previous_failures: u32,
+    failure_threshold: u32,
+) -> RuntimeHealthAssessment {
+    assess_runtime_health_probe(
+        RuntimeHealthProbe::Failed {
+            reason: reason.into(),
+            response_time_ms: None,
+        },
+        previous_failures,
+        failure_threshold,
+    )
+}
+
 pub fn assess_runtime_health_probe(
     probe: RuntimeHealthProbe,
     previous_failures: u32,
@@ -123,8 +138,9 @@ pub fn assess_runtime_health_probe(
 #[cfg(test)]
 mod tests {
     use super::{
-        assess_runtime_health_probe, runtime_health_assessment_record,
-        unhealthy_runtime_health_assessment, RuntimeHealthProbe, RuntimeHealthState,
+        assess_runtime_health_probe, failed_runtime_health_assessment,
+        runtime_health_assessment_record, unhealthy_runtime_health_assessment, RuntimeHealthProbe,
+        RuntimeHealthState,
     };
 
     #[test]
@@ -244,5 +260,35 @@ mod tests {
         );
         assert_eq!(assessment.error.as_deref(), Some("python adapter failed"));
         assert_eq!(assessment.consecutive_failures, 1);
+    }
+
+    #[test]
+    fn failed_runtime_health_assessment_reports_degraded_below_threshold() {
+        let assessment = failed_runtime_health_assessment("python adapter failed", 0, 3);
+
+        assert!(assessment.healthy);
+        assert_eq!(
+            assessment.state,
+            RuntimeHealthState::Degraded {
+                reason: "python adapter failed".to_string(),
+            }
+        );
+        assert_eq!(assessment.error.as_deref(), Some("python adapter failed"));
+        assert_eq!(assessment.consecutive_failures, 1);
+    }
+
+    #[test]
+    fn failed_runtime_health_assessment_reports_unhealthy_at_threshold() {
+        let assessment = failed_runtime_health_assessment("python adapter failed", 2, 3);
+
+        assert!(!assessment.healthy);
+        assert_eq!(
+            assessment.state,
+            RuntimeHealthState::Unhealthy {
+                reason: "python adapter failed".to_string(),
+            }
+        );
+        assert_eq!(assessment.error.as_deref(), Some("python adapter failed"));
+        assert_eq!(assessment.consecutive_failures, 3);
     }
 }
