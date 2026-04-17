@@ -806,6 +806,7 @@ impl WorkflowService {
                             session_id: session_id.to_string(),
                             workflow_id: target.workflow_id.clone(),
                             usage_profile: target.usage_profile.clone(),
+                            required_backends: target.required_backends.clone(),
                             required_models: target.required_models.clone(),
                         },
                         candidates: store.runtime_unload_candidates(session_id),
@@ -906,6 +907,7 @@ impl WorkflowService {
             graph_fingerprint,
             runtime_capability_fingerprint,
             override_selection,
+            required_backends: capabilities.runtime_requirements.required_backends.clone(),
             required_models: capabilities.runtime_requirements.required_models.clone(),
             blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
         };
@@ -929,6 +931,7 @@ impl WorkflowService {
         })?;
         store.update_runtime_affinity_basis(
             session_id,
+            capabilities.runtime_requirements.required_backends,
             capabilities.runtime_requirements.required_models,
         )?;
         Ok(())
@@ -953,6 +956,7 @@ impl WorkflowService {
                     .clone()
                     .map(|v| v.trim().to_string())
                     .filter(|v| !v.is_empty()),
+                Vec::new(),
                 Vec::new(),
                 request.keep_alive,
             )?
@@ -2641,6 +2645,7 @@ mod tests {
     struct AffinityRuntimeHost {
         unloads: Arc<Mutex<Vec<String>>>,
         capabilities: WorkflowHostCapabilities,
+        required_backends_by_workflow: HashMap<String, Vec<String>>,
         required_models_by_workflow: HashMap<String, Vec<String>>,
     }
 
@@ -2656,12 +2661,14 @@ mod tests {
                     models: Vec::new(),
                     runtime_capabilities: vec![ready_runtime_capability()],
                 },
+                required_backends_by_workflow: HashMap::new(),
                 required_models_by_workflow: HashMap::new(),
             }
         }
 
-        fn with_required_models(
+        fn with_runtime_affinity(
             unloads: Arc<Mutex<Vec<String>>>,
+            required_backends_by_workflow: HashMap<String, Vec<String>>,
             required_models_by_workflow: HashMap<String, Vec<String>>,
         ) -> Self {
             Self {
@@ -2674,6 +2681,7 @@ mod tests {
                     models: Vec::new(),
                     runtime_capabilities: vec![ready_runtime_capability()],
                 },
+                required_backends_by_workflow,
                 required_models_by_workflow,
             }
         }
@@ -3072,6 +3080,11 @@ mod tests {
             workflow_id: &str,
         ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
             let mut capabilities = self.capabilities.clone();
+            capabilities.runtime_requirements.required_backends = self
+                .required_backends_by_workflow
+                .get(workflow_id)
+                .cloned()
+                .unwrap_or_default();
             capabilities.runtime_requirements.required_models = self
                 .required_models_by_workflow
                 .get(workflow_id)
@@ -4918,8 +4931,13 @@ mod tests {
     #[tokio::test]
     async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime() {
         let unloads = Arc::new(Mutex::new(Vec::new()));
-        let host = AffinityRuntimeHost::with_required_models(
+        let host = AffinityRuntimeHost::with_runtime_affinity(
             unloads.clone(),
+            HashMap::from([
+                ("wf-target".to_string(), vec!["llama_cpp".to_string()]),
+                ("wf-shared-model".to_string(), vec!["llama_cpp".to_string()]),
+                ("wf-other-model".to_string(), vec!["pytorch".to_string()]),
+            ]),
             HashMap::from([
                 ("wf-target".to_string(), vec!["model-a".to_string()]),
                 ("wf-shared-model".to_string(), vec!["model-a".to_string()]),
@@ -4989,6 +5007,90 @@ mod tests {
         assert!(!unloads
             .iter()
             .any(|session_id| session_id == &shared_model.session_id));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runtime() {
+        let unloads = Arc::new(Mutex::new(Vec::new()));
+        let host = AffinityRuntimeHost::with_runtime_affinity(
+            unloads.clone(),
+            HashMap::from([
+                ("wf-target".to_string(), vec!["llama_cpp".to_string()]),
+                (
+                    "wf-shared-backend".to_string(),
+                    vec!["llama_cpp".to_string()],
+                ),
+                ("wf-other-backend".to_string(), vec!["pytorch".to_string()]),
+            ]),
+            HashMap::from([
+                ("wf-target".to_string(), vec!["model-a".to_string()]),
+                ("wf-shared-backend".to_string(), vec!["model-z".to_string()]),
+                ("wf-other-backend".to_string(), vec!["model-a".to_string()]),
+            ]),
+        );
+        let service = WorkflowService::with_capacity_limits(3, 2);
+
+        let shared_backend = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-shared-backend".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create shared-backend keep-alive session");
+        let other_backend = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-other-backend".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create other-backend keep-alive session");
+        let target = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-target".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create target session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: target.session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("run target session");
+
+        let unloads = unloads.lock().expect("unloads lock poisoned");
+        assert_eq!(
+            unloads.first().map(String::as_str),
+            Some(other_backend.session_id.as_str())
+        );
+        assert!(unloads
+            .iter()
+            .any(|session_id| session_id == &target.session_id));
+        assert!(!unloads
+            .iter()
+            .any(|session_id| session_id == &shared_backend.session_id));
     }
 
     #[tokio::test]

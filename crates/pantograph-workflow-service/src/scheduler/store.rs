@@ -47,6 +47,7 @@ pub(crate) struct WorkflowSessionPreflightCache {
     pub(crate) graph_fingerprint: String,
     pub(crate) runtime_capability_fingerprint: String,
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,
+    pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
     pub(crate) blocking_runtime_issues: Vec<WorkflowRuntimeIssue>,
 }
@@ -55,6 +56,7 @@ pub(crate) struct WorkflowSessionPreflightCache {
 pub(crate) struct WorkflowSessionRecord {
     pub(crate) workflow_id: String,
     pub(crate) usage_profile: Option<String>,
+    pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
     pub(crate) keep_alive: bool,
     pub(crate) runtime_loaded: bool,
@@ -134,6 +136,7 @@ impl WorkflowSessionStore {
         &mut self,
         workflow_id: String,
         usage_profile: Option<String>,
+        required_backends: Vec<String>,
         required_models: Vec<String>,
         keep_alive: bool,
     ) -> Result<String, WorkflowServiceError> {
@@ -150,7 +153,8 @@ impl WorkflowSessionStore {
         let state = WorkflowSessionRecord {
             workflow_id,
             usage_profile,
-            required_models: normalize_required_models(required_models),
+            required_backends: normalize_affinity_values(required_backends),
+            required_models: normalize_affinity_values(required_models),
             keep_alive,
             runtime_loaded: false,
             active_run: None,
@@ -187,6 +191,7 @@ impl WorkflowSessionStore {
                     session_id: session_id.clone(),
                     workflow_id: state.workflow_id.clone(),
                     usage_profile: state.usage_profile.clone(),
+                    required_backends: state.required_backends.clone(),
                     required_models: state.required_models.clone(),
                     keep_alive: state.keep_alive,
                     access_tick: state.access_tick,
@@ -262,6 +267,11 @@ impl WorkflowSessionStore {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
         state.preflight_cache = Some(cache);
+        state.required_backends = state
+            .preflight_cache
+            .as_ref()
+            .map(|cache| cache.required_backends.clone())
+            .unwrap_or_default();
         state.required_models = state
             .preflight_cache
             .as_ref()
@@ -274,13 +284,15 @@ impl WorkflowSessionStore {
     pub(crate) fn update_runtime_affinity_basis(
         &mut self,
         session_id: &str,
+        required_backends: Vec<String>,
         required_models: Vec<String>,
     ) -> Result<(), WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
-        state.required_models = normalize_required_models(required_models);
+        state.required_backends = normalize_affinity_values(required_backends);
+        state.required_models = normalize_affinity_values(required_models);
         Self::mark_session_access(state, tick);
         Ok(())
     }
@@ -658,15 +670,15 @@ impl WorkflowSessionStore {
     }
 }
 
-fn normalize_required_models(required_models: Vec<String>) -> Vec<String> {
-    let mut required_models = required_models
+fn normalize_affinity_values(values: Vec<String>) -> Vec<String> {
+    let mut values = values
         .into_iter()
-        .map(|model_id| model_id.trim().to_string())
-        .filter(|model_id| !model_id.is_empty())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
-    required_models.sort();
-    required_models.dedup();
-    required_models
+    values.sort();
+    values.dedup();
+    values
 }
 
 fn session_state_from_record(state: &WorkflowSessionRecord) -> WorkflowSessionState {

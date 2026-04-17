@@ -107,8 +107,15 @@ impl PriorityThenFifoSchedulerPolicy {
         &self,
         target: &WorkflowSessionRuntimeSelectionTarget,
         candidate: &WorkflowSessionRuntimeUnloadCandidate,
-    ) -> (bool, bool, bool, bool) {
+    ) -> (bool, bool, bool, bool, bool, bool) {
         let same_workflow = candidate.workflow_id == target.workflow_id;
+        let exact_required_backends = !target.required_backends.is_empty()
+            && candidate.required_backends == target.required_backends;
+        let shared_required_backends = !target.required_backends.is_empty()
+            && candidate
+                .required_backends
+                .iter()
+                .any(|backend| target.required_backends.contains(backend));
         let exact_required_models = !target.required_models.is_empty()
             && candidate.required_models == target.required_models;
         let shared_required_models = !target.required_models.is_empty()
@@ -119,6 +126,8 @@ impl PriorityThenFifoSchedulerPolicy {
         let same_usage_profile = same_workflow && candidate.usage_profile == target.usage_profile;
         (
             same_workflow,
+            exact_required_backends,
+            shared_required_backends,
             exact_required_models,
             shared_required_models,
             same_usage_profile,
@@ -194,12 +203,17 @@ mod tests {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
+        required_backends: &[&str],
         required_models: &[&str],
     ) -> WorkflowSessionRuntimeSelectionTarget {
         WorkflowSessionRuntimeSelectionTarget {
             session_id: session_id.to_string(),
             workflow_id: workflow_id.to_string(),
             usage_profile: usage_profile.map(str::to_string),
+            required_backends: required_backends
+                .iter()
+                .map(|backend| backend.to_string())
+                .collect(),
             required_models: required_models
                 .iter()
                 .map(|model_id| model_id.to_string())
@@ -211,6 +225,7 @@ mod tests {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
+        required_backends: &[&str],
         required_models: &[&str],
         keep_alive: bool,
         access_tick: u64,
@@ -219,6 +234,10 @@ mod tests {
             session_id: session_id.to_string(),
             workflow_id: workflow_id.to_string(),
             usage_profile: usage_profile.map(str::to_string),
+            required_backends: required_backends
+                .iter()
+                .map(|backend| backend.to_string())
+                .collect(),
             required_models: required_models
                 .iter()
                 .map(|model_id| model_id.to_string())
@@ -256,13 +275,21 @@ mod tests {
     #[test]
     fn select_runtime_unload_candidate_prefers_non_affine_idle_sessions() {
         let policy = PriorityThenFifoSchedulerPolicy;
-        let target = runtime_target("session-target", "wf-a", Some("interactive"), &[]);
+        let target = runtime_target("session-target", "wf-a", Some("interactive"), &[], &[]);
         let selected = policy
             .select_runtime_unload_candidate(
                 &target,
                 &[
-                    unload_candidate("session-same", "wf-a", Some("interactive"), &[], false, 1),
-                    unload_candidate("session-other", "wf-b", Some("batch"), &[], true, 10),
+                    unload_candidate(
+                        "session-same",
+                        "wf-a",
+                        Some("interactive"),
+                        &[],
+                        &[],
+                        false,
+                        1,
+                    ),
+                    unload_candidate("session-other", "wf-b", Some("batch"), &[], &[], true, 10),
                 ],
             )
             .expect("candidate");
@@ -273,7 +300,7 @@ mod tests {
     #[test]
     fn select_runtime_unload_candidate_prefers_usage_mismatch_before_same_profile() {
         let policy = PriorityThenFifoSchedulerPolicy;
-        let target = runtime_target("session-target", "wf-a", Some("interactive"), &[]);
+        let target = runtime_target("session-target", "wf-a", Some("interactive"), &[], &[]);
         let selected = policy
             .select_runtime_unload_candidate(
                 &target,
@@ -283,6 +310,7 @@ mod tests {
                         "wf-a",
                         Some("interactive"),
                         &[],
+                        &[],
                         false,
                         1,
                     ),
@@ -290,6 +318,7 @@ mod tests {
                         "session-other-profile",
                         "wf-a",
                         Some("batch"),
+                        &[],
                         &[],
                         true,
                         10,
@@ -308,6 +337,7 @@ mod tests {
             "session-target",
             "wf-target",
             Some("interactive"),
+            &["llama_cpp"],
             &["model-a"],
         );
         let selected = policy
@@ -318,6 +348,7 @@ mod tests {
                         "session-shared-model",
                         "wf-shared",
                         Some("batch"),
+                        &["llama_cpp"],
                         &["model-a"],
                         false,
                         1,
@@ -326,6 +357,7 @@ mod tests {
                         "session-other-model",
                         "wf-other",
                         Some("batch"),
+                        &["pytorch"],
                         &["model-b"],
                         true,
                         10,
@@ -344,6 +376,7 @@ mod tests {
             "session-target",
             "wf-target",
             Some("interactive"),
+            &["llama_cpp"],
             &["model-a", "model-b"],
         );
         let selected = policy
@@ -354,6 +387,7 @@ mod tests {
                         "session-exact-models",
                         "wf-other-exact",
                         Some("batch"),
+                        &["llama_cpp"],
                         &["model-a", "model-b"],
                         false,
                         1,
@@ -362,6 +396,7 @@ mod tests {
                         "session-partial-models",
                         "wf-other-partial",
                         Some("batch"),
+                        &["llama_cpp"],
                         &["model-a"],
                         true,
                         10,
@@ -371,5 +406,44 @@ mod tests {
             .expect("candidate");
 
         assert_eq!(selected.session_id, "session-partial-models");
+    }
+
+    #[test]
+    fn select_runtime_unload_candidate_prefers_unrelated_backends_before_shared_backends() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let target = runtime_target(
+            "session-target",
+            "wf-target",
+            Some("interactive"),
+            &["llama_cpp"],
+            &["model-a"],
+        );
+        let selected = policy
+            .select_runtime_unload_candidate(
+                &target,
+                &[
+                    unload_candidate(
+                        "session-shared-backend",
+                        "wf-shared",
+                        Some("batch"),
+                        &["llama_cpp"],
+                        &["model-z"],
+                        false,
+                        1,
+                    ),
+                    unload_candidate(
+                        "session-other-backend",
+                        "wf-other",
+                        Some("batch"),
+                        &["pytorch"],
+                        &["model-a"],
+                        true,
+                        10,
+                    ),
+                ],
+            )
+            .expect("candidate");
+
+        assert_eq!(selected.session_id, "session-other-backend");
     }
 }

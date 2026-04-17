@@ -44,10 +44,11 @@ The accurate implementation baseline at the current checkpoint is:
   workflow and `usage_profile` context plus candidate `usage_profile` facts, so
   capacity rebalance can preserve affine idle runtimes before falling back to
   generic least-recently-used eviction
-- runtime-affinity selection now also preserves backend-owned `required_models`
-  facts refreshed from workflow capabilities and preflight caches, so unload
-  ranking can avoid evicting idle sessions that share the target run's model
-  requirements even when they belong to different workflows
+- runtime-affinity selection now also preserves backend-owned
+  `required_backends` and `required_models` facts refreshed from workflow
+  capabilities and preflight caches, so unload ranking can avoid evicting idle
+  sessions that share the target run's backend and model requirements even
+  when they belong to different workflows
 - `crates/pantograph-workflow-service/src/workflow.rs` still owns the current
   workflow-service facade, runtime orchestration, and session command entry
   points, but it no longer has to be the long-term home for scheduler DTOs and
@@ -470,9 +471,10 @@ policy, fairness, and machine-consumable decision semantics.
 - Runtime-pressure unload selection now also consumes backend-owned target
   workflow and `usage_profile` affinity inputs, and preserves less-affine idle
   sessions first in workflow-service and embedded-runtime tests.
-- Scheduler affinity now also consumes backend-owned `required_models`
-  refreshed from workflow capabilities and preflight caches, and preserves
-  shared-model idle runtimes before unrelated-model sessions during rebalance.
+- Scheduler affinity now also consumes backend-owned `required_backends` and
+  `required_models` refreshed from workflow capabilities and preflight caches,
+  and preserves shared-backend or shared-model idle runtimes before unrelated
+  sessions during rebalance.
 - Remaining Milestone 3 work is the deeper policy expansion: broader fairness,
   richer model-dependency affinity beyond the current `required_models`
   unload-selection path, and stronger admission inputs beyond the current
@@ -554,6 +556,10 @@ Update during implementation:
   and preflight cache updates before runtime loading, and verified that
   capacity rebalance preserves shared-model idle runtimes ahead of unrelated
   model sessions.
+- 2026-04-16: Extended the same scheduler affinity basis with backend-owned
+  `required_backends`, so rebalance now preserves idle sessions that share the
+  target run's backend requirements before candidates that only overlap on
+  model id or workflow shape.
 
 ## Commit Cadence Notes
 
