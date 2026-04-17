@@ -9,6 +9,10 @@ use crate::workflow::{
     WorkflowSessionRunRequest,
 };
 
+use super::policy::{
+    WorkflowSessionAdmissionCandidate, WorkflowSessionAdmissionInput,
+    WorkflowSessionAdmissionRuntimePosture, WorkflowSessionWarmCompatibility,
+};
 use super::{
     PriorityThenFifoSchedulerPolicy, WorkflowSchedulerAdmissionOutcome,
     WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
@@ -407,24 +411,23 @@ impl WorkflowSessionStore {
 
         let policy = PriorityThenFifoSchedulerPolicy;
         policy.refresh_queue(&mut state.queue);
-
-        let Some(front) = state.queue.first() else {
-            return Err(WorkflowServiceError::QueueItemNotFound(format!(
-                "queue item '{}' not found in session '{}'",
-                queue_id, session_id
-            )));
+        let admission_input = Self::admission_input_from_state(state);
+        let decision = policy.admission_decision(&admission_input, queue_id)?;
+        let Some(admitted_queue_id) = decision.admitted_queue_id.as_deref() else {
+            return Ok(None);
         };
-        if front.queue_id != queue_id {
-            if policy.admission_reason(&state.queue, queue_id)?.is_none() {
-                return Ok(None);
-            }
-            return Err(WorkflowServiceError::QueueItemNotFound(format!(
-                "queue item '{}' not found in session '{}'",
-                queue_id, session_id
-            )));
-        }
+        let admitted_index = state
+            .queue
+            .iter()
+            .position(|queued| queued.queue_id == admitted_queue_id)
+            .ok_or_else(|| {
+                WorkflowServiceError::Internal(format!(
+                    "admitted queue item '{}' missing from session '{}'",
+                    admitted_queue_id, session_id
+                ))
+            })?;
 
-        let queued = state.queue.remove(0);
+        let queued = state.queue.remove(admitted_index);
         for item in &mut state.queue {
             item.starvation_bypass_count = item.starvation_bypass_count.saturating_add(1);
         }
@@ -668,6 +671,81 @@ impl WorkflowSessionStore {
             runtime_loaded: removed.runtime_loaded,
         })
     }
+
+    fn admission_input_from_state(state: &WorkflowSessionRecord) -> WorkflowSessionAdmissionInput {
+        WorkflowSessionAdmissionInput {
+            has_active_run: state.active_run.is_some(),
+            runtime_posture: if state.runtime_loaded {
+                WorkflowSessionAdmissionRuntimePosture::Loaded
+            } else {
+                WorkflowSessionAdmissionRuntimePosture::Unloaded
+            },
+            usage_profile: state.usage_profile.clone(),
+            required_backends: state.required_backends.clone(),
+            required_models: state.required_models.clone(),
+            candidates: state
+                .queue
+                .iter()
+                .enumerate()
+                .map(|(queue_position, queued)| {
+                    let warm_session_compatibility =
+                        Self::warm_session_compatibility(state, queued);
+                    WorkflowSessionAdmissionCandidate {
+                        queue_id: queued.queue_id.clone(),
+                        priority: queued.priority,
+                        enqueued_tick: queued.enqueued_tick,
+                        starvation_bypass_count: queued.starvation_bypass_count,
+                        queue_position,
+                        affine_runtime_reuse: state.runtime_loaded
+                            && warm_session_compatibility
+                                != WorkflowSessionWarmCompatibility::Incompatible,
+                        warm_session_compatibility,
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    fn warm_session_compatibility(
+        state: &WorkflowSessionRecord,
+        queued: &WorkflowSessionQueuedRun,
+    ) -> WorkflowSessionWarmCompatibility {
+        if !state.runtime_loaded {
+            return WorkflowSessionWarmCompatibility::Unknown;
+        }
+
+        let Some(override_selection) = queued.override_selection.as_ref() else {
+            return WorkflowSessionWarmCompatibility::Compatible;
+        };
+
+        if let Some(backend_key) = override_selection.backend_key.as_deref() {
+            if state.required_backends.is_empty() {
+                return WorkflowSessionWarmCompatibility::Unknown;
+            }
+            if !state
+                .required_backends
+                .iter()
+                .any(|required| required == backend_key)
+            {
+                return WorkflowSessionWarmCompatibility::Incompatible;
+            }
+        }
+
+        if let Some(model_id) = override_selection.model_id.as_deref() {
+            if state.required_models.is_empty() {
+                return WorkflowSessionWarmCompatibility::Unknown;
+            }
+            if !state
+                .required_models
+                .iter()
+                .any(|required| required == model_id)
+            {
+                return WorkflowSessionWarmCompatibility::Incompatible;
+            }
+        }
+
+        WorkflowSessionWarmCompatibility::Compatible
+    }
 }
 
 fn normalize_affinity_values(values: Vec<String>) -> Vec<String> {
@@ -688,5 +766,101 @@ fn session_state_from_record(state: &WorkflowSessionRecord) -> WorkflowSessionSt
         WorkflowSessionState::IdleLoaded
     } else {
         WorkflowSessionState::IdleUnloaded
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_run_request() -> WorkflowSessionRunRequest {
+        WorkflowSessionRunRequest {
+            session_id: "ignored".to_string(),
+            inputs: Vec::new(),
+            output_targets: None,
+            override_selection: None,
+            timeout_ms: None,
+            run_id: None,
+            priority: None,
+        }
+    }
+
+    #[test]
+    fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_diverges() {
+        let mut store = WorkflowSessionStore::new(1, 1);
+        let session_id = store
+            .create_session(
+                "wf-1".to_string(),
+                Some("interactive".to_string()),
+                vec!["llama_cpp".to_string()],
+                vec!["model-a".to_string()],
+                true,
+            )
+            .expect("create session");
+        store
+            .mark_runtime_loaded(&session_id, true)
+            .expect("mark runtime loaded");
+
+        let mut request = empty_run_request();
+        request.override_selection = Some(WorkflowTechnicalFitOverride {
+            model_id: Some("model-b".to_string()),
+            backend_key: Some("pytorch".to_string()),
+        });
+        let queue_id = store
+            .enqueue_run(&session_id, &request)
+            .expect("enqueue run");
+
+        let state = store.active.get(&session_id).expect("session state");
+        let input = WorkflowSessionStore::admission_input_from_state(state);
+        let candidate = input
+            .candidates
+            .iter()
+            .find(|candidate| candidate.queue_id == queue_id)
+            .expect("candidate");
+
+        assert_eq!(
+            input.runtime_posture,
+            WorkflowSessionAdmissionRuntimePosture::Loaded
+        );
+        assert!(!candidate.affine_runtime_reuse);
+        assert_eq!(
+            candidate.warm_session_compatibility,
+            WorkflowSessionWarmCompatibility::Incompatible
+        );
+    }
+
+    #[test]
+    fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_divergence() {
+        let mut store = WorkflowSessionStore::new(1, 1);
+        let session_id = store
+            .create_session(
+                "wf-1".to_string(),
+                Some("interactive".to_string()),
+                vec!["llama_cpp".to_string()],
+                vec!["model-a".to_string()],
+                true,
+            )
+            .expect("create session");
+        store
+            .mark_runtime_loaded(&session_id, true)
+            .expect("mark runtime loaded");
+
+        let queue_id = store
+            .enqueue_run(&session_id, &empty_run_request())
+            .expect("enqueue run");
+
+        let state = store.active.get(&session_id).expect("session state");
+        let input = WorkflowSessionStore::admission_input_from_state(state);
+        let candidate = input
+            .candidates
+            .iter()
+            .find(|candidate| candidate.queue_id == queue_id)
+            .expect("candidate");
+
+        assert!(candidate.affine_runtime_reuse);
+        assert_eq!(
+            candidate.warm_session_compatibility,
+            WorkflowSessionWarmCompatibility::Compatible
+        );
     }
 }

@@ -11,8 +11,8 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | ----------- | ----------- |
 | `mod.rs` | Internal module entrypoint that re-exports scheduler contracts and store helpers to the workflow facade. |
 | `contracts.rs` | Scheduler request/response DTOs, queue item contracts, keep-alive/unload semantics, and stale-cleanup worker types. |
-| `policy.rs` | Explicit scheduler ordering policy objects and stable decision vocabulary for queue placement and admission. |
-| `store.rs` | In-memory scheduler state, queue ordering, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
+| `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
+| `store.rs` | In-memory scheduler state, queue ordering, canonical admission-input construction, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 
 ## Problem
 Pantograph previously kept workflow session scheduler contracts and queue/store
@@ -41,7 +41,10 @@ workflow id, `required_backends`, `required_models`, and `usage_profile`
 affinity facts refreshed by the service before runtime loading. Queue items and
 trace-facing projections now also carry backend-owned admission-outcome
 semantics instead of forcing adapters to reverse-engineer queued versus
-admitted state. `workflow.rs` remains the public
+admitted state. Store-owned queue transitions now also construct a canonical
+internal admission-input model for policy evaluation from backend session
+state, loaded-runtime posture, and warm-session compatibility facts instead of
+keeping those inputs implicit inside one mutation path. `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation
 logic.

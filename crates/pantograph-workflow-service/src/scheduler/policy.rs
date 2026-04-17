@@ -10,6 +10,46 @@ use super::{
 
 const STARVATION_BYPASS_THRESHOLD: u32 = 2;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkflowSessionAdmissionRuntimePosture {
+    Loaded,
+    Unloaded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorkflowSessionWarmCompatibility {
+    Compatible,
+    Incompatible,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSessionAdmissionCandidate {
+    pub(crate) queue_id: String,
+    pub(crate) priority: i32,
+    pub(crate) enqueued_tick: u64,
+    pub(crate) starvation_bypass_count: u32,
+    pub(crate) queue_position: usize,
+    pub(crate) affine_runtime_reuse: bool,
+    pub(crate) warm_session_compatibility: WorkflowSessionWarmCompatibility,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSessionAdmissionInput {
+    pub(crate) has_active_run: bool,
+    pub(crate) runtime_posture: WorkflowSessionAdmissionRuntimePosture,
+    pub(crate) usage_profile: Option<String>,
+    pub(crate) required_backends: Vec<String>,
+    pub(crate) required_models: Vec<String>,
+    pub(crate) candidates: Vec<WorkflowSessionAdmissionCandidate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkflowSessionAdmissionDecision {
+    pub(crate) admitted_queue_id: Option<String>,
+    pub(crate) reason: Option<WorkflowSchedulerDecisionReason>,
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct PriorityThenFifoSchedulerPolicy;
 
@@ -52,30 +92,44 @@ impl PriorityThenFifoSchedulerPolicy {
         }
     }
 
-    pub(crate) fn admission_reason(
+    pub(crate) fn admission_decision(
         &self,
-        queue: &[WorkflowSessionQueuedRun],
+        input: &WorkflowSessionAdmissionInput,
         queue_id: &str,
-    ) -> Result<Option<WorkflowSchedulerDecisionReason>, WorkflowServiceError> {
-        let Some(front) = queue.first() else {
+    ) -> Result<WorkflowSessionAdmissionDecision, WorkflowServiceError> {
+        if input.has_active_run {
+            return self.pending_or_not_found(input, queue_id);
+        }
+
+        let Some(candidate) = self.select_admission_candidate(input) else {
             return Err(WorkflowServiceError::QueueItemNotFound(format!(
                 "queue item '{}' not found in queue",
                 queue_id
             )));
         };
 
-        if front.queue_id == queue_id {
-            return Ok(Some(WorkflowSchedulerDecisionReason::AdmittedForExecution));
+        if candidate.queue_id == queue_id {
+            return Ok(WorkflowSessionAdmissionDecision {
+                admitted_queue_id: Some(candidate.queue_id.clone()),
+                reason: Some(WorkflowSchedulerDecisionReason::AdmittedForExecution),
+            });
         }
 
-        if queue.iter().any(|item| item.queue_id == queue_id) {
-            return Ok(None);
+        self.pending_or_not_found(input, queue_id)
+    }
+
+    pub(crate) fn select_admission_candidate<'a>(
+        &self,
+        input: &'a WorkflowSessionAdmissionInput,
+    ) -> Option<&'a WorkflowSessionAdmissionCandidate> {
+        if input.has_active_run {
+            return None;
         }
 
-        Err(WorkflowServiceError::QueueItemNotFound(format!(
-            "queue item '{}' not found in queue",
-            queue_id
-        )))
+        input
+            .candidates
+            .iter()
+            .min_by(|left, right| self.compare_admission_candidates(left, right))
     }
 
     fn compare_runs(
@@ -85,6 +139,17 @@ impl PriorityThenFifoSchedulerPolicy {
     ) -> Ordering {
         self.effective_priority(right)
             .cmp(&self.effective_priority(left))
+            .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
+            .then_with(|| left.queue_id.cmp(&right.queue_id))
+    }
+
+    fn compare_admission_candidates(
+        &self,
+        left: &WorkflowSessionAdmissionCandidate,
+        right: &WorkflowSessionAdmissionCandidate,
+    ) -> Ordering {
+        self.admission_effective_priority(right)
+            .cmp(&self.admission_effective_priority(left))
             .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
             .then_with(|| left.queue_id.cmp(&right.queue_id))
     }
@@ -142,6 +207,42 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn starvation_priority_boost(&self, queued: &WorkflowSessionQueuedRun) -> i32 {
         (queued.starvation_bypass_count / STARVATION_BYPASS_THRESHOLD).min(i32::MAX as u32) as i32
+    }
+
+    fn admission_effective_priority(&self, candidate: &WorkflowSessionAdmissionCandidate) -> i32 {
+        candidate
+            .priority
+            .saturating_add(self.admission_starvation_priority_boost(candidate))
+    }
+
+    fn admission_starvation_priority_boost(
+        &self,
+        candidate: &WorkflowSessionAdmissionCandidate,
+    ) -> i32 {
+        (candidate.starvation_bypass_count / STARVATION_BYPASS_THRESHOLD).min(i32::MAX as u32)
+            as i32
+    }
+
+    fn pending_or_not_found(
+        &self,
+        input: &WorkflowSessionAdmissionInput,
+        queue_id: &str,
+    ) -> Result<WorkflowSessionAdmissionDecision, WorkflowServiceError> {
+        if input
+            .candidates
+            .iter()
+            .any(|item| item.queue_id == queue_id)
+        {
+            return Ok(WorkflowSessionAdmissionDecision {
+                admitted_queue_id: None,
+                reason: None,
+            });
+        }
+
+        Err(WorkflowServiceError::QueueItemNotFound(format!(
+            "queue item '{}' not found in queue",
+            queue_id
+        )))
     }
 
     fn reason_for_queue_position(
@@ -245,6 +346,26 @@ mod tests {
             keep_alive,
             access_tick,
             run_count: 0,
+        }
+    }
+
+    fn admission_candidate(
+        queue_id: &str,
+        priority: i32,
+        enqueued_tick: u64,
+        starvation_bypass_count: u32,
+        queue_position: usize,
+        affine_runtime_reuse: bool,
+        warm_session_compatibility: WorkflowSessionWarmCompatibility,
+    ) -> WorkflowSessionAdmissionCandidate {
+        WorkflowSessionAdmissionCandidate {
+            queue_id: queue_id.to_string(),
+            priority,
+            enqueued_tick,
+            starvation_bypass_count,
+            queue_position,
+            affine_runtime_reuse,
+            warm_session_compatibility,
         }
     }
 
@@ -445,5 +566,89 @@ mod tests {
             .expect("candidate");
 
         assert_eq!(selected.session_id, "session-other-backend");
+    }
+
+    #[test]
+    fn admission_decision_selects_highest_priority_candidate_from_admission_input() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![
+                admission_candidate(
+                    "lower-priority",
+                    0,
+                    1,
+                    0,
+                    0,
+                    true,
+                    WorkflowSessionWarmCompatibility::Compatible,
+                ),
+                admission_candidate(
+                    "higher-priority",
+                    2,
+                    2,
+                    0,
+                    1,
+                    false,
+                    WorkflowSessionWarmCompatibility::Incompatible,
+                ),
+            ],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "higher-priority")
+            .expect("admission decision");
+
+        assert_eq!(
+            decision.admitted_queue_id.as_deref(),
+            Some("higher-priority")
+        );
+        assert_eq!(
+            decision.reason,
+            Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
+        );
+    }
+
+    #[test]
+    fn admission_decision_keeps_pending_candidate_when_another_item_is_selected() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![
+                admission_candidate(
+                    "selected",
+                    2,
+                    1,
+                    0,
+                    0,
+                    true,
+                    WorkflowSessionWarmCompatibility::Compatible,
+                ),
+                admission_candidate(
+                    "pending",
+                    0,
+                    2,
+                    0,
+                    1,
+                    false,
+                    WorkflowSessionWarmCompatibility::Incompatible,
+                ),
+            ],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "pending")
+            .expect("pending decision");
+
+        assert_eq!(decision.admitted_queue_id, None);
+        assert_eq!(decision.reason, None);
     }
 }

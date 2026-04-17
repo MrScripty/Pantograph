@@ -440,21 +440,70 @@ Scheduler V2 policy has a standards-compliant home.
 policy, fairness, and machine-consumable decision semantics.
 
 **Tasks:**
-- [ ] Introduce focused scheduler policy abstractions for admission, ordering,
-      fairness, starvation protection, and warm-session reuse
-- [ ] Define stable decision-reason, admission-outcome, and scheduler-error
-      vocabularies for transport-visible payloads
-- [ ] Add runtime-affinity inputs based on workflow id, model dependency, and
-      `usage_profile`
-- [ ] Keep one mutable-state owner for queue transitions and policy evaluation
-- [ ] Add unit coverage for fairness, starvation prevention, and decision
-      reasoning
+- [x] Extract backend-owned scheduler policy and state boundaries so
+      `pantograph-workflow-service::scheduler` owns queue ordering and policy
+      primitives while `workflow.rs` remains the public facade.
+- [x] Preserve one mutable-state owner for queue transitions and policy
+      evaluation in `WorkflowSessionStore`; do not move scheduler truth,
+      reorder logic, or admission decisions into Tauri, diagnostics wrappers,
+      or other transport layers.
+- [x] Define additive backend-owned queue/snapshot/trace vocabulary for
+      decision reasons, queue positions, and admission outcomes so transport
+      consumers do not infer scheduler state from status combinations.
+- [x] Add backend-owned runtime-affinity inputs for unload ranking using
+      workflow id, `usage_profile`, `required_backends`, and
+      `required_models`, refreshed from workflow capabilities and preflight
+      caches before runtime loading.
+- [x] Add a backend-owned admission-input model for queued runs that captures
+      the canonical facts needed for next-run selection:
+      queue ordering state, loaded-runtime posture, affine-runtime reuse
+      posture, and any already-known warm-session compatibility facts.
+      Keep the implementation in Rust scheduler/workflow-service modules, keep
+      transport contracts additive, and do not create a second mutable owner.
+- [ ] Expand fairness beyond the current starvation-promotion rule with a
+      bounded and deterministic policy slice that remains reviewable:
+      explicit tie-break semantics, reuse-aware fairness constraints, and
+      guardrails that prevent warm-runtime preference from bypassing priority
+      or starvation guarantees.
+- [ ] Extend richer model-dependency affinity beyond the current
+      `required_backends`/`required_models` unload-selection basis using
+      backend-owned compatibility keys only. Any new affinity identity must be
+      normalized in Rust contracts or preflight/session state, not inferred in
+      Tauri or frontend code, and must preserve facade-first compatibility.
+- [ ] Add stable machine-consumable admission and reuse reason vocabulary for
+      the stronger admission policy so clients can distinguish queue ordering,
+      fairness, affine reuse, and cold-start fallbacks without adapter-local
+      heuristics.
+- [ ] Add focused unit and workflow-service coverage for the remaining
+      fairness, admission, and reason-vocabulary slices, including negative
+      cases where affine reuse is available but correctly rejected by priority
+      or fairness rules.
+
+**Implementation constraints for remaining Milestone 3 work:**
+- Backend Rust remains the owner of all scheduler business logic. Tauri and
+  other bindings may only forward backend-owned contracts and commands.
+- New scheduler-facing fields must be additive on existing contracts unless an
+  explicitly documented compatibility break is approved.
+- Any new policy helper extracted during this milestone must remain inside the
+  scheduler/workflow-service backend boundary and keep `WorkflowSessionStore`
+  as the single mutable owner for queue/admission state.
+- If new affinity or admission facts come from technical-fit or preflight
+  assessment, store normalized backend-owned values in Rust state rather than
+  recomputing them in adapters.
+- If the remaining policy work forces further decomposition under `src/`,
+  update the touched module README(s) in the same logical slice.
 
 **Verification:**
 - Scheduler policy is represented by focused backend-owned abstractions instead
   of ad hoc branching inside one service file
 - Machine-consumable scheduler reasons and errors are exposed from backend
   contracts and do not require adapter-local reconstruction
+- Admission and fairness decisions are computed from backend-owned Rust state,
+  not duplicated in Tauri, diagnostics, or frontend code
+- New contract fields remain additive and are documented in the touched
+  scheduler source-of-truth files
+- Unit and workflow-service tests cover both positive reuse/fairness outcomes
+  and the refusal paths that preserve deterministic priority behavior
 
 **Execution progress:**
 - The backend-owned scheduler module boundary and explicit priority/FIFO policy
@@ -475,10 +524,14 @@ policy, fairness, and machine-consumable decision semantics.
   `required_models` refreshed from workflow capabilities and preflight caches,
   and preserves shared-backend or shared-model idle runtimes before unrelated
   sessions during rebalance.
-- Remaining Milestone 3 work is the deeper policy expansion: broader fairness,
-  richer model-dependency affinity beyond the current `required_models`
-  unload-selection path, and stronger admission inputs beyond the current
-  queue/runtime facts.
+- Store-owned queue transitions now also build a canonical internal admission
+  input from queue ordering, loaded-runtime posture, affine reuse posture, and
+  warm-session compatibility facts before delegating next-run selection to the
+  backend scheduler policy.
+- Remaining Milestone 3 work is now narrowly defined as:
+  fairness expansion beyond starvation promotion, richer compatibility
+  identity beyond the current unload-affinity basis, and stable
+  admission/reuse reason vocabulary for those decisions.
 
 **Status:** In progress
 
@@ -560,6 +613,11 @@ Update during implementation:
   `required_backends`, so rebalance now preserves idle sessions that share the
   target run's backend requirements before candidates that only overlap on
   model id or workflow shape.
+- 2026-04-16: Added a backend-owned internal admission-input model in
+  `scheduler/policy.rs` and `scheduler/store.rs`, so queue admission now
+  evaluates canonical queue/runtime/warm-compatibility facts through an
+  explicit policy boundary instead of leaving them implicit in the store
+  mutation path.
 
 ## Commit Cadence Notes
 
