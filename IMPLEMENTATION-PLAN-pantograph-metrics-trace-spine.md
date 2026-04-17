@@ -425,6 +425,10 @@ Update during implementation:
   run/node events are treated as idempotent replay, preserving first terminal
   timestamps and durations inside the backend trace owner instead of pushing
   de-duplication policy into adapters.
+- 2026-04-17: Thirty-seventh implementation slice added direct Tauri workflow
+  adapter coverage proving duplicate terminal node-engine events still resolve
+  to one canonical trace outcome because replay/idempotency remains owned by
+  the backend trace store rather than the transport layer.
 
 ## Commit Cadence Notes
 

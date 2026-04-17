@@ -217,6 +217,10 @@ let snapshot = workflow_service
   directory must resynchronize diagnostics and runtime-registry views from the
   backend-owned trace store and runtime-registry snapshot rather than keeping
   adapter-local recovery bookkeeping as a second source of truth.
+- Duplicate terminal workflow events must likewise flow through to the
+  backend-owned trace store and rely on its idempotent replay handling; this
+  directory must not restamp or locally coalesce them into a second policy
+  layer.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

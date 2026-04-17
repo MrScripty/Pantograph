@@ -302,14 +302,25 @@ impl WorkflowDiagnosticsStore {
         event: &WorkflowEvent,
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
-        let traces = workflow_trace_event(event)
-            .map(|trace_event| self.trace_store.record_event(&trace_event, timestamp_ms))
-            .unwrap_or_else(|| self.trace_store.snapshot_all());
+        let (traces, record_overlay) = workflow_trace_event(event)
+            .map(|trace_event| {
+                let execution_id = trace_event_execution_id(&trace_event).to_string();
+                let previous_event_count = self.trace_event_count_for_execution(&execution_id);
+                let traces = self.trace_store.record_event(&trace_event, timestamp_ms);
+                let record_overlay = trace_event_count_in_snapshot(&traces, &execution_id)
+                    .zip(previous_event_count)
+                    .map(|(current, previous)| current > previous)
+                    .unwrap_or(previous_event_count.is_none());
+                (traces, record_overlay)
+            })
+            .unwrap_or_else(|| (self.trace_store.snapshot_all(), true));
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        if record_overlay {
+            record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        }
         state.prune_overlays(&traces);
         state.snapshot(&traces)
     }
@@ -318,20 +329,28 @@ impl WorkflowDiagnosticsStore {
         &self,
         event: &WorkflowEvent,
     ) -> WorkflowDiagnosticsProjection {
-        let (traces, timestamp_ms) = workflow_trace_event(event)
+        let (traces, timestamp_ms, record_overlay) = workflow_trace_event(event)
             .map(|trace_event| {
+                let execution_id = trace_event_execution_id(&trace_event).to_string();
+                let previous_event_count = self.trace_event_count_for_execution(&execution_id);
                 let result = self.trace_store.record_event_now(&trace_event);
-                (result.snapshot, result.recorded_at_ms)
+                let record_overlay = trace_event_count_in_snapshot(&result.snapshot, &execution_id)
+                    .zip(previous_event_count)
+                    .map(|(current, previous)| current > previous)
+                    .unwrap_or(previous_event_count.is_none());
+                (result.snapshot, result.recorded_at_ms, record_overlay)
             })
             .unwrap_or_else(|| {
                 let timestamp_ms = unix_timestamp_ms();
-                (self.trace_store.snapshot_all(), timestamp_ms)
+                (self.trace_store.snapshot_all(), timestamp_ms, true)
             });
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        if record_overlay {
+            record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        }
         state.prune_overlays(&traces);
         state.snapshot(&traces)
     }
@@ -342,18 +361,71 @@ impl WorkflowDiagnosticsStore {
         overlay_event: &WorkflowEvent,
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
+        let execution_id = trace_event_execution_id(trace_event).to_string();
+        let previous_event_count = self.trace_event_count_for_execution(&execution_id);
         let traces = self.trace_store.record_event(trace_event, timestamp_ms);
+        let record_overlay = trace_event_count_in_snapshot(&traces, &execution_id)
+            .zip(previous_event_count)
+            .map(|(current, previous)| current > previous)
+            .unwrap_or(previous_event_count.is_none());
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        record_diagnostics_overlay(&mut state, overlay_event, timestamp_ms);
+        if record_overlay {
+            record_diagnostics_overlay(&mut state, overlay_event, timestamp_ms);
+        }
         state.prune_overlays(&traces);
         state.snapshot(&traces)
+    }
+
+    fn trace_event_count_for_execution(&self, execution_id: &str) -> Option<usize> {
+        self.trace_store
+            .snapshot(&WorkflowTraceSnapshotRequest {
+                execution_id: Some(execution_id.to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: Some(true),
+            })
+            .expect("trace snapshot request should be valid")
+            .traces
+            .into_iter()
+            .next()
+            .map(|trace| trace.event_count)
     }
 }
 
 pub type SharedWorkflowDiagnosticsStore = Arc<WorkflowDiagnosticsStore>;
+
+fn trace_event_count_in_snapshot(
+    traces: &WorkflowTraceSnapshotResponse,
+    execution_id: &str,
+) -> Option<usize> {
+    traces
+        .traces
+        .iter()
+        .find(|trace| trace.execution_id == execution_id)
+        .map(|trace| trace.event_count)
+}
+
+fn trace_event_execution_id(event: &WorkflowTraceEvent) -> &str {
+    match event {
+        WorkflowTraceEvent::RunStarted { execution_id, .. }
+        | WorkflowTraceEvent::RunCompleted { execution_id, .. }
+        | WorkflowTraceEvent::RunFailed { execution_id, .. }
+        | WorkflowTraceEvent::RunCancelled { execution_id, .. }
+        | WorkflowTraceEvent::NodeStarted { execution_id, .. }
+        | WorkflowTraceEvent::NodeProgress { execution_id, .. }
+        | WorkflowTraceEvent::NodeStream { execution_id, .. }
+        | WorkflowTraceEvent::NodeCompleted { execution_id, .. }
+        | WorkflowTraceEvent::NodeFailed { execution_id, .. }
+        | WorkflowTraceEvent::WaitingForInput { execution_id, .. }
+        | WorkflowTraceEvent::GraphModified { execution_id, .. }
+        | WorkflowTraceEvent::IncrementalExecutionStarted { execution_id, .. }
+        | WorkflowTraceEvent::RuntimeSnapshotCaptured { execution_id, .. }
+        | WorkflowTraceEvent::SchedulerSnapshotCaptured { execution_id, .. } => execution_id,
+    }
+}
 
 fn record_diagnostics_overlay(
     state: &mut WorkflowDiagnosticsState,

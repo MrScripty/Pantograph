@@ -414,6 +414,49 @@ mod tests {
     }
 
     #[test]
+    fn translated_duplicate_terminal_events_preserve_backend_trace_timing() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let _ = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::WorkflowStarted {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(100),
+            },
+        );
+        let _ = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::WorkflowCompleted {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(140),
+            },
+        );
+        let (_, diagnostics_event) = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::WorkflowCompleted {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(170),
+            },
+        );
+
+        match diagnostics_event {
+            super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+                let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+                assert_eq!(
+                    trace.status,
+                    crate::workflow::diagnostics::DiagnosticsRunStatus::Completed
+                );
+                assert_eq!(trace.ended_at_ms, Some(140));
+                assert_eq!(trace.duration_ms, Some(40));
+                assert_eq!(trace.events.len(), 2);
+            }
+            other => panic!("unexpected diagnostics event: {other:?}"),
+        }
+    }
+
+    #[test]
     fn adapter_send_emits_primary_and_diagnostics_events() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
         let emitted = Arc::new(Mutex::new(Vec::<Value>::new()));
