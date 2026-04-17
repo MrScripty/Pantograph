@@ -105,6 +105,48 @@ pub enum WorkflowSessionQueueItemStatus {
     Running,
 }
 
+/// Stable scheduler decision reason vocabulary shared by queue, snapshot, and
+/// trace projections.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSchedulerDecisionReason {
+    SchedulerSnapshotFailed,
+    MatchedPendingItem,
+    MatchedRunningItem,
+    SessionRunningWithBacklog,
+    SessionRunning,
+    SessionQueued,
+    IdleLoaded,
+    IdleUnloaded,
+    HighestPriorityFirst,
+    FifoPriorityTieBreak,
+    WaitingForHigherPriority,
+    AdmittedForExecution,
+}
+
+impl WorkflowSchedulerDecisionReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkflowSchedulerDecisionReason::SchedulerSnapshotFailed => "scheduler_snapshot_failed",
+            WorkflowSchedulerDecisionReason::MatchedPendingItem => "matched_pending_item",
+            WorkflowSchedulerDecisionReason::MatchedRunningItem => "matched_running_item",
+            WorkflowSchedulerDecisionReason::SessionRunningWithBacklog => {
+                "session_running_with_backlog"
+            }
+            WorkflowSchedulerDecisionReason::SessionRunning => "session_running",
+            WorkflowSchedulerDecisionReason::SessionQueued => "session_queued",
+            WorkflowSchedulerDecisionReason::IdleLoaded => "idle_loaded",
+            WorkflowSchedulerDecisionReason::IdleUnloaded => "idle_unloaded",
+            WorkflowSchedulerDecisionReason::HighestPriorityFirst => "highest_priority_first",
+            WorkflowSchedulerDecisionReason::FifoPriorityTieBreak => "fifo_priority_tie_break",
+            WorkflowSchedulerDecisionReason::WaitingForHigherPriority => {
+                "waiting_for_higher_priority"
+            }
+            WorkflowSchedulerDecisionReason::AdmittedForExecution => "admitted_for_execution",
+        }
+    }
+}
+
 /// Session queue item metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -117,6 +159,8 @@ pub struct WorkflowSessionQueueItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dequeued_at_ms: Option<u64>,
     pub priority: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduler_decision_reason: Option<WorkflowSchedulerDecisionReason>,
     pub status: WorkflowSessionQueueItemStatus,
 }
 

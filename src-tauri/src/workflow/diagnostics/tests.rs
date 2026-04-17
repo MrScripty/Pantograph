@@ -166,6 +166,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             enqueued_at_ms: None,
             dequeued_at_ms: None,
             priority: 10,
+            scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
@@ -663,6 +664,7 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
             enqueued_at_ms: Some(4_750),
             dequeued_at_ms: Some(4_750),
             priority: 0,
+            scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
@@ -723,6 +725,7 @@ fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
             enqueued_at_ms: Some(100),
             dequeued_at_ms: Some(110),
             priority: 5,
+            scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
@@ -824,6 +827,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             enqueued_at_ms: Some(1_950),
             dequeued_at_ms: Some(1_980),
             priority: 5,
+            scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
@@ -857,7 +861,10 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
         2_010,
     );
 
-    assert_eq!(runtime_projection.run_order, vec!["restored-exec".to_string()]);
+    assert_eq!(
+        runtime_projection.run_order,
+        vec!["restored-exec".to_string()]
+    );
     assert_eq!(
         runtime_projection.runtime.active_model_target.as_deref(),
         Some("/models/restarted.gguf")
@@ -916,6 +923,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             enqueued_at_ms: Some(900),
             dequeued_at_ms: Some(930),
             priority: 1,
+            scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,
@@ -974,6 +982,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             enqueued_at_ms: Some(900),
             dequeued_at_ms: Some(940),
             priority: 1,
+            scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
         None,

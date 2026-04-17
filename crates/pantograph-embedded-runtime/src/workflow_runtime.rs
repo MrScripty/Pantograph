@@ -908,8 +908,8 @@ mod tests {
     }
 
     #[test]
-    fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_and_runtime_facts()
-     {
+    fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_and_runtime_facts(
+    ) {
         let registry = RuntimeRegistry::new();
         let snapshot = build_workflow_execution_diagnostics_snapshot(
             Some(&registry),
@@ -933,6 +933,7 @@ mod tests {
                     enqueued_at_ms: Some(11),
                     dequeued_at_ms: Some(12),
                     priority: 0,
+                    scheduler_decision_reason: None,
                     status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
                 }],
             },

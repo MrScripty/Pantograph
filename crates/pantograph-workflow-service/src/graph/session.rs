@@ -318,6 +318,7 @@ impl GraphEditSession {
                     enqueued_at_ms: started_at_ms,
                     dequeued_at_ms: started_at_ms,
                     priority: 0,
+                    scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }
             })

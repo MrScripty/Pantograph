@@ -11,6 +11,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | ----------- | ----------- |
 | `mod.rs` | Internal module entrypoint that re-exports scheduler contracts and store helpers to the workflow facade. |
 | `contracts.rs` | Scheduler request/response DTOs, queue item contracts, keep-alive/unload semantics, and stale-cleanup worker types. |
+| `policy.rs` | Explicit scheduler ordering policy objects and stable decision vocabulary for queue placement and admission. |
 | `store.rs` | In-memory scheduler state, queue ordering, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 
 ## Problem
@@ -32,9 +33,11 @@ future fairness, affinity, and diagnostics policy.
 Create a focused `scheduler/` boundary inside `pantograph-workflow-service`.
 `contracts.rs` freezes the workflow-facing scheduler DTOs, while `store.rs`
 owns the in-memory queue and session state that `WorkflowService` delegates to.
-`workflow.rs` remains the public application-service facade and orchestration
-entrypoint, but it no longer needs to be the long-term home for scheduler
-contracts or queue mutation logic.
+`policy.rs` makes the current priority/FIFO queue behavior explicit instead of
+leaving it as ad hoc branching inside the store. `workflow.rs` remains the
+public application-service facade and orchestration entrypoint, but it no
+longer needs to be the long-term home for scheduler contracts or queue
+mutation logic.
 
 ## Alternatives Rejected
 - Leave scheduler logic in `workflow.rs`.

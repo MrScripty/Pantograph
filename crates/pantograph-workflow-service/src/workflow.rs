@@ -34,7 +34,8 @@ use crate::graph::WorkflowSessionKind;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSchedulerDecisionReason, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse,
     WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
     WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
@@ -5494,6 +5495,10 @@ mod tests {
             pending_items[0].status,
             WorkflowSessionQueueItemStatus::Pending
         );
+        assert_eq!(
+            pending_items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::HighestPriorityFirst)
+        );
 
         let running_items = {
             let mut store = service
@@ -5525,6 +5530,10 @@ mod tests {
                 >= running_items[0]
                     .enqueued_at_ms
                     .expect("enqueued timestamp present")
+        );
+        assert_eq!(
+            running_items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
         );
     }
 

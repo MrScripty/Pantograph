@@ -24,6 +24,12 @@ The accurate implementation baseline at the current checkpoint is:
   dedicated backend-owned scheduler module boundary, with scheduler-facing DTOs
   and the in-memory workflow-session queue/store extracted out of
   `workflow.rs`
+- the initial explicit queue policy object now also exists in
+  `crates/pantograph-workflow-service/src/scheduler/policy.rs`, freezing the
+  current priority-then-FIFO behavior behind a backend-owned policy boundary
+- `WorkflowSessionQueueItem` now carries an additive machine-consumable
+  `scheduler_decision_reason`, and the backend trace layer prefers that
+  scheduler-owned reason when it is present
 - `crates/pantograph-workflow-service/src/workflow.rs` still owns the current
   workflow-service facade, runtime orchestration, and session command entry
   points, but it no longer has to be the long-term home for scheduler DTOs and
@@ -431,7 +437,7 @@ policy, fairness, and machine-consumable decision semantics.
 - Machine-consumable scheduler reasons and errors are exposed from backend
   contracts and do not require adapter-local reconstruction
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Runtime-Aware Admission, Reuse, And Diagnostics
 
@@ -492,6 +498,11 @@ Update during implementation:
   queue/store into `crates/pantograph-workflow-service/src/scheduler/`, added
   the required README coverage, and kept `workflow.rs` as the public facade
   through re-exports rather than further deepening the service file.
+- 2026-04-16: Added the first explicit backend-owned queue policy object plus
+  a stable scheduler decision-reason vocabulary, and threaded additive
+  `scheduler_decision_reason` fields through queue items so trace/diagnostics
+  can prefer backend-owned scheduler reasons over generic matched-item
+  fallbacks.
 
 ## Commit Cadence Notes
 

@@ -10,6 +10,7 @@ use crate::workflow::{
 };
 
 use super::{
+    PriorityThenFifoSchedulerPolicy, WorkflowSchedulerDecisionReason,
     WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionRuntimeUnloadCandidate,
     WorkflowSessionState, WorkflowSessionSummary,
 };
@@ -18,15 +19,16 @@ pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowSessionQueuedRun {
-    queue_id: String,
+    pub(crate) queue_id: String,
     pub(crate) run_id: Option<String>,
     enqueued_at_ms: u64,
     pub(crate) inputs: Vec<WorkflowPortBinding>,
     pub(crate) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,
     pub(crate) timeout_ms: Option<u64>,
-    priority: i32,
-    enqueued_tick: u64,
+    pub(crate) priority: i32,
+    scheduler_decision_reason: WorkflowSchedulerDecisionReason,
+    pub(crate) enqueued_tick: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +38,7 @@ struct WorkflowSessionActiveRun {
     enqueued_at_ms: u64,
     dequeued_at_ms: u64,
     priority: i32,
+    scheduler_decision_reason: WorkflowSchedulerDecisionReason,
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +276,7 @@ impl WorkflowSessionStore {
                 enqueued_at_ms: Some(active_run.enqueued_at_ms),
                 dequeued_at_ms: Some(active_run.dequeued_at_ms),
                 priority: active_run.priority,
+                scheduler_decision_reason: Some(active_run.scheduler_decision_reason),
                 status: WorkflowSessionQueueItemStatus::Running,
             });
         }
@@ -284,6 +288,7 @@ impl WorkflowSessionStore {
                 enqueued_at_ms: Some(queued.enqueued_at_ms),
                 dequeued_at_ms: None,
                 priority: queued.priority,
+                scheduler_decision_reason: Some(queued.scheduler_decision_reason),
                 status: WorkflowSessionQueueItemStatus::Pending,
             });
         }
@@ -301,6 +306,7 @@ impl WorkflowSessionStore {
         })?;
 
         let queue_id = Uuid::new_v4().to_string();
+        let policy = PriorityThenFifoSchedulerPolicy;
         let queued = WorkflowSessionQueuedRun {
             queue_id: queue_id.clone(),
             run_id: request
@@ -318,18 +324,14 @@ impl WorkflowSessionStore {
                 .and_then(WorkflowTechnicalFitOverride::normalized),
             timeout_ms: request.timeout_ms,
             priority: request.priority.unwrap_or(0),
+            scheduler_decision_reason: WorkflowSchedulerDecisionReason::HighestPriorityFirst,
             enqueued_tick: tick,
         };
 
-        let insert_index = state
-            .queue
-            .iter()
-            .position(|existing| {
-                queued.priority > existing.priority
-                    || (queued.priority == existing.priority
-                        && queued.enqueued_tick < existing.enqueued_tick)
-            })
-            .unwrap_or(state.queue.len());
+        let placement = policy.placement_for_enqueue(&state.queue, &queued);
+        let mut queued = queued;
+        queued.scheduler_decision_reason = placement.reason;
+        let insert_index = placement.index;
         state.queue.insert(insert_index, queued);
         Self::mark_session_access(state, tick);
         Ok(queue_id)
@@ -363,8 +365,9 @@ impl WorkflowSessionStore {
                 queue_id, session_id
             )));
         };
+        let policy = PriorityThenFifoSchedulerPolicy;
         if front.queue_id != queue_id {
-            if state.queue.iter().any(|item| item.queue_id == queue_id) {
+            if policy.admission_reason(&state.queue, queue_id)?.is_none() {
                 return Ok(None);
             }
             return Err(WorkflowServiceError::QueueItemNotFound(format!(
@@ -380,6 +383,7 @@ impl WorkflowSessionStore {
             enqueued_at_ms: queued.enqueued_at_ms,
             dequeued_at_ms: unix_timestamp_ms(),
             priority: queued.priority,
+            scheduler_decision_reason: WorkflowSchedulerDecisionReason::AdmittedForExecution,
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowSessionDequeuedRun {
@@ -513,15 +517,10 @@ impl WorkflowSessionStore {
 
         let mut queued = state.queue.remove(item_index);
         queued.priority = priority;
-        let insert_index = state
-            .queue
-            .iter()
-            .position(|existing| {
-                queued.priority > existing.priority
-                    || (queued.priority == existing.priority
-                        && queued.enqueued_tick < existing.enqueued_tick)
-            })
-            .unwrap_or(state.queue.len());
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let placement = policy.placement_for_enqueue(&state.queue, &queued);
+        queued.scheduler_decision_reason = placement.reason;
+        let insert_index = placement.index;
         state.queue.insert(insert_index, queued);
         Self::mark_session_access(state, tick);
         Ok(())
