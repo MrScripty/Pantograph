@@ -349,9 +349,9 @@ export interface WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> 
 
 // --- Execution State ---
 
-export type NodeExecutionState = 'idle' | 'running' | 'success' | 'error';
+export type NodeExecutionState = 'idle' | 'running' | 'waiting' | 'success' | 'error';
 
 export interface NodeExecutionInfo {
   state: NodeExecutionState;
-  errorMessage?: string;
+  message?: string;
 }

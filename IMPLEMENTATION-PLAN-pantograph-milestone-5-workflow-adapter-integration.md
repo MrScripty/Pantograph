@@ -600,6 +600,10 @@ Update during implementation:
 - Direct workflow-run callers now also receive an `InvalidRequest` envelope
   when a workflow requires interactive input, preserving the backend-owned host
   contract mismatch instead of flattening it into an internal runtime error.
+- The shared graph package now rejects execution-scoped events that omit or
+  mismatch the pinned run id once execution ownership is claimed, and the
+  existing GUI now surfaces `WaitingForInput` as a real node/wait state
+  instead of silently ignoring the backend-owned pause contract.
 
 ### Deviations
 

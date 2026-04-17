@@ -98,8 +98,8 @@ execution-id boundary.
 - Store-backed graph rematerialization must preserve the selected node ids that
   the consumer last acknowledged through selection change events.
 - Session-owned execution UI must claim the active run from the first workflow
-  event that carries a non-empty `execution_id`, then ignore later events whose
-  `execution_id` no longer matches that run.
+  event that carries a non-empty `execution_id`, then ignore later events that
+  either omit `execution_id` or no longer match that run.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

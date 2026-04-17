@@ -441,6 +441,10 @@ incremental runs.
   execution-scoped workflow event instead of pre-pinning session-backed runs
   to the edit-session id, so valid scheduler/runtime and incremental events are
   not dropped before the backend emits `Started`.
+- The shared graph package now rejects execution-scoped events that omit or
+  mismatch the pinned run id once execution ownership is claimed, and the
+  existing GUI now surfaces `WaitingForInput` as a real node/wait state
+  instead of silently treating it as an unhandled event.
 - The app diagnostics consumer now also tracks run execution identity
   separately from editable-session ownership, so session-backed diagnostics
   filtering no longer rejects backend-owned run events before the session UI
@@ -452,8 +456,6 @@ incremental runs.
   mutation paths that still do not produce the event vocabulary consistently,
   especially beyond the executor-owned invalidation, multi-demand, and current
   edit-session human-input pause path
-- Explicit stale-event rejection semantics keyed to canonical execution/session
-  identity across backend and frontend consumers
 - Full adapter parity between backend-owned events and frontend consumers
 
 ### Phase 6: Incremental Graph Execution

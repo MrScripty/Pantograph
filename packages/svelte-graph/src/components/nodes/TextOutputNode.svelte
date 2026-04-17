@@ -111,6 +111,11 @@
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
+  .status-dot[data-state="waiting"] {
+    background-color: #60a5fa;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
   .status-dot[data-state="success"] {
     background-color: #0891b2;
   }

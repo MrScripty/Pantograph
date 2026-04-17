@@ -23,6 +23,7 @@
 
   let currentUnsubscribe: (() => void) | null = null;
   let activeExecutionId: string | null = null;
+  let waitingForInput = false;
 
   async function handleRun() {
     if ($isExecuting) return;
@@ -30,6 +31,7 @@
     isExecuting.set(true);
     stores.workflow.resetExecutionStates();
     activeExecutionId = null;
+    waitingForInput = false;
 
     currentUnsubscribe = backend.subscribeEvents(handleWorkflowEvent);
 
@@ -47,6 +49,7 @@
         currentUnsubscribe = null;
       }
       activeExecutionId = null;
+      waitingForInput = false;
     }
   }
 
@@ -57,6 +60,7 @@
       currentUnsubscribe = null;
     }
     activeExecutionId = null;
+    waitingForInput = false;
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
@@ -69,6 +73,7 @@
 
     switch (event.type) {
       case 'NodeStarted':
+        waitingForInput = false;
         stores.workflow.setNodeExecutionState((event.data as { node_id: string }).node_id, 'running');
         break;
       case 'NodeCompleted': {
@@ -96,6 +101,16 @@
         const errorData = event.data as { node_id: string; error: string };
         stores.workflow.setNodeExecutionState(errorData.node_id, 'error', errorData.error);
         console.error(`Node ${errorData.node_id} failed:`, errorData.error);
+        break;
+      }
+      case 'WaitingForInput': {
+        const waitingData = event.data as { node_id: string; message?: string | null };
+        waitingForInput = true;
+        stores.workflow.setNodeExecutionState(
+          waitingData.node_id,
+          'waiting',
+          waitingData.message || 'Waiting for input',
+        );
         break;
       }
       case 'Completed':
@@ -194,7 +209,11 @@
       disabled={$isExecuting}
     >
       {#if $isExecuting}
-        [||] Running...
+        {#if waitingForInput}
+          [?] Waiting...
+        {:else}
+          [||] Running...
+        {/if}
       {:else}
         [>] Run
       {/if}

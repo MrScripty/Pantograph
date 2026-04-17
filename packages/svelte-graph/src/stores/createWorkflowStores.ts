@@ -73,7 +73,7 @@ export interface WorkflowStores {
   syncEdgesFromBackend: (backendGraph: WorkflowGraph) => void;
 
   // Actions — execution
-  setNodeExecutionState: (nodeId: string, state: NodeExecutionState, errorMessage?: string) => void;
+  setNodeExecutionState: (nodeId: string, state: NodeExecutionState, message?: string) => void;
   getNodeExecutionInfo: (nodeId: string) => NodeExecutionInfo | undefined;
   resetExecutionStates: () => void;
 
@@ -381,10 +381,10 @@ export function createWorkflowStores(
 
   // --- Execution actions ---
 
-  function setNodeExecutionState(nodeId: string, state: NodeExecutionState, errorMessage?: string) {
+  function setNodeExecutionState(nodeId: string, state: NodeExecutionState, message?: string) {
     nodeExecutionStates.update((map) => {
       const newMap = new Map(map);
-      newMap.set(nodeId, { state, errorMessage });
+      newMap.set(nodeId, { state, message });
       return newMap;
     });
   }

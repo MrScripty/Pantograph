@@ -27,7 +27,7 @@
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
-  let errorMessage = $derived(executionInfo?.errorMessage);
+  let statusMessage = $derived(executionInfo?.message);
   let activeConnectionIntent = $derived($connectionIntent);
   let hasConnectionIntent = $derived(activeConnectionIntent !== null);
   let intentSourceAnchor = $derived(activeConnectionIntent?.sourceAnchor ?? null);
@@ -88,15 +88,15 @@
       <div
         class="status-dot"
         data-state={executionState}
-        title={executionState === 'error' && errorMessage ? errorMessage : executionState}
+        title={statusMessage || executionState}
       ></div>
     {/if}
   </div>
 
-  <!-- Error message banner -->
-  {#if executionState === 'error' && errorMessage}
-    <div class="error-banner" title={errorMessage}>
-      {errorMessage}
+  <!-- Status message banner -->
+  {#if (executionState === 'error' || executionState === 'waiting') && statusMessage}
+    <div class:waiting-banner={executionState === 'waiting'} class="error-banner" title={statusMessage}>
+      {statusMessage}
     </div>
   {/if}
 
@@ -230,6 +230,14 @@
       0 0 30px rgba(245, 158, 11, 0.15);
   }
 
+  .base-node[data-state="waiting"] {
+    border-color: #3b82f6;
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.3),
+      0 0 15px rgba(59, 130, 246, 0.28),
+      0 0 30px rgba(59, 130, 246, 0.14);
+  }
+
   .base-node[data-state="success"] {
     border-color: #22c55e;
     box-shadow:
@@ -282,6 +290,11 @@
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
+  .status-dot[data-state="waiting"] {
+    background-color: #3b82f6;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
@@ -297,6 +310,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .waiting-banner {
+    background-color: rgba(30, 64, 175, 0.42);
+    border-bottom-color: #2563eb;
+    color: #bfdbfe;
   }
 
   /* --- Ports --- */

@@ -24,6 +24,7 @@
     {
       idle: 'Idle',
       running: 'Running...',
+      waiting: 'Waiting...',
       success: 'Complete',
       error: 'Error',
     }[executionState as string]
@@ -66,6 +67,7 @@
 
   .status-dot[data-state="idle"] { background-color: #737373; }
   .status-dot[data-state="running"] { background-color: #3b82f6; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  .status-dot[data-state="waiting"] { background-color: #60a5fa; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
   .status-dot[data-state="success"] { background-color: #22c55e; }
   .status-dot[data-state="error"] { background-color: #ef4444; }
 

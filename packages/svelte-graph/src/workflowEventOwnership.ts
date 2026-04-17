@@ -32,5 +32,5 @@ export function isWorkflowEventRelevantToExecution(
 
   const eventExecutionId = getWorkflowEventExecutionId(event);
 
-  return eventExecutionId === null || eventExecutionId === expectedExecutionId;
+  return eventExecutionId === expectedExecutionId;
 }

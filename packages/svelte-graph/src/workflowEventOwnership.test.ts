@@ -66,9 +66,21 @@ test('isWorkflowEventRelevantToExecution keeps events without execution ids', ()
       {
         data: {},
       },
-      'session-1',
+      null,
     ),
     true,
+  );
+});
+
+test('isWorkflowEventRelevantToExecution rejects events without execution ids after pinning', () => {
+  assert.equal(
+    isWorkflowEventRelevantToExecution(
+      {
+        data: {},
+      },
+      'session-1',
+    ),
+    false,
   );
 });
 
