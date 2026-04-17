@@ -420,6 +420,11 @@ Update during implementation:
   `WorkflowEvent` carry additive backend-owned `occurred_at_ms` timestamps and
   updated the Tauri workflow adapter to preserve those producer timestamps when
   projecting diagnostics overlays into the backend trace spine.
+- 2026-04-17: Thirty-sixth implementation slice hardened
+  `pantograph_workflow_service::WorkflowTraceStore` so duplicate terminal
+  run/node events are treated as idempotent replay, preserving first terminal
+  timestamps and durations inside the backend trace owner instead of pushing
+  de-duplication policy into adapters.
 
 ## Commit Cadence Notes
 

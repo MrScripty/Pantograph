@@ -388,6 +388,10 @@ fn apply_trace_event(
     event: &WorkflowTraceEvent,
     timestamp_ms: u64,
 ) {
+    if is_idempotent_terminal_trace_event(trace, event) {
+        return;
+    }
+
     trace.event_count += 1;
 
     match event {
@@ -538,6 +542,40 @@ fn apply_trace_event(
         | WorkflowTraceEvent::IncrementalExecutionStarted { .. }
         | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
         | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => {}
+    }
+}
+
+fn is_idempotent_terminal_trace_event(
+    trace: &WorkflowTraceRunState,
+    event: &WorkflowTraceEvent,
+) -> bool {
+    match event {
+        WorkflowTraceEvent::RunCompleted { .. } => {
+            trace.status == WorkflowTraceStatus::Completed && trace.ended_at_ms.is_some()
+        }
+        WorkflowTraceEvent::RunFailed { error, .. } => {
+            trace.status == WorkflowTraceStatus::Failed
+                && trace.ended_at_ms.is_some()
+                && trace.last_error.as_deref() == Some(error.as_str())
+        }
+        WorkflowTraceEvent::RunCancelled { error, .. } => {
+            trace.status == WorkflowTraceStatus::Cancelled
+                && trace.ended_at_ms.is_some()
+                && trace.last_error.as_deref() == Some(error.as_str())
+        }
+        WorkflowTraceEvent::NodeCompleted { node_id, .. } => {
+            trace.nodes_by_id.get(node_id).is_some_and(|node| {
+                node.status == WorkflowTraceNodeStatus::Completed && node.ended_at_ms.is_some()
+            })
+        }
+        WorkflowTraceEvent::NodeFailed { node_id, error, .. } => {
+            trace.nodes_by_id.get(node_id).is_some_and(|node| {
+                node.status == WorkflowTraceNodeStatus::Failed
+                    && node.ended_at_ms.is_some()
+                    && node.last_error.as_deref() == Some(error.as_str())
+            })
+        }
+        _ => false,
     }
 }
 

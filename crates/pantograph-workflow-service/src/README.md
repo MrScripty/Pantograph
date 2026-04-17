@@ -157,6 +157,9 @@ Primary contract types:
 - The in-memory recent-trace store also belongs here so adapters can forward
   canonical trace events into one backend-owned owner instead of accumulating
   lifecycle state locally.
+- Duplicate terminal run/node events are normalized here as idempotent replay,
+  preserving the first terminal timestamps and durations instead of asking
+  adapters to de-duplicate delivery.
 - When the same execution id receives a new terminal-to-running `RunStarted`
   transition, this crate resets attempt-scoped trace state before recording the
   new attempt so retry or replay flows do not leak stale node, queue, or

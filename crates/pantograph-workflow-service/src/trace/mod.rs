@@ -1054,6 +1054,87 @@ mod tests {
     }
 
     #[test]
+    fn workflow_trace_store_ignores_duplicate_run_completed_events() {
+        let store = WorkflowTraceStore::new(10);
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 1,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunCompleted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+            },
+            140,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::RunCompleted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+            },
+            170,
+        );
+
+        let trace = snapshot.traces.first().expect("trace");
+        assert_eq!(trace.status, WorkflowTraceStatus::Completed);
+        assert_eq!(trace.ended_at_ms, Some(140));
+        assert_eq!(trace.duration_ms, Some(40));
+        assert_eq!(trace.event_count, 2);
+    }
+
+    #[test]
+    fn workflow_trace_store_ignores_duplicate_node_failed_events() {
+        let store = WorkflowTraceStore::new(10);
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 1,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeStarted {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+                node_type: Some("llm-inference".to_string()),
+            },
+            110,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeFailed {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+                error: "boom".to_string(),
+            },
+            140,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::NodeFailed {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+                error: "boom".to_string(),
+            },
+            170,
+        );
+
+        let trace = snapshot.traces.first().expect("trace");
+        let node = trace.nodes.first().expect("node");
+        assert_eq!(trace.event_count, 3);
+        assert_eq!(node.event_count, 2);
+        assert_eq!(node.status, WorkflowTraceNodeStatus::Failed);
+        assert_eq!(node.ended_at_ms, Some(140));
+        assert_eq!(node.duration_ms, Some(30));
+        assert_eq!(node.last_error.as_deref(), Some("boom"));
+    }
+
+    #[test]
     fn workflow_trace_store_prefers_matching_queue_items_over_session_backlog() {
         let store = WorkflowTraceStore::new(10);
         let snapshot = store.record_event(
