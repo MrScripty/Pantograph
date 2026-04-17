@@ -373,7 +373,7 @@ Milestone 5 behavior work expands them further.
 preserve backend-owned semantics without adapter-local reconstruction.
 
 **Tasks:**
-- [ ] Normalize diagnostics and trace snapshot boundary validation into shared
+- [x] Normalize diagnostics and trace snapshot boundary validation into shared
       backend-owned request helpers where raw adapter input still leaks through.
 - [x] Ensure scheduler snapshot, runtime snapshot, and trace snapshot transport
       keeps backend-owned execution/session identity semantics when identifiers
@@ -386,7 +386,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
 - [x] Verify that runtime-not-ready, admission failure, and cancellation-shaped
       failures preserve machine-consumable backend envelopes through transport
       wrappers.
-- [ ] Add or tighten acceptance coverage from backend trace/scheduler producers
+- [x] Add or tighten acceptance coverage from backend trace/scheduler producers
       through Tauri/binding consumers.
 
 **Verification:**
@@ -395,7 +395,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
 - Cross-layer acceptance checks per `TESTING-STANDARDS.md`
 - Interop review against `INTEROP-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 4: Binding And Adapter Consistency Review
 
@@ -549,6 +549,15 @@ Update during implementation:
   snapshots rebuilds canonical trace state from backend facts, and that the
   Tauri runtime-registry wrapper resynchronizes registry state after a
   stop-and-restore transition instead of leaving a stale stopped view behind.
+- Milestone 3 request-boundary review now confirms that diagnostics filter
+  normalization is centralized in `WorkflowDiagnosticsSnapshotRequest` and
+  trace request rejection remains centralized in the backend-owned
+  `WorkflowTraceSnapshotRequest::validate()` path, so transport wrappers no
+  longer trim or reinterpret those request fields ad hoc.
+- Milestone 3 acceptance coverage now explicitly asserts that the runtime
+  debug snapshot consumer preserves backend-produced scheduler execution
+  identity, queue timing, and observed runtime ids all the way through the
+  Tauri-facing debug snapshot contract.
 
 ### Deviations
 

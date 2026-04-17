@@ -563,6 +563,144 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts() {
+        let gateway: SharedGateway = Arc::new(InferenceGateway::new(Arc::new(MockProcessSpawner)));
+        gateway.init().await;
+
+        let runtime_registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
+        let workflow_diagnostics: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
+        workflow_diagnostics.record_runtime_snapshot(
+            "workflow-debug".to_string(),
+            "execution-debug".to_string(),
+            123,
+            None,
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                observed_runtime_ids: vec![
+                    "llama.cpp.embedding".to_string(),
+                    "llama_cpp_embedding".to_string(),
+                ],
+                runtime_instance_id: Some("llama-cpp-embedding-13".to_string()),
+                model_target: Some("/models/embed.gguf".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            Some("/models/embed.gguf".to_string()),
+            None,
+            Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-cpp-embedding-13".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            None,
+            None,
+        );
+        workflow_diagnostics.record_scheduler_snapshot(
+            Some("workflow-debug".to_string()),
+            "execution-debug".to_string(),
+            "session-debug".to_string(),
+            456,
+            Some(WorkflowSessionSummary {
+                session_id: "session-debug".to_string(),
+                workflow_id: "workflow-debug".to_string(),
+                session_kind: WorkflowSessionKind::Workflow,
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+                state: WorkflowSessionState::Running,
+                queued_runs: 1,
+                run_count: 1,
+            }),
+            vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+                queue_id: "queue-1".to_string(),
+                run_id: Some("execution-debug".to_string()),
+                enqueued_at_ms: Some(400),
+                dequeued_at_ms: Some(430),
+                priority: 3,
+                status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+            }],
+            None,
+        );
+        let workflow_diagnostics_projection = workflow_diagnostics.snapshot();
+        let workflow_trace = workflow_diagnostics
+            .trace_snapshot(WorkflowTraceSnapshotRequest {
+                execution_id: Some("execution-debug".to_string()),
+                session_id: None,
+                workflow_id: None,
+                include_completed: Some(true),
+            })
+            .expect("workflow trace snapshot");
+
+        let response = runtime_debug_snapshot_response(
+            &gateway,
+            &runtime_registry,
+            None,
+            None,
+            Some(workflow_diagnostics_projection),
+            Some(workflow_trace),
+        )
+        .await;
+
+        let scheduler = response
+            .workflow_scheduler_diagnostics
+            .as_ref()
+            .expect("scheduler diagnostics");
+        assert_eq!(scheduler.session_id.as_deref(), Some("session-debug"));
+        assert_eq!(
+            scheduler.trace_execution_id.as_deref(),
+            Some("execution-debug")
+        );
+
+        let runtime = response
+            .workflow_runtime_diagnostics
+            .as_ref()
+            .expect("runtime diagnostics");
+        assert_eq!(runtime.workflow_id.as_deref(), Some("workflow-debug"));
+        assert_eq!(
+            runtime.active_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+        assert_eq!(
+            runtime
+                .active_runtime
+                .as_ref()
+                .and_then(|snapshot| snapshot.runtime_id.as_deref()),
+            Some("llama.cpp.embedding")
+        );
+
+        let trace = response
+            .workflow_trace
+            .as_ref()
+            .and_then(|trace| trace.traces.first())
+            .expect("workflow trace");
+        assert_eq!(trace.execution_id, "execution-debug");
+        assert_eq!(trace.session_id.as_deref(), Some("session-debug"));
+        assert_eq!(trace.workflow_id.as_deref(), Some("workflow-debug"));
+        assert_eq!(trace.queue.enqueued_at_ms, Some(400));
+        assert_eq!(trace.queue.dequeued_at_ms, Some(430));
+        assert_eq!(trace.queue.queue_wait_ms, Some(30));
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("matched_running_item")
+        );
+        assert_eq!(
+            trace.runtime.observed_runtime_ids,
+            vec![
+                "llama.cpp.embedding".to_string(),
+                "llama_cpp_embedding".to_string(),
+            ]
+        );
+    }
+
     #[test]
     fn runtime_debug_snapshot_request_serializes_optional_workflow_filters() {
         let request = RuntimeDebugSnapshotRequest {
