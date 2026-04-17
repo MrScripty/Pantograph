@@ -399,16 +399,17 @@ Milestone 6 directly touches.
 whether any rollout toggle is actually necessary.
 
 **Tasks:**
-- [ ] Audit runtime debug snapshot, runtime-registry snapshot, targeted
+- [x] Audit runtime debug snapshot, runtime-registry snapshot, targeted
       reclaim, and workflow diagnostics/trace transport contracts for
       additive-only semantics and boundary-local validation.
-- [ ] Decide whether a rollout toggle is required. Default to no new toggle
+- [x] Decide whether a rollout toggle is required. Default to no new toggle
       unless a concrete migration or operational risk is documented.
-- [ ] If no toggle is needed, record that decision with rationale and revisit
+- [x] If no toggle is needed, record that decision with rationale and revisit
       triggers in the Milestone 6 docs/README surfaces.
-- [ ] If a toggle is required, keep it backend-owned with explicit config
+- [x] Record that no new toggle is required today and freeze the fallback rule
+      that any future toggle must stay backend-owned with explicit config
       ownership, defaults, ordering, upgrade semantics, and restart behavior.
-- [ ] Ensure recovery, restart, restore, and reclaim guidance points to the
+- [x] Ensure recovery, restart, restore, and reclaim guidance points to the
       synchronized backend-owned helper paths rather than Tauri-local
       bookkeeping or manual drift-prone workarounds.
 
@@ -417,7 +418,7 @@ whether any rollout toggle is actually necessary.
 - Targeted smoke verification for startup, shutdown, recovery, runtime debug
   snapshot, and workflow trace visibility through real command paths
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 4: ADR, Operator Docs, Tooling, And Final Reconciliation
 
@@ -465,6 +466,11 @@ Update during implementation:
   removing the vestigial empty `src-tauri/src/llm/runtime_registry/`
   directory, and ignoring/removing generated cache directories from the touched
   source roots.
+- 2026-04-16: Completed the Milestone 6 rollout-safety slice by documenting
+  the current runtime debug, reclaim, and recovery surfaces; recording the
+  explicit "no new Milestone 6 rollout toggle" decision with revisit triggers;
+  and tying the operator guidance back to backend-owned synchronization and
+  reclaim helpers rather than Tauri-local bookkeeping.
 
 ## Commit Cadence Notes
 
@@ -517,6 +523,9 @@ Update during implementation:
   cache directories are ignored and removed from the touched source roots, and
   the vestigial empty `src-tauri/src/llm/runtime_registry/` directory has been
   deleted.
+- Milestone 3 rollout-safety work is complete: the no-new-toggle decision is
+  now documented, and runtime debug/recovery/reclaim guidance explicitly
+  points to the backend-owned synchronization paths already used by the code.
 
 ### Deviations
 

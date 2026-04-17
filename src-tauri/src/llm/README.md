@@ -115,6 +115,10 @@ app.manage(gateway);
   started and stopped by the app composition root or another explicit owner,
   not by arbitrary UI calls. Command handlers may invoke those managed
   services, but they must not create replacement service instances on demand.
+- Milestone 6 does not add a new rollout toggle for runtime debug or targeted
+  reclaim transport. These command surfaces stay additive and always available
+  to the desktop host because they forward already-owned backend state rather
+  than introducing a second policy boundary.
 - Compatibility policy is additive: command surfaces may grow, but existing
   backend-owned status shapes should remain stable unless an explicit contract
   change is approved.
@@ -127,6 +131,10 @@ app.manage(gateway);
   single producer-specific runtime snapshots into backend-owned registry
   observations, but it must not become the owner of lifecycle or retention
   policy.
+- `commands/registry.rs` may aggregate runtime mode, registry, health,
+  recovery, workflow diagnostics, and optional workflow trace facts into one
+  debug response, but it must do so by reusing backend-owned snapshot helpers
+  and must not cache or redefine runtime truth locally.
 - `health_monitor.rs` may own polling cadence, HTTP transport, and desktop
   event emission, but degraded/unhealthy threshold interpretation must come
   from `crates/pantograph-embedded-runtime::runtime_health`.
@@ -148,6 +156,9 @@ app.manage(gateway);
   not dropped.
 - Command payloads emitted from this directory are transport wrappers around
   backend/runtime contracts, not a separate policy schema.
+- Existing `RecoveryConfig` fields control recovery behavior only; they are not
+  a feature-gating mechanism for runtime-registry visibility or targeted
+  reclaim.
 - Health/recovery overlays may add host-only fields, but they must not mutate
   the meaning of backend-owned lifecycle facts.
 - This directory must distinguish raw backend facts from registry policy

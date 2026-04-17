@@ -14,6 +14,7 @@ across commit history or transient chat context.
 | `headless-embedding-api-v1.md` | Reference contract for the headless embedding service surface. |
 | `headless-native-bindings.md` | Product-facing native/bindings packaging and usage guidance. |
 | `python-runtime-separation.md` | Design notes and rationale for keeping Python runtime execution out of process. |
+| `runtime-registry-debug-and-recovery.md` | Operator/developer guide for runtime-registry inspection, reclaim, recovery, and Milestone 6 rollout posture. |
 
 ## Problem
 Pantograph spans workflow orchestration, runtime management, bindings, and

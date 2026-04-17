@@ -123,5 +123,9 @@ desktop app wiring.
 - Hosts may also pass normalized technical-fit inputs and candidate facts into
   this crate, but they must not invent alternate factor names, override
   precedence semantics, or selector reason codes locally.
+- Runtime debug or operator-facing tools may surface this crate's snapshots and
+  reclaim dispositions directly, but they should treat those surfaces as
+  always-on additive inspection tools rather than gating them behind a second
+  rollout flag unless a future compatibility hazard is explicitly documented.
 - New fields in public snapshot/lease structs should be additive unless a
   deliberate migration is recorded.
