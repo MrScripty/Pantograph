@@ -3233,6 +3233,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics_to_start_runtime(
+    ) {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let gateway = Arc::new(inference::InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        ));
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let host_runtime_mode_info =
+            HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            gateway.clone(),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::with_capacity_limits(4, 1)),
+            None,
+            Some(runtime_registry.clone()),
+            Some(host_runtime_mode_info),
+        )
+        .await;
+
+        let created = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+
+        runtime
+            .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
+                session_id: created.session_id,
+                keep_alive: false,
+            })
+            .await
+            .expect("disable keep alive");
+
+        let snapshot = runtime_registry.snapshot();
+        let runtime_record = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("runtime should remain observable after reclaim");
+        assert_eq!(runtime_record.status, RuntimeRegistryStatus::Stopped);
+
+        let diagnostics_provider = EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
+            gateway.clone(),
+            runtime_registry.clone(),
+        );
+        let diagnostics = diagnostics_provider
+            .scheduler_runtime_registry_diagnostics(&WorkflowSchedulerRuntimeDiagnosticsRequest {
+                session_id: "queued-after-reclaim".to_string(),
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: false,
+                runtime_loaded: false,
+                next_admission_queue_id: Some("queue-after-reclaim".to_string()),
+                reclaim_candidates: Vec::new(),
+            })
+            .await
+            .expect("scheduler diagnostics provider should succeed")
+            .expect("runtime registry diagnostics should be present");
+
+        assert_eq!(
+            diagnostics,
+            WorkflowSchedulerRuntimeRegistryDiagnostics {
+                target_runtime_id: Some("llama_cpp".to_string()),
+                reclaim_candidate_session_id: None,
+                reclaim_candidate_runtime_id: None,
+                next_warmup_decision: Some(WorkflowSchedulerRuntimeWarmupDecision::StartRuntime,),
+                next_warmup_reason: Some(WorkflowSchedulerRuntimeWarmupReason::NoLoadedInstance),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn test_sync_loaded_session_runtime_retention_hint_updates_running_session() {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");

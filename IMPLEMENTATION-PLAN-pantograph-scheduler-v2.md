@@ -590,7 +590,7 @@ and source-of-truth alignment.
 **Tasks:**
 - [x] Add cross-layer acceptance coverage for scheduler snapshots, queue
       commands, and transport-visible decision/error payloads
-- [ ] Add replay/recovery/idempotency coverage for scheduler interactions with
+- [x] Add replay/recovery/idempotency coverage for scheduler interactions with
       reclaim, cleanup, and restart paths where relevant
 - [ ] Update roadmap, READMEs, and ADR text if ownership or accepted
       consequences changed during implementation
@@ -617,6 +617,10 @@ and source-of-truth alignment.
   embedding workflow restores the inference runtime, the backend-owned
   scheduler runtime-registry diagnostics provider still reports reclaim and
   `reuse_loaded_runtime` facts for the next admission request.
+- Added companion reclaim coverage proving that, after keep-alive-driven
+  runtime unload stops the last loaded runtime, the same backend-owned
+  diagnostics provider flips the next admission posture to
+  `start_runtime`/`no_loaded_instance`.
 
 **Status:** In progress
 
