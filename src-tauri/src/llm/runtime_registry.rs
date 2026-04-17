@@ -591,9 +591,13 @@ mod tests {
         );
         assert!(stopped_runtime.runtime_instance_id.is_none());
 
-        restore_runtime_and_sync_runtime_registry(&gateway, &registry, Some(BackendConfig::default()))
-            .await
-            .expect("restore should succeed");
+        restore_runtime_and_sync_runtime_registry(
+            &gateway,
+            &registry,
+            Some(BackendConfig::default()),
+        )
+        .await
+        .expect("restore should succeed");
 
         let restored_runtime = registry
             .snapshot()

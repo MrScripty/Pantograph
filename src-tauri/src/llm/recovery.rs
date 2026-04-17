@@ -142,8 +142,11 @@ impl RecoveryManager {
             let attempt = self.attempt_count.fetch_add(1, Ordering::SeqCst);
 
             // Calculate and apply backoff
-            let backoff =
-                recovery_backoff(self.config.backoff_base_ms, self.config.backoff_max_ms, attempt);
+            let backoff = recovery_backoff(
+                self.config.backoff_base_ms,
+                self.config.backoff_max_ms,
+                attempt,
+            );
             log::info!("Recovery attempt {} (waiting {:?})", attempt + 1, backoff);
             tokio::time::sleep(backoff).await;
 
