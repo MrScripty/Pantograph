@@ -1219,9 +1219,13 @@ mod tests {
         assert_eq!(events[0].event_type, "WaitingForInput");
         assert_eq!(events[1].event_type, "GraphModified");
         assert_eq!(events[2].event_type, "IncrementalExecutionStarted");
-        assert!(events[0].event_json.contains("\"type\":\"waitingForInput\""));
+        assert!(events[0]
+            .event_json
+            .contains("\"type\":\"waitingForInput\""));
         assert!(events[1].event_json.contains("\"type\":\"graphModified\""));
-        assert!(events[2].event_json.contains("\"type\":\"incrementalExecutionStarted\""));
+        assert!(events[2]
+            .event_json
+            .contains("\"type\":\"incrementalExecutionStarted\""));
     }
 
     #[cfg(feature = "frontend-http")]
