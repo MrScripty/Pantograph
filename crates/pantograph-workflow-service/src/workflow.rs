@@ -1231,7 +1231,7 @@ impl WorkflowService {
             })?
             .clone();
 
-        {
+        let workflow_snapshot = {
             let mut store = self.session_store.lock().map_err(|_| {
                 WorkflowServiceError::Internal("session store lock poisoned".to_string())
             })?;
@@ -1241,27 +1241,32 @@ impl WorkflowService {
             {
                 Ok(session) => {
                     let items = store.list_queue(session_id)?;
-                    let mut diagnostics = store.scheduler_snapshot_diagnostics(session_id)?;
                     let runtime_diagnostics_request =
                         store.scheduler_runtime_diagnostics_request(session_id)?;
-                    drop(store);
-                    if let Some(provider) = scheduler_diagnostics_provider.as_ref() {
-                        diagnostics.runtime_registry = provider
-                            .scheduler_runtime_registry_diagnostics(&runtime_diagnostics_request)
-                            .await?;
-                    }
-                    return Ok(WorkflowSchedulerSnapshotResponse {
-                        workflow_id: Some(session.workflow_id.clone()),
-                        session_id: session_id.to_string(),
-                        trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
-                        session,
-                        items,
-                        diagnostics: Some(diagnostics),
-                    });
+                    let diagnostics = store.scheduler_snapshot_diagnostics(session_id)?;
+                    Some((session, items, diagnostics, runtime_diagnostics_request))
                 }
-                Err(WorkflowServiceError::SessionNotFound(_)) => {}
+                Err(WorkflowServiceError::SessionNotFound(_)) => None,
                 Err(error) => return Err(error),
             }
+        };
+
+        if let Some((session, items, mut diagnostics, runtime_diagnostics_request)) =
+            workflow_snapshot
+        {
+            if let Some(provider) = scheduler_diagnostics_provider.as_ref() {
+                diagnostics.runtime_registry = provider
+                    .scheduler_runtime_registry_diagnostics(&runtime_diagnostics_request)
+                    .await?;
+            }
+            return Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some(session.workflow_id.clone()),
+                session_id: session_id.to_string(),
+                trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
+                session,
+                items,
+                diagnostics: Some(diagnostics),
+            });
         }
 
         self.graph_session_store

@@ -290,7 +290,9 @@ mod tests {
     use pantograph_workflow_service::{
         WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowErrorCode,
         WorkflowErrorEnvelope, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
-        WorkflowRuntimeRequirements, WorkflowSchedulerSnapshotRequest,
+        WorkflowRuntimeRequirements, WorkflowSchedulerRuntimeRegistryDiagnostics,
+        WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
+        WorkflowSchedulerSnapshotDiagnostics, WorkflowSchedulerSnapshotRequest,
         WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
         WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
         WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
@@ -852,6 +854,93 @@ mod tests {
         assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
         assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
         assert_eq!(trace.nodes.len(), 0);
+    }
+
+    #[test]
+    fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry_diagnostics() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        let projection = workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("run-1".to_string()),
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: None,
+                    priority: 5,
+                    queue_position: Some(0),
+                    scheduler_admission_outcome: None,
+                    scheduler_decision_reason: None,
+                    status: WorkflowSessionQueueItemStatus::Pending,
+                }],
+                diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
+                    loaded_session_count: 1,
+                    max_loaded_sessions: 2,
+                    reclaimable_loaded_session_count: 1,
+                    runtime_capacity_pressure:
+                        pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
+                    active_run_blocks_admission: false,
+                    next_admission_queue_id: Some("queue-1".to_string()),
+                    next_admission_after_runs: Some(0),
+                    next_admission_reason: Some(
+                        pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
+                    ),
+                    runtime_registry: Some(WorkflowSchedulerRuntimeRegistryDiagnostics {
+                        target_runtime_id: Some("llama_cpp".to_string()),
+                        reclaim_candidate_session_id: Some("session-loaded".to_string()),
+                        reclaim_candidate_runtime_id: Some("llama_cpp".to_string()),
+                        next_warmup_decision: Some(
+                            WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime,
+                        ),
+                        next_warmup_reason: Some(
+                            WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady,
+                        ),
+                    }),
+                }),
+            })),
+            Some(Ok(capability_response())),
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
+                runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:34b".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            Some("llava:34b".to_string()),
+            None,
+            None,
+            None,
+            120,
+        );
+
+        assert_eq!(
+            projection
+                .scheduler
+                .diagnostics
+                .as_ref()
+                .and_then(|diagnostics| diagnostics.runtime_registry.clone()),
+            Some(WorkflowSchedulerRuntimeRegistryDiagnostics {
+                target_runtime_id: Some("llama_cpp".to_string()),
+                reclaim_candidate_session_id: Some("session-loaded".to_string()),
+                reclaim_candidate_runtime_id: Some("llama_cpp".to_string()),
+                next_warmup_decision: Some(
+                    WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime,
+                ),
+                next_warmup_reason: Some(WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady,),
+            })
+        );
     }
 
     #[test]

@@ -588,7 +588,7 @@ and observable diagnostics without violating ownership boundaries.
 and source-of-truth alignment.
 
 **Tasks:**
-- [ ] Add cross-layer acceptance coverage for scheduler snapshots, queue
+- [x] Add cross-layer acceptance coverage for scheduler snapshots, queue
       commands, and transport-visible decision/error payloads
 - [ ] Add replay/recovery/idempotency coverage for scheduler interactions with
       reclaim, cleanup, and restart paths where relevant
@@ -604,7 +604,12 @@ and source-of-truth alignment.
 - Source-of-truth documents and touched READMEs accurately describe the landed
   scheduler ownership and diagnostics behavior
 
-**Status:** Not started
+**Execution progress:**
+- Added transport-facing acceptance coverage proving additive scheduler
+  `runtime_registry` diagnostics survive the headless diagnostics projection
+  without Tauri or wrappers reinterpreting scheduler policy.
+
+**Status:** In progress
 
 ## Execution Notes
 
