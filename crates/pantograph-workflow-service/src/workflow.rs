@@ -6019,6 +6019,97 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_session_queue_prefers_bounded_warm_reuse_over_same_priority_cold_head() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let (cold_head_queue_id, warm_queue_id) = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .update_runtime_affinity_basis(
+                    &created.session_id,
+                    vec!["llama_cpp".to_string()],
+                    vec!["model-a".to_string()],
+                )
+                .expect("update runtime affinity basis");
+            store
+                .mark_runtime_loaded(&created.session_id, true)
+                .expect("mark runtime loaded");
+            let cold_head_queue_id = store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: Some(WorkflowTechnicalFitOverride {
+                            model_id: Some("model-b".to_string()),
+                            backend_key: Some("pytorch".to_string()),
+                        }),
+                        timeout_ms: None,
+                        run_id: Some("cold-head".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue cold head");
+            let warm_queue_id = store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("warm-follow".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue warm follow");
+            (cold_head_queue_id, warm_queue_id)
+        };
+
+        let running_items = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .begin_queued_run(&created.session_id, &warm_queue_id)
+                .expect("begin queued run");
+            store
+                .list_queue(&created.session_id)
+                .expect("list running queue items")
+        };
+
+        assert_eq!(running_items.len(), 2);
+        assert_eq!(running_items[0].queue_id, warm_queue_id);
+        assert_eq!(
+            running_items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
+        );
+        assert_eq!(running_items[1].queue_id, cold_head_queue_id);
+        assert_eq!(
+            running_items[1].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::HighestPriorityFirst)
+        );
+    }
+
+    #[tokio::test]
     async fn workflow_session_queue_items_expose_authoritative_queue_positions() {
         let host = MockWorkflowHost::new(8, 1024);
         let service = WorkflowService::new();

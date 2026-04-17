@@ -48,7 +48,11 @@ internal admission-input model for policy evaluation from backend session
 state, loaded-runtime posture, and warm-session compatibility facts instead of
 keeping those inputs implicit inside one mutation path, and admitted runs now
 surface backend-owned warm-reuse versus reload versus cold-start reasons
-instead of a generic execution label. `workflow.rs` remains the public
+instead of a generic execution label. Admission selection now also has one
+bounded fairness override for warm reuse: inside the highest-priority,
+non-starved band, a compatible warm candidate may bypass at most the next cold
+candidate, but it still cannot jump starved or higher-priority work.
+`workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.
 

@@ -460,7 +460,7 @@ policy, fairness, and machine-consumable decision semantics.
       posture, and any already-known warm-session compatibility facts.
       Keep the implementation in Rust scheduler/workflow-service modules, keep
       transport contracts additive, and do not create a second mutable owner.
-- [ ] Expand fairness beyond the current starvation-promotion rule with a
+- [x] Expand fairness beyond the current starvation-promotion rule with a
       bounded and deterministic policy slice that remains reviewable:
       explicit tie-break semantics, reuse-aware fairness constraints, and
       guardrails that prevent warm-runtime preference from bypassing priority
@@ -474,7 +474,7 @@ policy, fairness, and machine-consumable decision semantics.
       the stronger admission policy so clients can distinguish queue ordering,
       fairness, affine reuse, and cold-start fallbacks without adapter-local
       heuristics.
-- [ ] Add focused unit and workflow-service coverage for the remaining
+- [x] Add focused unit and workflow-service coverage for the remaining
       fairness, admission, and reason-vocabulary slices, including negative
       cases where affine reuse is available but correctly rejected by priority
       or fairness rules.
@@ -536,11 +536,15 @@ policy, fairness, and machine-consumable decision semantics.
   `runtime_reload_required`, and `cold_start_required` reasons so queue,
   snapshot, and trace consumers no longer depend on a generic
   `admitted_for_execution` label.
-- Remaining Milestone 3 work is now narrowly defined as:
-  fairness expansion beyond starvation promotion and focused coverage for the
-  remaining fairness slices.
+- Admission selection now also applies a bounded warm-reuse fairness window in
+  the highest-priority, non-starved band, so a compatible warm candidate can
+  bypass at most the next cold candidate without overtaking higher-priority or
+  starved work.
+- Focused unit and workflow-service coverage now also locks the positive warm-
+  reuse path plus negative cases where reuse is correctly rejected by
+  starvation or window guardrails.
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 4: Runtime-Aware Admission, Reuse, And Diagnostics
 
@@ -633,6 +637,10 @@ Update during implementation:
   compatibility identity spanning `usage_profile`, `required_backends`, and
   `required_models`, so cross-workflow reclaim can preserve more reusable idle
   runtimes without shifting ownership into adapters.
+- 2026-04-16: Added a bounded warm-reuse fairness window for highest-priority,
+  non-starved admission candidates, plus focused policy and workflow-service
+  coverage for positive reuse, starvation guardrails, and out-of-window
+  rejection cases.
 
 ## Commit Cadence Notes
 

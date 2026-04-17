@@ -9,6 +9,7 @@ use super::{
 };
 
 const STARVATION_BYPASS_THRESHOLD: u32 = 2;
+const WARM_REUSE_FAIRNESS_WINDOW: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkflowSessionAdmissionRuntimePosture {
@@ -141,6 +142,10 @@ impl PriorityThenFifoSchedulerPolicy {
             return None;
         }
 
+        if let Some(candidate) = self.select_warm_reuse_candidate_within_fairness_window(input) {
+            return Some(candidate);
+        }
+
         input
             .candidates
             .iter()
@@ -240,6 +245,50 @@ impl PriorityThenFifoSchedulerPolicy {
             required_backends: candidate.required_backends.clone(),
             required_models: candidate.required_models.clone(),
         }
+    }
+
+    fn select_warm_reuse_candidate_within_fairness_window<'a>(
+        &self,
+        input: &'a WorkflowSessionAdmissionInput,
+    ) -> Option<&'a WorkflowSessionAdmissionCandidate> {
+        let highest_effective_priority = input
+            .candidates
+            .iter()
+            .map(|candidate| self.admission_effective_priority(candidate))
+            .max()?;
+
+        let priority_band = input
+            .candidates
+            .iter()
+            .filter(|candidate| {
+                self.admission_effective_priority(candidate) == highest_effective_priority
+            })
+            .collect::<Vec<_>>();
+        let band_head = priority_band
+            .iter()
+            .copied()
+            .min_by(|left, right| self.compare_admission_candidates(left, right))?;
+        if band_head.starvation_bypass_count > 0 {
+            return None;
+        }
+
+        priority_band
+            .into_iter()
+            .filter(|candidate| {
+                candidate.queue_position
+                    <= band_head
+                        .queue_position
+                        .saturating_add(WARM_REUSE_FAIRNESS_WINDOW)
+            })
+            .filter(|candidate| {
+                candidate.warm_session_compatibility == WorkflowSessionWarmCompatibility::Compatible
+            })
+            .min_by(|left, right| {
+                left.queue_position
+                    .cmp(&right.queue_position)
+                    .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
+                    .then_with(|| left.queue_id.cmp(&right.queue_id))
+            })
     }
 
     fn admission_reason(
@@ -815,5 +864,134 @@ mod tests {
             decision.reason,
             Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
         );
+    }
+
+    #[test]
+    fn admission_decision_prefers_warm_reuse_within_bounded_fairness_window() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![
+                admission_candidate(
+                    "head-cold",
+                    1,
+                    1,
+                    0,
+                    0,
+                    false,
+                    WorkflowSessionWarmCompatibility::Incompatible,
+                ),
+                admission_candidate(
+                    "next-warm",
+                    1,
+                    2,
+                    0,
+                    1,
+                    true,
+                    WorkflowSessionWarmCompatibility::Compatible,
+                ),
+            ],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "next-warm")
+            .expect("admission decision");
+
+        assert_eq!(decision.admitted_queue_id.as_deref(), Some("next-warm"));
+        assert_eq!(
+            decision.reason,
+            Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
+        );
+    }
+
+    #[test]
+    fn admission_decision_preserves_starved_head_over_warm_reuse_candidate() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![
+                admission_candidate(
+                    "starved-head",
+                    0,
+                    1,
+                    4,
+                    0,
+                    false,
+                    WorkflowSessionWarmCompatibility::Incompatible,
+                ),
+                admission_candidate(
+                    "warm-follower",
+                    2,
+                    2,
+                    0,
+                    1,
+                    true,
+                    WorkflowSessionWarmCompatibility::Compatible,
+                ),
+            ],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "warm-follower")
+            .expect("pending decision");
+
+        assert_eq!(decision.admitted_queue_id, None);
+        assert_eq!(decision.reason, None);
+    }
+
+    #[test]
+    fn admission_decision_preserves_fifo_when_warm_reuse_candidate_is_outside_window() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![
+                admission_candidate(
+                    "head-cold",
+                    1,
+                    1,
+                    0,
+                    0,
+                    false,
+                    WorkflowSessionWarmCompatibility::Incompatible,
+                ),
+                admission_candidate(
+                    "middle-cold",
+                    1,
+                    2,
+                    0,
+                    1,
+                    false,
+                    WorkflowSessionWarmCompatibility::Unknown,
+                ),
+                admission_candidate(
+                    "far-warm",
+                    1,
+                    3,
+                    0,
+                    2,
+                    true,
+                    WorkflowSessionWarmCompatibility::Compatible,
+                ),
+            ],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "far-warm")
+            .expect("pending decision");
+
+        assert_eq!(decision.admitted_queue_id, None);
+        assert_eq!(decision.reason, None);
     }
 }
