@@ -492,6 +492,10 @@ sync boundaries between the package graph and backend-owned graph state.
 **Goal:** Make managed runtimes and external runtimes look consistent to the
 workflow scheduler, preflight layer, and diagnostics surfaces.
 
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
+
 **Progress to date:**
 
 - Shared backend/runtime identity normalization is in place in Rust.
@@ -618,6 +622,20 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   contract family
 - Broader producer coverage over the backend-owned runtime-registry boundary
   beyond the current gateway plus dedicated-embedding observation path
+
+**Milestones:**
+
+- Freeze the dedicated Phase 7 source of truth and bring the immediate runtime
+  insertion areas back toward standards compliance before more producer logic
+  lands
+- Converge producer health, reconnect, and degraded-state semantics behind
+  backend-owned Rust helpers instead of adapter-local policy
+- Unify the registry-ready capability contract family across gateway,
+  dedicated-embedding, and execution-observed runtime producers
+- Broaden backend-owned runtime-registry boundary coverage for restore,
+  recovery, reclaim, and execution-path producer reconciliation
+- Reconcile README, roadmap, and acceptance coverage so the final Phase 7
+  ownership boundary and transport contract remain auditable
 
 ## Cross-Cutting Delivery Work
 
