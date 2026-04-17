@@ -311,6 +311,8 @@ fn workflow_trace_contract_snapshot() {
                         active_run_blocks_admission: false,
                         next_admission_queue_id: Some("queue-next".to_string()),
                         next_admission_after_runs: Some(0),
+                        next_admission_wait_ms: Some(0),
+                        next_admission_not_before_ms: Some(100),
                         next_admission_reason: Some(
                             pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
                         ),
@@ -374,6 +376,8 @@ fn workflow_trace_contract_snapshot() {
                     "active_run_blocks_admission": false,
                     "next_admission_queue_id": "queue-next",
                     "next_admission_after_runs": 0,
+                    "next_admission_wait_ms": 0,
+                    "next_admission_not_before_ms": 100,
                     "next_admission_reason": "warm_session_reused"
                 },
                 "scheduler_decision_reason": "dequeued_fifo"

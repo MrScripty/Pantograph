@@ -22,6 +22,12 @@ use super::{
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WorkflowSchedulerAdmissionEta {
+    wait_ms: u64,
+    not_before_ms: u64,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowSessionQueuedRun {
     pub(crate) queue_id: String,
@@ -347,6 +353,7 @@ impl WorkflowSessionStore {
         &self,
         session_id: &str,
     ) -> Result<WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError> {
+        let now_ms = unix_timestamp_ms();
         let state = self.active.get(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
@@ -390,6 +397,12 @@ impl WorkflowSessionStore {
         } else {
             WorkflowSchedulerRuntimeCapacityPressure::Saturated
         };
+        let next_admission_eta = next_admission_eta(
+            active_run_blocks_admission,
+            next_admission_queue_id.as_deref(),
+            next_admission_reason,
+            now_ms,
+        );
 
         Ok(WorkflowSchedulerSnapshotDiagnostics {
             loaded_session_count,
@@ -401,6 +414,8 @@ impl WorkflowSessionStore {
             next_admission_after_runs: predicted_admission
                 .as_ref()
                 .map(|_| usize::from(active_run_blocks_admission)),
+            next_admission_wait_ms: next_admission_eta.map(|eta| eta.wait_ms),
+            next_admission_not_before_ms: next_admission_eta.map(|eta| eta.not_before_ms),
             next_admission_reason,
             runtime_registry: None,
         })
@@ -926,6 +941,30 @@ impl WorkflowSessionStore {
 
         WorkflowSessionWarmCompatibility::Compatible
     }
+}
+
+fn next_admission_eta(
+    active_run_blocks_admission: bool,
+    next_admission_queue_id: Option<&str>,
+    next_admission_reason: Option<WorkflowSchedulerDecisionReason>,
+    now_ms: u64,
+) -> Option<WorkflowSchedulerAdmissionEta> {
+    if active_run_blocks_admission || next_admission_queue_id.is_none() {
+        return None;
+    }
+
+    let wait_ms = match next_admission_reason {
+        Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission) => {
+            WORKFLOW_SESSION_QUEUE_POLL_MS
+        }
+        Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity) => return None,
+        _ => 0,
+    };
+
+    Some(WorkflowSchedulerAdmissionEta {
+        wait_ms,
+        not_before_ms: now_ms.saturating_add(wait_ms),
+    })
 }
 
 fn normalize_affinity_values(values: Vec<String>) -> Vec<String> {

@@ -228,6 +228,8 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
         active_run_blocks_admission: true,
         next_admission_queue_id: Some("queue-1".to_string()),
         next_admission_after_runs: Some(1),
+        next_admission_wait_ms: None,
+        next_admission_not_before_ms: None,
         next_admission_reason: Some(
             pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
         ),

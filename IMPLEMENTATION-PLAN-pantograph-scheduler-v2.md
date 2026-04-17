@@ -579,6 +579,11 @@ and observable diagnostics without violating ownership boundaries.
 - `pantograph-embedded-runtime` now supplies those facts from the runtime
   registry and gateway lifecycle, while Tauri continues forwarding the shared
   backend contract without adding scheduler policy.
+- Canonical scheduler snapshots now also expose additive backend-owned
+  `next_admission_wait_ms` and `next_admission_not_before_ms` fields. These
+  remain intentionally bounded to earliest-known admission time: immediate
+  admission returns `0`, runtime-admission polling returns the canonical poll
+  delay, and capacity or active-run blockers stay `None` instead of guessing.
 
 **Status:** Complete
 
@@ -637,8 +642,8 @@ and source-of-truth alignment.
   outside the existing backend tests, so no additional fixture-specific
   validation or regeneration steps were required during close-out.
 - Remaining Scheduler V2 work is intentionally deferred to later milestones:
-  queue ETA exposure and any further fairness-policy breadth beyond the
-  currently landed starvation and warm-affinity rules.
+  further fairness-policy breadth beyond the currently landed starvation and
+  warm-affinity rules.
 
 **Status:** Complete
 
@@ -706,6 +711,10 @@ Update during implementation:
   workflow-session runs can remain queued with `waiting_for_runtime_admission`
   when the active runtime cannot currently accept another reservation, instead
   of dequeuing and then failing after runtime load begins.
+- 2026-04-17: Added backend-owned scheduler ETA lower-bound diagnostics via
+  additive `next_admission_wait_ms` and `next_admission_not_before_ms`
+  snapshot fields, exposing only earliest-known admission timing from
+  canonical state instead of transport-side or speculative estimates.
 
 ## Commit Cadence Notes
 

@@ -35,8 +35,9 @@ recovery/idempotency verification, source-of-truth close-out, and the
 Milestone 6 diagnostics, documentation, and rollout-safety reconciliation are
 complete. Scheduler V2 milestone 5 close-out is now also complete: transport
 projection, cleanup recovery, restore/reclaim recovery, and source-of-truth
-reconciliation are landed, while later scheduler phases remain focused on
-policy breadth such as ETA and final fairness work.
+reconciliation are landed, and canonical scheduler snapshots now expose
+backend-owned earliest-known admission ETA bounds, while later scheduler
+phases remain focused on final fairness breadth.
 
 ### Completed groundwork already in the repo
 
@@ -391,17 +392,19 @@ session scheduler that makes better admission and reuse decisions.
 - Introduce explicit runtime affinity and warm-session reuse decisions by
   workflow id, model dependency, and `usage_profile`
 - Add starvation protection and fair ordering across queued runs
-- Add queue ETA and admission diagnostics
-- Improve runtime rebalance behavior when loaded-session capacity is exhausted
-- Define scheduler error codes and decision reasons as stable machine-consumable
-  payloads
+- Queue ETA and admission diagnostics now expose backend-owned earliest-known
+  admission timing instead of transport-side estimates
+- Runtime rebalance behavior now keeps runs queued when loaded-session
+  capacity is exhausted by active work and no reclaim path exists
+- Scheduler error codes and decision reasons now flow as stable
+  machine-consumable payloads
 
 **Dependency note:**
 
 - Keep the remaining Scheduler V2 work layered on the completed backend-owned
   runtime-registry boundary and current metrics/trace surfaces; do not reopen
   adapter-boundary ownership or move scheduler truth into Tauri while the
-  later ETA/error-surface work is still pending.
+  later fairness/error-surface work is still pending.
 
 ### Phase 5: Real Workflow Event Contract
 

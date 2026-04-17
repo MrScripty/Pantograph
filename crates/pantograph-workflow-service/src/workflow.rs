@@ -5599,6 +5599,10 @@ mod tests {
             })
             .await
             .expect("scheduler snapshot while waiting");
+        let diagnostics = snapshot
+            .diagnostics
+            .as_ref()
+            .expect("scheduler diagnostics while waiting");
 
         assert_eq!(snapshot.session.state, WorkflowSessionState::IdleUnloaded);
         assert_eq!(snapshot.items.len(), 1);
@@ -5611,12 +5615,11 @@ mod tests {
             Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity)
         );
         assert_eq!(
-            snapshot
-                .diagnostics
-                .as_ref()
-                .and_then(|diagnostics| diagnostics.next_admission_reason),
+            diagnostics.next_admission_reason,
             Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity)
         );
+        assert_eq!(diagnostics.next_admission_wait_ms, None);
+        assert_eq!(diagnostics.next_admission_not_before_ms, None);
         assert!(
             tokio::time::timeout(Duration::from_millis(30), &mut second_run)
                 .await
@@ -5679,12 +5682,18 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(30)).await;
 
+        let before_snapshot_ms = unix_timestamp_ms();
         let snapshot = service
             .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
                 session_id: created.session_id.clone(),
             })
             .await
             .expect("scheduler snapshot while admission is blocked");
+        let after_snapshot_ms = unix_timestamp_ms();
+        let diagnostics = snapshot
+            .diagnostics
+            .as_ref()
+            .expect("scheduler diagnostics while admission is blocked");
 
         assert_eq!(snapshot.session.state, WorkflowSessionState::IdleUnloaded);
         assert_eq!(snapshot.items.len(), 1);
@@ -5697,12 +5706,15 @@ mod tests {
             Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission)
         );
         assert_eq!(
-            snapshot
-                .diagnostics
-                .as_ref()
-                .and_then(|diagnostics| diagnostics.next_admission_reason),
+            diagnostics.next_admission_reason,
             Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission)
         );
+        assert_eq!(diagnostics.next_admission_wait_ms, Some(10));
+        let next_admission_not_before_ms = diagnostics
+            .next_admission_not_before_ms
+            .expect("runtime-admission wait timestamp");
+        assert!(next_admission_not_before_ms >= before_snapshot_ms.saturating_add(10));
+        assert!(next_admission_not_before_ms <= after_snapshot_ms.saturating_add(10));
         assert!(
             tokio::time::timeout(Duration::from_millis(30), &mut run)
                 .await
@@ -6676,10 +6688,12 @@ mod tests {
         };
 
         let session_id = created.session_id.clone();
+        let before_snapshot_ms = unix_timestamp_ms();
         let snapshot = service
             .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest { session_id })
             .await
             .expect("scheduler snapshot");
+        let after_snapshot_ms = unix_timestamp_ms();
         let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
 
         assert_eq!(diagnostics.loaded_session_count, 0);
@@ -6695,6 +6709,12 @@ mod tests {
             Some(queue_id.as_str())
         );
         assert_eq!(diagnostics.next_admission_after_runs, Some(0));
+        assert_eq!(diagnostics.next_admission_wait_ms, Some(0));
+        let next_admission_not_before_ms = diagnostics
+            .next_admission_not_before_ms
+            .expect("immediate admission not-before timestamp");
+        assert!(next_admission_not_before_ms >= before_snapshot_ms);
+        assert!(next_admission_not_before_ms <= after_snapshot_ms);
         assert_eq!(
             diagnostics.next_admission_reason,
             Some(WorkflowSchedulerDecisionReason::ColdStartRequired)

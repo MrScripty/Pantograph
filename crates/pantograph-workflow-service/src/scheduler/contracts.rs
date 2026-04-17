@@ -385,6 +385,10 @@ pub struct WorkflowSchedulerSnapshotDiagnostics {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_after_runs: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_admission_wait_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_admission_not_before_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_reason: Option<WorkflowSchedulerDecisionReason>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_registry: Option<WorkflowSchedulerRuntimeRegistryDiagnostics>,
