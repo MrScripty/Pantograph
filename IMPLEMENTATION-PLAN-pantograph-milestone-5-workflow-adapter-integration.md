@@ -421,7 +421,7 @@ aligned with the same backend-owned contracts.
 - `cargo check -p pantograph-frontend-http-adapter`
 - Binding review against `LANGUAGE-BINDINGS-STANDARDS.md`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Documentation, Recovery Hardening, And Close-Out
 
@@ -558,6 +558,12 @@ Update during implementation:
   debug snapshot consumer preserves backend-produced scheduler execution
   identity, queue timing, and observed runtime ids all the way through the
   Tauri-facing debug snapshot contract.
+- Milestone 4 wrapper audit has started: the current workflow diagnostics and
+  trace transport surfaces remain Tauri-owned, while the optional UniFFI and
+  Rustler frontend-HTTP bindings currently wrap workflow-service contracts as
+  JSON boundaries. The first cleanup slice aligns UniFFI with Rustler by
+  centralizing request parsing and response serialization instead of repeating
+  ad hoc `serde_json` handling across each exported workflow helper.
 
 ### Deviations
 

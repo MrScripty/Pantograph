@@ -60,9 +60,15 @@ Default:
 `frontend-http` feature:
 - `frontend_http_workflow_run(base_url, request_json, pumas_api?) -> response_json`
 - `frontend_http_workflow_get_capabilities(base_url, request_json, pumas_api?) -> response_json`
+- `frontend_http_workflow_preflight(base_url, request_json, pumas_api?) -> response_json`
 - `frontend_http_workflow_create_session(base_url, request_json, pumas_api?) -> response_json`
 - `frontend_http_workflow_run_session(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_close_session(request_json) -> response_json`
+- `frontend_http_workflow_close_session(base_url, request_json, pumas_api?) -> response_json`
+- `frontend_http_workflow_get_session_status(request_json) -> response_json`
+- `frontend_http_workflow_list_session_queue(request_json) -> response_json`
+- `frontend_http_workflow_cancel_session_queue_item(request_json) -> response_json`
+- `frontend_http_workflow_reprioritize_session_queue_item(request_json) -> response_json`
+- `frontend_http_workflow_set_session_keep_alive(base_url, request_json, pumas_api?) -> response_json`
 
 ## Dependencies
 - Internal: `pantograph-workflow-service`, `pantograph-embedded-runtime`, `node-engine`.
@@ -73,6 +79,10 @@ Default:
 
 - Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.
 - Native embedding behavior is isolated in `pantograph-embedded-runtime`.
+- The request and response JSON contracts are owned by
+  `pantograph-workflow-service`; this UniFFI layer only parses request JSON,
+  delegates to the Rust service/adapter crates, and re-serializes backend-owned
+  responses or error envelopes at the boundary.
 - `scripts/check-uniffi-embedded-runtime-surface.sh` verifies that the direct
   runtime object is present in the compiled UniFFI metadata.
 - `scripts/check-uniffi-csharp-smoke.sh` uses `uniffi-bindgen-cs` to generate
