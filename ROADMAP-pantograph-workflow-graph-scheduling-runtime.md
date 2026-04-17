@@ -29,9 +29,8 @@ Milestone 6 implementation plan in
 The roadmap remains the cross-target summary, while milestone-level runtime
 adapter sequencing and close-out constraints are tracked in those dedicated
 plans. Milestone 5 transport hardening, binding review, recovery/idempotency
-verification, and source-of-truth close-out are complete; the remaining
-runtime-adapter-unification follow-through now sits in Milestone 6
-documentation and rollout-safety work.
+verification, source-of-truth close-out, and the Milestone 6 diagnostics,
+documentation, and rollout-safety reconciliation are complete.
 
 ### Completed groundwork already in the repo
 
@@ -156,13 +155,11 @@ documentation and rollout-safety work.
 - Metrics/trace hardening for runtime lifecycle visibility
 - Contract normalization across workflow service, Tauri diagnostics, embedded
   runtime wiring, and gateway lifecycle reporting
-- Source-of-truth, documentation, and rollout-safety close-out work for the
-  dedicated Milestone 6 runtime-registry plan
+- Scheduler and later runtime-policy work that builds on the completed
+  runtime-registry and Milestone 6 close-out boundaries
 
 ### Next gate before more implementation breadth
 
-- Finish the documentation, rollout-safety, and traceability work in the
-  dedicated Milestone 6 plan so roadmap and plan state match the codebase
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
   backend-owned runtime-registry boundary instead of reopening completed

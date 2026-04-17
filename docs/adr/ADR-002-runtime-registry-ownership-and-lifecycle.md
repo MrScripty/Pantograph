@@ -89,6 +89,15 @@ Adopt the following ownership and lifecycle boundary for the planned
 - Later milestones may make it consume registry-backed decisions, but that does
   not change its role into the policy owner.
 
+9. Observability surfaces stay additive and transport-only.
+- Hosts may expose synced runtime-registry snapshots, aggregate runtime-debug
+  views, and targeted-reclaim command surfaces over backend-owned state.
+- Those surfaces must reuse backend-owned synchronization, reclaim, and trace
+  helpers rather than inventing Tauri-local recovery or registry truth.
+- No separate rollout toggle is required for these additive inspection
+  surfaces unless a future compatibility or persisted-artifact hazard is
+  explicitly documented.
+
 ## Consequences
 
 ### Positive
@@ -100,6 +109,9 @@ Adopt the following ownership and lifecycle boundary for the planned
   outward into a Pantograph-owned coordinator.
 - Documentation and README traceability can point to one accepted boundary for
   future implementation commits.
+- Debug, reclaim, and recovery inspection surfaces can remain available to the
+  desktop host without implying that Tauri owns runtime policy or a staged
+  feature rollout boundary.
 
 ### Negative
 - Pantograph adds another application-layer object that must be injected and
@@ -114,3 +126,5 @@ Adopt the following ownership and lifecycle boundary for the planned
   the final file/module layout for Milestone 2.
 - Non-Tauri hosts may still adopt the same registry architecture, but they need
   their own composition-root wiring.
+- Milestone 6 clarifies that additive observability surfaces reuse this
+  boundary rather than creating a second policy owner or feature flag.

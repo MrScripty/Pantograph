@@ -10,7 +10,7 @@ developers to reconstruct intent from commit history.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `ADR-001-headless-embedding-service-boundary.md` | Freezes the host-agnostic workflow service boundary and the separation between service logic and adapters. |
-| `ADR-002-runtime-registry-ownership-and-lifecycle.md` | Freezes ownership, lifecycle, and facade boundaries for the planned `RuntimeRegistry` layer. |
+| `ADR-002-runtime-registry-ownership-and-lifecycle.md` | Freezes ownership, lifecycle, facade, and observability boundaries for the `RuntimeRegistry` layer. |
 
 ## Problem
 Pantograph is actively deepening its backend/runtime architecture. Without an

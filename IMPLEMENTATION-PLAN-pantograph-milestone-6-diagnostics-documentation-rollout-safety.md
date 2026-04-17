@@ -1,7 +1,7 @@
 # Plan: Pantograph Milestone 6 Diagnostics, Documentation, And Rollout Safety
 
 ## Status
-Active
+Completed
 
 Last updated: 2026-04-16
 
@@ -426,18 +426,18 @@ whether any rollout toggle is actually necessary.
 Milestone 6 and reconcile all source-of-truth documents.
 
 **Tasks:**
-- [ ] Update `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md` if
+- [x] Update `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md` if
       Milestone 6 needs to record clarified accepted consequences around
       diagnostics visibility, recovery ownership, or rollout posture.
-- [ ] Add a new ADR only if Milestone 6 uncovers a new long-lived boundary
+- [x] Add a new ADR only if Milestone 6 uncovers a new long-lived boundary
       decision not already covered by ADR-002.
-- [ ] Add or update operator/developer documentation under `docs/` covering
+- [x] Add or update operator/developer documentation under `docs/` covering
       runtime debug snapshot usage, registry snapshot interpretation, technical-fit
       observability, and recovery expectations.
-- [ ] Add lightweight artifact validation or hook documentation only if
+- [x] Add lightweight artifact validation or hook documentation only if
       Milestone 6 introduces new persisted structured examples, fixtures, or
       machine-consumed docs artifacts.
-- [ ] Reconcile milestone status and wording across this plan, the umbrella
+- [x] Reconcile milestone status and wording across this plan, the umbrella
       plan, and the roadmap once Milestone 6 verification passes.
 
 **Verification:**
@@ -445,7 +445,7 @@ Milestone 6 and reconcile all source-of-truth documents.
 - Tooling/traceability review against `TOOLING-STANDARDS.md`
 - Acceptance/recovery close-out review against `TESTING-STANDARDS.md`
 
-**Status:** Not started
+**Status:** Completed
 
 ## Execution Notes
 
@@ -471,6 +471,11 @@ Update during implementation:
   explicit "no new Milestone 6 rollout toggle" decision with revisit triggers;
   and tying the operator guidance back to backend-owned synchronization and
   reclaim helpers rather than Tauri-local bookkeeping.
+- 2026-04-16: Completed the Milestone 6 close-out slice by clarifying ADR-002
+  with additive observability guidance, reusing that ADR instead of creating a
+  new one, recording that no new artifact-validation hook was required for
+  narrative docs-only additions, and reconciling milestone status back into
+  the umbrella plan and roadmap.
 
 ## Commit Cadence Notes
 
@@ -526,21 +531,28 @@ Update during implementation:
 - Milestone 3 rollout-safety work is complete: the no-new-toggle decision is
   now documented, and runtime debug/recovery/reclaim guidance explicitly
   points to the backend-owned synchronization paths already used by the code.
+- Milestone 4 close-out work is complete: ADR-002 now covers additive
+  observability surfaces, no new ADR or artifact-validation hook was needed,
+  and the roadmap plus umbrella plan can be reconciled to Milestone 6
+  completion.
 
 ### Deviations
 
-- None yet.
+- None.
 
 ### Follow-Ups
 
-- Implement the README, rollout-safety, ADR/operator-doc, and final
-  reconciliation work recorded in Milestones 2 through 4.
+- Scheduler V2 remains the next major roadmap target after this Milestone 6
+  close-out.
 
 ### Verification Summary
 
 - Planning and standards review completed against the current roadmap,
   umbrella-plan, README, ADR, and touched runtime/diagnostics source
   boundaries.
+- `cargo test --manifest-path src-tauri/Cargo.toml runtime_debug_snapshot_includes_synced_runtime_and_recovery_state`
+- `cargo test --manifest-path src-tauri/Cargo.toml reclaim_runtime_returns_updated_registry_snapshot`
+- `cargo test -p pantograph-runtime-registry reclaim_runtime_requests_stop_for_active_evictable_runtime`
 
 ### Traceability Links
 

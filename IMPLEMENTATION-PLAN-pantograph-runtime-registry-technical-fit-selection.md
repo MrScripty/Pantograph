@@ -23,11 +23,12 @@ The accurate status is:
 - runtime-registry Milestone 5, Workflow And Adapter Integration: completed in
   `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 - runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
-  Safety: in progress in
+  Safety: completed in
   `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
-- current next milestone focus: Milestone 6 documentation, rollout-safety, and
-  final source-of-truth reconciliation work, with detailed sequencing tracked
-  in `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+- current next milestone focus: roadmap work beyond runtime-registry close-out,
+  with Milestone 6 retained as the completed diagnostics/documentation
+  reference in
+  `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
 - stop rule remains active for later milestones: runtime-registry work must
   preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
@@ -866,12 +867,13 @@ Detailed sequencing and standards-review notes for this milestone now live in
 - [x] Expose runtime-registry snapshots and recent decision diagnostics for
   internal/UI debugging
 - [ ] Add rollout toggles only if needed, with explicit config/default
+- [x] Add rollout toggles only if needed, with explicit config/default
   semantics
-- [ ] Update/add READMEs for touched directories with architectural
+- [x] Update/add READMEs for touched directories with architectural
   responsibility, consumer contract, and producer contract sections as required
-- [ ] Add/update ADR and operator/developer docs covering registry ownership,
+- [x] Add/update ADR and operator/developer docs covering registry ownership,
   technical-fit selection, and recovery behavior
-- [ ] Add any needed artifact validation or tooling hooks if new persisted
+- [x] Add any needed artifact validation or tooling hooks if new persisted
   structured outputs are introduced
 
 **Verification:**
@@ -897,25 +899,23 @@ Detailed sequencing and standards-review notes for this milestone now live in
   stays inside the shared Rust diagnostics boundary instead of splitting into a
   second adapter-local path.
 
-**Status:** In progress
+**Status:** Completed
 
 ## Current Implementation Guidance
 
 ### What must happen next
 
-1. Execute the dedicated Milestone 6 plan: close the remaining README,
-   rollout-safety, ADR/operator-doc, and source-of-truth reconciliation work
-   without reopening completed transport or runtime-policy refactors.
-2. Keep Milestone 6 focused on documentation, rollout-safety decisions, and
-   any truly needed operator-facing guidance rather than reopening completed
-   transport or binding refactors.
-3. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+1. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
    aligned with ADR-002 and the README boundary decisions already landed in
-   Milestone 1 and reinforced by the completed Milestone 4 technical-fit
-   integration.
-4. Re-plan immediately if Milestone 6 work would move policy back into
+   Milestone 1, reinforced by the completed Milestone 4 technical-fit
+   integration, and clarified by the completed Milestone 6 observability
+   close-out.
+2. Re-plan immediately if later roadmap work would move policy back into
    Tauri/binding layers, require a new persisted artifact, or expand recovery
    ownership beyond the current backend-owned runtime-registry boundary.
+3. Build Scheduler V2 and later runtime-policy work on the now-documented
+   runtime-registry, diagnostics, and recovery boundaries instead of reopening
+   Milestone 6 close-out decisions.
 
 ### What should not happen next
 
