@@ -100,6 +100,9 @@ execution-id boundary.
 - Session-owned execution UI must claim the active run from the first workflow
   event that carries a non-empty `execution_id`, then ignore later events that
   either omit `execution_id` or no longer match that run.
+- Session-owned execution UI must treat backend-owned `WaitingForInput`,
+  `IncrementalExecutionStarted`, and `GraphModified` events as execution-state
+  updates rather than leaving those contracts unobserved in the existing GUI.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

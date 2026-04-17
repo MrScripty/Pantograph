@@ -445,6 +445,9 @@ incremental runs.
   mismatch the pinned run id once execution ownership is claimed, and the
   existing GUI now surfaces `WaitingForInput` as a real node/wait state
   instead of silently treating it as an unhandled event.
+- The existing GUI now also maps backend-owned `IncrementalExecutionStarted`
+  and `GraphModified` events onto node execution state, so incremental reruns
+  and dirty-subgraph invalidation no longer stop at transport-only parity.
 - The app diagnostics consumer now also tracks run execution identity
   separately from editable-session ownership, so session-backed diagnostics
   filtering no longer rejects backend-owned run events before the session UI

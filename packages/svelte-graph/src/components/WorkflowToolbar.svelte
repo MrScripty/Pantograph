@@ -76,6 +76,14 @@
         waitingForInput = false;
         stores.workflow.setNodeExecutionState((event.data as { node_id: string }).node_id, 'running');
         break;
+      case 'IncrementalExecutionStarted': {
+        waitingForInput = false;
+        const incrementalData = event.data as { task_ids: string[] };
+        for (const taskId of incrementalData.task_ids) {
+          stores.workflow.setNodeExecutionState(taskId, 'running');
+        }
+        break;
+      }
       case 'NodeCompleted': {
         const completedData = event.data as { node_id: string; outputs?: Record<string, unknown> };
         stores.workflow.setNodeExecutionState(completedData.node_id, 'success');
@@ -111,6 +119,13 @@
           'waiting',
           waitingData.message || 'Waiting for input',
         );
+        break;
+      }
+      case 'GraphModified': {
+        const graphModifiedData = event.data as { dirty_tasks?: string[] };
+        for (const taskId of graphModifiedData.dirty_tasks || []) {
+          stores.workflow.setNodeExecutionState(taskId, 'idle');
+        }
         break;
       }
       case 'Completed':

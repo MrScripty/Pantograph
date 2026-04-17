@@ -604,6 +604,10 @@ Update during implementation:
   mismatch the pinned run id once execution ownership is claimed, and the
   existing GUI now surfaces `WaitingForInput` as a real node/wait state
   instead of silently ignoring the backend-owned pause contract.
+- The existing GUI now also projects backend-owned `IncrementalExecutionStarted`
+  and `GraphModified` events into node execution state, closing another
+  frontend parity gap without moving graph invalidation or incremental-run
+  policy out of Rust-owned execution layers.
 
 ### Deviations
 
