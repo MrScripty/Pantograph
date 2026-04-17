@@ -527,6 +527,10 @@ Update during implementation:
   runtime snapshots so diagnostics snapshot rebuilds can rehydrate
   execution-observed producer state into the shared registry without
   overwriting live gateway or dedicated-embedding observations.
+- 2026-04-17: Moved alternate-port fallback and clean-restart settle-delay
+  decisions into a backend-owned recovery attempt plan so Tauri recovery loops
+  only provide host port-availability facts instead of branching on reconnect
+  policy locally.
 
 ## Commit Cadence Notes
 

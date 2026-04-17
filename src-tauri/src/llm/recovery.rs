@@ -5,7 +5,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
@@ -21,7 +20,8 @@ use crate::llm::sync_rag_embedding_url_from_gateway;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use pantograph_embedded_runtime::runtime_recovery::{
-    build_recovery_restart_plan, recovery_backoff, recovery_strategy_for_attempt, RecoveryStrategy,
+    build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
+    RecoveryAttemptPlan, RecoveryStrategy,
 };
 
 /// Recovery configuration
@@ -151,10 +151,28 @@ impl RecoveryManager {
             log::info!("Recovery attempt {} (waiting {:?})", attempt + 1, backoff);
             tokio::time::sleep(backoff).await;
 
-            // Determine strategy based on attempt and config
-            strategy = recovery_strategy_for_attempt(attempt, self.config.try_alternate_port);
+            let default_port_available = check_port_available(ports::SERVER).available;
+            let alternate_port = if self.config.try_alternate_port {
+                find_available_port(ports::ALTERNATE_START, ports::ALTERNATE_RANGE)
+            } else {
+                None
+            };
+            let attempt_plan = build_recovery_attempt_plan(
+                attempt,
+                self.config.try_alternate_port,
+                default_port_available,
+                alternate_port,
+            );
 
-            match self.try_recovery_strategy(app, gateway, &strategy).await {
+            strategy = attempt_plan
+                .as_ref()
+                .map(|plan| plan.strategy.clone())
+                .unwrap_or(RecoveryStrategy::Restart);
+
+            match self
+                .try_recovery_strategy(app, gateway, attempt_plan.as_ref())
+                .await
+            {
                 Ok(port) => {
                     log::info!("Recovery successful on port {}", port);
 
@@ -203,39 +221,36 @@ impl RecoveryManager {
         &self,
         app: &AppHandle,
         gateway: &SharedGateway,
-        strategy: &RecoveryStrategy,
+        attempt_plan: Result<
+            &RecoveryAttemptPlan,
+            &pantograph_embedded_runtime::runtime_recovery::RecoveryAttemptPlanError,
+        >,
     ) -> Result<u16, String> {
-        match strategy {
+        let attempt_plan = attempt_plan.map_err(|error| error.to_string())?;
+
+        match attempt_plan.strategy {
             RecoveryStrategy::Restart => {
-                // Just try to restart with current config
-                self.do_restart(app, gateway, None).await
+                self.do_restart(app, gateway, attempt_plan.port_override)
+                    .await
             }
             RecoveryStrategy::AlternatePort => {
-                // Check if default port is blocked
-                let port_status = check_port_available(ports::SERVER);
-                if !port_status.available {
-                    // Find alternate port
-                    let alt_port =
-                        find_available_port(ports::ALTERNATE_START, ports::ALTERNATE_RANGE)
-                            .ok_or_else(|| "No alternate ports available".to_string())?;
-
+                if let Some(alt_port) = attempt_plan.port_override {
                     log::info!(
                         "Using alternate port {} (default {} is blocked)",
                         alt_port,
                         ports::SERVER
                     );
-                    self.do_restart(app, gateway, Some(alt_port)).await
-                } else {
-                    self.do_restart(app, gateway, None).await
                 }
+                self.do_restart(app, gateway, attempt_plan.port_override)
+                    .await
             }
             RecoveryStrategy::CleanRestart => {
-                // First stop any existing server
                 stop_gateway_for_recovery(app, gateway).await;
-                tokio::time::sleep(Duration::from_millis(500)).await;
-
-                // Then restart
-                self.do_restart(app, gateway, None).await
+                if !attempt_plan.settle_delay.is_zero() {
+                    tokio::time::sleep(attempt_plan.settle_delay).await;
+                }
+                self.do_restart(app, gateway, attempt_plan.port_override)
+                    .await
             }
             RecoveryStrategy::Abandon => Err("Abandoning recovery".to_string()),
         }

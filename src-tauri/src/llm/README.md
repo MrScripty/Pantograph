@@ -64,6 +64,9 @@ does not own runtime policy.
   do not redefine runtime lifecycle truth.
 - Health and recovery flows must operate through shared gateway-backed state,
   not independent adapter-local state machines.
+- Recovery retry loops may gather host facts such as port availability, but
+  alternate-port fallback and clean-restart sequencing must come from backend
+  recovery helpers rather than from Tauri-local branching.
 - Host-owned caches of embedding runtime availability must be synchronized from
   gateway facts whenever lifecycle commands or recovery change the active
   embedding producer.

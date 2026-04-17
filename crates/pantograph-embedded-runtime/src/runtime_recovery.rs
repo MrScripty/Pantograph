@@ -18,6 +18,14 @@ pub enum RecoveryStrategy {
     Abandon,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryAttemptPlan {
+    pub strategy: RecoveryStrategy,
+    pub port_override: Option<u16>,
+    pub stop_before_restart: bool,
+    pub settle_delay: Duration,
+}
+
 #[derive(Debug, Clone)]
 pub struct RecoveryRestartPlan {
     pub restart_config: inference::BackendConfig,
@@ -28,6 +36,12 @@ pub struct RecoveryRestartPlan {
 pub enum RecoveryRestartPlanError {
     #[error("No active runtime configuration available for restart")]
     MissingRuntimeConfig,
+}
+
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+pub enum RecoveryAttemptPlanError {
+    #[error("No alternate ports available")]
+    MissingAlternatePort,
 }
 
 pub fn build_recovery_restart_plan(
@@ -54,6 +68,55 @@ pub fn build_recovery_restart_plan(
     })
 }
 
+pub fn build_recovery_attempt_plan(
+    attempt: u32,
+    try_alternate_port: bool,
+    default_port_available: bool,
+    alternate_port: Option<u16>,
+) -> Result<RecoveryAttemptPlan, RecoveryAttemptPlanError> {
+    let strategy = recovery_strategy_for_attempt(attempt, try_alternate_port);
+
+    match strategy {
+        RecoveryStrategy::Restart => Ok(RecoveryAttemptPlan {
+            strategy,
+            port_override: None,
+            stop_before_restart: false,
+            settle_delay: Duration::ZERO,
+        }),
+        RecoveryStrategy::AlternatePort => {
+            if default_port_available {
+                return Ok(RecoveryAttemptPlan {
+                    strategy: RecoveryStrategy::Restart,
+                    port_override: None,
+                    stop_before_restart: false,
+                    settle_delay: Duration::ZERO,
+                });
+            }
+
+            let port_override =
+                alternate_port.ok_or(RecoveryAttemptPlanError::MissingAlternatePort)?;
+            Ok(RecoveryAttemptPlan {
+                strategy,
+                port_override: Some(port_override),
+                stop_before_restart: false,
+                settle_delay: Duration::ZERO,
+            })
+        }
+        RecoveryStrategy::CleanRestart => Ok(RecoveryAttemptPlan {
+            strategy,
+            port_override: None,
+            stop_before_restart: true,
+            settle_delay: Duration::from_millis(500),
+        }),
+        RecoveryStrategy::Abandon => Ok(RecoveryAttemptPlan {
+            strategy,
+            port_override: None,
+            stop_before_restart: false,
+            settle_delay: Duration::ZERO,
+        }),
+    }
+}
+
 pub fn recovery_backoff(base_ms: u64, max_ms: u64, attempt: u32) -> Duration {
     let delay_ms = base_ms.saturating_mul(1u64 << attempt.min(10));
     Duration::from_millis(delay_ms.min(max_ms))
@@ -76,8 +139,9 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        build_recovery_restart_plan, recovery_backoff, recovery_strategy_for_attempt,
-        RecoveryRestartPlanError, RecoveryStrategy,
+        build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
+        recovery_strategy_for_attempt, RecoveryAttemptPlanError, RecoveryRestartPlanError,
+        RecoveryStrategy,
     };
 
     #[test]
@@ -188,5 +252,43 @@ mod tests {
             recovery_strategy_for_attempt(1, false),
             RecoveryStrategy::Restart
         );
+    }
+
+    #[test]
+    fn build_recovery_attempt_plan_uses_alternate_port_when_default_is_blocked() {
+        let plan = build_recovery_attempt_plan(1, true, false, Some(18080)).expect("attempt plan");
+
+        assert_eq!(plan.strategy, RecoveryStrategy::AlternatePort);
+        assert_eq!(plan.port_override, Some(18080));
+        assert!(!plan.stop_before_restart);
+        assert_eq!(plan.settle_delay, Duration::ZERO);
+    }
+
+    #[test]
+    fn build_recovery_attempt_plan_falls_back_to_restart_when_default_port_is_available() {
+        let plan = build_recovery_attempt_plan(1, true, true, Some(18080)).expect("attempt plan");
+
+        assert_eq!(plan.strategy, RecoveryStrategy::Restart);
+        assert_eq!(plan.port_override, None);
+        assert!(!plan.stop_before_restart);
+        assert_eq!(plan.settle_delay, Duration::ZERO);
+    }
+
+    #[test]
+    fn build_recovery_attempt_plan_requires_alternate_port_when_selected() {
+        let error = build_recovery_attempt_plan(1, true, false, None)
+            .expect_err("missing alternate port should fail");
+
+        assert_eq!(error, RecoveryAttemptPlanError::MissingAlternatePort);
+    }
+
+    #[test]
+    fn build_recovery_attempt_plan_marks_clean_restart_stop_and_settle_delay() {
+        let plan = build_recovery_attempt_plan(2, true, true, None).expect("clean restart plan");
+
+        assert_eq!(plan.strategy, RecoveryStrategy::CleanRestart);
+        assert_eq!(plan.port_override, None);
+        assert!(plan.stop_before_restart);
+        assert_eq!(plan.settle_delay, Duration::from_millis(500));
     }
 }
