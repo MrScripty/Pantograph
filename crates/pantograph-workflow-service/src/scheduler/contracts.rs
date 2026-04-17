@@ -383,6 +383,8 @@ pub struct WorkflowSchedulerSnapshotDiagnostics {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_queue_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_admission_bypassed_queue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_after_runs: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_wait_ms: Option<u64>,

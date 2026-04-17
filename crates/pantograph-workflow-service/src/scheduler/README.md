@@ -54,9 +54,9 @@ non-starved band, a compatible warm candidate may bypass at most the next cold
 candidate, but it still cannot jump starved or higher-priority work.
 Scheduler snapshots now also expose additive backend-owned diagnostics for
 loaded-session pressure, reclaimable runtime counts, next-admission
-prediction, and earliest-known admission wait bounds so Tauri and other
-adapters can forward canonical scheduler facts without reconstructing queue
-policy client-side.
+prediction, skipped queue-head visibility for fairness-driven bypasses, and
+earliest-known admission wait bounds so Tauri and other adapters can forward
+canonical scheduler facts without reconstructing queue policy client-side.
 When loaded-session capacity is saturated by active runs with no reclaimable
 idle runtime, the selected candidate now stays queued with the explicit
 `waiting_for_runtime_capacity` reason instead of being admitted and then

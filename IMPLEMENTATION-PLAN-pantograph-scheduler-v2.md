@@ -584,6 +584,10 @@ and observable diagnostics without violating ownership boundaries.
   remain intentionally bounded to earliest-known admission time: immediate
   admission returns `0`, runtime-admission polling returns the canonical poll
   delay, and capacity or active-run blockers stay `None` instead of guessing.
+- Canonical scheduler snapshots now also expose additive backend-owned
+  `next_admission_bypassed_queue_id` visibility when warm-reuse fairness
+  intentionally selects a non-head queue item, so adapters and diagnostics can
+  explain the remaining fairness behavior without reconstructing queue policy.
 
 **Status:** Complete
 

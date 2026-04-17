@@ -6708,6 +6708,7 @@ mod tests {
             diagnostics.next_admission_queue_id.as_deref(),
             Some(queue_id.as_str())
         );
+        assert_eq!(diagnostics.next_admission_bypassed_queue_id, None);
         assert_eq!(diagnostics.next_admission_after_runs, Some(0));
         assert_eq!(diagnostics.next_admission_wait_ms, Some(0));
         let next_admission_not_before_ms = diagnostics
@@ -6827,6 +6828,93 @@ mod tests {
         assert_eq!(
             recorded_requests[0].reclaim_candidates[0].session_id,
             loaded.session_id
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_reuse() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let (cold_head_queue_id, warm_queue_id) = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .update_runtime_affinity_basis(
+                    &created.session_id,
+                    vec!["llama_cpp".to_string()],
+                    vec!["model-a".to_string()],
+                )
+                .expect("update runtime affinity basis");
+            store
+                .mark_runtime_loaded(&created.session_id, true)
+                .expect("mark runtime loaded");
+            let cold_head_queue_id = store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: Some(WorkflowTechnicalFitOverride {
+                            model_id: Some("model-b".to_string()),
+                            backend_key: Some("pytorch".to_string()),
+                        }),
+                        timeout_ms: None,
+                        run_id: Some("cold-head".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue cold head");
+            let warm_queue_id = store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("warm-follow".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue warm follow");
+            (cold_head_queue_id, warm_queue_id)
+        };
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id,
+            })
+            .await
+            .expect("scheduler snapshot");
+        let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
+
+        assert_eq!(
+            diagnostics.next_admission_queue_id.as_deref(),
+            Some(warm_queue_id.as_str())
+        );
+        assert_eq!(
+            diagnostics.next_admission_bypassed_queue_id.as_deref(),
+            Some(cold_head_queue_id.as_str())
+        );
+        assert_eq!(
+            diagnostics.next_admission_reason,
+            Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
         );
     }
 

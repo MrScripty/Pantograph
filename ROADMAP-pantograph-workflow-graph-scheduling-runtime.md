@@ -394,6 +394,9 @@ session scheduler that makes better admission and reuse decisions.
 - Add starvation protection and fair ordering across queued runs
 - Queue ETA and admission diagnostics now expose backend-owned earliest-known
   admission timing instead of transport-side estimates
+- Scheduler snapshots now also identify when fairness-driven warm reuse will
+  bypass the current queue head, keeping the remaining admission policy
+  observable without adapter-local queue reconstruction
 - Runtime rebalance behavior now keeps runs queued when loaded-session
   capacity is exhausted by active work and no reclaim path exists
 - Scheduler error codes and decision reasons now flow as stable

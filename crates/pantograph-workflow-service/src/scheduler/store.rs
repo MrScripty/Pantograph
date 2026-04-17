@@ -368,6 +368,15 @@ impl WorkflowSessionStore {
         let next_admission_queue_id = predicted_admission
             .as_ref()
             .and_then(|decision| decision.admitted_queue_id.clone());
+        let next_admission_bypassed_queue_id = match (
+            state.queue.first().map(|queued| queued.queue_id.as_str()),
+            next_admission_queue_id.as_deref(),
+        ) {
+            (Some(queue_head_id), Some(next_queue_id)) if queue_head_id != next_queue_id => {
+                Some(queue_head_id.to_string())
+            }
+            _ => None,
+        };
         let next_admission_reason = next_admission_queue_id
             .as_deref()
             .and_then(|queue_id| {
@@ -411,6 +420,7 @@ impl WorkflowSessionStore {
             runtime_capacity_pressure,
             active_run_blocks_admission,
             next_admission_queue_id,
+            next_admission_bypassed_queue_id,
             next_admission_after_runs: predicted_admission
                 .as_ref()
                 .map(|_| usize::from(active_run_blocks_admission)),

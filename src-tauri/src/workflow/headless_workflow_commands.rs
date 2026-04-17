@@ -902,6 +902,7 @@ mod tests {
                         pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
                     active_run_blocks_admission: false,
                     next_admission_queue_id: Some("queue-1".to_string()),
+                    next_admission_bypassed_queue_id: None,
                     next_admission_after_runs: Some(0),
                     next_admission_wait_ms: Some(0),
                     next_admission_not_before_ms: Some(120),
