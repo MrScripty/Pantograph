@@ -407,6 +407,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             enqueued_at_ms: Some(100),
             dequeued_at_ms: Some(110),
             priority: 5,
+            queue_position: None,
             scheduler_decision_reason: None,
             status: WorkflowSessionQueueItemStatus::Running,
         }],

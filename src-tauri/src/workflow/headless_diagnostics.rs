@@ -366,6 +366,7 @@ mod tests {
                     enqueued_at_ms: Some(100),
                     dequeued_at_ms: None,
                     priority: 5,
+                    queue_position: None,
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Pending,
                 }],

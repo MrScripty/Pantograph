@@ -349,7 +349,8 @@ session scheduler that makes better admission and reuse decisions.
   reduced to facade/orchestration ownership for the existing queue surface
 - The current priority/FIFO queue behavior is now represented by an explicit
   backend-owned scheduler policy object, and queue items now expose additive
-  machine-consumable scheduler decision reasons
+  machine-consumable scheduler decision reasons plus canonical
+  `queue_position` ordering diagnostics
 - Add scheduler policy objects instead of encoding all queue behavior directly
   in one service module
 - Introduce explicit runtime affinity and warm-session reuse decisions by

@@ -933,6 +933,7 @@ mod tests {
                     enqueued_at_ms: Some(11),
                     dequeued_at_ms: Some(12),
                     priority: 0,
+                    queue_position: None,
                     scheduler_decision_reason: None,
                     status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
                 }],

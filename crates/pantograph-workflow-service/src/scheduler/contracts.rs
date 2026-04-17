@@ -160,6 +160,8 @@ pub struct WorkflowSessionQueueItem {
     pub dequeued_at_ms: Option<u64>,
     pub priority: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_position: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduler_decision_reason: Option<WorkflowSchedulerDecisionReason>,
     pub status: WorkflowSessionQueueItemStatus,
 }

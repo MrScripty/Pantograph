@@ -276,18 +276,21 @@ impl WorkflowSessionStore {
                 enqueued_at_ms: Some(active_run.enqueued_at_ms),
                 dequeued_at_ms: Some(active_run.dequeued_at_ms),
                 priority: active_run.priority,
+                queue_position: Some(0),
                 scheduler_decision_reason: Some(active_run.scheduler_decision_reason),
                 status: WorkflowSessionQueueItemStatus::Running,
             });
         }
 
-        for queued in &state.queue {
+        let pending_offset = items.len();
+        for (index, queued) in state.queue.iter().enumerate() {
             items.push(WorkflowSessionQueueItem {
                 queue_id: queued.queue_id.clone(),
                 run_id: queued.run_id.clone(),
                 enqueued_at_ms: Some(queued.enqueued_at_ms),
                 dequeued_at_ms: None,
                 priority: queued.priority,
+                queue_position: Some(pending_offset + index),
                 scheduler_decision_reason: Some(queued.scheduler_decision_reason),
                 status: WorkflowSessionQueueItemStatus::Pending,
             });

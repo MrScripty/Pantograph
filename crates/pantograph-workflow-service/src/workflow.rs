@@ -5491,6 +5491,7 @@ mod tests {
         assert_eq!(pending_items[0].run_id.as_deref(), Some("queued-run-1"));
         assert!(pending_items[0].enqueued_at_ms.is_some());
         assert!(pending_items[0].dequeued_at_ms.is_none());
+        assert_eq!(pending_items[0].queue_position, Some(0));
         assert_eq!(
             pending_items[0].status,
             WorkflowSessionQueueItemStatus::Pending
@@ -5522,6 +5523,7 @@ mod tests {
             running_items[0].enqueued_at_ms,
             pending_items[0].enqueued_at_ms
         );
+        assert_eq!(running_items[0].queue_position, Some(0));
         assert!(running_items[0].dequeued_at_ms.is_some());
         assert!(
             running_items[0]
@@ -5535,6 +5537,97 @@ mod tests {
             running_items[0].scheduler_decision_reason,
             Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
         );
+    }
+
+    #[tokio::test]
+    async fn workflow_session_queue_items_expose_authoritative_queue_positions() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let first_queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(10),
+                    },
+                )
+                .expect("enqueue first run")
+        };
+        let second_queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-2".to_string()),
+                        priority: Some(5),
+                    },
+                )
+                .expect("enqueue second run")
+        };
+
+        let pending_items = {
+            let store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .list_queue(&created.session_id)
+                .expect("list pending queue items")
+        };
+        assert_eq!(pending_items.len(), 2);
+        assert_eq!(pending_items[0].queue_id, first_queue_id);
+        assert_eq!(pending_items[0].queue_position, Some(0));
+        assert_eq!(pending_items[1].queue_id, second_queue_id);
+        assert_eq!(pending_items[1].queue_position, Some(1));
+
+        let running_items = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .begin_queued_run(&created.session_id, &first_queue_id)
+                .expect("begin first run");
+            store
+                .list_queue(&created.session_id)
+                .expect("list queue after begin")
+        };
+        assert_eq!(running_items.len(), 2);
+        assert_eq!(running_items[0].queue_id, first_queue_id);
+        assert_eq!(running_items[0].queue_position, Some(0));
+        assert_eq!(running_items[1].queue_id, second_queue_id);
+        assert_eq!(running_items[1].queue_position, Some(1));
     }
 
     #[tokio::test]
