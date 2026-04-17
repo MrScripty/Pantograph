@@ -47,9 +47,9 @@ pub use technical_fit::{
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
-    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
-    WorkflowTraceStore, WorkflowTraceSummary,
+    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRecordResult,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
 };
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,

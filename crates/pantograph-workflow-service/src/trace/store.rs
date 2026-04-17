@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::workflow::WorkflowServiceError;
 
@@ -13,6 +14,19 @@ use super::types::{
 };
 
 const DEFAULT_RETAINED_TRACE_LIMIT: usize = 200;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowTraceRecordResult {
+    pub snapshot: WorkflowTraceSnapshotResponse,
+    pub recorded_at_ms: u64,
+}
+
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
 
 #[derive(Debug, Clone, Default)]
 struct WorkflowTraceExecutionContext {
@@ -296,6 +310,14 @@ impl WorkflowTraceStore {
         let mut state = self.state.lock().expect("workflow trace lock poisoned");
         state.record_event(event, timestamp_ms);
         state.snapshot_all()
+    }
+
+    pub fn record_event_now(&self, event: &WorkflowTraceEvent) -> WorkflowTraceRecordResult {
+        let recorded_at_ms = unix_timestamp_ms();
+        WorkflowTraceRecordResult {
+            snapshot: self.record_event(event, recorded_at_ms),
+            recorded_at_ms,
+        }
     }
 }
 

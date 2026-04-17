@@ -200,10 +200,9 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
 fn translate_node_event_with_diagnostics(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     event: node_engine::WorkflowEvent,
-    timestamp_ms: u64,
 ) -> (TauriWorkflowEvent, TauriWorkflowEvent) {
     let tauri_event = translate_node_event(event);
-    let diagnostics_snapshot = diagnostics_store.record_workflow_event(&tauri_event, timestamp_ms);
+    let diagnostics_snapshot = diagnostics_store.record_workflow_event_now(&tauri_event);
     let diagnostics_event = TauriWorkflowEvent::diagnostics_snapshot(
         translated_execution_id(&tauri_event).to_string(),
         diagnostics_snapshot,
@@ -214,11 +213,8 @@ fn translate_node_event_with_diagnostics(
 
 impl EventSink for TauriEventAdapter {
     fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), EventError> {
-        let (tauri_event, diagnostics_event) = translate_node_event_with_diagnostics(
-            &self.diagnostics_store,
-            event,
-            super::workflow_execution_commands::unix_timestamp_ms(),
-        );
+        let (tauri_event, diagnostics_event) =
+            translate_node_event_with_diagnostics(&self.diagnostics_store, event);
 
         self.channel
             .send(tauri_event)
@@ -251,7 +247,6 @@ mod tests {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
             },
-            100,
         );
 
         match &event {
@@ -288,7 +283,6 @@ mod tests {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
             },
-            100,
         );
 
         let (_, diagnostics_event) = translate_node_event_with_diagnostics(
@@ -299,7 +293,6 @@ mod tests {
                 progress: 0.5,
                 message: Some("working".to_string()),
             },
-            110,
         );
 
         match diagnostics_event {
@@ -323,7 +316,6 @@ mod tests {
                 execution_id: "exec-1".to_string(),
                 error: "workflow run cancelled during execution".to_string(),
             },
-            120,
         );
 
         match event {
@@ -361,7 +353,6 @@ mod tests {
                 execution_id: "exec-graph".to_string(),
                 dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
             },
-            130,
         );
 
         match &event {

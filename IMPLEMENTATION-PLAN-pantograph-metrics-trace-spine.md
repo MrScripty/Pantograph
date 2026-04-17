@@ -411,6 +411,11 @@ Update during implementation:
 - 2026-04-13: Thirty-third implementation slice added backend-owned llama.cpp
   runtime reuse detection so identical sidecar mode/model/device starts return
   structured reuse outcomes instead of forcing a fresh runtime start.
+- 2026-04-17: Thirty-fourth implementation slice moved ordinary node-engine
+  trace timestamp capture into
+  `pantograph_workflow_service::WorkflowTraceStore`, so the Tauri workflow
+  event adapter now forwards execution events into backend-owned trace timing
+  instead of stamping canonical run/node chronology locally.
 
 ## Commit Cadence Notes
 

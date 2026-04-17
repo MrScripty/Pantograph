@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
@@ -15,6 +16,13 @@ use super::types::{
 use crate::workflow::events::WorkflowEvent;
 
 const DEFAULT_DIAGNOSTICS_EVENT_LIMIT: usize = 200;
+
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct DiagnosticsNodeOverlay {
@@ -297,6 +305,28 @@ impl WorkflowDiagnosticsStore {
         let traces = workflow_trace_event(event)
             .map(|trace_event| self.trace_store.record_event(&trace_event, timestamp_ms))
             .unwrap_or_else(|| self.trace_store.snapshot_all());
+        let mut state = self
+            .state
+            .lock()
+            .expect("workflow diagnostics lock poisoned");
+        record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
+    }
+
+    pub fn record_workflow_event_now(
+        &self,
+        event: &WorkflowEvent,
+    ) -> WorkflowDiagnosticsProjection {
+        let (traces, timestamp_ms) = workflow_trace_event(event)
+            .map(|trace_event| {
+                let result = self.trace_store.record_event_now(&trace_event);
+                (result.snapshot, result.recorded_at_ms)
+            })
+            .unwrap_or_else(|| {
+                let timestamp_ms = unix_timestamp_ms();
+                (self.trace_store.snapshot_all(), timestamp_ms)
+            });
         let mut state = self
             .state
             .lock()

@@ -7,7 +7,6 @@ pub use super::workflow_edit_session::{
     update_node_position_in_execution,
 };
 pub use super::workflow_execution_runtime::{execute_workflow_v2, run_workflow_session};
-pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
 
 #[cfg(test)]
 mod tests {

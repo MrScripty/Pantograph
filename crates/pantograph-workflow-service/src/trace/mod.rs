@@ -3,7 +3,7 @@ mod scheduler;
 mod store;
 mod types;
 
-pub use store::WorkflowTraceStore;
+pub use store::{WorkflowTraceRecordResult, WorkflowTraceStore};
 pub use types::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
     WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
@@ -14,6 +14,7 @@ pub use types::{
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::runtime::{infer_runtime_id, runtime_lifecycle_reason};
     use super::*;
@@ -1210,5 +1211,31 @@ mod tests {
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("warm_session_reused")
         );
+    }
+
+    #[test]
+    fn workflow_trace_store_record_event_now_uses_backend_timestamp_capture() {
+        let store = WorkflowTraceStore::new(10);
+        let before_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before epoch")
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
+        let result = store.record_event_now(&WorkflowTraceEvent::RunStarted {
+            execution_id: "exec-1".to_string(),
+            workflow_id: Some("wf-1".to_string()),
+            node_count: 2,
+        });
+        let after_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before epoch")
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
+
+        assert!(result.recorded_at_ms >= before_ms);
+        assert!(result.recorded_at_ms <= after_ms);
+        let trace = result.snapshot.traces.first().expect("trace summary");
+        assert_eq!(trace.started_at_ms, result.recorded_at_ms);
+        assert_eq!(trace.node_count_at_start, 2);
     }
 }

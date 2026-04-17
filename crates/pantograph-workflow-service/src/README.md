@@ -144,6 +144,9 @@ Primary contract types:
 - Workflow trace and metrics contract ownership is backend-owned in this crate;
   adapters may project or transport traces but must not invent timing or
   lifecycle state locally.
+- The in-memory trace store owns retention plus canonical run/node event
+  timestamp capture for ordinary workflow events, so adapters forward events
+  into backend-owned timing rather than stamping trace chronology locally.
 - Scheduler snapshots now expose additive `trace_execution_id` attribution when
   the backend can unambiguously identify the active or uniquely-visible queued
   run. Adapters must treat an omitted value as "identity ambiguous" rather than
