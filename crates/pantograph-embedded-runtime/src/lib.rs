@@ -42,10 +42,11 @@ use pantograph_workflow_service::{
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse, WorkflowSessionState,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitRequest, WorkflowTraceRuntimeMetrics,
+    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
+    WorkflowSessionStaleCleanupResponse, WorkflowSessionState, WorkflowSessionStatusRequest,
+    WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
+    WorkflowTraceRuntimeMetrics,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -1698,14 +1699,10 @@ impl EmbeddedWorkflowHost {
     }
 
     fn fallback_runtime_unload_candidate(
+        target: &WorkflowSessionRuntimeSelectionTarget,
         candidates: &[WorkflowSessionRuntimeUnloadCandidate],
     ) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
-        candidates.iter().cloned().min_by(|left, right| {
-            left.access_tick
-                .cmp(&right.access_tick)
-                .then_with(|| left.run_count.cmp(&right.run_count))
-                .then_with(|| left.session_id.cmp(&right.session_id))
-        })
+        pantograph_workflow_service::select_runtime_unload_candidate_by_affinity(target, candidates)
     }
 }
 
@@ -1846,10 +1843,11 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 
     async fn select_runtime_unload_candidate(
         &self,
+        target: &WorkflowSessionRuntimeSelectionTarget,
         candidates: &[WorkflowSessionRuntimeUnloadCandidate],
     ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
-            return Ok(Self::fallback_runtime_unload_candidate(candidates));
+            return Ok(Self::fallback_runtime_unload_candidate(target, candidates));
         };
 
         let candidates_by_session_id = candidates
@@ -1871,7 +1869,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             }
         }
 
-        Ok(Self::fallback_runtime_unload_candidate(candidates))
+        Ok(Self::fallback_runtime_unload_candidate(target, candidates))
     }
 
     async fn workflow_technical_fit_decision(
@@ -3500,22 +3498,31 @@ mod tests {
 
         let selected = runtime
             .host()
-            .select_runtime_unload_candidate(&[
-                WorkflowSessionRuntimeUnloadCandidate {
-                    session_id: "session-a".to_string(),
+            .select_runtime_unload_candidate(
+                &WorkflowSessionRuntimeSelectionTarget {
+                    session_id: "session-target".to_string(),
                     workflow_id: "wf-a".to_string(),
-                    keep_alive: true,
-                    access_tick: 1,
-                    run_count: 0,
+                    usage_profile: Some("interactive".to_string()),
                 },
-                WorkflowSessionRuntimeUnloadCandidate {
-                    session_id: "session-b".to_string(),
-                    workflow_id: "wf-b".to_string(),
-                    keep_alive: false,
-                    access_tick: 99,
-                    run_count: 5,
-                },
-            ])
+                &[
+                    WorkflowSessionRuntimeUnloadCandidate {
+                        session_id: "session-a".to_string(),
+                        workflow_id: "wf-a".to_string(),
+                        usage_profile: Some("interactive".to_string()),
+                        keep_alive: true,
+                        access_tick: 1,
+                        run_count: 0,
+                    },
+                    WorkflowSessionRuntimeUnloadCandidate {
+                        session_id: "session-b".to_string(),
+                        workflow_id: "wf-b".to_string(),
+                        usage_profile: Some("batch".to_string()),
+                        keep_alive: false,
+                        access_tick: 99,
+                        run_count: 5,
+                    },
+                ],
+            )
             .await
             .expect("select unload candidate")
             .expect("candidate should exist");

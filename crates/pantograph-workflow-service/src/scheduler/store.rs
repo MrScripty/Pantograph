@@ -182,6 +182,7 @@ impl WorkflowSessionStore {
                 |(session_id, state)| WorkflowSessionRuntimeUnloadCandidate {
                     session_id: session_id.clone(),
                     workflow_id: state.workflow_id.clone(),
+                    usage_profile: state.usage_profile.clone(),
                     keep_alive: state.keep_alive,
                     access_tick: state.access_tick,
                     run_count: state.run_count,

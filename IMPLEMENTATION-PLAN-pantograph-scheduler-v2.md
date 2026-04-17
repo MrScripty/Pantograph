@@ -37,6 +37,10 @@ The accurate implementation baseline at the current checkpoint is:
   protection rule, allowing long-waiting queued runs to accumulate canonical
   promotion credit and surface `starvation_protection` when they legitimately
   overtake newer higher-priority work
+- runtime-pressure unload selection now also carries backend-owned target
+  workflow and `usage_profile` context plus candidate `usage_profile` facts, so
+  capacity rebalance can preserve affine idle runtimes before falling back to
+  generic least-recently-used eviction
 - `crates/pantograph-workflow-service/src/workflow.rs` still owns the current
   workflow-service facade, runtime orchestration, and session command entry
   points, but it no longer has to be the long-term home for scheduler DTOs and
@@ -453,8 +457,12 @@ policy, fairness, and machine-consumable decision semantics.
   for running and pending items.
 - The first starvation-protection promotion rule is now backend-owned in the
   scheduler policy and covered by unit plus workflow-service tests.
-- Remaining Milestone 3 work is the deeper policy expansion: broader fairness
-  policy and runtime-affinity-oriented admission inputs.
+- Runtime-pressure unload selection now also consumes backend-owned target
+  workflow and `usage_profile` affinity inputs, and preserves less-affine idle
+  sessions first in workflow-service and embedded-runtime tests.
+- Remaining Milestone 3 work is the deeper policy expansion: broader fairness,
+  model-dependency-aware affinity, and richer admission inputs beyond the
+  current unload-selection path.
 
 **Status:** In progress
 

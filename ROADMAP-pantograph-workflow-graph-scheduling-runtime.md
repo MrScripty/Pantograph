@@ -355,6 +355,9 @@ session scheduler that makes better admission and reuse decisions.
   protection promotion rule, so long-waiting queued runs can surface a stable
   `starvation_protection` reason when they legitimately overtake newer higher-
   priority work
+- Runtime-pressure unload selection now also carries backend-owned target
+  workflow and `usage_profile` affinity inputs, so default rebalance behavior
+  preserves more-reusable idle runtimes before falling back to generic LRU
 - Add scheduler policy objects instead of encoding all queue behavior directly
   in one service module
 - Introduce explicit runtime affinity and warm-session reuse decisions by

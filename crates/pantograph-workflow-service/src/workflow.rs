@@ -34,13 +34,14 @@ use crate::graph::WorkflowSessionKind;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
-    WorkflowSchedulerDecisionReason, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRetentionHint, WorkflowSessionRuntimeUnloadCandidate,
+    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerDecisionReason,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
+    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
+    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
     WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
     WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
     WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
@@ -697,14 +698,12 @@ pub trait WorkflowHost: Send + Sync {
 
     async fn select_runtime_unload_candidate(
         &self,
+        target: &WorkflowSessionRuntimeSelectionTarget,
         candidates: &[WorkflowSessionRuntimeUnloadCandidate],
     ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
-        Ok(candidates.iter().cloned().min_by(|left, right| {
-            left.access_tick
-                .cmp(&right.access_tick)
-                .then_with(|| left.run_count.cmp(&right.run_count))
-                .then_with(|| left.session_id.cmp(&right.session_id))
-        }))
+        Ok(select_runtime_unload_candidate_by_affinity(
+            target, candidates,
+        ))
     }
 
     async fn workflow_technical_fit_decision(
@@ -777,7 +776,10 @@ impl WorkflowService {
     ) -> Result<(), WorkflowServiceError> {
         enum RuntimeDecision {
             Ready,
-            SelectUnloadCandidate(Vec<WorkflowSessionRuntimeUnloadCandidate>),
+            SelectUnloadCandidate {
+                target: WorkflowSessionRuntimeSelectionTarget,
+                candidates: Vec<WorkflowSessionRuntimeUnloadCandidate>,
+            },
             LoadTarget {
                 workflow_id: String,
                 usage_profile: Option<String>,
@@ -799,9 +801,14 @@ impl WorkflowService {
                 if target.runtime_loaded {
                     RuntimeDecision::Ready
                 } else if store.loaded_session_count() >= store.max_loaded_sessions {
-                    RuntimeDecision::SelectUnloadCandidate(
-                        store.runtime_unload_candidates(session_id),
-                    )
+                    RuntimeDecision::SelectUnloadCandidate {
+                        target: WorkflowSessionRuntimeSelectionTarget {
+                            session_id: session_id.to_string(),
+                            workflow_id: target.workflow_id.clone(),
+                            usage_profile: target.usage_profile.clone(),
+                        },
+                        candidates: store.runtime_unload_candidates(session_id),
+                    }
                 } else {
                     RuntimeDecision::LoadTarget {
                         workflow_id: target.workflow_id.clone(),
@@ -817,8 +824,10 @@ impl WorkflowService {
 
             match decision {
                 RuntimeDecision::Ready => return Ok(()),
-                RuntimeDecision::SelectUnloadCandidate(candidates) => {
-                    let Some(candidate) = host.select_runtime_unload_candidate(&candidates).await?
+                RuntimeDecision::SelectUnloadCandidate { target, candidates } => {
+                    let Some(candidate) = host
+                        .select_runtime_unload_candidate(&target, &candidates)
+                        .await?
                     else {
                         return Err(WorkflowServiceError::SchedulerBusy(
                             "runtime capacity exhausted; no idle session runtime available for unload"
@@ -2592,6 +2601,27 @@ mod tests {
         }
     }
 
+    struct AffinityRuntimeHost {
+        unloads: Arc<Mutex<Vec<String>>>,
+        capabilities: WorkflowHostCapabilities,
+    }
+
+    impl AffinityRuntimeHost {
+        fn new(unloads: Arc<Mutex<Vec<String>>>) -> Self {
+            Self {
+                unloads,
+                capabilities: WorkflowHostCapabilities {
+                    max_input_bindings: 16,
+                    max_output_targets: 16,
+                    max_value_bytes: 4096,
+                    runtime_requirements: WorkflowRuntimeRequirements::default(),
+                    models: Vec::new(),
+                    runtime_capabilities: vec![ready_runtime_capability()],
+                },
+            }
+        }
+    }
+
     struct PreflightHost {
         capabilities: WorkflowHostCapabilities,
         technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
@@ -2919,12 +2949,78 @@ mod tests {
 
         async fn select_runtime_unload_candidate(
             &self,
+            _target: &WorkflowSessionRuntimeSelectionTarget,
             candidates: &[WorkflowSessionRuntimeUnloadCandidate],
         ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
             Ok(candidates
                 .iter()
                 .find(|candidate| candidate.session_id == self.selected_session_id)
                 .cloned())
+        }
+
+        async fn unload_session_runtime(
+            &self,
+            session_id: &str,
+            _workflow_id: &str,
+            _reason: WorkflowSessionUnloadReason,
+        ) -> Result<(), WorkflowServiceError> {
+            self.unloads
+                .lock()
+                .expect("unloads lock poisoned")
+                .push(session_id.to_string());
+            Ok(())
+        }
+
+        async fn load_session_runtime(
+            &self,
+            _session_id: &str,
+            _workflow_id: &str,
+            _usage_profile: Option<&str>,
+            _retention_hint: WorkflowSessionRetentionHint,
+        ) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for AffinityRuntimeHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("affinity-graph".to_string())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn runtime_capabilities(
+            &self,
+        ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+            Ok(self.capabilities.runtime_capabilities.clone())
         }
 
         async fn unload_session_runtime(
@@ -4685,6 +4781,75 @@ mod tests {
         assert!(!unloads
             .iter()
             .any(|session_id| session_id == &first.session_id));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_default() {
+        let unloads = Arc::new(Mutex::new(Vec::new()));
+        let host = AffinityRuntimeHost::new(unloads.clone());
+        let service = WorkflowService::with_capacity_limits(3, 2);
+
+        let affine = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-shared".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create affine keep-alive session");
+        let non_affine = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-other".to_string(),
+                    usage_profile: Some("batch".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create non-affine keep-alive session");
+        let target = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-shared".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create target session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: target.session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("run target session");
+
+        let unloads = unloads.lock().expect("unloads lock poisoned");
+        assert_eq!(
+            unloads.first().map(String::as_str),
+            Some(non_affine.session_id.as_str())
+        );
+        assert!(unloads
+            .iter()
+            .any(|session_id| session_id == &target.session_id));
+        assert!(!unloads
+            .iter()
+            .any(|session_id| session_id == &affine.session_id));
     }
 
     #[tokio::test]

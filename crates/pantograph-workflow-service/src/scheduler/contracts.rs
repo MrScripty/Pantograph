@@ -292,7 +292,17 @@ pub enum WorkflowSessionUnloadReason {
 pub struct WorkflowSessionRuntimeUnloadCandidate {
     pub session_id: String,
     pub workflow_id: String,
+    pub usage_profile: Option<String>,
     pub keep_alive: bool,
     pub access_tick: u64,
     pub run_count: u64,
+}
+
+/// Runtime-affinity target context used when selecting which idle session
+/// runtime to unload under capacity pressure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSessionRuntimeSelectionTarget {
+    pub session_id: String,
+    pub workflow_id: String,
+    pub usage_profile: Option<String>,
 }

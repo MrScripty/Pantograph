@@ -3,14 +3,35 @@ use std::cmp::Ordering;
 use crate::workflow::WorkflowServiceError;
 
 use super::store::WorkflowSessionQueuedRun;
-use super::WorkflowSchedulerDecisionReason;
+use super::{
+    WorkflowSchedulerDecisionReason, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate,
+};
 
 const STARVATION_BYPASS_THRESHOLD: u32 = 2;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct PriorityThenFifoSchedulerPolicy;
 
+pub fn select_runtime_unload_candidate_by_affinity(
+    target: &WorkflowSessionRuntimeSelectionTarget,
+    candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
+    PriorityThenFifoSchedulerPolicy.select_runtime_unload_candidate(target, candidates)
+}
+
 impl PriorityThenFifoSchedulerPolicy {
+    pub(crate) fn select_runtime_unload_candidate(
+        &self,
+        target: &WorkflowSessionRuntimeSelectionTarget,
+        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+    ) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
+        candidates
+            .iter()
+            .cloned()
+            .min_by(|left, right| self.compare_runtime_unload_candidates(target, left, right))
+    }
+
     pub(crate) fn placement_index_for_enqueue(
         &self,
         queue: &[WorkflowSessionQueuedRun],
@@ -66,6 +87,30 @@ impl PriorityThenFifoSchedulerPolicy {
             .cmp(&self.effective_priority(left))
             .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
             .then_with(|| left.queue_id.cmp(&right.queue_id))
+    }
+
+    fn compare_runtime_unload_candidates(
+        &self,
+        target: &WorkflowSessionRuntimeSelectionTarget,
+        left: &WorkflowSessionRuntimeUnloadCandidate,
+        right: &WorkflowSessionRuntimeUnloadCandidate,
+    ) -> Ordering {
+        self.runtime_affinity_rank(target, left)
+            .cmp(&self.runtime_affinity_rank(target, right))
+            .then_with(|| left.keep_alive.cmp(&right.keep_alive))
+            .then_with(|| left.access_tick.cmp(&right.access_tick))
+            .then_with(|| left.run_count.cmp(&right.run_count))
+            .then_with(|| left.session_id.cmp(&right.session_id))
+    }
+
+    fn runtime_affinity_rank(
+        &self,
+        target: &WorkflowSessionRuntimeSelectionTarget,
+        candidate: &WorkflowSessionRuntimeUnloadCandidate,
+    ) -> (bool, bool) {
+        let same_workflow = candidate.workflow_id == target.workflow_id;
+        let same_usage_profile = same_workflow && candidate.usage_profile == target.usage_profile;
+        (same_workflow, same_usage_profile)
     }
 
     fn effective_priority(&self, queued: &WorkflowSessionQueuedRun) -> i32 {
@@ -133,6 +178,35 @@ mod tests {
         }
     }
 
+    fn runtime_target(
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+    ) -> WorkflowSessionRuntimeSelectionTarget {
+        WorkflowSessionRuntimeSelectionTarget {
+            session_id: session_id.to_string(),
+            workflow_id: workflow_id.to_string(),
+            usage_profile: usage_profile.map(str::to_string),
+        }
+    }
+
+    fn unload_candidate(
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+        keep_alive: bool,
+        access_tick: u64,
+    ) -> WorkflowSessionRuntimeUnloadCandidate {
+        WorkflowSessionRuntimeUnloadCandidate {
+            session_id: session_id.to_string(),
+            workflow_id: workflow_id.to_string(),
+            usage_profile: usage_profile.map(str::to_string),
+            keep_alive,
+            access_tick,
+            run_count: 0,
+        }
+    }
+
     #[test]
     fn refresh_queue_promotes_starved_run_over_newer_higher_priority_items() {
         let policy = PriorityThenFifoSchedulerPolicy;
@@ -155,5 +229,45 @@ mod tests {
             WorkflowSchedulerDecisionReason::FifoPriorityTieBreak
         );
         assert_eq!(queue[2].queue_id, "high-2");
+    }
+
+    #[test]
+    fn select_runtime_unload_candidate_prefers_non_affine_idle_sessions() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let target = runtime_target("session-target", "wf-a", Some("interactive"));
+        let selected = policy
+            .select_runtime_unload_candidate(
+                &target,
+                &[
+                    unload_candidate("session-same", "wf-a", Some("interactive"), false, 1),
+                    unload_candidate("session-other", "wf-b", Some("batch"), true, 10),
+                ],
+            )
+            .expect("candidate");
+
+        assert_eq!(selected.session_id, "session-other");
+    }
+
+    #[test]
+    fn select_runtime_unload_candidate_prefers_usage_mismatch_before_same_profile() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let target = runtime_target("session-target", "wf-a", Some("interactive"));
+        let selected = policy
+            .select_runtime_unload_candidate(
+                &target,
+                &[
+                    unload_candidate(
+                        "session-same-profile",
+                        "wf-a",
+                        Some("interactive"),
+                        false,
+                        1,
+                    ),
+                    unload_candidate("session-other-profile", "wf-a", Some("batch"), true, 10),
+                ],
+            )
+            .expect("candidate");
+
+        assert_eq!(selected.session_id, "session-other-profile");
     }
 }
