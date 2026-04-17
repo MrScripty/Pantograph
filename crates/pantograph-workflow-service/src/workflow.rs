@@ -6114,6 +6114,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_stale_cleanup_worker_keeps_sessions_with_queued_work() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = Arc::new(WorkflowService::new());
+        let worker = service
+            .spawn_workflow_session_stale_cleanup_worker(WorkflowSessionStaleCleanupWorkerConfig {
+                interval: Duration::from_millis(10),
+                idle_timeout: Duration::from_millis(20),
+            })
+            .expect("spawn stale cleanup worker");
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue run");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("scheduler snapshot");
+        assert_eq!(snapshot.session.session_id, created.session_id);
+        assert_eq!(snapshot.session.queued_runs, 1);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(
+            snapshot.items[0].status,
+            WorkflowSessionQueueItemStatus::Pending
+        );
+
+        worker.shutdown().await;
+    }
+
+    #[tokio::test]
     async fn workflow_stale_cleanup_worker_shutdown_stops_future_cleanup() {
         let host = MockWorkflowHost::new(8, 1024);
         let service = Arc::new(WorkflowService::new());

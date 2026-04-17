@@ -611,6 +611,8 @@ and source-of-truth alignment.
 - Added cleanup-path recovery coverage ensuring stale-session cleanup is
   idempotent after removal and cannot delete workflow sessions that still hold
   queued scheduler work.
+- Extended that cleanup recovery coverage to the background stale-session
+  worker so autonomous cleanup preserves queued scheduler work as well.
 
 **Status:** In progress
 
