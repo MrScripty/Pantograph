@@ -372,7 +372,7 @@ reconnect policy family instead of a gateway-only special case.
 - `cargo check` and focused runtime-registry or embedded-runtime test slices
   for touched crates
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: Unify The Registry-Ready Capability Contract Family
 
@@ -502,6 +502,11 @@ Update during implementation:
 - 2026-04-17: Added the missing `crates/pantograph-runtime-identity/src/README.md`
   so the shared runtime-identity boundary meets documentation standards before
   the next extraction and producer-convergence slices.
+- 2026-04-17: Began the first Milestone 2 backend extraction by moving
+  runtime-registry observation builders and health-overlay matching into a
+  dedicated embedded-runtime module so later producer-convergence changes can
+  land behind backend Rust boundaries instead of expanding Tauri transport
+  files.
 
 ## Commit Cadence Notes
 
@@ -551,6 +556,8 @@ Update during implementation:
   inventory, contract-family freeze, and decomposition review.
 - Milestone 1 surrounding-compliance closure completed with the missing
   runtime-identity source README.
+- Milestone 2 is now in progress with the first embedded-runtime extraction
+  slice for runtime-registry observation building.
 
 ### Deviations
 

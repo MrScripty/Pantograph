@@ -23,6 +23,7 @@ packages.
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry backoff, backend port overrides, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
+| `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path runtime-registry override reconciliation. |
 
 ## Problem
@@ -96,6 +97,9 @@ embedded-runtime crate.
 - Gateway and producer observation mapping for the shared runtime registry must
   stay in backend Rust so adapters do not drift on runtime-id, backend-key, or
   lifecycle-status translation.
+- Runtime-registry observation builders and health-overlay matching may be
+  decomposed into helper modules, but those helpers must remain backend-owned
+  and must not be reintroduced as Tauri-local mapping code.
 - Runtime-registry sync-before-snapshot and sync-before-reclaim semantics must
   stay in backend Rust so host adapters do not drift on when authoritative
   mode-info reconciliation happens.

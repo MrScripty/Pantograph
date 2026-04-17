@@ -63,6 +63,7 @@ pub mod runtime_capabilities;
 pub mod runtime_health;
 pub mod runtime_recovery;
 pub mod runtime_registry;
+mod runtime_registry_observations;
 pub mod task_executor;
 pub mod technical_fit;
 pub mod workflow_runtime;
