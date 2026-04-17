@@ -5880,6 +5880,85 @@ mod tests {
             .await
             .expect_err("cleaned session should be removed");
         assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+
+        let second_response = service
+            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                idle_timeout_ms: 1_000,
+            })
+            .await
+            .expect("second cleanup stale sessions");
+        assert!(
+            second_response.cleaned_session_ids.is_empty(),
+            "repeat cleanup should be idempotent once the stale session is gone"
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_cleanup_stale_sessions_keeps_session_with_queued_work() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue run");
+            let state = store
+                .active
+                .get_mut(&created.session_id)
+                .expect("session state should exist");
+            state.last_accessed_at_ms = unix_timestamp_ms().saturating_sub(5_000);
+        }
+
+        let response = service
+            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                idle_timeout_ms: 1_000,
+            })
+            .await
+            .expect("cleanup stale sessions");
+
+        assert!(
+            response.cleaned_session_ids.is_empty(),
+            "queued sessions should remain scheduler-visible until the queue drains"
+        );
+
+        let session_id = created.session_id.clone();
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest { session_id })
+            .await
+            .expect("scheduler snapshot");
+        assert_eq!(snapshot.session.session_id, created.session_id);
+        assert_eq!(snapshot.session.queued_runs, 1);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(
+            snapshot.items[0].status,
+            WorkflowSessionQueueItemStatus::Pending
+        );
     }
 
     #[tokio::test]

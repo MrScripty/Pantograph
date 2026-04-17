@@ -608,6 +608,9 @@ and source-of-truth alignment.
 - Added transport-facing acceptance coverage proving additive scheduler
   `runtime_registry` diagnostics survive the headless diagnostics projection
   without Tauri or wrappers reinterpreting scheduler policy.
+- Added cleanup-path recovery coverage ensuring stale-session cleanup is
+  idempotent after removal and cannot delete workflow sessions that still hold
+  queued scheduler work.
 
 **Status:** In progress
 

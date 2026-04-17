@@ -784,6 +784,7 @@ impl WorkflowSessionStore {
                 !state.keep_alive
                     && !state.runtime_loaded
                     && state.active_run.is_none()
+                    && state.queue.is_empty()
                     && state.last_accessed_at_ms.saturating_add(idle_timeout_ms) <= now_ms
             })
             .map(|(session_id, state)| WorkflowSessionStaleCleanupCandidate {
@@ -811,6 +812,7 @@ impl WorkflowSessionStore {
         if state.keep_alive
             || state.runtime_loaded
             || state.active_run.is_some()
+            || !state.queue.is_empty()
             || state.last_accessed_at_ms != candidate.last_accessed_at_ms
             || state.last_accessed_at_ms.saturating_add(idle_timeout_ms) > now_ms
         {
