@@ -597,6 +597,9 @@ Update during implementation:
   semantics for unresolved `human-input` nodes, with `node-engine` owning the
   pause event and the embedded-runtime/Tauri boundary treating that state as an
   interactive wait instead of degrading it into `WorkflowFailed`.
+- Direct workflow-run callers now also receive an `InvalidRequest` envelope
+  when a workflow requires interactive input, preserving the backend-owned host
+  contract mismatch instead of flattening it into an internal runtime error.
 
 ### Deviations
 

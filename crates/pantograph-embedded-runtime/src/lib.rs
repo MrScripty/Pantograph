@@ -2525,6 +2525,82 @@ mod tests {
         .expect("write workflow");
     }
 
+    fn write_human_input_workflow(root: &Path, workflow_id: &str) {
+        let workflows_dir = root.join(".pantograph").join("workflows");
+        std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+        let workflow_json = serde_json::json!({
+            "version": "1.0",
+            "metadata": {
+                "name": "Interactive Workflow",
+                "created": "2026-01-01T00:00:00Z",
+                "modified": "2026-01-01T00:00:00Z"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "human-input-1",
+                        "node_type": "human-input",
+                        "data": {
+                            "prompt": "Approve deployment?",
+                            "definition": {
+                                "category": "input",
+                                "io_binding_origin": "client_session",
+                                "label": "Human Input",
+                                "description": "Pauses workflow to wait for interactive input",
+                                "inputs": [
+                                    {
+                                        "id": "prompt",
+                                        "label": "Prompt",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    },
+                                    {
+                                        "id": "default",
+                                        "label": "Default Value",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    },
+                                    {
+                                        "id": "auto_accept",
+                                        "label": "Auto Accept",
+                                        "data_type": "boolean",
+                                        "required": false,
+                                        "multiple": false
+                                    },
+                                    {
+                                        "id": "user_response",
+                                        "label": "User Response",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    }
+                                ],
+                                "outputs": [
+                                    {
+                                        "id": "value",
+                                        "label": "Value",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    }
+                                ]
+                            }
+                        },
+                        "position": { "x": 0.0, "y": 0.0 }
+                    }
+                ],
+                "edges": []
+            }
+        });
+        std::fs::write(
+            workflows_dir.join(format!("{workflow_id}.json")),
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+    }
+
     fn workflow_port_definition(id: &str, label: &str, data_type: &str) -> serde_json::Value {
         serde_json::json!({
             "id": id,
@@ -2944,6 +3020,55 @@ mod tests {
             })
             .await
             .expect("close session");
+    }
+
+    #[tokio::test]
+    async fn workflow_run_returns_invalid_request_for_human_input_workflow() {
+        let temp = TempDir::new().expect("temp dir");
+        write_human_input_workflow(temp.path(), "interactive-human-input");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
+
+        let error = runtime
+            .workflow_run(WorkflowRunRequest {
+                workflow_id: "interactive-human-input".to_string(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "human-input-1".to_string(),
+                    port_id: "value".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                run_id: Some("run-human-input".to_string()),
+            })
+            .await
+            .expect_err("interactive workflow run should fail for non-streaming callers");
+
+        match error {
+            WorkflowServiceError::InvalidRequest(message) => {
+                assert!(
+                    message.contains("interactive") || message.contains("input"),
+                    "unexpected invalid-request message: {message}"
+                );
+            }
+            other => panic!("expected invalid request error, got {other:?}"),
+        }
     }
 
     #[tokio::test]

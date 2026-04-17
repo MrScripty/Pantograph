@@ -433,6 +433,10 @@ incremental runs.
   semantics end-to-end: unresolved `human-input` nodes emit the backend-owned
   wait event from `node-engine`, and the embedded runtime/Tauri transport stop
   treating that interactive pause as `WorkflowFailed`.
+- Non-streaming workflow-run callers now also receive a backend-owned
+  `InvalidRequest` envelope when a workflow requires interactive input, so
+  direct adapters do not flatten that host-contract mismatch into an internal
+  runtime error.
 - Frontend execution-ownership helpers now claim the active run from the first
   execution-scoped workflow event instead of pre-pinning session-backed runs
   to the edit-session id, so valid scheduler/runtime and incremental events are
