@@ -543,6 +543,10 @@ Update during implementation:
   runtime-event projection into a single backend helper so
   `headless_diagnostics_transport.rs` no longer owns the order in which
   registry rehydration and runtime projection occur.
+- 2026-04-17: Moved active-runtime registration for scheduler diagnostics and
+  session reservation checks behind a shared backend registry helper so the
+  embedded workflow host no longer re-derives registration shape across
+  multiple workflow-execution call sites.
 
 ## Commit Cadence Notes
 

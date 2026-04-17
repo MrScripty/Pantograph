@@ -26,8 +26,8 @@ use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistry,
-    RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
+    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
+    RuntimeRegistry, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +64,21 @@ pub fn reconcile_runtime_registry_mode_info_with_health_assessments(
         active_assessment,
         embedding_assessment,
     ))
+}
+
+pub fn register_active_runtime(
+    registry: &RuntimeRegistry,
+    mode_info: &HostRuntimeModeSnapshot,
+) -> ActiveRuntimeDescriptor {
+    let descriptor = active_runtime_descriptor(mode_info);
+    registry.register_runtime(
+        RuntimeRegistration::new(
+            descriptor.runtime_id.clone(),
+            descriptor.display_name.clone(),
+        )
+        .with_backend_keys(descriptor.backend_keys.clone()),
+    );
+    descriptor
 }
 
 pub fn reconcile_runtime_registry_snapshot_override(
@@ -808,6 +823,48 @@ mod tests {
             Some("python sidecar crashed")
         );
         assert!(pytorch.models.is_empty());
+    }
+
+    #[test]
+    fn register_active_runtime_registers_descriptor_backend_keys() {
+        let registry = RuntimeRegistry::new();
+        let descriptor = register_active_runtime(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-registered".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+        );
+
+        assert_eq!(descriptor.runtime_id, "llama.cpp");
+        assert_eq!(descriptor.display_name, "llama.cpp");
+        assert_eq!(descriptor.backend_keys, vec!["llama_cpp".to_string()]);
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| {
+                runtime.runtime_id
+                    == pantograph_runtime_identity::canonical_runtime_id(&descriptor.runtime_id)
+            })
+            .expect("active runtime should be registered");
+        assert_eq!(runtime.display_name, "llama.cpp");
+        assert_eq!(runtime.backend_keys, vec!["llama_cpp".to_string()]);
     }
 
     #[tokio::test]

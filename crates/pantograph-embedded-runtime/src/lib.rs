@@ -9,9 +9,9 @@ use node_engine::{
 };
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
-    RuntimeRegistration, RuntimeRegistryError, RuntimeReservationRequest,
-    RuntimeReservationRequirements, RuntimeRetentionDecision, RuntimeRetentionHint,
-    RuntimeTransition, RuntimeWarmupDecision, SharedRuntimeRegistry,
+    RuntimeRegistryError, RuntimeReservationRequest, RuntimeReservationRequirements,
+    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision,
+    SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -223,14 +223,9 @@ impl WorkflowSchedulerDiagnosticsProvider for EmbeddedWorkflowSchedulerDiagnosti
     ) -> Result<Option<WorkflowSchedulerRuntimeRegistryDiagnostics>, WorkflowServiceError> {
         let mode_info = self.gateway.mode_info().await;
         let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
-
-        self.runtime_registry.register_runtime(
-            RuntimeRegistration::new(
-                descriptor.runtime_id.clone(),
-                descriptor.display_name.clone(),
-            )
-            .with_backend_keys(descriptor.backend_keys.clone()),
+        let descriptor = runtime_registry::register_active_runtime(
+            &self.runtime_registry,
+            &host_runtime_mode_info,
         );
 
         let reclaim_candidate = runtime_registry_reclaim_candidate_for_sessions(
@@ -1518,19 +1513,12 @@ impl EmbeddedWorkflowHost {
 
         let mode_info = self.gateway.mode_info().await;
         let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
+        let descriptor =
+            runtime_registry::register_active_runtime(runtime_registry, &host_runtime_mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
                 .runtime_requirements,
-        );
-
-        runtime_registry.register_runtime(
-            RuntimeRegistration::new(
-                descriptor.runtime_id.clone(),
-                descriptor.display_name.clone(),
-            )
-            .with_backend_keys(descriptor.backend_keys.clone()),
         );
 
         let lease = runtime_registry
@@ -1921,19 +1909,12 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 
         let mode_info = self.gateway.mode_info().await;
         let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
+        let descriptor =
+            runtime_registry::register_active_runtime(runtime_registry, &host_runtime_mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
                 .runtime_requirements,
-        );
-
-        runtime_registry.register_runtime(
-            RuntimeRegistration::new(
-                descriptor.runtime_id.clone(),
-                descriptor.display_name.clone(),
-            )
-            .with_backend_keys(descriptor.backend_keys.clone()),
         );
 
         match runtime_registry.can_acquire_reservation(&RuntimeReservationRequest {
@@ -2099,7 +2080,7 @@ mod tests {
     use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use inference::{RerankRequest, RerankResponse};
     use pantograph_runtime_registry::{
-        RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
+        RuntimeRegistration, RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
     };
     use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use std::path::Path;

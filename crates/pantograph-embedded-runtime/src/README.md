@@ -23,7 +23,7 @@ packages.
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including dedicated embedding and Python-sidecar capability builders plus capability-to-lifecycle projection. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
-| `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
+| `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
@@ -125,6 +125,9 @@ embedded-runtime crate.
 - Runtime-registry sync, snapshot, reclaim, stop-all, and restore orchestration
   may be decomposed into helper modules, but those helpers must remain
   backend-owned and must not be reintroduced as Tauri-local sequencing code.
+- Active-runtime registration used by scheduler diagnostics and reservation
+  paths must stay in shared backend registry helpers so workflow execution does
+  not re-derive registration shape in multiple call sites.
 - Execution-path runtime snapshot override reconciliation must stay in backend
   Rust so workflow adapters do not drift on when Python-sidecar or
   embedding-path execution facts become shared registry observations, and so
