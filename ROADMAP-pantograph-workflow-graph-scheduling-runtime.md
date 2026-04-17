@@ -22,12 +22,16 @@ implementation progress in the runtime and diagnostics layers.
 
 Runtime adapter unification and workflow-adapter hardening now have a dedicated
 Milestone 5 implementation plan in
-`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`.
-The roadmap remains the cross-target summary, while milestone-level workflow
-adapter sequencing and standards constraints are tracked in that dedicated
-plan. The transport-hardening and binding-review slices in that plan are now
-complete; the remaining work is recovery/idempotency verification plus
-README/source-of-truth close-out.
+`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`,
+and the diagnostics/documentation/rollout-safety close-out now has a dedicated
+Milestone 6 implementation plan in
+`IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
+The roadmap remains the cross-target summary, while milestone-level runtime
+adapter sequencing and close-out constraints are tracked in those dedicated
+plans. Milestone 5 transport hardening, binding review, recovery/idempotency
+verification, and source-of-truth close-out are complete; the remaining
+runtime-adapter-unification follow-through now sits in Milestone 6
+documentation and rollout-safety work.
 
 ### Completed groundwork already in the repo
 
@@ -152,13 +156,13 @@ README/source-of-truth close-out.
 - Metrics/trace hardening for runtime lifecycle visibility
 - Contract normalization across workflow service, Tauri diagnostics, embedded
   runtime wiring, and gateway lifecycle reporting
-- Source-of-truth and recovery close-out work for the dedicated Milestone 5
-  workflow/adapter plan
+- Source-of-truth, documentation, and rollout-safety close-out work for the
+  dedicated Milestone 6 runtime-registry plan
 
 ### Next gate before more implementation breadth
 
-- Finish the remaining recovery/idempotency and documentation close-out work in
-  the dedicated Milestone 5 plan so roadmap and plan state match the codebase
+- Finish the documentation, rollout-safety, and traceability work in the
+  dedicated Milestone 6 plan so roadmap and plan state match the codebase
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
   backend-owned runtime-registry boundary instead of reopening completed

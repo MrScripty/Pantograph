@@ -20,15 +20,14 @@ The accurate status is:
   completed
 - runtime-registry Milestone 4, Technical-Fit Selection Integration:
   completed
-- runtime-registry Milestone 5, Workflow And Adapter Integration: in progress
-  in `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
-  with transport hardening and binding review complete, and close-out/recovery
-  verification remaining
-- runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
-  Safety: in progress
-- current next milestone focus: Milestone 5 close-out and Milestone 6
-  source-of-truth/documentation work, with detailed sequencing tracked in
+- runtime-registry Milestone 5, Workflow And Adapter Integration: completed in
   `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+- runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
+  Safety: in progress in
+  `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+- current next milestone focus: Milestone 6 documentation, rollout-safety, and
+  final source-of-truth reconciliation work, with detailed sequencing tracked
+  in `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
 - stop rule remains active for later milestones: runtime-registry work must
   preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
@@ -815,13 +814,13 @@ Detailed source of truth:
 `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 
 **Tasks:**
-- [ ] Wire registry decisions through Tauri workflow host/task-execution paths
+- [x] Wire registry decisions through Tauri workflow host/task-execution paths
   while keeping adapters thin
-- [ ] Keep workflow service and host adapters aligned with service-independence
+- [x] Keep workflow service and host adapters aligned with service-independence
   standards
 - [x] Ensure runtime-not-ready and admission-failure paths stay deterministic
   and machine-consumable
-- [ ] Verify binding/adapter surfaces remain transport wrappers rather than
+- [x] Verify binding/adapter surfaces remain transport wrappers rather than
   policy owners
 
 **Progress:**
@@ -843,9 +842,9 @@ Detailed source of truth:
 - 2026-04-16: Workflow trace ownership, diagnostics projection boundaries,
   runtime-debug transport semantics, recovery-shaped reconciliation coverage,
   and binding-wrapper transport scaffolding were completed and are now tracked
-  in detail by the dedicated Milestone 5 implementation plan. The remaining
-  work in that file is close-out: replay/recovery verification, README/source-
-  of-truth reconciliation, and final documentation alignment.
+  in detail by the dedicated Milestone 5 implementation plan, which also
+  records the completed replay/recovery verification, README updates, and
+  source-of-truth reconciliation that closed the milestone.
 
 **Verification:**
 - `cargo check --manifest-path src-tauri/Cargo.toml`
@@ -853,12 +852,15 @@ Detailed source of truth:
 - acceptance check proving producer semantics survive adapter binding and
   execution
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 6: Diagnostics, Documentation, And Rollout Safety
 
 **Goal:** Make the system observable and keep the codebase aligned after the
 refactor lands.
+
+Detailed sequencing and standards-review notes for this milestone now live in
+`IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
 
 **Tasks:**
 - [x] Expose runtime-registry snapshots and recent decision diagnostics for
@@ -901,9 +903,9 @@ refactor lands.
 
 ### What must happen next
 
-1. Finish the remaining close-out work in the dedicated Milestone 5 plan:
-   replay/recovery/idempotency verification, README updates, and source-of-
-   truth reconciliation across roadmap and umbrella-plan files.
+1. Execute the dedicated Milestone 6 plan: close the remaining README,
+   rollout-safety, ADR/operator-doc, and source-of-truth reconciliation work
+   without reopening completed transport or runtime-policy refactors.
 2. Keep Milestone 6 focused on documentation, rollout-safety decisions, and
    any truly needed operator-facing guidance rather than reopening completed
    transport or binding refactors.
@@ -911,7 +913,7 @@ refactor lands.
    aligned with ADR-002 and the README boundary decisions already landed in
    Milestone 1 and reinforced by the completed Milestone 4 technical-fit
    integration.
-4. Re-plan immediately if Milestone 5 or 6 work would move policy back into
+4. Re-plan immediately if Milestone 6 work would move policy back into
    Tauri/binding layers, require a new persisted artifact, or expand recovery
    ownership beyond the current backend-owned runtime-registry boundary.
 
