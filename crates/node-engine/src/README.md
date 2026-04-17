@@ -14,6 +14,7 @@ and keeps execution dispatch aligned with the contracts published by
 | `core_executor.rs` | Main node-type dispatch, dependency-aware execution, and payload normalization. |
 | `descriptor.rs` | Node descriptor contracts consumed by the graph and runtime layers. |
 | `engine.rs` | Workflow engine entry points and orchestration helpers. |
+| `engine/` | Focused graph-event and multi-demand helpers behind the stable engine facade. |
 | `error.rs` | Shared engine and execution error types. |
 | `events.rs` | Stable facade for workflow event contracts and sink implementations. |
 | `events/` | Focused event contract, sink, and test modules behind the stable facade. |

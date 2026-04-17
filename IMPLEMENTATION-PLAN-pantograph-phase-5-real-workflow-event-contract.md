@@ -423,6 +423,10 @@ Update during implementation:
   `crates/node-engine/src/events/`, keeping `crate::events` as the stable
   facade while moving workflow-event contract and sink implementations into
   focused modules with dedicated README coverage.
+- 2026-04-17: Second Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/`, moving graph-mutation and incremental-run
+  event helpers behind focused internal modules so later workflow-event
+  completion work no longer needs to deepen `engine.rs` directly.
 
 ## Commit Cadence Notes
 

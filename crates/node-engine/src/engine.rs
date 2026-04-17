@@ -46,6 +46,9 @@ use crate::events::{EventSink, WorkflowEvent};
 use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
 
+mod graph_events;
+mod multi_demand;
+
 /// Trait for executing a single node/task
 ///
 /// This abstracts the actual execution logic, allowing different
@@ -93,25 +96,6 @@ pub struct DemandEngine {
     global_version: u64,
     /// Execution ID for events
     execution_id: String,
-}
-
-fn collect_dirty_tasks(graph: &WorkflowGraph, root_node_id: &NodeId) -> Vec<NodeId> {
-    let mut visited = HashSet::new();
-    let mut stack = vec![root_node_id.clone()];
-
-    while let Some(node_id) = stack.pop() {
-        if !visited.insert(node_id.clone()) {
-            continue;
-        }
-
-        for dependent in graph.get_dependents(&node_id) {
-            stack.push(dependent);
-        }
-    }
-
-    let mut dirty_tasks = visited.into_iter().collect::<Vec<_>>();
-    dirty_tasks.sort();
-    dirty_tasks
 }
 
 fn unresolved_human_input_prompt(
@@ -437,19 +421,16 @@ impl DemandEngine {
         event_sink: &dyn EventSink,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-        let mut results = HashMap::new();
-
-        // For now, execute sequentially. Parallel execution would require
-        // more complex dependency analysis to find independent subgraphs.
-        // This is a future optimization.
-        for node_id in node_ids {
-            let output = self
-                .demand(node_id, graph, executor, context, event_sink, extensions)
-                .await?;
-            results.insert(node_id.clone(), output);
-        }
-
-        Ok(results)
+        multi_demand::demand_multiple_sequential(
+            self,
+            node_ids,
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+        )
+        .await
     }
 
     /// Invalidate cache for a node and all its downstream dependents
@@ -590,29 +571,23 @@ impl WorkflowExecutor {
     }
 
     fn emit_graph_modified(&self, workflow_id: String, dirty_tasks: Vec<NodeId>) {
-        if dirty_tasks.is_empty() {
-            return;
-        }
-
-        let _ = self.send_event(WorkflowEvent::GraphModified {
+        if let Some(event) = graph_events::graph_modified_event(
             workflow_id,
-            execution_id: self.execution_id.clone(),
+            &self.execution_id,
             dirty_tasks,
-            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-        });
+        ) {
+            let _ = self.send_event(event);
+        }
     }
 
     fn emit_incremental_execution_started(&self, workflow_id: String, task_ids: Vec<NodeId>) {
-        if task_ids.is_empty() {
-            return;
-        }
-
-        let _ = self.send_event(WorkflowEvent::IncrementalExecutionStarted {
+        if let Some(event) = graph_events::incremental_execution_started_event(
             workflow_id,
-            execution_id: self.execution_id.clone(),
-            tasks: task_ids,
-            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-        });
+            &self.execution_id,
+            task_ids,
+        ) {
+            let _ = self.send_event(event);
+        }
     }
 
     /// Demand output from a specific node
@@ -668,7 +643,10 @@ impl WorkflowExecutor {
     pub async fn mark_modified(&self, node_id: &NodeId) {
         let (workflow_id, dirty_tasks) = {
             let graph = self.graph.read().await;
-            (graph.id.clone(), collect_dirty_tasks(&graph, node_id))
+            (
+                graph.id.clone(),
+                graph_events::collect_dirty_tasks(&graph, node_id),
+            )
         };
         let mut engine = self.demand_engine.write().await;
         engine.mark_modified(node_id);
@@ -745,11 +723,7 @@ impl WorkflowExecutor {
     /// This clears all caches since the graph structure may have changed.
     pub async fn restore_graph_snapshot(&self, graph: WorkflowGraph) {
         let workflow_id = graph.id.clone();
-        let dirty_tasks = graph
-            .nodes
-            .iter()
-            .map(|node| node.id.clone())
-            .collect::<Vec<_>>();
+        let dirty_tasks = graph_events::snapshot_dirty_tasks(&graph);
         {
             let mut current_graph = self.graph.write().await;
             *current_graph = graph;

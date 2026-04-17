@@ -388,6 +388,10 @@ Update during implementation:
 - 2026-04-17: First Milestone 1 decomposition slice landed in
   `crates/node-engine/src/events/`, reducing one shared `node-engine` hot spot
   before dependency-planning and bounded-parallel coordinator work begins.
+- 2026-04-17: Second Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/`, extracting the current sequential
+  multi-demand path and incremental graph-event helpers so the future bounded
+  parallel coordinator has a focused insertion boundary.
 
 ## Commit Cadence Notes
 
