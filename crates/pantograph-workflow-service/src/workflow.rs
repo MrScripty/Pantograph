@@ -5365,6 +5365,13 @@ mod tests {
             snapshot.items[0].scheduler_decision_reason,
             Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity)
         );
+        assert_eq!(
+            snapshot
+                .diagnostics
+                .as_ref()
+                .and_then(|diagnostics| diagnostics.next_admission_reason),
+            Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity)
+        );
         assert!(
             tokio::time::timeout(Duration::from_millis(30), &mut second_run)
                 .await
@@ -5442,6 +5449,13 @@ mod tests {
         );
         assert_eq!(
             snapshot.items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission)
+        );
+        assert_eq!(
+            snapshot
+                .diagnostics
+                .as_ref()
+                .and_then(|diagnostics| diagnostics.next_admission_reason),
             Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission)
         );
         assert!(

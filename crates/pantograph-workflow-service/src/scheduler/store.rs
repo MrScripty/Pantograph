@@ -358,6 +358,30 @@ impl WorkflowSessionStore {
         admission_input.has_active_run = false;
         let predicted_admission =
             PriorityThenFifoSchedulerPolicy.predicted_admission_decision(&admission_input);
+        let next_admission_queue_id = predicted_admission
+            .as_ref()
+            .and_then(|decision| decision.admitted_queue_id.clone());
+        let next_admission_reason = next_admission_queue_id
+            .as_deref()
+            .and_then(|queue_id| {
+                state
+                    .queue
+                    .iter()
+                    .find(|queued| queued.queue_id == queue_id)
+                    .map(|queued| queued.scheduler_decision_reason)
+            })
+            .filter(|reason| {
+                matches!(
+                    reason,
+                    WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity
+                        | WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission
+                )
+            })
+            .or_else(|| {
+                predicted_admission
+                    .as_ref()
+                    .and_then(|decision| decision.reason)
+            });
 
         let runtime_capacity_pressure = if loaded_session_count < self.max_loaded_sessions {
             WorkflowSchedulerRuntimeCapacityPressure::Available
@@ -373,13 +397,11 @@ impl WorkflowSessionStore {
             reclaimable_loaded_session_count,
             runtime_capacity_pressure,
             active_run_blocks_admission,
-            next_admission_queue_id: predicted_admission
-                .as_ref()
-                .and_then(|decision| decision.admitted_queue_id.clone()),
+            next_admission_queue_id,
             next_admission_after_runs: predicted_admission
                 .as_ref()
                 .map(|_| usize::from(active_run_blocks_admission)),
-            next_admission_reason: predicted_admission.and_then(|decision| decision.reason),
+            next_admission_reason,
         })
     }
 
