@@ -570,6 +570,9 @@ Update during implementation:
   capability shaping into the shared backend capability module so
   `EmbeddedWorkflowHost` no longer owns those `WorkflowRuntimeCapability`
   translations inline.
+- 2026-04-17: Added backend parity coverage for managed, host,
+  dedicated-embedding, and Python-sidecar capability builders so Milestone 3
+  now pins the shared runtime-capability contract across producer families.
 
 ## Commit Cadence Notes
 

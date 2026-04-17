@@ -107,6 +107,10 @@ embedded-runtime crate.
 - Managed-runtime, host-runtime, and Python-sidecar capability shaping must
   stay in the shared backend capability helper module rather than being
   rebuilt inside `EmbeddedWorkflowHost` or Tauri adapters.
+- Capability parity across managed, host, dedicated-embedding, and Python-
+  sidecar producers must be pinned by backend tests so later producer-specific
+  additions do not silently drift on runtime ids, install-state semantics, or
+  required capability fields.
 - Capability-driven lifecycle projection for diagnostics and workflow fallback
   paths must stay in the shared backend capability helper module rather than
   being rebuilt inside workflow adapters.

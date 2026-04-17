@@ -296,6 +296,23 @@ mod tests {
     use super::*;
     use inference::backend::{BackendCapabilities, BackendDefaultStartMode};
 
+    fn assert_runtime_capability_contract(
+        capability: &WorkflowRuntimeCapability,
+        expected_runtime_id: &str,
+        expected_source_kind: WorkflowRuntimeSourceKind,
+        expected_install_state: WorkflowRuntimeInstallState,
+    ) {
+        assert_eq!(capability.runtime_id, expected_runtime_id);
+        assert_eq!(capability.source_kind, expected_source_kind);
+        assert_eq!(capability.install_state, expected_install_state);
+        assert!(!capability.display_name.trim().is_empty());
+        assert!(capability
+            .backend_keys
+            .iter()
+            .all(|backend_key| !backend_key.trim().is_empty()));
+        assert!(!capability.backend_keys.is_empty());
+    }
+
     #[test]
     fn dedicated_embedding_runtime_capability_reports_dedicated_runtime() {
         let capabilities =
@@ -491,6 +508,106 @@ mod tests {
         assert_eq!(
             capability.install_state,
             WorkflowRuntimeInstallState::Installed
+        );
+    }
+
+    #[test]
+    fn runtime_capability_contract_family_stays_aligned_across_producers() {
+        let managed_capability = managed_runtime_capabilities(
+            &[inference::ManagedBinaryCapability {
+                id: inference::ManagedBinaryId::LlamaCpp,
+                display_name: "llama.cpp".to_string(),
+                install_state: inference::ManagedBinaryInstallState::Installed,
+                available: true,
+                can_install: false,
+                can_remove: true,
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+            &[inference::BackendInfo {
+                name: "llama.cpp".to_string(),
+                backend_key: "llama_cpp".to_string(),
+                description: "Managed llama.cpp runtime".to_string(),
+                capabilities: BackendCapabilities {
+                    external_connection: true,
+                    ..BackendCapabilities::default()
+                },
+                default_start_mode: BackendDefaultStartMode::Inference,
+                active: false,
+                available: true,
+                unavailable_reason: None,
+                can_install: true,
+                runtime_binary_id: Some(inference::ManagedBinaryId::LlamaCpp),
+            }],
+            "llama_cpp",
+        )
+        .remove(0);
+
+        let host_capability = host_runtime_capabilities(
+            &[inference::BackendInfo {
+                name: "Candle".to_string(),
+                backend_key: "candle".to_string(),
+                description: "In-process Candle inference".to_string(),
+                capabilities: BackendCapabilities {
+                    external_connection: false,
+                    ..BackendCapabilities::default()
+                },
+                default_start_mode: BackendDefaultStartMode::Embedding,
+                active: true,
+                available: true,
+                unavailable_reason: None,
+                can_install: false,
+                runtime_binary_id: None,
+            }],
+            "candle",
+        )
+        .remove(0);
+
+        let embedding_capability =
+            dedicated_embedding_runtime_capabilities(Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("embedding-runtime-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }))
+            .remove(0);
+
+        let python_capability = python_runtime_capabilities(
+            Ok(std::path::PathBuf::from("/usr/bin/python3")),
+            "pytorch",
+        )
+        .into_iter()
+        .find(|capability| capability.runtime_id == "pytorch")
+        .expect("pytorch capability");
+
+        assert_runtime_capability_contract(
+            &managed_capability,
+            "llama_cpp",
+            WorkflowRuntimeSourceKind::Managed,
+            WorkflowRuntimeInstallState::Installed,
+        );
+        assert_runtime_capability_contract(
+            &host_capability,
+            "candle",
+            WorkflowRuntimeSourceKind::Host,
+            WorkflowRuntimeInstallState::SystemProvided,
+        );
+        assert_runtime_capability_contract(
+            &embedding_capability,
+            "llama.cpp.embedding",
+            WorkflowRuntimeSourceKind::Host,
+            WorkflowRuntimeInstallState::Installed,
+        );
+        assert_runtime_capability_contract(
+            &python_capability,
+            "pytorch",
+            WorkflowRuntimeSourceKind::System,
+            WorkflowRuntimeInstallState::SystemProvided,
         );
     }
 
