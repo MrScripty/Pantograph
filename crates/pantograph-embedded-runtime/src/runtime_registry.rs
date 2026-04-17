@@ -16,7 +16,7 @@ use pantograph_runtime_identity::{
 };
 use pantograph_runtime_registry::{
     observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistry,
-    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot,
+    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -391,20 +391,61 @@ pub fn reconcile_runtime_registry_snapshot_override(
         .to_string();
     let backend_keys = runtime_backend_key_aliases(&display_name, &runtime_id);
 
-    Some(registry.observe_runtime(RuntimeObservation {
-        runtime_id,
-        display_name: display_name.clone(),
-        backend_keys,
-        model_id: model_id.map(ToOwned::to_owned),
-        status: observed_runtime_status_from_lifecycle(
-            snapshot.active,
-            snapshot.warmup_started_at_ms,
-            snapshot.warmup_completed_at_ms,
-            snapshot.last_error.is_some(),
-        ),
-        runtime_instance_id: snapshot.runtime_instance_id.clone(),
-        last_error: snapshot.last_error.clone(),
-    }))
+    let observation = preserve_matching_unhealthy_runtime(
+        registry,
+        RuntimeObservation {
+            runtime_id,
+            display_name: display_name.clone(),
+            backend_keys,
+            model_id: model_id.map(ToOwned::to_owned),
+            status: observed_runtime_status_from_lifecycle(
+                snapshot.active,
+                snapshot.warmup_started_at_ms,
+                snapshot.warmup_completed_at_ms,
+                snapshot.last_error.is_some(),
+            ),
+            runtime_instance_id: snapshot.runtime_instance_id.clone(),
+            last_error: snapshot.last_error.clone(),
+        },
+    );
+
+    Some(registry.observe_runtime(observation))
+}
+
+fn preserve_matching_unhealthy_runtime(
+    registry: &RuntimeRegistry,
+    mut observation: RuntimeObservation,
+) -> RuntimeObservation {
+    if matches!(
+        observation.status,
+        RuntimeRegistryStatus::Stopped | RuntimeRegistryStatus::Failed
+    ) {
+        return observation;
+    }
+
+    let Some(existing_runtime) = registry
+        .snapshot()
+        .runtimes
+        .into_iter()
+        .find(|runtime| runtime.runtime_id == observation.runtime_id)
+    else {
+        return observation;
+    };
+
+    if existing_runtime.status != RuntimeRegistryStatus::Unhealthy {
+        return observation;
+    }
+
+    if existing_runtime.runtime_instance_id != observation.runtime_instance_id {
+        return observation;
+    }
+
+    observation.status = RuntimeRegistryStatus::Unhealthy;
+    if observation.last_error.is_none() {
+        observation.last_error = existing_runtime.last_error;
+    }
+
+    observation
 }
 
 pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController + Sync>(
@@ -1005,6 +1046,41 @@ mod tests {
             .find(|runtime| runtime.runtime_id == "pytorch")
             .expect("python runtime should be present in registry");
         assert!(pytorch.backend_keys.contains(&"pytorch".to_string()));
+    }
+
+    #[test]
+    fn reconcile_snapshot_override_preserves_matching_unhealthy_runtime() {
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtime(RuntimeObservation {
+            runtime_id: "pytorch".to_string(),
+            display_name: "PyTorch (Python sidecar)".to_string(),
+            backend_keys: vec!["pytorch".to_string()],
+            model_id: Some("/models/failed.safetensors".to_string()),
+            status: RuntimeRegistryStatus::Unhealthy,
+            runtime_instance_id: Some("python-runtime:pytorch:venv_torch".to_string()),
+            last_error: Some("probe timeout".to_string()),
+        });
+
+        let pytorch = reconcile_runtime_registry_snapshot_override(
+            &registry,
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:venv_torch".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            },
+            Some("/models/retry.safetensors"),
+        )
+        .expect("python snapshot should be reconciled");
+
+        assert_eq!(pytorch.status, RuntimeRegistryStatus::Unhealthy);
+        assert_eq!(pytorch.last_error.as_deref(), Some("probe timeout"));
+        assert_eq!(pytorch.models[0].model_id, "/models/retry.safetensors");
     }
 
     #[tokio::test]

@@ -605,6 +605,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   `crates/pantograph-embedded-runtime`, leaving the Tauri orchestration module
   to inject state and forward events instead of owning composite task
   execution or registry-aware Python runtime observation handling.
+- Execution-path runtime snapshot overrides now also preserve a matching
+  producer's existing `unhealthy` registry state, so Python-sidecar or other
+  non-gateway execution observations do not silently downgrade backend-owned
+  health assessment failures back to lifecycle-ready snapshots.
 
 **Still missing:**
 
