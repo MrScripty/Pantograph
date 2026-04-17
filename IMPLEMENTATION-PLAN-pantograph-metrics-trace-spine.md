@@ -433,6 +433,10 @@ Update during implementation:
   diagnostics store to reset execution overlays when the canonical trace resets
   into a new attempt, preventing stale node progress/event history from
   leaking across retry-shaped `RunStarted` transitions.
+- 2026-04-17: Thirty-ninth implementation slice added direct Tauri workflow
+  adapter coverage proving restarted `node-engine` executions preserve that
+  backend-owned reset behavior through transport adaptation and do not retain
+  stale diagnostics overlay state from the prior attempt.
 
 ## Commit Cadence Notes
 

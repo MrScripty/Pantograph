@@ -457,6 +457,62 @@ mod tests {
     }
 
     #[test]
+    fn translated_restarted_execution_resets_diagnostics_overlay_state() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let _ = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::WorkflowStarted {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(100),
+            },
+        );
+        let _ = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::TaskProgress {
+                task_id: "node-a".to_string(),
+                execution_id: "exec-1".to_string(),
+                progress: 0.5,
+                message: Some("halfway".to_string()),
+                occurred_at_ms: Some(120),
+            },
+        );
+        let _ = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::WorkflowCompleted {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(140),
+            },
+        );
+
+        let (_, diagnostics_event) = translate_node_event_with_diagnostics(
+            &diagnostics_store,
+            node_engine::WorkflowEvent::WorkflowStarted {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(200),
+            },
+        );
+
+        match diagnostics_event {
+            super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+                let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+                assert_eq!(
+                    trace.status,
+                    crate::workflow::diagnostics::DiagnosticsRunStatus::Running
+                );
+                assert_eq!(trace.started_at_ms, 200);
+                assert_eq!(trace.event_count, 1);
+                assert_eq!(trace.events.len(), 1);
+                assert_eq!(trace.events[0].event_type, "Started");
+                assert!(trace.nodes.is_empty());
+            }
+            other => panic!("unexpected diagnostics event: {other:?}"),
+        }
+    }
+
+    #[test]
     fn adapter_send_emits_primary_and_diagnostics_events() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
         let emitted = Arc::new(Mutex::new(Vec::<Value>::new()));

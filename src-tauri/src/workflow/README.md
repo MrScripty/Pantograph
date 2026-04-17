@@ -225,6 +225,10 @@ let snapshot = workflow_service
   diagnostics overlay for that execution must reset alongside it so stale
   progress text, node overlays, and retained event history do not leak across
   retries.
+- The workflow event adapter must preserve that retry/reset behavior when
+  translating `node-engine` events, so restarted executions remain one backend-
+  owned trace with fresh attempt-local diagnostics state instead of a layered
+  transport reconstruction.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle
