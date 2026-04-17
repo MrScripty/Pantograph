@@ -655,6 +655,10 @@ Update during implementation:
   an immediate `SchedulerBusy` failure when loaded-session capacity is fully
   occupied by active work; the selected candidate now stays queued with
   `waiting_for_runtime_capacity` until a real rebalance or release path opens.
+- 2026-04-17: Added a backend-owned runtime-registry admission dry-run seam so
+  workflow-session runs can remain queued with `waiting_for_runtime_admission`
+  when the active runtime cannot currently accept another reservation, instead
+  of dequeuing and then failing after runtime load begins.
 
 ## Commit Cadence Notes
 

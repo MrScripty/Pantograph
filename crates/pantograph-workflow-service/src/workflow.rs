@@ -676,6 +676,16 @@ pub trait WorkflowHost: Send + Sync {
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError>;
 
     /// Load session runtime resources (model runtime, worker state) when needed.
+    async fn can_load_session_runtime(
+        &self,
+        _session_id: &str,
+        _workflow_id: &str,
+        _usage_profile: Option<&str>,
+        _retention_hint: WorkflowSessionRetentionHint,
+    ) -> Result<bool, WorkflowServiceError> {
+        Ok(true)
+    }
+
     async fn load_session_runtime(
         &self,
         _session_id: &str,
@@ -1011,6 +1021,43 @@ impl WorkflowService {
         };
 
         let queued_run = loop {
+            let session_ready_to_load = {
+                let mut store = self.session_store.lock().map_err(|_| {
+                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
+                })?;
+                if !store.queued_run_is_admission_candidate(&session_id, &queue_id)? {
+                    None
+                } else {
+                    Some(store.session_summary(&session_id)?)
+                }
+            };
+            if let Some(session) = session_ready_to_load {
+                let retention_hint = if session.keep_alive {
+                    WorkflowSessionRetentionHint::KeepAlive
+                } else {
+                    WorkflowSessionRetentionHint::Ephemeral
+                };
+                if !host
+                    .can_load_session_runtime(
+                        &session.session_id,
+                        &session.workflow_id,
+                        session.usage_profile.as_deref(),
+                        retention_hint,
+                    )
+                    .await?
+                {
+                    if let Ok(mut store) = self.session_store.lock() {
+                        let _ = store.set_queue_decision_reason_if_present(
+                            &session_id,
+                            &queue_id,
+                            WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
+                        );
+                    }
+                    tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
+                    continue;
+                }
+            }
+
             let maybe_queued = {
                 let mut store = self.session_store.lock().map_err(|_| {
                     WorkflowServiceError::Internal("session store lock poisoned".to_string())
@@ -2632,6 +2679,21 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
+    struct AdmissionGatedHost {
+        capabilities: WorkflowHostCapabilities,
+        admission_open: Arc<AtomicBool>,
+    }
+
+    impl AdmissionGatedHost {
+        fn new(admission_open: Arc<AtomicBool>) -> Self {
+            Self {
+                capabilities: MockWorkflowHost::new(8, 1024).capabilities,
+                admission_open,
+            }
+        }
+    }
+
     struct RecordingRuntimeHost {
         retention_hints: Arc<Mutex<Vec<WorkflowSessionRetentionHint>>>,
         capabilities: WorkflowHostCapabilities,
@@ -2997,6 +3059,52 @@ mod tests {
                 self.release_first_run.notified().await;
             }
 
+            Ok(vec![WorkflowPortBinding {
+                node_id: "text-output-1".to_string(),
+                port_id: "text".to_string(),
+                value: serde_json::json!("ok"),
+            }])
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowHost for AdmissionGatedHost {
+        async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+            Ok(())
+        }
+
+        async fn workflow_graph_fingerprint(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<String, WorkflowServiceError> {
+            Ok("admission-gated-graph".to_string())
+        }
+
+        async fn workflow_capabilities(
+            &self,
+            _workflow_id: &str,
+        ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+            Ok(self.capabilities.clone())
+        }
+
+        async fn can_load_session_runtime(
+            &self,
+            _session_id: &str,
+            _workflow_id: &str,
+            _usage_profile: Option<&str>,
+            _retention_hint: WorkflowSessionRetentionHint,
+        ) -> Result<bool, WorkflowServiceError> {
+            Ok(self.admission_open.load(Ordering::SeqCst))
+        }
+
+        async fn run_workflow(
+            &self,
+            _workflow_id: &str,
+            _inputs: &[WorkflowPortBinding],
+            _output_targets: Option<&[WorkflowOutputTarget]>,
+            _run_options: WorkflowRunOptions,
+            _run_handle: WorkflowRunHandle,
+        ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
             Ok(vec![WorkflowPortBinding {
                 node_id: "text-output-1".to_string(),
                 port_id: "text".to_string(),
@@ -5277,6 +5385,79 @@ mod tests {
 
         assert_eq!(first_response.outputs.len(), 1);
         assert_eq!(second_response.outputs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn workflow_session_run_waits_for_runtime_admission_before_dequeue() {
+        let admission_open = Arc::new(AtomicBool::new(false));
+        let host = AdmissionGatedHost::new(admission_open.clone());
+        let service = WorkflowService::with_capacity_limits(1, 1);
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-gated".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create gated session");
+
+        let run_service = service.clone();
+        let run_host = host.clone();
+        let session_id = created.session_id.clone();
+        let mut run = tokio::spawn(async move {
+            run_service
+                .run_workflow_session(
+                    &run_host,
+                    WorkflowSessionRunRequest {
+                        session_id,
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("run-gated".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
+                session_id: created.session_id.clone(),
+            })
+            .await
+            .expect("scheduler snapshot while admission is blocked");
+
+        assert_eq!(snapshot.session.state, WorkflowSessionState::IdleUnloaded);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(
+            snapshot.items[0].status,
+            WorkflowSessionQueueItemStatus::Pending
+        );
+        assert_eq!(
+            snapshot.items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission)
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), &mut run)
+                .await
+                .is_err(),
+            "run should remain queued until runtime admission opens"
+        );
+
+        admission_open.store(true, Ordering::SeqCst);
+
+        let response = run
+            .await
+            .expect("run join")
+            .expect("run response after admission opens");
+        assert_eq!(response.outputs.len(), 1);
     }
 
     #[tokio::test]

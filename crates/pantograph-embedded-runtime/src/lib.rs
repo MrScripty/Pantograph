@@ -1821,6 +1821,51 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         Ok(runtimes)
     }
 
+    async fn can_load_session_runtime(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+        retention_hint: WorkflowSessionRetentionHint,
+    ) -> Result<bool, WorkflowServiceError> {
+        let Some(runtime_registry) = self.runtime_registry.as_ref() else {
+            return Ok(true);
+        };
+
+        let mode_info = self.gateway.mode_info().await;
+        let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
+        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
+        let requirements = Self::reservation_requirements(
+            &WorkflowHost::workflow_capabilities(self, workflow_id)
+                .await?
+                .runtime_requirements,
+        );
+
+        runtime_registry.register_runtime(
+            RuntimeRegistration::new(
+                descriptor.runtime_id.clone(),
+                descriptor.display_name.clone(),
+            )
+            .with_backend_keys(descriptor.backend_keys.clone()),
+        );
+
+        match runtime_registry.can_acquire_reservation(&RuntimeReservationRequest {
+            runtime_id: descriptor.runtime_id,
+            workflow_id: workflow_id.to_string(),
+            reservation_owner_id: Some(session_id.to_string()),
+            usage_profile: Self::trimmed_optional(usage_profile),
+            model_id: mode_info.active_model_target,
+            pin_runtime: false,
+            requirements,
+            retention_hint: Self::runtime_retention_hint(retention_hint),
+        }) {
+            Ok(()) => Ok(true),
+            Err(RuntimeRegistryError::AdmissionRejected { .. })
+            | Err(RuntimeRegistryError::ReservationRejected(_)) => Ok(false),
+            Err(error) => Err(Self::workflow_service_error_from_runtime_registry(error)),
+        }
+    }
+
     async fn load_session_runtime(
         &self,
         session_id: &str,

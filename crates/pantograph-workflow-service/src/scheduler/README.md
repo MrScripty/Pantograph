@@ -60,6 +60,9 @@ When loaded-session capacity is saturated by active runs with no reclaimable
 idle runtime, the selected candidate now stays queued with the explicit
 `waiting_for_runtime_capacity` reason instead of being admitted and then
 failing immediately with a capacity error.
+When backend runtime-registry admission would currently reject a session load,
+the candidate now also stays queued with `waiting_for_runtime_admission`
+instead of dequeuing into an immediate runtime-load failure.
 `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation logic.

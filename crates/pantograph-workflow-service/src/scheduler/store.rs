@@ -428,6 +428,70 @@ impl WorkflowSessionStore {
         Ok(queue_id)
     }
 
+    pub(crate) fn queued_run_is_admission_candidate(
+        &mut self,
+        session_id: &str,
+        queue_id: &str,
+    ) -> Result<bool, WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+
+        if let Some(active_run) = state.active_run.as_ref() {
+            if active_run.queue_id == queue_id
+                || state.queue.iter().any(|item| item.queue_id == queue_id)
+            {
+                Self::mark_session_access(state, tick);
+                return Ok(false);
+            }
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "queue item '{}' not found in session '{}'",
+                queue_id, session_id
+            )));
+        }
+
+        if !state.queue.iter().any(|item| item.queue_id == queue_id) {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "queue item '{}' not found in session '{}'",
+                queue_id, session_id
+            )));
+        }
+
+        let policy = PriorityThenFifoSchedulerPolicy;
+        policy.refresh_queue(&mut state.queue);
+        let admission_input = Self::admission_input_from_state(state);
+        let candidate = policy
+            .predicted_admission_decision(&admission_input)
+            .and_then(|decision| decision.admitted_queue_id)
+            .as_deref()
+            == Some(queue_id);
+        Self::mark_session_access(state, tick);
+        Ok(candidate)
+    }
+
+    pub(crate) fn set_queue_decision_reason_if_present(
+        &mut self,
+        session_id: &str,
+        queue_id: &str,
+        reason: WorkflowSchedulerDecisionReason,
+    ) -> Result<bool, WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let Some(queued) = state
+            .queue
+            .iter_mut()
+            .find(|queued| queued.queue_id == queue_id)
+        else {
+            return Ok(false);
+        };
+        queued.scheduler_decision_reason = reason;
+        Self::mark_session_access(state, tick);
+        Ok(true)
+    }
+
     pub(crate) fn begin_queued_run(
         &mut self,
         session_id: &str,

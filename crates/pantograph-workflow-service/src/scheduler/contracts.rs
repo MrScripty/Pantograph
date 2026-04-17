@@ -140,6 +140,7 @@ pub enum WorkflowSchedulerDecisionReason {
     FifoPriorityTieBreak,
     WaitingForHigherPriority,
     WaitingForRuntimeCapacity,
+    WaitingForRuntimeAdmission,
     StarvationProtection,
     WarmSessionReused,
     RuntimeReloadRequired,
@@ -166,6 +167,9 @@ impl WorkflowSchedulerDecisionReason {
             }
             WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity => {
                 "waiting_for_runtime_capacity"
+            }
+            WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission => {
+                "waiting_for_runtime_admission"
             }
             WorkflowSchedulerDecisionReason::StarvationProtection => "starvation_protection",
             WorkflowSchedulerDecisionReason::WarmSessionReused => "warm_session_reused",

@@ -298,6 +298,49 @@ impl RuntimeRegistry {
         Ok(reservation.into_lease())
     }
 
+    pub fn can_acquire_reservation(
+        &self,
+        request: &RuntimeReservationRequest,
+    ) -> Result<(), RuntimeRegistryError> {
+        let runtime_id = canonical_runtime_id(&request.runtime_id);
+        let guard = self
+            .state
+            .lock()
+            .expect("runtime registry state lock poisoned");
+
+        if let Some(owner_id) = request.reservation_owner_id.as_deref() {
+            if let Some(existing_reservation_id) = guard
+                .reservations
+                .values()
+                .find(|reservation| reservation.reservation_owner_id.as_deref() == Some(owner_id))
+                .map(|reservation| reservation.reservation_id)
+            {
+                let existing_runtime_id = guard
+                    .reservations
+                    .get(&existing_reservation_id)
+                    .expect("existing reservation should still exist")
+                    .runtime_id
+                    .clone();
+                if existing_runtime_id != runtime_id {
+                    return Err(RuntimeRegistryError::ReservationOwnerConflict {
+                        owner_id: owner_id.to_string(),
+                        existing_runtime_id,
+                        requested_runtime_id: runtime_id,
+                    });
+                }
+
+                return validate_reservation_request(
+                    &guard,
+                    &runtime_id,
+                    request.requirements.as_ref(),
+                    Some(existing_reservation_id),
+                );
+            }
+        }
+
+        validate_reservation_request(&guard, &runtime_id, request.requirements.as_ref(), None)
+    }
+
     pub fn release_reservation(&self, reservation_id: u64) -> Result<(), RuntimeRegistryError> {
         self.release_reservation_with_disposition(reservation_id)
             .map(|_| ())
@@ -870,6 +913,39 @@ fn admission_failure(
     }
 
     None
+}
+
+fn validate_reservation_request(
+    state: &RuntimeRegistryState,
+    runtime_id: &str,
+    requirements: Option<&RuntimeReservationRequirements>,
+    existing_reservation_id: Option<u64>,
+) -> Result<(), RuntimeRegistryError> {
+    let record = state
+        .runtimes
+        .get(runtime_id)
+        .ok_or_else(|| RuntimeRegistryError::RuntimeNotFound(runtime_id.to_string()))?;
+
+    if matches!(
+        record.status,
+        RuntimeRegistryStatus::Stopping | RuntimeRegistryStatus::Failed
+    ) {
+        return Err(RuntimeRegistryError::ReservationRejected(
+            runtime_id.to_string(),
+        ));
+    }
+
+    let claim = RuntimeReservationClaim::from_requirements(requirements);
+    if let Some(failure) =
+        admission_failure(record, claim, &state.reservations, existing_reservation_id)
+    {
+        return Err(RuntimeRegistryError::AdmissionRejected {
+            runtime_id: runtime_id.to_string(),
+            failure,
+        });
+    }
+
+    Ok(())
 }
 
 fn total_reserved_resource_mb<F>(
@@ -2252,6 +2328,54 @@ mod tests {
                 },
             }
         );
+    }
+
+    #[test]
+    fn can_acquire_reservation_reports_admission_failure_without_creating_reservation() {
+        let registry = RuntimeRegistry::new();
+        registry.register_runtime(
+            RuntimeRegistration::new("llama.cpp", "llama.cpp")
+                .with_admission_budget(RuntimeAdmissionBudget::new(None, Some(4096))),
+        );
+        registry
+            .transition_runtime(
+                "llama.cpp",
+                RuntimeTransition::Ready {
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                },
+            )
+            .expect("ready transition");
+
+        let err = registry
+            .can_acquire_reservation(&RuntimeReservationRequest {
+                runtime_id: "llama.cpp".to_string(),
+                workflow_id: "wf-blocked".to_string(),
+                reservation_owner_id: Some("session-blocked".to_string()),
+                usage_profile: Some("interactive".to_string()),
+                model_id: Some("model-blocked".to_string()),
+                pin_runtime: false,
+                requirements: Some(RuntimeReservationRequirements {
+                    estimated_peak_vram_mb: Some(8192),
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: Some(4096),
+                    estimated_min_ram_mb: None,
+                }),
+                retention_hint: RuntimeRetentionHint::Ephemeral,
+            })
+            .expect_err("dry-run admission check should reject oversized request");
+
+        assert!(matches!(
+            err,
+            RuntimeRegistryError::AdmissionRejected {
+                runtime_id,
+                failure: RuntimeAdmissionFailure::InsufficientVram { .. },
+            } if runtime_id == "llama_cpp"
+        ));
+
+        let snapshot = registry.snapshot();
+        assert!(snapshot.reservations.is_empty());
+        assert_eq!(snapshot.runtimes.len(), 1);
+        assert!(snapshot.runtimes[0].active_reservation_ids.is_empty());
     }
 
     #[test]
