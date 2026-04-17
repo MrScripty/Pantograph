@@ -4,6 +4,7 @@
 //! so runtime-registry lifecycle coordination stays separate from observation
 //! translation and execution-path override reconciliation.
 
+use std::future::Future;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -92,6 +93,21 @@ pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController + Sync>(
 ) -> RuntimeRegistrySnapshot {
     sync_runtime_registry(controller, registry).await;
     registry.snapshot()
+}
+
+pub async fn run_runtime_transition_and_reconcile_runtime_registry<C, F, Fut, T, E>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    transition: F,
+) -> Result<T, E>
+where
+    C: HostRuntimeRegistryController + Sync,
+    F: FnOnce(&C) -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+{
+    let result = transition(controller).await;
+    sync_runtime_registry(controller, registry).await;
+    result
 }
 
 pub async fn consume_active_runtime_warmup_disposition<C: HostRuntimeRegistryController + Sync>(

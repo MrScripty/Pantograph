@@ -1,5 +1,7 @@
 //! Tauri-side re-export of backend-owned runtime-registry helpers.
 
+use std::future::Future;
+
 use async_trait::async_trait;
 
 #[cfg(test)]
@@ -9,9 +11,9 @@ use pantograph_embedded_runtime::runtime_health::RuntimeHealthAssessmentSnapshot
 use pantograph_embedded_runtime::runtime_registry::sync_runtime_registry_with_health_assessments;
 pub use pantograph_embedded_runtime::runtime_registry::{
     reclaim_runtime_and_reconcile_runtime_registry, restore_runtime_and_reconcile_runtime_registry,
-    runtime_registry_snapshot, stop_all_runtime_producers_and_reconcile_runtime_registry,
-    sync_runtime_registry, HostRuntimeProducer, HostRuntimeRegistryController,
-    HostRuntimeRegistryLifecycleController,
+    run_runtime_transition_and_reconcile_runtime_registry, runtime_registry_snapshot,
+    stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
+    HostRuntimeProducer, HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
 };
 use pantograph_embedded_runtime::HostRuntimeModeSnapshot;
 pub use pantograph_runtime_registry::{
@@ -94,6 +96,18 @@ pub async fn reclaim_runtime_and_sync_runtime_registry(
     runtime_id: &str,
 ) -> Result<RuntimeReclaimDisposition, RuntimeRegistryError> {
     reclaim_runtime_and_reconcile_runtime_registry(gateway, registry, runtime_id).await
+}
+
+pub async fn run_runtime_transition_and_sync_runtime_registry<F, Fut, T, E>(
+    gateway: &crate::llm::gateway::InferenceGateway,
+    registry: &RuntimeRegistry,
+    transition: F,
+) -> Result<T, E>
+where
+    F: FnOnce(&crate::llm::gateway::InferenceGateway) -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+{
+    run_runtime_transition_and_reconcile_runtime_registry(gateway, registry, transition).await
 }
 
 #[cfg(test)]

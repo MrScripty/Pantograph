@@ -73,6 +73,9 @@ does not own runtime policy.
 - Runtime-registry injection passes through this layer, but runtime residency
   and admission policy must not be implemented in command handlers or other
   Tauri transport modules.
+- Recovery orchestration may perform host-specific restart steps here, but the
+  “run transition, then reconcile registry” sequencing must stay in backend
+  lifecycle helpers rather than as a separate adapter-local sync step.
 
 ## Revisit Triggers
 - A non-Tauri app root needs the same runtime composition logic and this

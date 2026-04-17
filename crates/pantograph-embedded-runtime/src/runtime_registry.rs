@@ -8,7 +8,8 @@ use crate::runtime_health::RuntimeHealthAssessment;
 pub use crate::runtime_registry_lifecycle::{
     consume_active_runtime_warmup_disposition, reclaim_runtime_and_reconcile_runtime_registry,
     release_reservation_and_reconcile_runtime_registry,
-    restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
+    restore_runtime_and_reconcile_runtime_registry,
+    run_runtime_transition_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     sync_runtime_registry_with_active_health_assessment,
     sync_runtime_registry_with_health_assessments, HostRuntimeRegistryController,
@@ -1718,6 +1719,117 @@ mod tests {
             Some("llama-main-restored")
         );
         assert_eq!(runtime.models[0].model_id, "/models/qwen.gguf");
+    }
+
+    #[tokio::test]
+    async fn run_runtime_transition_and_reconcile_runtime_registry_syncs_after_success() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        };
+        let registry = RuntimeRegistry::new();
+
+        let result = run_runtime_transition_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            |controller| {
+                let mut mode_info = controller
+                    .mode_info
+                    .lock()
+                    .expect("mode info lock poisoned");
+                mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-transition".to_string()),
+                    warmup_started_at_ms: Some(10),
+                    warmup_completed_at_ms: Some(20),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                });
+                std::future::ready(Ok::<_, &'static str>("transition-complete"))
+            },
+        )
+        .await
+        .expect("transition should succeed");
+
+        assert_eq!(result, "transition-complete");
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-transition")
+        );
+    }
+
+    #[tokio::test]
+    async fn run_runtime_transition_and_reconcile_runtime_registry_syncs_after_failure() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-before-failure".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        };
+        let registry = RuntimeRegistry::new();
+        reconcile_runtime_registry_mode_info(&registry, &controller.mode_info_snapshot().await);
+
+        let error = run_runtime_transition_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            |controller| {
+                let mut mode_info = controller
+                    .mode_info
+                    .lock()
+                    .expect("mode info lock poisoned");
+                mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot::default());
+                std::future::ready(Err::<(), _>("transition failed"))
+            },
+        )
+        .await
+        .expect_err("transition should fail");
+
+        assert_eq!(error, "transition failed");
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Stopped);
     }
 
     struct HealthAwareHostRuntimeController {

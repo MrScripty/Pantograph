@@ -13,8 +13,8 @@ use crate::config::{AppConfig, EmbeddingMemoryMode};
 use crate::constants::ports;
 use crate::llm::health_monitor::ServerEvent;
 use crate::llm::port_manager::{check_port_available, find_available_port};
+use crate::llm::runtime_registry::run_runtime_transition_and_sync_runtime_registry;
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
-use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::startup::validate_external_server_url;
 use crate::llm::sync_rag_embedding_url_from_gateway;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
@@ -279,18 +279,41 @@ impl RecoveryManager {
         // Stop existing
         stop_gateway_for_recovery(app, gateway).await;
 
-        gateway
-            .start(&restart_plan.restart_config)
-            .await
-            .map_err(|error| error.to_string())?;
+        if let Some(runtime_registry) = app
+            .try_state::<SharedRuntimeRegistry>()
+            .map(|runtime_registry| runtime_registry.clone())
+        {
+            run_runtime_transition_and_sync_runtime_registry(
+                gateway.as_ref(),
+                runtime_registry.as_ref(),
+                |_| async {
+                    gateway
+                        .start(&restart_plan.restart_config)
+                        .await
+                        .map_err(|error| error.to_string())?;
 
-        if restart_plan.restart_embedding {
-            restart_dedicated_embedding_runtime(app, gateway, &app_config).await?;
+                    if restart_plan.restart_embedding {
+                        restart_dedicated_embedding_runtime(app, gateway, &app_config).await?;
+                    } else {
+                        sync_rag_embedding_url(app, gateway).await;
+                    }
+
+                    Ok::<(), String>(())
+                },
+            )
+            .await?;
         } else {
-            sync_rag_embedding_url(app, gateway).await;
-        }
+            gateway
+                .start(&restart_plan.restart_config)
+                .await
+                .map_err(|error| error.to_string())?;
 
-        sync_runtime_registry_after_recovery_restart(app, gateway).await;
+            if restart_plan.restart_embedding {
+                restart_dedicated_embedding_runtime(app, gateway, &app_config).await?;
+            } else {
+                sync_rag_embedding_url(app, gateway).await;
+            }
+        }
 
         Ok(recovery_port_from_gateway(gateway).await)
     }
@@ -352,17 +375,6 @@ async fn sync_rag_embedding_url(app: &AppHandle, gateway: &SharedGateway) {
     };
 
     sync_rag_embedding_url_from_gateway(gateway, &rag_manager).await;
-}
-
-async fn sync_runtime_registry_after_recovery_restart(app: &AppHandle, gateway: &SharedGateway) {
-    let Some(runtime_registry) = app
-        .try_state::<SharedRuntimeRegistry>()
-        .map(|runtime_registry| runtime_registry.clone())
-    else {
-        return;
-    };
-
-    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
 }
 
 async fn recovery_port_from_gateway(gateway: &SharedGateway) -> u16 {

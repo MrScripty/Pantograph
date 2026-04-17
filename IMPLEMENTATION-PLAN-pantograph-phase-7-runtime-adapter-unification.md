@@ -584,6 +584,9 @@ Update during implementation:
 - 2026-04-17: Added restore-overlap regressions that pin backend lifecycle
   behavior when a restored runtime carries a matching unhealthy assessment
   versus when a fresh runtime instance must replace an older unhealthy record.
+- 2026-04-17: Continued Milestone 4 by adding a backend lifecycle helper for
+  “run transition, then reconcile registry” sequencing so Tauri recovery no
+  longer performs a separate post-restart registry sync step.
 
 ## Commit Cadence Notes
 
