@@ -6,8 +6,7 @@
 
 use pantograph_embedded_runtime::{
     workflow_runtime::{
-        build_runtime_event_projection, reconcile_runtime_registry_stored_projection_overrides,
-        unix_timestamp_ms,
+        build_runtime_event_projection_with_registry_reconciliation, unix_timestamp_ms,
     },
     HostRuntimeModeSnapshot,
 };
@@ -103,23 +102,8 @@ pub async fn workflow_diagnostics_snapshot_response(
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let gateway_mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-    reconcile_runtime_registry_stored_projection_overrides(
+    let runtime_projection = build_runtime_event_projection_with_registry_reconciliation(
         Some(runtime_registry.as_ref()),
-        stored_runtime_snapshots
-            .as_ref()
-            .and_then(|(active_runtime, _)| active_runtime.as_ref()),
-        stored_runtime_snapshots
-            .as_ref()
-            .and_then(|(_, embedding_runtime)| embedding_runtime.as_ref()),
-        stored_runtime_model_targets
-            .as_ref()
-            .and_then(|(active_model_target, _)| active_model_target.as_deref()),
-        stored_runtime_model_targets
-            .as_ref()
-            .and_then(|(_, embedding_model_target)| embedding_model_target.as_deref()),
-        &gateway_mode_info,
-    );
-    let runtime_projection = build_runtime_event_projection(
         stored_runtime_snapshots
             .as_ref()
             .and_then(|(active_runtime, _)| active_runtime.as_ref()),

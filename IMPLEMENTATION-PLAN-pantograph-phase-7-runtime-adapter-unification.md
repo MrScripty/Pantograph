@@ -539,6 +539,10 @@ Update during implementation:
   shared backend degraded-versus-unhealthy threshold contract, with recorder
   state carrying consecutive-failure progression per runtime instance and only
   thresholded failures escalating registry reconciliation to `unhealthy`.
+- 2026-04-17: Moved diagnostics-path sequencing for stored runtime replay plus
+  runtime-event projection into a single backend helper so
+  `headless_diagnostics_transport.rs` no longer owns the order in which
+  registry rehydration and runtime projection occur.
 
 ## Commit Cadence Notes
 

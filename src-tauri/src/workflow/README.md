@@ -84,6 +84,9 @@ registry-backed runtime operations through injected host state while keeping
 policy ownership outside the Tauri adapter boundary. Execution-path runtime
 snapshot overrides should be projected into the shared registry by backend
 helpers in `crates/pantograph-embedded-runtime`, not by local Tauri sequencing.
+Stored diagnostics-runtime replay and runtime-event projection sequencing
+should likewise stay in backend helpers so the Tauri diagnostics transport
+remains a thin caller.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.

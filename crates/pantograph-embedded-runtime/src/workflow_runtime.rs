@@ -324,6 +324,43 @@ pub fn build_runtime_event_projection_with_registry_override(
     projection
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn build_runtime_event_projection_with_registry_reconciliation(
+    runtime_registry: Option<&RuntimeRegistry>,
+    stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_active_model_target: Option<&str>,
+    stored_embedding_model_target: Option<&str>,
+    stored_trace_runtime_metrics: Option<WorkflowTraceRuntimeMetrics>,
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+    embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+    runtime_model_target_override: Option<&str>,
+) -> RuntimeEventProjection {
+    reconcile_runtime_registry_stored_projection_overrides(
+        runtime_registry,
+        stored_active_runtime_snapshot,
+        stored_embedding_runtime_snapshot,
+        stored_active_model_target,
+        stored_embedding_model_target,
+        gateway_mode_info,
+    );
+    build_runtime_event_projection_with_registry_override(
+        runtime_registry,
+        stored_active_runtime_snapshot,
+        stored_embedding_runtime_snapshot,
+        stored_active_model_target,
+        stored_embedding_model_target,
+        stored_trace_runtime_metrics,
+        runtime_snapshot_override,
+        gateway_snapshot,
+        embedding_runtime_snapshot,
+        gateway_mode_info,
+        runtime_model_target_override,
+    )
+}
+
 pub fn reconcile_runtime_registry_stored_projection_overrides(
     runtime_registry: Option<&RuntimeRegistry>,
     stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
@@ -455,6 +492,7 @@ mod tests {
     use super::{
         build_runtime_diagnostics_projection, build_runtime_event_projection,
         build_runtime_event_projection_with_registry_override,
+        build_runtime_event_projection_with_registry_reconciliation,
         build_workflow_execution_diagnostics_snapshot, normalized_runtime_lifecycle_snapshot,
         reconcile_runtime_registry_stored_projection_overrides, resolve_runtime_model_target,
         trace_runtime_metrics, trace_runtime_metrics_with_observed_runtime_ids,
@@ -1017,6 +1055,119 @@ mod tests {
         assert_eq!(
             runtime.runtime_instance_id.as_deref(),
             Some("python-runtime:pytorch:default")
+        );
+    }
+
+    #[test]
+    fn build_runtime_event_projection_with_registry_reconciliation_replays_stored_runtime_into_registry(
+    ) {
+        let registry = RuntimeRegistry::new();
+        crate::runtime_registry::reconcile_runtime_registry_mode_info(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-live".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+        );
+
+        let projection = build_runtime_event_projection_with_registry_reconciliation(
+            Some(&registry),
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:restored".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(12),
+                warmup_duration_ms: Some(2),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            None,
+            Some("/models/restored.safetensors"),
+            None,
+            None,
+            None,
+            &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-live".to_string()),
+                warmup_started_at_ms: Some(1),
+                warmup_completed_at_ms: Some(2),
+                warmup_duration_ms: Some(1),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            },
+            None,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-live".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            None,
+        );
+
+        assert_eq!(
+            projection.active_runtime_snapshot.runtime_id.as_deref(),
+            Some("PyTorch")
+        );
+        assert_eq!(
+            projection.active_model_target.as_deref(),
+            Some("/models/restored.safetensors")
+        );
+
+        let snapshot = registry.snapshot();
+        let gateway_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("gateway runtime should remain present");
+        assert_eq!(
+            gateway_runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-live")
+        );
+
+        let restored_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("stored sidecar runtime should be replayed");
+        assert_eq!(
+            restored_runtime.runtime_instance_id.as_deref(),
+            Some("python-runtime:pytorch:restored")
+        );
+        assert_eq!(restored_runtime.models.len(), 1);
+        assert_eq!(
+            restored_runtime.models[0].model_id,
+            "/models/restored.safetensors"
         );
     }
 

@@ -26,7 +26,7 @@ packages.
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
-| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path runtime-registry override reconciliation. |
+| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,
@@ -134,6 +134,9 @@ embedded-runtime crate.
   registry must stay in backend Rust so diagnostics paths can rehydrate
   execution-observed producer state without overriding live gateway or
   embedding producer observations.
+- Diagnostics-path sequencing that combines stored-snapshot replay with runtime
+  event projection must stay in backend Rust so Tauri transport does not own
+  the order in which registry reconciliation and runtime projection occur.
 - Workflow-facing runtime-registry coordination failures must be mapped in
   backend Rust onto stable workflow-service error codes so adapters do not
   collapse admission or runtime-unavailable decisions into generic internal
