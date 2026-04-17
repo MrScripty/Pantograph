@@ -584,6 +584,10 @@ Update during implementation:
   first execution-scoped workflow event instead of pre-pinning session-backed
   UI to the edit-session id, tightening stale-event rejection semantics at the
   consumer boundary without moving workflow policy out of Rust-owned services.
+- App-owned diagnostics filtering now also reads a dedicated run execution id
+  from `WorkflowService` instead of overloading the editable-session id, so
+  session-backed diagnostics and scheduler/runtime snapshots stay aligned with
+  backend-owned run identity.
 
 ### Deviations
 

@@ -429,6 +429,10 @@ incremental runs.
   execution-scoped workflow event instead of pre-pinning session-backed runs
   to the edit-session id, so valid scheduler/runtime and incremental events are
   not dropped before the backend emits `Started`.
+- The app diagnostics consumer now also tracks run execution identity
+  separately from editable-session ownership, so session-backed diagnostics
+  filtering no longer rejects backend-owned run events before the session UI
+  sees a `Started` event.
 
 **Still missing:**
 

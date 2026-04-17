@@ -194,7 +194,7 @@ function isDiagnosticsSnapshotEvent(
 
 function bindDiagnosticsStore(): void {
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
-    const currentExecutionId = workflowService.getCurrentExecutionId() ?? latestSessionId;
+    const currentExecutionId = workflowService.getCurrentRunExecutionId();
     const expectedExecutionId = claimWorkflowExecutionIdFromEvent(event, currentExecutionId);
     if (!isWorkflowEventRelevantToExecution(event, expectedExecutionId)) {
       return;

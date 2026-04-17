@@ -3,7 +3,7 @@ import type {
   WorkflowDiagnosticsProjection,
   WorkflowTraceSnapshotRequest,
   WorkflowTraceSnapshotResponse,
-} from '../diagnostics/types';
+} from '../diagnostics/types.ts';
 import type {
   NodeDefinition,
   WorkflowCapabilitiesResponse,
@@ -24,13 +24,16 @@ import type {
   InsertNodePositionHint,
   InsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse,
-} from './types';
+} from './types.ts';
 import {
   MOCK_NODE_DEFINITIONS,
   mockExecuteWorkflow,
   mockValidateConnection,
-} from './mocks';
-import { getWorkflowEventExecutionId } from '@pantograph/svelte-graph';
+} from './mocks.ts';
+import {
+  claimWorkflowExecutionIdFromEvent,
+  getWorkflowEventExecutionId,
+} from '@pantograph/svelte-graph';
 import {
   normalizeConnectionCandidatesResponse,
   normalizeConnectionCommitResponse,
@@ -38,7 +41,7 @@ import {
   normalizeInsertNodeConnectionResponse,
   normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
-} from '../../lib/tauriConnectionIntentWire';
+} from '../../lib/tauriConnectionIntentWire.ts';
 
 // Set to false to use real Rust backend, true to use frontend mocks
 const USE_MOCKS = false;
@@ -66,8 +69,13 @@ export class WorkflowService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
   private currentExecutionId: string | null = null;
+  private currentRunExecutionId: string | null = null;
 
   private publishEvent(event: WorkflowEvent): void {
+    this.currentRunExecutionId = claimWorkflowExecutionIdFromEvent(
+      event,
+      this.currentRunExecutionId,
+    );
     if (event.type === 'Started') {
       this.currentExecutionId = getWorkflowEventExecutionId(event);
     }
@@ -112,12 +120,14 @@ export class WorkflowService {
   async executeWorkflow(graph: WorkflowGraph): Promise<void> {
     if (USE_MOCKS) {
       this.currentExecutionId = null;
+      this.currentRunExecutionId = null;
       return mockExecuteWorkflow(graph, (event) => {
         this.publishEvent(event);
       });
     }
 
     this.currentExecutionId = null;
+    this.currentRunExecutionId = null;
     this.channel = new Channel<WorkflowEvent>();
 
     this.channel.onmessage = (event) => {
@@ -140,13 +150,16 @@ export class WorkflowService {
   async executeWorkflowV2(graph: WorkflowGraph): Promise<string> {
     if (USE_MOCKS) {
       // For mocks, fall back to legacy execution and return a fake ID
+      this.currentRunExecutionId = null;
       await mockExecuteWorkflow(graph, (event) => {
         this.publishEvent(event);
       });
       this.currentExecutionId ??= 'mock-execution-id';
+      this.currentRunExecutionId ??= this.currentExecutionId;
       return this.currentExecutionId;
     }
 
+    this.currentRunExecutionId = null;
     this.channel = new Channel<WorkflowEvent>();
 
     this.channel.onmessage = (event) => {
@@ -159,6 +172,7 @@ export class WorkflowService {
     });
 
     this.currentExecutionId = executionId;
+    this.currentRunExecutionId = executionId;
     return executionId;
   }
 
@@ -170,11 +184,19 @@ export class WorkflowService {
   }
 
   /**
+   * Get the current run execution ID, if any.
+   */
+  getCurrentRunExecutionId(): string | null {
+    return this.currentRunExecutionId;
+  }
+
+  /**
    * Set the current execution ID externally.
    * Used by storeInstances to sync session IDs created via WorkflowBackend.
    */
   setCurrentExecutionId(id: string | null): void {
     this.currentExecutionId = id;
+    this.currentRunExecutionId = null;
   }
 
   // --- Session Management ---
@@ -187,6 +209,7 @@ export class WorkflowService {
   async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
     if (USE_MOCKS) {
       this.currentExecutionId = 'mock-session-id';
+      this.currentRunExecutionId = null;
       return {
         session_id: this.currentExecutionId,
         session_kind: 'edit',
@@ -195,6 +218,7 @@ export class WorkflowService {
 
     const session = await invoke<WorkflowSessionHandle>('create_workflow_session', { graph });
     this.currentExecutionId = session.session_id;
+    this.currentRunExecutionId = null;
     return session;
   }
 
@@ -213,6 +237,7 @@ export class WorkflowService {
       return;
     }
 
+    this.currentRunExecutionId = null;
     this.channel = new Channel<WorkflowEvent>();
 
     this.channel.onmessage = (event) => {
@@ -761,6 +786,7 @@ export class WorkflowService {
 
     if (USE_MOCKS) {
       this.currentExecutionId = null;
+      this.currentRunExecutionId = null;
       return;
     }
 
@@ -768,6 +794,9 @@ export class WorkflowService {
 
     if (id === this.currentExecutionId) {
       this.currentExecutionId = null;
+    }
+    if (id === this.currentRunExecutionId) {
+      this.currentRunExecutionId = null;
     }
   }
 

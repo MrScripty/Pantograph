@@ -39,12 +39,12 @@ built-in workflow bootstraps without forcing every existing caller to migrate
 to package-level backends immediately. Session-scoped graph mutation methods
 now also return the updated graph snapshot from core so legacy callers can stay
 aligned with backend-owned state. The service also refreshes
-`currentExecutionId` from the first `Started` event on transient no-session
-runs after clearing any stale prior id, so diagnostics and legacy consumers can
-track ad hoc executions without inheriting the previous run's identity. The
-same service boundary now exposes a direct backend-owned trace snapshot read
-for debugging or future metrics surfaces that should not depend on the GUI
-projection shape.
+`currentRunExecutionId` from the first execution-scoped workflow event while
+preserving `currentExecutionId` as the editable session owner, so diagnostics
+and legacy consumers can follow ad hoc or session-backed runs without
+overwriting the session id that mutation commands still need. The same service
+boundary now exposes a direct backend-owned trace snapshot read for debugging
+or future metrics surfaces that should not depend on the GUI projection shape.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -57,6 +57,8 @@ projection shape.
 ## Invariants
 - `currentExecutionId` must refer to the active editable session before any
   session-scoped graph mutation method runs.
+- `currentRunExecutionId` must only represent the active workflow run and must
+  be reset when session ownership changes.
 - Edit mutation methods must forward backend-owned graph state rather than
   reconstructing local graph changes client-side.
 - Expected connection rejection is returned as structured data, not thrown as an
@@ -67,8 +69,9 @@ projection shape.
   is only allowed through `insertNodeOnEdge`.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
-- Starting a transient `executeWorkflow()` run must clear any stale prior
-  execution id before the next `Started` event claims the active run identity.
+- Starting a transient `executeWorkflow()` run must clear any stale prior run
+  execution id before the next execution-scoped event claims the active run
+  identity.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.
@@ -119,6 +122,9 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 ## API Consumer Contract (Host-Facing Modules)
 - Callers must establish or inherit `currentExecutionId` before using
   session-scoped graph mutation methods.
+- Diagnostics and other run-scoped consumers must use `currentRunExecutionId`
+  rather than reusing `currentExecutionId`, because session owners and run ids
+  are intentionally distinct for session-backed execution.
 - Add/update/remove/move mutation methods return the updated graph for callers
   that need to refresh rendered state directly.
 - `getConnectionCandidates` returns compatible existing targets and insertable
