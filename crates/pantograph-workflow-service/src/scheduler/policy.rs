@@ -50,6 +50,21 @@ pub(crate) struct WorkflowSessionAdmissionDecision {
     pub(crate) reason: Option<WorkflowSchedulerDecisionReason>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowSessionCompatibilityKey {
+    usage_profile: Option<String>,
+    required_backends: Vec<String>,
+    required_models: Vec<String>,
+}
+
+impl WorkflowSessionCompatibilityKey {
+    fn is_empty(&self) -> bool {
+        self.usage_profile.is_none()
+            && self.required_backends.is_empty()
+            && self.required_models.is_empty()
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct PriorityThenFifoSchedulerPolicy;
 
@@ -172,31 +187,59 @@ impl PriorityThenFifoSchedulerPolicy {
         &self,
         target: &WorkflowSessionRuntimeSelectionTarget,
         candidate: &WorkflowSessionRuntimeUnloadCandidate,
-    ) -> (bool, bool, bool, bool, bool, bool) {
+    ) -> (bool, bool, bool, bool, bool, bool, bool, bool) {
+        let target_key = Self::compatibility_key_from_target(target);
+        let candidate_key = Self::compatibility_key_from_candidate(candidate);
         let same_workflow = candidate.workflow_id == target.workflow_id;
-        let exact_required_backends = !target.required_backends.is_empty()
-            && candidate.required_backends == target.required_backends;
-        let shared_required_backends = !target.required_backends.is_empty()
+        let same_usage_profile = target_key.usage_profile.is_some()
+            && candidate_key.usage_profile == target_key.usage_profile;
+        let exact_required_backends = !target_key.required_backends.is_empty()
+            && candidate_key.required_backends == target_key.required_backends;
+        let shared_required_backends = !target_key.required_backends.is_empty()
             && candidate
                 .required_backends
                 .iter()
-                .any(|backend| target.required_backends.contains(backend));
-        let exact_required_models = !target.required_models.is_empty()
-            && candidate.required_models == target.required_models;
-        let shared_required_models = !target.required_models.is_empty()
+                .any(|backend| target_key.required_backends.contains(backend));
+        let exact_required_models = !target_key.required_models.is_empty()
+            && candidate_key.required_models == target_key.required_models;
+        let shared_required_models = !target_key.required_models.is_empty()
             && candidate
                 .required_models
                 .iter()
-                .any(|model_id| target.required_models.contains(model_id));
-        let same_usage_profile = same_workflow && candidate.usage_profile == target.usage_profile;
+                .any(|model_id| target_key.required_models.contains(model_id));
+        let exact_compatibility_identity = !target_key.is_empty() && candidate_key == target_key;
+        let shared_compatibility_identity =
+            same_usage_profile || shared_required_backends || shared_required_models;
         (
             same_workflow,
+            exact_compatibility_identity,
+            shared_compatibility_identity,
+            same_usage_profile,
             exact_required_backends,
             shared_required_backends,
             exact_required_models,
             shared_required_models,
-            same_usage_profile,
         )
+    }
+
+    fn compatibility_key_from_target(
+        target: &WorkflowSessionRuntimeSelectionTarget,
+    ) -> WorkflowSessionCompatibilityKey {
+        WorkflowSessionCompatibilityKey {
+            usage_profile: target.usage_profile.clone(),
+            required_backends: target.required_backends.clone(),
+            required_models: target.required_models.clone(),
+        }
+    }
+
+    fn compatibility_key_from_candidate(
+        candidate: &WorkflowSessionRuntimeUnloadCandidate,
+    ) -> WorkflowSessionCompatibilityKey {
+        WorkflowSessionCompatibilityKey {
+            usage_profile: candidate.usage_profile.clone(),
+            required_backends: candidate.required_backends.clone(),
+            required_models: candidate.required_models.clone(),
+        }
     }
 
     fn admission_reason(
@@ -464,6 +507,45 @@ mod tests {
                         Some("batch"),
                         &[],
                         &[],
+                        true,
+                        10,
+                    ),
+                ],
+            )
+            .expect("candidate");
+
+        assert_eq!(selected.session_id, "session-other-profile");
+    }
+
+    #[test]
+    fn select_runtime_unload_candidate_prefers_usage_mismatch_across_workflows() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let target = runtime_target(
+            "session-target",
+            "wf-target",
+            Some("interactive"),
+            &["llama_cpp"],
+            &["model-a"],
+        );
+        let selected = policy
+            .select_runtime_unload_candidate(
+                &target,
+                &[
+                    unload_candidate(
+                        "session-same-profile",
+                        "wf-a",
+                        Some("interactive"),
+                        &["llama_cpp"],
+                        &["model-a"],
+                        false,
+                        1,
+                    ),
+                    unload_candidate(
+                        "session-other-profile",
+                        "wf-b",
+                        Some("batch"),
+                        &["llama_cpp"],
+                        &["model-a"],
                         true,
                         10,
                     ),

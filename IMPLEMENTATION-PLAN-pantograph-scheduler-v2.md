@@ -465,7 +465,7 @@ policy, fairness, and machine-consumable decision semantics.
       explicit tie-break semantics, reuse-aware fairness constraints, and
       guardrails that prevent warm-runtime preference from bypassing priority
       or starvation guarantees.
-- [ ] Extend richer model-dependency affinity beyond the current
+- [x] Extend richer model-dependency affinity beyond the current
       `required_backends`/`required_models` unload-selection basis using
       backend-owned compatibility keys only. Any new affinity identity must be
       normalized in Rust contracts or preflight/session state, not inferred in
@@ -524,6 +524,10 @@ policy, fairness, and machine-consumable decision semantics.
   `required_models` refreshed from workflow capabilities and preflight caches,
   and preserves shared-backend or shared-model idle runtimes before unrelated
   sessions during rebalance.
+- Scheduler runtime-affinity ranking now also folds `usage_profile`,
+  `required_backends`, and `required_models` into an explicit backend-owned
+  compatibility identity, so cross-workflow reclaim keeps same-profile,
+  same-dependency idle runtimes resident before less-compatible sessions.
 - Store-owned queue transitions now also build a canonical internal admission
   input from queue ordering, loaded-runtime posture, affine reuse posture, and
   warm-session compatibility facts before delegating next-run selection to the
@@ -533,9 +537,8 @@ policy, fairness, and machine-consumable decision semantics.
   snapshot, and trace consumers no longer depend on a generic
   `admitted_for_execution` label.
 - Remaining Milestone 3 work is now narrowly defined as:
-  fairness expansion beyond starvation promotion, richer compatibility
-  identity beyond the current unload-affinity basis, and focused coverage for
-  the remaining fairness and compatibility slices.
+  fairness expansion beyond starvation promotion and focused coverage for the
+  remaining fairness slices.
 
 **Status:** In progress
 
@@ -626,6 +629,10 @@ Update during implementation:
   backend-owned `warm_session_reused`, `runtime_reload_required`, and
   `cold_start_required` admission reasons across queue, workflow-service, and
   trace projections.
+- 2026-04-16: Folded scheduler unload affinity onto an explicit internal
+  compatibility identity spanning `usage_profile`, `required_backends`, and
+  `required_models`, so cross-workflow reclaim can preserve more reusable idle
+  runtimes without shifting ownership into adapters.
 
 ## Commit Cadence Notes
 
