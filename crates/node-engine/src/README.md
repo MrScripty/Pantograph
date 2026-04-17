@@ -47,7 +47,10 @@ Keep `core_executor.rs` as the single dispatch boundary for built-in node types
 and normalize node inputs there before handing them to downstream runtimes.
 Reranking therefore enters as a first-class `reranker` node with dedicated
 document parsing and task classification instead of overloading
-`llamacpp-inference`.
+`llamacpp-inference`. `engine.rs` also remains the backend-owned source for
+graph-mutation and incremental-demand workflow events, so adapters only
+translate emitted execution facts instead of inferring graph-change semantics
+locally.
 
 ## Alternatives Rejected
 - Reusing the generic llama.cpp inference node for reranking.
@@ -62,6 +65,8 @@ document parsing and task classification instead of overloading
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
+- Graph mutation and incremental execution events must be emitted from executor
+  state transitions, not synthesized by frontend or transport adapters.
 
 ## Revisit Triggers
 - A second reranker family requires materially different request normalization.

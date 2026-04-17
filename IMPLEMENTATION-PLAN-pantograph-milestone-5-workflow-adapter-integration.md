@@ -588,6 +588,11 @@ Update during implementation:
   from `WorkflowService` instead of overloading the editable-session id, so
   session-backed diagnostics and scheduler/runtime snapshots stay aligned with
   backend-owned run identity.
+- `node-engine::WorkflowExecutor` now emits backend-owned `GraphModified` and
+  `IncrementalExecutionStarted` events for executor-owned graph invalidation
+  and multi-demand entry paths, reducing the remaining event-contract gap to
+  paths that still bypass executor-owned mutation or interactive execution
+  semantics.
 
 ### Deviations
 

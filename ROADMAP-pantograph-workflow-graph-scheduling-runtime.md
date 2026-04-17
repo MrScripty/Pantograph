@@ -425,6 +425,10 @@ incremental runs.
   transport vocabulary now exist across the engine, Tauri adapter, and
   diagnostics/trace projection path, and `GraphModified` now preserves a real
   execution id instead of borrowing the workflow id at the adapter boundary.
+- `node-engine::WorkflowExecutor` now emits backend-owned `GraphModified`
+  events for graph-mutation invalidation paths and
+  `IncrementalExecutionStarted` for multi-demand execution entry, so those
+  contracts no longer exist only as adapter/diagnostics placeholders.
 - Frontend execution-ownership helpers now claim the active run from the first
   execution-scoped workflow event instead of pre-pinning session-backed runs
   to the edit-session id, so valid scheduler/runtime and incremental events are
@@ -437,7 +441,8 @@ incremental runs.
 **Still missing:**
 
 - Backend-owned emission coverage for the remaining interactive and graph-
-  mutation paths that still do not produce the event vocabulary consistently
+  mutation paths that still do not produce the event vocabulary consistently,
+  especially beyond the executor-owned invalidation and multi-demand paths
 - Explicit stale-event rejection semantics keyed to canonical execution/session
   identity across backend and frontend consumers
 - Full adapter parity between backend-owned events and frontend consumers

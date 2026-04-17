@@ -91,6 +91,25 @@ pub struct DemandEngine {
     execution_id: String,
 }
 
+fn collect_dirty_tasks(graph: &WorkflowGraph, root_node_id: &NodeId) -> Vec<NodeId> {
+    let mut visited = HashSet::new();
+    let mut stack = vec![root_node_id.clone()];
+
+    while let Some(node_id) = stack.pop() {
+        if !visited.insert(node_id.clone()) {
+            continue;
+        }
+
+        for dependent in graph.get_dependents(&node_id) {
+            stack.push(dependent);
+        }
+    }
+
+    let mut dirty_tasks = visited.into_iter().collect::<Vec<_>>();
+    dirty_tasks.sort();
+    dirty_tasks
+}
+
 impl DemandEngine {
     /// Create a new demand engine
     pub fn new(execution_id: impl Into<String>) -> Self {
@@ -528,6 +547,30 @@ impl WorkflowExecutor {
         self.event_sink = event_sink;
     }
 
+    fn emit_graph_modified(&self, workflow_id: String, dirty_tasks: Vec<NodeId>) {
+        if dirty_tasks.is_empty() {
+            return;
+        }
+
+        let _ = self.send_event(WorkflowEvent::GraphModified {
+            workflow_id,
+            execution_id: self.execution_id.clone(),
+            dirty_tasks,
+        });
+    }
+
+    fn emit_incremental_execution_started(&self, workflow_id: String, task_ids: Vec<NodeId>) {
+        if task_ids.is_empty() {
+            return;
+        }
+
+        let _ = self.send_event(WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id,
+            execution_id: self.execution_id.clone(),
+            tasks: task_ids,
+        });
+    }
+
     /// Demand output from a specific node
     ///
     /// This is the main entry point for demand-driven execution.
@@ -559,6 +602,7 @@ impl WorkflowExecutor {
         executor: &dyn TaskExecutor,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         let graph = self.graph.read().await;
+        self.emit_incremental_execution_started(graph.id.clone(), node_ids.to_vec());
         let mut engine = self.demand_engine.write().await;
 
         engine
@@ -578,8 +622,14 @@ impl WorkflowExecutor {
     /// This will invalidate the node's cache and mark downstream nodes
     /// for re-execution on next demand.
     pub async fn mark_modified(&self, node_id: &NodeId) {
+        let (workflow_id, dirty_tasks) = {
+            let graph = self.graph.read().await;
+            (graph.id.clone(), collect_dirty_tasks(&graph, node_id))
+        };
         let mut engine = self.demand_engine.write().await;
         engine.mark_modified(node_id);
+        drop(engine);
+        self.emit_graph_modified(workflow_id, dirty_tasks);
     }
 
     /// Update a node's data and mark it as modified
@@ -602,8 +652,12 @@ impl WorkflowExecutor {
 
     /// Add a new node to the graph
     pub async fn add_node(&self, node: crate::types::GraphNode) {
+        let node_id = node.id.clone();
         let mut graph = self.graph.write().await;
         graph.nodes.push(node);
+        let workflow_id = graph.id.clone();
+        drop(graph);
+        self.emit_graph_modified(workflow_id, vec![node_id]);
     }
 
     /// Add a new edge to the graph
@@ -646,6 +700,12 @@ impl WorkflowExecutor {
     ///
     /// This clears all caches since the graph structure may have changed.
     pub async fn restore_graph_snapshot(&self, graph: WorkflowGraph) {
+        let workflow_id = graph.id.clone();
+        let dirty_tasks = graph
+            .nodes
+            .iter()
+            .map(|node| node.id.clone())
+            .collect::<Vec<_>>();
         {
             let mut current_graph = self.graph.write().await;
             *current_graph = graph;
@@ -654,6 +714,8 @@ impl WorkflowExecutor {
         // Clear all caches since we don't know what changed
         let mut engine = self.demand_engine.write().await;
         engine.clear_cache();
+        drop(engine);
+        self.emit_graph_modified(workflow_id, dirty_tasks);
     }
 
     /// Get cache statistics
@@ -1099,6 +1161,66 @@ mod tests {
             count_after_update,
             count_after_first
         );
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_mark_modified_emits_graph_modified_with_dirty_subgraph() {
+        let graph = make_linear_graph();
+        let event_sink = Arc::new(VecEventSink::new());
+        let workflow_executor = WorkflowExecutor::new("exec_1", graph, event_sink.clone());
+
+        workflow_executor.mark_modified(&"b".to_string()).await;
+
+        let events = event_sink.events();
+        let graph_modified = events
+            .iter()
+            .find(|event| matches!(event, WorkflowEvent::GraphModified { .. }))
+            .expect("graph modified event");
+
+        match graph_modified {
+            WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+            } => {
+                assert_eq!(workflow_id, "test");
+                assert_eq!(execution_id, "exec_1");
+                assert_eq!(dirty_tasks, &vec!["b".to_string(), "c".to_string()]);
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_demand_multiple_emits_incremental_execution_started() {
+        let graph = make_linear_graph();
+        let event_sink = Arc::new(VecEventSink::new());
+        let executor_impl = CountingExecutor::new();
+        let workflow_executor = WorkflowExecutor::new("exec_1", graph, event_sink.clone());
+
+        let _ = workflow_executor
+            .demand_multiple(&["b".to_string(), "c".to_string()], &executor_impl)
+            .await
+            .expect("incremental demand succeeds");
+
+        let events = event_sink.events();
+        let incremental_started = events
+            .iter()
+            .find(|event| matches!(event, WorkflowEvent::IncrementalExecutionStarted { .. }))
+            .expect("incremental execution event");
+
+        match incremental_started {
+            WorkflowEvent::IncrementalExecutionStarted {
+                workflow_id,
+                execution_id,
+                tasks,
+            } => {
+                assert_eq!(workflow_id, "test");
+                assert_eq!(execution_id, "exec_1");
+                assert_eq!(tasks, &vec!["b".to_string(), "c".to_string()]);
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
 
     #[tokio::test]
