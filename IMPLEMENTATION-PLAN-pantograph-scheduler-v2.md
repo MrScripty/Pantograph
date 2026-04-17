@@ -33,6 +33,9 @@ The accurate implementation baseline at the current checkpoint is:
 - `WorkflowSessionQueueItem` now also carries additive canonical
   `queue_position` diagnostics, so scheduler snapshots expose backend-owned
   ordering facts instead of forcing adapters or trace readers to infer them
+- `WorkflowSessionQueueItem` and `WorkflowTraceQueueMetrics` now also carry
+  additive backend-owned `scheduler_admission_outcome` semantics, so queued
+  versus admitted visibility no longer depends on transport-local inference
 - the explicit scheduler policy now also owns the first backend starvation-
   protection rule, allowing long-waiting queued runs to accumulate canonical
   promotion credit and surface `starvation_protection` when they legitimately
@@ -455,6 +458,9 @@ policy, fairness, and machine-consumable decision semantics.
   `WorkflowSessionQueueItem`.
 - Queue items now also expose additive canonical `queue_position` diagnostics
   for running and pending items.
+- Queue items and trace queue metrics now also expose additive backend-owned
+  `scheduler_admission_outcome` values so queued versus admitted state is
+  machine-consumable without reconstructing it from item status.
 - The first starvation-protection promotion rule is now backend-owned in the
   scheduler policy and covered by unit plus workflow-service tests.
 - Runtime-pressure unload selection now also consumes backend-owned target
@@ -530,6 +536,11 @@ Update during implementation:
   `scheduler_decision_reason` fields through queue items so trace/diagnostics
   can prefer backend-owned scheduler reasons over generic matched-item
   fallbacks.
+- 2026-04-16: Added additive backend-owned
+  `scheduler_admission_outcome` fields to workflow-session queue items and
+  trace queue metrics, updated workflow-service, embedded-runtime, and Tauri
+  fixtures, and verified that scheduler-facing diagnostics no longer have to
+  infer queued versus admitted state from status/reason combinations.
 
 ## Commit Cadence Notes
 

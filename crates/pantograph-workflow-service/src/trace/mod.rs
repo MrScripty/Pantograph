@@ -49,6 +49,7 @@ mod tests {
                 enqueued_at_ms: Some(80),
                 dequeued_at_ms: Some(100),
                 queue_wait_ms: Some(20),
+                scheduler_admission_outcome: Some("admitted".to_string()),
                 scheduler_decision_reason: Some("warm_session_reused".to_string()),
             },
             runtime: WorkflowTraceRuntimeMetrics {
@@ -95,6 +96,7 @@ mod tests {
                 "enqueued_at_ms": 80,
                 "dequeued_at_ms": 100,
                 "queue_wait_ms": 20,
+                "scheduler_admission_outcome": "admitted",
                 "scheduler_decision_reason": "warm_session_reused"
             },
             "runtime": {
@@ -468,6 +470,7 @@ mod tests {
                     dequeued_at_ms: Some(105),
                     priority: 5,
                     queue_position: None,
+                    scheduler_admission_outcome: None,
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
@@ -541,6 +544,7 @@ mod tests {
                     dequeued_at_ms: None,
                     priority: 5,
                     queue_position: None,
+                    scheduler_admission_outcome: None,
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Pending,
                 }],
@@ -630,6 +634,7 @@ mod tests {
                     dequeued_at_ms: Some(115),
                     priority: 5,
                     queue_position: None,
+                    scheduler_admission_outcome: None,
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
@@ -643,6 +648,10 @@ mod tests {
         assert_eq!(trace.queue.enqueued_at_ms, Some(80));
         assert_eq!(trace.queue.dequeued_at_ms, Some(115));
         assert_eq!(trace.queue.queue_wait_ms, Some(35));
+        assert_eq!(
+            trace.queue.scheduler_admission_outcome.as_deref(),
+            Some("admitted")
+        );
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_running_item")
@@ -754,6 +763,7 @@ mod tests {
                     dequeued_at_ms: Some(100),
                     priority: 0,
                     queue_position: None,
+                    scheduler_admission_outcome: None,
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
@@ -993,6 +1003,7 @@ mod tests {
                         dequeued_at_ms: Some(150),
                         priority: 10,
                         queue_position: None,
+                        scheduler_admission_outcome: None,
                         scheduler_decision_reason: None,
                         status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                     },
@@ -1003,6 +1014,7 @@ mod tests {
                         dequeued_at_ms: None,
                         priority: 5,
                         queue_position: None,
+                        scheduler_admission_outcome: None,
                         scheduler_decision_reason: None,
                         status: crate::workflow::WorkflowSessionQueueItemStatus::Pending,
                     },
@@ -1017,6 +1029,10 @@ mod tests {
         assert_eq!(trace.queue.enqueued_at_ms, Some(180));
         assert_eq!(trace.queue.dequeued_at_ms, None);
         assert_eq!(trace.queue.queue_wait_ms, None);
+        assert_eq!(
+            trace.queue.scheduler_admission_outcome.as_deref(),
+            Some("queued")
+        );
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_pending_item")
@@ -1049,6 +1065,7 @@ mod tests {
                     dequeued_at_ms: Some(4_750),
                     priority: 0,
                     queue_position: None,
+                    scheduler_admission_outcome: None,
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
@@ -1062,6 +1079,10 @@ mod tests {
         assert_eq!(trace.queue.enqueued_at_ms, Some(4_750));
         assert_eq!(trace.queue.dequeued_at_ms, Some(4_750));
         assert_eq!(trace.queue.queue_wait_ms, Some(0));
+        assert_eq!(
+            trace.queue.scheduler_admission_outcome.as_deref(),
+            Some("admitted")
+        );
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_running_item")
@@ -1094,6 +1115,7 @@ mod tests {
                     dequeued_at_ms: Some(120),
                     priority: 5,
                     queue_position: None,
+                    scheduler_admission_outcome: None,
                     scheduler_decision_reason: Some(
                         crate::workflow::WorkflowSchedulerDecisionReason::AdmittedForExecution,
                     ),

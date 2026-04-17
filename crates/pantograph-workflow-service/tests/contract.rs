@@ -300,6 +300,7 @@ fn workflow_trace_contract_snapshot() {
                 enqueued_at_ms: Some(90),
                 dequeued_at_ms: Some(100),
                 queue_wait_ms: Some(10),
+                scheduler_admission_outcome: Some("admitted".to_string()),
                 scheduler_decision_reason: Some("dequeued_fifo".to_string()),
             },
             runtime: WorkflowTraceRuntimeMetrics {
@@ -408,6 +409,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             dequeued_at_ms: Some(110),
             priority: 5,
             queue_position: None,
+            scheduler_admission_outcome: None,
             scheduler_decision_reason: None,
             status: WorkflowSessionQueueItemStatus::Running,
         }],

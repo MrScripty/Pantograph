@@ -34,18 +34,18 @@ use crate::graph::WorkflowSessionKind;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerDecisionReason,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
-    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
-    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
-    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
-    WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerAdmissionOutcome,
+    WorkflowSchedulerDecisionReason, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
+    WorkflowSessionStaleCleanupResponse, WorkflowSessionStaleCleanupWorker,
+    WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
+    WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -5658,6 +5658,10 @@ mod tests {
         assert!(pending_items[0].dequeued_at_ms.is_none());
         assert_eq!(pending_items[0].queue_position, Some(0));
         assert_eq!(
+            pending_items[0].scheduler_admission_outcome,
+            Some(WorkflowSchedulerAdmissionOutcome::Queued)
+        );
+        assert_eq!(
             pending_items[0].status,
             WorkflowSessionQueueItemStatus::Pending
         );
@@ -5689,6 +5693,10 @@ mod tests {
             pending_items[0].enqueued_at_ms
         );
         assert_eq!(running_items[0].queue_position, Some(0));
+        assert_eq!(
+            running_items[0].scheduler_admission_outcome,
+            Some(WorkflowSchedulerAdmissionOutcome::Admitted)
+        );
         assert!(running_items[0].dequeued_at_ms.is_some());
         assert!(
             running_items[0]
@@ -5873,6 +5881,10 @@ mod tests {
         assert_eq!(pending_items[0].queue_id, low_priority_queue_id);
         assert_eq!(pending_items[0].queue_position, Some(0));
         assert_eq!(
+            pending_items[0].scheduler_admission_outcome,
+            Some(WorkflowSchedulerAdmissionOutcome::Queued)
+        );
+        assert_eq!(
             pending_items[0].scheduler_decision_reason,
             Some(WorkflowSchedulerDecisionReason::StarvationProtection)
         );
@@ -5894,6 +5906,10 @@ mod tests {
                 .expect("list running queue items")
         };
         assert_eq!(running_items[0].queue_id, low_priority_queue_id);
+        assert_eq!(
+            running_items[0].scheduler_admission_outcome,
+            Some(WorkflowSchedulerAdmissionOutcome::Admitted)
+        );
         assert_eq!(
             running_items[0].scheduler_decision_reason,
             Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)

@@ -105,6 +105,24 @@ pub enum WorkflowSessionQueueItemStatus {
     Running,
 }
 
+/// Stable scheduler admission outcome vocabulary shared by queue, snapshot, and
+/// trace projections.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSchedulerAdmissionOutcome {
+    Queued,
+    Admitted,
+}
+
+impl WorkflowSchedulerAdmissionOutcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkflowSchedulerAdmissionOutcome::Queued => "queued",
+            WorkflowSchedulerAdmissionOutcome::Admitted => "admitted",
+        }
+    }
+}
+
 /// Stable scheduler decision reason vocabulary shared by queue, snapshot, and
 /// trace projections.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -163,6 +181,8 @@ pub struct WorkflowSessionQueueItem {
     pub priority: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_position: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduler_admission_outcome: Option<WorkflowSchedulerAdmissionOutcome>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduler_decision_reason: Option<WorkflowSchedulerDecisionReason>,
     pub status: WorkflowSessionQueueItemStatus,

@@ -1,6 +1,6 @@
 use crate::workflow::{
-    WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-    WorkflowSessionState, WorkflowSessionSummary,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem,
+    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
 };
 
 pub(super) fn apply_scheduler_snapshot(
@@ -17,6 +17,7 @@ pub(super) fn apply_scheduler_snapshot(
     }
 
     if error.is_some() {
+        trace.queue.scheduler_admission_outcome = None;
         trace.queue.scheduler_decision_reason = Some(
             WorkflowSchedulerDecisionReason::SchedulerSnapshotFailed
                 .as_str()
@@ -90,8 +91,52 @@ pub(super) fn apply_scheduler_snapshot(
         }
         _ => None,
     };
+    trace.queue.scheduler_admission_outcome =
+        scheduler_admission_outcome(execution_id, session_id, session, items);
     trace.queue.scheduler_decision_reason =
         scheduler_decision_reason(execution_id, session_id, session, items);
+}
+
+fn scheduler_admission_outcome(
+    execution_id: &str,
+    session_id: &str,
+    session: Option<&WorkflowSessionSummary>,
+    items: &[WorkflowSessionQueueItem],
+) -> Option<String> {
+    let matched_item = matched_queue_item(execution_id, session_id, items);
+    let outcome = if let Some(item) = matched_item {
+        item.scheduler_admission_outcome.or(match item.status {
+            WorkflowSessionQueueItemStatus::Pending => {
+                Some(WorkflowSchedulerAdmissionOutcome::Queued)
+            }
+            WorkflowSessionQueueItemStatus::Running => {
+                Some(WorkflowSchedulerAdmissionOutcome::Admitted)
+            }
+        })
+    } else {
+        let pending_visible = session
+            .map(|summary| summary.queued_runs > 0)
+            .unwrap_or(false)
+            || items
+                .iter()
+                .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+        let running_visible = matches!(
+            session.map(|summary| summary.state),
+            Some(WorkflowSessionState::Running)
+        ) || items
+            .iter()
+            .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+
+        if running_visible {
+            Some(WorkflowSchedulerAdmissionOutcome::Admitted)
+        } else if pending_visible {
+            Some(WorkflowSchedulerAdmissionOutcome::Queued)
+        } else {
+            None
+        }
+    }?;
+
+    Some(outcome.as_str().to_string())
 }
 
 fn scheduler_decision_reason(

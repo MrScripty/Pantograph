@@ -351,6 +351,9 @@ session scheduler that makes better admission and reuse decisions.
   backend-owned scheduler policy object, and queue items now expose additive
   machine-consumable scheduler decision reasons plus canonical
   `queue_position` ordering diagnostics
+- Queue items and trace queue metrics now also expose additive backend-owned
+  `scheduler_admission_outcome` values, so queued versus admitted visibility
+  no longer depends on adapter-local inference from item status
 - The backend-owned scheduler policy now also applies the first starvation-
   protection promotion rule, so long-waiting queued runs can surface a stable
   `starvation_protection` reason when they legitimately overtake newer higher-

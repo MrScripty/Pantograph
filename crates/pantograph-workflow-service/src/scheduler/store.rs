@@ -10,9 +10,9 @@ use crate::workflow::{
 };
 
 use super::{
-    PriorityThenFifoSchedulerPolicy, WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem,
-    WorkflowSessionQueueItemStatus, WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionState,
-    WorkflowSessionSummary,
+    PriorityThenFifoSchedulerPolicy, WorkflowSchedulerAdmissionOutcome,
+    WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionState, WorkflowSessionSummary,
 };
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
@@ -279,6 +279,7 @@ impl WorkflowSessionStore {
                 dequeued_at_ms: Some(active_run.dequeued_at_ms),
                 priority: active_run.priority,
                 queue_position: Some(0),
+                scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Admitted),
                 scheduler_decision_reason: Some(active_run.scheduler_decision_reason),
                 status: WorkflowSessionQueueItemStatus::Running,
             });
@@ -293,6 +294,7 @@ impl WorkflowSessionStore {
                 dequeued_at_ms: None,
                 priority: queued.priority,
                 queue_position: Some(pending_offset + index),
+                scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Queued),
                 scheduler_decision_reason: Some(queued.scheduler_decision_reason),
                 status: WorkflowSessionQueueItemStatus::Pending,
             });

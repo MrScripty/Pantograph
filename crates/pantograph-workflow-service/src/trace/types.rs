@@ -39,6 +39,8 @@ pub struct WorkflowTraceQueueMetrics {
     #[serde(default)]
     pub queue_wait_ms: Option<u64>,
     #[serde(default)]
+    pub scheduler_admission_outcome: Option<String>,
+    #[serde(default)]
     pub scheduler_decision_reason: Option<String>,
 }
 

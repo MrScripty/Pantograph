@@ -6,9 +6,9 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
-    WorkflowSessionSummary,
+    scheduler_snapshot_trace_execution_id, WorkflowSchedulerAdmissionOutcome,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -319,6 +319,7 @@ impl GraphEditSession {
                     dequeued_at_ms: started_at_ms,
                     priority: 0,
                     queue_position: Some(0),
+                    scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Admitted),
                     scheduler_decision_reason: None,
                     status: WorkflowSessionQueueItemStatus::Running,
                 }
