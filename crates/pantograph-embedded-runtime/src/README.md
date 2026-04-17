@@ -24,7 +24,7 @@ packages.
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
-| `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
+| `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, warmup coordination, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
 
@@ -125,6 +125,10 @@ embedded-runtime crate.
 - Runtime-registry sync, snapshot, reclaim, stop-all, and restore orchestration
   may be decomposed into helper modules, but those helpers must remain
   backend-owned and must not be reintroduced as Tauri-local sequencing code.
+- Runtime warmup polling, mode-info reconciliation, and `WarmupStarted`
+  transition sequencing for active runtimes must stay in shared backend
+  registry helpers so workflow execution does not own a separate warmup policy
+  loop.
 - Active-runtime registration used by scheduler diagnostics and reservation
   paths must stay in shared backend registry helpers so workflow execution does
   not re-derive registration shape in multiple call sites.

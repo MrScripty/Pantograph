@@ -4,14 +4,18 @@
 //! so runtime-registry lifecycle coordination stays separate from observation
 //! translation and execution-path override reconciliation.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
+use thiserror::Error;
 
 use crate::runtime_health::{RuntimeHealthAssessment, RuntimeHealthAssessmentSnapshot};
 use crate::runtime_registry::HostRuntimeProducer;
 use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_registry::{
     RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError,
-    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot,
+    RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot, RuntimeTransition,
+    RuntimeWarmupDecision,
 };
 
 #[async_trait]
@@ -30,6 +34,16 @@ pub trait HostRuntimeRegistryLifecycleController: HostRuntimeRegistryController 
         &self,
         restore_config: Option<inference::BackendConfig>,
     ) -> Result<(), inference::GatewayError>;
+}
+
+#[derive(Debug, Error)]
+pub enum RuntimeWarmupCoordinationError {
+    #[error(transparent)]
+    Registry(#[from] RuntimeRegistryError),
+    #[error(
+        "timed out waiting for runtime '{runtime_id}' to finish warmup or shutdown transition"
+    )]
+    Timeout { runtime_id: String },
 }
 
 pub async fn sync_runtime_registry<C: HostRuntimeRegistryController + Sync>(
@@ -78,6 +92,106 @@ pub async fn runtime_registry_snapshot<C: HostRuntimeRegistryController + Sync>(
 ) -> RuntimeRegistrySnapshot {
     sync_runtime_registry(controller, registry).await;
     registry.snapshot()
+}
+
+pub async fn consume_active_runtime_warmup_disposition<C: HostRuntimeRegistryController + Sync>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    runtime_id: &str,
+    poll_interval: Duration,
+    wait_timeout: Duration,
+) -> Result<(), RuntimeWarmupCoordinationError> {
+    match registry.warmup_disposition(runtime_id)?.decision {
+        RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
+        RuntimeWarmupDecision::StartRuntime => {
+            let mode_info = reconcile_active_runtime_mode_info_snapshot(controller, registry).await;
+
+            match registry.warmup_disposition(runtime_id)?.decision {
+                RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
+                RuntimeWarmupDecision::WaitForTransition => {
+                    wait_for_active_runtime_warmup_transition(
+                        controller,
+                        registry,
+                        runtime_id,
+                        poll_interval,
+                        wait_timeout,
+                    )
+                    .await
+                }
+                RuntimeWarmupDecision::StartRuntime => {
+                    mark_runtime_warmup_started(registry, runtime_id, &mode_info)
+                }
+            }
+        }
+        RuntimeWarmupDecision::WaitForTransition => {
+            wait_for_active_runtime_warmup_transition(
+                controller,
+                registry,
+                runtime_id,
+                poll_interval,
+                wait_timeout,
+            )
+            .await
+        }
+    }
+}
+
+async fn wait_for_active_runtime_warmup_transition<C: HostRuntimeRegistryController + Sync>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+    runtime_id: &str,
+    poll_interval: Duration,
+    wait_timeout: Duration,
+) -> Result<(), RuntimeWarmupCoordinationError> {
+    let wait_future = async {
+        loop {
+            let mode_info = reconcile_active_runtime_mode_info_snapshot(controller, registry).await;
+
+            match registry.warmup_disposition(runtime_id)?.decision {
+                RuntimeWarmupDecision::ReuseLoadedRuntime => return Ok(()),
+                RuntimeWarmupDecision::StartRuntime => {
+                    return mark_runtime_warmup_started(registry, runtime_id, &mode_info);
+                }
+                RuntimeWarmupDecision::WaitForTransition => {
+                    tokio::time::sleep(poll_interval).await;
+                }
+            }
+        }
+    };
+
+    tokio::time::timeout(wait_timeout, wait_future)
+        .await
+        .map_err(|_| RuntimeWarmupCoordinationError::Timeout {
+            runtime_id: runtime_id.to_string(),
+        })?
+}
+
+async fn reconcile_active_runtime_mode_info_snapshot<C: HostRuntimeRegistryController + Sync>(
+    controller: &C,
+    registry: &RuntimeRegistry,
+) -> HostRuntimeModeSnapshot {
+    let mode_info = controller.mode_info_snapshot().await;
+    crate::runtime_registry::reconcile_active_runtime_mode_info(registry, &mode_info, false);
+    mode_info
+}
+
+fn mark_runtime_warmup_started(
+    registry: &RuntimeRegistry,
+    runtime_id: &str,
+    mode_info: &HostRuntimeModeSnapshot,
+) -> Result<(), RuntimeWarmupCoordinationError> {
+    registry
+        .transition_runtime(
+            runtime_id,
+            RuntimeTransition::WarmupStarted {
+                runtime_instance_id: mode_info
+                    .active_runtime
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.runtime_instance_id.clone()),
+            },
+        )
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 pub async fn stop_all_runtime_producers_and_reconcile_runtime_registry<

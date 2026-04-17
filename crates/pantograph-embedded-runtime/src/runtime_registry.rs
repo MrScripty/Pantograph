@@ -6,11 +6,12 @@
 
 use crate::runtime_health::RuntimeHealthAssessment;
 pub use crate::runtime_registry_lifecycle::{
-    reclaim_runtime_and_reconcile_runtime_registry, restore_runtime_and_reconcile_runtime_registry,
-    runtime_registry_snapshot, stop_all_runtime_producers_and_reconcile_runtime_registry,
-    sync_runtime_registry, sync_runtime_registry_with_active_health_assessment,
+    consume_active_runtime_warmup_disposition, reclaim_runtime_and_reconcile_runtime_registry,
+    restore_runtime_and_reconcile_runtime_registry, runtime_registry_snapshot,
+    stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
+    sync_runtime_registry_with_active_health_assessment,
     sync_runtime_registry_with_health_assessments, HostRuntimeRegistryController,
-    HostRuntimeRegistryLifecycleController,
+    HostRuntimeRegistryLifecycleController, RuntimeWarmupCoordinationError,
 };
 pub use crate::runtime_registry_observations::{
     active_runtime_descriptor, active_runtime_id, active_runtime_observation,
@@ -168,7 +169,9 @@ fn preserve_matching_unhealthy_runtime(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::sync::Mutex;
+    use std::time::Duration;
 
     use async_trait::async_trait;
 
@@ -1240,6 +1243,139 @@ mod tests {
         assert_eq!(
             embedding.runtime_instance_id.as_deref(),
             Some("llama-embed-unhealthy")
+        );
+    }
+
+    #[tokio::test]
+    async fn consume_active_runtime_warmup_disposition_marks_runtime_warming_after_mode_sync() {
+        let controller = MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-warm".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: false,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        };
+        let registry = RuntimeRegistry::new();
+        register_active_runtime(&registry, &controller.mode_info_snapshot().await);
+
+        consume_active_runtime_warmup_disposition(
+            &controller,
+            &registry,
+            "llama.cpp",
+            Duration::from_millis(1),
+            Duration::from_millis(50),
+        )
+        .await
+        .expect("warmup should be marked as started");
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("runtime should remain registered");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Warming);
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-warm")
+        );
+    }
+
+    #[tokio::test]
+    async fn consume_active_runtime_warmup_disposition_waits_for_ready_transition() {
+        let controller = Arc::new(MockHostRuntimeController {
+            mode_info: Mutex::new(HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-wait".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_starting".to_string()),
+                    active: false,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            }),
+            stopped_producers: Mutex::new(Vec::new()),
+            stop_all_calls: Mutex::new(0),
+            restore_calls: Mutex::new(Vec::new()),
+            restore_should_fail: Mutex::new(false),
+        });
+        let registry = RuntimeRegistry::new();
+        register_active_runtime(&registry, &controller.mode_info_snapshot().await);
+        registry
+            .transition_runtime(
+                "llama.cpp",
+                pantograph_runtime_registry::RuntimeTransition::WarmupStarted {
+                    runtime_instance_id: Some("llama-main-wait".to_string()),
+                },
+            )
+            .expect("runtime should start in warming state");
+
+        let ready_controller = controller.clone();
+        let ready_task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut mode_info = ready_controller
+                .mode_info
+                .lock()
+                .expect("mode info lock poisoned");
+            mode_info.active_runtime = Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-wait".to_string()),
+                warmup_started_at_ms: Some(1),
+                warmup_completed_at_ms: Some(2),
+                warmup_duration_ms: Some(1),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            });
+        });
+
+        consume_active_runtime_warmup_disposition(
+            controller.as_ref(),
+            &registry,
+            "llama.cpp",
+            Duration::from_millis(1),
+            Duration::from_millis(100),
+        )
+        .await
+        .expect("warmup wait should observe ready transition");
+        ready_task.await.expect("ready task should complete");
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("runtime should remain registered");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-wait")
         );
     }
 }

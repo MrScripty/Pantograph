@@ -10,8 +10,7 @@ use node_engine::{
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
     RuntimeRegistryError, RuntimeReservationRequest, RuntimeReservationRequirements,
-    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeTransition, RuntimeWarmupDecision,
-    SharedRuntimeRegistry,
+    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -1296,17 +1295,20 @@ impl EmbeddedWorkflowHost {
         }
     }
 
-    fn reconcile_active_runtime_mode_info(
-        runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
-        mode_info: &inference::ServerModeInfo,
-        include_stopped: bool,
-    ) {
-        let snapshot = HostRuntimeModeSnapshot::from_mode_info(mode_info);
-        runtime_registry::reconcile_active_runtime_mode_info(
-            runtime_registry,
-            &snapshot,
-            include_stopped,
-        );
+    fn workflow_service_error_from_runtime_warmup_coordination(
+        error: runtime_registry::RuntimeWarmupCoordinationError,
+    ) -> WorkflowServiceError {
+        match error {
+            runtime_registry::RuntimeWarmupCoordinationError::Registry(error) => {
+                Self::workflow_service_error_from_runtime_registry(error)
+            }
+            runtime_registry::RuntimeWarmupCoordinationError::Timeout { runtime_id } => {
+                WorkflowServiceError::RuntimeTimeout(format!(
+                    "timed out waiting for runtime '{}' to finish warmup or shutdown transition",
+                    runtime_id
+                ))
+            }
+        }
     }
 
     fn record_session_runtime_reservation(
@@ -1380,101 +1382,20 @@ impl EmbeddedWorkflowHost {
         Ok(())
     }
 
-    async fn wait_for_runtime_warmup_transition(
-        &self,
-        runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
-        runtime_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
-        let wait_future = async {
-            loop {
-                let mode_info = self.gateway.mode_info().await;
-                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info, false);
-
-                let disposition = runtime_registry
-                    .warmup_disposition(runtime_id)
-                    .map_err(Self::workflow_service_error_from_runtime_registry)?;
-                match disposition.decision {
-                    RuntimeWarmupDecision::ReuseLoadedRuntime => return Ok(()),
-                    RuntimeWarmupDecision::StartRuntime => {
-                        let runtime_instance_id = mode_info
-                            .active_runtime
-                            .as_ref()
-                            .and_then(|snapshot| snapshot.runtime_instance_id.clone());
-                        runtime_registry
-                            .transition_runtime(
-                                runtime_id,
-                                RuntimeTransition::WarmupStarted {
-                                    runtime_instance_id,
-                                },
-                            )
-                            .map_err(Self::workflow_service_error_from_runtime_registry)?;
-                        return Ok(());
-                    }
-                    RuntimeWarmupDecision::WaitForTransition => {
-                        tokio::time::sleep(Duration::from_millis(RUNTIME_WARMUP_POLL_INTERVAL_MS))
-                            .await;
-                    }
-                }
-            }
-        };
-
-        tokio::time::timeout(
-            Duration::from_millis(RUNTIME_WARMUP_WAIT_TIMEOUT_MS),
-            wait_future,
-        )
-        .await
-        .map_err(|_| {
-            WorkflowServiceError::RuntimeTimeout(format!(
-                "timed out waiting for runtime '{}' to finish warmup or shutdown transition",
-                runtime_id
-            ))
-        })?
-    }
-
     async fn consume_runtime_warmup_disposition(
         &self,
         runtime_registry: &pantograph_runtime_registry::RuntimeRegistry,
         runtime_id: &str,
     ) -> Result<(), WorkflowServiceError> {
-        match runtime_registry
-            .warmup_disposition(runtime_id)
-            .map_err(Self::workflow_service_error_from_runtime_registry)?
-            .decision
-        {
-            RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
-            RuntimeWarmupDecision::StartRuntime => {
-                let mode_info = self.gateway.mode_info().await;
-                Self::reconcile_active_runtime_mode_info(runtime_registry, &mode_info, false);
-
-                match runtime_registry
-                    .warmup_disposition(runtime_id)
-                    .map_err(Self::workflow_service_error_from_runtime_registry)?
-                    .decision
-                {
-                    RuntimeWarmupDecision::ReuseLoadedRuntime => Ok(()),
-                    RuntimeWarmupDecision::WaitForTransition => {
-                        self.wait_for_runtime_warmup_transition(runtime_registry, runtime_id)
-                            .await
-                    }
-                    RuntimeWarmupDecision::StartRuntime => runtime_registry
-                        .transition_runtime(
-                            runtime_id,
-                            RuntimeTransition::WarmupStarted {
-                                runtime_instance_id: mode_info
-                                    .active_runtime
-                                    .as_ref()
-                                    .and_then(|snapshot| snapshot.runtime_instance_id.clone()),
-                            },
-                        )
-                        .map(|_| ())
-                        .map_err(Self::workflow_service_error_from_runtime_registry),
-                }
-            }
-            RuntimeWarmupDecision::WaitForTransition => {
-                self.wait_for_runtime_warmup_transition(runtime_registry, runtime_id)
-                    .await
-            }
-        }
+        runtime_registry::consume_active_runtime_warmup_disposition(
+            self.gateway.as_ref(),
+            runtime_registry,
+            runtime_id,
+            Duration::from_millis(RUNTIME_WARMUP_POLL_INTERVAL_MS),
+            Duration::from_millis(RUNTIME_WARMUP_WAIT_TIMEOUT_MS),
+        )
+        .await
+        .map_err(Self::workflow_service_error_from_runtime_warmup_coordination)
     }
 
     async fn apply_runtime_retention_disposition(
@@ -2081,6 +2002,7 @@ mod tests {
     use inference::{RerankRequest, RerankResponse};
     use pantograph_runtime_registry::{
         RuntimeRegistration, RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
+        RuntimeTransition,
     };
     use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
     use std::path::Path;

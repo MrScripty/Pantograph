@@ -547,6 +547,10 @@ Update during implementation:
   session reservation checks behind a shared backend registry helper so the
   embedded workflow host no longer re-derives registration shape across
   multiple workflow-execution call sites.
+- 2026-04-17: Moved active-runtime warmup polling and `WarmupStarted`
+  transition sequencing behind a shared backend lifecycle helper so the
+  embedded workflow host no longer owns a separate runtime warmup loop during
+  session-load admission.
 
 ## Commit Cadence Notes
 
