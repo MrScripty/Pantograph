@@ -288,12 +288,12 @@ mod tests {
     };
     use pantograph_workflow_service::graph::WorkflowSessionKind;
     use pantograph_workflow_service::{
-        WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowGraph,
-        WorkflowGraphEditSessionCreateRequest, WorkflowRuntimeRequirements,
-        WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
-        WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-        WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
-        WorkflowTraceSnapshotRequest,
+        WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowErrorCode,
+        WorkflowErrorEnvelope, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
+        WorkflowRuntimeRequirements, WorkflowSchedulerSnapshotRequest,
+        WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
+        WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     };
 
     fn running_session_summary() -> WorkflowSessionSummary {
@@ -742,6 +742,36 @@ mod tests {
         assert!(error.contains("\"code\":\"invalid_request\""));
         assert!(error
             .contains("workflow trace snapshot request field 'execution_id' must not be blank"));
+    }
+
+    #[test]
+    fn workflow_transport_error_json_preserves_backend_error_envelopes() {
+        let cases = [
+            (
+                WorkflowServiceError::RuntimeNotReady("runtime unavailable".to_string()),
+                WorkflowErrorCode::RuntimeNotReady,
+                "runtime unavailable",
+            ),
+            (
+                WorkflowServiceError::CapabilityViolation("runtime admission rejected".to_string()),
+                WorkflowErrorCode::CapabilityViolation,
+                "runtime admission rejected",
+            ),
+            (
+                WorkflowServiceError::RuntimeTimeout("workflow run cancelled".to_string()),
+                WorkflowErrorCode::RuntimeTimeout,
+                "workflow run cancelled",
+            ),
+        ];
+
+        for (error, expected_code, expected_message) in cases {
+            let envelope: WorkflowErrorEnvelope =
+                serde_json::from_str(&super::workflow_error_json(error))
+                    .expect("parse error envelope");
+
+            assert_eq!(envelope.code, expected_code);
+            assert_eq!(envelope.message, expected_message);
+        }
     }
 
     #[test]

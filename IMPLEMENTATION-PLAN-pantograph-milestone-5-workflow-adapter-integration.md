@@ -383,7 +383,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
 - [ ] Add explicit post-restart and post-restore reconciliation coverage so
       diagnostics and trace consumers resynchronize from backend-owned state
       after recovery-shaped transitions.
-- [ ] Verify that runtime-not-ready, admission failure, and cancellation-shaped
+- [x] Verify that runtime-not-ready, admission failure, and cancellation-shaped
       failures preserve machine-consumable backend envelopes through transport
       wrappers.
 - [ ] Add or tighten acceptance coverage from backend trace/scheduler producers
@@ -537,6 +537,10 @@ Update during implementation:
   normalization through `WorkflowDiagnosticsSnapshotRequest` so the Tauri
   transport reuses one request-normalization rule instead of trimming fields in
   scattered command helpers.
+- Milestone 3 transport coverage now explicitly asserts that Tauri workflow
+  adapters preserve backend error-envelope codes for runtime-not-ready,
+  admission-rejection, and cancellation-shaped runtime-timeout failures instead
+  of flattening those errors into transport-local strings.
 
 ### Deviations
 
