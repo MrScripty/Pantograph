@@ -13,7 +13,7 @@ implementation progress in the runtime and diagnostics layers.
 1. Metrics/trace spine: In progress
 2. Parallel demand execution: Not started
 3. KV cache implementation: Not started
-4. Scheduler V2: Not started
+4. Scheduler V2: In progress
 5. Real workflow event contract: Partial prerequisite groundwork only
 6. Incremental graph execution: Not started
 7. Runtime adapter unification: In progress
@@ -26,11 +26,14 @@ Milestone 5 implementation plan in
 and the diagnostics/documentation/rollout-safety close-out now has a dedicated
 Milestone 6 implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
-The roadmap remains the cross-target summary, while milestone-level runtime
-adapter sequencing and close-out constraints are tracked in those dedicated
-plans. Milestone 5 transport hardening, binding review, recovery/idempotency
-verification, source-of-truth close-out, and the Milestone 6 diagnostics,
-documentation, and rollout-safety reconciliation are complete.
+Scheduler V2 planning now also has a dedicated implementation plan in
+`IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`. The roadmap remains the
+cross-target summary, while milestone-level runtime-adapter sequencing,
+Scheduler V2 execution constraints, and close-out details are tracked in those
+dedicated plans. Milestone 5 transport hardening, binding review,
+recovery/idempotency verification, source-of-truth close-out, and the
+Milestone 6 diagnostics, documentation, and rollout-safety reconciliation are
+complete.
 
 ### Completed groundwork already in the repo
 
@@ -330,13 +333,20 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 
 ### Phase 4: Scheduler V2
 
-**Status:** Not started
+**Status:** In progress
 
 **Goal:** Move from simple queue ordering plus keep-alive toward a runtime-aware
 session scheduler that makes better admission and reuse decisions.
 
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
+
 **Milestones:**
 
+- Backend-owned scheduler module extraction is now landed in
+  `crates/pantograph-workflow-service/src/scheduler/`, with `workflow.rs`
+  reduced to facade/orchestration ownership for the existing queue surface
 - Add scheduler policy objects instead of encoding all queue behavior directly
   in one service module
 - Introduce explicit runtime affinity and warm-session reuse decisions by

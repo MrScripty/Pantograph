@@ -10,6 +10,9 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
 
 ## Contents
 - `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
+- `scheduler/`: backend-owned workflow-session scheduler contracts and queue
+  store boundary used by `workflow.rs` so queue policy does not stay embedded
+  in the service facade.
 - `technical_fit.rs`: host-agnostic technical-fit request and decision DTOs plus
   normalization helpers, session queue-pressure/context assembly, and
   workflow-service request/session entrypoints plus runtime-preflight
@@ -117,6 +120,9 @@ Primary contract types:
 - Session `keep_alive` interpretation starts here; adapters may forward the
   resulting retention hint to lower-level runtime infrastructure, but they must
   not invent separate retention policy.
+- The workflow-session scheduler queue/store now lives under `scheduler/`,
+  while `workflow.rs` remains the facade and orchestration entrypoint that
+  delegates into that backend-owned scheduler boundary.
 - This crate owns session-idle/runtime-loaded facts, but hosts may consume
   those facts through an explicit unload-candidate contract so backend runtime
   registries remain the owner of reservation eviction ordering.

@@ -10,6 +10,7 @@ extern crate workflow_nodes;
 
 pub mod capabilities;
 pub mod graph;
+mod scheduler;
 pub mod technical_fit;
 pub mod trace;
 pub mod workflow;
