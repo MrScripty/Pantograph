@@ -221,6 +221,10 @@ let snapshot = workflow_service
   backend-owned trace store and rely on its idempotent replay handling; this
   directory must not restamp or locally coalesce them into a second policy
   layer.
+- When the backend trace store resets an execution into a new attempt, the
+  diagnostics overlay for that execution must reset alongside it so stale
+  progress text, node overlays, and retained event history do not leak across
+  retries.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

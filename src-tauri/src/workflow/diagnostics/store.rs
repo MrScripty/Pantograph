@@ -59,6 +59,18 @@ struct WorkflowDiagnosticsState {
     retained_event_limit: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TraceAttemptState {
+    started_at_ms: u64,
+    event_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OverlayRecordDecision {
+    reset_overlay: bool,
+    record_overlay: bool,
+}
+
 impl WorkflowDiagnosticsState {
     fn new(retained_event_limit: usize) -> Self {
         Self {
@@ -302,23 +314,38 @@ impl WorkflowDiagnosticsStore {
         event: &WorkflowEvent,
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
-        let (traces, record_overlay) = workflow_trace_event(event)
+        let (traces, execution_id, overlay_decision) = workflow_trace_event(event)
             .map(|trace_event| {
                 let execution_id = trace_event_execution_id(&trace_event).to_string();
-                let previous_event_count = self.trace_event_count_for_execution(&execution_id);
+                let previous_state = self.trace_attempt_state_for_execution(&execution_id);
                 let traces = self.trace_store.record_event(&trace_event, timestamp_ms);
-                let record_overlay = trace_event_count_in_snapshot(&traces, &execution_id)
-                    .zip(previous_event_count)
-                    .map(|(current, previous)| current > previous)
-                    .unwrap_or(previous_event_count.is_none());
-                (traces, record_overlay)
+                let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
+                (
+                    traces,
+                    Some(execution_id),
+                    overlay_record_decision(previous_state, current_state),
+                )
             })
-            .unwrap_or_else(|| (self.trace_store.snapshot_all(), true));
+            .unwrap_or_else(|| {
+                (
+                    self.trace_store.snapshot_all(),
+                    event_execution_id(event),
+                    OverlayRecordDecision {
+                        reset_overlay: false,
+                        record_overlay: true,
+                    },
+                )
+            });
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        if record_overlay {
+        if overlay_decision.reset_overlay {
+            if let Some(execution_id) = execution_id.as_deref() {
+                state.overlays_by_execution_id.remove(execution_id);
+            }
+        }
+        if overlay_decision.record_overlay {
             record_diagnostics_overlay(&mut state, event, timestamp_ms);
         }
         state.prune_overlays(&traces);
@@ -329,26 +356,42 @@ impl WorkflowDiagnosticsStore {
         &self,
         event: &WorkflowEvent,
     ) -> WorkflowDiagnosticsProjection {
-        let (traces, timestamp_ms, record_overlay) = workflow_trace_event(event)
+        let (traces, timestamp_ms, execution_id, overlay_decision) = workflow_trace_event(event)
             .map(|trace_event| {
                 let execution_id = trace_event_execution_id(&trace_event).to_string();
-                let previous_event_count = self.trace_event_count_for_execution(&execution_id);
+                let previous_state = self.trace_attempt_state_for_execution(&execution_id);
                 let result = self.trace_store.record_event_now(&trace_event);
-                let record_overlay = trace_event_count_in_snapshot(&result.snapshot, &execution_id)
-                    .zip(previous_event_count)
-                    .map(|(current, previous)| current > previous)
-                    .unwrap_or(previous_event_count.is_none());
-                (result.snapshot, result.recorded_at_ms, record_overlay)
+                let current_state =
+                    trace_attempt_state_in_snapshot(&result.snapshot, &execution_id);
+                (
+                    result.snapshot,
+                    result.recorded_at_ms,
+                    Some(execution_id),
+                    overlay_record_decision(previous_state, current_state),
+                )
             })
             .unwrap_or_else(|| {
                 let timestamp_ms = unix_timestamp_ms();
-                (self.trace_store.snapshot_all(), timestamp_ms, true)
+                (
+                    self.trace_store.snapshot_all(),
+                    timestamp_ms,
+                    event_execution_id(event),
+                    OverlayRecordDecision {
+                        reset_overlay: false,
+                        record_overlay: true,
+                    },
+                )
             });
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        if record_overlay {
+        if overlay_decision.reset_overlay {
+            if let Some(execution_id) = execution_id.as_deref() {
+                state.overlays_by_execution_id.remove(execution_id);
+            }
+        }
+        if overlay_decision.record_overlay {
             record_diagnostics_overlay(&mut state, event, timestamp_ms);
         }
         state.prune_overlays(&traces);
@@ -362,24 +405,25 @@ impl WorkflowDiagnosticsStore {
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
         let execution_id = trace_event_execution_id(trace_event).to_string();
-        let previous_event_count = self.trace_event_count_for_execution(&execution_id);
+        let previous_state = self.trace_attempt_state_for_execution(&execution_id);
         let traces = self.trace_store.record_event(trace_event, timestamp_ms);
-        let record_overlay = trace_event_count_in_snapshot(&traces, &execution_id)
-            .zip(previous_event_count)
-            .map(|(current, previous)| current > previous)
-            .unwrap_or(previous_event_count.is_none());
+        let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
+        let overlay_decision = overlay_record_decision(previous_state, current_state);
         let mut state = self
             .state
             .lock()
             .expect("workflow diagnostics lock poisoned");
-        if record_overlay {
+        if overlay_decision.reset_overlay {
+            state.overlays_by_execution_id.remove(&execution_id);
+        }
+        if overlay_decision.record_overlay {
             record_diagnostics_overlay(&mut state, overlay_event, timestamp_ms);
         }
         state.prune_overlays(&traces);
         state.snapshot(&traces)
     }
 
-    fn trace_event_count_for_execution(&self, execution_id: &str) -> Option<usize> {
+    fn trace_attempt_state_for_execution(&self, execution_id: &str) -> Option<TraceAttemptState> {
         self.trace_store
             .snapshot(&WorkflowTraceSnapshotRequest {
                 execution_id: Some(execution_id.to_string()),
@@ -391,21 +435,58 @@ impl WorkflowDiagnosticsStore {
             .traces
             .into_iter()
             .next()
-            .map(|trace| trace.event_count)
+            .map(|trace| TraceAttemptState {
+                started_at_ms: trace.started_at_ms,
+                event_count: trace.event_count,
+            })
     }
 }
 
 pub type SharedWorkflowDiagnosticsStore = Arc<WorkflowDiagnosticsStore>;
 
-fn trace_event_count_in_snapshot(
+fn trace_attempt_state_in_snapshot(
     traces: &WorkflowTraceSnapshotResponse,
     execution_id: &str,
-) -> Option<usize> {
+) -> Option<TraceAttemptState> {
     traces
         .traces
         .iter()
         .find(|trace| trace.execution_id == execution_id)
-        .map(|trace| trace.event_count)
+        .map(|trace| TraceAttemptState {
+            started_at_ms: trace.started_at_ms,
+            event_count: trace.event_count,
+        })
+}
+
+fn overlay_record_decision(
+    previous_state: Option<TraceAttemptState>,
+    current_state: Option<TraceAttemptState>,
+) -> OverlayRecordDecision {
+    match (previous_state, current_state) {
+        (None, Some(_)) => OverlayRecordDecision {
+            reset_overlay: false,
+            record_overlay: true,
+        },
+        (Some(previous), Some(current))
+            if current.started_at_ms != previous.started_at_ms
+                || current.event_count < previous.event_count =>
+        {
+            OverlayRecordDecision {
+                reset_overlay: true,
+                record_overlay: true,
+            }
+        }
+        (Some(previous), Some(current)) if current.event_count > previous.event_count => {
+            OverlayRecordDecision {
+                reset_overlay: false,
+                record_overlay: true,
+            }
+        }
+        _ => OverlayRecordDecision {
+            reset_overlay: false,
+            record_overlay: false,
+        },
+    }
 }
 
 fn trace_event_execution_id(event: &WorkflowTraceEvent) -> &str {

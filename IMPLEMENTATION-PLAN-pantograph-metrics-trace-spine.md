@@ -429,6 +429,10 @@ Update during implementation:
   adapter coverage proving duplicate terminal node-engine events still resolve
   to one canonical trace outcome because replay/idempotency remains owned by
   the backend trace store rather than the transport layer.
+- 2026-04-17: Thirty-eighth implementation slice taught the backend-owned
+  diagnostics store to reset execution overlays when the canonical trace resets
+  into a new attempt, preventing stale node progress/event history from
+  leaking across retry-shaped `RunStarted` transitions.
 
 ## Commit Cadence Notes
 
