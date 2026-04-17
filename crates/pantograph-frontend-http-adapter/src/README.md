@@ -6,7 +6,7 @@ Explicit frontend HTTP workflow host adapter for modular GUI surfaces.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | URL-based `WorkflowHost` implementation and HTTP payload parsing helpers. |
+| `lib.rs` | URL-based `WorkflowHost` implementation plus shared HTTP error-envelope and output-payload parsing helpers. |
 
 ## Problem
 Headless API bindings were mixing frontend HTTP transport concerns with
@@ -28,6 +28,8 @@ implements `WorkflowHost`.
 ## Invariants
 - This crate is transport/infrastructure only; no workflow business rules.
 - This crate is not required for headless Rust API usage.
+- Non-2xx HTTP responses must be translated through backend-owned workflow
+  error envelopes instead of adapter-local error taxonomies.
 
 ## Revisit Triggers
 - A second frontend transport needs the same host semantics.

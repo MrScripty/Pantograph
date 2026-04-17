@@ -403,16 +403,16 @@ preserve backend-owned semantics without adapter-local reconstruction.
 aligned with the same backend-owned contracts.
 
 **Tasks:**
-- [ ] Audit UniFFI, Rustler, frontend HTTP, and Tauri workflow request/response
+- [x] Audit UniFFI, Rustler, frontend HTTP, and Tauri workflow request/response
       wrappers for duplicate validation, local reconstruction, or contract
       drift.
-- [ ] Apply additive transport-only changes where one binding still lags the
+- [x] Apply additive transport-only changes where one binding still lags the
       backend-owned workflow/diagnostics contracts.
-- [ ] Move any newly discovered binding-adjacent business logic back into the
+- [x] Move any newly discovered binding-adjacent business logic back into the
       relevant backend Rust crate or wrapper crate before continuing.
-- [ ] Ensure generated or wrapper-level binding docs identify the core Rust
+- [x] Ensure generated or wrapper-level binding docs identify the core Rust
       contract owner instead of implying binding-local business logic.
-- [ ] Review dependency usage and avoid adding new cross-layer dependencies
+- [x] Review dependency usage and avoid adding new cross-layer dependencies
       unless they are justified under `DEPENDENCY-STANDARDS.md`.
 
 **Verification:**
@@ -421,7 +421,7 @@ aligned with the same backend-owned contracts.
 - `cargo check -p pantograph-frontend-http-adapter`
 - Binding review against `LANGUAGE-BINDINGS-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Documentation, Recovery Hardening, And Close-Out
 
@@ -569,6 +569,10 @@ Update during implementation:
   wrapper execution around shared JSON parse/serialize helpers, while the
   Rustler README now identifies `pantograph-workflow-service` as the contract
   owner and documents the full optional frontend-HTTP export surface.
+- Milestone 4 frontend-HTTP adapter audit found no backend policy leakage, but
+  it now also centralizes non-2xx workflow error-envelope parsing in one
+  transport helper and documents that HTTP failures must translate through
+  backend-owned workflow error envelopes rather than adapter-local taxonomies.
 
 ### Deviations
 

@@ -209,20 +209,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             }
         })?;
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.map_err(|e| {
-                WorkflowServiceError::Internal(format!(
-                    "workflow api error {} (failed to read error payload: {})",
-                    status, e
-                ))
-            })?;
-            let envelope: WorkflowErrorEnvelope = serde_json::from_str(&body).map_err(|e| {
-                WorkflowServiceError::Internal(format!(
-                    "workflow api error {} (expected workflow error envelope JSON: {}; body: {})",
-                    status, e, body
-                ))
-            })?;
-            return Err(map_workflow_error_envelope(envelope));
+            return Err(workflow_error_from_http_response(response).await?);
         }
 
         let payload: serde_json::Value = response
@@ -232,6 +219,25 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
 
         parse_workflow_outputs_payload(&payload)
     }
+}
+
+async fn workflow_error_from_http_response(
+    response: reqwest::Response,
+) -> Result<WorkflowServiceError, WorkflowServiceError> {
+    let status = response.status();
+    let body = response.text().await.map_err(|e| {
+        WorkflowServiceError::Internal(format!(
+            "workflow api error {} (failed to read error payload: {})",
+            status, e
+        ))
+    })?;
+    let envelope: WorkflowErrorEnvelope = serde_json::from_str(&body).map_err(|e| {
+        WorkflowServiceError::Internal(format!(
+            "workflow api error {} (expected workflow error envelope JSON: {}; body: {})",
+            status, e, body
+        ))
+    })?;
+    Ok(map_workflow_error_envelope(envelope))
 }
 
 fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServiceError {
@@ -709,5 +715,30 @@ mod tests {
             });
             assert_eq!(mapped.to_envelope(), expected.to_envelope());
         }
+    }
+
+    #[tokio::test]
+    async fn workflow_error_from_http_response_rejects_non_envelope_payloads() {
+        let payload = serde_json::json!({
+            "error": "backend unavailable"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(502, payload);
+
+        let response = reqwest::Client::new()
+            .post(format!("{}/v1/workflow/run", base_url))
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .expect("request should succeed");
+
+        let error = workflow_error_from_http_response(response)
+            .await
+            .expect_err("non-envelope payload should be rejected");
+
+        server_thread.join().expect("join server");
+        assert!(matches!(error, WorkflowServiceError::Internal(_)));
+        assert!(error
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
     }
 }
