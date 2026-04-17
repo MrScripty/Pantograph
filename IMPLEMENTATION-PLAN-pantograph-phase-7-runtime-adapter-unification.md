@@ -327,7 +327,7 @@ standards blockers before more producer logic lands.
 **Tasks:**
 - [x] Keep this file and the roadmap aligned, with this file as the detailed
       source of truth for Phase 7 sequencing.
-- [ ] Add the missing `crates/pantograph-runtime-identity/src/README.md`
+- [x] Add the missing `crates/pantograph-runtime-identity/src/README.md`
       before Milestones 2 through 4 rely on that source directory as part of
       the runtime identity contract.
 - [x] Inventory the exact runtime producer families still in scope for Phase 7
@@ -344,7 +344,7 @@ standards blockers before more producer logic lands.
 - Direct read-through of roadmap and this plan to confirm source-of-truth
   alignment
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 2: Converge Producer Health, Reconnect, And Degraded Semantics
 
@@ -499,6 +499,9 @@ Update during implementation:
   families still in scope, freezes the shared registry and capability contract
   family, and captures the decomposition decisions required before more Phase 7
   runtime behavior lands.
+- 2026-04-17: Added the missing `crates/pantograph-runtime-identity/src/README.md`
+  so the shared runtime-identity boundary meets documentation standards before
+  the next extraction and producer-convergence slices.
 
 ## Commit Cadence Notes
 
@@ -546,6 +549,8 @@ Update during implementation:
   plan.
 - Milestone 1 source-of-truth freeze completed for roadmap alignment, producer
   inventory, contract-family freeze, and decomposition review.
+- Milestone 1 surrounding-compliance closure completed with the missing
+  runtime-identity source README.
 
 ### Deviations
 
@@ -553,7 +558,6 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Add the missing `crates/pantograph-runtime-identity/src/README.md`.
 - Begin the first backend extraction slice from the recorded decomposition
   review before Milestone 2 producer-policy changes land.
 
