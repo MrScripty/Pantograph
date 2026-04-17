@@ -313,6 +313,7 @@ pub struct WorkflowSessionRuntimeUnloadCandidate {
     pub session_id: String,
     pub workflow_id: String,
     pub usage_profile: Option<String>,
+    pub required_models: Vec<String>,
     pub keep_alive: bool,
     pub access_tick: u64,
     pub run_count: u64,
@@ -325,4 +326,5 @@ pub struct WorkflowSessionRuntimeSelectionTarget {
     pub session_id: String,
     pub workflow_id: String,
     pub usage_profile: Option<String>,
+    pub required_models: Vec<String>,
 }

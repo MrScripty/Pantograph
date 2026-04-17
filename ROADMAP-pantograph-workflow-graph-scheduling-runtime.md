@@ -361,6 +361,10 @@ session scheduler that makes better admission and reuse decisions.
 - Runtime-pressure unload selection now also carries backend-owned target
   workflow and `usage_profile` affinity inputs, so default rebalance behavior
   preserves more-reusable idle runtimes before falling back to generic LRU
+- Scheduler runtime-affinity selection now also carries backend-owned
+  `required_models` refreshed from workflow capabilities and preflight cache
+  updates, so rebalance preserves shared-model idle runtimes before unrelated
+  model sessions even across different workflows
 - Add scheduler policy objects instead of encoding all queue behavior directly
   in one service module
 - Introduce explicit runtime affinity and warm-session reuse decisions by

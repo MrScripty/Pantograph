@@ -806,6 +806,7 @@ impl WorkflowService {
                             session_id: session_id.to_string(),
                             workflow_id: target.workflow_id.clone(),
                             usage_profile: target.usage_profile.clone(),
+                            required_models: target.required_models.clone(),
                         },
                         candidates: store.runtime_unload_candidates(session_id),
                     }
@@ -905,6 +906,7 @@ impl WorkflowService {
             graph_fingerprint,
             runtime_capability_fingerprint,
             override_selection,
+            required_models: capabilities.runtime_requirements.required_models.clone(),
             blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
         };
 
@@ -913,6 +915,23 @@ impl WorkflowService {
         })?;
         store.cache_preflight(session_id, cache.clone())?;
         Ok(cache)
+    }
+
+    async fn refresh_session_runtime_affinity_basis<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        workflow_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let capabilities = host.workflow_capabilities(workflow_id).await?;
+        let mut store = self.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session store lock poisoned".to_string())
+        })?;
+        store.update_runtime_affinity_basis(
+            session_id,
+            capabilities.runtime_requirements.required_models,
+        )?;
+        Ok(())
     }
 
     pub async fn create_workflow_session<H: WorkflowHost>(
@@ -934,11 +953,21 @@ impl WorkflowService {
                     .clone()
                     .map(|v| v.trim().to_string())
                     .filter(|v| !v.is_empty()),
+                Vec::new(),
                 request.keep_alive,
             )?
         };
 
         if request.keep_alive {
+            if let Err(error) = self
+                .refresh_session_runtime_affinity_basis(host, &session_id, &request.workflow_id)
+                .await
+            {
+                if let Ok(mut rollback_store) = self.session_store.lock() {
+                    let _ = rollback_store.close_session(&session_id);
+                }
+                return Err(error);
+            }
             if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
                 if let Ok(mut rollback_store) = self.session_store.lock() {
                     let _ = rollback_store.close_session(&session_id);
@@ -990,13 +1019,6 @@ impl WorkflowService {
             tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
         };
 
-        if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
-            if let Ok(mut store) = self.session_store.lock() {
-                let _ = store.finish_run(&session_id, &queue_id);
-            }
-            return Err(error);
-        }
-
         let preflight_cache = match self
             .ensure_session_runtime_preflight(
                 host,
@@ -1014,6 +1036,13 @@ impl WorkflowService {
                 return Err(error);
             }
         };
+
+        if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
+            if let Ok(mut store) = self.session_store.lock() {
+                let _ = store.finish_run(&session_id, &queue_id);
+            }
+            return Err(error);
+        }
 
         let run_result = self
             .workflow_run_internal(
@@ -1281,6 +1310,14 @@ impl WorkflowService {
         } else if request.keep_alive
             && matches!(state_after_update, WorkflowSessionState::IdleUnloaded)
         {
+            let workflow_id = {
+                let store = self.session_store.lock().map_err(|_| {
+                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
+                })?;
+                store.session_summary(&session_id)?.workflow_id
+            };
+            self.refresh_session_runtime_affinity_basis(host, &session_id, &workflow_id)
+                .await?;
             self.ensure_session_runtime_loaded(host, &session_id)
                 .await?;
         }
@@ -2604,6 +2641,7 @@ mod tests {
     struct AffinityRuntimeHost {
         unloads: Arc<Mutex<Vec<String>>>,
         capabilities: WorkflowHostCapabilities,
+        required_models_by_workflow: HashMap<String, Vec<String>>,
     }
 
     impl AffinityRuntimeHost {
@@ -2618,6 +2656,25 @@ mod tests {
                     models: Vec::new(),
                     runtime_capabilities: vec![ready_runtime_capability()],
                 },
+                required_models_by_workflow: HashMap::new(),
+            }
+        }
+
+        fn with_required_models(
+            unloads: Arc<Mutex<Vec<String>>>,
+            required_models_by_workflow: HashMap<String, Vec<String>>,
+        ) -> Self {
+            Self {
+                unloads,
+                capabilities: WorkflowHostCapabilities {
+                    max_input_bindings: 16,
+                    max_output_targets: 16,
+                    max_value_bytes: 4096,
+                    runtime_requirements: WorkflowRuntimeRequirements::default(),
+                    models: Vec::new(),
+                    runtime_capabilities: vec![ready_runtime_capability()],
+                },
+                required_models_by_workflow,
             }
         }
     }
@@ -3012,9 +3069,15 @@ mod tests {
 
         async fn workflow_capabilities(
             &self,
-            _workflow_id: &str,
+            workflow_id: &str,
         ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
-            Ok(self.capabilities.clone())
+            let mut capabilities = self.capabilities.clone();
+            capabilities.runtime_requirements.required_models = self
+                .required_models_by_workflow
+                .get(workflow_id)
+                .cloned()
+                .unwrap_or_default();
+            Ok(capabilities)
         }
 
         async fn runtime_capabilities(
@@ -4850,6 +4913,82 @@ mod tests {
         assert!(!unloads
             .iter()
             .any(|session_id| session_id == &affine.session_id));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime() {
+        let unloads = Arc::new(Mutex::new(Vec::new()));
+        let host = AffinityRuntimeHost::with_required_models(
+            unloads.clone(),
+            HashMap::from([
+                ("wf-target".to_string(), vec!["model-a".to_string()]),
+                ("wf-shared-model".to_string(), vec!["model-a".to_string()]),
+                ("wf-other-model".to_string(), vec!["model-b".to_string()]),
+            ]),
+        );
+        let service = WorkflowService::with_capacity_limits(3, 2);
+
+        let shared_model = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-shared-model".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create shared-model keep-alive session");
+        let other_model = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-other-model".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create other-model keep-alive session");
+        let target = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-target".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create target session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: target.session_id.clone(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    run_id: None,
+                    priority: None,
+                },
+            )
+            .await
+            .expect("run target session");
+
+        let unloads = unloads.lock().expect("unloads lock poisoned");
+        assert_eq!(
+            unloads.first().map(String::as_str),
+            Some(other_model.session_id.as_str())
+        );
+        assert!(unloads
+            .iter()
+            .any(|session_id| session_id == &target.session_id));
+        assert!(!unloads
+            .iter()
+            .any(|session_id| session_id == &shared_model.session_id));
     }
 
     #[tokio::test]

@@ -3503,12 +3503,14 @@ mod tests {
                     session_id: "session-target".to_string(),
                     workflow_id: "wf-a".to_string(),
                     usage_profile: Some("interactive".to_string()),
+                    required_models: Vec::new(),
                 },
                 &[
                     WorkflowSessionRuntimeUnloadCandidate {
                         session_id: "session-a".to_string(),
                         workflow_id: "wf-a".to_string(),
                         usage_profile: Some("interactive".to_string()),
+                        required_models: Vec::new(),
                         keep_alive: true,
                         access_tick: 1,
                         run_count: 0,
@@ -3517,6 +3519,7 @@ mod tests {
                         session_id: "session-b".to_string(),
                         workflow_id: "wf-b".to_string(),
                         usage_profile: Some("batch".to_string()),
+                        required_models: Vec::new(),
                         keep_alive: false,
                         access_tick: 99,
                         run_count: 5,

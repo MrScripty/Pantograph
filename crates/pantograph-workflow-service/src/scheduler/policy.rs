@@ -107,10 +107,22 @@ impl PriorityThenFifoSchedulerPolicy {
         &self,
         target: &WorkflowSessionRuntimeSelectionTarget,
         candidate: &WorkflowSessionRuntimeUnloadCandidate,
-    ) -> (bool, bool) {
+    ) -> (bool, bool, bool, bool) {
         let same_workflow = candidate.workflow_id == target.workflow_id;
+        let exact_required_models = !target.required_models.is_empty()
+            && candidate.required_models == target.required_models;
+        let shared_required_models = !target.required_models.is_empty()
+            && candidate
+                .required_models
+                .iter()
+                .any(|model_id| target.required_models.contains(model_id));
         let same_usage_profile = same_workflow && candidate.usage_profile == target.usage_profile;
-        (same_workflow, same_usage_profile)
+        (
+            same_workflow,
+            exact_required_models,
+            shared_required_models,
+            same_usage_profile,
+        )
     }
 
     fn effective_priority(&self, queued: &WorkflowSessionQueuedRun) -> i32 {
@@ -182,11 +194,16 @@ mod tests {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
+        required_models: &[&str],
     ) -> WorkflowSessionRuntimeSelectionTarget {
         WorkflowSessionRuntimeSelectionTarget {
             session_id: session_id.to_string(),
             workflow_id: workflow_id.to_string(),
             usage_profile: usage_profile.map(str::to_string),
+            required_models: required_models
+                .iter()
+                .map(|model_id| model_id.to_string())
+                .collect(),
         }
     }
 
@@ -194,6 +211,7 @@ mod tests {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
+        required_models: &[&str],
         keep_alive: bool,
         access_tick: u64,
     ) -> WorkflowSessionRuntimeUnloadCandidate {
@@ -201,6 +219,10 @@ mod tests {
             session_id: session_id.to_string(),
             workflow_id: workflow_id.to_string(),
             usage_profile: usage_profile.map(str::to_string),
+            required_models: required_models
+                .iter()
+                .map(|model_id| model_id.to_string())
+                .collect(),
             keep_alive,
             access_tick,
             run_count: 0,
@@ -234,13 +256,13 @@ mod tests {
     #[test]
     fn select_runtime_unload_candidate_prefers_non_affine_idle_sessions() {
         let policy = PriorityThenFifoSchedulerPolicy;
-        let target = runtime_target("session-target", "wf-a", Some("interactive"));
+        let target = runtime_target("session-target", "wf-a", Some("interactive"), &[]);
         let selected = policy
             .select_runtime_unload_candidate(
                 &target,
                 &[
-                    unload_candidate("session-same", "wf-a", Some("interactive"), false, 1),
-                    unload_candidate("session-other", "wf-b", Some("batch"), true, 10),
+                    unload_candidate("session-same", "wf-a", Some("interactive"), &[], false, 1),
+                    unload_candidate("session-other", "wf-b", Some("batch"), &[], true, 10),
                 ],
             )
             .expect("candidate");
@@ -251,7 +273,7 @@ mod tests {
     #[test]
     fn select_runtime_unload_candidate_prefers_usage_mismatch_before_same_profile() {
         let policy = PriorityThenFifoSchedulerPolicy;
-        let target = runtime_target("session-target", "wf-a", Some("interactive"));
+        let target = runtime_target("session-target", "wf-a", Some("interactive"), &[]);
         let selected = policy
             .select_runtime_unload_candidate(
                 &target,
@@ -260,14 +282,94 @@ mod tests {
                         "session-same-profile",
                         "wf-a",
                         Some("interactive"),
+                        &[],
                         false,
                         1,
                     ),
-                    unload_candidate("session-other-profile", "wf-a", Some("batch"), true, 10),
+                    unload_candidate(
+                        "session-other-profile",
+                        "wf-a",
+                        Some("batch"),
+                        &[],
+                        true,
+                        10,
+                    ),
                 ],
             )
             .expect("candidate");
 
         assert_eq!(selected.session_id, "session-other-profile");
+    }
+
+    #[test]
+    fn select_runtime_unload_candidate_prefers_unrelated_models_before_shared_models() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let target = runtime_target(
+            "session-target",
+            "wf-target",
+            Some("interactive"),
+            &["model-a"],
+        );
+        let selected = policy
+            .select_runtime_unload_candidate(
+                &target,
+                &[
+                    unload_candidate(
+                        "session-shared-model",
+                        "wf-shared",
+                        Some("batch"),
+                        &["model-a"],
+                        false,
+                        1,
+                    ),
+                    unload_candidate(
+                        "session-other-model",
+                        "wf-other",
+                        Some("batch"),
+                        &["model-b"],
+                        true,
+                        10,
+                    ),
+                ],
+            )
+            .expect("candidate");
+
+        assert_eq!(selected.session_id, "session-other-model");
+    }
+
+    #[test]
+    fn select_runtime_unload_candidate_prefers_partial_model_overlap_before_exact_match() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let target = runtime_target(
+            "session-target",
+            "wf-target",
+            Some("interactive"),
+            &["model-a", "model-b"],
+        );
+        let selected = policy
+            .select_runtime_unload_candidate(
+                &target,
+                &[
+                    unload_candidate(
+                        "session-exact-models",
+                        "wf-other-exact",
+                        Some("batch"),
+                        &["model-a", "model-b"],
+                        false,
+                        1,
+                    ),
+                    unload_candidate(
+                        "session-partial-models",
+                        "wf-other-partial",
+                        Some("batch"),
+                        &["model-a"],
+                        true,
+                        10,
+                    ),
+                ],
+            )
+            .expect("candidate");
+
+        assert_eq!(selected.session_id, "session-partial-models");
     }
 }

@@ -36,9 +36,11 @@ owns the in-memory queue and session state that `WorkflowService` delegates to.
 `policy.rs` makes the current priority/FIFO queue behavior explicit and now
 also owns the first starvation-protection promotion rule plus the first
 runtime-affinity unload-ranking rule instead of leaving that behavior as ad hoc
-branching inside the store. Queue items and trace-facing projections now also
-carry backend-owned admission-outcome semantics instead of forcing adapters to
-reverse-engineer queued versus admitted state. `workflow.rs` remains the public
+branching inside the store. That unload-ranking path now consumes backend-owned
+workflow id, `required_models`, and `usage_profile` affinity facts refreshed by
+the service before runtime loading. Queue items and trace-facing projections
+now also carry backend-owned admission-outcome semantics instead of forcing
+adapters to reverse-engineer queued versus admitted state. `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
 needs to be the long-term home for scheduler contracts or queue mutation
 logic.
