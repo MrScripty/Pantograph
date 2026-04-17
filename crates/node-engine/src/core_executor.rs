@@ -749,24 +749,81 @@ fn extract_json_path(json: &serde_json::Value, path: &str) -> (serde_json::Value
 fn execute_human_input(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
-    let prompt = inputs
-        .get("_data")
-        .and_then(|d| d.get("prompt"))
-        .and_then(|p| p.as_str())
-        .unwrap_or("Please provide input");
-
-    let user_input = inputs
-        .get("user_input")
-        .and_then(|i| i.as_str())
-        .map(|s| s.to_string());
+    let prompt = human_input_prompt(inputs).unwrap_or_else(|| "Please provide input".to_string());
+    let value = human_input_value(inputs).unwrap_or_else(|| serde_json::json!(""));
 
     let mut outputs = HashMap::new();
     outputs.insert("prompt".to_string(), serde_json::json!(prompt));
-    outputs.insert(
-        "input".to_string(),
-        serde_json::json!(user_input.unwrap_or_default()),
-    );
+    outputs.insert("value".to_string(), value.clone());
+    outputs.insert("input".to_string(), value);
     Ok(outputs)
+}
+
+pub(crate) fn human_input_prompt(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+    inputs
+        .get("prompt")
+        .and_then(|prompt| prompt.as_str())
+        .map(|prompt| prompt.to_string())
+        .or_else(|| {
+            inputs
+                .get("_data")
+                .and_then(|data| data.get("prompt"))
+                .and_then(|prompt| prompt.as_str())
+                .map(|prompt| prompt.to_string())
+        })
+}
+
+pub(crate) fn human_input_default_value(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<serde_json::Value> {
+    inputs
+        .get("default")
+        .filter(|value| !value.is_null())
+        .cloned()
+        .or_else(|| {
+            inputs
+                .get("_data")
+                .and_then(|data| data.get("default"))
+                .filter(|value| !value.is_null())
+                .cloned()
+        })
+}
+
+pub(crate) fn human_input_auto_accept(inputs: &HashMap<String, serde_json::Value>) -> bool {
+    inputs
+        .get("auto_accept")
+        .or_else(|| inputs.get("_data").and_then(|data| data.get("auto_accept")))
+        .and_then(parse_boolean_input_value)
+        .unwrap_or(false)
+}
+
+pub(crate) fn human_input_response_value(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<serde_json::Value> {
+    for key in ["user_response", "user_input"] {
+        if let Some(value) = inputs.get(key).filter(|value| !value.is_null()).cloned() {
+            return Some(value);
+        }
+        if let Some(value) = inputs
+            .get("_data")
+            .and_then(|data| data.get(key))
+            .filter(|value| !value.is_null())
+            .cloned()
+        {
+            return Some(value);
+        }
+    }
+    None
+}
+
+pub(crate) fn human_input_value(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<serde_json::Value> {
+    human_input_response_value(inputs).or_else(|| {
+        human_input_auto_accept(inputs)
+            .then(|| human_input_default_value(inputs))
+            .flatten()
+    })
 }
 
 fn execute_tool_executor(
@@ -3745,12 +3802,26 @@ mod tests {
         let mut inputs = HashMap::new();
         inputs.insert(
             "_data".to_string(),
-            serde_json::json!({"prompt": "Enter name"}),
+            serde_json::json!({"prompt": "Enter name", "default": "Unknown"}),
         );
-        inputs.insert("user_input".to_string(), serde_json::json!("Alice"));
+        inputs.insert("user_response".to_string(), serde_json::json!("Alice"));
         let result = execute_human_input(&inputs).unwrap();
         assert_eq!(result["prompt"], "Enter name");
+        assert_eq!(result["value"], "Alice");
         assert_eq!(result["input"], "Alice");
+    }
+
+    #[test]
+    fn test_human_input_auto_accepts_default() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "_data".to_string(),
+            serde_json::json!({"prompt": "Enter name", "default": "Unknown", "auto_accept": true}),
+        );
+        let result = execute_human_input(&inputs).unwrap();
+        assert_eq!(result["prompt"], "Enter name");
+        assert_eq!(result["value"], "Unknown");
+        assert_eq!(result["input"], "Unknown");
     }
 
     #[test]

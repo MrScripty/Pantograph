@@ -40,6 +40,13 @@ pub enum NodeEngineError {
     #[error("Workflow cancelled")]
     Cancelled,
 
+    /// Workflow is waiting for interactive input
+    #[error("Workflow is waiting for input at task '{task_id}'")]
+    WaitingForInput {
+        task_id: String,
+        prompt: Option<String>,
+    },
+
     /// Gateway/inference error
     #[error("Gateway error: {0}")]
     Gateway(String),
@@ -57,6 +64,14 @@ impl NodeEngineError {
     /// Create an execution failed error with a message
     pub fn failed(msg: impl Into<String>) -> Self {
         Self::ExecutionFailed(msg.into())
+    }
+
+    /// Create a waiting-for-input error for interactive tasks.
+    pub fn waiting_for_input(task_id: impl Into<String>, prompt: Option<String>) -> Self {
+        Self::WaitingForInput {
+            task_id: task_id.into(),
+            prompt,
+        }
     }
 
     /// Create from a graph-flow error

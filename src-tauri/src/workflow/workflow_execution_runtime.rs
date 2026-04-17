@@ -234,6 +234,9 @@ async fn run_session_graph_snapshot(
         outcome.runtime_model_target,
     )
     .await;
+    if outcome.waiting_for_input {
+        return Ok(());
+    }
     if let Some(error) = outcome.error {
         return Err(error);
     }

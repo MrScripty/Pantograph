@@ -593,6 +593,10 @@ Update during implementation:
   and multi-demand entry paths, reducing the remaining event-contract gap to
   paths that still bypass executor-owned mutation or interactive execution
   semantics.
+- Edit-session execution now preserves backend-owned `WaitingForInput`
+  semantics for unresolved `human-input` nodes, with `node-engine` owning the
+  pause event and the embedded-runtime/Tauri boundary treating that state as an
+  interactive wait instead of degrading it into `WorkflowFailed`.
 
 ### Deviations
 

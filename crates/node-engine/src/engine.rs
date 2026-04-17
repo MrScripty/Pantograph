@@ -37,6 +37,10 @@ use async_trait::async_trait;
 use graph_flow::Context;
 use tokio::sync::RwLock;
 
+use crate::core_executor::{
+    human_input_auto_accept, human_input_default_value, human_input_prompt,
+    human_input_response_value,
+};
 use crate::error::{NodeEngineError, Result};
 use crate::events::{EventSink, WorkflowEvent};
 use crate::extensions::ExecutorExtensions;
@@ -108,6 +112,25 @@ fn collect_dirty_tasks(graph: &WorkflowGraph, root_node_id: &NodeId) -> Vec<Node
     let mut dirty_tasks = visited.into_iter().collect::<Vec<_>>();
     dirty_tasks.sort();
     dirty_tasks
+}
+
+fn unresolved_human_input_prompt(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<Option<String>> {
+    if node_type != "human-input" {
+        return None;
+    }
+
+    if human_input_response_value(inputs).is_some() {
+        return None;
+    }
+
+    if human_input_auto_accept(inputs) && human_input_default_value(inputs).is_some() {
+        return None;
+    }
+
+    Some(human_input_prompt(inputs))
 }
 
 impl DemandEngine {
@@ -341,6 +364,21 @@ impl DemandEngine {
             if let Some(node) = graph.find_node(node_id) {
                 if !node.data.is_null() {
                     inputs.insert("_data".to_string(), node.data.clone());
+                }
+
+                if let Some(prompt) = unresolved_human_input_prompt(&node.node_type, &inputs) {
+                    let _ = event_sink.send(WorkflowEvent::TaskStarted {
+                        task_id: node_id.clone(),
+                        execution_id: self.execution_id.clone(),
+                    });
+                    let _ = event_sink.send(WorkflowEvent::WaitingForInput {
+                        workflow_id: graph.id.clone(),
+                        execution_id: self.execution_id.clone(),
+                        task_id: node_id.clone(),
+                        prompt: prompt.clone(),
+                    });
+                    computing.remove(node_id);
+                    return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
                 }
             }
 
@@ -1221,6 +1259,100 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_human_input_emits_waiting_for_input() {
+        let graph = WorkflowGraph {
+            id: "interactive-workflow".to_string(),
+            name: "Interactive Workflow".to_string(),
+            nodes: vec![GraphNode {
+                id: "approval".to_string(),
+                node_type: "human-input".to_string(),
+                data: serde_json::json!({
+                    "node_type": "human-input",
+                    "prompt": "Approve deployment?"
+                }),
+                position: (0.0, 0.0),
+            }],
+            edges: Vec::new(),
+            groups: Vec::new(),
+        };
+        let event_sink = Arc::new(VecEventSink::new());
+        let workflow_executor =
+            WorkflowExecutor::new("exec_human_input", graph, event_sink.clone());
+        let executor_impl = crate::core_executor::CoreTaskExecutor::new();
+
+        let error = workflow_executor
+            .demand(&"approval".to_string(), &executor_impl)
+            .await
+            .expect_err("human input should pause execution");
+        assert!(matches!(
+            error,
+            NodeEngineError::WaitingForInput {
+                task_id,
+                prompt: Some(prompt)
+            } if task_id == "approval" && prompt == "Approve deployment?"
+        ));
+
+        let events = event_sink.events();
+        assert!(matches!(
+            events.as_slice(),
+            [
+                WorkflowEvent::TaskStarted { task_id, .. },
+                WorkflowEvent::WaitingForInput {
+                    workflow_id,
+                    task_id: waiting_task_id,
+                    prompt: Some(prompt),
+                    ..
+                }
+            ] if task_id == "approval"
+                && workflow_id == "interactive-workflow"
+                && waiting_task_id == "approval"
+                && prompt == "Approve deployment?"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_human_input_continues_with_response() {
+        let graph = WorkflowGraph {
+            id: "interactive-workflow".to_string(),
+            name: "Interactive Workflow".to_string(),
+            nodes: vec![GraphNode {
+                id: "approval".to_string(),
+                node_type: "human-input".to_string(),
+                data: serde_json::json!({
+                    "node_type": "human-input",
+                    "prompt": "Approve deployment?",
+                    "user_response": "approved"
+                }),
+                position: (0.0, 0.0),
+            }],
+            edges: Vec::new(),
+            groups: Vec::new(),
+        };
+        let event_sink = Arc::new(VecEventSink::new());
+        let workflow_executor =
+            WorkflowExecutor::new("exec_human_input", graph, event_sink.clone());
+        let executor_impl = crate::core_executor::CoreTaskExecutor::new();
+
+        let outputs = workflow_executor
+            .demand(&"approval".to_string(), &executor_impl)
+            .await
+            .expect("human input should continue once a response is present");
+        assert_eq!(outputs.get("value"), Some(&serde_json::json!("approved")));
+
+        let events = event_sink.events();
+        assert!(matches!(
+            events.as_slice(),
+            [
+                WorkflowEvent::TaskStarted { task_id, .. },
+                WorkflowEvent::TaskCompleted {
+                    task_id: completed_task_id,
+                    ..
+                }
+            ] if task_id == "approval" && completed_task_id == "approval"
+        ));
     }
 
     #[tokio::test]

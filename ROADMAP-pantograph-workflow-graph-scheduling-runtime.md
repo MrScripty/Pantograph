@@ -429,6 +429,10 @@ incremental runs.
   events for graph-mutation invalidation paths and
   `IncrementalExecutionStarted` for multi-demand execution entry, so those
   contracts no longer exist only as adapter/diagnostics placeholders.
+- Edit-session execution now also preserves real `WaitingForInput` pause
+  semantics end-to-end: unresolved `human-input` nodes emit the backend-owned
+  wait event from `node-engine`, and the embedded runtime/Tauri transport stop
+  treating that interactive pause as `WorkflowFailed`.
 - Frontend execution-ownership helpers now claim the active run from the first
   execution-scoped workflow event instead of pre-pinning session-backed runs
   to the edit-session id, so valid scheduler/runtime and incremental events are
@@ -442,7 +446,8 @@ incremental runs.
 
 - Backend-owned emission coverage for the remaining interactive and graph-
   mutation paths that still do not produce the event vocabulary consistently,
-  especially beyond the executor-owned invalidation and multi-demand paths
+  especially beyond the executor-owned invalidation, multi-demand, and current
+  edit-session human-input pause path
 - Explicit stale-event rejection semantics keyed to canonical execution/session
   identity across backend and frontend consumers
 - Full adapter parity between backend-owned events and frontend consumers

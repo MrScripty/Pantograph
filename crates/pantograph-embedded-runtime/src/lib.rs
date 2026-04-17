@@ -385,6 +385,7 @@ pub struct EditSessionGraphExecutionOutcome {
     pub runtime_snapshot: inference::RuntimeLifecycleSnapshot,
     pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
     pub runtime_model_target: Option<String>,
+    pub waiting_for_input: bool,
     pub error: Option<String>,
 }
 
@@ -916,10 +917,21 @@ impl EmbeddedRuntime {
         });
 
         let mut workflow_result: Result<(), String> = Ok(());
+        let mut waiting_for_input = false;
         for node_id in &terminal_nodes {
             match executor.demand(node_id, &task_executor).await {
                 Ok(_outputs) => {
                     log::debug!("Demanded outputs from node: {}", node_id);
+                }
+                Err(node_engine::NodeEngineError::WaitingForInput { task_id, prompt }) => {
+                    log::info!(
+                        "Workflow session '{}' is waiting for input at node '{}' (prompt: {:?})",
+                        session_id,
+                        task_id,
+                        prompt
+                    );
+                    waiting_for_input = true;
+                    break;
                 }
                 Err(error) => {
                     log::error!("Error demanding from node {}: {}", node_id, error);
@@ -934,7 +946,12 @@ impl EmbeddedRuntime {
             .await
             .map_err(|error| error.to_envelope_json())?;
 
-        if workflow_result.is_ok() {
+        if waiting_for_input {
+            log::debug!(
+                "Workflow session '{}' paused in waiting-for-input state",
+                session_id
+            );
+        } else if workflow_result.is_ok() {
             let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowCompleted {
                 workflow_id: session_id.to_string(),
                 execution_id: session_id.to_string(),
@@ -995,6 +1012,7 @@ impl EmbeddedRuntime {
             runtime_snapshot,
             trace_runtime_metrics,
             runtime_model_target,
+            waiting_for_input,
             error: workflow_result.err(),
         })
     }
@@ -2103,7 +2121,15 @@ impl WorkflowHost for EmbeddedWorkflowHost {
                     node_outputs.insert(node_id.clone(), outputs);
                 }
                 Err(error) => {
-                    run_result = Err(WorkflowServiceError::Internal(error.to_string()));
+                    run_result = Err(match error {
+                        node_engine::NodeEngineError::WaitingForInput { task_id, .. } => {
+                            WorkflowServiceError::InvalidRequest(format!(
+                                "workflow '{}' requires interactive input at node '{}'",
+                                workflow_id, task_id
+                            ))
+                        }
+                        other => WorkflowServiceError::Internal(other.to_string()),
+                    });
                     break;
                 }
             }
@@ -4666,6 +4692,77 @@ mod tests {
             outcome.runtime_model_target.as_deref(),
             Some("/tmp/mock-onnx-model")
         );
+        assert!(!outcome.waiting_for_input);
+    }
+
+    #[tokio::test]
+    async fn execute_edit_session_graph_waiting_for_input_does_not_emit_workflow_failed() {
+        let temp = TempDir::new().expect("temp dir");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Arc::new(ProcessPythonRuntimeAdapter),
+        );
+
+        let graph = WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "approval".to_string(),
+                node_type: "human-input".to_string(),
+                data: serde_json::json!({ "prompt": "Approve deployment?" }),
+                position: Position::default(),
+            }],
+            edges: Vec::new(),
+            derived_graph: None,
+        };
+        let session = runtime
+            .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+                graph: graph.clone(),
+            })
+            .await
+            .expect("create edit session");
+        let event_sink = Arc::new(node_engine::VecEventSink::new());
+
+        let outcome = runtime
+            .execute_edit_session_graph(
+                &session.session_id,
+                &graph,
+                inference::EmbeddingStartRequest::default(),
+                event_sink.clone(),
+            )
+            .await
+            .expect("edit-session execution should pause instead of failing");
+
+        assert!(outcome.waiting_for_input);
+        assert!(outcome.error.is_none());
+
+        let events = event_sink.events();
+        assert!(events.iter().any(|event| matches!(
+            event,
+            node_engine::WorkflowEvent::WaitingForInput {
+                task_id,
+                prompt: Some(prompt),
+                ..
+            } if task_id == "approval" && prompt == "Approve deployment?"
+        )));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowCompleted { .. })));
     }
 
     #[tokio::test]
