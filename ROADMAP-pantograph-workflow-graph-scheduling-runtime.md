@@ -16,7 +16,7 @@ implementation progress in the runtime and diagnostics layers.
 4. Scheduler V2: Complete
 5. Real workflow event contract: Partial prerequisite groundwork only
 6. Incremental graph execution: Not started
-7. Runtime adapter unification: In progress
+7. Runtime adapter unification: Complete
 
 ## Current Source-of-Truth Summary
 
@@ -37,7 +37,11 @@ complete. Scheduler V2 milestone 5 close-out is now also complete: transport
 projection, cleanup recovery, restore/reclaim recovery, and source-of-truth
 reconciliation are landed, and canonical scheduler snapshots now expose
 backend-owned earliest-known admission ETA bounds plus fairness-driven queue-
-head bypass visibility.
+head bypass visibility. Phase 7 runtime-adapter unification is now also
+complete: backend Rust owns producer health, capability, reconciliation, and
+workflow-execution diagnostics sequencing across gateway, dedicated-embedding,
+and execution-observed runtime paths, and the roadmap/plan/README set is
+reconciled as the final source of truth.
 
 ### Completed groundwork already in the repo
 
@@ -344,7 +348,7 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 
 ### Phase 4: Scheduler V2
 
-**Status:** In progress
+**Status:** Complete
 
 **Goal:** Move from simple queue ordering plus keep-alive toward a runtime-aware
 session scheduler that makes better admission and reuse decisions.
@@ -487,7 +491,7 @@ sync boundaries between the package graph and backend-owned graph state.
 
 ### Phase 7: Runtime Adapter Unification
 
-**Status:** In progress
+**Status:** Complete
 
 **Goal:** Make managed runtimes and external runtimes look consistent to the
 workflow scheduler, preflight layer, and diagnostics surfaces.
@@ -554,6 +558,10 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   semantics. Execution-path runtime snapshot override reconciliation now also
   lives there, so Tauri no longer decides when producer-specific execution
   facts should update shared registry state.
+- Workflow-execution diagnostics now also synchronize the shared runtime
+  registry through a backend-owned helper before projecting execution
+  snapshots, so `workflow_execution_runtime.rs` no longer owns a separate
+  sync-before-snapshot sequence.
 - Registry admission and runtime-unavailable failures from workflow execution
   now cross the workflow boundary as deterministic `runtime_not_ready` or
   `invalid_request` envelopes instead of being collapsed into generic
@@ -614,14 +622,18 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
   non-gateway execution observations do not silently downgrade backend-owned
   health assessment failures back to lifecycle-ready snapshots.
 
-**Still missing:**
+**Close-out summary:**
 
-- Remaining health-check, reconnect, and degraded-state hardening for all
-  runtime producers beyond the current gateway plus dedicated-embedding path
-- Full convergence of all runtime producers on one registry-ready capability
-  contract family
-- Broader producer coverage over the backend-owned runtime-registry boundary
-  beyond the current gateway plus dedicated-embedding observation path
+- Producer health, reconnect, degraded-state, and health-overlay semantics now
+  converge through backend-owned Rust helpers instead of adapter-local policy.
+- Runtime capability publication now converges on one backend-owned contract
+  family across gateway, dedicated-embedding, and execution-observed producer
+  paths.
+- Restore, recovery, reclaim, diagnostics, and workflow-execution registry
+  reconciliation now route through backend-owned helpers, leaving Tauri as a
+  composition and transport boundary.
+- No new ADR or dependency was required to close Phase 7; the existing
+  ownership boundary remained sufficient.
 
 **Milestones:**
 
@@ -652,14 +664,13 @@ These items apply to every phase above and are not separate roadmap points:
 This replaces the original purely hypothetical sequence. It reflects the code
 that has already landed and the safest next dependency order from here.
 
-1. Finish runtime adapter unification and remaining producer-convergence work
-2. Complete metrics/trace spine hardening so runtime, scheduler, and registry
+1. Complete metrics/trace spine hardening so runtime, scheduler, and registry
    policy stay observable as later roadmap work lands
-3. Finish the real workflow event contract end-to-end on top of the now-frozen
+2. Finish the real workflow event contract end-to-end on top of the now-frozen
    scheduler and runtime-registry boundaries
-4. Implement parallel demand execution in `node-engine`
-5. Implement incremental graph execution
-6. Implement KV cache as a real reusable runtime primitive
+3. Implement parallel demand execution in `node-engine`
+4. Implement incremental graph execution
+5. Implement KV cache as a real reusable runtime primitive
 
 ## Dependencies and Sequencing Notes
 

@@ -112,14 +112,19 @@ The following Milestone 2 foundation slices have now landed in code:
 - headless workflow adapter synchronization that refreshes registry state
   before embedded-runtime capability and diagnostics snapshot reads
 
-### What has not landed yet
+### What landed after the runtime-registry milestone stream
 
-- workflow and adapter hardening from Milestone 5 is still incomplete,
-  especially the remaining workflow trace extraction, diagnostics projection
-  decomposition, and transport-boundary cleanup
-- replay/recovery close-out, README/ADR follow-through, and rollout-safety
-  tasks from Milestone 6 still remain after the current diagnostics/debug
-  groundwork
+- Milestone 5 workflow and adapter hardening is complete in the dedicated
+  workflow/adapter plan, including workflow trace extraction, diagnostics
+  projection decomposition, transport-boundary cleanup, and standards-focused
+  adapter review.
+- Milestone 6 replay/recovery close-out, documentation follow-through, and
+  rollout-safety reconciliation are complete in the dedicated Milestone 6
+  plan.
+- Phase 7 runtime-adapter producer convergence is complete in the dedicated
+  Phase 7 plan, including backend-owned health, capability, reconciliation,
+  and workflow-execution diagnostics sequencing across runtime producer
+  families.
 
 ## Inputs
 
@@ -1007,7 +1012,7 @@ Update during implementation:
 - Milestone 1 architecture/documentation freeze for runtime-registry ownership
 - Milestone 2 runtime-registry foundation
 
-### In Progress
+### Completed Outside This Plan
 
 - Runtime producer-convergence hardening outside the runtime-registry plan
 - Milestone 5 workflow and adapter integration

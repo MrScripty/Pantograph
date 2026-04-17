@@ -1,7 +1,7 @@
 # Plan: Pantograph Phase 7 Runtime Adapter Unification
 
 ## Status
-Active
+Complete
 
 Last updated: 2026-04-17
 
@@ -33,17 +33,15 @@ The accurate implementation baseline at the current checkpoint is:
   backend registry sync and embedding-endpoint refresh helpers rather than
   owning those policy rules locally
 - direct embedded and headless workflow execution already reconcile Python-
-  sidecar observations into the shared runtime registry, but this producer
-  family is not yet fully converged with gateway and dedicated embedding health
-  and capability behavior
-- the remaining roadmap gaps are still the three explicit Phase 7 items:
-  - full health-check, reconnect, and degraded-state hardening for runtime
-    producers beyond gateway plus dedicated embedding
-  - one shared registry-ready capability contract family across all runtime
-    producers
-  - broader backend-owned runtime-registry boundary coverage for producer
-    observation and restore/reconciliation paths beyond gateway plus dedicated
-    embedding
+  sidecar observations into the shared runtime registry, and this producer
+  family now converges with gateway and dedicated-embedding health, capability,
+  and reconciliation behavior through backend-owned Rust helpers
+- workflow execution, headless diagnostics, recovery, restore, reclaim, and
+  other adapter-facing runtime-registry paths now route through shared backend
+  helpers instead of reintroducing Tauri-local sequencing forks
+- touched README files, the roadmap, and the runtime-registry umbrella plan can
+  now describe Phase 7 as complete without requiring a new ADR or dependency
+  introduction
 
 The Milestone 1 inventory frozen for implementation is:
 
@@ -352,17 +350,17 @@ standards blockers before more producer logic lands.
 reconnect policy family instead of a gateway-only special case.
 
 **Tasks:**
-- [ ] Extract or consolidate backend-owned producer health assessment helpers in
+- [x] Extract or consolidate backend-owned producer health assessment helpers in
       `pantograph-embedded-runtime` and related runtime crates so Tauri health
       polling stays transport-only.
-- [ ] Extend the shared health/degraded contract to the remaining execution-
+- [x] Extend the shared health/degraded contract to the remaining execution-
       observed producer families, including Python-sidecar-style runtime paths
       that currently rely more on execution snapshots than on unified health
       overlays.
-- [ ] Ensure reconnect and degraded-state progression rules are expressed once
+- [x] Ensure reconnect and degraded-state progression rules are expressed once
       in backend-owned code and reused by recovery, restore, and health-monitor
       callers.
-- [ ] Refactor the immediate oversized runtime health and registry insertion
+- [x] Refactor the immediate oversized runtime health and registry insertion
       areas as needed so new policy does not deepen the existing file-size and
       mixed-responsibility debt.
 
@@ -372,7 +370,7 @@ reconnect policy family instead of a gateway-only special case.
 - `cargo check` and focused runtime-registry or embedded-runtime test slices
   for touched crates
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 3: Unify The Registry-Ready Capability Contract Family
 
@@ -380,15 +378,15 @@ reconnect policy family instead of a gateway-only special case.
 dedicated embedding, and execution-observed runtime producers.
 
 **Tasks:**
-- [ ] Freeze or extend a single backend-owned capability contract family that
+- [x] Freeze or extend a single backend-owned capability contract family that
       covers canonical runtime id, backend requirements, producer identity,
       readiness state, and degraded-state semantics.
-- [ ] Remove any remaining adapter-local capability shaping that duplicates or
+- [x] Remove any remaining adapter-local capability shaping that duplicates or
       diverges from backend-owned runtime capability builders.
-- [ ] Keep transport and binding updates additive so Tauri, UniFFI, and other
+- [x] Keep transport and binding updates additive so Tauri, UniFFI, and other
       wrappers forward the same backend-owned semantics rather than inferring
       new ones locally.
-- [ ] Add coverage that compares producer families against the same capability
+- [x] Add coverage that compares producer families against the same capability
       expectations for scheduler, preflight, and diagnostics consumers.
 
 **Verification:**
@@ -397,7 +395,7 @@ dedicated embedding, and execution-observed runtime producers.
 - Manual interop review against `INTEROP-STANDARDS.md` and
   `LANGUAGE-BINDINGS-STANDARDS.md` for additive payload compatibility
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 4: Broaden Backend-Owned Registry Boundary Coverage
 
@@ -431,13 +429,13 @@ non-gateway producer paths.
 coverage.
 
 **Tasks:**
-- [ ] Update touched README files so the runtime identity, registry, workflow,
+- [x] Update touched README files so the runtime identity, registry, workflow,
       and Tauri adapter boundaries describe the final Phase 7 ownership model.
-- [ ] Add or update an ADR only if Phase 7 accepts a new long-lived runtime
+- [x] Add or update an ADR only if Phase 7 accepts a new long-lived runtime
       ownership or compatibility consequence that is not already covered.
-- [ ] Reconcile this plan, the roadmap, and any touched runtime README files so
+- [x] Reconcile this plan, the roadmap, and any touched runtime README files so
       Phase 7 completion status and remaining follow-ups are consistent.
-- [ ] Confirm no unnecessary new dependencies were introduced for Phase 7; if a
+- [x] Confirm no unnecessary new dependencies were introduced for Phase 7; if a
       new dependency is justified, document the reason at the ownership
       boundary that actually uses it.
 
@@ -446,7 +444,7 @@ coverage.
 - Acceptance review of roadmap, README, and plan alignment plus targeted test
   summary from Milestones 2 through 4
 
-**Status:** Not started
+**Status:** Complete
 
 ## Standards Review Passes
 
@@ -594,6 +592,10 @@ Update during implementation:
   sync-before-snapshot sequencing behind a shared backend helper so
   `workflow_execution_runtime.rs` no longer owns a separate registry-refresh
   order before execution snapshot projection.
+- 2026-04-17: Closed Milestone 5 and Phase 7 by reconciling this plan, the
+  roadmap, touched runtime README files, and the runtime-registry umbrella
+  plan; no new ADR or dependency was required for the final ownership
+  boundary.
 
 ## Commit Cadence Notes
 
@@ -643,29 +645,41 @@ Update during implementation:
   inventory, contract-family freeze, and decomposition review.
 - Milestone 1 surrounding-compliance closure completed with the missing
   runtime-identity source README.
-- Milestone 2 is now in progress with the first embedded-runtime extraction
-  slice for runtime-registry observation building.
+- Milestone 2 completed with backend-owned health, degraded-state, reconnect,
+  and runtime-registry health-overlay convergence across gateway, dedicated
+  embedding, and execution-observed producer families.
+- Milestone 3 completed with one shared backend-owned capability contract
+  family, additive transport forwarding, and parity coverage across producer
+  families.
+- Milestone 4 completed with backend-owned registry reconciliation for
+  restore, recovery, reclaim, diagnostics, and workflow-execution paths plus
+  deterministic overlap and recovery regressions.
+- Milestone 5 completed with README, roadmap, and plan reconciliation; no new
+  ADR or dependency was required to close Phase 7.
 
 ### Deviations
 
-- None yet. Implementation has not started from this plan.
+- None.
 
 ### Follow-Ups
 
-- Begin the first backend extraction slice from the recorded decomposition
-  review before Milestone 2 producer-policy changes land.
+- Start any new runtime-producer ownership or compatibility work under a new
+  plan instead of reopening the closed Phase 7 source of truth implicitly.
 
 ### Verification Summary
 
-- Manual roadmap and standards review completed during planning.
+- Standards-review passes completed during planning, with focused runtime-
+  registry, embedded-runtime, and Tauri verification landed incrementally
+  during implementation.
 
 ### Traceability Links
 
-- Module README updated: N/A during planning; required in Milestones 1 and 5
-- ADR added/updated: N/A during planning; only if implementation reveals a new
-  long-lived decision
-- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A during
-  planning
+- Module README updated: `crates/pantograph-embedded-runtime/src/README.md`,
+  `src-tauri/src/llm/README.md`, `src-tauri/src/workflow/README.md`
+- ADR added/updated: none required; existing ownership ADR coverage remained
+  sufficient
+- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: deferred to any
+  later PR that bundles the completed Phase 7 history
 
 ## Brevity Note
 
