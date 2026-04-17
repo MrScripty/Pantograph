@@ -611,6 +611,9 @@ Update during implementation:
 - The shared graph package now also mirrors the backend-owned `Cancelled`
   workflow event and the existing GUI closes out cancelled runs through that
   contract instead of relying on failure-only handling.
+- UniFFI buffered workflow events now emit canonical backend event-type names
+  for the newer event vocabulary instead of reconstructing transport labels
+  from unstable debug output.
 
 ### Deviations
 

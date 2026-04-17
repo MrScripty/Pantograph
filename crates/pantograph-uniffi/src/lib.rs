@@ -82,6 +82,12 @@ pub enum FfiError {
     #[error("Cancelled")]
     Cancelled,
 
+    #[error("Waiting for input at task '{task_id}'")]
+    WaitingForInput {
+        task_id: String,
+        prompt: Option<String>,
+    },
+
     #[error("Gateway error: {message}")]
     Gateway { message: String },
 
@@ -111,6 +117,9 @@ impl From<node_engine::NodeEngineError> for FfiError {
             },
             NodeEngineError::Compression(msg) => FfiError::Compression { message: msg },
             NodeEngineError::Cancelled => FfiError::Cancelled,
+            NodeEngineError::WaitingForInput { task_id, prompt } => {
+                FfiError::WaitingForInput { task_id, prompt }
+            }
             NodeEngineError::Gateway(msg) => FfiError::Gateway { message: msg },
             NodeEngineError::Rag(msg) => FfiError::Rag { message: msg },
             NodeEngineError::Io(err) => FfiError::Io {
@@ -205,12 +214,28 @@ pub struct FfiOrchestrationMetadata {
 }
 
 /// FFI-safe workflow event.
-#[derive(uniffi::Record)]
+#[derive(Clone, uniffi::Record)]
 pub struct FfiWorkflowEvent {
     /// Event type identifier
     pub event_type: String,
     /// Full event data as JSON
     pub event_json: String,
+}
+
+fn ffi_workflow_event_type(event: &WorkflowEvent) -> &'static str {
+    match event {
+        WorkflowEvent::WorkflowStarted { .. } => "WorkflowStarted",
+        WorkflowEvent::WorkflowCompleted { .. } => "WorkflowCompleted",
+        WorkflowEvent::WorkflowFailed { .. } => "WorkflowFailed",
+        WorkflowEvent::WaitingForInput { .. } => "WaitingForInput",
+        WorkflowEvent::TaskStarted { .. } => "TaskStarted",
+        WorkflowEvent::TaskCompleted { .. } => "TaskCompleted",
+        WorkflowEvent::TaskFailed { .. } => "TaskFailed",
+        WorkflowEvent::TaskProgress { .. } => "TaskProgress",
+        WorkflowEvent::TaskStream { .. } => "TaskStream",
+        WorkflowEvent::GraphModified { .. } => "GraphModified",
+        WorkflowEvent::IncrementalExecutionStarted { .. } => "IncrementalExecutionStarted",
+    }
 }
 
 // ============================================================================
@@ -568,11 +593,7 @@ struct BufferedEventSink {
 
 impl EventSink for BufferedEventSink {
     fn send(&self, event: WorkflowEvent) -> std::result::Result<(), node_engine::EventError> {
-        let event_type = format!("{:?}", event)
-            .split('(')
-            .next()
-            .unwrap_or("Unknown")
-            .to_string();
+        let event_type = ffi_workflow_event_type(&event).to_string();
         let event_json = serde_json::to_string(&event).map_err(|e| node_engine::EventError {
             message: e.to_string(),
         })?;
@@ -1084,6 +1105,20 @@ mod tests {
     }
 
     #[test]
+    fn test_ffi_error_waiting_for_input() {
+        let err = node_engine::NodeEngineError::WaitingForInput {
+            task_id: "human-input-1".to_string(),
+            prompt: Some("Approve deployment?".to_string()),
+        };
+        let ffi_err: FfiError = err.into();
+        assert!(matches!(
+            ffi_err,
+            FfiError::WaitingForInput { task_id, prompt }
+                if task_id == "human-input-1" && prompt.as_deref() == Some("Approve deployment?")
+        ));
+    }
+
+    #[test]
     fn test_ffi_graph_conversion() {
         let graph = WorkflowGraph::new("test", "Test Graph");
         let ffi = FfiWorkflowGraph::from(graph);
@@ -1147,6 +1182,46 @@ mod tests {
         let engine = FfiWorkflowEngine::new("wf-1".to_string(), "Test".to_string());
         let events = engine.drain_events().await;
         assert!(events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_buffered_event_sink_uses_canonical_event_type_names() {
+        let buffer = Arc::new(RwLock::new(Vec::new()));
+        let sink = BufferedEventSink {
+            buffer: buffer.clone(),
+        };
+
+        sink.send(WorkflowEvent::WaitingForInput {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            task_id: "human-input-1".to_string(),
+            prompt: Some("Approve deployment?".to_string()),
+        })
+        .expect("send waiting event");
+        sink.send(WorkflowEvent::GraphModified {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+        })
+        .expect("send graph modified event");
+        sink.send(WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            tasks: vec!["node-c".to_string()],
+        })
+        .expect("send incremental event");
+
+        let events = {
+            let guard = buffer.read().await;
+            guard.clone()
+        };
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].event_type, "WaitingForInput");
+        assert_eq!(events[1].event_type, "GraphModified");
+        assert_eq!(events[2].event_type, "IncrementalExecutionStarted");
+        assert!(events[0].event_json.contains("\"type\":\"waitingForInput\""));
+        assert!(events[1].event_json.contains("\"type\":\"graphModified\""));
+        assert!(events[2].event_json.contains("\"type\":\"incrementalExecutionStarted\""));
     }
 
     #[cfg(feature = "frontend-http")]

@@ -451,6 +451,9 @@ incremental runs.
 - The shared graph package now also mirrors the backend-owned `Cancelled`
   workflow event and the existing GUI closes out cancelled runs through that
   contract instead of depending on failure-only handling.
+- UniFFI buffered workflow events now expose canonical backend event-type names
+  for the newer event vocabulary instead of deriving transport labels from
+  unstable debug output.
 - The app diagnostics consumer now also tracks run execution identity
   separately from editable-session ownership, so session-backed diagnostics
   filtering no longer rejects backend-owned run events before the session UI
