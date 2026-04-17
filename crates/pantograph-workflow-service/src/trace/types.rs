@@ -6,6 +6,7 @@ use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary,
 };
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -42,6 +43,8 @@ pub struct WorkflowTraceQueueMetrics {
     pub scheduler_admission_outcome: Option<String>,
     #[serde(default)]
     pub scheduler_decision_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduler_snapshot_diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -202,6 +205,7 @@ pub enum WorkflowTraceEvent {
         captured_at_ms: u64,
         session: Option<WorkflowSessionSummary>,
         items: Vec<WorkflowSessionQueueItem>,
+        diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
         error: Option<String>,
     },
 }

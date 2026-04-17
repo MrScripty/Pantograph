@@ -17,7 +17,8 @@ mod tests {
 
     use super::runtime::{infer_runtime_id, runtime_lifecycle_reason};
     use super::*;
-    use crate::workflow::WorkflowServiceError;
+    use crate::workflow::{WorkflowSchedulerDecisionReason, WorkflowServiceError};
+    use crate::{WorkflowSchedulerRuntimeCapacityPressure, WorkflowSchedulerSnapshotDiagnostics};
 
     fn workflow_capabilities_with_runtimes(
         runtime_requirements: crate::workflow::WorkflowRuntimeRequirements,
@@ -51,6 +52,17 @@ mod tests {
                 queue_wait_ms: Some(20),
                 scheduler_admission_outcome: Some("admitted".to_string()),
                 scheduler_decision_reason: Some("warm_session_reused".to_string()),
+                scheduler_snapshot_diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
+                    loaded_session_count: 1,
+                    max_loaded_sessions: 2,
+                    reclaimable_loaded_session_count: 1,
+                    runtime_capacity_pressure:
+                        WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
+                    active_run_blocks_admission: false,
+                    next_admission_queue_id: Some("queue-next".to_string()),
+                    next_admission_after_runs: Some(0),
+                    next_admission_reason: Some(WorkflowSchedulerDecisionReason::WarmSessionReused),
+                }),
             },
             runtime: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
@@ -97,7 +109,17 @@ mod tests {
                 "dequeued_at_ms": 100,
                 "queue_wait_ms": 20,
                 "scheduler_admission_outcome": "admitted",
-                "scheduler_decision_reason": "warm_session_reused"
+                "scheduler_decision_reason": "warm_session_reused",
+                "scheduler_snapshot_diagnostics": {
+                    "loaded_session_count": 1,
+                    "max_loaded_sessions": 2,
+                    "reclaimable_loaded_session_count": 1,
+                    "runtime_capacity_pressure": "rebalance_required",
+                    "active_run_blocks_admission": false,
+                    "next_admission_queue_id": "queue-next",
+                    "next_admission_after_runs": 0,
+                    "next_admission_reason": "warm_session_reused"
+                }
             },
             "runtime": {
                 "runtime_id": "llama_cpp",
@@ -474,6 +496,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
                 error: None,
             },
             105,
@@ -548,6 +571,17 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Pending,
                 }],
+                diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
+                    loaded_session_count: 1,
+                    max_loaded_sessions: 2,
+                    reclaimable_loaded_session_count: 1,
+                    runtime_capacity_pressure:
+                        WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
+                    active_run_blocks_admission: true,
+                    next_admission_queue_id: Some("queue-1".to_string()),
+                    next_admission_after_runs: Some(1),
+                    next_admission_reason: Some(WorkflowSchedulerDecisionReason::WarmSessionReused),
+                }),
                 error: None,
             },
             90,
@@ -638,6 +672,16 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
+                    loaded_session_count: 1,
+                    max_loaded_sessions: 2,
+                    reclaimable_loaded_session_count: 0,
+                    runtime_capacity_pressure: WorkflowSchedulerRuntimeCapacityPressure::Available,
+                    active_run_blocks_admission: false,
+                    next_admission_queue_id: None,
+                    next_admission_after_runs: None,
+                    next_admission_reason: None,
+                }),
                 error: None,
             },
             120,
@@ -655,6 +699,19 @@ mod tests {
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
             Some("matched_running_item")
+        );
+        assert_eq!(
+            trace.queue.scheduler_snapshot_diagnostics,
+            Some(WorkflowSchedulerSnapshotDiagnostics {
+                loaded_session_count: 1,
+                max_loaded_sessions: 2,
+                reclaimable_loaded_session_count: 0,
+                runtime_capacity_pressure: WorkflowSchedulerRuntimeCapacityPressure::Available,
+                active_run_blocks_admission: false,
+                next_admission_queue_id: None,
+                next_admission_after_runs: None,
+                next_admission_reason: None,
+            })
         );
         assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));
         assert_eq!(
@@ -767,6 +824,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
                 error: None,
             },
             126,
@@ -1019,6 +1077,7 @@ mod tests {
                         status: crate::workflow::WorkflowSessionQueueItemStatus::Pending,
                     },
                 ],
+                diagnostics: None,
                 error: None,
             },
             200,
@@ -1069,6 +1128,7 @@ mod tests {
                     scheduler_decision_reason: None,
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
                 error: None,
             },
             5_000,
@@ -1121,6 +1181,7 @@ mod tests {
                     ),
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
+                diagnostics: None,
                 error: None,
             },
             200,

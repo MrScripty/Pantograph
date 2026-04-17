@@ -557,7 +557,7 @@ and observable diagnostics without violating ownership boundaries.
 - [ ] Improve rebalance behavior when loaded-session capacity is exhausted
 - [x] Add queue ETA and admission diagnostics derived from canonical scheduler
       state
-- [ ] Preserve additive trace integration so scheduler decisions remain
+- [x] Preserve additive trace integration so scheduler decisions remain
       observable through the metrics/trace spine
 - [ ] Keep Tauri and bindings transport-only while forwarding any new scheduler
       diagnostics fields
@@ -646,6 +646,11 @@ Update during implementation:
   prediction, then threaded those canonical fields through embedded-runtime and
   Tauri diagnostics/event transport without moving scheduler policy ownership
   out of Rust.
+- 2026-04-17: Extended the workflow trace spine so scheduler snapshot
+  diagnostics can flow through backend-owned trace events and queue metrics,
+  keeping runtime-capacity and next-admission visibility machine-consumable in
+  trace snapshots instead of leaving those fields trapped in transport-local
+  diagnostics state.
 
 ## Commit Cadence Notes
 

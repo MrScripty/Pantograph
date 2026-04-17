@@ -153,6 +153,7 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
             captured_at_ms,
             session,
             items,
+            diagnostics,
             error,
             ..
         } => Some(WorkflowTraceEvent::SchedulerSnapshotCaptured {
@@ -162,6 +163,7 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
             captured_at_ms: *captured_at_ms,
             session: session.clone(),
             items: items.clone(),
+            diagnostics: diagnostics.clone(),
             error: error.clone(),
         }),
         WorkflowEvent::DiagnosticsSnapshot { .. } => None,

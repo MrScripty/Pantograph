@@ -2,6 +2,7 @@ use crate::workflow::{
     WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem,
     WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
 };
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 pub(super) fn apply_scheduler_snapshot(
     trace: &mut super::store::WorkflowTraceRunState,
@@ -9,6 +10,7 @@ pub(super) fn apply_scheduler_snapshot(
     session_id: &str,
     session: Option<&WorkflowSessionSummary>,
     items: &[WorkflowSessionQueueItem],
+    diagnostics: Option<&WorkflowSchedulerSnapshotDiagnostics>,
     error: Option<&str>,
     captured_at_ms: u64,
 ) {
@@ -23,6 +25,7 @@ pub(super) fn apply_scheduler_snapshot(
                 .as_str()
                 .to_string(),
         );
+        trace.queue.scheduler_snapshot_diagnostics = None;
         return;
     }
 
@@ -95,6 +98,7 @@ pub(super) fn apply_scheduler_snapshot(
         scheduler_admission_outcome(execution_id, session_id, session, items);
     trace.queue.scheduler_decision_reason =
         scheduler_decision_reason(execution_id, session_id, session, items);
+    trace.queue.scheduler_snapshot_diagnostics = diagnostics.cloned();
 }
 
 fn scheduler_admission_outcome(

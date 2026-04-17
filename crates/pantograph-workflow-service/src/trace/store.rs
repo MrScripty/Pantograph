@@ -433,6 +433,7 @@ fn apply_trace_event(
             captured_at_ms,
             session,
             items,
+            diagnostics,
             error,
             ..
         } => apply_scheduler_snapshot(
@@ -441,6 +442,7 @@ fn apply_trace_event(
             session_id,
             session.as_ref(),
             items,
+            diagnostics.as_ref(),
             error.as_deref(),
             *captured_at_ms,
         ),

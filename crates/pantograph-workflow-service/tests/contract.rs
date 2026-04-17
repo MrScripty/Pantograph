@@ -302,6 +302,20 @@ fn workflow_trace_contract_snapshot() {
                 queue_wait_ms: Some(10),
                 scheduler_admission_outcome: Some("admitted".to_string()),
                 scheduler_decision_reason: Some("dequeued_fifo".to_string()),
+                scheduler_snapshot_diagnostics: Some(
+                    pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics {
+                        loaded_session_count: 1,
+                        max_loaded_sessions: 2,
+                        reclaimable_loaded_session_count: 1,
+                        runtime_capacity_pressure: pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
+                        active_run_blocks_admission: false,
+                        next_admission_queue_id: Some("queue-next".to_string()),
+                        next_admission_after_runs: Some(0),
+                        next_admission_reason: Some(
+                            pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
+                        ),
+                    },
+                ),
             },
             runtime: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
@@ -351,6 +365,16 @@ fn workflow_trace_contract_snapshot() {
                 "dequeued_at_ms": 100,
                 "queue_wait_ms": 10,
                 "scheduler_admission_outcome": "admitted",
+                "scheduler_snapshot_diagnostics": {
+                    "loaded_session_count": 1,
+                    "max_loaded_sessions": 2,
+                    "reclaimable_loaded_session_count": 1,
+                    "runtime_capacity_pressure": "rebalance_required",
+                    "active_run_blocks_admission": false,
+                    "next_admission_queue_id": "queue-next",
+                    "next_admission_after_runs": 0,
+                    "next_admission_reason": "warm_session_reused"
+                },
                 "scheduler_decision_reason": "dequeued_fifo"
             },
             "runtime": {
