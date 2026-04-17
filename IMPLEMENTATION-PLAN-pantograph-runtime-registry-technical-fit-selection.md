@@ -22,10 +22,13 @@ The accurate status is:
   completed
 - runtime-registry Milestone 5, Workflow And Adapter Integration: in progress
   in `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+  with transport hardening and binding review complete, and close-out/recovery
+  verification remaining
 - runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
   Safety: in progress
-- current next milestone: Milestone 5, Workflow And Adapter Integration
-  tracked in `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+- current next milestone focus: Milestone 5 close-out and Milestone 6
+  source-of-truth/documentation work, with detailed sequencing tracked in
+  `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 - stop rule remains active for later milestones: runtime-registry work must
   preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
@@ -111,7 +114,12 @@ The following Milestone 2 foundation slices have now landed in code:
 
 ### What has not landed yet
 
-- no Pumas-driven technical-fit selector is integrated into workflow execution
+- workflow and adapter hardening from Milestone 5 is still incomplete,
+  especially the remaining workflow trace extraction, diagnostics projection
+  decomposition, and transport-boundary cleanup
+- replay/recovery close-out, README/ADR follow-through, and rollout-safety
+  tasks from Milestone 6 still remain after the current diagnostics/debug
+  groundwork
 
 ## Inputs
 
@@ -832,6 +840,12 @@ Detailed source of truth:
   override DTOs; they remain boundary-local parsers/serializers that forward
   backend-owned request and response contracts without recreating selector
   policy.
+- 2026-04-16: Workflow trace ownership, diagnostics projection boundaries,
+  runtime-debug transport semantics, recovery-shaped reconciliation coverage,
+  and binding-wrapper transport scaffolding were completed and are now tracked
+  in detail by the dedicated Milestone 5 implementation plan. The remaining
+  work in that file is close-out: replay/recovery verification, README/source-
+  of-truth reconciliation, and final documentation alignment.
 
 **Verification:**
 - `cargo check --manifest-path src-tauri/Cargo.toml`
@@ -887,23 +901,19 @@ refactor lands.
 
 ### What must happen next
 
-1. Start Milestone 3 by adding backend-owned admission, warmup, retention, and
-   eviction policy on top of the completed runtime-registry foundation.
-2. Add warmup/reuse plus retention-hint interpretation inside the registry boundary
-   without moving those decisions into gateway or adapter layers.
-3. Continue reconciling the shared runtime registry after any remaining
-   producer restore or stop paths beyond the landed edit-session, RAG,
-   shutdown, and recovery slices so registry truth stays aligned with real
-   runtime transitions.
-4. Consume the new backend-owned eviction candidate ordering from registry
-   policy rather than rebuilding candidate selection in workflow service or
-   adapters.
-5. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
-   aligned with the README and ADR boundary decisions now reflected in the
-   backend-owned registry refactor.
-6. Re-plan immediately if Milestone 3 implementation pressures any of the
-   frozen ownership decisions, requires a different async ownership model, or
-   forces contract changes larger than assumed.
+1. Finish the remaining close-out work in the dedicated Milestone 5 plan:
+   replay/recovery/idempotency verification, README updates, and source-of-
+   truth reconciliation across roadmap and umbrella-plan files.
+2. Keep Milestone 6 focused on documentation, rollout-safety decisions, and
+   any truly needed operator-facing guidance rather than reopening completed
+   transport or binding refactors.
+3. Keep gateway, workflow-service, embedded-runtime, and Tauri adapter roles
+   aligned with ADR-002 and the README boundary decisions already landed in
+   Milestone 1 and reinforced by the completed Milestone 4 technical-fit
+   integration.
+4. Re-plan immediately if Milestone 5 or 6 work would move policy back into
+   Tauri/binding layers, require a new persisted artifact, or expand recovery
+   ownership beyond the current backend-owned runtime-registry boundary.
 
 ### What should not happen next
 
@@ -998,11 +1008,13 @@ Update during implementation:
 ### In Progress
 
 - Runtime producer-convergence hardening outside the runtime-registry plan
-- Milestone 3 admission, warmup, retention, and eviction work
+- Milestone 5 workflow and adapter integration
+- Milestone 6 diagnostics, documentation, and rollout-safety close-out
 
 ### Not Started
 
-- Milestones 4 through 6 of this plan
+- Parallel roadmap work outside this plan remains separate from the runtime-
+  registry milestone stream
 
 ### Deviations
 

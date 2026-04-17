@@ -25,7 +25,9 @@ Milestone 5 implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`.
 The roadmap remains the cross-target summary, while milestone-level workflow
 adapter sequencing and standards constraints are tracked in that dedicated
-plan.
+plan. The transport-hardening and binding-review slices in that plan are now
+complete; the remaining work is recovery/idempotency verification plus
+README/source-of-truth close-out.
 
 ### Completed groundwork already in the repo
 
@@ -150,15 +152,17 @@ plan.
 - Metrics/trace hardening for runtime lifecycle visibility
 - Contract normalization across workflow service, Tauri diagnostics, embedded
   runtime wiring, and gateway lifecycle reporting
+- Source-of-truth and recovery close-out work for the dedicated Milestone 5
+  workflow/adapter plan
 
 ### Next gate before more implementation breadth
 
-- Use the completed Milestone 3 runtime-registry boundary as the baseline while
-  finishing any remaining runtime producer convergence that still emits
-  divergent contracts
+- Finish the remaining recovery/idempotency and documentation close-out work in
+  the dedicated Milestone 5 plan so roadmap and plan state match the codebase
 - Keep roadmap/plan status aligned with implementation reality
 - Build scheduler-v2 and later runtime-policy work on the now-frozen
-  backend-owned runtime-registry boundary
+  backend-owned runtime-registry boundary instead of reopening completed
+  adapter-boundary refactors
 
 ## Objective
 
