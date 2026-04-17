@@ -5,8 +5,8 @@ use uuid::Uuid;
 use crate::graph::WorkflowSessionKind;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowServiceError,
-    WorkflowSessionRunRequest,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeIssue,
+    WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowServiceError, WorkflowSessionRunRequest,
 };
 
 use super::policy::{
@@ -402,6 +402,26 @@ impl WorkflowSessionStore {
                 .as_ref()
                 .map(|_| usize::from(active_run_blocks_admission)),
             next_admission_reason,
+            runtime_registry: None,
+        })
+    }
+
+    pub(crate) fn scheduler_runtime_diagnostics_request(
+        &self,
+        session_id: &str,
+    ) -> Result<WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowServiceError> {
+        let state = self.active.get(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+        let diagnostics = self.scheduler_snapshot_diagnostics(session_id)?;
+        Ok(WorkflowSchedulerRuntimeDiagnosticsRequest {
+            session_id: session_id.to_string(),
+            workflow_id: state.workflow_id.clone(),
+            usage_profile: state.usage_profile.clone(),
+            keep_alive: state.keep_alive,
+            runtime_loaded: state.runtime_loaded,
+            next_admission_queue_id: diagnostics.next_admission_queue_id,
+            reclaim_candidates: self.runtime_unload_candidates(session_id),
         })
     }
 

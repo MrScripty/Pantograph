@@ -330,6 +330,46 @@ pub enum WorkflowSchedulerRuntimeCapacityPressure {
     Saturated,
 }
 
+/// Backend-owned warmup/reuse posture for the runtime that would back the next
+/// admission.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSchedulerRuntimeWarmupDecision {
+    StartRuntime,
+    ReuseLoadedRuntime,
+    WaitForTransition,
+}
+
+/// Backend-owned explanation for the runtime warmup/reuse posture derived from
+/// runtime-registry state.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSchedulerRuntimeWarmupReason {
+    NoLoadedInstance,
+    RecoveryRequired,
+    LoadedInstanceReady,
+    LoadedInstanceBusy,
+    WarmupInProgress,
+    StopInProgress,
+}
+
+/// Optional runtime-registry facts attached to scheduler diagnostics. These
+/// remain backend-owned and additive so transport layers only forward them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerRuntimeRegistryDiagnostics {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reclaim_candidate_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reclaim_candidate_runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_warmup_decision: Option<WorkflowSchedulerRuntimeWarmupDecision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_warmup_reason: Option<WorkflowSchedulerRuntimeWarmupReason>,
+}
+
 /// Additive backend-owned scheduler diagnostics derived from canonical queue
 /// and loaded-session state.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -346,6 +386,8 @@ pub struct WorkflowSchedulerSnapshotDiagnostics {
     pub next_admission_after_runs: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_reason: Option<WorkflowSchedulerDecisionReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_registry: Option<WorkflowSchedulerRuntimeRegistryDiagnostics>,
 }
 
 /// Idle session runtime candidate that may be unloaded under capacity pressure.

@@ -552,14 +552,14 @@ policy, fairness, and machine-consumable decision semantics.
 and observable diagnostics without violating ownership boundaries.
 
 **Tasks:**
-- [ ] Consume backend-owned runtime-registry facts for runtime-affinity,
+- [x] Consume backend-owned runtime-registry facts for runtime-affinity,
       residency pressure, reclaim candidates, and warm reuse decisions
 - [x] Improve rebalance behavior when loaded-session capacity is exhausted
 - [x] Add queue ETA and admission diagnostics derived from canonical scheduler
       state
 - [x] Preserve additive trace integration so scheduler decisions remain
       observable through the metrics/trace spine
-- [ ] Keep Tauri and bindings transport-only while forwarding any new scheduler
+- [x] Keep Tauri and bindings transport-only while forwarding any new scheduler
       diagnostics fields
 
 **Verification:**
@@ -569,7 +569,18 @@ and observable diagnostics without violating ownership boundaries.
   trace contracts
 - No scheduler policy is added to Tauri or other wrappers
 
-**Status:** In progress
+**Execution progress:**
+- Canonical scheduler snapshots now expose an additive backend-owned
+  `runtime_registry` diagnostics block covering target runtime identity,
+  runtime-registry reclaim candidates, and next warmup/reuse posture.
+- `pantograph-workflow-service` now accepts an optional backend diagnostics
+  provider so canonical queue ownership stays in the service while
+  host-specific runtime-registry facts remain injectable and transport-agnostic.
+- `pantograph-embedded-runtime` now supplies those facts from the runtime
+  registry and gateway lifecycle, while Tauri continues forwarding the shared
+  backend contract without adding scheduler policy.
+
+**Status:** Complete
 
 ### Milestone 5: Close-Out, Acceptance, And Source-Of-Truth Reconciliation
 

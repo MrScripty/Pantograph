@@ -314,6 +314,7 @@ fn workflow_trace_contract_snapshot() {
                         next_admission_reason: Some(
                             pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
                         ),
+                        runtime_registry: None,
                     },
                 ),
             },

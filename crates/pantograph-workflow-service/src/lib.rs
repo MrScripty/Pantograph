@@ -37,7 +37,8 @@ pub use graph::{
 };
 pub use scheduler::{
     select_runtime_unload_candidate_by_affinity, WorkflowSchedulerRuntimeCapacityPressure,
-    WorkflowSchedulerSnapshotDiagnostics,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
 };
 pub use technical_fit::{
     build_workflow_technical_fit_request, WorkflowTechnicalFitDecision,
@@ -59,6 +60,7 @@ pub use workflow::{
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeIssue, WorkflowRuntimeRequirements,
     WorkflowRuntimeSourceKind, WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
+    WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
     WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
     WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,

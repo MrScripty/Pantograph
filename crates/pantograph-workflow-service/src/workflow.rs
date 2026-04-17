@@ -35,17 +35,19 @@ use crate::graph::WorkflowSessionKind;
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
     select_runtime_unload_candidate_by_affinity, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
-    WorkflowSessionStaleCleanupResponse, WorkflowSessionStaleCleanupWorker,
-    WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
-    WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    WorkflowSchedulerDecisionReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
+    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
+    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
+    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
+    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
+    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
+    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
+    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -724,6 +726,31 @@ pub trait WorkflowHost: Send + Sync {
     }
 }
 
+/// Backend-owned request for additive scheduler diagnostics that depend on a
+/// runtime-registry or another host-specific runtime fact source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSchedulerRuntimeDiagnosticsRequest {
+    pub session_id: String,
+    pub workflow_id: String,
+    pub usage_profile: Option<String>,
+    pub keep_alive: bool,
+    pub runtime_loaded: bool,
+    pub next_admission_queue_id: Option<String>,
+    pub reclaim_candidates: Vec<WorkflowSessionRuntimeUnloadCandidate>,
+}
+
+/// Optional backend provider for additive scheduler diagnostics that require
+/// host/runtime state outside the canonical queue store.
+#[async_trait]
+pub trait WorkflowSchedulerDiagnosticsProvider: Send + Sync {
+    async fn scheduler_runtime_registry_diagnostics(
+        &self,
+        _request: &WorkflowSchedulerRuntimeDiagnosticsRequest,
+    ) -> Result<Option<WorkflowSchedulerRuntimeRegistryDiagnostics>, WorkflowServiceError> {
+        Ok(None)
+    }
+}
+
 const DEFAULT_MAX_SESSIONS: usize = 8;
 const WORKFLOW_CANCEL_GRACE_WINDOW_MS: u64 = 250;
 
@@ -732,6 +759,8 @@ const WORKFLOW_CANCEL_GRACE_WINDOW_MS: u64 = 250;
 pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
+    scheduler_diagnostics_provider:
+        Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
 }
 
 impl Default for WorkflowService {
@@ -756,7 +785,21 @@ impl WorkflowService {
                 max_loaded_sessions,
             ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
+            scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn set_scheduler_diagnostics_provider(
+        &self,
+        provider: Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut guard = self.scheduler_diagnostics_provider.lock().map_err(|_| {
+            WorkflowServiceError::Internal(
+                "scheduler diagnostics provider lock poisoned".to_string(),
+            )
+        })?;
+        *guard = provider;
+        Ok(())
     }
 
     pub fn set_loaded_runtime_capacity_limit(
@@ -1178,6 +1221,16 @@ impl WorkflowService {
             ));
         }
 
+        let scheduler_diagnostics_provider = self
+            .scheduler_diagnostics_provider
+            .lock()
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "scheduler diagnostics provider lock poisoned".to_string(),
+                )
+            })?
+            .clone();
+
         {
             let mut store = self.session_store.lock().map_err(|_| {
                 WorkflowServiceError::Internal("session store lock poisoned".to_string())
@@ -1188,7 +1241,15 @@ impl WorkflowService {
             {
                 Ok(session) => {
                     let items = store.list_queue(session_id)?;
-                    let diagnostics = store.scheduler_snapshot_diagnostics(session_id)?;
+                    let mut diagnostics = store.scheduler_snapshot_diagnostics(session_id)?;
+                    let runtime_diagnostics_request =
+                        store.scheduler_runtime_diagnostics_request(session_id)?;
+                    drop(store);
+                    if let Some(provider) = scheduler_diagnostics_provider.as_ref() {
+                        diagnostics.runtime_registry = provider
+                            .scheduler_runtime_registry_diagnostics(&runtime_diagnostics_request)
+                            .await?;
+                    }
                     return Ok(WorkflowSchedulerSnapshotResponse {
                         workflow_id: Some(session.workflow_id.clone()),
                         session_id: session_id.to_string(),
@@ -2823,6 +2884,27 @@ mod tests {
         runtime_capabilities_calls: Arc<AtomicUsize>,
         graph_fingerprint: Arc<Mutex<String>>,
         technical_fit_requests: Arc<Mutex<Vec<WorkflowTechnicalFitRequest>>>,
+    }
+
+    #[derive(Clone)]
+    struct MockSchedulerDiagnosticsProvider {
+        diagnostics: WorkflowSchedulerRuntimeRegistryDiagnostics,
+        requests: Arc<Mutex<Vec<WorkflowSchedulerRuntimeDiagnosticsRequest>>>,
+    }
+
+    #[async_trait]
+    impl WorkflowSchedulerDiagnosticsProvider for MockSchedulerDiagnosticsProvider {
+        async fn scheduler_runtime_registry_diagnostics(
+            &self,
+            request: &WorkflowSchedulerRuntimeDiagnosticsRequest,
+        ) -> Result<Option<WorkflowSchedulerRuntimeRegistryDiagnostics>, WorkflowServiceError>
+        {
+            self.requests
+                .lock()
+                .expect("scheduler diagnostics requests lock poisoned")
+                .push(request.clone());
+            Ok(Some(self.diagnostics.clone()))
+        }
     }
 
     #[async_trait]
@@ -6159,10 +6241,9 @@ mod tests {
                 .expect("enqueue run");
         }
 
+        let session_id = created.session_id.clone();
         let snapshot = service
-            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
-                session_id: created.session_id,
-            })
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest { session_id })
             .await
             .expect("scheduler snapshot");
 
@@ -6211,10 +6292,9 @@ mod tests {
                 .expect("enqueue run")
         };
 
+        let session_id = created.session_id.clone();
         let snapshot = service
-            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
-                session_id: created.session_id,
-            })
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest { session_id })
             .await
             .expect("scheduler snapshot");
         let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
@@ -6235,6 +6315,115 @@ mod tests {
         assert_eq!(
             diagnostics.next_admission_reason,
             Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
+        );
+        assert_eq!(diagnostics.runtime_registry, None);
+    }
+
+    #[tokio::test]
+    async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_from_provider() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_capacity_limits(3, 1);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        service
+            .set_scheduler_diagnostics_provider(Some(Arc::new(MockSchedulerDiagnosticsProvider {
+                diagnostics: WorkflowSchedulerRuntimeRegistryDiagnostics {
+                    target_runtime_id: Some("llama_cpp".to_string()),
+                    reclaim_candidate_session_id: Some("session-loaded".to_string()),
+                    reclaim_candidate_runtime_id: Some("llama_cpp".to_string()),
+                    next_warmup_decision: Some(
+                        WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime,
+                    ),
+                    next_warmup_reason: Some(
+                        WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady,
+                    ),
+                },
+                requests: requests.clone(),
+            })))
+            .expect("scheduler diagnostics provider should be installed");
+
+        let loaded = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-loaded".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create loaded session");
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-queued".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create queued session");
+
+        let queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue run")
+        };
+
+        let session_id = created.session_id.clone();
+        let snapshot = service
+            .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest { session_id })
+            .await
+            .expect("scheduler snapshot");
+        let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
+
+        assert_eq!(
+            diagnostics.runtime_registry,
+            Some(WorkflowSchedulerRuntimeRegistryDiagnostics {
+                target_runtime_id: Some("llama_cpp".to_string()),
+                reclaim_candidate_session_id: Some("session-loaded".to_string()),
+                reclaim_candidate_runtime_id: Some("llama_cpp".to_string()),
+                next_warmup_decision: Some(
+                    WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime,
+                ),
+                next_warmup_reason: Some(WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady,),
+            })
+        );
+        let recorded_requests = requests
+            .lock()
+            .expect("scheduler diagnostics requests lock poisoned");
+        assert_eq!(recorded_requests.len(), 1);
+        assert_eq!(recorded_requests[0].session_id, created.session_id);
+        assert_eq!(recorded_requests[0].workflow_id, "wf-queued");
+        assert_eq!(
+            recorded_requests[0].usage_profile.as_deref(),
+            Some("interactive")
+        );
+        assert!(!recorded_requests[0].keep_alive);
+        assert!(!recorded_requests[0].runtime_loaded);
+        assert_eq!(
+            recorded_requests[0].next_admission_queue_id.as_deref(),
+            Some(queue_id.as_str())
+        );
+        assert_eq!(recorded_requests[0].reclaim_candidates.len(), 1);
+        assert_eq!(
+            recorded_requests[0].reclaim_candidates[0].session_id,
+            loaded.session_id
         );
     }
 

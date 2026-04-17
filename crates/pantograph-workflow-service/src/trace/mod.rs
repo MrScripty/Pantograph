@@ -62,6 +62,7 @@ mod tests {
                     next_admission_queue_id: Some("queue-next".to_string()),
                     next_admission_after_runs: Some(0),
                     next_admission_reason: Some(WorkflowSchedulerDecisionReason::WarmSessionReused),
+                    runtime_registry: None,
                 }),
             },
             runtime: WorkflowTraceRuntimeMetrics {
@@ -581,6 +582,7 @@ mod tests {
                     next_admission_queue_id: Some("queue-1".to_string()),
                     next_admission_after_runs: Some(1),
                     next_admission_reason: Some(WorkflowSchedulerDecisionReason::WarmSessionReused),
+                    runtime_registry: None,
                 }),
                 error: None,
             },
@@ -681,6 +683,7 @@ mod tests {
                     next_admission_queue_id: None,
                     next_admission_after_runs: None,
                     next_admission_reason: None,
+                    runtime_registry: None,
                 }),
                 error: None,
             },
@@ -711,6 +714,7 @@ mod tests {
                 next_admission_queue_id: None,
                 next_admission_after_runs: None,
                 next_admission_reason: None,
+                runtime_registry: None,
             })
         );
         assert_eq!(trace.runtime.runtime_id.as_deref(), Some("llama_cpp"));

@@ -231,6 +231,7 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
         next_admission_reason: Some(
             pantograph_workflow_service::WorkflowSchedulerDecisionReason::WarmSessionReused,
         ),
+        runtime_registry: None,
     };
 
     let snapshot = store.update_scheduler_snapshot(

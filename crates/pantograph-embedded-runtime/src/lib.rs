@@ -36,13 +36,16 @@ use pantograph_workflow_service::{
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunOptions,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
-    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
+    WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
+    WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
     WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
     WorkflowSessionStaleCleanupResponse, WorkflowSessionState, WorkflowSessionStatusRequest,
     WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
@@ -174,6 +177,119 @@ pub fn apply_runtime_extensions(
     snapshot: &RuntimeExtensionsSnapshot,
 ) {
     apply_runtime_extensions_for_execution(executor, snapshot, None, None, None);
+}
+
+#[derive(Clone)]
+struct EmbeddedWorkflowSchedulerDiagnosticsProvider {
+    gateway: Arc<inference::InferenceGateway>,
+    runtime_registry: SharedRuntimeRegistry,
+}
+
+impl EmbeddedWorkflowSchedulerDiagnosticsProvider {
+    fn new(
+        gateway: Arc<inference::InferenceGateway>,
+        runtime_registry: SharedRuntimeRegistry,
+    ) -> Self {
+        Self {
+            gateway,
+            runtime_registry,
+        }
+    }
+}
+
+fn runtime_registry_reclaim_candidate_for_sessions(
+    runtime_registry: &SharedRuntimeRegistry,
+    candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+) -> Option<(String, String)> {
+    let candidates_by_session_id = candidates
+        .iter()
+        .map(|candidate| (candidate.session_id.clone(), candidate))
+        .collect::<HashMap<_, _>>();
+    let owner_ids = candidates_by_session_id
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let reservation = runtime_registry.eviction_reservation_candidate_for_owners(&owner_ids)?;
+    let owner_id = reservation.reservation_owner_id?;
+    let candidate = candidates_by_session_id.get(&owner_id)?;
+    Some((candidate.session_id.clone(), reservation.runtime_id))
+}
+
+#[async_trait]
+impl WorkflowSchedulerDiagnosticsProvider for EmbeddedWorkflowSchedulerDiagnosticsProvider {
+    async fn scheduler_runtime_registry_diagnostics(
+        &self,
+        request: &WorkflowSchedulerRuntimeDiagnosticsRequest,
+    ) -> Result<Option<WorkflowSchedulerRuntimeRegistryDiagnostics>, WorkflowServiceError> {
+        let mode_info = self.gateway.mode_info().await;
+        let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
+        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
+
+        self.runtime_registry.register_runtime(
+            RuntimeRegistration::new(
+                descriptor.runtime_id.clone(),
+                descriptor.display_name.clone(),
+            )
+            .with_backend_keys(descriptor.backend_keys.clone()),
+        );
+
+        let reclaim_candidate = runtime_registry_reclaim_candidate_for_sessions(
+            &self.runtime_registry,
+            &request.reclaim_candidates,
+        );
+        let warmup_disposition = if request.next_admission_queue_id.is_some() {
+            Some(
+                self.runtime_registry
+                    .warmup_disposition(&descriptor.runtime_id)
+                    .map_err(EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry)?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Some(WorkflowSchedulerRuntimeRegistryDiagnostics {
+            target_runtime_id: Some(descriptor.runtime_id),
+            reclaim_candidate_session_id: reclaim_candidate
+                .as_ref()
+                .map(|(session_id, _)| session_id.clone()),
+            reclaim_candidate_runtime_id: reclaim_candidate.map(|(_, runtime_id)| runtime_id),
+            next_warmup_decision: warmup_disposition
+                .as_ref()
+                .map(|disposition| match disposition.decision {
+                    RuntimeWarmupDecision::StartRuntime => {
+                        WorkflowSchedulerRuntimeWarmupDecision::StartRuntime
+                    }
+                    RuntimeWarmupDecision::ReuseLoadedRuntime => {
+                        WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime
+                    }
+                    RuntimeWarmupDecision::WaitForTransition => {
+                        WorkflowSchedulerRuntimeWarmupDecision::WaitForTransition
+                    }
+                }),
+            next_warmup_reason: warmup_disposition.as_ref().map(|disposition| {
+                match disposition.reason {
+                    pantograph_runtime_registry::RuntimeWarmupReason::NoLoadedInstance => {
+                        WorkflowSchedulerRuntimeWarmupReason::NoLoadedInstance
+                    }
+                    pantograph_runtime_registry::RuntimeWarmupReason::RecoveryRequired => {
+                        WorkflowSchedulerRuntimeWarmupReason::RecoveryRequired
+                    }
+                    pantograph_runtime_registry::RuntimeWarmupReason::LoadedInstanceReady => {
+                        WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady
+                    }
+                    pantograph_runtime_registry::RuntimeWarmupReason::LoadedInstanceBusy => {
+                        WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceBusy
+                    }
+                    pantograph_runtime_registry::RuntimeWarmupReason::WarmupInProgress => {
+                        WorkflowSchedulerRuntimeWarmupReason::WarmupInProgress
+                    }
+                    pantograph_runtime_registry::RuntimeWarmupReason::StopInProgress => {
+                        WorkflowSchedulerRuntimeWarmupReason::StopInProgress
+                    }
+                }
+            }),
+        }))
+    }
 }
 
 #[async_trait]
@@ -420,6 +536,14 @@ impl EmbeddedRuntime {
     }
 
     pub fn with_runtime_registry(mut self, runtime_registry: SharedRuntimeRegistry) -> Self {
+        self.workflow_service
+            .set_scheduler_diagnostics_provider(Some(Arc::new(
+                EmbeddedWorkflowSchedulerDiagnosticsProvider::new(
+                    self.gateway.clone(),
+                    runtime_registry.clone(),
+                ),
+            )))
+            .expect("scheduler diagnostics provider should be configured");
         self.runtime_registry = Some(runtime_registry);
         self
     }
@@ -1895,22 +2019,14 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             return Ok(Self::fallback_runtime_unload_candidate(target, candidates));
         };
 
-        let candidates_by_session_id = candidates
-            .iter()
-            .cloned()
-            .map(|candidate| (candidate.session_id.clone(), candidate))
-            .collect::<HashMap<_, _>>();
-        let owner_ids = candidates_by_session_id
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        if let Some(reservation) =
-            runtime_registry.eviction_reservation_candidate_for_owners(&owner_ids)
+        if let Some((session_id, _runtime_id)) =
+            runtime_registry_reclaim_candidate_for_sessions(runtime_registry, candidates)
         {
-            if let Some(owner_id) = reservation.reservation_owner_id.as_deref() {
-                if let Some(candidate) = candidates_by_session_id.get(owner_id) {
-                    return Ok(Some(candidate.clone()));
-                }
+            if let Some(candidate) = candidates
+                .iter()
+                .find(|candidate| candidate.session_id == session_id)
+            {
+                return Ok(Some(candidate.clone()));
             }
         }
 
