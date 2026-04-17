@@ -563,6 +563,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn restore_runtime_and_sync_runtime_registry_reconciles_after_stop_all() {
+        let gateway = crate::llm::gateway::InferenceGateway::with_test_backend(
+            Box::new(MockInferenceBackend::new()),
+            "PyTorch",
+            Arc::new(MockProcessSpawner),
+        );
+        gateway.init().await;
+        gateway
+            .start(&BackendConfig::default())
+            .await
+            .expect("gateway should start");
+
+        let registry = RuntimeRegistry::new();
+        sync_runtime_registry_from_gateway(&gateway, &registry).await;
+        stop_all_and_sync_runtime_registry(&gateway, &registry).await;
+
+        let stopped_runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("stopped runtime snapshot");
+        assert_eq!(
+            stopped_runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Stopped
+        );
+        assert!(stopped_runtime.runtime_instance_id.is_none());
+
+        restore_runtime_and_sync_runtime_registry(&gateway, &registry, Some(BackendConfig::default()))
+            .await
+            .expect("restore should succeed");
+
+        let restored_runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("restored runtime snapshot");
+        assert_eq!(
+            restored_runtime.status,
+            pantograph_runtime_registry::RuntimeRegistryStatus::Ready
+        );
+    }
+
+    #[tokio::test]
     async fn reclaim_runtime_and_sync_runtime_registry_keeps_other_live_producers_running() {
         let gateway = crate::llm::gateway::InferenceGateway::new(Arc::new(MockProcessSpawner));
         gateway.init().await;

@@ -380,7 +380,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
       are absent or ambiguous.
 - [x] Ensure Tauri diagnostics overlays remain additive UI/transport state and
       do not become canonical workflow or runtime state.
-- [ ] Add explicit post-restart and post-restore reconciliation coverage so
+- [x] Add explicit post-restart and post-restore reconciliation coverage so
       diagnostics and trace consumers resynchronize from backend-owned state
       after recovery-shaped transitions.
 - [x] Verify that runtime-not-ready, admission failure, and cancellation-shaped
@@ -544,6 +544,11 @@ Update during implementation:
 - Milestone 3 diagnostics-store coverage now explicitly asserts that runtime
   and scheduler overlays alone do not materialize canonical run records,
   keeping Tauri-owned diagnostics state additive to backend-owned trace facts.
+- Milestone 3 reconciliation coverage now explicitly asserts that clearing
+  local diagnostics history and then receiving backend-owned scheduler/runtime
+  snapshots rebuilds canonical trace state from backend facts, and that the
+  Tauri runtime-registry wrapper resynchronizes registry state after a
+  stop-and-restore transition instead of leaving a stale stopped view behind.
 
 ### Deviations
 

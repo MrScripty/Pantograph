@@ -780,6 +780,118 @@ fn clear_history_preserves_runtime_and_scheduler_snapshots() {
 }
 
 #[test]
+fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
+    let store = WorkflowDiagnosticsStore::default();
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Started {
+            workflow_id: "wf-1".to_string(),
+            node_count: 1,
+            execution_id: "stale-exec".to_string(),
+        },
+        1_000,
+    );
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::NodeStarted {
+            node_id: "llm-1".to_string(),
+            node_type: "llm-inference".to_string(),
+            execution_id: "stale-exec".to_string(),
+        },
+        1_010,
+    );
+
+    let cleared = store.clear_history();
+    assert!(cleared.runs_by_id.is_empty());
+    assert!(cleared.run_order.is_empty());
+
+    let projection = store.record_scheduler_snapshot(
+        Some("wf-1".to_string()),
+        "restored-exec".to_string(),
+        "session-1".to_string(),
+        2_000,
+        Some(pantograph_workflow_service::WorkflowSessionSummary {
+            session_id: "session-1".to_string(),
+            workflow_id: "wf-1".to_string(),
+            session_kind: WorkflowSessionKind::Workflow,
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            state: pantograph_workflow_service::WorkflowSessionState::Running,
+            queued_runs: 1,
+            run_count: 1,
+        }),
+        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+            queue_id: "queue-1".to_string(),
+            run_id: Some("restored-exec".to_string()),
+            enqueued_at_ms: Some(1_950),
+            dequeued_at_ms: Some(1_980),
+            priority: 5,
+            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+        }],
+        None,
+    );
+
+    assert_eq!(projection.run_order, vec!["restored-exec".to_string()]);
+    assert!(!projection.runs_by_id.contains_key("stale-exec"));
+    assert_eq!(
+        projection.scheduler.trace_execution_id.as_deref(),
+        Some("restored-exec")
+    );
+
+    let runtime_projection = store.update_runtime_snapshot(
+        Some("wf-1".to_string()),
+        None,
+        None,
+        Some("/models/restarted.gguf".to_string()),
+        None,
+        Some(inference::RuntimeLifecycleSnapshot {
+            runtime_id: Some("llama.cpp".to_string()),
+            runtime_instance_id: Some("llama-cpp-restored".to_string()),
+            warmup_started_at_ms: Some(1_900),
+            warmup_completed_at_ms: Some(1_940),
+            warmup_duration_ms: Some(40),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            active: true,
+            last_error: None,
+        }),
+        None,
+        2_010,
+    );
+
+    assert_eq!(runtime_projection.run_order, vec!["restored-exec".to_string()]);
+    assert_eq!(
+        runtime_projection.runtime.active_model_target.as_deref(),
+        Some("/models/restarted.gguf")
+    );
+    assert_eq!(
+        runtime_projection
+            .runtime
+            .active_runtime
+            .as_ref()
+            .and_then(|runtime| runtime.runtime_id.as_deref()),
+        Some("llama_cpp")
+    );
+
+    let trace = store
+        .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
+            execution_id: Some("restored-exec".to_string()),
+            session_id: None,
+            workflow_id: None,
+            include_completed: Some(true),
+        })
+        .expect("trace snapshot")
+        .traces
+        .into_iter()
+        .next()
+        .expect("restored trace");
+
+    assert_eq!(trace.execution_id, "restored-exec");
+    assert_eq!(trace.session_id.as_deref(), Some("session-1"));
+    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+    assert_eq!(trace.queue.enqueued_at_ms, Some(1_950));
+    assert_eq!(trace.queue.dequeued_at_ms, Some(1_980));
+}
+
+#[test]
 fn cancelled_workflow_event_maps_to_cancelled_trace_status() {
     let store = WorkflowDiagnosticsStore::default();
 
