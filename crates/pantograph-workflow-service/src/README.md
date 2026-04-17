@@ -164,6 +164,9 @@ Primary contract types:
   transition, this crate resets attempt-scoped trace state before recording the
   new attempt so retry or replay flows do not leak stale node, queue, or
   runtime facts into the restarted run.
+- That attempt reset applies after explicit cancellation as well as failure or
+  completion, so one execution id can retry cleanly without carrying cancelled
+  node/runtime state into the next attempt.
 - When backend scheduler or runtime snapshots replay for the same execution id
   during recovery or restore, this crate updates the canonical trace in place
   instead of materializing duplicate runs, leaving adapters free to reread one

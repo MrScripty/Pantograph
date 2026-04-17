@@ -229,6 +229,9 @@ let snapshot = workflow_service
   translating `node-engine` events, so restarted executions remain one backend-
   owned trace with fresh attempt-local diagnostics state instead of a layered
   transport reconstruction.
+- That reset rule also applies when the prior terminal state was cancellation;
+  retries after cancellation must clear stale overlay state the same way as
+  retries after failure or completion.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   port overlays used only when their `node_type` matches the containing node.
 - `model_path` remains the workflow-facing field name, but for external bundle

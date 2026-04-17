@@ -437,6 +437,10 @@ Update during implementation:
   adapter coverage proving restarted `node-engine` executions preserve that
   backend-owned reset behavior through transport adaptation and do not retain
   stale diagnostics overlay state from the prior attempt.
+- 2026-04-17: Fortieth implementation slice added cancellation-to-restart
+  coverage across the workflow trace store, diagnostics store, and Tauri
+  workflow adapter so retry semantics are frozen for cancelled executions as
+  well as failed or completed attempts.
 
 ## Commit Cadence Notes
 

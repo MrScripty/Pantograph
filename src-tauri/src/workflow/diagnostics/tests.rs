@@ -1017,6 +1017,60 @@ fn restarted_run_clears_stale_overlay_history_and_node_state() {
 }
 
 #[test]
+fn restarted_cancelled_run_clears_stale_overlay_history_and_node_state() {
+    let store = WorkflowDiagnosticsStore::default();
+    store.set_execution_metadata(
+        "exec-1",
+        Some("wf-1".to_string()),
+        Some("Retry Workflow".to_string()),
+    );
+    store.set_execution_graph("exec-1", &sample_graph());
+
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Started {
+            workflow_id: "wf-1".to_string(),
+            node_count: 1,
+            execution_id: "exec-1".to_string(),
+        },
+        1_000,
+    );
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::NodeProgress {
+            node_id: "llm-1".to_string(),
+            progress: 0.5,
+            message: Some("halfway".to_string()),
+            execution_id: "exec-1".to_string(),
+        },
+        1_020,
+    );
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Cancelled {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            error: "workflow run cancelled during execution".to_string(),
+        },
+        1_100,
+    );
+
+    let restarted = store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Started {
+            workflow_id: "wf-1".to_string(),
+            node_count: 1,
+            execution_id: "exec-1".to_string(),
+        },
+        2_000,
+    );
+
+    let run = restarted.runs_by_id.get("exec-1").expect("restarted run");
+    assert_eq!(run.status, DiagnosticsRunStatus::Running);
+    assert_eq!(run.started_at_ms, 2_000);
+    assert_eq!(run.event_count, 1);
+    assert_eq!(run.events.len(), 1);
+    assert_eq!(run.events[0].event_type, "Started");
+    assert!(run.nodes.is_empty());
+}
+
+#[test]
 fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
     let store = WorkflowDiagnosticsStore::default();
 

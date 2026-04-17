@@ -1054,6 +1054,86 @@ mod tests {
     }
 
     #[test]
+    fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellation() {
+        let store = WorkflowTraceStore::new(10);
+        store.set_execution_metadata(
+            "exec-1",
+            Some("wf-1".to_string()),
+            Some("Workflow".to_string()),
+        );
+        store.set_execution_graph_context(
+            "exec-1",
+            &WorkflowTraceGraphContext {
+                graph_fingerprint: Some("graph-1".to_string()),
+                node_count_at_start: 2,
+                node_types_by_id: HashMap::from([
+                    ("node-1".to_string(), "llm-inference".to_string()),
+                    ("node-2".to_string(), "embedding".to_string()),
+                ]),
+            },
+        );
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 1,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::NodeStarted {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-1".to_string(),
+                node_type: None,
+            },
+            110,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunCancelled {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                error: "workflow run cancelled during execution".to_string(),
+            },
+            130,
+        );
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 2,
+            },
+            200,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::NodeStarted {
+                execution_id: "exec-1".to_string(),
+                node_id: "node-2".to_string(),
+                node_type: None,
+            },
+            210,
+        );
+
+        let trace = snapshot.traces.first().expect("trace");
+        assert_eq!(trace.workflow_name.as_deref(), Some("Workflow"));
+        assert_eq!(trace.graph_fingerprint.as_deref(), Some("graph-1"));
+        assert_eq!(trace.status, WorkflowTraceStatus::Running);
+        assert_eq!(trace.started_at_ms, 200);
+        assert_eq!(trace.ended_at_ms, None);
+        assert_eq!(trace.duration_ms, None);
+        assert_eq!(trace.last_error, None);
+        assert_eq!(trace.node_count_at_start, 2);
+        assert_eq!(trace.event_count, 2);
+        assert_eq!(trace.stream_event_count, 0);
+        assert_eq!(trace.queue, WorkflowTraceQueueMetrics::default());
+        assert_eq!(trace.runtime, WorkflowTraceRuntimeMetrics::default());
+        assert_eq!(trace.nodes.len(), 1);
+        assert_eq!(trace.nodes[0].node_id, "node-2");
+        assert_eq!(trace.nodes[0].status, WorkflowTraceNodeStatus::Running);
+    }
+
+    #[test]
     fn workflow_trace_store_ignores_duplicate_run_completed_events() {
         let store = WorkflowTraceStore::new(10);
 
