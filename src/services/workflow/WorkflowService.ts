@@ -76,7 +76,7 @@ export class WorkflowService {
       event,
       this.currentRunExecutionId,
     );
-    if (event.type === 'Started') {
+    if (event.type === 'Started' && this.currentExecutionId === null) {
       this.currentExecutionId = getWorkflowEventExecutionId(event);
     }
     this.eventListeners.forEach((listener) => listener(event));
