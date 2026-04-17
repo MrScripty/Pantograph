@@ -562,6 +562,10 @@ Update during implementation:
 - 2026-04-17: Moved reservation retention-hint mutation behind a shared backend
   registry helper so workflow keep-alive updates no longer call the lower-level
   registry update API directly from the embedded workflow host.
+- 2026-04-17: Moved scheduler runtime-registry diagnostics shaping behind a
+  shared backend registry helper so reclaim-candidate lookup and warmup
+  decision/reason translation no longer live inline in the diagnostics
+  provider.
 
 ## Commit Cadence Notes
 

@@ -32,6 +32,11 @@ use pantograph_runtime_registry::{
     RuntimeRegistry, RuntimeRegistryError, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
     RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
 };
+use pantograph_workflow_service::{
+    WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerRuntimeRegistryDiagnostics,
+    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
+    WorkflowSessionRuntimeUnloadCandidate,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostRuntimeProducer {
@@ -114,6 +119,94 @@ pub fn sync_runtime_reservation_retention_hint(
     registry
         .update_reservation_retention_hint_if_present(reservation_id, retention_hint)
         .map(|_| ())
+}
+
+pub fn scheduler_runtime_registry_diagnostics(
+    registry: &RuntimeRegistry,
+    mode_info: &HostRuntimeModeSnapshot,
+    request: &WorkflowSchedulerRuntimeDiagnosticsRequest,
+) -> Result<WorkflowSchedulerRuntimeRegistryDiagnostics, RuntimeRegistryError> {
+    let descriptor = register_active_runtime(registry, mode_info);
+    let reclaim_candidate =
+        runtime_registry_reclaim_candidate_for_sessions(registry, &request.reclaim_candidates);
+    let warmup_disposition = if request.next_admission_queue_id.is_some() {
+        Some(registry.warmup_disposition(&descriptor.runtime_id)?)
+    } else {
+        None
+    };
+
+    Ok(WorkflowSchedulerRuntimeRegistryDiagnostics {
+        target_runtime_id: Some(descriptor.runtime_id),
+        reclaim_candidate_session_id: reclaim_candidate
+            .as_ref()
+            .map(|(session_id, _)| session_id.clone()),
+        reclaim_candidate_runtime_id: reclaim_candidate.map(|(_, runtime_id)| runtime_id),
+        next_warmup_decision: warmup_disposition
+            .as_ref()
+            .map(|disposition| workflow_scheduler_runtime_warmup_decision(disposition.decision)),
+        next_warmup_reason: warmup_disposition
+            .as_ref()
+            .map(|disposition| workflow_scheduler_runtime_warmup_reason(disposition.reason)),
+    })
+}
+
+pub fn runtime_registry_reclaim_candidate_for_sessions(
+    runtime_registry: &RuntimeRegistry,
+    candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+) -> Option<(String, String)> {
+    let candidates_by_session_id = candidates
+        .iter()
+        .map(|candidate| (candidate.session_id.clone(), candidate))
+        .collect::<std::collections::HashMap<_, _>>();
+    let owner_ids = candidates_by_session_id
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let reservation = runtime_registry.eviction_reservation_candidate_for_owners(&owner_ids)?;
+    let owner_id = reservation.reservation_owner_id?;
+    let candidate = candidates_by_session_id.get(&owner_id)?;
+    Some((candidate.session_id.clone(), reservation.runtime_id))
+}
+
+fn workflow_scheduler_runtime_warmup_decision(
+    decision: pantograph_runtime_registry::RuntimeWarmupDecision,
+) -> WorkflowSchedulerRuntimeWarmupDecision {
+    match decision {
+        pantograph_runtime_registry::RuntimeWarmupDecision::StartRuntime => {
+            WorkflowSchedulerRuntimeWarmupDecision::StartRuntime
+        }
+        pantograph_runtime_registry::RuntimeWarmupDecision::ReuseLoadedRuntime => {
+            WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime
+        }
+        pantograph_runtime_registry::RuntimeWarmupDecision::WaitForTransition => {
+            WorkflowSchedulerRuntimeWarmupDecision::WaitForTransition
+        }
+    }
+}
+
+fn workflow_scheduler_runtime_warmup_reason(
+    reason: pantograph_runtime_registry::RuntimeWarmupReason,
+) -> WorkflowSchedulerRuntimeWarmupReason {
+    match reason {
+        pantograph_runtime_registry::RuntimeWarmupReason::NoLoadedInstance => {
+            WorkflowSchedulerRuntimeWarmupReason::NoLoadedInstance
+        }
+        pantograph_runtime_registry::RuntimeWarmupReason::RecoveryRequired => {
+            WorkflowSchedulerRuntimeWarmupReason::RecoveryRequired
+        }
+        pantograph_runtime_registry::RuntimeWarmupReason::LoadedInstanceReady => {
+            WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady
+        }
+        pantograph_runtime_registry::RuntimeWarmupReason::LoadedInstanceBusy => {
+            WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceBusy
+        }
+        pantograph_runtime_registry::RuntimeWarmupReason::WarmupInProgress => {
+            WorkflowSchedulerRuntimeWarmupReason::WarmupInProgress
+        }
+        pantograph_runtime_registry::RuntimeWarmupReason::StopInProgress => {
+            WorkflowSchedulerRuntimeWarmupReason::StopInProgress
+        }
+    }
 }
 
 pub fn reconcile_runtime_registry_snapshot_override(
@@ -1071,6 +1164,72 @@ mod tests {
         assert_eq!(
             snapshot.reservations[0].retention_hint,
             RuntimeRetentionHint::KeepAlive
+        );
+    }
+
+    #[test]
+    fn scheduler_runtime_registry_diagnostics_reports_start_runtime_without_loaded_candidate() {
+        let registry = RuntimeRegistry::new();
+        let candidate_request = active_runtime_reservation_request(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: None,
+            },
+            "wf-loaded",
+            Some("session-loaded"),
+            Some("interactive"),
+            None,
+            RuntimeRetentionHint::Ephemeral,
+        );
+        registry
+            .acquire_reservation(candidate_request)
+            .expect("loaded session reservation should be created");
+
+        let diagnostics = scheduler_runtime_registry_diagnostics(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot::default()),
+                embedding_runtime: None,
+            },
+            &WorkflowSchedulerRuntimeDiagnosticsRequest {
+                session_id: "session-queued".to_string(),
+                workflow_id: "wf-queued".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: false,
+                runtime_loaded: false,
+                next_admission_queue_id: Some("queue-1".to_string()),
+                reclaim_candidates: vec![WorkflowSessionRuntimeUnloadCandidate {
+                    session_id: "session-loaded".to_string(),
+                    workflow_id: "wf-loaded".to_string(),
+                    keep_alive: false,
+                    usage_profile: Some("interactive".to_string()),
+                    required_backends: Vec::new(),
+                    required_models: Vec::new(),
+                    access_tick: 1,
+                    run_count: 1,
+                }],
+            },
+        )
+        .expect("scheduler diagnostics should succeed");
+
+        assert_eq!(
+            diagnostics,
+            WorkflowSchedulerRuntimeRegistryDiagnostics {
+                target_runtime_id: Some("llama_cpp".to_string()),
+                reclaim_candidate_session_id: None,
+                reclaim_candidate_runtime_id: None,
+                next_warmup_decision: Some(WorkflowSchedulerRuntimeWarmupDecision::StartRuntime,),
+                next_warmup_reason: Some(WorkflowSchedulerRuntimeWarmupReason::NoLoadedInstance),
+            }
         );
     }
 

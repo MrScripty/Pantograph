@@ -10,7 +10,7 @@ use node_engine::{
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
     RuntimeRegistryError, RuntimeReservationRequirements, RuntimeRetentionHint,
-    RuntimeWarmupDecision, SharedRuntimeRegistry,
+    SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -33,8 +33,7 @@ use pantograph_workflow_service::{
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
-    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
-    WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowService, WorkflowServiceError,
     WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
     WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
     WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
@@ -196,24 +195,6 @@ impl EmbeddedWorkflowSchedulerDiagnosticsProvider {
     }
 }
 
-fn runtime_registry_reclaim_candidate_for_sessions(
-    runtime_registry: &SharedRuntimeRegistry,
-    candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-) -> Option<(String, String)> {
-    let candidates_by_session_id = candidates
-        .iter()
-        .map(|candidate| (candidate.session_id.clone(), candidate))
-        .collect::<HashMap<_, _>>();
-    let owner_ids = candidates_by_session_id
-        .keys()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-    let reservation = runtime_registry.eviction_reservation_candidate_for_owners(&owner_ids)?;
-    let owner_id = reservation.reservation_owner_id?;
-    let candidate = candidates_by_session_id.get(&owner_id)?;
-    Some((candidate.session_id.clone(), reservation.runtime_id))
-}
-
 #[async_trait]
 impl WorkflowSchedulerDiagnosticsProvider for EmbeddedWorkflowSchedulerDiagnosticsProvider {
     async fn scheduler_runtime_registry_diagnostics(
@@ -222,67 +203,14 @@ impl WorkflowSchedulerDiagnosticsProvider for EmbeddedWorkflowSchedulerDiagnosti
     ) -> Result<Option<WorkflowSchedulerRuntimeRegistryDiagnostics>, WorkflowServiceError> {
         let mode_info = self.gateway.mode_info().await;
         let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        let descriptor = runtime_registry::register_active_runtime(
-            &self.runtime_registry,
-            &host_runtime_mode_info,
-        );
-
-        let reclaim_candidate = runtime_registry_reclaim_candidate_for_sessions(
-            &self.runtime_registry,
-            &request.reclaim_candidates,
-        );
-        let warmup_disposition = if request.next_admission_queue_id.is_some() {
-            Some(
-                self.runtime_registry
-                    .warmup_disposition(&descriptor.runtime_id)
-                    .map_err(EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry)?,
+        Ok(Some(
+            runtime_registry::scheduler_runtime_registry_diagnostics(
+                &self.runtime_registry,
+                &host_runtime_mode_info,
+                request,
             )
-        } else {
-            None
-        };
-
-        Ok(Some(WorkflowSchedulerRuntimeRegistryDiagnostics {
-            target_runtime_id: Some(descriptor.runtime_id),
-            reclaim_candidate_session_id: reclaim_candidate
-                .as_ref()
-                .map(|(session_id, _)| session_id.clone()),
-            reclaim_candidate_runtime_id: reclaim_candidate.map(|(_, runtime_id)| runtime_id),
-            next_warmup_decision: warmup_disposition
-                .as_ref()
-                .map(|disposition| match disposition.decision {
-                    RuntimeWarmupDecision::StartRuntime => {
-                        WorkflowSchedulerRuntimeWarmupDecision::StartRuntime
-                    }
-                    RuntimeWarmupDecision::ReuseLoadedRuntime => {
-                        WorkflowSchedulerRuntimeWarmupDecision::ReuseLoadedRuntime
-                    }
-                    RuntimeWarmupDecision::WaitForTransition => {
-                        WorkflowSchedulerRuntimeWarmupDecision::WaitForTransition
-                    }
-                }),
-            next_warmup_reason: warmup_disposition.as_ref().map(|disposition| {
-                match disposition.reason {
-                    pantograph_runtime_registry::RuntimeWarmupReason::NoLoadedInstance => {
-                        WorkflowSchedulerRuntimeWarmupReason::NoLoadedInstance
-                    }
-                    pantograph_runtime_registry::RuntimeWarmupReason::RecoveryRequired => {
-                        WorkflowSchedulerRuntimeWarmupReason::RecoveryRequired
-                    }
-                    pantograph_runtime_registry::RuntimeWarmupReason::LoadedInstanceReady => {
-                        WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceReady
-                    }
-                    pantograph_runtime_registry::RuntimeWarmupReason::LoadedInstanceBusy => {
-                        WorkflowSchedulerRuntimeWarmupReason::LoadedInstanceBusy
-                    }
-                    pantograph_runtime_registry::RuntimeWarmupReason::WarmupInProgress => {
-                        WorkflowSchedulerRuntimeWarmupReason::WarmupInProgress
-                    }
-                    pantograph_runtime_registry::RuntimeWarmupReason::StopInProgress => {
-                        WorkflowSchedulerRuntimeWarmupReason::StopInProgress
-                    }
-                }
-            }),
-        }))
+            .map_err(EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry)?,
+        ))
     }
 }
 
@@ -1864,7 +1792,10 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         };
 
         if let Some((session_id, _runtime_id)) =
-            runtime_registry_reclaim_candidate_for_sessions(runtime_registry, candidates)
+            runtime_registry::runtime_registry_reclaim_candidate_for_sessions(
+                runtime_registry,
+                candidates,
+            )
         {
             if let Some(candidate) = candidates
                 .iter()
@@ -1983,7 +1914,10 @@ mod tests {
         RuntimeRegistration, RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
         RuntimeReservationRequest, RuntimeTransition,
     };
-    use pantograph_workflow_service::{GraphEdge, GraphNode, Position, WorkflowGraph};
+    use pantograph_workflow_service::{
+        GraphEdge, GraphNode, Position, WorkflowGraph, WorkflowSchedulerRuntimeWarmupDecision,
+        WorkflowSchedulerRuntimeWarmupReason,
+    };
     use std::path::Path;
     use std::pin::Pin;
     use tempfile::TempDir;

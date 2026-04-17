@@ -135,6 +135,9 @@ embedded-runtime crate.
 - Reservation retention-hint mutation must stay in shared backend registry
   helpers so workflow execution does not depend directly on the lower-level
   registry update call when session keep-alive policy changes.
+- Scheduler runtime-registry diagnostics shaping, including reclaim-candidate
+  lookup and warmup-decision translation, must stay in shared backend registry
+  helpers so workflow providers do not drift on registry-to-workflow mapping.
 - Active-runtime registration used by scheduler diagnostics and reservation
   paths must stay in shared backend registry helpers so workflow execution does
   not re-derive registration shape in multiple call sites.
