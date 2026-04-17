@@ -111,7 +111,7 @@ impl PriorityThenFifoSchedulerPolicy {
         if candidate.queue_id == queue_id {
             return Ok(WorkflowSessionAdmissionDecision {
                 admitted_queue_id: Some(candidate.queue_id.clone()),
-                reason: Some(WorkflowSchedulerDecisionReason::AdmittedForExecution),
+                reason: Some(self.admission_reason(input, candidate)),
             });
         }
 
@@ -197,6 +197,29 @@ impl PriorityThenFifoSchedulerPolicy {
             shared_required_models,
             same_usage_profile,
         )
+    }
+
+    fn admission_reason(
+        &self,
+        input: &WorkflowSessionAdmissionInput,
+        candidate: &WorkflowSessionAdmissionCandidate,
+    ) -> WorkflowSchedulerDecisionReason {
+        match input.runtime_posture {
+            WorkflowSessionAdmissionRuntimePosture::Unloaded => {
+                WorkflowSchedulerDecisionReason::ColdStartRequired
+            }
+            WorkflowSessionAdmissionRuntimePosture::Loaded => {
+                match candidate.warm_session_compatibility {
+                    WorkflowSessionWarmCompatibility::Compatible => {
+                        WorkflowSchedulerDecisionReason::WarmSessionReused
+                    }
+                    WorkflowSessionWarmCompatibility::Incompatible
+                    | WorkflowSessionWarmCompatibility::Unknown => {
+                        WorkflowSchedulerDecisionReason::RuntimeReloadRequired
+                    }
+                }
+            }
+        }
     }
 
     fn effective_priority(&self, queued: &WorkflowSessionQueuedRun) -> i32 {
@@ -609,7 +632,7 @@ mod tests {
         );
         assert_eq!(
             decision.reason,
-            Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
+            Some(WorkflowSchedulerDecisionReason::RuntimeReloadRequired)
         );
     }
 
@@ -650,5 +673,65 @@ mod tests {
 
         assert_eq!(decision.admitted_queue_id, None);
         assert_eq!(decision.reason, None);
+    }
+
+    #[test]
+    fn admission_decision_reports_warm_session_reuse_for_loaded_compatible_runtime() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![admission_candidate(
+                "selected",
+                2,
+                1,
+                0,
+                0,
+                true,
+                WorkflowSessionWarmCompatibility::Compatible,
+            )],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "selected")
+            .expect("admission decision");
+
+        assert_eq!(
+            decision.reason,
+            Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
+        );
+    }
+
+    #[test]
+    fn admission_decision_reports_cold_start_when_runtime_is_unloaded() {
+        let policy = PriorityThenFifoSchedulerPolicy;
+        let input = WorkflowSessionAdmissionInput {
+            has_active_run: false,
+            runtime_posture: WorkflowSessionAdmissionRuntimePosture::Unloaded,
+            usage_profile: Some("interactive".to_string()),
+            required_backends: vec!["llama_cpp".to_string()],
+            required_models: vec!["model-a".to_string()],
+            candidates: vec![admission_candidate(
+                "selected",
+                2,
+                1,
+                0,
+                0,
+                false,
+                WorkflowSessionWarmCompatibility::Unknown,
+            )],
+        };
+
+        let decision = policy
+            .admission_decision(&input, "selected")
+            .expect("admission decision");
+
+        assert_eq!(
+            decision.reason,
+            Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
+        );
     }
 }

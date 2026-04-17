@@ -438,7 +438,12 @@ impl WorkflowSessionStore {
             enqueued_at_ms: queued.enqueued_at_ms,
             dequeued_at_ms: unix_timestamp_ms(),
             priority: queued.priority,
-            scheduler_decision_reason: WorkflowSchedulerDecisionReason::AdmittedForExecution,
+            scheduler_decision_reason: decision.reason.ok_or_else(|| {
+                WorkflowServiceError::Internal(format!(
+                    "admitted queue item '{}' in session '{}' missing scheduler reason",
+                    admitted_queue_id, session_id
+                ))
+            })?,
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowSessionDequeuedRun {

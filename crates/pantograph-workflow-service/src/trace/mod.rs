@@ -1117,7 +1117,7 @@ mod tests {
                     queue_position: None,
                     scheduler_admission_outcome: None,
                     scheduler_decision_reason: Some(
-                        crate::workflow::WorkflowSchedulerDecisionReason::AdmittedForExecution,
+                        crate::workflow::WorkflowSchedulerDecisionReason::WarmSessionReused,
                     ),
                     status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
                 }],
@@ -1129,7 +1129,7 @@ mod tests {
         let trace = snapshot.traces.first().expect("trace summary");
         assert_eq!(
             trace.queue.scheduler_decision_reason.as_deref(),
-            Some("admitted_for_execution")
+            Some("warm_session_reused")
         );
     }
 }

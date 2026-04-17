@@ -140,7 +140,9 @@ pub enum WorkflowSchedulerDecisionReason {
     FifoPriorityTieBreak,
     WaitingForHigherPriority,
     StarvationProtection,
-    AdmittedForExecution,
+    WarmSessionReused,
+    RuntimeReloadRequired,
+    ColdStartRequired,
 }
 
 impl WorkflowSchedulerDecisionReason {
@@ -162,7 +164,9 @@ impl WorkflowSchedulerDecisionReason {
                 "waiting_for_higher_priority"
             }
             WorkflowSchedulerDecisionReason::StarvationProtection => "starvation_protection",
-            WorkflowSchedulerDecisionReason::AdmittedForExecution => "admitted_for_execution",
+            WorkflowSchedulerDecisionReason::WarmSessionReused => "warm_session_reused",
+            WorkflowSchedulerDecisionReason::RuntimeReloadRequired => "runtime_reload_required",
+            WorkflowSchedulerDecisionReason::ColdStartRequired => "cold_start_required",
         }
     }
 }

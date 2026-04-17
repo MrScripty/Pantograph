@@ -470,7 +470,7 @@ policy, fairness, and machine-consumable decision semantics.
       backend-owned compatibility keys only. Any new affinity identity must be
       normalized in Rust contracts or preflight/session state, not inferred in
       Tauri or frontend code, and must preserve facade-first compatibility.
-- [ ] Add stable machine-consumable admission and reuse reason vocabulary for
+- [x] Add stable machine-consumable admission and reuse reason vocabulary for
       the stronger admission policy so clients can distinguish queue ordering,
       fairness, affine reuse, and cold-start fallbacks without adapter-local
       heuristics.
@@ -528,10 +528,14 @@ policy, fairness, and machine-consumable decision semantics.
   input from queue ordering, loaded-runtime posture, affine reuse posture, and
   warm-session compatibility facts before delegating next-run selection to the
   backend scheduler policy.
+- Admitted runs now also expose backend-owned `warm_session_reused`,
+  `runtime_reload_required`, and `cold_start_required` reasons so queue,
+  snapshot, and trace consumers no longer depend on a generic
+  `admitted_for_execution` label.
 - Remaining Milestone 3 work is now narrowly defined as:
   fairness expansion beyond starvation promotion, richer compatibility
-  identity beyond the current unload-affinity basis, and stable
-  admission/reuse reason vocabulary for those decisions.
+  identity beyond the current unload-affinity basis, and focused coverage for
+  the remaining fairness and compatibility slices.
 
 **Status:** In progress
 
@@ -618,6 +622,10 @@ Update during implementation:
   evaluates canonical queue/runtime/warm-compatibility facts through an
   explicit policy boundary instead of leaving them implicit in the store
   mutation path.
+- 2026-04-16: Replaced the generic admitted execution reason with
+  backend-owned `warm_session_reused`, `runtime_reload_required`, and
+  `cold_start_required` admission reasons across queue, workflow-service, and
+  trace projections.
 
 ## Commit Cadence Notes
 

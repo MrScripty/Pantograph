@@ -44,10 +44,11 @@ semantics instead of forcing adapters to reverse-engineer queued versus
 admitted state. Store-owned queue transitions now also construct a canonical
 internal admission-input model for policy evaluation from backend session
 state, loaded-runtime posture, and warm-session compatibility facts instead of
-keeping those inputs implicit inside one mutation path. `workflow.rs` remains the public
+keeping those inputs implicit inside one mutation path, and admitted runs now
+surface backend-owned warm-reuse versus reload versus cold-start reasons
+instead of a generic execution label. `workflow.rs` remains the public
 application-service facade and orchestration entrypoint, but it no longer
-needs to be the long-term home for scheduler contracts or queue mutation
-logic.
+needs to be the long-term home for scheduler contracts or queue mutation logic.
 
 ## Alternatives Rejected
 - Leave scheduler logic in `workflow.rs`.

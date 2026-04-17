@@ -5949,7 +5949,72 @@ mod tests {
         );
         assert_eq!(
             running_items[0].scheduler_decision_reason,
-            Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
+            Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
+        );
+    }
+
+    #[tokio::test]
+    async fn workflow_session_queue_marks_loaded_compatible_admission_as_warm_reuse() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create workflow session");
+
+        let queue_id = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .mark_runtime_loaded(&created.session_id, true)
+                .expect("mark runtime loaded");
+            store
+                .enqueue_run(
+                    &created.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: created.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("queued-run-1".to_string()),
+                        priority: Some(1),
+                    },
+                )
+                .expect("enqueue run")
+        };
+
+        let running_items = {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .begin_queued_run(&created.session_id, &queue_id)
+                .expect("begin queued run");
+            store
+                .list_queue(&created.session_id)
+                .expect("list running queue items")
+        };
+
+        assert_eq!(running_items.len(), 1);
+        assert_eq!(running_items[0].queue_id, queue_id);
+        assert_eq!(
+            running_items[0].scheduler_admission_outcome,
+            Some(WorkflowSchedulerAdmissionOutcome::Admitted)
+        );
+        assert_eq!(
+            running_items[0].scheduler_decision_reason,
+            Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
         );
     }
 
@@ -6153,7 +6218,7 @@ mod tests {
         );
         assert_eq!(
             running_items[0].scheduler_decision_reason,
-            Some(WorkflowSchedulerDecisionReason::AdmittedForExecution)
+            Some(WorkflowSchedulerDecisionReason::ColdStartRequired)
         );
     }
 
