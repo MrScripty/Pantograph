@@ -157,6 +157,10 @@ embedded-runtime crate.
   restore projections must stay in shared backend registry helpers so workflow
   diagnostics code does not own a second post-restore registry reconciliation
   path.
+- Restore-time registry reconciliation must preserve a matching unhealthy
+  assessment for the restored runtime instance while replacing stale unhealthy
+  records from older instances, so recovery and restore paths do not drift on
+  runtime-instance identity semantics.
 - Restore-time replay of stored non-live runtime snapshots into the shared
   registry must stay in backend Rust so diagnostics paths can rehydrate
   execution-observed producer state without overriding live gateway or

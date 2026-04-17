@@ -581,6 +581,9 @@ Update during implementation:
   sync-before-projection ordering behind a shared backend workflow-runtime
   helper so headless diagnostics transport no longer sequences gateway-backed
   registry sync outside the backend boundary.
+- 2026-04-17: Added restore-overlap regressions that pin backend lifecycle
+  behavior when a restored runtime carries a matching unhealthy assessment
+  versus when a fresh runtime instance must replace an older unhealthy record.
 
 ## Commit Cadence Notes
 

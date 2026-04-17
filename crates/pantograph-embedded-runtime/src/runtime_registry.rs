@@ -1598,9 +1598,137 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn restore_runtime_and_reconcile_runtime_registry_applies_matching_unhealthy_assessment()
+    {
+        let controller = HealthAwareLifecycleController {
+            mode_info: HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-restored".to_string()),
+                    warmup_started_at_ms: Some(30),
+                    warmup_completed_at_ms: Some(40),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            health_assessments: RuntimeHealthAssessmentSnapshot {
+                active: Some(crate::runtime_health::RuntimeHealthAssessmentRecord {
+                    runtime_id: "llama.cpp".to_string(),
+                    runtime_instance_id: Some("llama-main-restored".to_string()),
+                    assessment: RuntimeHealthAssessment {
+                        healthy: false,
+                        state: RuntimeHealthState::Unhealthy {
+                            reason: "port bind failed".to_string(),
+                        },
+                        response_time_ms: None,
+                        error: Some("port bind failed".to_string()),
+                        consecutive_failures: 1,
+                    },
+                }),
+                embedding: None,
+            },
+            restore_calls: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+
+        restore_runtime_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            Some(inference::BackendConfig::default()),
+        )
+        .await
+        .expect("restore should succeed");
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("restored runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Unhealthy);
+        assert_eq!(runtime.last_error.as_deref(), Some("port bind failed"));
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-restored")
+        );
+    }
+
+    #[tokio::test]
+    async fn restore_runtime_and_reconcile_runtime_registry_replaces_old_unhealthy_instance() {
+        let controller = HealthAwareLifecycleController {
+            mode_info: HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/qwen.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-restored".to_string()),
+                    warmup_started_at_ms: Some(30),
+                    warmup_completed_at_ms: Some(40),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            health_assessments: RuntimeHealthAssessmentSnapshot::default(),
+            restore_calls: Mutex::new(Vec::new()),
+        };
+        let registry = RuntimeRegistry::new();
+        registry.observe_runtime(RuntimeObservation {
+            runtime_id: "llama_cpp".to_string(),
+            display_name: "llama.cpp".to_string(),
+            backend_keys: vec!["llama_cpp".to_string()],
+            model_id: Some("/models/old.gguf".to_string()),
+            status: RuntimeRegistryStatus::Unhealthy,
+            runtime_instance_id: Some("llama-main-old".to_string()),
+            last_error: Some("old crash".to_string()),
+        });
+
+        restore_runtime_and_reconcile_runtime_registry(
+            &controller,
+            &registry,
+            Some(inference::BackendConfig::default()),
+        )
+        .await
+        .expect("restore should succeed");
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
+            .expect("restored runtime snapshot");
+        assert_eq!(runtime.status, RuntimeRegistryStatus::Ready);
+        assert_eq!(runtime.last_error, None);
+        assert_eq!(
+            runtime.runtime_instance_id.as_deref(),
+            Some("llama-main-restored")
+        );
+        assert_eq!(runtime.models[0].model_id, "/models/qwen.gguf");
+    }
+
     struct HealthAwareHostRuntimeController {
         mode_info: HostRuntimeModeSnapshot,
         health_assessments: RuntimeHealthAssessmentSnapshot,
+    }
+
+    struct HealthAwareLifecycleController {
+        mode_info: HostRuntimeModeSnapshot,
+        health_assessments: RuntimeHealthAssessmentSnapshot,
+        restore_calls: Mutex<Vec<Option<inference::BackendConfig>>>,
     }
 
     #[async_trait]
@@ -1613,6 +1741,35 @@ mod tests {
 
         async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
             self.health_assessments.clone()
+        }
+    }
+
+    #[async_trait]
+    impl HostRuntimeRegistryController for HealthAwareLifecycleController {
+        async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+            self.mode_info.clone()
+        }
+
+        async fn stop_runtime_producer(&self, _producer: HostRuntimeProducer) {}
+
+        async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
+            self.health_assessments.clone()
+        }
+    }
+
+    #[async_trait]
+    impl HostRuntimeRegistryLifecycleController for HealthAwareLifecycleController {
+        async fn stop_all_runtime_producers(&self) {}
+
+        async fn restore_runtime(
+            &self,
+            restore_config: Option<inference::BackendConfig>,
+        ) -> Result<(), inference::GatewayError> {
+            self.restore_calls
+                .lock()
+                .expect("restore calls lock poisoned")
+                .push(restore_config);
+            Ok(())
         }
     }
 
