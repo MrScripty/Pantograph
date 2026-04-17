@@ -378,7 +378,7 @@ preserve backend-owned semantics without adapter-local reconstruction.
 - [x] Ensure scheduler snapshot, runtime snapshot, and trace snapshot transport
       keeps backend-owned execution/session identity semantics when identifiers
       are absent or ambiguous.
-- [ ] Ensure Tauri diagnostics overlays remain additive UI/transport state and
+- [x] Ensure Tauri diagnostics overlays remain additive UI/transport state and
       do not become canonical workflow or runtime state.
 - [ ] Add explicit post-restart and post-restore reconciliation coverage so
       diagnostics and trace consumers resynchronize from backend-owned state
@@ -541,6 +541,9 @@ Update during implementation:
   adapters preserve backend error-envelope codes for runtime-not-ready,
   admission-rejection, and cancellation-shaped runtime-timeout failures instead
   of flattening those errors into transport-local strings.
+- Milestone 3 diagnostics-store coverage now explicitly asserts that runtime
+  and scheduler overlays alone do not materialize canonical run records,
+  keeping Tauri-owned diagnostics state additive to backend-owned trace facts.
 
 ### Deviations
 

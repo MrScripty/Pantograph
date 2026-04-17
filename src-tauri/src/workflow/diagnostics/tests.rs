@@ -172,6 +172,8 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
         6_000,
     );
 
+    assert!(snapshot.runs_by_id.is_empty());
+    assert!(snapshot.run_order.is_empty());
     assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-runtime"));
     assert_eq!(snapshot.runtime.max_input_bindings, Some(4));
     assert_eq!(
