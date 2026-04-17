@@ -164,6 +164,9 @@ embedded-runtime crate.
 - Diagnostics-path sequencing that combines stored-snapshot replay with runtime
   event projection must stay in backend Rust so Tauri transport does not own
   the order in which registry reconciliation and runtime projection occur.
+- Diagnostics-path sync-before-projection sequencing must stay in backend Rust
+  so headless workflow adapters do not own the order in which gateway-backed
+  registry sync and runtime-event projection occur.
 - Workflow-facing runtime-registry coordination failures must be mapped in
   backend Rust onto stable workflow-service error codes so adapters do not
   collapse admission or runtime-unavailable decisions into generic internal

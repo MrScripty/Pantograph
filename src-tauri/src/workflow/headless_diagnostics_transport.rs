@@ -5,9 +5,7 @@
 //! command adapter.
 
 use pantograph_embedded_runtime::{
-    workflow_runtime::{
-        build_runtime_event_projection_with_registry_reconciliation, unix_timestamp_ms,
-    },
+    workflow_runtime::{build_runtime_event_projection_with_registry_sync, unix_timestamp_ms},
     HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
@@ -16,7 +14,6 @@ use pantograph_workflow_service::{
 };
 use tauri::{AppHandle, State};
 
-use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
@@ -58,7 +55,6 @@ pub async fn workflow_diagnostics_snapshot_response(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     request: WorkflowDiagnosticsSnapshotRequest,
 ) -> Result<WorkflowDiagnosticsProjection, String> {
-    sync_runtime_registry_from_gateway(gateway.as_ref(), runtime_registry.as_ref()).await;
     let captured_at_ms = unix_timestamp_ms();
     let request = request.normalized();
     let session_id = request.session_id;
@@ -102,8 +98,9 @@ pub async fn workflow_diagnostics_snapshot_response(
     let gateway_snapshot = gateway.runtime_lifecycle_snapshot().await;
     let gateway_mode_info = HostRuntimeModeSnapshot::from_mode_info(&gateway.mode_info().await);
     let live_embedding_runtime_snapshot = gateway.embedding_runtime_lifecycle_snapshot().await;
-    let runtime_projection = build_runtime_event_projection_with_registry_reconciliation(
-        Some(runtime_registry.as_ref()),
+    let runtime_projection = build_runtime_event_projection_with_registry_sync(
+        gateway.as_ref(),
+        runtime_registry.as_ref(),
         stored_runtime_snapshots
             .as_ref()
             .and_then(|(active_runtime, _)| active_runtime.as_ref()),
@@ -126,7 +123,8 @@ pub async fn workflow_diagnostics_snapshot_response(
         live_embedding_runtime_snapshot.as_ref(),
         &gateway_mode_info,
         None,
-    );
+    )
+    .await;
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store,

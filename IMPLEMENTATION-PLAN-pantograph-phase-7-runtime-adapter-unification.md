@@ -577,6 +577,10 @@ Update during implementation:
   runtime skip rules behind a shared backend registry helper so
   `workflow_runtime.rs` no longer owns a separate post-restore registry
   reconciliation path.
+- 2026-04-17: Continued Milestone 4 by moving diagnostics-path
+  sync-before-projection ordering behind a shared backend workflow-runtime
+  helper so headless diagnostics transport no longer sequences gateway-backed
+  registry sync outside the backend boundary.
 
 ## Commit Cadence Notes
 

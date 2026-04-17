@@ -361,6 +361,40 @@ pub fn build_runtime_event_projection_with_registry_reconciliation(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn build_runtime_event_projection_with_registry_sync<C>(
+    controller: &C,
+    runtime_registry: &RuntimeRegistry,
+    stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    stored_active_model_target: Option<&str>,
+    stored_embedding_model_target: Option<&str>,
+    stored_trace_runtime_metrics: Option<WorkflowTraceRuntimeMetrics>,
+    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
+    embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
+    gateway_mode_info: &HostRuntimeModeSnapshot,
+    runtime_model_target_override: Option<&str>,
+) -> RuntimeEventProjection
+where
+    C: crate::runtime_registry::HostRuntimeRegistryController + Sync,
+{
+    crate::runtime_registry::sync_runtime_registry(controller, runtime_registry).await;
+    build_runtime_event_projection_with_registry_reconciliation(
+        Some(runtime_registry),
+        stored_active_runtime_snapshot,
+        stored_embedding_runtime_snapshot,
+        stored_active_model_target,
+        stored_embedding_model_target,
+        stored_trace_runtime_metrics,
+        runtime_snapshot_override,
+        gateway_snapshot,
+        embedding_runtime_snapshot,
+        gateway_mode_info,
+        runtime_model_target_override,
+    )
+}
+
 pub fn reconcile_runtime_registry_stored_projection_overrides(
     runtime_registry: Option<&RuntimeRegistry>,
     stored_active_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
@@ -443,7 +477,9 @@ pub fn build_runtime_event_projection(
 
 #[cfg(test)]
 mod tests {
+    use crate::runtime_health::RuntimeHealthAssessmentSnapshot;
     use crate::HostRuntimeModeSnapshot;
+    use async_trait::async_trait;
     use pantograph_runtime_registry::RuntimeRegistry;
     use pantograph_workflow_service::graph::WorkflowSessionKind;
     use pantograph_workflow_service::{
@@ -455,10 +491,32 @@ mod tests {
         build_runtime_diagnostics_projection, build_runtime_event_projection,
         build_runtime_event_projection_with_registry_override,
         build_runtime_event_projection_with_registry_reconciliation,
+        build_runtime_event_projection_with_registry_sync,
         build_workflow_execution_diagnostics_snapshot, normalized_runtime_lifecycle_snapshot,
         reconcile_runtime_registry_stored_projection_overrides, resolve_runtime_model_target,
         trace_runtime_metrics, trace_runtime_metrics_with_observed_runtime_ids,
     };
+
+    struct MockRuntimeRegistryController {
+        mode_info: HostRuntimeModeSnapshot,
+    }
+
+    #[async_trait]
+    impl crate::runtime_registry::HostRuntimeRegistryController for MockRuntimeRegistryController {
+        async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
+            self.mode_info.clone()
+        }
+
+        async fn stop_runtime_producer(
+            &self,
+            _producer: crate::runtime_registry::HostRuntimeProducer,
+        ) {
+        }
+
+        async fn runtime_health_assessment_snapshot(&self) -> RuntimeHealthAssessmentSnapshot {
+            RuntimeHealthAssessmentSnapshot::default()
+        }
+    }
 
     #[test]
     fn trace_runtime_metrics_keeps_canonical_backend_lifecycle_reason() {
@@ -524,6 +582,80 @@ mod tests {
         assert_eq!(
             snapshot.lifecycle_decision_reason.as_deref(),
             Some("runtime_reused")
+        );
+    }
+
+    #[tokio::test]
+    async fn build_runtime_event_projection_with_registry_sync_reconciles_live_and_stored_runtimes()
+    {
+        let registry = RuntimeRegistry::new();
+        let gateway_mode_info = HostRuntimeModeSnapshot {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: None,
+            active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-live".to_string()),
+                warmup_started_at_ms: Some(1),
+                warmup_completed_at_ms: Some(2),
+                warmup_duration_ms: Some(1),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: None,
+        };
+
+        let projection = build_runtime_event_projection_with_registry_sync(
+            &MockRuntimeRegistryController {
+                mode_info: gateway_mode_info.clone(),
+            },
+            &registry,
+            Some(&inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                runtime_instance_id: Some("python-runtime:pytorch:restored".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(12),
+                warmup_duration_ms: Some(2),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            None,
+            Some("/models/restored.safetensors"),
+            None,
+            None,
+            None,
+            gateway_mode_info
+                .active_runtime
+                .as_ref()
+                .expect("gateway runtime snapshot"),
+            None,
+            &gateway_mode_info,
+            None,
+        )
+        .await;
+
+        assert_eq!(
+            projection.active_runtime_snapshot.runtime_id.as_deref(),
+            Some("PyTorch")
+        );
+        let snapshot = registry.snapshot();
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .any(|runtime| runtime.runtime_id == "llama_cpp"));
+        let stored_runtime = snapshot
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.runtime_id == "pytorch")
+            .expect("stored python runtime should be replayed");
+        assert_eq!(
+            stored_runtime.runtime_instance_id.as_deref(),
+            Some("python-runtime:pytorch:restored")
         );
     }
 
