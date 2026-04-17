@@ -36,7 +36,7 @@ Milestone 6 diagnostics, documentation, and rollout-safety reconciliation are
 complete. Scheduler V2 milestone 5 close-out is now also complete: transport
 projection, cleanup recovery, restore/reclaim recovery, and source-of-truth
 reconciliation are landed, while later scheduler phases remain focused on
-policy breadth such as ETA, richer error surfaces, and final fairness work.
+policy breadth such as ETA and final fairness work.
 
 ### Completed groundwork already in the repo
 
@@ -367,6 +367,10 @@ session scheduler that makes better admission and reuse decisions.
 - Headless workflow diagnostics transport now also preserves additive
   backend-owned scheduler `runtime_registry` diagnostics instead of
   re-deriving runtime admission posture in Tauri
+- Workflow error envelopes now also preserve additive backend-owned
+  `details.scheduler` payloads for scheduler-capacity failures, so transport
+  adapters can forward stable reason codes and counts without reclassifying
+  free-form error text
 - Scheduler recovery coverage now explicitly exercises stale cleanup, cleanup
   worker execution, restore-after-embedding runtime reconciliation, and
   reclaim-driven warmup posture at the backend diagnostics-provider boundary

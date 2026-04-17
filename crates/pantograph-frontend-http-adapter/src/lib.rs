@@ -12,7 +12,7 @@ use pantograph_runtime_identity::{
     backend_key_aliases, normalize_runtime_identifier_with_fallback,
 };
 use pantograph_workflow_service::{
-    capabilities, WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowHost,
+    capabilities, WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
     WorkflowRuntimeSourceKind, WorkflowServiceError,
@@ -241,6 +241,9 @@ async fn workflow_error_from_http_response(
 }
 
 fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServiceError {
+    let scheduler_details = envelope.details.and_then(|details| match details {
+        WorkflowErrorDetails::Scheduler(details) => Some(details),
+    });
     match envelope.code {
         WorkflowErrorCode::InvalidRequest => WorkflowServiceError::InvalidRequest(envelope.message),
         WorkflowErrorCode::WorkflowNotFound => {
@@ -259,7 +262,13 @@ fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServi
         WorkflowErrorCode::QueueItemNotFound => {
             WorkflowServiceError::QueueItemNotFound(envelope.message)
         }
-        WorkflowErrorCode::SchedulerBusy => WorkflowServiceError::SchedulerBusy(envelope.message),
+        WorkflowErrorCode::SchedulerBusy => {
+            if let Some(details) = scheduler_details {
+                WorkflowServiceError::scheduler_busy_with_details(envelope.message, details)
+            } else {
+                WorkflowServiceError::scheduler_busy(envelope.message)
+            }
+        }
         WorkflowErrorCode::OutputNotProduced => {
             WorkflowServiceError::OutputNotProduced(envelope.message)
         }
@@ -692,7 +701,7 @@ mod tests {
             ),
             (
                 WorkflowErrorCode::SchedulerBusy,
-                WorkflowServiceError::SchedulerBusy("x".to_string()),
+                WorkflowServiceError::scheduler_busy("x"),
             ),
             (
                 WorkflowErrorCode::OutputNotProduced,
@@ -712,6 +721,7 @@ mod tests {
             let mapped = map_workflow_error_envelope(WorkflowErrorEnvelope {
                 code,
                 message: "x".to_string(),
+                details: None,
             });
             assert_eq!(mapped.to_envelope(), expected.to_envelope());
         }

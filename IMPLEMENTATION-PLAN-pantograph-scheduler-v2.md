@@ -621,6 +621,11 @@ and source-of-truth alignment.
   runtime unload stops the last loaded runtime, the same backend-owned
   diagnostics provider flips the next admission posture to
   `start_runtime`/`no_loaded_instance`.
+- Workflow error envelopes now also expose additive backend-owned
+  `details.scheduler` payloads for scheduler-capacity failures, including
+  stable reason codes plus session or loaded-runtime counts, and the Tauri and
+  HTTP transport adapters now forward those details without translating
+  scheduler policy locally.
 - Refreshed the roadmap to remove stale pre-implementation Scheduler V2
   wording, record the now-landed transport and recovery coverage, and align
   the recommended execution order with Scheduler V2 already being underway.
@@ -632,9 +637,8 @@ and source-of-truth alignment.
   outside the existing backend tests, so no additional fixture-specific
   validation or regeneration steps were required during close-out.
 - Remaining Scheduler V2 work is intentionally deferred to later milestones:
-  queue ETA exposure, richer stable scheduler error payloads, and any further
-  fairness-policy breadth beyond the currently landed starvation and
-  warm-affinity rules.
+  queue ETA exposure and any further fairness-policy breadth beyond the
+  currently landed starvation and warm-affinity rules.
 
 **Status:** Complete
 

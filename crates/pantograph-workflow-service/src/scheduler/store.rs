@@ -146,10 +146,10 @@ impl WorkflowSessionStore {
         keep_alive: bool,
     ) -> Result<String, WorkflowServiceError> {
         if self.active.len() >= self.max_sessions {
-            return Err(WorkflowServiceError::SchedulerBusy(format!(
-                "session capacity {} reached; close an existing session before creating another",
-                self.max_sessions
-            )));
+            return Err(WorkflowServiceError::scheduler_session_capacity_reached(
+                self.active.len(),
+                self.max_sessions,
+            ));
         }
 
         let session_id = Uuid::new_v4().to_string();
@@ -839,7 +839,7 @@ impl WorkflowSessionStore {
             )));
         };
         if state.active_run.is_some() {
-            return Err(WorkflowServiceError::SchedulerBusy(format!(
+            return Err(WorkflowServiceError::scheduler_busy(format!(
                 "session '{}' is currently running",
                 session_id
             )));

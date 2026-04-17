@@ -289,8 +289,9 @@ mod tests {
     use pantograph_workflow_service::graph::WorkflowSessionKind;
     use pantograph_workflow_service::{
         WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowErrorCode,
-        WorkflowErrorEnvelope, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
-        WorkflowRuntimeRequirements, WorkflowSchedulerRuntimeRegistryDiagnostics,
+        WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowGraph,
+        WorkflowGraphEditSessionCreateRequest, WorkflowRuntimeRequirements,
+        WorkflowSchedulerErrorDetails, WorkflowSchedulerRuntimeRegistryDiagnostics,
         WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
         WorkflowSchedulerSnapshotDiagnostics, WorkflowSchedulerSnapshotRequest,
         WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
@@ -769,26 +770,38 @@ mod tests {
                 WorkflowServiceError::RuntimeNotReady("runtime unavailable".to_string()),
                 WorkflowErrorCode::RuntimeNotReady,
                 "runtime unavailable",
+                None,
             ),
             (
                 WorkflowServiceError::CapabilityViolation("runtime admission rejected".to_string()),
                 WorkflowErrorCode::CapabilityViolation,
                 "runtime admission rejected",
+                None,
             ),
             (
                 WorkflowServiceError::RuntimeTimeout("workflow run cancelled".to_string()),
                 WorkflowErrorCode::RuntimeTimeout,
                 "workflow run cancelled",
+                None,
+            ),
+            (
+                WorkflowServiceError::scheduler_runtime_capacity_exhausted(1, 1, 0),
+                WorkflowErrorCode::SchedulerBusy,
+                "runtime capacity exhausted; no idle session runtime available for unload",
+                Some(WorkflowErrorDetails::Scheduler(
+                    WorkflowSchedulerErrorDetails::runtime_capacity_exhausted(1, 1, 0),
+                )),
             ),
         ];
 
-        for (error, expected_code, expected_message) in cases {
+        for (error, expected_code, expected_message, expected_details) in cases {
             let envelope: WorkflowErrorEnvelope =
                 serde_json::from_str(&super::workflow_error_json(error))
                     .expect("parse error envelope");
 
             assert_eq!(envelope.code, expected_code);
             assert_eq!(envelope.message, expected_message);
+            assert_eq!(envelope.details, expected_details);
         }
     }
 

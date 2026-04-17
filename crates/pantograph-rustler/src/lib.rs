@@ -438,6 +438,7 @@ fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> S
     let envelope = WorkflowErrorEnvelope {
         code,
         message: message.into(),
+        details: None,
     };
     serde_json::to_string(&envelope).unwrap_or_else(|_| {
         r#"{"code":"internal_error","message":"failed to serialize workflow error envelope"}"#
@@ -695,9 +696,10 @@ fn frontend_http_workflow_close_session(
 
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_get_session_status_impl(request_json: String) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionStatusRequest, _, _>(request_json, |request| {
-        async move { WORKFLOW_SERVICE.workflow_get_session_status(request).await }
-    })
+    workflow_run_scheduler_request::<WorkflowSessionStatusRequest, _, _>(
+        request_json,
+        |request| async move { WORKFLOW_SERVICE.workflow_get_session_status(request).await },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -708,9 +710,10 @@ fn frontend_http_workflow_get_session_status(request_json: String) -> NifResult<
 
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_list_session_queue_impl(request_json: String) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionQueueListRequest, _, _>(request_json, |request| {
-        async move { WORKFLOW_SERVICE.workflow_list_session_queue(request).await }
-    })
+    workflow_run_scheduler_request::<WorkflowSessionQueueListRequest, _, _>(
+        request_json,
+        |request| async move { WORKFLOW_SERVICE.workflow_list_session_queue(request).await },
+    )
 }
 
 #[cfg(feature = "frontend-http")]
@@ -723,11 +726,14 @@ fn frontend_http_workflow_list_session_queue(request_json: String) -> NifResult<
 fn frontend_http_workflow_cancel_session_queue_item_impl(
     request_json: String,
 ) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionQueueCancelRequest, _, _>(request_json, |request| async move {
-        WORKFLOW_SERVICE
-            .workflow_cancel_session_queue_item(request)
-            .await
-    })
+    workflow_run_scheduler_request::<WorkflowSessionQueueCancelRequest, _, _>(
+        request_json,
+        |request| async move {
+            WORKFLOW_SERVICE
+                .workflow_cancel_session_queue_item(request)
+                .await
+        },
+    )
 }
 
 #[cfg(feature = "frontend-http")]

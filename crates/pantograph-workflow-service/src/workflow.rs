@@ -394,11 +394,70 @@ pub enum WorkflowErrorCode {
     InternalError,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSchedulerErrorReason {
+    SessionCapacityReached,
+    RuntimeCapacityExhausted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerErrorDetails {
+    pub reason: WorkflowSchedulerErrorReason,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_session_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_sessions: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loaded_session_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_loaded_sessions: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reclaimable_loaded_session_count: Option<usize>,
+}
+
+impl WorkflowSchedulerErrorDetails {
+    pub fn session_capacity_reached(active_session_count: usize, max_sessions: usize) -> Self {
+        Self {
+            reason: WorkflowSchedulerErrorReason::SessionCapacityReached,
+            active_session_count: Some(active_session_count),
+            max_sessions: Some(max_sessions),
+            loaded_session_count: None,
+            max_loaded_sessions: None,
+            reclaimable_loaded_session_count: None,
+        }
+    }
+
+    pub fn runtime_capacity_exhausted(
+        loaded_session_count: usize,
+        max_loaded_sessions: usize,
+        reclaimable_loaded_session_count: usize,
+    ) -> Self {
+        Self {
+            reason: WorkflowSchedulerErrorReason::RuntimeCapacityExhausted,
+            active_session_count: None,
+            max_sessions: None,
+            loaded_session_count: Some(loaded_session_count),
+            max_loaded_sessions: Some(max_loaded_sessions),
+            reclaimable_loaded_session_count: Some(reclaimable_loaded_session_count),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowErrorDetails {
+    Scheduler(WorkflowSchedulerErrorDetails),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowErrorEnvelope {
     pub code: WorkflowErrorCode,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<WorkflowErrorDetails>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -424,8 +483,11 @@ pub enum WorkflowServiceError {
     #[error("queue_item_not_found: {0}")]
     QueueItemNotFound(String),
 
-    #[error("scheduler_busy: {0}")]
-    SchedulerBusy(String),
+    #[error("scheduler_busy: {message}")]
+    SchedulerBusy {
+        message: String,
+        details: Option<WorkflowSchedulerErrorDetails>,
+    },
 
     #[error("output_not_produced: {0}")]
     OutputNotProduced(String),
@@ -447,7 +509,7 @@ impl WorkflowServiceError {
             WorkflowServiceError::SessionNotFound(_) => WorkflowErrorCode::SessionNotFound,
             WorkflowServiceError::SessionEvicted(_) => WorkflowErrorCode::SessionEvicted,
             WorkflowServiceError::QueueItemNotFound(_) => WorkflowErrorCode::QueueItemNotFound,
-            WorkflowServiceError::SchedulerBusy(_) => WorkflowErrorCode::SchedulerBusy,
+            WorkflowServiceError::SchedulerBusy { .. } => WorkflowErrorCode::SchedulerBusy,
             WorkflowServiceError::OutputNotProduced(_) => WorkflowErrorCode::OutputNotProduced,
             WorkflowServiceError::RuntimeTimeout(_) => WorkflowErrorCode::RuntimeTimeout,
             WorkflowServiceError::Internal(_) => WorkflowErrorCode::InternalError,
@@ -463,17 +525,76 @@ impl WorkflowServiceError {
             | WorkflowServiceError::SessionNotFound(message)
             | WorkflowServiceError::SessionEvicted(message)
             | WorkflowServiceError::QueueItemNotFound(message)
-            | WorkflowServiceError::SchedulerBusy(message)
             | WorkflowServiceError::OutputNotProduced(message)
             | WorkflowServiceError::RuntimeTimeout(message)
             | WorkflowServiceError::Internal(message) => message,
+            WorkflowServiceError::SchedulerBusy { message, .. } => message,
         }
+    }
+
+    pub fn details(&self) -> Option<WorkflowErrorDetails> {
+        match self {
+            WorkflowServiceError::SchedulerBusy {
+                details: Some(details),
+                ..
+            } => Some(WorkflowErrorDetails::Scheduler(details.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn scheduler_busy(message: impl Into<String>) -> Self {
+        Self::SchedulerBusy {
+            message: message.into(),
+            details: None,
+        }
+    }
+
+    pub fn scheduler_busy_with_details(
+        message: impl Into<String>,
+        details: WorkflowSchedulerErrorDetails,
+    ) -> Self {
+        Self::SchedulerBusy {
+            message: message.into(),
+            details: Some(details),
+        }
+    }
+
+    pub fn scheduler_session_capacity_reached(
+        active_session_count: usize,
+        max_sessions: usize,
+    ) -> Self {
+        Self::scheduler_busy_with_details(
+            format!(
+                "session capacity {} reached; close an existing session before creating another",
+                max_sessions
+            ),
+            WorkflowSchedulerErrorDetails::session_capacity_reached(
+                active_session_count,
+                max_sessions,
+            ),
+        )
+    }
+
+    pub fn scheduler_runtime_capacity_exhausted(
+        loaded_session_count: usize,
+        max_loaded_sessions: usize,
+        reclaimable_loaded_session_count: usize,
+    ) -> Self {
+        Self::scheduler_busy_with_details(
+            "runtime capacity exhausted; no idle session runtime available for unload",
+            WorkflowSchedulerErrorDetails::runtime_capacity_exhausted(
+                loaded_session_count,
+                max_loaded_sessions,
+                reclaimable_loaded_session_count,
+            ),
+        )
     }
 
     pub fn to_envelope(&self) -> WorkflowErrorEnvelope {
         WorkflowErrorEnvelope {
             code: self.code(),
             message: self.message().to_string(),
+            details: self.details(),
         }
     }
 
@@ -832,6 +953,8 @@ impl WorkflowService {
             SelectUnloadCandidate {
                 target: WorkflowSessionRuntimeSelectionTarget,
                 candidates: Vec<WorkflowSessionRuntimeUnloadCandidate>,
+                loaded_session_count: usize,
+                max_loaded_sessions: usize,
             },
             LoadTarget {
                 workflow_id: String,
@@ -854,6 +977,7 @@ impl WorkflowService {
                 if target.runtime_loaded {
                     RuntimeDecision::Ready
                 } else if store.loaded_session_count() >= store.max_loaded_sessions {
+                    let loaded_session_count = store.loaded_session_count();
                     RuntimeDecision::SelectUnloadCandidate {
                         target: WorkflowSessionRuntimeSelectionTarget {
                             session_id: session_id.to_string(),
@@ -863,6 +987,8 @@ impl WorkflowService {
                             required_models: target.required_models.clone(),
                         },
                         candidates: store.runtime_unload_candidates(session_id),
+                        loaded_session_count,
+                        max_loaded_sessions: store.max_loaded_sessions,
                     }
                 } else {
                     RuntimeDecision::LoadTarget {
@@ -879,14 +1005,20 @@ impl WorkflowService {
 
             match decision {
                 RuntimeDecision::Ready => return Ok(()),
-                RuntimeDecision::SelectUnloadCandidate { target, candidates } => {
+                RuntimeDecision::SelectUnloadCandidate {
+                    target,
+                    candidates,
+                    loaded_session_count,
+                    max_loaded_sessions,
+                } => {
                     let Some(candidate) = host
                         .select_runtime_unload_candidate(&target, &candidates)
                         .await?
                     else {
-                        return Err(WorkflowServiceError::SchedulerBusy(
-                            "runtime capacity exhausted; no idle session runtime available for unload"
-                                .to_string(),
+                        return Err(WorkflowServiceError::scheduler_runtime_capacity_exhausted(
+                            loaded_session_count,
+                            max_loaded_sessions,
+                            candidates.len(),
                         ));
                     };
                     host.unload_session_runtime(
@@ -4854,12 +4986,38 @@ mod tests {
         let envelope = err.to_envelope();
         assert_eq!(envelope.code, WorkflowErrorCode::OutputNotProduced);
         assert!(envelope.message.contains("vector-output-1.vector"));
+        assert_eq!(envelope.details, None);
 
         let json = err.to_envelope_json();
         let parsed: WorkflowErrorEnvelope =
             serde_json::from_str(&json).expect("parse workflow error envelope");
         assert_eq!(parsed.code, WorkflowErrorCode::OutputNotProduced);
         assert!(parsed.message.contains("vector-output-1.vector"));
+        assert_eq!(parsed.details, None);
+    }
+
+    #[test]
+    fn workflow_service_scheduler_busy_envelope_includes_structured_details() {
+        let err = WorkflowServiceError::scheduler_runtime_capacity_exhausted(2, 2, 0);
+
+        let envelope = err.to_envelope();
+        assert_eq!(envelope.code, WorkflowErrorCode::SchedulerBusy);
+        assert_eq!(
+            envelope.details,
+            Some(WorkflowErrorDetails::Scheduler(
+                WorkflowSchedulerErrorDetails::runtime_capacity_exhausted(2, 2, 0),
+            ))
+        );
+
+        let json = err.to_envelope_json();
+        let parsed: WorkflowErrorEnvelope =
+            serde_json::from_str(&json).expect("parse workflow error envelope");
+        assert_eq!(
+            parsed.details,
+            Some(WorkflowErrorDetails::Scheduler(
+                WorkflowSchedulerErrorDetails::runtime_capacity_exhausted(2, 2, 0),
+            ))
+        );
     }
 
     #[tokio::test]
@@ -5769,7 +5927,12 @@ mod tests {
             )
             .await
             .expect_err("second session should fail at capacity");
-        assert!(matches!(err, WorkflowServiceError::SchedulerBusy(_)));
+        assert_eq!(
+            err.to_envelope().details,
+            Some(WorkflowErrorDetails::Scheduler(
+                WorkflowSchedulerErrorDetails::session_capacity_reached(1, 1),
+            ))
+        );
     }
 
     #[tokio::test]
@@ -5799,7 +5962,12 @@ mod tests {
             )
             .await
             .expect_err("scheduler should be busy at session capacity");
-        assert!(matches!(err, WorkflowServiceError::SchedulerBusy(_)));
+        assert_eq!(
+            err.to_envelope().details,
+            Some(WorkflowErrorDetails::Scheduler(
+                WorkflowSchedulerErrorDetails::session_capacity_reached(1, 1),
+            ))
+        );
 
         let closed = service
             .close_workflow_session(
@@ -5832,6 +6000,70 @@ mod tests {
             .expect("get status");
         assert_eq!(status.session.session_kind, WorkflowSessionKind::Workflow);
         assert!(!status.session.keep_alive);
+    }
+
+    #[tokio::test]
+    async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available(
+    ) {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_capacity_limits(2, 1);
+        let loaded = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-loaded".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create loaded keep-alive session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            let queue_id = store
+                .enqueue_run(
+                    &loaded.session_id,
+                    &WorkflowSessionRunRequest {
+                        session_id: loaded.session_id.clone(),
+                        inputs: Vec::new(),
+                        output_targets: None,
+                        override_selection: None,
+                        timeout_ms: None,
+                        run_id: Some("run-loaded".to_string()),
+                        priority: None,
+                    },
+                )
+                .expect("enqueue run for loaded session");
+            let dequeued = store
+                .begin_queued_run(&loaded.session_id, &queue_id)
+                .expect("begin queued run");
+            assert!(
+                dequeued.is_some(),
+                "loaded session should transition into an active run"
+            );
+        }
+
+        let err = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-blocked".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect_err("second keep-alive session should fail while loaded capacity is pinned");
+        assert_eq!(
+            err.to_envelope().details,
+            Some(WorkflowErrorDetails::Scheduler(
+                WorkflowSchedulerErrorDetails::runtime_capacity_exhausted(1, 1, 0),
+            ))
+        );
     }
 
     #[tokio::test]
