@@ -132,6 +132,9 @@ embedded-runtime crate.
 - Active-runtime registration used by scheduler diagnostics and reservation
   paths must stay in shared backend registry helpers so workflow execution does
   not re-derive registration shape in multiple call sites.
+- Active-runtime reservation request shaping must stay in shared backend
+  registry helpers so admission checks and reservation acquisition do not drift
+  on runtime id, owner id, model target, or retention payload shape.
 - Execution-path runtime snapshot override reconciliation must stay in backend
   Rust so workflow adapters do not drift on when Python-sidecar or
   embedding-path execution facts become shared registry observations, and so

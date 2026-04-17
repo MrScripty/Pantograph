@@ -551,6 +551,10 @@ Update during implementation:
   transition sequencing behind a shared backend lifecycle helper so the
   embedded workflow host no longer owns a separate runtime warmup loop during
   session-load admission.
+- 2026-04-17: Moved active-runtime reservation request shaping behind a shared
+  backend registry helper so admission checks and reservation acquisition reuse
+  one payload contract instead of rebuilding runtime-id, owner-id, and model
+  target fields separately.
 
 ## Commit Cadence Notes
 

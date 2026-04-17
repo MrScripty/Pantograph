@@ -29,6 +29,7 @@ use pantograph_runtime_identity::{
 use pantograph_runtime_registry::{
     observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
     RuntimeRegistry, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
+    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +81,28 @@ pub fn register_active_runtime(
         .with_backend_keys(descriptor.backend_keys.clone()),
     );
     descriptor
+}
+
+pub fn active_runtime_reservation_request(
+    registry: &RuntimeRegistry,
+    mode_info: &HostRuntimeModeSnapshot,
+    workflow_id: &str,
+    reservation_owner_id: Option<&str>,
+    usage_profile: Option<&str>,
+    requirements: Option<RuntimeReservationRequirements>,
+    retention_hint: RuntimeRetentionHint,
+) -> RuntimeReservationRequest {
+    let descriptor = register_active_runtime(registry, mode_info);
+    RuntimeReservationRequest {
+        runtime_id: descriptor.runtime_id,
+        workflow_id: workflow_id.to_string(),
+        reservation_owner_id: reservation_owner_id.map(ToOwned::to_owned),
+        usage_profile: usage_profile.map(ToOwned::to_owned),
+        model_id: mode_info.active_model_target.clone(),
+        pin_runtime: false,
+        requirements,
+        retention_hint,
+    }
 }
 
 pub fn reconcile_runtime_registry_snapshot_override(
@@ -865,6 +888,56 @@ mod tests {
                 runtime.runtime_id
                     == pantograph_runtime_identity::canonical_runtime_id(&descriptor.runtime_id)
             })
+            .expect("active runtime should be registered");
+        assert_eq!(runtime.display_name, "llama.cpp");
+        assert_eq!(runtime.backend_keys, vec!["llama_cpp".to_string()]);
+    }
+
+    #[test]
+    fn active_runtime_reservation_request_registers_runtime_and_preserves_model_target() {
+        let registry = RuntimeRegistry::new();
+        let request = active_runtime_reservation_request(
+            &registry,
+            &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: Some(inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-request".to_string()),
+                    warmup_started_at_ms: Some(1),
+                    warmup_completed_at_ms: Some(2),
+                    warmup_duration_ms: Some(1),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                embedding_runtime: None,
+            },
+            "wf-1",
+            Some("session-1"),
+            Some("interactive"),
+            None,
+            pantograph_runtime_registry::RuntimeRetentionHint::KeepAlive,
+        );
+
+        assert_eq!(request.runtime_id, "llama.cpp");
+        assert_eq!(request.workflow_id, "wf-1");
+        assert_eq!(request.reservation_owner_id.as_deref(), Some("session-1"));
+        assert_eq!(request.usage_profile.as_deref(), Some("interactive"));
+        assert_eq!(request.model_id.as_deref(), Some("/models/main.gguf"));
+        assert_eq!(
+            request.retention_hint,
+            pantograph_runtime_registry::RuntimeRetentionHint::KeepAlive
+        );
+
+        let runtime = registry
+            .snapshot()
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.runtime_id == "llama_cpp")
             .expect("active runtime should be registered");
         assert_eq!(runtime.display_name, "llama.cpp");
         assert_eq!(runtime.backend_keys, vec!["llama_cpp".to_string()]);

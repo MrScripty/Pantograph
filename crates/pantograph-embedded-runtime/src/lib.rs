@@ -9,8 +9,8 @@ use node_engine::{
 };
 use pantograph_runtime_identity::{backend_key_aliases, canonical_runtime_backend_key};
 use pantograph_runtime_registry::{
-    RuntimeRegistryError, RuntimeReservationRequest, RuntimeReservationRequirements,
-    RuntimeRetentionDecision, RuntimeRetentionHint, RuntimeWarmupDecision, SharedRuntimeRegistry,
+    RuntimeRegistryError, RuntimeReservationRequirements, RuntimeRetentionDecision,
+    RuntimeRetentionHint, RuntimeWarmupDecision, SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
@@ -1434,25 +1434,24 @@ impl EmbeddedWorkflowHost {
 
         let mode_info = self.gateway.mode_info().await;
         let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        let descriptor =
-            runtime_registry::register_active_runtime(runtime_registry, &host_runtime_mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
                 .runtime_requirements,
         );
-
+        let trimmed_usage_profile = Self::trimmed_optional(usage_profile);
+        let reservation_request = runtime_registry::active_runtime_reservation_request(
+            runtime_registry,
+            &host_runtime_mode_info,
+            workflow_id,
+            Some(session_id),
+            trimmed_usage_profile.as_deref(),
+            requirements,
+            Self::runtime_retention_hint(retention_hint),
+        );
+        let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
         let lease = runtime_registry
-            .acquire_reservation(RuntimeReservationRequest {
-                runtime_id: descriptor.runtime_id.clone(),
-                workflow_id: workflow_id.to_string(),
-                reservation_owner_id: Some(session_id.to_string()),
-                usage_profile: Self::trimmed_optional(usage_profile),
-                model_id: mode_info.active_model_target.clone(),
-                pin_runtime: false,
-                requirements,
-                retention_hint: Self::runtime_retention_hint(retention_hint),
-            })
+            .acquire_reservation(reservation_request)
             .map_err(Self::workflow_service_error_from_runtime_registry)?;
 
         let previous_reservation_id =
@@ -1830,24 +1829,23 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 
         let mode_info = self.gateway.mode_info().await;
         let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        let descriptor =
-            runtime_registry::register_active_runtime(runtime_registry, &host_runtime_mode_info);
         let requirements = Self::reservation_requirements(
             &WorkflowHost::workflow_capabilities(self, workflow_id)
                 .await?
                 .runtime_requirements,
         );
-
-        match runtime_registry.can_acquire_reservation(&RuntimeReservationRequest {
-            runtime_id: descriptor.runtime_id,
-            workflow_id: workflow_id.to_string(),
-            reservation_owner_id: Some(session_id.to_string()),
-            usage_profile: Self::trimmed_optional(usage_profile),
-            model_id: mode_info.active_model_target,
-            pin_runtime: false,
+        let trimmed_usage_profile = Self::trimmed_optional(usage_profile);
+        let reservation_request = runtime_registry::active_runtime_reservation_request(
+            runtime_registry,
+            &host_runtime_mode_info,
+            workflow_id,
+            Some(session_id),
+            trimmed_usage_profile.as_deref(),
             requirements,
-            retention_hint: Self::runtime_retention_hint(retention_hint),
-        }) {
+            Self::runtime_retention_hint(retention_hint),
+        );
+
+        match runtime_registry.can_acquire_reservation(&reservation_request) {
             Ok(()) => Ok(true),
             Err(RuntimeRegistryError::AdmissionRejected { .. })
             | Err(RuntimeRegistryError::ReservationRejected(_)) => Ok(false),
