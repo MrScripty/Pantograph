@@ -2343,6 +2343,7 @@ mod tests {
                     execution_id,
                     port,
                     data,
+                    ..
                 } => Some((task_id, execution_id, port, data)),
                 _ => None,
             })

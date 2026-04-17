@@ -67,6 +67,9 @@ locally.
   shapes must stay stable once published.
 - Graph mutation and incremental execution events must be emitted from executor
   state transitions, not synthesized by frontend or transport adapters.
+- Execution events may carry additive `occurred_at_ms` timestamps, and adapter
+  layers must preserve those backend-owned producer times when projecting trace
+  or diagnostics state instead of restamping them locally.
 
 ## Revisit Triggers
 - A second reranker family requires materially different request normalization.

@@ -9,6 +9,7 @@ mod trace;
 mod types;
 
 pub use store::{SharedWorkflowDiagnosticsStore, WorkflowDiagnosticsStore};
+pub(crate) use trace::node_engine_workflow_trace_event;
 #[allow(unused_imports)]
 pub use types::{
     DiagnosticsEventRecord, DiagnosticsNodeStatus, DiagnosticsNodeTrace, DiagnosticsRunStatus,

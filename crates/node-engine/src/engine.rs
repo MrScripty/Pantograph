@@ -370,12 +370,14 @@ impl DemandEngine {
                     let _ = event_sink.send(WorkflowEvent::TaskStarted {
                         task_id: node_id.clone(),
                         execution_id: self.execution_id.clone(),
+                        occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
                     });
                     let _ = event_sink.send(WorkflowEvent::WaitingForInput {
                         workflow_id: graph.id.clone(),
                         execution_id: self.execution_id.clone(),
                         task_id: node_id.clone(),
                         prompt: prompt.clone(),
+                        occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
                     });
                     computing.remove(node_id);
                     return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
@@ -386,6 +388,7 @@ impl DemandEngine {
             let _ = event_sink.send(WorkflowEvent::TaskStarted {
                 task_id: node_id.clone(),
                 execution_id: self.execution_id.clone(),
+                occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
             });
 
             // 5. Execute this node
@@ -398,6 +401,7 @@ impl DemandEngine {
                 task_id: node_id.clone(),
                 execution_id: self.execution_id.clone(),
                 output: Some(serde_json::to_value(&outputs)?),
+                occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
             });
 
             // 6. Cache with current input version
@@ -594,6 +598,7 @@ impl WorkflowExecutor {
             workflow_id,
             execution_id: self.execution_id.clone(),
             dirty_tasks,
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -606,6 +611,7 @@ impl WorkflowExecutor {
             workflow_id,
             execution_id: self.execution_id.clone(),
             tasks: task_ids,
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -1220,6 +1226,7 @@ mod tests {
                 workflow_id,
                 execution_id,
                 dirty_tasks,
+                ..
             } => {
                 assert_eq!(workflow_id, "test");
                 assert_eq!(execution_id, "exec_1");
@@ -1252,6 +1259,7 @@ mod tests {
                 workflow_id,
                 execution_id,
                 tasks,
+                ..
             } => {
                 assert_eq!(workflow_id, "test");
                 assert_eq!(execution_id, "exec_1");

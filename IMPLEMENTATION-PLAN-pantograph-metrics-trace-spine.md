@@ -416,6 +416,10 @@ Update during implementation:
   `pantograph_workflow_service::WorkflowTraceStore`, so the Tauri workflow
   event adapter now forwards execution events into backend-owned trace timing
   instead of stamping canonical run/node chronology locally.
+- 2026-04-17: Thirty-fifth implementation slice made `node-engine`
+  `WorkflowEvent` carry additive backend-owned `occurred_at_ms` timestamps and
+  updated the Tauri workflow adapter to preserve those producer timestamps when
+  projecting diagnostics overlays into the backend trace spine.
 
 ## Commit Cadence Notes
 

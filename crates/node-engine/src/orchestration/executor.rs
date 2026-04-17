@@ -338,6 +338,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         let _ = event_sink.send(WorkflowEvent::WorkflowStarted {
             workflow_id: workflow_id.to_string(),
             execution_id: self.execution_id.clone(),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -345,6 +346,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         let _ = event_sink.send(WorkflowEvent::WorkflowCompleted {
             workflow_id: workflow_id.to_string(),
             execution_id: self.execution_id.clone(),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -353,6 +355,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             workflow_id: workflow_id.to_string(),
             execution_id: self.execution_id.clone(),
             error: error.to_string(),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -360,6 +363,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         let _ = event_sink.send(WorkflowEvent::TaskStarted {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -373,6 +377,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
             output: output.map(|s| Value::String(s)),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -381,6 +386,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
             error: error.to_string(),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 
@@ -396,6 +402,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             execution_id: self.execution_id.clone(),
             progress,
             message,
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
 }

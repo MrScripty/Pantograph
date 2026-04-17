@@ -832,10 +832,14 @@ impl EmbeddedRuntime {
             .await
             .map_err(|error| error.to_envelope_json())?;
 
-        let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowStarted {
-            workflow_id: session_id.to_string(),
-            execution_id: session_id.to_string(),
-        });
+        let _ = event_sink.send(
+            node_engine::WorkflowEvent::WorkflowStarted {
+                workflow_id: session_id.to_string(),
+                execution_id: session_id.to_string(),
+                occurred_at_ms: None,
+            }
+            .now(),
+        );
 
         let mut workflow_result: Result<(), String> = Ok(());
         let mut waiting_for_input = false;
@@ -873,16 +877,24 @@ impl EmbeddedRuntime {
                 session_id
             );
         } else if workflow_result.is_ok() {
-            let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowCompleted {
-                workflow_id: session_id.to_string(),
-                execution_id: session_id.to_string(),
-            });
+            let _ = event_sink.send(
+                node_engine::WorkflowEvent::WorkflowCompleted {
+                    workflow_id: session_id.to_string(),
+                    execution_id: session_id.to_string(),
+                    occurred_at_ms: None,
+                }
+                .now(),
+            );
         } else if let Err(error) = &workflow_result {
-            let _ = event_sink.send(node_engine::WorkflowEvent::WorkflowFailed {
-                workflow_id: session_id.to_string(),
-                execution_id: session_id.to_string(),
-                error: error.clone(),
-            });
+            let _ = event_sink.send(
+                node_engine::WorkflowEvent::WorkflowFailed {
+                    workflow_id: session_id.to_string(),
+                    execution_id: session_id.to_string(),
+                    error: error.clone(),
+                    occurred_at_ms: None,
+                }
+                .now(),
+            );
         }
 
         let execution_mode_info =

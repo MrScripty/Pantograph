@@ -1196,18 +1196,21 @@ mod tests {
             execution_id: "exec-1".to_string(),
             task_id: "human-input-1".to_string(),
             prompt: Some("Approve deployment?".to_string()),
+            occurred_at_ms: None,
         })
         .expect("send waiting event");
         sink.send(WorkflowEvent::GraphModified {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
             dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            occurred_at_ms: None,
         })
         .expect("send graph modified event");
         sink.send(WorkflowEvent::IncrementalExecutionStarted {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
             tasks: vec!["node-c".to_string()],
+            occurred_at_ms: None,
         })
         .expect("send incremental event");
 

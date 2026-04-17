@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use node_engine::{EventError, EventSink};
 use tauri::ipc::Channel;
 
-use super::diagnostics::SharedWorkflowDiagnosticsStore;
+use super::diagnostics::{node_engine_workflow_trace_event, SharedWorkflowDiagnosticsStore};
 use super::events::{is_cancelled_error_message, WorkflowEvent as TauriWorkflowEvent};
 
 /// A value that flows through a port (alias for serde_json::Value)
@@ -61,6 +61,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
         node_engine::WorkflowEvent::WorkflowStarted {
             workflow_id,
             execution_id,
+            ..
         } => {
             // Note: node_engine doesn't have node_count, so we send 0.
             TauriWorkflowEvent::Started {
@@ -73,6 +74,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
         node_engine::WorkflowEvent::WorkflowCompleted {
             workflow_id,
             execution_id,
+            ..
         } => {
             // Actual outputs are retrieved separately.
             TauriWorkflowEvent::Completed {
@@ -86,6 +88,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             workflow_id,
             execution_id,
             error,
+            ..
         } => {
             if is_cancelled_error_message(&error) {
                 TauriWorkflowEvent::Cancelled {
@@ -105,6 +108,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
         node_engine::WorkflowEvent::TaskStarted {
             task_id,
             execution_id,
+            ..
         } => TauriWorkflowEvent::NodeStarted {
             node_id: task_id,
             node_type: String::new(),
@@ -115,6 +119,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             task_id,
             execution_id,
             output,
+            ..
         } => {
             let outputs: HashMap<String, PortValue> = output
                 .and_then(|value| value.as_object().cloned())
@@ -132,6 +137,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             task_id,
             execution_id,
             error,
+            ..
         } => TauriWorkflowEvent::NodeError {
             node_id: task_id,
             error,
@@ -143,6 +149,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             execution_id,
             progress,
             message,
+            ..
         } => TauriWorkflowEvent::NodeProgress {
             node_id: task_id,
             progress,
@@ -155,6 +162,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             execution_id,
             port,
             data,
+            ..
         } => TauriWorkflowEvent::NodeStream {
             node_id: task_id,
             port,
@@ -167,6 +175,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             execution_id,
             task_id,
             prompt,
+            ..
         } => TauriWorkflowEvent::WaitingForInput {
             workflow_id,
             execution_id,
@@ -178,6 +187,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             workflow_id,
             execution_id,
             dirty_tasks,
+            ..
         } => TauriWorkflowEvent::GraphModified {
             workflow_id,
             execution_id,
@@ -189,6 +199,7 @@ fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWorkflowEvent
             workflow_id,
             execution_id,
             tasks,
+            ..
         } => TauriWorkflowEvent::IncrementalExecutionStarted {
             workflow_id,
             execution_id,
@@ -201,8 +212,17 @@ fn translate_node_event_with_diagnostics(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
     event: node_engine::WorkflowEvent,
 ) -> (TauriWorkflowEvent, TauriWorkflowEvent) {
+    let trace_event = node_engine_workflow_trace_event(&event);
     let tauri_event = translate_node_event(event);
-    let diagnostics_snapshot = diagnostics_store.record_workflow_event_now(&tauri_event);
+    let diagnostics_snapshot = trace_event
+        .map(|(trace_event, occurred_at_ms)| {
+            diagnostics_store.record_trace_event_with_overlay(
+                &trace_event,
+                &tauri_event,
+                occurred_at_ms,
+            )
+        })
+        .unwrap_or_else(|| diagnostics_store.record_workflow_event_now(&tauri_event));
     let diagnostics_event = TauriWorkflowEvent::diagnostics_snapshot(
         translated_execution_id(&tauri_event).to_string(),
         diagnostics_snapshot,
@@ -246,6 +266,7 @@ mod tests {
             node_engine::WorkflowEvent::WorkflowStarted {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(1_717_171_001),
             },
         );
 
@@ -269,6 +290,9 @@ mod tests {
             } => {
                 assert_eq!(execution_id, "exec-1");
                 assert_eq!(snapshot.run_order, vec!["exec-1".to_string()]);
+                let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+                assert_eq!(trace.started_at_ms, 1_717_171_001);
+                assert_eq!(trace.events[0].timestamp_ms, 1_717_171_001);
             }
             other => panic!("unexpected diagnostics event: {other:?}"),
         }
@@ -282,6 +306,7 @@ mod tests {
             node_engine::WorkflowEvent::WorkflowStarted {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(10),
             },
         );
 
@@ -292,6 +317,7 @@ mod tests {
                 execution_id: "exec-1".to_string(),
                 progress: 0.5,
                 message: Some("working".to_string()),
+                occurred_at_ms: Some(25),
             },
         );
 
@@ -315,6 +341,7 @@ mod tests {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
                 error: "workflow run cancelled during execution".to_string(),
+                occurred_at_ms: Some(33),
             },
         );
 
@@ -352,6 +379,7 @@ mod tests {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-graph".to_string(),
                 dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+                occurred_at_ms: Some(44),
             },
         );
 
@@ -409,6 +437,7 @@ mod tests {
             node_engine::WorkflowEvent::WorkflowStarted {
                 workflow_id: "wf-1".to_string(),
                 execution_id: "exec-1".to_string(),
+                occurred_at_ms: Some(55),
             },
         )
         .expect("send should succeed");

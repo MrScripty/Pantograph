@@ -25,6 +25,112 @@ pub(crate) fn graph_trace_context(graph: &WorkflowGraph) -> WorkflowTraceGraphCo
     }
 }
 
+pub(crate) fn node_engine_workflow_trace_event(
+    event: &node_engine::WorkflowEvent,
+) -> Option<(WorkflowTraceEvent, u64)> {
+    let occurred_at_ms = event.occurred_at_ms()?;
+    let trace_event = match event {
+        node_engine::WorkflowEvent::WorkflowStarted {
+            workflow_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::RunStarted {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+            node_count: 0,
+        },
+        node_engine::WorkflowEvent::WorkflowCompleted {
+            workflow_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::RunCompleted {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        },
+        node_engine::WorkflowEvent::WorkflowFailed {
+            workflow_id,
+            execution_id,
+            error,
+            ..
+        } => WorkflowTraceEvent::RunFailed {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+            error: error.clone(),
+        },
+        node_engine::WorkflowEvent::WaitingForInput {
+            workflow_id,
+            execution_id,
+            task_id,
+            ..
+        } => WorkflowTraceEvent::WaitingForInput {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+            node_id: task_id.clone(),
+        },
+        node_engine::WorkflowEvent::TaskStarted {
+            task_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::NodeStarted {
+            execution_id: execution_id.clone(),
+            node_id: task_id.clone(),
+            node_type: None,
+        },
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::NodeCompleted {
+            execution_id: execution_id.clone(),
+            node_id: task_id.clone(),
+        },
+        node_engine::WorkflowEvent::TaskFailed {
+            task_id,
+            execution_id,
+            error,
+            ..
+        } => WorkflowTraceEvent::NodeFailed {
+            execution_id: execution_id.clone(),
+            node_id: task_id.clone(),
+            error: error.clone(),
+        },
+        node_engine::WorkflowEvent::TaskProgress {
+            task_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::NodeProgress {
+            execution_id: execution_id.clone(),
+            node_id: task_id.clone(),
+        },
+        node_engine::WorkflowEvent::TaskStream {
+            task_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::NodeStream {
+            execution_id: execution_id.clone(),
+            node_id: task_id.clone(),
+        },
+        node_engine::WorkflowEvent::GraphModified {
+            workflow_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::GraphModified {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        },
+        node_engine::WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id,
+            execution_id,
+            ..
+        } => WorkflowTraceEvent::IncrementalExecutionStarted {
+            execution_id: execution_id.clone(),
+            workflow_id: Some(workflow_id.clone()),
+        },
+    };
+
+    Some((trace_event, occurred_at_ms))
+}
+
 pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTraceEvent> {
     match event {
         WorkflowEvent::Started {

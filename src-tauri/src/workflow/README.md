@@ -194,6 +194,9 @@ let snapshot = workflow_service
 - Canonical run/node lifecycle timing for diagnostics must come from
   `WorkflowTraceStore`; Tauri may only adapt that trace data into the existing
   GUI projection shape and attach additive UI-only overlay fields.
+- When `node-engine` emits additive `occurred_at_ms` timestamps on workflow
+  events, this directory must forward those timestamps into backend-owned trace
+  storage instead of replacing them with adapter-local observation time.
 - Runtime and scheduler snapshots carried through this directory must preserve
   the distinction between backend/runtime producer facts and future
   RuntimeRegistry policy decisions.

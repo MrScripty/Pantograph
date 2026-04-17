@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStore,
+    WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStore,
 };
 
 use super::trace::{diagnostics_run_trace, graph_trace_context, workflow_trace_event};
@@ -332,6 +332,22 @@ impl WorkflowDiagnosticsStore {
             .lock()
             .expect("workflow diagnostics lock poisoned");
         record_diagnostics_overlay(&mut state, event, timestamp_ms);
+        state.prune_overlays(&traces);
+        state.snapshot(&traces)
+    }
+
+    pub fn record_trace_event_with_overlay(
+        &self,
+        trace_event: &WorkflowTraceEvent,
+        overlay_event: &WorkflowEvent,
+        timestamp_ms: u64,
+    ) -> WorkflowDiagnosticsProjection {
+        let traces = self.trace_store.record_event(trace_event, timestamp_ms);
+        let mut state = self
+            .state
+            .lock()
+            .expect("workflow diagnostics lock poisoned");
+        record_diagnostics_overlay(&mut state, overlay_event, timestamp_ms);
         state.prune_overlays(&traces);
         state.snapshot(&traces)
     }
