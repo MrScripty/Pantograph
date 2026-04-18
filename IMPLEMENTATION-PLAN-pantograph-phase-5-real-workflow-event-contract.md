@@ -587,6 +587,10 @@ Update during implementation:
   `node_id`/`message` event shape without losing execution ownership, and that
   the resulting diagnostics snapshot marks the run as waiting with the prompt
   message attached to the node overlay.
+- 2026-04-18: The adapter waiting-path note above is now backed by a focused
+  `src-tauri` test in `workflow::event_adapter::tests`, keeping the
+  translation contract pinned at the Tauri boundary instead of only in
+  downstream GUI reducers.
 
 ## Commit Cadence Notes
 

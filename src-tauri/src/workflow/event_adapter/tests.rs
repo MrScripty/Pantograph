@@ -199,6 +199,54 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
 }
 
 #[test]
+fn translated_waiting_for_input_event_preserves_backend_contract_and_waiting_status() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::WaitingForInput {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-wait".to_string(),
+            task_id: "human-input-1".to_string(),
+            prompt: Some("Need approval".to_string()),
+            occurred_at_ms: Some(52),
+        },
+    );
+
+    match &event {
+        super::TauriWorkflowEvent::WaitingForInput {
+            workflow_id,
+            execution_id,
+            node_id,
+            message,
+        } => {
+            assert_eq!(workflow_id, "wf-1");
+            assert_eq!(execution_id, "exec-wait");
+            assert_eq!(node_id, "human-input-1");
+            assert_eq!(message.as_deref(), Some("Need approval"));
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+
+    assert_eq!(translated_execution_id(&event), "exec-wait");
+    match diagnostics_event {
+        super::TauriWorkflowEvent::DiagnosticsSnapshot {
+            execution_id,
+            snapshot,
+        } => {
+            assert_eq!(execution_id, "exec-wait");
+            let trace = snapshot.runs_by_id.get("exec-wait").expect("trace");
+            assert_eq!(
+                trace.status,
+                crate::workflow::diagnostics::DiagnosticsRunStatus::Waiting
+            );
+            let node = trace.nodes.get("human-input-1").expect("node overlay");
+            assert_eq!(node.last_message.as_deref(), Some("Need approval"));
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
 fn translated_duplicate_terminal_events_preserve_backend_trace_timing() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
     let _ = translate_node_event_with_diagnostics(

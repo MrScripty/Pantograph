@@ -577,6 +577,9 @@ incremental runs.
   `WaitingForInput` translation path and its waiting-state diagnostics
   projection, so that backend task/prompt semantics are explicitly preserved
   through the app-facing node/message contract.
+- That waiting-path parity is now also anchored by a focused `src-tauri`
+  adapter test rather than being inferred only from downstream consumer
+  behavior.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
