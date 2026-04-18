@@ -762,6 +762,11 @@ Update during implementation:
   `DemandEngine` demand/cache access behind a private window runner so later
   concurrent window execution can change engine ownership without reopening
   batch planning and outcome contracts.
+- 2026-04-18: Seventh Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, replacing raw dispatch
+  window vectors with explicit window plans that mark whether each window is
+  eligible for bounded concurrent execution under the current batch and budget
+  rules.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -855,6 +860,9 @@ Update during implementation:
   interruption outcomes rather than only batch-level aggregation.
 - Direct engine access now also lives behind a private window runner rather
   than being spread across coordinator methods.
+- Dispatch windows now also carry an explicit parallel-eligibility decision so
+  future concurrent execution branches from a frozen backend-owned contract
+  instead of recomputing eligibility ad hoc.
 
 ### Deviations
 

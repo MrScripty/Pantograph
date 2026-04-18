@@ -422,6 +422,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also routes direct engine demand/cache access through a private
   window runner, reducing the remaining ownership reshaping needed before
   concurrent window execution can land.
+- Phase 2 dispatch windows now also carry an explicit parallel-eligibility
+  decision, freezing where future concurrent execution is allowed to branch
+  under the current overlap and budget rules.
 
 **Milestones:**
 
