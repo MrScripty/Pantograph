@@ -757,17 +757,14 @@ incremental runs.
 
 **Still missing for real workflow event contract completion:**
 
-- Backend-owned emission coverage for the remaining interactive paths that
-  still do not produce the event vocabulary consistently beyond the current
-  human-input pause path, orchestration subgraph pause/cancel path, and the
-  now-canonical graph-mutation/incremental paths
-- Broader backend emission coverage for any additional cancellable producer
-  paths that still terminate without publishing the canonical cancellation
-  event, beyond the now-covered orchestration error exits
-- Extend acceptance coverage for the new `cancelled` envelope only where a
-  remaining non-streaming/headless command or runtime-hosted binding surface is
-  still not directly pinned beyond the now-covered embedded-runtime host and
-  session-run surfaces, streamed Tauri execution helper, UniFFI frontend-HTTP
+- Confirm whether any real backend-owned interactive or cancellable producer
+  path remains unpinned beyond the now-covered human-input pause,
+  orchestration subgraph wait/cancel, graph-modification, and incremental
+  execution paths before landing more producer-side changes
+- Extend acceptance coverage for the new `cancelled` envelope only if a real
+  remaining non-streaming/headless command or runtime-hosted binding surface
+  is still found beyond the now-covered embedded-runtime host and session-run
+  surfaces, streamed Tauri execution helper, UniFFI frontend-HTTP
   workflow-run/session-run bindings, UniFFI direct embedded-runtime
   workflow-run/session-run bindings, Rustler workflow host and session-host
   paths, and frontend-HTTP workflow-run transport

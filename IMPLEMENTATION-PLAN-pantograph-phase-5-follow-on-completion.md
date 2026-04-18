@@ -1,7 +1,7 @@
 # Plan: Pantograph Phase 5 Follow-On Completion
 
 ## Status
-Draft
+In progress
 
 Last updated: 2026-04-18
 
@@ -295,6 +295,24 @@ Resulting plan requirements:
 
 **Goal:** Convert the remaining Phase 5 bullets into a concrete scoped worklist
 and prevent more logic from landing in already non-compliant files.
+
+**Current classification result:**
+
+- `remaining_event_contract_gap`
+  The currently documented event-contract remainder is now limited to
+  validating whether any real backend-owned producer or transport-hosted
+  surface is still unpinned beyond the already covered human-input pause,
+  orchestration wait/cancel, graph-modification, incremental rerun,
+  embedded-runtime non-streaming, frontend-HTTP, UniFFI, Rustler host-path,
+  and Tauri adapter coverage.
+- `binding_platform_follow_on`
+  Curated client-facing binding surface policy, C# lane hardening, Python
+  client binding work, and BEAM-hosted opaque-NIF verification now belong to
+  the binding-platform / Rustler-specific plans rather than blocking Phase 5
+  event-contract close-out by default.
+- `defer_until_phase_6`
+  Incremental graph execution and any future graph-surface expansion remain
+  Phase 6 work unless a concrete failing event-contract case proves otherwise.
 
 **Tasks:**
 - [x] Audit every remaining roadmap Phase 5 item and classify it as one of:
