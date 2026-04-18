@@ -581,6 +581,12 @@ Update during implementation:
   their canonical transport labels and additive fields when serialized for the
   NIF event channel, instead of leaving that contract covered only by the
   frontend-http error-envelope tests.
+- 2026-04-18: Tauri event-adapter coverage now also pins the backend-owned
+  `WaitingForInput` translation path directly. The focused adapter test asserts
+  that the backend `task_id`/`prompt` contract is translated into the app
+  `node_id`/`message` event shape without losing execution ownership, and that
+  the resulting diagnostics snapshot marks the run as waiting with the prompt
+  message attached to the node overlay.
 
 ## Commit Cadence Notes
 

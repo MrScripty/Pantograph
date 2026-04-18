@@ -573,6 +573,10 @@ incremental runs.
   `GraphModified` and `WaitingForInput` event JSON at the BEAM boundary, so
   the NIF event channel no longer relies on inference from downstream
   consumers for those transport labels and additive fields.
+- Tauri event-adapter coverage now also pins the backend-owned
+  `WaitingForInput` translation path and its waiting-state diagnostics
+  projection, so that backend task/prompt semantics are explicitly preserved
+  through the app-facing node/message contract.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
