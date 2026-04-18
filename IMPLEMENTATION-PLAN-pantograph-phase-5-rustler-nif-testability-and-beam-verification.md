@@ -20,16 +20,18 @@ questions arise. Use this document when the work being discussed is
 specifically the BEAM/Rustler lane.
 
 The earlier native compile blocker caused by the `node-engine` / Rustler
-`Send` mismatch is now resolved in backend-owned code. The remaining distinct
-verification problem for this lane is the real BEAM-hosted NIF boundary:
-`cargo test -p pantograph_rustler` still requires a host that provides the
-`enif_*` symbols, so the outstanding work here is now focused on pure-Rust
-extraction for cargo-friendly coverage and BEAM-hosted acceptance for the
-true wrapper boundary.
+`Send` mismatch is now resolved in backend-owned code. `pantograph_rustler`
+now compiles and builds successfully, and the in-repo Mix/ExUnit smoke harness
+proves the NIF loads under a real BEAM host. The remaining issue for this lane
+is narrower: raw `cargo test -p pantograph_rustler` is still not the
+authoritative verification path for NIF-hosted behavior because Rust test
+binaries do not provide the BEAM-owned `enif_*` symbols. The outstanding work
+is therefore focused on pure-Rust extraction for cargo-friendly coverage plus
+broader BEAM-hosted acceptance coverage for the true wrapper boundary.
 
 ## Objective
 
-Resolve the current Rustler NIF verification gap with a two-part follow-on:
+Resolve the remaining Rustler NIF verification gap with a two-part follow-on:
 
 - Option 1: refactor NIF-adjacent contract shaping into pure Rust modules or
   backend-owned helpers so most workflow-event envelope logic can be exercised
@@ -74,9 +76,11 @@ existing standards violations.
 ### Problem
 
 Pantograph currently has Rustler-side serializer parity coverage for some Phase
-5 envelopes, but parts of that work remain trapped behind Rustler linkage and
-cannot be exercised with ordinary `cargo test` when the BEAM runtime is not
-providing the `enif_*` symbols. That leaves two gaps:
+5 envelopes, and it now also has a passing in-repo BEAM smoke harness. The
+remaining problem is not that Pantograph fails to compile; it is that parts of
+the wrapper boundary still cannot be verified authoritatively with ordinary
+Rust test binaries because those binaries do not provide the BEAM-owned
+`enif_*` symbols. That leaves two gaps:
 
 - pure contract-shaping logic is harder to test than it should be because it
   still lives too close to the NIF wrapper boundary
@@ -116,10 +120,11 @@ while new verification harnesses are added behind the current boundary.
 ### Assumptions
 
 - The missing linker symbols discussed earlier are the BEAM-provided `enif_*`
-  functions expected by Rustler-built NIF artifacts when loaded or linked
-  outside a BEAM host.
-- No in-repo Mix/ExUnit harness exists today; one must be introduced if Option
-  2 is implemented.
+  functions expected by Rustler-built NIF artifacts when linked from plain
+  Rust test binaries or otherwise exercised outside a BEAM host.
+- An in-repo Mix/ExUnit harness now exists and passes baseline local smoke
+  coverage; Option 2 is now about expanding that host-lane coverage, not
+  merely creating the harness.
 - The current Phase 5 workflow-event/error envelopes are the contract to pin,
   not a temporary scaffold.
 - Some Rustler helper code may be appropriate to move into a backend-owned
@@ -411,8 +416,8 @@ Corrections applied:
 
 #### Current status note
 
-- This milestone now owns the remaining `enif_*` linker-symbol verification
-  gap for true Rustler NIF loading and host-boundary assertions.
+- This milestone now owns the remaining BEAM-hosted acceptance expansion for
+  true Rustler NIF loading and host-boundary assertions.
 - A first documented BEAM harness scaffold now exists under `bindings/beam/`,
   with a minimal Mix/ExUnit smoke project that loads the compiled NIF through
   `PANTOGRAPH_RUSTLER_NIF_PATH` and exercises real exported Rustler functions.
@@ -425,6 +430,10 @@ Corrections applied:
 - Host-side smoke coverage now also includes a wrapper-visible parse failure
   path, proving that malformed workflow JSON crosses the NIF boundary back to
   BEAM as a structured `{:error, message}` tuple.
+- Raw `cargo test -p pantograph_rustler` remains a non-authoritative path for
+  NIF-hosted behavior because it still lacks the BEAM runtime symbols the NIF
+  expects; this is now a tooling-bound test-path limitation rather than a
+  product compile blocker.
 
 ### Milestone 4: Source-of-Truth And Contract Reconciliation
 
@@ -472,10 +481,10 @@ Corrections applied:
 
 - 2026-04-18: The backend-owned `Send` mismatch between `node-engine` and the
   Rustler orchestration bridge was repaired in the dedicated unblock slice.
-  `cargo check -p pantograph_rustler` now succeeds, while
-  `cargo test -p pantograph_rustler` remains blocked only by the separate
-  BEAM-provided `enif_*` linker-symbol boundary this plan is intended to
-  address.
+  `cargo check -p pantograph_rustler` and `cargo build -p pantograph_rustler`
+  now succeed. Raw `cargo test -p pantograph_rustler` remains a non-BEAM test
+  path that cannot validate NIF-hosted behavior by itself because it lacks the
+  runtime-provided `enif_*` symbols.
 - 2026-04-18: Milestone 1 decomposition continued inside
   `crates/pantograph-rustler`: resource registration moved into a focused
   `resource_registration.rs` module so `lib.rs` remains facade-first while the
