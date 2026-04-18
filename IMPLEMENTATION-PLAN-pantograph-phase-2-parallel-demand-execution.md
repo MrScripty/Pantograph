@@ -629,7 +629,7 @@ consumers.
 behind.
 
 **Tasks:**
-- [ ] Add representative workflow benchmarks or benchmark-like reproducible
+- [x] Add representative workflow benchmarks or benchmark-like reproducible
       harnesses that compare the sequential baseline with bounded parallel
       execution.
 - [x] Add cross-layer acceptance coverage for a real workflow path that
@@ -827,6 +827,12 @@ Update during implementation:
   parallel execution now has cross-layer acceptance coverage for
   consumer-visible events and diagnostics snapshots instead of relying only on
   replayed event sequences.
+- 2026-04-18: Second Milestone 5 close-out slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, adding an ignored
+  benchmark-like harness that runs the same independent-root graph with
+  sequential and bounded budgets, preserving output equivalence while making
+  the current latency/concurrency comparison reproducible without forcing
+  timing-sensitive checks into the default test suite.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are

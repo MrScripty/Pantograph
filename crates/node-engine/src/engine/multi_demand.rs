@@ -728,6 +728,7 @@ async fn execute_plan_with_budget(
 mod tests {
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
 
     use async_trait::async_trait;
     use graph_flow::Context;
@@ -962,6 +963,100 @@ mod tests {
                     "inputs": inputs
                 }),
             )]))
+        }
+    }
+
+    struct TimedHarnessExecutor {
+        current_in_flight: AtomicUsize,
+        max_in_flight: AtomicUsize,
+        per_task_delay: Duration,
+    }
+
+    impl TimedHarnessExecutor {
+        fn new(per_task_delay: Duration) -> Self {
+            Self {
+                current_in_flight: AtomicUsize::new(0),
+                max_in_flight: AtomicUsize::new(0),
+                per_task_delay,
+            }
+        }
+
+        fn max_in_flight(&self) -> usize {
+            self.max_in_flight.load(Ordering::SeqCst)
+        }
+
+        fn record_max_in_flight(&self, observed: usize) {
+            let mut current_max = self.max_in_flight.load(Ordering::SeqCst);
+            while observed > current_max {
+                match self.max_in_flight.compare_exchange(
+                    current_max,
+                    observed,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => break,
+                    Err(actual) => current_max = actual,
+                }
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for TimedHarnessExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            inputs: HashMap<String, serde_json::Value>,
+            _context: &Context,
+            _extensions: &ExecutorExtensions,
+        ) -> crate::error::Result<HashMap<String, serde_json::Value>> {
+            let observed = self.current_in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            self.record_max_in_flight(observed);
+            tokio::time::sleep(self.per_task_delay).await;
+            self.current_in_flight.fetch_sub(1, Ordering::SeqCst);
+
+            Ok(HashMap::from([(
+                "out".to_string(),
+                serde_json::json!({
+                    "task": task_id,
+                    "inputs": inputs
+                }),
+            )]))
+        }
+    }
+
+    struct DemandHarnessObservation {
+        elapsed: Duration,
+        max_in_flight: usize,
+        outputs: HashMap<String, HashMap<String, serde_json::Value>>,
+    }
+
+    async fn run_parallel_demand_harness(budget: usize) -> DemandHarnessObservation {
+        let graph = make_parallel_roots_graph();
+        let mut engine = DemandEngine::new("test");
+        let executor = TimedHarnessExecutor::new(Duration::from_millis(30));
+        let context = Context::new();
+        let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
+
+        let started_at = Instant::now();
+        let outputs = demand_multiple_with_explicit_budget(
+            &mut engine,
+            &["left".to_string(), "right".to_string()],
+            DemandExecutionBudget::new(budget),
+            &graph,
+            &executor,
+            &context,
+            &event_sink,
+            &extensions,
+        )
+        .await
+        .expect("demand harness should succeed");
+
+        DemandHarnessObservation {
+            elapsed: started_at.elapsed(),
+            max_in_flight: executor.max_in_flight(),
+            outputs,
         }
     }
 
@@ -1287,6 +1382,23 @@ mod tests {
         assert_eq!(outputs.len(), 2);
         assert!(outputs.contains_key("left"));
         assert!(outputs.contains_key("right"));
+    }
+
+    #[tokio::test]
+    #[ignore = "benchmark-like harness for comparing sequential and bounded parallel demand"]
+    async fn demand_harness_compares_sequential_and_parallel_baselines() {
+        let sequential = run_parallel_demand_harness(1).await;
+        let bounded_parallel = run_parallel_demand_harness(2).await;
+
+        assert_eq!(sequential.max_in_flight, 1);
+        assert_eq!(bounded_parallel.max_in_flight, 2);
+        assert_eq!(sequential.outputs, bounded_parallel.outputs);
+        assert!(
+            bounded_parallel.elapsed < sequential.elapsed,
+            "expected bounded parallel harness to finish faster than sequential baseline: sequential={:?}, parallel={:?}",
+            sequential.elapsed,
+            bounded_parallel.elapsed
+        );
     }
 
     #[test]

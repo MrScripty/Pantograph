@@ -465,6 +465,10 @@ prepare the engine for metric-informed scheduling.
   `src-tauri/src/workflow/event_adapter/tests.rs`, exercising bounded parallel
   independent roots through `WorkflowExecutor`, `TauriEventAdapter`, emitted
   transport events, and diagnostics snapshots in one path.
+- Phase 2 now also includes an ignored benchmark-like harness in
+  `crates/node-engine/src/engine/multi_demand.rs` that compares sequential and
+  bounded-parallel independent-root execution while pinning output equivalence
+  and observed concurrency.
 
 **Milestones:**
 
