@@ -4,6 +4,7 @@ mod effective_definition;
 mod persistence;
 mod registry;
 mod session;
+mod session_contract;
 mod session_event;
 mod types;
 mod validation;
@@ -17,19 +18,20 @@ pub use persistence::{
     FileSystemWorkflowGraphStore, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
-pub use registry::{validate_workflow_connection, NodeRegistry};
+pub use registry::{NodeRegistry, validate_workflow_connection};
 pub use session::{
-    convert_graph_to_node_engine, GraphSessionStore, UndoRedoState, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    GraphSessionStore, UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
     WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
     WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowSessionKind, convert_graph_to_node_engine,
 };
+pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
     ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,

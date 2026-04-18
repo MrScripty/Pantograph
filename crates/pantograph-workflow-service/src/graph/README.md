@@ -15,6 +15,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `effective_definition.rs` | Merges registry metadata with additive per-node definition overlays before validation or candidate lookup. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
+| `session_contract.rs` | Additive graph snapshot contracts, including the Phase 6 workflow-session state view surfaced to transport layers. |
 | `session.rs` | Edit-session store, undo/redo state, graph mutation orchestration, and graph-to-engine conversion helpers. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 
@@ -53,10 +54,16 @@ when the node type matches.
 - Graph edit-session mutation responses may also carry an additive canonical
   backend-owned `workflow_event` so bindings and adapters can forward
   `GraphModified` semantics without synthesizing them locally.
+- Graph edit-session snapshot responses may also carry an additive backend-
+  owned `workflow_session_state` view so transports can forward Phase 6 node-
+  memory, checkpoint, and mutation-impact contracts without owning them.
 - Edit-session graph mutation responses currently use the backend-owned session
   id for both `workflow_id` and `execution_id` inside that additive event
   contract because the session-scoped graph DTO does not yet carry a separate
   persisted workflow identity.
+- Current graph-edit mutation responses conservatively project Phase 6 memory
+  impact as fallback full invalidation for dirty tasks until explicit graph-
+  edit compatibility preservation lands in a later milestone.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Dynamic `node.data.definition` overlays may add ports for a specific node

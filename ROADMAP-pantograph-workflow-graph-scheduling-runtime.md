@@ -16,7 +16,7 @@ layers.
 3. KV cache implementation: Not started
 4. Scheduler V2: Complete
 5. Real workflow event contract: Complete
-6. Incremental graph execution: Not started
+6. Incremental graph execution: In progress
 7. Runtime adapter unification: Complete
 
 ## Current Source-of-Truth Summary
@@ -32,6 +32,19 @@ Milestone 6 implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
 Scheduler V2 planning now also has a dedicated implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`.
+Incremental graph execution now also has a dedicated standards-reviewed plan
+in `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`.
+That Phase 6 plan now treats incremental execution as a backend-owned
+workflow-session state problem, covering per-node memory, graph-edit
+reconciliation, selective input reinjection, keep-alive session reuse,
+scheduler/runtime unload-restore continuity, and read-only inspection surfaces
+instead of only dirty-task invalidation.
+The first Phase 6 implementation slice is now landed: `node-engine` exposes
+backend-owned workflow-session residency, node-memory, graph-memory-impact,
+and checkpoint contract types behind a focused engine helper module, and graph
+edit-session snapshots now forward an additive `workflow_session_state` view
+that keeps current graph mutations explicitly conservative by projecting
+fallback full invalidation until compatibility-preserving reconciliation lands.
 Parallel demand execution now has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`, and
 real workflow event contract completion now has dedicated
@@ -210,7 +223,9 @@ reconciled as the final source of truth.
   BEAM host lanes
 - Parallel demand execution planning and `node-engine` decomposition prep
 - Future incremental execution work that will build on the completed
-  metrics/trace, scheduler, and runtime-registry boundaries
+  metrics/trace, scheduler, and runtime-registry boundaries while adding a
+  backend-owned node-memory and checkpoint substrate for partial reruns and
+  persistent workflow sessions
 
 ### Next gate before more implementation breadth
 
@@ -486,7 +501,7 @@ prepare the engine for metric-informed scheduling.
 
 ### Phase 3: KV Cache Implementation
 
-**Status:** Not started
+**Status:** In progress
 
 **Goal:** Convert the existing KV cache scaffolding into a real workflow
 primitive that improves reruns, prompt-prefix reuse, and iterative local work.
@@ -782,19 +797,46 @@ incremental runs.
 
 **Status:** Not started
 
-**Goal:** Make graph editing and reruns cheaper by tightening invalidation and
-sync boundaries between the package graph and backend-owned graph state.
+**Goal:** Add a backend-owned node-memory and session-checkpoint substrate so
+graph edits, input reinjection, keep-alive sessions, and temporary
+runtime-unload/restore flows can preserve compatible node state and rerun only
+the affected downstream closure.
+
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+
+**Progress to date:**
+
+- `crates/node-engine/src/engine/session_state.rs` now owns the backend-owned
+  Phase 6 contract types for workflow-session residency, node-memory identity
+  and snapshots, graph-memory impact summaries, and bounded checkpoint
+  summaries instead of adding those concepts inline inside `engine.rs`.
+- `WorkflowExecutor` now exposes thin residency and checkpoint-summary accessors
+  through that private session-state scaffold, creating a stable backend seam
+  for later node-memory and restore integration.
+- `crates/pantograph-workflow-service/src/graph/session_contract.rs` now owns
+  the additive `workflow_session_state` response contract for edit-session
+  snapshots so graph-session transport DTO growth does not go back into the
+  oversized `session.rs` file.
+- Current graph-edit mutation responses now explicitly project Phase 6 memory
+  impact as fallback full invalidation for dirty tasks, making the current
+  conservative behavior machine-consumable until later milestones implement
+  compatibility-preserving graph reconciliation.
 
 **Milestones:**
 
-- Add partial graph invalidation instead of broad graph refreshes after every
-  structural edit
-- Reduce full graph fingerprint recomputation where incremental derivation is
-  safe
-- Tighten stale-intent and stale-event handling using session and execution ids
-- Extend graph-session tests for insert-and-connect, edge insertion, undo/redo,
-  and selection persistence across backend snapshots
-- Add explicit graph mutation diagnostics to the frontend package
+- Define backend-owned node-memory and session-checkpoint contracts
+- Define workflow-session residency and restore/reconcile rules so logical node
+  state survives keep-alive, reclaim, unload, and restore
+- Preserve compatible node memory across graph edits and explicit input
+  injection points
+- Add downstream-only reruns for graph edits and repeated kept-alive invocations
+  that reuse preserved node state and unchanged outputs where safe
+- Integrate keep-alive, reclaim, and restore flows with checkpointed workflow
+  state
+- Add explicit node-memory inspection and graph-mutation diagnostics for
+  debugger, system-builder, and GUI consumers
 
 ### Phase 7: Runtime Adapter Unification
 

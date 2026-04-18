@@ -6,9 +6,9 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    scheduler_snapshot_trace_execution_id, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+    WorkflowSessionSummary, scheduler_snapshot_trace_execution_id,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -18,6 +18,9 @@ use super::connection_intent::{
     rejected_insert_on_edge_response, rejected_insert_response,
 };
 use super::registry::NodeRegistry;
+use super::session_contract::{
+    WorkflowGraphEditSessionGraphResponse, build_workflow_session_state_view,
+};
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
 };
@@ -82,16 +85,6 @@ pub struct WorkflowGraphEditSessionCloseResponse {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphEditSessionGraphRequest {
     pub session_id: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub struct WorkflowGraphEditSessionGraphResponse {
-    pub session_id: String,
-    pub graph_revision: String,
-    pub graph: WorkflowGraph,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_event: Option<node_engine::WorkflowEvent>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -262,10 +255,16 @@ impl GraphEditSession {
     ) -> WorkflowGraphEditSessionGraphResponse {
         self.touch();
         self.canonicalize_graph();
+        let graph_revision = self.graph.compute_fingerprint();
         WorkflowGraphEditSessionGraphResponse {
             session_id: session_id.to_string(),
-            graph_revision: self.graph.compute_fingerprint(),
+            graph_revision: graph_revision.clone(),
             graph: self.graph.clone(),
+            workflow_session_state: Some(build_workflow_session_state_view(
+                session_id,
+                &graph_revision,
+                workflow_event.as_ref(),
+            )),
             workflow_event,
         }
     }
@@ -1139,10 +1138,12 @@ mod tests {
         assert!(response.accepted);
         let graph = response.graph.expect("updated graph");
         assert_eq!(graph.edges.len(), 2);
-        assert!(graph
-            .edges
-            .iter()
-            .all(|edge| edge.id != "text-input-text-text-output-text"));
+        assert!(
+            graph
+                .edges
+                .iter()
+                .all(|edge| edge.id != "text-input-text-text-output-text")
+        );
         let inserted_node_id = response.inserted_node_id.expect("inserted node id");
         assert!(graph.find_node(&inserted_node_id).is_some());
     }
