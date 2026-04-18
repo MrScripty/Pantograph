@@ -613,6 +613,10 @@ Update during implementation:
   `IncrementalExecutionStarted`, so the shared client-facing binding surface
   does not silently drift on key workflow ids, execution ids, prompts, dirty
   tasks, or resumed task lists.
+- 2026-04-18: The non-streaming frontend-HTTP host surface now also has a
+  focused workflow-run contract test for backend-owned `cancelled` envelopes.
+  That path is therefore pinned at the actual adapter entrypoint, not only in
+  the lower-level envelope mapping helper or adjacent binding wrappers.
 
 ## Commit Cadence Notes
 

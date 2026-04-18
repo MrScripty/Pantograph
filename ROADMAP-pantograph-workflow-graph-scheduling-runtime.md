@@ -591,6 +591,10 @@ incremental runs.
   and pins additive payload parity for `WaitingForInput`, `GraphModified`,
   `WorkflowCancelled`, and `IncrementalExecutionStarted`, tightening the
   binding-side acceptance path beyond canonical event-label checks alone.
+- The non-streaming frontend-HTTP workflow host now also pins a backend-owned
+  `cancelled` envelope through its real `workflow_run` entrypoint, reducing
+  the remaining acceptance-gap surface for cancellation parity outside Tauri
+  and UniFFI.
 - The touched backend trace and Tauri workflow READMEs are now reconciled with
   the landed contract: backend trace ownership explicitly documents
   resume-from-waiting semantics, and the Tauri adapter/workflow boundary docs

@@ -33,6 +33,9 @@ implements `WorkflowHost`.
 - Backend-owned cancellation envelopes must stay distinct from timeout
   envelopes; this adapter must not rewrite `cancelled` into
   `runtime_timeout`.
+- The actual `workflow_run` transport path must preserve backend-owned
+  `cancelled` envelopes as `WorkflowServiceError::Cancelled`, not just the
+  lower-level envelope mapper helpers.
 
 ## Revisit Triggers
 - A second frontend transport needs the same host semantics.
