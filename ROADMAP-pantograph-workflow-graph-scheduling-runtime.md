@@ -618,6 +618,11 @@ incremental runs.
   `cancelled` and interactive `invalid_request` envelopes at the real binding
   boundary, so session-backed non-streaming binding parity is no longer
   inferred only from direct workflow-run coverage.
+- UniFFI direct embedded-runtime coverage now also pins the same backend-owned
+  interactive `invalid_request` envelope on `FfiPantographRuntime::workflow_run`
+  and `FfiPantographRuntime::workflow_run_session`, so the real direct runtime
+  binding path no longer relies on frontend-HTTP parity to prove the
+  non-streaming interactive mismatch contract.
 - Rustler frontend-HTTP session-host coverage now also pins the same
   backend-owned `cancelled` and interactive `invalid_request` contracts for
   session-backed runs, reducing the remaining BEAM-side acceptance gap to the
@@ -654,9 +659,10 @@ incremental runs.
 - Extend acceptance coverage for the new `cancelled` envelope only where a
   remaining non-streaming/headless command or runtime-hosted binding surface is
   still not directly pinned beyond the now-covered embedded-runtime host and
-  session-run surfaces, streamed Tauri execution helper, UniFFI workflow-run
-  and session-run bindings, Rustler workflow host and session-host paths, and
-  frontend-HTTP workflow-run transport
+  session-run surfaces, streamed Tauri execution helper, UniFFI frontend-HTTP
+  workflow-run/session-run bindings, UniFFI direct embedded-runtime
+  workflow-run/session-run bindings, Rustler workflow host and session-host
+  paths, and frontend-HTTP workflow-run transport
 - Binding-platform follow-on: freeze the curated client-facing surface for the
   Pantograph headless binding platform instead of treating wrapper exports as
   the product contract by default

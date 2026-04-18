@@ -711,6 +711,123 @@ mod tests {
         .expect("write workflow");
     }
 
+    fn write_human_input_workflow(root: &Path, workflow_id: &str) {
+        let workflows_dir = root.join(".pantograph").join("workflows");
+        std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+        let workflow_json = serde_json::json!({
+            "version": "1.0",
+            "metadata": {
+                "name": "Interactive Workflow",
+                "created": "2026-01-01T00:00:00Z",
+                "modified": "2026-01-01T00:00:00Z"
+            },
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "human-input-1",
+                        "node_type": "human-input",
+                        "data": {
+                            "prompt": "Approve deployment?",
+                            "definition": {
+                                "category": "input",
+                                "io_binding_origin": "client_session",
+                                "label": "Human Input",
+                                "description": "Pauses workflow to wait for interactive input",
+                                "inputs": [
+                                    {
+                                        "id": "prompt",
+                                        "label": "Prompt",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    },
+                                    {
+                                        "id": "default",
+                                        "label": "Default Value",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    },
+                                    {
+                                        "id": "auto_accept",
+                                        "label": "Auto Accept",
+                                        "data_type": "boolean",
+                                        "required": false,
+                                        "multiple": false
+                                    },
+                                    {
+                                        "id": "user_response",
+                                        "label": "User Response",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    }
+                                ],
+                                "outputs": [
+                                    {
+                                        "id": "value",
+                                        "label": "Value",
+                                        "data_type": "string",
+                                        "required": false,
+                                        "multiple": false
+                                    }
+                                ]
+                            }
+                        },
+                        "position": { "x": 0.0, "y": 0.0 }
+                    },
+                    {
+                        "id": "text-output-1",
+                        "node_type": "text-output",
+                        "data": {
+                            "definition": {
+                                "category": "output",
+                                "io_binding_origin": "client_session",
+                                "label": "Text Output",
+                                "description": "Displays text output",
+                                "inputs": [{
+                                    "id": "text",
+                                    "label": "Text",
+                                    "data_type": "string",
+                                    "required": false,
+                                    "multiple": false
+                                }],
+                                "outputs": [{
+                                    "id": "text",
+                                    "label": "Text",
+                                    "data_type": "string",
+                                    "required": false,
+                                    "multiple": false
+                                }]
+                            }
+                        },
+                        "position": { "x": 240.0, "y": 0.0 }
+                    }
+                ],
+                "edges": [{
+                    "id": "e-human-output",
+                    "source": "human-input-1",
+                    "source_handle": "value",
+                    "target": "text-output-1",
+                    "target_handle": "text"
+                }]
+            }
+        });
+        std::fs::write(
+            workflows_dir.join(format!("{workflow_id}.json")),
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+    }
+
+    fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
+        let message = match err {
+            FfiError::Other { message } => message,
+            other => panic!("expected FfiError::Other with envelope JSON, got {other:?}"),
+        };
+        serde_json::from_str(&message).expect("parse workflow error envelope")
+    }
+
     #[tokio::test]
     async fn direct_runtime_runs_workflow_and_session_from_json() {
         let workflow_id = "uniffi-runtime-text";
@@ -795,6 +912,117 @@ mod tests {
             .expect("close session");
         runtime.shutdown().await;
 
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
+        let workflow_id = "uniffi-runtime-interactive-run";
+        let root = create_temp_root(workflow_id);
+        write_human_input_workflow(&root, workflow_id);
+
+        let runtime = FfiPantographRuntime::new(
+            FfiEmbeddedRuntimeConfig {
+                app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+                project_root: root.to_string_lossy().into_owned(),
+                workflow_roots: Vec::new(),
+                max_loaded_sessions: None,
+            },
+            None,
+        )
+        .await
+        .expect("runtime");
+
+        let err = runtime
+            .workflow_run(
+                serde_json::json!({
+                    "workflow_id": workflow_id,
+                    "inputs": [],
+                    "output_targets": [{
+                        "node_id": "text-output-1",
+                        "port_id": "text"
+                    }],
+                    "run_id": "run-human-input"
+                })
+                .to_string(),
+            )
+            .await
+            .expect_err("interactive workflow run should preserve invalid-request envelope");
+
+        let envelope = workflow_error_envelope(err);
+        assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+        assert_eq!(
+            envelope.message,
+            "workflow 'uniffi-runtime-interactive-run' requires interactive input at node 'human-input-1'"
+        );
+
+        runtime.shutdown().await;
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn direct_runtime_workflow_run_session_preserves_invalid_request_envelope() {
+        let workflow_id = "uniffi-runtime-interactive-session";
+        let root = create_temp_root(workflow_id);
+        write_human_input_workflow(&root, workflow_id);
+
+        let runtime = FfiPantographRuntime::new(
+            FfiEmbeddedRuntimeConfig {
+                app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+                project_root: root.to_string_lossy().into_owned(),
+                workflow_roots: Vec::new(),
+                max_loaded_sessions: None,
+            },
+            None,
+        )
+        .await
+        .expect("runtime");
+
+        let create_response_json = runtime
+            .workflow_create_session(
+                serde_json::json!({
+                    "workflow_id": workflow_id,
+                    "usage_profile": "interactive",
+                    "keep_alive": false
+                })
+                .to_string(),
+            )
+            .await
+            .expect("create session");
+        let session_id = serde_json::from_str::<serde_json::Value>(&create_response_json)
+            .expect("parse create response")["session_id"]
+            .as_str()
+            .expect("session_id")
+            .to_string();
+
+        let err = runtime
+            .workflow_run_session(
+                serde_json::json!({
+                    "session_id": session_id,
+                    "inputs": [],
+                    "output_targets": [{
+                        "node_id": "text-output-1",
+                        "port_id": "text"
+                    }],
+                    "run_id": "run-human-input-session"
+                })
+                .to_string(),
+            )
+            .await
+            .expect_err("interactive session run should preserve invalid-request envelope");
+
+        let envelope = workflow_error_envelope(err);
+        assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+        assert_eq!(
+            envelope.message,
+            "workflow 'uniffi-runtime-interactive-session' requires interactive input at node 'human-input-1'"
+        );
+
+        runtime
+            .workflow_close_session(serde_json::json!({ "session_id": session_id }).to_string())
+            .await
+            .expect("close session");
+        runtime.shutdown().await;
         let _ = std::fs::remove_dir_all(root);
     }
 
