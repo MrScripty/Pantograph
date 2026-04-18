@@ -643,6 +643,12 @@ Update during implementation:
   terminal failure/cancellation mismatches for the data-graph wrapper node,
   and orchestration cancellation cannot drift back into completed or failed
   workflow terminals.
+- 2026-04-18: The streamed Tauri edit-session execution boundary now has
+  focused transport coverage for waiting-versus-error result mapping.
+  `workflow_execution_runtime.rs` keeps `waiting_for_input` as a non-error
+  transport outcome while still surfacing terminal backend errors directly,
+  and that mapping now has dedicated tests instead of being inferred from the
+  surrounding runtime execution flow.
 
 ## Commit Cadence Notes
 

@@ -28,6 +28,16 @@ fn send_diagnostics_projection(
     ));
 }
 
+fn finalize_edit_session_execution(waiting_for_input: bool, error: Option<String>) -> Result<(), String> {
+    if waiting_for_input {
+        return Ok(());
+    }
+    if let Some(error) = error {
+        return Err(error);
+    }
+    Ok(())
+}
+
 async fn emit_diagnostics_snapshots(
     app: &AppHandle,
     session_id: &str,
@@ -227,13 +237,7 @@ async fn run_session_graph_snapshot(
         outcome.runtime_model_target,
     )
     .await;
-    if outcome.waiting_for_input {
-        return Ok(());
-    }
-    if let Some(error) = outcome.error {
-        return Err(error);
-    }
-    Ok(())
+    finalize_edit_session_execution(outcome.waiting_for_input, outcome.error)
 }
 
 pub async fn execute_workflow_v2(
@@ -304,4 +308,30 @@ pub async fn run_workflow_session(
         channel,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::finalize_edit_session_execution;
+
+    #[test]
+    fn finalize_edit_session_execution_treats_waiting_as_non_error() {
+        assert!(finalize_edit_session_execution(true, None).is_ok());
+    }
+
+    #[test]
+    fn finalize_edit_session_execution_propagates_terminal_error() {
+        let error = finalize_edit_session_execution(
+            false,
+            Some("workflow execution failed".to_string()),
+        )
+        .expect_err("terminal error should be returned");
+
+        assert_eq!(error, "workflow execution failed");
+    }
+
+    #[test]
+    fn finalize_edit_session_execution_accepts_success_without_error() {
+        assert!(finalize_edit_session_execution(false, None).is_ok());
+    }
 }
