@@ -1068,6 +1068,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_workflow_executor_demand_multiple_returns_redundant_requested_target_outputs() {
+        let graph = make_linear_graph();
+        let event_sink = Arc::new(NullEventSink);
+        let executor_impl = CountingExecutor::new();
+        let workflow_executor = WorkflowExecutor::new("exec_1", graph, event_sink);
+
+        let outputs = workflow_executor
+            .demand_multiple(&["b".to_string(), "c".to_string()], &executor_impl)
+            .await
+            .expect("incremental demand succeeds");
+
+        assert_eq!(executor_impl.count(), 3);
+        assert!(outputs.contains_key("b"));
+        assert!(outputs.contains_key("c"));
+        assert_eq!(outputs["b"]["out"]["task"], serde_json::json!("b"));
+        assert_eq!(outputs["c"]["out"]["task"], serde_json::json!("c"));
+    }
+
+    #[tokio::test]
     async fn test_workflow_executor_human_input_emits_waiting_for_input() {
         let graph = WorkflowGraph {
             id: "interactive-workflow".to_string(),

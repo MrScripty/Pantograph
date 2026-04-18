@@ -722,6 +722,11 @@ Update during implementation:
   execution-budget contract with a current default of one in-flight target so
   later bounded scheduling has an explicit budget owner before additive runtime
   configuration is introduced.
+- 2026-04-18: Fourth Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, teaching the private
+  multi-demand plan to separate requested targets from minimal root execution
+  targets so redundant top-level requests covered by other requested
+  dependents are pruned before coordinator execution begins.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -795,6 +800,9 @@ Update during implementation:
   instead of reopening facade orchestration.
 - Multi-demand execution budget semantics are now also explicit behind a
   private contract with a current default of one in-flight target.
+- Multi-demand planning now also separates caller-visible requested targets
+  from minimal root execution targets so later bounded scheduling can start
+  from the smallest required top-level drive set.
 
 ### Deviations
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use graph_flow::Context;
 
@@ -37,10 +37,28 @@ struct DemandMultipleCoordinator<'a> {
 }
 
 impl DemandMultiplePlan {
-    fn from_requested_targets(node_ids: &[NodeId]) -> Self {
+    fn from_requested_targets(node_ids: &[NodeId], graph: &WorkflowGraph) -> Self {
+        let mut requested_targets = Vec::new();
+        let mut requested_target_set = HashSet::new();
+
+        for node_id in node_ids {
+            requested_targets.push(node_id.clone());
+            requested_target_set.insert(node_id.clone());
+        }
+
+        let execution_targets = requested_targets
+            .iter()
+            .filter(|node_id| !is_redundant_requested_target(graph, node_id, &requested_target_set))
+            .fold(Vec::new(), |mut deduped_targets, node_id| {
+                if !deduped_targets.contains(node_id) {
+                    deduped_targets.push(node_id.clone());
+                }
+                deduped_targets
+            });
+
         Self {
-            requested_targets: node_ids.to_vec(),
-            execution_targets: node_ids.to_vec(),
+            requested_targets,
+            execution_targets,
         }
     }
 
@@ -51,6 +69,30 @@ impl DemandMultiplePlan {
     fn execution_targets(&self) -> &[NodeId] {
         &self.execution_targets
     }
+}
+
+fn is_redundant_requested_target(
+    graph: &WorkflowGraph,
+    node_id: &NodeId,
+    requested_target_set: &HashSet<NodeId>,
+) -> bool {
+    has_requested_dependent(graph, node_id, requested_target_set, &mut HashSet::new())
+}
+
+fn has_requested_dependent(
+    graph: &WorkflowGraph,
+    node_id: &NodeId,
+    requested_target_set: &HashSet<NodeId>,
+    visited: &mut HashSet<NodeId>,
+) -> bool {
+    if !visited.insert(node_id.clone()) {
+        return false;
+    }
+
+    graph.get_dependents(node_id).into_iter().any(|dependent_id| {
+        requested_target_set.contains(&dependent_id)
+            || has_requested_dependent(graph, &dependent_id, requested_target_set, visited)
+    })
 }
 
 impl DemandMultipleResults {
@@ -114,6 +156,8 @@ impl<'a> DemandMultipleCoordinator<'a> {
             self.demand_target(node_id).await?;
         }
 
+        self.collect_requested_outputs().await?;
+
         Ok(self.results.into_outputs())
     }
 
@@ -132,6 +176,27 @@ impl<'a> DemandMultipleCoordinator<'a> {
         self.results.record_success(node_id, output);
         Ok(())
     }
+
+    async fn collect_requested_outputs(&mut self) -> Result<()> {
+        for node_id in self.plan.requested_targets() {
+            let outputs = if let Some(outputs) = self.engine.get_cached(node_id, self.graph) {
+                serde_json::from_value(outputs.clone())?
+            } else {
+                self.engine.demand(
+                    node_id,
+                    self.graph,
+                    self.executor,
+                    self.context,
+                    self.event_sink,
+                    self.extensions,
+                )
+                .await?
+            };
+            self.results.record_success(node_id, outputs);
+        }
+
+        Ok(())
+    }
 }
 
 pub(super) async fn demand_multiple_with_executor(
@@ -139,8 +204,8 @@ pub(super) async fn demand_multiple_with_executor(
     node_ids: &[NodeId],
     executor: &dyn TaskExecutor,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    let plan = DemandMultiplePlan::from_requested_targets(node_ids);
     let graph = workflow_executor.graph.read().await;
+    let plan = DemandMultiplePlan::from_requested_targets(node_ids, &graph);
     workflow_executor
         .emit_incremental_execution_started(graph.id.clone(), plan.requested_targets().to_vec());
     let mut demand_engine = workflow_executor.demand_engine.write().await;
@@ -166,7 +231,7 @@ pub(super) async fn demand_multiple_sequential(
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    let plan = DemandMultiplePlan::from_requested_targets(node_ids);
+    let plan = DemandMultiplePlan::from_requested_targets(node_ids, graph);
 
     execute_sequential_plan(
         engine,
@@ -206,15 +271,62 @@ async fn execute_sequential_plan(
 mod tests {
     use std::collections::HashMap;
 
+    use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
+
     use super::{DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults};
+
+    fn make_linear_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            id: "graph".to_string(),
+            name: "Graph".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "a".to_string(),
+                    node_type: "input".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "b".to_string(),
+                    node_type: "middle".to_string(),
+                    data: serde_json::json!({}),
+                    position: (1.0, 0.0),
+                },
+                GraphNode {
+                    id: "c".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (2.0, 0.0),
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: "e1".to_string(),
+                    source: "a".to_string(),
+                    source_handle: "out".to_string(),
+                    target: "b".to_string(),
+                    target_handle: "in".to_string(),
+                },
+                GraphEdge {
+                    id: "e2".to_string(),
+                    source: "b".to_string(),
+                    source_handle: "out".to_string(),
+                    target: "c".to_string(),
+                    target_handle: "in".to_string(),
+                },
+            ],
+            groups: Vec::new(),
+        }
+    }
 
     #[test]
     fn plan_preserves_requested_target_order_for_event_payloads() {
+        let graph = make_linear_graph();
         let plan = DemandMultiplePlan::from_requested_targets(&[
             "node_b".to_string(),
             "node_a".to_string(),
             "node_c".to_string(),
-        ]);
+        ], &graph);
 
         assert_eq!(
             plan.requested_targets(),
@@ -228,21 +340,39 @@ mod tests {
 
     #[test]
     fn plan_starts_with_sequential_execution_order() {
-        let plan = DemandMultiplePlan::from_requested_targets(&[
-            "node_b".to_string(),
-            "node_a".to_string(),
-            "node_c".to_string(),
-        ]);
+        let graph = make_linear_graph();
+        let plan = DemandMultiplePlan::from_requested_targets(&["a".to_string()], &graph);
 
         assert_eq!(plan.execution_targets(), plan.requested_targets());
     }
 
     #[test]
     fn plan_handles_empty_requests() {
-        let plan = DemandMultiplePlan::from_requested_targets(&[]);
+        let graph = make_linear_graph();
+        let plan = DemandMultiplePlan::from_requested_targets(&[], &graph);
 
         assert!(plan.requested_targets().is_empty());
         assert!(plan.execution_targets().is_empty());
+    }
+
+    #[test]
+    fn plan_prunes_requested_targets_covered_by_requested_dependents() {
+        let graph = make_linear_graph();
+        let plan =
+            DemandMultiplePlan::from_requested_targets(&["b".to_string(), "c".to_string()], &graph);
+
+        assert_eq!(plan.requested_targets(), &["b".to_string(), "c".to_string()]);
+        assert_eq!(plan.execution_targets(), &["c".to_string()]);
+    }
+
+    #[test]
+    fn plan_dedupes_execution_targets_while_preserving_requested_duplicates() {
+        let graph = make_linear_graph();
+        let plan =
+            DemandMultiplePlan::from_requested_targets(&["c".to_string(), "c".to_string()], &graph);
+
+        assert_eq!(plan.requested_targets(), &["c".to_string(), "c".to_string()]);
+        assert_eq!(plan.execution_targets(), &["c".to_string()]);
     }
 
     #[test]

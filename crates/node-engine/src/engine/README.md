@@ -14,7 +14,7 @@ entrypoint while preserving the current public API.
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
-| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, result-merge contract, execution-budget contract, coordinator owner, and the future insertion point for bounded parallel coordination. |
+| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, result-merge contract, execution-budget contract, coordinator owner, and the future insertion point for bounded parallel coordination. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
@@ -53,6 +53,9 @@ changing the public executor surface.
   orchestration or graph-lock choreography.
 - Multi-demand execution-budget semantics should stay behind a private contract
   so default behavior and future additive controls remain explicit.
+- Multi-demand planning should keep caller-visible requested targets separate
+  from minimal root execution targets so later bounded scheduling can prune
+  redundant top-level drives without changing the facade contract.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -75,7 +78,8 @@ future scheduling changes do not have to redefine the facade event payload.
 The same applies to deterministic multi-demand result aggregation semantics.
 The current sequential traversal now also lives behind a coordinator owner that
 the future bounded scheduler can extend. The same directory now also owns the
-current execution-budget contract.
+current execution-budget contract and the requested-target versus root-target
+planning split.
 
 ## Alternatives Rejected
 - Continuing to grow `engine.rs` directly.
@@ -111,6 +115,9 @@ current execution-budget contract.
   through a dedicated coordinator owner.
 - Multi-demand execution currently uses an explicit one-in-flight budget even
   though additive runtime controls have not landed yet.
+- Multi-demand planning currently preserves requested-target order for facade
+  events while pruning redundant top-level execution targets that are already
+  covered by other requested dependents.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

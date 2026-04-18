@@ -397,6 +397,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also has a private execution-budget contract with a current
   default of one in-flight target, giving later bounded scheduling an explicit
   budget owner before additive runtime controls land.
+- Phase 2 planning now also separates caller-visible requested targets from
+  minimal root execution targets so redundant top-level drives are pruned
+  before coordinator execution begins.
 
 **Milestones:**
 
