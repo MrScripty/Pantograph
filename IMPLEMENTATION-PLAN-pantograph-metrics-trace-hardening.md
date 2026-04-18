@@ -370,13 +370,13 @@ modules before semantic hardening deepens them.
 - [x] Split `src-tauri/src/workflow/diagnostics/store.rs` so overlay-state
       bookkeeping, trace-attempt resolution, and projection assembly no longer
       live in one monolithic store file.
-- [ ] Split `src-tauri/src/llm/commands/registry.rs` so request normalization,
+- [x] Split `src-tauri/src/llm/commands/registry.rs` so request normalization,
       runtime-debug aggregation, command wrappers, and tests are not coupled in
       one file.
 - [ ] Review lock ownership and primitive choice in the touched trace and
       diagnostics stores, migrating to the repo-preferred synchronization model
       when the touched code can do so without broad unrelated churn.
-- [ ] Keep existing public entry points stable and route behavior through the
+- [x] Keep existing public entry points stable and route behavior through the
       extracted modules instead of introducing adapter-local duplicates.
 
 **Verification:**
@@ -526,6 +526,10 @@ Update during implementation:
   and cross-layer aggregation helpers out of `llm/commands/registry.rs` into
   `llm/commands/registry/debug.rs` so the command facade only coordinates host
   state lookup, trace requests, and reclaim entrypoints.
+- 2026-04-18: Completed the runtime-debug registry decomposition by extracting
+  the in-file command regression suite out of `llm/commands/registry.rs` into
+  `llm/commands/registry/tests.rs`, leaving `registry.rs` as the command
+  wrapper over `request.rs`, `debug.rs`, and focused tests.
 
 ## Commit Cadence Notes
 

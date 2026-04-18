@@ -18,6 +18,7 @@ LLM gateway, process management, and Tauri command handlers for model and server
 | rag.rs | Source file used by modules in this directory. |
 | registry.rs | Runtime-registry and runtime-debug Tauri command entrypoints. |
 | registry/ | Focused helpers extracted from the runtime-registry command boundary. |
+| registry/tests.rs | Runtime-registry and runtime-debug command regression coverage. |
 | sandbox.rs | Source file used by modules in this directory. |
 | server.rs | Source file used by modules in this directory. |
 | shared.rs | Source file used by modules in this directory. |
