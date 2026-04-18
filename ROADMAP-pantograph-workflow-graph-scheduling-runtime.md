@@ -620,9 +620,10 @@ incremental runs.
 - Broader backend emission coverage for any additional cancellable producer
   paths that still terminate without publishing the canonical cancellation
   event, beyond the now-covered orchestration error exits
-- Extend acceptance coverage for the new `cancelled` envelope across any
-  remaining non-streaming/headless command or binding surfaces that still need
-  explicit parity checks
+- Extend acceptance coverage for the new `cancelled` envelope only where a
+  remaining non-streaming/headless command or runtime-hosted binding surface is
+  still not directly pinned beyond the now-covered Tauri helper, UniFFI, and
+  frontend-HTTP workflow-run paths
 - Binding-platform follow-on: freeze the curated client-facing surface for the
   Pantograph headless binding platform instead of treating wrapper exports as
   the product contract by default
