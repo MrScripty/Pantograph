@@ -26,12 +26,8 @@
   import type { WorkflowEvent } from '../services/workflow/types';
   import {
     AUDIO_RUNTIME_DATA_KEYS,
-    buildAudioRuntimeDataFromCompletedOutputs,
   } from './nodes/workflow/audioOutputState';
-  import {
-    claimWorkflowExecutionIdFromEvent,
-    isWorkflowEventRelevantToExecution,
-  } from '@pantograph/svelte-graph';
+  import { applyWorkflowToolbarEvent } from './workflowToolbarEvents.ts';
   import { get } from 'svelte/store';
   import GraphSelector from './GraphSelector.svelte';
   import { diagnosticsSnapshot, toggleDiagnosticsPanel } from '../stores/diagnosticsStore';
@@ -45,6 +41,7 @@
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
   let activeExecutionId: string | null = null;
+  let waitingForInput = false;
 
   function normalizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim().length > 0) {
@@ -56,60 +53,6 @@
     return String(error);
   }
 
-  function parseTextStreamChunk(chunk: unknown): { mode: 'append' | 'replace'; text: string } | null {
-    if (chunk && typeof chunk === 'object' && 'text' in chunk) {
-      const structured = chunk as { mode?: string; text: unknown };
-      if (typeof structured.text === 'string') {
-        return {
-          mode: structured.mode === 'replace' ? 'replace' : 'append',
-          text: structured.text,
-        };
-      }
-      return null;
-    }
-
-    if (typeof chunk === 'string') {
-      return { mode: 'append', text: chunk };
-    }
-
-    return null;
-  }
-
-  function parseAudioStreamChunk(chunk: unknown): {
-    mode: 'append' | 'replace';
-    audioBase64: string;
-    mimeType: string;
-    sequence: number | null;
-    isFinal: boolean;
-  } | null {
-    if (!chunk || typeof chunk !== 'object') return null;
-    if (!('audio_base64' in chunk)) return null;
-    const structured = chunk as {
-      mode?: string;
-      audio_base64: unknown;
-      mime_type?: unknown;
-      sequence?: unknown;
-      is_final?: unknown;
-    };
-    if (typeof structured.audio_base64 !== 'string' || structured.audio_base64.length === 0) {
-      return null;
-    }
-    const sequence =
-      typeof structured.sequence === 'number' && Number.isFinite(structured.sequence)
-        ? structured.sequence
-        : null;
-    return {
-      mode: structured.mode === 'replace' ? 'replace' : 'append',
-      audioBase64: structured.audio_base64,
-      mimeType:
-        typeof structured.mime_type === 'string' && structured.mime_type.length > 0
-          ? structured.mime_type
-          : 'audio/wav',
-      sequence,
-      isFinal: structured.is_final === true,
-    };
-  }
-
   async function handleRun() {
     if ($isExecuting) return;
 
@@ -118,7 +61,8 @@
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
-    activeExecutionId = $currentSessionId;
+    activeExecutionId = null;
+    waitingForInput = false;
 
     // Subscribe to events - will be cleaned up in handleWorkflowEvent on completion/failure
     currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
@@ -140,6 +84,7 @@
         currentUnsubscribe = null;
       }
       activeExecutionId = null;
+      waitingForInput = false;
     }
   }
 
@@ -150,115 +95,58 @@
       currentUnsubscribe = null;
     }
     activeExecutionId = null;
+    waitingForInput = false;
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
-    activeExecutionId = claimWorkflowExecutionIdFromEvent(event, activeExecutionId);
-    if (!isWorkflowEventRelevantToExecution(event, activeExecutionId)) {
+    const result = applyWorkflowToolbarEvent({
+      event,
+      activeExecutionId,
+      waitingForInput,
+      edges: get(edges),
+      workflow: {
+        setNodeExecutionState,
+        updateNodeRuntimeData,
+        appendStreamContent,
+        setStreamContent,
+      },
+    });
+
+    activeExecutionId = result.activeExecutionId;
+    waitingForInput = result.waitingForInput;
+
+    if (!result.handled) {
       return;
     }
 
     console.log('Workflow event:', event.type, event.data);
 
     switch (event.type) {
-      case 'NodeStarted':
-        setNodeExecutionState((event.data as { node_id: string }).node_id, 'running');
-        break;
-      case 'NodeCompleted': {
-        const completedData = event.data as { node_id: string; outputs?: Record<string, unknown> };
-        setNodeExecutionState(completedData.node_id, 'success');
-
-        // Propagate outputs to connected downstream nodes
-        if (completedData.outputs) {
-          const completedNodeRuntimeData = {
-            ...completedData.outputs,
-            ...(buildAudioRuntimeDataFromCompletedOutputs(
-              'audio',
-              'audio',
-              completedData.outputs
-            ) ?? {}),
-          };
-          updateNodeRuntimeData(completedData.node_id, completedNodeRuntimeData);
-
-          const currentEdges = get(edges);
-          const outgoingEdges = currentEdges.filter(e => e.source === completedData.node_id);
-
-          for (const edge of outgoingEdges) {
-            const sourceHandle = edge.sourceHandle || '';
-            const outputValue = completedData.outputs[sourceHandle];
-            if (outputValue !== undefined) {
-              // Update the target node's data with the incoming value
-              const targetHandle = edge.targetHandle || '';
-              const runtimeData = {
-                [targetHandle]: outputValue,
-                ...(
-                  buildAudioRuntimeDataFromCompletedOutputs(
-                    sourceHandle,
-                    targetHandle,
-                    completedData.outputs
-                  ) ?? {}
-                ),
-              };
-              updateNodeRuntimeData(edge.target, runtimeData);
-            }
-          }
-        }
-        break;
-      }
-      case 'NodeStream': {
-        const streamData = event.data as { node_id: string; port: string; chunk: unknown };
-        const textChunk = parseTextStreamChunk(streamData.chunk);
-        const audioChunk = parseAudioStreamChunk(streamData.chunk);
-        // Follow edges from (node_id, port) to update connected target nodes
-        const currentEdges = get(edges);
-        const outgoing = currentEdges.filter(
-          e => e.source === streamData.node_id && e.sourceHandle === streamData.port
-        );
-        for (const edge of outgoing) {
-          if (textChunk) {
-            if (textChunk.mode === 'replace') {
-              setStreamContent(edge.target, textChunk.text);
-            } else {
-              appendStreamContent(edge.target, textChunk.text);
-            }
-            continue;
-          }
-
-          const targetHandle = edge.targetHandle || 'stream';
-          if (audioChunk && targetHandle === 'stream') {
-            updateNodeRuntimeData(edge.target, {
-              [targetHandle]: streamData.chunk,
-              audio_mime: audioChunk.mimeType,
-              stream_sequence: audioChunk.sequence,
-              stream_is_final: audioChunk.isFinal,
-            });
-            continue;
-          }
-
-          updateNodeRuntimeData(edge.target, {
-            [targetHandle]: streamData.chunk,
-          });
-        }
-        break;
-      }
       case 'NodeError': {
         const errorData = event.data as { node_id: string; error: string };
-        setNodeExecutionState(errorData.node_id, 'error', errorData.error);
         console.error(`Node ${errorData.node_id} failed:`, errorData.error);
         break;
       }
       case 'Completed':
         console.log('Workflow completed successfully');
         workflowError = null;
-        cleanupExecution();
         break;
       case 'Failed': {
         const failedData = event.data as { error: string };
         console.error('Workflow failed:', failedData.error);
         workflowError = failedData.error;
-        cleanupExecution();
         break;
       }
+      case 'Cancelled': {
+        const cancelledData = event.data as { error: string };
+        console.warn('Workflow cancelled:', cancelledData.error);
+        workflowError = null;
+        break;
+      }
+    }
+
+    if (result.shouldCleanup) {
+      cleanupExecution();
     }
   }
 
@@ -377,7 +265,11 @@
         disabled={$isExecuting}
       >
         {#if $isExecuting}
-          [||] Running...
+          {#if waitingForInput}
+            [?] Waiting...
+          {:else}
+            [||] Running...
+          {/if}
         {:else}
           [>] Run
         {/if}

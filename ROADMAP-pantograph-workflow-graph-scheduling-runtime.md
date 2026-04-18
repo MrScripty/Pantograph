@@ -561,6 +561,11 @@ incremental runs.
   and Tauri diagnostics restart tests now pin that stale dirty-task and
   incremental-task overlays are cleared when an execution id is reused for a
   fresh attempt.
+- The app-owned workflow toolbar now also consumes backend workflow events
+  through a focused helper built on the shared reducer path instead of keeping
+  a stale partial switch in the Svelte component, and the app-local workflow
+  execution-state type now includes the backend-owned `waiting` state needed
+  for interactive runs.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics

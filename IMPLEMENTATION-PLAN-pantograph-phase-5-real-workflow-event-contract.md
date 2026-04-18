@@ -563,6 +563,14 @@ Update during implementation:
   restarted runs clear stale `last_dirty_tasks` and
   `last_incremental_task_ids` instead of carrying mutation state across
   attempts.
+- 2026-04-18: Another consumer-parity slice landed in the app GUI boundary.
+  `src/components/WorkflowToolbar.svelte` now routes backend workflow events
+  through a focused helper built on the shared graph reducer instead of
+  hand-maintaining a stale partial event switch, and the app-local workflow
+  type surface now admits the backend-owned `waiting` node execution state.
+  Focused frontend coverage now pins the toolbar path for
+  `WaitingForInput`/resume, `GraphModified`, completed output mirroring, and
+  streamed runtime-data propagation.
 
 ## Commit Cadence Notes
 

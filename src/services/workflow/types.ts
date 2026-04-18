@@ -399,7 +399,7 @@ export interface WorkflowGraphMutationResponse {
   workflow_event?: WorkflowEvent<'GraphModified'> | null;
 }
 
-export type NodeExecutionState = 'idle' | 'running' | 'success' | 'error';
+export type NodeExecutionState = 'idle' | 'running' | 'waiting' | 'success' | 'error';
 
 /** Extended execution info including error messages */
 export interface NodeExecutionInfo {
