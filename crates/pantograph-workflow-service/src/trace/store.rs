@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use parking_lot::Mutex;
 
 use crate::workflow::WorkflowServiceError;
 
@@ -266,18 +267,11 @@ impl WorkflowTraceStore {
     ) -> Result<WorkflowTraceSnapshotResponse, WorkflowServiceError> {
         let request = request.normalized();
         request.validate()?;
-        Ok(self
-            .state
-            .lock()
-            .expect("workflow trace lock poisoned")
-            .snapshot(&request))
+        Ok(self.state.lock().snapshot(&request))
     }
 
     pub fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
-        self.state
-            .lock()
-            .expect("workflow trace lock poisoned")
-            .snapshot_all()
+        self.state.lock().snapshot_all()
     }
 
     pub fn select_runtime_metrics(
@@ -286,15 +280,11 @@ impl WorkflowTraceStore {
     ) -> Result<super::types::WorkflowTraceRuntimeSelection, WorkflowServiceError> {
         let request = request.normalized();
         request.validate()?;
-        Ok(self
-            .state
-            .lock()
-            .expect("workflow trace lock poisoned")
-            .runtime_metrics_selection(&request))
+        Ok(self.state.lock().runtime_metrics_selection(&request))
     }
 
     pub fn clear_history(&self) -> WorkflowTraceSnapshotResponse {
-        let mut state = self.state.lock().expect("workflow trace lock poisoned");
+        let mut state = self.state.lock();
         state.clear_history();
         state.snapshot_all()
     }
@@ -307,7 +297,6 @@ impl WorkflowTraceStore {
     ) {
         self.state
             .lock()
-            .expect("workflow trace lock poisoned")
             .set_execution_metadata(execution_id, workflow_id, workflow_name);
     }
 
@@ -318,7 +307,6 @@ impl WorkflowTraceStore {
     ) {
         self.state
             .lock()
-            .expect("workflow trace lock poisoned")
             .set_execution_graph_context(execution_id, graph_context);
     }
 
@@ -327,7 +315,7 @@ impl WorkflowTraceStore {
         event: &WorkflowTraceEvent,
         timestamp_ms: u64,
     ) -> WorkflowTraceSnapshotResponse {
-        let mut state = self.state.lock().expect("workflow trace lock poisoned");
+        let mut state = self.state.lock();
         state.record_event(event, timestamp_ms);
         state.snapshot_all()
     }

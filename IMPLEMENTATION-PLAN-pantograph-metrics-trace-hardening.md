@@ -373,7 +373,7 @@ modules before semantic hardening deepens them.
 - [x] Split `src-tauri/src/llm/commands/registry.rs` so request normalization,
       runtime-debug aggregation, command wrappers, and tests are not coupled in
       one file.
-- [ ] Review lock ownership and primitive choice in the touched trace and
+- [x] Review lock ownership and primitive choice in the touched trace and
       diagnostics stores, migrating to the repo-preferred synchronization model
       when the touched code can do so without broad unrelated churn.
 - [x] Keep existing public entry points stable and route behavior through the
@@ -386,7 +386,7 @@ modules before semantic hardening deepens them.
   and poisoning/cascade behavior in the touched stores
 - README review to ensure extracted boundaries remain documented
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 3: Harden Backend Trace Filter And Timing Semantics
 
@@ -530,6 +530,11 @@ Update during implementation:
   the in-file command regression suite out of `llm/commands/registry.rs` into
   `llm/commands/registry/tests.rs`, leaving `registry.rs` as the command
   wrapper over `request.rs`, `debug.rs`, and focused tests.
+- 2026-04-18: Completed the touched-store lock ownership review by switching
+  `WorkflowTraceStore` and `WorkflowDiagnosticsStore` from
+  `std::sync::Mutex` poison-based locking to `parking_lot::Mutex` for their
+  synchronous critical sections, removing poison-cascade `expect(...)` paths
+  without widening lock scope or introducing async-held locks.
 
 ## Commit Cadence Notes
 

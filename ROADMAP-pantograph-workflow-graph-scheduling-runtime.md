@@ -50,12 +50,16 @@ metrics/trace follow-up work, runtime-adapter sequencing, Scheduler V2
 execution constraints, workflow-event completion sequencing, and parallel
 execution refactor details are tracked in those dedicated plans.
 The dedicated metrics/trace hardening plan now also reflects current
-implementation reality: Milestone 1 is complete, Milestone 2 is in progress,
-the backend trace store has already been decomposed into `query.rs` and
-`state.rs` behind the existing `WorkflowTraceStore` facade, backend queue
-timing is authoritative-only, queue attribution is execution-first, and
-session/workflow-scoped runtime metric reuse now requires a unique backend
-trace match instead of collapsing to the first trace.
+implementation reality: Milestone 1 is complete, Milestone 2 is complete, the
+backend trace store has already been decomposed into `query.rs` and `state.rs`
+behind the existing `WorkflowTraceStore` facade, Tauri diagnostics now split
+overlay and trace-attempt ownership into `overlay.rs` and `attempts.rs`,
+runtime-debug registry commands now split request/debug/test boundaries into
+`request.rs`, `debug.rs`, and `tests.rs`, backend queue timing is
+authoritative-only, queue attribution is execution-first, session/workflow-
+scoped runtime metric reuse now requires a unique backend trace match instead
+of collapsing to the first trace, and the touched synchronous stores now use
+`parking_lot::Mutex` instead of poison-based `std::sync::Mutex` locking.
 
 Milestone 5 transport hardening, binding review, recovery/idempotency
 verification, source-of-truth close-out, and the Milestone 6 diagnostics,
@@ -196,9 +200,9 @@ reconciled as the final source of truth.
 
 ### Active implementation stream
 
-- Metrics/trace follow-up hardening, with backend trace decomposition underway
-  and the remaining work concentrated in Tauri diagnostics/runtime-debug
-  decomposition plus residual producer/acceptance coverage
+- Metrics/trace follow-up hardening, with decomposition and lock-alignment
+  complete and the remaining work concentrated in residual producer and
+  acceptance coverage
 - Workflow event contract completion planning and backend-owned transport
   parity preparation
 - Binding platform planning and verification expansion for C#, Python, and

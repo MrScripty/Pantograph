@@ -1,6 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use parking_lot::Mutex;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceRuntimeMetrics,
@@ -51,10 +52,7 @@ impl WorkflowDiagnosticsStore {
 
     pub fn snapshot(&self) -> WorkflowDiagnosticsProjection {
         let traces = self.trace_store.snapshot_all();
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         state.prune_overlays(&traces);
         state.snapshot(&traces)
     }
@@ -75,10 +73,7 @@ impl WorkflowDiagnosticsStore {
 
     pub fn clear_history(&self) -> WorkflowDiagnosticsProjection {
         let traces = self.trace_store.clear_history();
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         state.clear_history();
         state.snapshot(&traces)
     }
@@ -161,10 +156,7 @@ impl WorkflowDiagnosticsStore {
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         captured_at_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         state.runtime = match workflow_id {
             Some(workflow_id) => DiagnosticsRuntimeSnapshot::from_capabilities(
                 workflow_id,
@@ -197,10 +189,7 @@ impl WorkflowDiagnosticsStore {
         last_error: Option<String>,
         captured_at_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         state.scheduler = match session_id {
             Some(session_id) => DiagnosticsSchedulerSnapshot {
                 workflow_id,
@@ -247,10 +236,7 @@ impl WorkflowDiagnosticsStore {
                     },
                 )
             });
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         if overlay_decision.reset_overlay {
             if let Some(execution_id) = execution_id.as_deref() {
                 state.overlays_by_execution_id.remove(execution_id);
@@ -294,10 +280,7 @@ impl WorkflowDiagnosticsStore {
                     },
                 )
             });
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         if overlay_decision.reset_overlay {
             if let Some(execution_id) = execution_id.as_deref() {
                 state.overlays_by_execution_id.remove(execution_id);
@@ -321,10 +304,7 @@ impl WorkflowDiagnosticsStore {
         let traces = self.trace_store.record_event(trace_event, timestamp_ms);
         let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
         let overlay_decision = overlay_record_decision(previous_state, current_state);
-        let mut state = self
-            .state
-            .lock()
-            .expect("workflow diagnostics lock poisoned");
+        let mut state = self.state.lock();
         if overlay_decision.reset_overlay {
             state.overlays_by_execution_id.remove(&execution_id);
         }

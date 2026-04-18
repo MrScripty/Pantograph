@@ -13,6 +13,7 @@ thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
 
 # Shared framework/domain crates
 node-engine = { path = "../node-engine" }
