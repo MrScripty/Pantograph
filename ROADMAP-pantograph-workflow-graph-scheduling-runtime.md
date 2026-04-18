@@ -587,6 +587,10 @@ incremental runs.
   task ids. Those transport semantics are therefore covered directly at
   translation time instead of only in downstream diagnostics and GUI reducer
   tests.
+- UniFFI buffered-event coverage now also parses serialized workflow-event JSON
+  and pins additive payload parity for `WaitingForInput`, `GraphModified`,
+  `WorkflowCancelled`, and `IncrementalExecutionStarted`, tightening the
+  binding-side acceptance path beyond canonical event-label checks alone.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics

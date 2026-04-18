@@ -599,6 +599,13 @@ Update during implementation:
   incremental-resume task ids survive through the trace and transport
   boundaries without relying only on downstream diagnostics-store or GUI
   reducer assertions.
+- 2026-04-18: UniFFI buffered-event acceptance coverage now also parses the
+  serialized event JSON instead of only checking canonical type labels. The
+  binding boundary now directly pins additive payload parity for
+  `WaitingForInput`, `GraphModified`, `WorkflowCancelled`, and
+  `IncrementalExecutionStarted`, so the shared client-facing binding surface
+  does not silently drift on key workflow ids, execution ids, prompts, dirty
+  tasks, or resumed task lists.
 
 ## Commit Cadence Notes
 

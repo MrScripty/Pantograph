@@ -1231,16 +1231,34 @@ mod tests {
         assert_eq!(events[1].event_type, "GraphModified");
         assert_eq!(events[2].event_type, "WorkflowCancelled");
         assert_eq!(events[3].event_type, "IncrementalExecutionStarted");
-        assert!(events[0]
-            .event_json
-            .contains("\"type\":\"waitingForInput\""));
-        assert!(events[1].event_json.contains("\"type\":\"graphModified\""));
-        assert!(events[2]
-            .event_json
-            .contains("\"type\":\"workflowCancelled\""));
-        assert!(events[3]
-            .event_json
-            .contains("\"type\":\"incrementalExecutionStarted\""));
+        let waiting_json: serde_json::Value =
+            serde_json::from_str(&events[0].event_json).expect("parse waiting json");
+        let graph_modified_json: serde_json::Value =
+            serde_json::from_str(&events[1].event_json).expect("parse graph modified json");
+        let cancelled_json: serde_json::Value =
+            serde_json::from_str(&events[2].event_json).expect("parse cancelled json");
+        let incremental_json: serde_json::Value =
+            serde_json::from_str(&events[3].event_json).expect("parse incremental json");
+
+        assert_eq!(waiting_json["type"], "waitingForInput");
+        assert_eq!(waiting_json["taskId"], "human-input-1");
+        assert_eq!(waiting_json["prompt"], "Approve deployment?");
+
+        assert_eq!(graph_modified_json["type"], "graphModified");
+        assert_eq!(graph_modified_json["workflowId"], "wf-1");
+        assert_eq!(graph_modified_json["executionId"], "exec-1");
+        assert_eq!(
+            graph_modified_json["dirtyTasks"],
+            serde_json::json!(["node-a", "node-b"])
+        );
+
+        assert_eq!(cancelled_json["type"], "workflowCancelled");
+        assert_eq!(cancelled_json["error"], "workflow run cancelled during execution");
+
+        assert_eq!(incremental_json["type"], "incrementalExecutionStarted");
+        assert_eq!(incremental_json["workflowId"], "wf-1");
+        assert_eq!(incremental_json["executionId"], "exec-1");
+        assert_eq!(incremental_json["tasks"], serde_json::json!(["node-c"]));
     }
 
     #[cfg(feature = "frontend-http")]
