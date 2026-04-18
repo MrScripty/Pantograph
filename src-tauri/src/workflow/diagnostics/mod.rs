@@ -4,6 +4,7 @@
 //! workflow run state, node lifecycle state, and retained event history are all
 //! derived in Rust before the GUI renders them.
 
+mod overlay;
 mod store;
 mod trace;
 mod types;

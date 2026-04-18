@@ -3,7 +3,7 @@ use pantograph_workflow_service::{
     WorkflowTraceSummary,
 };
 
-use super::store::{DiagnosticsNodeOverlay, DiagnosticsRunOverlay};
+use super::overlay::{DiagnosticsNodeOverlay, DiagnosticsRunOverlay};
 use super::types::{
     diagnostics_node_status, diagnostics_run_status, DiagnosticsNodeTrace, DiagnosticsRunTrace,
     DiagnosticsTraceRuntimeMetrics,

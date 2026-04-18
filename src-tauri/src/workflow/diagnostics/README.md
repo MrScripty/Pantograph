@@ -11,7 +11,8 @@ TypeScript or command handlers.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `mod.rs` | Module entrypoint that exposes the diagnostics store and transport-facing DTOs. |
-| `store.rs` | Owns the retained overlay state and merges it with backend-owned trace snapshots. |
+| `overlay.rs` | Owns retained overlay state, pruning, and workflow-event overlay mutation helpers. |
+| `store.rs` | Owns the diagnostics facade and trace-attempt coordination over backend-owned trace snapshots. |
 | `trace.rs` | Converts workflow events and backend trace summaries into diagnostics-friendly run projections. |
 | `types.rs` | Defines the Tauri-facing diagnostics DTOs and snapshot request/response shapes. |
 | `tests.rs` | Regression coverage for projection, replay, and clear-history behavior. |
@@ -37,12 +38,13 @@ the frontend would become a second owner of execution state.
   contract instead of diverging in Tauri.
 
 ## Decision
-Keep Tauri diagnostics as a projection-only boundary. `store.rs` owns only the
-retained overlays that do not exist in canonical workflow trace state, while
-`trace.rs` and `types.rs` adapt backend-owned `WorkflowTraceStore`,
-runtime-lifecycle snapshots, and scheduler snapshots into the GUI diagnostics
-shape. This preserves one backend source of truth while still supporting
-desktop debug views and retained event history.
+Keep Tauri diagnostics as a projection-only boundary. `store.rs` owns the
+facade and trace-attempt coordination, `overlay.rs` owns the retained overlays
+that do not exist in canonical workflow trace state, and `trace.rs` plus
+`types.rs` adapt backend-owned `WorkflowTraceStore`, runtime-lifecycle
+snapshots, and scheduler snapshots into the GUI diagnostics shape. This
+preserves one backend source of truth while still supporting desktop debug
+views and retained event history.
 
 ## Alternatives Rejected
 - Rebuild diagnostics state in TypeScript.

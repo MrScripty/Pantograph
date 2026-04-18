@@ -509,6 +509,10 @@ Update during implementation:
 - 2026-04-18: Reconciled the hardening plan and roadmap after the queue-timing,
   execution-attribution, unique-match runtime selection, and backend trace
   decomposition slices so Milestones 2 through 4 reflect current repo state.
+- 2026-04-18: Continued Milestone 2 by extracting Tauri diagnostics overlay
+  state, pruning, and event-to-overlay mutation helpers out of
+  `workflow/diagnostics/store.rs` into `workflow/diagnostics/overlay.rs` while
+  keeping trace-attempt coordination in the facade for the next slice.
 
 ## Commit Cadence Notes
 
