@@ -597,7 +597,7 @@ backend-owned coordinator.
 - Focused tests for independent-branch parallelism, shared-dependency dedupe,
   failure cleanup, and waiting-for-input behavior
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Preserve Event, Trace, And Consumer Semantics
 
@@ -713,6 +713,10 @@ Update during implementation:
   multi-demand result collector that freezes deterministic last-write-wins
   result-map merge semantics separately from the execution loop that currently
   populates it.
+- 2026-04-18: First Milestone 3 coordinator-prep slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing a private
+  multi-demand coordinator owner that still runs sequentially but now owns the
+  execution loop the future bounded scheduler will replace.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -781,6 +785,9 @@ Update during implementation:
 - Multi-demand result aggregation now also lives behind a private collector so
   deterministic merge semantics are explicit before concurrent completion paths
   are introduced.
+- The current sequential multi-demand traversal now also runs behind a private
+  coordinator owner so later bounded scheduling can change one internal owner
+  instead of reopening facade orchestration.
 
 ### Deviations
 

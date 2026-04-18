@@ -19,6 +19,17 @@ struct DemandMultipleResults {
     outputs: HashMap<NodeId, HashMap<String, serde_json::Value>>,
 }
 
+struct DemandMultipleCoordinator<'a> {
+    engine: &'a mut DemandEngine,
+    plan: &'a DemandMultiplePlan,
+    graph: &'a WorkflowGraph,
+    executor: &'a dyn TaskExecutor,
+    context: &'a Context,
+    event_sink: &'a dyn EventSink,
+    extensions: &'a ExecutorExtensions,
+    results: DemandMultipleResults,
+}
+
 impl DemandMultiplePlan {
     fn from_requested_targets(node_ids: &[NodeId]) -> Self {
         Self {
@@ -47,6 +58,53 @@ impl DemandMultipleResults {
 
     fn into_outputs(self) -> HashMap<NodeId, HashMap<String, serde_json::Value>> {
         self.outputs
+    }
+}
+
+impl<'a> DemandMultipleCoordinator<'a> {
+    fn new(
+        engine: &'a mut DemandEngine,
+        plan: &'a DemandMultiplePlan,
+        graph: &'a WorkflowGraph,
+        executor: &'a dyn TaskExecutor,
+        context: &'a Context,
+        event_sink: &'a dyn EventSink,
+        extensions: &'a ExecutorExtensions,
+    ) -> Self {
+        Self {
+            engine,
+            plan,
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+            results: DemandMultipleResults::default(),
+        }
+    }
+
+    async fn run_sequential(mut self) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
+        for node_id in self.plan.execution_targets() {
+            self.demand_target(node_id).await?;
+        }
+
+        Ok(self.results.into_outputs())
+    }
+
+    async fn demand_target(&mut self, node_id: &NodeId) -> Result<()> {
+        let output = self
+            .engine
+            .demand(
+                node_id,
+                self.graph,
+                self.executor,
+                self.context,
+                self.event_sink,
+                self.extensions,
+            )
+            .await?;
+        self.results.record_success(node_id, output);
+        Ok(())
     }
 }
 
@@ -105,16 +163,17 @@ async fn execute_sequential_plan(
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    let mut results = DemandMultipleResults::default();
-
-    for node_id in plan.execution_targets() {
-        let output = engine
-            .demand(node_id, graph, executor, context, event_sink, extensions)
-            .await?;
-        results.record_success(node_id, output);
-    }
-
-    Ok(results.into_outputs())
+    DemandMultipleCoordinator::new(
+        engine,
+        plan,
+        graph,
+        executor,
+        context,
+        event_sink,
+        extensions,
+    )
+    .run_sequential()
+    .await
 }
 
 #[cfg(test)]

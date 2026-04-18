@@ -391,6 +391,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also has a private multi-demand result collector that makes the
   current deterministic result-map merge semantics explicit before concurrent
   completion paths are introduced.
+- Phase 2 now also executes the sequential multi-demand path through a private
+  coordinator owner so bounded scheduling can land by changing coordinator
+  internals instead of reopening facade orchestration.
 
 **Milestones:**
 
