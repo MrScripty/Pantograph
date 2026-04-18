@@ -28,4 +28,9 @@ defmodule PantographNativeSmokeTest do
     assert Enum.any?(errors, &String.contains?(&1, "unknown node 'missing-source'"))
     assert Enum.any?(errors, &String.contains?(&1, "unknown node 'missing-target'"))
   end
+
+  test "workflow_from_json returns parse errors as BEAM tuples" do
+    assert {:error, message} = Pantograph.Native.workflow_from_json("{")
+    assert String.contains?(message, "Parse error:")
+  end
 end

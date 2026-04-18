@@ -419,6 +419,9 @@ Corrections applied:
 - Host-side smoke coverage now also includes a backend-owned validation error
   path via `workflow_validate/1`, not just successful NIF loading and
   graph-round-trip calls.
+- Host-side smoke coverage now also includes a wrapper-visible parse failure
+  path, proving that malformed workflow JSON crosses the NIF boundary back to
+  BEAM as a structured `{:error, message}` tuple.
 
 ### Milestone 4: Source-of-Truth And Contract Reconciliation
 
@@ -490,3 +493,6 @@ Corrections applied:
   failure path by sending an invalid edge reference through
   `workflow_add_edge/5` and `workflow_validate/1`, proving that backend-owned
   validation errors cross the NIF boundary into BEAM intact.
+- 2026-04-18: The BEAM smoke harness now also asserts malformed workflow JSON
+  handling through `workflow_from_json/1`, confirming the current Rustler
+  adapter contract returns parse failures to BEAM as `{:error, message}`.

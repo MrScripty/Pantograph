@@ -27,5 +27,8 @@ local build artifact and exercising a small public contract surface.
 - This harness now also pins a backend-owned validation error path by
   asserting that unknown edge endpoints round-trip back to BEAM as validation
   strings through `workflow_validate/1`.
+- This harness also pins a wrapper-visible parse failure path by asserting
+  that malformed workflow JSON returns an `{:error, message}` tuple through
+  `workflow_from_json/1`.
 - Broader workflow-event and error-envelope coverage can be added here as the
   dedicated Rustler contract extraction work lands.
