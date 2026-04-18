@@ -757,6 +757,11 @@ Update during implementation:
   per-window completion and interruption outcomes so later concurrent window
   execution can preserve the same backend-owned stop semantics currently
   enforced sequentially.
+- 2026-04-18: Sixth Milestone 3 coordinator-prep slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, moving direct
+  `DemandEngine` demand/cache access behind a private window runner so later
+  concurrent window execution can change engine ownership without reopening
+  batch planning and outcome contracts.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -848,6 +853,8 @@ Update during implementation:
   sequentially for now.
 - The coordinator now also owns explicit per-window completion and
   interruption outcomes rather than only batch-level aggregation.
+- Direct engine access now also lives behind a private window runner rather
+  than being spread across coordinator methods.
 
 ### Deviations
 

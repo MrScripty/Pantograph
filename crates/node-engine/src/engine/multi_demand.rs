@@ -53,14 +53,18 @@ struct DemandExecutionBudget {
 
 struct DemandMultipleCoordinator<'a> {
     budget: DemandExecutionBudget,
-    engine: &'a mut DemandEngine,
     plan: &'a DemandMultiplePlan,
+    window_runner: DemandWindowRunner<'a>,
+    results: DemandMultipleResults,
+}
+
+struct DemandWindowRunner<'a> {
+    engine: &'a mut DemandEngine,
     graph: &'a WorkflowGraph,
     executor: &'a dyn TaskExecutor,
     context: &'a Context,
     event_sink: &'a dyn EventSink,
     extensions: &'a ExecutorExtensions,
-    results: DemandMultipleResults,
 }
 
 impl DemandMultiplePlan {
@@ -241,13 +245,15 @@ impl<'a> DemandMultipleCoordinator<'a> {
     ) -> Self {
         Self {
             budget: DemandExecutionBudget::sequential(),
-            engine,
             plan,
-            graph,
-            executor,
-            context,
-            event_sink,
-            extensions,
+            window_runner: DemandWindowRunner::new(
+                engine,
+                graph,
+                executor,
+                context,
+                event_sink,
+                extensions,
+            ),
             results: DemandMultipleResults::default(),
         }
     }
@@ -275,17 +281,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
     }
 
     async fn demand_target(&mut self, node_id: &NodeId) -> Result<()> {
-        let output = self
-            .engine
-            .demand(
-                node_id,
-                self.graph,
-                self.executor,
-                self.context,
-                self.event_sink,
-                self.extensions,
-            )
-            .await?;
+        let output = self.window_runner.demand_target(node_id).await?;
         self.results.record_success(node_id, output);
         Ok(())
     }
@@ -325,23 +321,58 @@ impl<'a> DemandMultipleCoordinator<'a> {
 
     async fn collect_requested_outputs(&mut self) -> Result<()> {
         for node_id in self.plan.requested_targets() {
-            let outputs = if let Some(outputs) = self.engine.get_cached(node_id, self.graph) {
-                serde_json::from_value(outputs.clone())?
-            } else {
-                self.engine.demand(
-                    node_id,
-                    self.graph,
-                    self.executor,
-                    self.context,
-                    self.event_sink,
-                    self.extensions,
-                )
-                .await?
-            };
+            let outputs = self.window_runner.load_requested_outputs(node_id).await?;
             self.results.record_success(node_id, outputs);
         }
 
         Ok(())
+    }
+}
+
+impl<'a> DemandWindowRunner<'a> {
+    fn new(
+        engine: &'a mut DemandEngine,
+        graph: &'a WorkflowGraph,
+        executor: &'a dyn TaskExecutor,
+        context: &'a Context,
+        event_sink: &'a dyn EventSink,
+        extensions: &'a ExecutorExtensions,
+    ) -> Self {
+        Self {
+            engine,
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+        }
+    }
+
+    async fn demand_target(
+        &mut self,
+        node_id: &NodeId,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        self.engine
+            .demand(
+                node_id,
+                self.graph,
+                self.executor,
+                self.context,
+                self.event_sink,
+                self.extensions,
+            )
+            .await
+    }
+
+    async fn load_requested_outputs(
+        &mut self,
+        node_id: &NodeId,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        if let Some(outputs) = self.engine.get_cached(node_id, self.graph) {
+            serde_json::from_value(outputs.clone()).map_err(Into::into)
+        } else {
+            self.demand_target(node_id).await
+        }
     }
 }
 

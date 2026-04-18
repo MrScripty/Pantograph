@@ -419,6 +419,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also has explicit per-window completion and interruption
   outcomes, so future concurrent window execution can preserve the same
   backend-owned stop semantics as the current sequential runner.
+- Phase 2 now also routes direct engine demand/cache access through a private
+  window runner, reducing the remaining ownership reshaping needed before
+  concurrent window execution can land.
 
 **Milestones:**
 
