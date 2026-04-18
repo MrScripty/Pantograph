@@ -338,6 +338,18 @@ Corrections applied:
 - Update this plan and the roadmap if the decomposition map changes the
   expected sequencing.
 
+#### Current status note
+
+- `workflow_event_contract.rs`, `workflow_host_contract.rs`, and
+  `elixir_data_graph_executor.rs` already exist as focused Rustler boundary
+  modules.
+- `resource_registration.rs` is now also carved out of the NIF facade so
+  load-time resource registration no longer deepens the main Rustler entry
+  file or relies on ignored must-use results in `load`.
+- `mix` and `elixir` are not installed in the current environment, so BEAM
+  host verification scaffolding can be authored here but not executed locally
+  until host tooling is available.
+
 ### Milestone 2: Option 1 Pure-Rust Extraction And Cargo-Test Coverage
 
 #### Tasks
@@ -446,3 +458,7 @@ Corrections applied:
   `cargo test -p pantograph_rustler` remains blocked only by the separate
   BEAM-provided `enif_*` linker-symbol boundary this plan is intended to
   address.
+- 2026-04-18: Milestone 1 decomposition continued inside
+  `crates/pantograph-rustler`: resource registration moved into a focused
+  `resource_registration.rs` module so `lib.rs` remains facade-first while the
+  NIF load boundary becomes easier to evolve for later BEAM harness work.

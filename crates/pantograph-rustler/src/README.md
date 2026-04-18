@@ -8,6 +8,7 @@ Rustler NIF adapter surface for Pantograph workflow APIs.
 | ----------- | ----------- |
 | `lib.rs` | NIF entrypoints, resource wrappers, and BEAM-facing adapter composition. |
 | `elixir_data_graph_executor.rs` | Focused orchestration data-graph bridge from Rustler into backend-owned workflow execution. |
+| `resource_registration.rs` | Focused Rustler resource registration boundary used during NIF load. |
 | `workflow_event_contract.rs` | Focused workflow-event JSON serialization helpers for the BEAM event channel. |
 | `workflow_host_contract.rs` | Focused frontend-HTTP request/response and workflow-error envelope helpers for Rustler. |
 
@@ -50,3 +51,7 @@ Default (`no features`):
   `elixir_data_graph_executor.rs`, isolating the Rustler-specific callback
   bridge from the NIF facade while keeping the actual async execution contract
   backend-owned.
+- NIF load-time resource registration now lives in
+  `resource_registration.rs`, isolating the Rustler resource macro boundary
+  from the public NIF facade and removing the previous ignored-return warning
+  pattern from `lib.rs`.

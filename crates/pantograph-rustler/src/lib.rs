@@ -58,11 +58,13 @@ use pantograph_workflow_service::{
 extern crate workflow_nodes;
 
 mod elixir_data_graph_executor;
+mod resource_registration;
 mod workflow_event_contract;
 #[cfg(feature = "frontend-http")]
 mod workflow_host_contract;
 
 use elixir_data_graph_executor::ElixirDataGraphExecutor;
+use resource_registration::register_resources;
 use workflow_event_contract::serialize_workflow_event_json;
 #[cfg(feature = "frontend-http")]
 use workflow_host_contract::{workflow_run_host_request, workflow_run_scheduler_request};
@@ -1999,12 +2001,7 @@ fn pumas_is_ollama_running(resource: ResourceArc<PumasApiResource>) -> bool {
 // ============================================================================
 
 fn load(env: Env, _info: Term) -> bool {
-    rustler::resource!(WorkflowExecutorResource, env);
-    rustler::resource!(OrchestrationStoreResource, env);
-    rustler::resource!(NodeRegistryResource, env);
-    rustler::resource!(PumasApiResource, env);
-    rustler::resource!(ExtensionsResource, env);
-    rustler::resource!(InferenceGatewayResource, env);
+    register_resources(env);
     true
 }
 
