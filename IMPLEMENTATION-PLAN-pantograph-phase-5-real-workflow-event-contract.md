@@ -385,17 +385,17 @@ spreads.
 consistently.
 
 **Tasks:**
-- [ ] Add or normalize event emission for the remaining interactive paths
-      beyond the current human-input pause path where backend semantics still
-      degrade or flatten.
+- [x] Add or normalize event emission for the current backend-owned
+      interactive paths in scope so human-input pauses and orchestration
+      subgraph waits no longer flatten or degrade at the producer boundary.
 - [x] Add or normalize graph-mutation and incremental-run events for the
       remaining backend-owned execution and edit-session paths that still do
       not emit them consistently.
 - [x] Introduce additive backend-owned structured cancellation outcomes where
       needed so transport boundaries no longer depend on free-form message
       classification.
-- [ ] Keep emission ownership in backend crates and avoid adapter-generated
-      semantic events.
+- [x] Keep emission ownership in backend crates and avoid adapter-generated
+      semantic events for the current execution paths covered by this phase.
 
 **Verification:**
 - `cargo test -p node-engine`
@@ -403,20 +403,20 @@ consistently.
 - Focused tests for interactive pause, cancellation, graph-mutation, and
   incremental-run producer paths
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 4: Transport And Consumer Parity
 
 **Goal:** Keep every boundary aligned with the backend-owned event contract.
 
 **Tasks:**
-- [ ] Update Tauri workflow event transport, diagnostics mapping, and headless
+- [x] Update Tauri workflow event transport, diagnostics mapping, and headless
       readers so they forward additive backend fields without reinterpretation.
-- [ ] Update UniFFI, Rustler, and any other affected wrappers so mirrored event
+- [x] Update UniFFI, Rustler, and any other affected wrappers so mirrored event
       labels and envelopes remain aligned with the backend contract.
-- [ ] Update `packages/svelte-graph` TypeScript contracts and read-only event
+- [x] Update `packages/svelte-graph` TypeScript contracts and read-only event
       consumers in the same logical slices as Rust DTO changes.
-- [ ] Validate boundary payloads at the boundary and keep generated bindings
+- [x] Validate boundary payloads at the boundary and keep generated bindings
       or mirrored types synchronized in the same commits.
 
 **Verification:**
@@ -425,7 +425,7 @@ consistently.
 - Targeted binding tests where the event envelope changes
 - `npm run typecheck`
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Acceptance, Recovery, And Source-of-Truth Close-Out
 
@@ -448,14 +448,15 @@ leave accurate documentation behind.
 - `npm run typecheck`
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Completed
 
 Milestone 5 acceptance and replay coverage is now substantially landed. The
 Milestone 5 close-out tasks in this plan are now complete. The overall Phase 5
 roadmap target remains in progress because the dedicated roadmap still carries
-explicit frozen follow-on gaps around remaining producer coverage, cancellation
-surface breadth, and binding-platform scope decisions beyond the slices landed
-here.
+explicit frozen follow-on gaps around future producer coverage that may be
+introduced by Scheduler V2, parallel demand execution, or incremental graph
+execution, along with binding-platform scope decisions beyond the slices
+landed here.
 
 ## Execution Notes
 
