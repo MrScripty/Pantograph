@@ -518,6 +518,10 @@ Update during implementation:
   decisions out of `workflow/diagnostics/store.rs` into
   `workflow/diagnostics/attempts.rs` so the facade only orchestrates backend
   trace snapshots and overlay application.
+- 2026-04-18: Continued Milestone 2 by extracting runtime-debug request
+  normalization and blank-filter validation out of
+  `llm/commands/registry.rs` into `llm/commands/registry/request.rs` while
+  keeping the command facade and response assembly stable.
 
 ## Commit Cadence Notes
 

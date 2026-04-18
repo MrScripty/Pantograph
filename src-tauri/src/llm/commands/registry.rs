@@ -1,5 +1,8 @@
 //! Runtime-registry inspection and targeted reclaim commands.
 
+#[path = "registry/request.rs"]
+mod request;
+
 use crate::config::ServerModeInfo;
 use crate::llm::commands::shared::synced_server_mode_info;
 use crate::llm::health_monitor::{HealthCheckResult, SharedHealthMonitor};
@@ -15,7 +18,7 @@ use crate::workflow::headless_diagnostics_transport::{
     workflow_diagnostics_snapshot_response, workflow_trace_snapshot_response,
 };
 use pantograph_workflow_service::{
-    WorkflowServiceError, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
@@ -25,6 +28,7 @@ use crate::llm::runtime_registry::{
     runtime_registry_snapshot as synced_runtime_registry_snapshot,
 };
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
+pub use request::RuntimeDebugSnapshotRequest;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -53,64 +57,6 @@ pub struct RuntimeDebugSnapshot {
     pub workflow_runtime_diagnostics: Option<DiagnosticsRuntimeSnapshot>,
     pub workflow_scheduler_diagnostics: Option<DiagnosticsSchedulerSnapshot>,
     pub workflow_trace: Option<WorkflowTraceSnapshotResponse>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub struct RuntimeDebugSnapshotRequest {
-    #[serde(default)]
-    pub execution_id: Option<String>,
-    #[serde(default)]
-    pub session_id: Option<String>,
-    #[serde(default)]
-    pub workflow_id: Option<String>,
-    #[serde(default)]
-    pub workflow_name: Option<String>,
-    #[serde(default)]
-    pub include_trace: Option<bool>,
-    #[serde(default)]
-    pub include_completed: Option<bool>,
-}
-
-impl RuntimeDebugSnapshotRequest {
-    fn normalized(&self) -> Self {
-        Self {
-            execution_id: normalize_optional_filter(&self.execution_id),
-            session_id: normalize_optional_filter(&self.session_id),
-            workflow_id: normalize_optional_filter(&self.workflow_id),
-            workflow_name: normalize_optional_filter(&self.workflow_name),
-            include_trace: self.include_trace,
-            include_completed: self.include_completed,
-        }
-    }
-
-    fn validate(&self) -> Result<(), WorkflowServiceError> {
-        validate_optional_filter(&self.execution_id, "execution_id")?;
-        validate_optional_filter(&self.session_id, "session_id")?;
-        validate_optional_filter(&self.workflow_id, "workflow_id")?;
-        validate_optional_filter(&self.workflow_name, "workflow_name")?;
-        Ok(())
-    }
-}
-
-fn normalize_optional_filter(value: &Option<String>) -> Option<String> {
-    value.as_deref().map(str::trim).map(ToOwned::to_owned)
-}
-
-fn validate_optional_filter(
-    value: &Option<String>,
-    field_name: &'static str,
-) -> Result<(), WorkflowServiceError> {
-    if let Some(value) = value {
-        if value.trim().is_empty() {
-            return Err(WorkflowServiceError::InvalidRequest(format!(
-                "runtime debug snapshot request field '{}' must not be blank",
-                field_name
-            )));
-        }
-    }
-
-    Ok(())
 }
 
 async fn runtime_registry_snapshot_response(

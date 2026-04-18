@@ -16,6 +16,8 @@ LLM gateway, process management, and Tauri command handlers for model and server
 | mod.rs | Source file used by modules in this directory. |
 | port.rs | Source file used by modules in this directory. |
 | rag.rs | Source file used by modules in this directory. |
+| registry.rs | Runtime-registry and runtime-debug Tauri command entrypoints. |
+| registry/ | Focused helpers extracted from the runtime-registry command boundary. |
 | sandbox.rs | Source file used by modules in this directory. |
 | server.rs | Source file used by modules in this directory. |
 | shared.rs | Source file used by modules in this directory. |
@@ -29,6 +31,8 @@ LLM gateway, process management, and Tauri command handlers for model and server
 - Command handlers that affect embedding-runtime availability should reuse the
   shared host-side RAG sync helper instead of caching embedding endpoints with
   command-local logic.
+- Keep `registry.rs` as the command facade while extracting request contracts,
+  runtime-debug aggregation, and tests into `registry/` support modules.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
