@@ -149,13 +149,20 @@ surface, not API breakage.
 
 ### Existing Codebase Non-Compliance In Immediate Surroundings
 
-The immediate hardening insertion points already exceed the soft decomposition
-thresholds from `CODING-STANDARDS.md` and should not absorb more logic in place:
+The immediate hardening insertion points already exceeded the soft
+decomposition thresholds from `CODING-STANDARDS.md`, which is why this plan
+includes decomposition as implementation work instead of optional cleanup.
+After the first Milestone 2 backend trace splits, the current surrounding sizes
+are:
 
-- `crates/pantograph-workflow-service/src/trace/store.rs` is approximately 644
+- `crates/pantograph-workflow-service/src/trace/store.rs` is approximately 342
   lines
-- `src-tauri/src/workflow/diagnostics/store.rs` is approximately 776 lines
-- `src-tauri/src/llm/commands/registry.rs` is approximately 733 lines
+- `crates/pantograph-workflow-service/src/trace/query.rs` is approximately 92
+  lines
+- `crates/pantograph-workflow-service/src/trace/state.rs` is approximately 298
+  lines
+- `src-tauri/src/workflow/diagnostics/store.rs` is approximately 785 lines
+- `src-tauri/src/llm/commands/registry.rs` is approximately 815 lines
 
 This plan therefore includes decomposition as part of the hardening work rather
 than treating it as an optional cleanup task.
@@ -357,7 +364,7 @@ decomposition do not drift across layers.
 modules before semantic hardening deepens them.
 
 **Tasks:**
-- [ ] Split `crates/pantograph-workflow-service/src/trace/store.rs` into focused
+- [x] Split `crates/pantograph-workflow-service/src/trace/store.rs` into focused
       modules for request/filter handling, run-state mutation/restart logic, and
       store facade behavior while preserving the public trace facade.
 - [ ] Split `src-tauri/src/workflow/diagnostics/store.rs` so overlay-state
@@ -387,18 +394,18 @@ modules before semantic hardening deepens them.
 attribution, and queue timing semantics.
 
 **Tasks:**
-- [ ] Implement the Milestone 1 filter decision in the backend trace request
+- [x] Implement the Milestone 1 filter decision in the backend trace request
       contract and validation path.
-- [ ] Normalize trace filter handling in one backend-owned place rather than
+- [x] Normalize trace filter handling in one backend-owned place rather than
       letting adapters normalize one request shape and forward another.
-- [ ] Remove or sharply constrain `session_id`-based fallback matching that can
+- [x] Remove or sharply constrain `session_id`-based fallback matching that can
       alias an execution read to the wrong trace or queue item.
-- [ ] Change scheduler snapshot handling so missing `enqueued_at_ms` or
+- [x] Change scheduler snapshot handling so missing `enqueued_at_ms` or
       `dequeued_at_ms` does not synthesize `queue_wait_ms` from
       `captured_at_ms`.
-- [ ] Add any additive diagnostics fields needed to represent incomplete timing
-      or unresolved attribution without fabricating data.
-- [ ] Keep replay, restart, and duplicate-event semantics intact while the trace
+- [x] Add any additive diagnostics or selection fields needed to represent
+      incomplete timing or unresolved attribution without fabricating data.
+- [x] Keep replay, restart, and duplicate-event semantics intact while the trace
       matching and timing rules are tightened.
 
 **Verification:**
@@ -408,7 +415,7 @@ attribution, and queue timing semantics.
   behavior
 - Concurrency review against `CONCURRENCY-STANDARDS.md`
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 4: Harden Diagnostics And Runtime-Debug Aggregation
 
@@ -416,17 +423,17 @@ attribution, and queue timing semantics.
 the hardened backend semantics without reintroducing local ambiguity.
 
 **Tasks:**
-- [ ] Update diagnostics and runtime-debug request handling to reuse the frozen
+- [x] Update diagnostics and runtime-debug request handling to reuse the frozen
       backend-owned filter semantics from Milestone 1 and Milestone 3.
-- [ ] Remove first-match runtime-metrics selection for session/workflow-only
+- [x] Remove first-match runtime-metrics selection for session/workflow-only
       reads when multiple traces can match.
 - [ ] Make combined diagnostics-plus-trace runtime-debug responses operate on
       the same resolved execution criteria or return explicit ambiguity instead
       of silently merging mismatched slices.
-- [ ] Harden the selection helpers in
+- [x] Harden the selection helpers in
       `src-tauri/src/workflow/headless_diagnostics.rs` so runtime metric
       projection does not collapse multi-run scope into incidental ordering.
-- [ ] Preserve Tauri as a projection/transport boundary and keep any new
+- [x] Preserve Tauri as a projection/transport boundary and keep any new
       selection logic backend-owned or explicitly delegated to a backend-owned
       helper.
 - [ ] Add compatibility-preserving adapters only where required to keep existing
@@ -442,7 +449,7 @@ the hardened backend semantics without reintroducing local ambiguity.
 - Architecture review confirming no new backend-owned semantics moved into
   Tauri modules
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Documentation, Roadmap Reconciliation, And Close-Out
 
@@ -499,6 +506,9 @@ Update during implementation:
 - 2026-04-18: Continued Milestone 2 by extracting backend trace run-state
   creation and event-application helpers out of `trace/store.rs` into
   `trace/state.rs` while preserving existing trace event semantics.
+- 2026-04-18: Reconciled the hardening plan and roadmap after the queue-timing,
+  execution-attribution, unique-match runtime selection, and backend trace
+  decomposition slices so Milestones 2 through 4 reflect current repo state.
 
 ## Commit Cadence Notes
 

@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-17
+Last updated: 2026-04-18
 
 ## Current Implementation Snapshot
 
@@ -37,6 +37,10 @@ Parallel demand execution now has a dedicated standards-reviewed plan in
 real workflow event contract completion now has a dedicated
 standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`.
+Binding platform planning now also has a dedicated standards-reviewed plan in
+`IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
+client-facing surface policy, shared backend-owned binding contract ownership,
+and the C#, Python, and BEAM language lanes.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -45,6 +49,13 @@ The roadmap remains the cross-target summary, while milestone-level
 metrics/trace follow-up work, runtime-adapter sequencing, Scheduler V2
 execution constraints, workflow-event completion sequencing, and parallel
 execution refactor details are tracked in those dedicated plans.
+The dedicated metrics/trace hardening plan now also reflects current
+implementation reality: Milestone 1 is complete, Milestone 2 is in progress,
+the backend trace store has already been decomposed into `query.rs` and
+`state.rs` behind the existing `WorkflowTraceStore` facade, backend queue
+timing is authoritative-only, queue attribution is execution-first, and
+session/workflow-scoped runtime metric reuse now requires a unique backend
+trace match instead of collapsing to the first trace.
 
 Milestone 5 transport hardening, binding review, recovery/idempotency
 verification, source-of-truth close-out, and the Milestone 6 diagnostics,
@@ -185,10 +196,13 @@ reconciled as the final source of truth.
 
 ### Active implementation stream
 
-- Metrics/trace follow-up hardening for the remaining runtime producers and
-  diagnostics command paths
+- Metrics/trace follow-up hardening, with backend trace decomposition underway
+  and the remaining work concentrated in Tauri diagnostics/runtime-debug
+  decomposition plus residual producer/acceptance coverage
 - Workflow event contract completion planning and backend-owned transport
   parity preparation
+- Binding platform planning and verification expansion for C#, Python, and
+  BEAM host lanes
 - Parallel demand execution planning and `node-engine` decomposition prep
 - Future incremental execution work that will build on the completed
   metrics/trace, scheduler, and runtime-registry boundaries
@@ -332,10 +346,15 @@ adding more scheduling or graph complexity.
 
 **Follow-up hardening still open:**
 
+- Complete the remaining Milestone 2 decomposition work in the Tauri
+  diagnostics store and runtime-debug registry command boundary so metrics and
+  trace hardening no longer lands in oversized adapter files.
 - Converge the remaining runtime hosts on the same authoritative
   `WorkflowTraceRuntimeMetrics` producer contract.
 - Extend adapter-boundary diagnostics and snapshot-path acceptance coverage for
-  the remaining command and transport surfaces.
+  the remaining command and transport surfaces, especially the combined
+  runtime-debug path that still needs the same explicit ambiguity handling now
+  enforced in backend trace selection.
 - Extend acceptance coverage around the new backend-owned cancellation contract
   across the remaining producer and transport surfaces.
 - Decide whether deeper metrics inspection should stay in diagnostics or move
@@ -451,6 +470,8 @@ session scheduler that makes better admission and reuse decisions.
 **Detailed source of truth:**
 
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
+- `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 
 **Goal:** Stop degrading engine semantics at the adapter boundary and give the
 frontend and headless hosts a stable event language for interactive and
@@ -548,6 +569,18 @@ incremental runs.
 - Extend acceptance coverage for the new `cancelled` envelope across any
   remaining non-streaming/headless command or binding surfaces that still need
   explicit parity checks
+- Binding-platform follow-on: freeze the curated client-facing surface for the
+  Pantograph headless binding platform instead of treating wrapper exports as
+  the product contract by default
+- C# lane follow-on: harden the existing generated/package/runtime path into a
+  documented first-class supported binding with stronger host-language contract
+  assertions
+- Python lane follow-on: add a distinct host-consumer binding path and testing
+  story that is separate from Pantograph's out-of-process Python worker/runtime
+  concerns
+- BEAM lane follow-on: extract Rustler-boundary logic into testable Rust where
+  appropriate and add a BEAM-hosted harness that proves the real NIF contract
+  with the runtime-provided `enif_*` symbols present
 
 ### Phase 6: Incremental Graph Execution
 
