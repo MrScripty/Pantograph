@@ -76,7 +76,12 @@ pub use composite_executor::CompositeTaskExecutor;
 pub use core_executor::{resolve_node_type, CoreTaskExecutor};
 
 // Re-export key types from engine
-pub use engine::{CacheStats, CachedOutput, DemandEngine, TaskExecutor, WorkflowExecutor};
+pub use engine::{
+    CacheStats, CachedOutput, DemandEngine, GraphMemoryImpactSummary, NodeMemoryCompatibility,
+    NodeMemoryCompatibilitySnapshot, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,
+    TaskExecutor, WorkflowExecutor, WorkflowSessionCheckpointSummary,
+    WorkflowSessionResidencyState,
+};
 pub use error::{NodeEngineError, Result};
 pub use events::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,

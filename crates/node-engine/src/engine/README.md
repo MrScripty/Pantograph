@@ -17,6 +17,7 @@ entrypoint while preserving the current public API.
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, and the future insertion point for bounded parallel coordination. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
+| `session_state.rs` | Phase 6 workflow-session residency, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned session-state scaffold. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
 
 ## Problem
@@ -123,12 +124,18 @@ planning split, plus the private execution-batch schedule derived from it.
   state rather than by adapter-local interpretation.
 - Cache freshness and version bump semantics remain derived from backend-owned
   version tracking rather than adapter-local memoization.
+- Workflow-session residency, node-memory compatibility classes, and bounded
+  checkpoint summaries remain backend-owned contracts in Rust rather than host-
+  local transport state.
 - Demand event emission remains derived from backend execution state rather
   than adapter-local reconstruction.
 - In-flight cycle detection remains derived from backend recursive execution
   state rather than adapter-local guards.
 - Recursive node-demand orchestration remains backend-owned and private to
   `node-engine` rather than becoming a new public or binding-facing surface.
+- The private executor-owned session-state scaffold remains the insertion point
+  for later Phase 6 node-memory and checkpoint integration instead of growing
+  new residency/checkpoint logic directly inside `engine.rs`.
 - Single-demand and multi-demand facade helpers remain behaviorally equivalent
   to the prior inline executor methods until the bounded parallel coordinator
   intentionally changes the multi-demand path.

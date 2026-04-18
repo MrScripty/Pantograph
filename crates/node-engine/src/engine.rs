@@ -42,15 +42,22 @@ use crate::events::{EventSink, WorkflowEvent};
 use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
 
-mod graph_events;
-mod multi_demand;
 mod dependency_inputs;
 mod execution_core;
 mod execution_events;
+mod graph_events;
 mod inflight_tracking;
-mod output_cache;
+mod multi_demand;
 mod node_preparation;
+mod output_cache;
+mod session_state;
 mod single_demand;
+
+pub use session_state::{
+    GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot,
+    NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus, WorkflowSessionCheckpointSummary,
+    WorkflowSessionResidencyState,
+};
 
 /// Trait for executing a single node/task
 ///
@@ -251,13 +258,7 @@ impl DemandEngine {
     > {
         Box::pin(async move {
             execution_core::DemandExecutionCore::new(
-                self,
-                graph,
-                executor,
-                context,
-                event_sink,
-                extensions,
-                computing,
+                self, graph, executor, context, event_sink, extensions, computing,
             )
             .run_node(node_id)
             .await
@@ -278,13 +279,7 @@ impl DemandEngine {
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         multi_demand::demand_multiple_with_default_budget(
-            self,
-            node_ids,
-            graph,
-            executor,
-            context,
-            event_sink,
-            extensions,
+            self, node_ids, graph, executor, context, event_sink, extensions,
         )
         .await
     }
@@ -324,11 +319,7 @@ fn reconcile_changed_node_entries<T>(
 ) where
     T: Clone + PartialEq,
 {
-    let changed_node_ids: HashSet<NodeId> = base
-        .keys()
-        .chain(isolated.keys())
-        .cloned()
-        .collect();
+    let changed_node_ids: HashSet<NodeId> = base.keys().chain(isolated.keys()).cloned().collect();
 
     for node_id in changed_node_ids {
         if base.get(&node_id) == isolated.get(&node_id) {
@@ -370,6 +361,9 @@ pub struct WorkflowExecutor {
     event_sink: Arc<dyn EventSink>,
     /// The workflow graph
     graph: Arc<RwLock<WorkflowGraph>>,
+    /// Phase 6 session-state scaffold for workflow-session residency and
+    /// checkpoint integration.
+    session_state: Arc<session_state::WorkflowExecutorSessionState>,
     /// Execution ID
     execution_id: String,
     /// Typed extensions for non-serializable dependencies (API clients, etc.)
@@ -389,6 +383,7 @@ impl WorkflowExecutor {
             context: Context::new(),
             event_sink,
             graph: Arc::new(RwLock::new(graph)),
+            session_state: Arc::new(session_state::WorkflowExecutorSessionState::new()),
             execution_id,
             extensions: ExecutorExtensions::new(),
         }
@@ -429,6 +424,32 @@ impl WorkflowExecutor {
         &self.graph
     }
 
+    /// Return the current workflow-session residency state used by the Phase 6
+    /// checkpoint scaffold.
+    pub async fn workflow_session_residency(&self) -> WorkflowSessionResidencyState {
+        self.session_state.residency().await
+    }
+
+    /// Update the workflow-session residency state used by the Phase 6
+    /// checkpoint scaffold.
+    pub async fn set_workflow_session_residency(&self, state: WorkflowSessionResidencyState) {
+        self.session_state.set_residency(state).await;
+    }
+
+    /// Return the current bounded checkpoint summary for a workflow session.
+    pub async fn workflow_session_checkpoint_summary(
+        &self,
+        workflow_session_id: &str,
+    ) -> WorkflowSessionCheckpointSummary {
+        let graph_revision = self.graph.read().await.id.clone();
+        let residency = self.workflow_session_residency().await;
+        WorkflowSessionCheckpointSummary::unavailable(
+            workflow_session_id,
+            graph_revision,
+            residency,
+        )
+    }
+
     /// Set a value in the context
     pub async fn set_context_value<T: serde::Serialize + Send + Sync>(&self, key: &str, value: T) {
         self.context.set(key, value).await;
@@ -456,11 +477,9 @@ impl WorkflowExecutor {
     }
 
     fn emit_graph_modified(&self, workflow_id: String, dirty_tasks: Vec<NodeId>) {
-        if let Some(event) = graph_events::graph_modified_event(
-            workflow_id,
-            &self.execution_id,
-            dirty_tasks,
-        ) {
+        if let Some(event) =
+            graph_events::graph_modified_event(workflow_id, &self.execution_id, dirty_tasks)
+        {
             let _ = self.send_event(event);
         }
     }
@@ -608,8 +627,8 @@ mod tests {
     use super::*;
     use crate::events::{NullEventSink, VecEventSink};
     use crate::types::{GraphEdge, GraphNode};
-    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     fn make_linear_graph() -> WorkflowGraph {
         let mut graph = WorkflowGraph::new("test", "Test");
@@ -864,10 +883,7 @@ mod tests {
         }
 
         fn executed_tasks(&self) -> Vec<String> {
-            self.execution_log
-                .lock()
-                .expect("execution log")
-                .clone()
+            self.execution_log.lock().expect("execution log").clone()
         }
     }
 
@@ -885,10 +901,7 @@ mod tests {
         }
 
         fn executed_tasks(&self) -> Vec<String> {
-            self.execution_log
-                .lock()
-                .expect("execution log")
-                .clone()
+            self.execution_log.lock().expect("execution log").clone()
         }
     }
 
@@ -959,7 +972,9 @@ mod tests {
             self.current_in_flight.fetch_sub(1, Ordering::SeqCst);
 
             if task_id == self.fail_on {
-                return Err(NodeEngineError::failed(format!("forced failure at {task_id}")));
+                return Err(NodeEngineError::failed(format!(
+                    "forced failure at {task_id}"
+                )));
             }
 
             Ok(HashMap::from([(
@@ -1020,7 +1035,9 @@ mod tests {
                 .push(task_id.to_string());
 
             if task_id == self.fail_on {
-                return Err(NodeEngineError::failed(format!("forced failure at {task_id}")));
+                return Err(NodeEngineError::failed(format!(
+                    "forced failure at {task_id}"
+                )));
             }
 
             Ok(HashMap::from([(
@@ -1528,7 +1545,9 @@ mod tests {
             .await
             .expect_err("parallel incremental demand should fail");
 
-        assert!(matches!(error, NodeEngineError::ExecutionFailed(message) if message.contains("forced failure at right")));
+        assert!(
+            matches!(error, NodeEngineError::ExecutionFailed(message) if message.contains("forced failure at right"))
+        );
         assert_eq!(executor_impl.max_in_flight(), 2);
 
         let events = event_sink.events();
@@ -1637,7 +1656,9 @@ mod tests {
             .await
             .expect_err("first batch should fail");
 
-        assert!(matches!(error, NodeEngineError::ExecutionFailed(message) if message.contains("forced failure at b")));
+        assert!(
+            matches!(error, NodeEngineError::ExecutionFailed(message) if message.contains("forced failure at b"))
+        );
         assert_eq!(
             executor_impl.executed_tasks(),
             vec!["a".to_string(), "b".to_string()]
