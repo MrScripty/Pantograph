@@ -103,6 +103,55 @@ test('applyWorkflowToolbarEvent replays graph-modified dirty tasks into idle sta
   assert.equal(result.handled, true);
 });
 
+test('applyWorkflowToolbarEvent marks waiting nodes and keeps waiting state true', () => {
+  const { result, stateCalls } = applyEvent(
+    {
+      type: 'WaitingForInput',
+      data: {
+        node_id: 'input-node',
+        message: 'Need user confirmation',
+        execution_id: 'run-1',
+      },
+    },
+    {
+      activeExecutionId: 'run-1',
+    },
+  );
+
+  assert.deepEqual(stateCalls, [
+    {
+      nodeId: 'input-node',
+      state: 'waiting',
+      message: 'Need user confirmation',
+    },
+  ]);
+  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.waitingForInput, true);
+  assert.equal(result.handled, true);
+  assert.equal(result.shouldCleanup, false);
+});
+
+test('applyWorkflowToolbarEvent requests cleanup for cancelled runs', () => {
+  const { result } = applyEvent(
+    {
+      type: 'Cancelled',
+      data: {
+        error: 'Stopped by user',
+        execution_id: 'run-1',
+      },
+    },
+    {
+      activeExecutionId: 'run-1',
+      waitingForInput: true,
+    },
+  );
+
+  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.waitingForInput, false);
+  assert.equal(result.handled, true);
+  assert.equal(result.shouldCleanup, true);
+});
+
 test('applyWorkflowToolbarEvent mirrors completed outputs into node and downstream runtime data', () => {
   const { runtimeDataCalls, stateCalls } = applyEvent(
     {

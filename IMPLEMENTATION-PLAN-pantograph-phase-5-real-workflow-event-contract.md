@@ -571,6 +571,10 @@ Update during implementation:
   Focused frontend coverage now pins the toolbar path for
   `WaitingForInput`/resume, `GraphModified`, completed output mirroring, and
   streamed runtime-data propagation.
+- 2026-04-18: The toolbar helper coverage was tightened again so the app GUI
+  boundary now explicitly pins backend-owned `WaitingForInput` state
+  transitions and cancelled-run cleanup, rather than relying on indirect
+  assertions through resume behavior alone.
 
 ## Commit Cadence Notes
 

@@ -566,6 +566,9 @@ incremental runs.
   a stale partial switch in the Svelte component, and the app-local workflow
   execution-state type now includes the backend-owned `waiting` state needed
   for interactive runs.
+- The focused toolbar helper coverage now also explicitly pins
+  `WaitingForInput` transitions and cancelled-run cleanup at the app boundary,
+  so the GUI contract is not only inferred through resume behavior.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
