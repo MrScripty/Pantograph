@@ -620,20 +620,7 @@ impl WorkflowExecutor {
         node_ids: &[NodeId],
         executor: &dyn TaskExecutor,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-        let graph = self.graph.read().await;
-        self.emit_incremental_execution_started(graph.id.clone(), node_ids.to_vec());
-        let mut engine = self.demand_engine.write().await;
-
-        engine
-            .demand_multiple(
-                node_ids,
-                &graph,
-                executor,
-                &self.context,
-                self.event_sink.as_ref(),
-                &self.extensions,
-            )
-            .await
+        multi_demand::demand_multiple_with_executor(self, node_ids, executor).await
     }
 
     /// Mark a node as modified (e.g., user changed its data)

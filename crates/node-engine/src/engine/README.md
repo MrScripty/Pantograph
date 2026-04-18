@@ -10,7 +10,7 @@ entrypoint while preserving the current public API.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
-| `multi_demand.rs` | Current multi-demand execution helper and the future insertion point for bounded parallel coordination. |
+| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path and the future insertion point for bounded parallel coordination. |
 
 ## Problem
 `engine.rs` owns both workflow execution and graph-mutation orchestration, and
@@ -24,6 +24,9 @@ changing the public executor surface.
 - Graph-modification and incremental-run semantics stay backend-owned in Rust.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
+- `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
+  so later bounded-parallel coordination does not have to be inserted back
+  into `engine.rs`.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under
@@ -42,8 +45,9 @@ boundaries for later event and concurrency work.
 - Public callers continue to use `node_engine::engine` and `WorkflowExecutor`.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
-- The current multi-demand helper remains behaviorally sequential until the
-  bounded parallel coordinator lands intentionally.
+- The current executor-facing and engine-facing multi-demand helpers remain
+  behaviorally sequential until the bounded parallel coordinator lands
+  intentionally.
 
 ## Revisit Triggers
 - Bounded parallel demand execution requires additional planner or coordinator

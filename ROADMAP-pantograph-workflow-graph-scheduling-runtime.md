@@ -373,6 +373,13 @@ adding more scheduling or graph complexity.
 **Goal:** Improve workflow execution latency for independent branches and
 prepare the engine for metric-informed scheduling.
 
+**Progress to date:**
+
+- Phase 2 decomposition is underway in `crates/node-engine`: workflow-event
+  helpers, graph-event helpers, and the executor-facing `demand_multiple`
+  choreography now live behind focused internal modules, creating a compliant
+  insertion boundary for the later bounded parallel coordinator.
+
 **Milestones:**
 
 - Replace sequential `demand_multiple` behavior with bounded parallel demand

@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-17
+Last updated: 2026-04-18
 
 ## Current Source-of-Truth Summary
 
@@ -285,7 +285,7 @@ Corrections applied:
 - Focused no-behavior-change tests for extracted helpers where practical
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 2: Freeze Parallel Execution Semantics
 
@@ -392,6 +392,12 @@ Update during implementation:
   `crates/node-engine/src/engine/`, extracting the current sequential
   multi-demand path and incremental graph-event helpers so the future bounded
   parallel coordinator has a focused insertion boundary.
+- 2026-04-18: Third Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, moving the
+  `WorkflowExecutor::demand_multiple` graph-read, event-emit, and engine-lock
+  choreography behind the dedicated multi-demand helper boundary so later
+  bounded-parallel coordination does not need to be inserted back into
+  `engine.rs`.
 
 ## Commit Cadence Notes
 
@@ -430,7 +436,9 @@ Update during implementation:
 
 ### Completed
 
-- None yet. Phase 2 implementation has not started from this plan.
+- Milestone 1 decomposition has begun with focused no-behavior-change
+  extraction slices in `crates/node-engine/src/events/` and
+  `crates/node-engine/src/engine/`.
 
 ### Deviations
 
@@ -438,7 +446,9 @@ Update during implementation:
 
 ### Follow-Ups
 
-- None yet. Follow-ups will be recorded here once implementation lands.
+- Continue Milestone 1 by extracting the remaining dependency-planning and
+  target-resolution logic out of `engine.rs` before bounded parallel
+  coordination lands.
 
 ### Verification Summary
 
