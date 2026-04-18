@@ -767,6 +767,15 @@ mod tests {
     fn workflow_transport_error_json_preserves_backend_error_envelopes() {
         let cases = [
             (
+                WorkflowServiceError::InvalidRequest(
+                    "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
+                        .to_string(),
+                ),
+                WorkflowErrorCode::InvalidRequest,
+                "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'",
+                None,
+            ),
+            (
                 WorkflowServiceError::RuntimeNotReady("runtime unavailable".to_string()),
                 WorkflowErrorCode::RuntimeNotReady,
                 "runtime unavailable",

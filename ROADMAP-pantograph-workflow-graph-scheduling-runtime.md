@@ -518,6 +518,9 @@ incremental runs.
   `WaitingForInput` outcomes instead of converting them into synthetic
   terminal-node error outputs before orchestration sees them, and the Tauri
   orchestration adapter now forwards that backend result directly.
+- The headless workflow transport helper is now also pinned for the
+  backend-owned interactive `invalid_request` envelope used by non-streaming
+  workflow runs.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics

@@ -520,6 +520,10 @@ Update during implementation:
   them into synthetic `*.error` outputs. The Tauri orchestration adapter was
   reduced to a passthrough for that backend-owned result instead of rewriting
   it at the boundary.
+- 2026-04-17: Milestone 5 transport coverage was tightened in
+  `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless error
+  envelope helper is now explicitly pinned for the backend-owned interactive
+  `invalid_request` contract emitted by non-streaming workflow runs.
 
 ## Commit Cadence Notes
 
