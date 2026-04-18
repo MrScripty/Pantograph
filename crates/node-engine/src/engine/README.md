@@ -165,6 +165,9 @@ planning split, plus the private execution-batch schedule derived from it.
   bounded concurrent execution under the current overlap and budget rules.
 - Multi-demand dispatch windows now also expose that decision as an explicit
   execution mode rather than a bare boolean.
+- Private multi-demand entry points now also thread an explicit execution
+  budget through coordinator ownership rather than hard-coding a sequential
+  path.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

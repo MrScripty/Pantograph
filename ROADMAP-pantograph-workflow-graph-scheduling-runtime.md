@@ -428,6 +428,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also represents that window-level decision as an explicit
   execution mode, so later bounded coordinator work can branch from a typed
   backend-owned contract instead of a boolean flag.
+- Phase 2 private multi-demand entry points now also thread an explicit
+  execution budget into the coordinator, removing the remaining non-sequential
+  panic path before real concurrent window execution lands.
 
 **Milestones:**
 

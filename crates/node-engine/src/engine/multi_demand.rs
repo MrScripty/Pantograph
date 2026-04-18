@@ -200,8 +200,14 @@ impl DemandMultipleResults {
 }
 
 impl DemandExecutionBudget {
+    fn new(max_in_flight: usize) -> Self {
+        Self {
+            max_in_flight: max_in_flight.max(1),
+        }
+    }
+
     fn sequential() -> Self {
-        Self { max_in_flight: 1 }
+        Self::new(1)
     }
 
     fn max_in_flight(self) -> usize {
@@ -284,6 +290,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
     fn new(
         engine: &'a mut DemandEngine,
         plan: &'a DemandMultiplePlan,
+        budget: DemandExecutionBudget,
         graph: &'a WorkflowGraph,
         executor: &'a dyn TaskExecutor,
         context: &'a Context,
@@ -291,7 +298,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
         extensions: &'a ExecutorExtensions,
     ) -> Self {
         Self {
-            budget: DemandExecutionBudget::sequential(),
+            budget,
             plan,
             window_runner: DemandWindowRunner::new(
                 engine,
@@ -306,13 +313,10 @@ impl<'a> DemandMultipleCoordinator<'a> {
     }
 
     async fn run(self) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-        match self.budget.max_in_flight() {
-            1 => self.run_sequential().await,
-            _ => unreachable!("bounded parallel execution is not implemented yet"),
-        }
+        self.run_dispatch_schedule().await
     }
 
-    async fn run_sequential(
+    async fn run_dispatch_schedule(
         mut self,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         for batch in self.plan.execution_batches() {
@@ -448,15 +452,31 @@ pub(super) async fn demand_multiple_with_executor(
     node_ids: &[NodeId],
     executor: &dyn TaskExecutor,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
+    demand_multiple_with_budget(
+        workflow_executor,
+        node_ids,
+        executor,
+        DemandExecutionBudget::sequential(),
+    )
+    .await
+}
+
+async fn demand_multiple_with_budget(
+    workflow_executor: &WorkflowExecutor,
+    node_ids: &[NodeId],
+    executor: &dyn TaskExecutor,
+    budget: DemandExecutionBudget,
+) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     let graph = workflow_executor.graph.read().await;
     let plan = DemandMultiplePlan::from_requested_targets(node_ids, &graph);
     workflow_executor
         .emit_incremental_execution_started(graph.id.clone(), plan.requested_targets().to_vec());
     let mut demand_engine = workflow_executor.demand_engine.write().await;
 
-    execute_sequential_plan(
+    execute_plan_with_budget(
         &mut demand_engine,
         &plan,
+        budget,
         &graph,
         executor,
         &workflow_executor.context,
@@ -475,11 +495,10 @@ pub(super) async fn demand_multiple_sequential(
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    let plan = DemandMultiplePlan::from_requested_targets(node_ids, graph);
-
-    execute_sequential_plan(
+    demand_multiple_with_explicit_budget(
         engine,
-        &plan,
+        node_ids,
+        DemandExecutionBudget::sequential(),
         graph,
         executor,
         context,
@@ -489,9 +508,35 @@ pub(super) async fn demand_multiple_sequential(
     .await
 }
 
-async fn execute_sequential_plan(
+async fn demand_multiple_with_explicit_budget(
+    engine: &mut DemandEngine,
+    node_ids: &[NodeId],
+    budget: DemandExecutionBudget,
+    graph: &WorkflowGraph,
+    executor: &dyn TaskExecutor,
+    context: &Context,
+    event_sink: &dyn EventSink,
+    extensions: &ExecutorExtensions,
+) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
+    let plan = DemandMultiplePlan::from_requested_targets(node_ids, graph);
+
+    execute_plan_with_budget(
+        engine,
+        &plan,
+        budget,
+        graph,
+        executor,
+        context,
+        event_sink,
+        extensions,
+    )
+    .await
+}
+
+async fn execute_plan_with_budget(
     engine: &mut DemandEngine,
     plan: &DemandMultiplePlan,
+    budget: DemandExecutionBudget,
     graph: &WorkflowGraph,
     executor: &dyn TaskExecutor,
     context: &Context,
@@ -501,6 +546,7 @@ async fn execute_sequential_plan(
     DemandMultipleCoordinator::new(
         engine,
         plan,
+        budget,
         graph,
         executor,
         context,
@@ -761,6 +807,11 @@ mod tests {
     }
 
     #[test]
+    fn execution_budget_normalizes_zero_to_one_in_flight() {
+        assert_eq!(DemandExecutionBudget::new(0).max_in_flight(), 1);
+    }
+
+    #[test]
     fn batch_execution_outcome_tracks_completed_targets_in_order() {
         let mut outcome = DemandBatchExecutionOutcome::default();
         outcome.record_completed_target(&"node_a".to_string());
@@ -830,7 +881,7 @@ mod tests {
                 "node_b".to_string(),
                 "node_c".to_string(),
             ],
-            DemandExecutionBudget { max_in_flight: 2 },
+            DemandExecutionBudget::new(2),
         );
 
         assert_eq!(
@@ -842,6 +893,28 @@ mod tests {
                 ),
                 DemandDispatchWindowPlan::new(
                     vec!["node_c".to_string()],
+                    DemandDispatchWindowExecutionMode::Sequential,
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn batch_dispatch_plan_normalizes_zero_budget_to_singleton_windows() {
+        let plan = DemandBatchDispatchPlan::from_batch(
+            &["node_a".to_string(), "node_b".to_string()],
+            DemandExecutionBudget::new(0),
+        );
+
+        assert_eq!(
+            plan.execution_windows(),
+            &[
+                DemandDispatchWindowPlan::new(
+                    vec!["node_a".to_string()],
+                    DemandDispatchWindowExecutionMode::Sequential,
+                ),
+                DemandDispatchWindowPlan::new(
+                    vec!["node_b".to_string()],
                     DemandDispatchWindowExecutionMode::Sequential,
                 )
             ]
