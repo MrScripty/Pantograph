@@ -506,6 +506,11 @@ Update during implementation:
   facts for every runtime path; the inference gateway and dedicated embedding
   sidecar now record authoritative lifecycle state, but remaining adapter-
   specific runtime paths still need to converge on the same producer contract.
+- Follow-on hardening after this plan also removed stale first-match
+  runtime-debug behavior, decomposed the oversized diagnostics and registry
+  adapters, and aligned the touched synchronous stores with `parking_lot`, so
+  the remaining deviations are downstream producer and acceptance coverage
+  issues rather than ownership or decomposition debt in the implemented paths.
 
 ### Follow-Ups
 
@@ -521,16 +526,11 @@ Update during implementation:
   runtime, scheduler, trace snapshot, and diagnostics projection refresh paths
   so the remaining diagnostics reader and transport paths are also exercised at
   the adapter boundary.
-- Extend queue attribution beyond current execution/session matching so traces
-  can distinguish concurrent queued runs more precisely when richer run
-  identity surfaces are available from producers.
 - Replace the current centralized cancellation-message classifier with a fully
   machine-readable producer contract once every workflow producer can emit
   explicit cancellation outcomes directly.
 - Decide whether later detailed metrics inspection belongs in the existing
   diagnostics command surface or a dedicated trace/metrics module.
-- Extend snapshot-path acceptance coverage beyond current diagnostics-store
-  helper tests so headless command adapters are exercised directly.
 
 ### Verification Summary
 
@@ -541,6 +541,11 @@ Update during implementation:
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `npm run typecheck`
+- Later hardening follow-up also added targeted verification for queue timing
+  absence semantics, execution-first queue attribution, unique-match runtime
+  metric selection, diagnostics decomposition boundaries, runtime-debug
+  ambiguity handling, and the `parking_lot` synchronization migration in the
+  touched stores.
 - `cargo check -p pantograph-workflow-service`
 - `cargo test --manifest-path src-tauri/Cargo.toml diagnostics::`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
@@ -554,6 +559,12 @@ Update during implementation:
 ### Traceability Links
 
 - Module README updated: N/A
+- Module README updated:
+  `crates/pantograph-workflow-service/src/trace/README.md`
+- Module README updated:
+  `src-tauri/src/workflow/diagnostics/README.md`
+- Module README updated:
+  `src-tauri/src/llm/commands/README.md`
 - ADR added/updated: N/A
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A
 

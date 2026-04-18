@@ -352,15 +352,11 @@ adding more scheduling or graph complexity.
 
 **Follow-up hardening still open:**
 
-- Complete the remaining Milestone 2 decomposition work in the Tauri
-  diagnostics store and runtime-debug registry command boundary so metrics and
-  trace hardening no longer lands in oversized adapter files.
 - Converge the remaining runtime hosts on the same authoritative
   `WorkflowTraceRuntimeMetrics` producer contract.
 - Extend adapter-boundary diagnostics and snapshot-path acceptance coverage for
-  the remaining command and transport surfaces, especially the combined
-  runtime-debug path that still needs the same explicit ambiguity handling now
-  enforced in backend trace selection.
+  the remaining command and transport surfaces beyond the now-hardened
+  runtime-debug path.
 - Extend acceptance coverage around the new backend-owned cancellation contract
   across the remaining producer and transport surfaces.
 - Decide whether deeper metrics inspection should stay in diagnostics or move

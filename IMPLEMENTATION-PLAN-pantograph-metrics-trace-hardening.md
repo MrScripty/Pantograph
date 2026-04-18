@@ -457,15 +457,15 @@ the hardened backend semantics without reintroducing local ambiguity.
 for later roadmap phases.
 
 **Tasks:**
-- [ ] Update touched module READMEs with the new filter, timing, attribution,
+- [x] Update touched module READMEs with the new filter, timing, attribution,
       and consumer-contract semantics.
-- [ ] Reconcile
+- [x] Reconcile
       `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
       and `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
       so the hardening follow-up is represented accurately.
-- [ ] Confirm no out-of-scope observability expansion slipped into the
+- [x] Confirm no out-of-scope observability expansion slipped into the
       implementation.
-- [ ] Record any remaining deferred work explicitly, limited to issues that are
+- [x] Record any remaining deferred work explicitly, limited to issues that are
       truly downstream of later roadmap phases rather than gaps left behind by
       this hardening slice.
 
@@ -474,7 +474,7 @@ for later roadmap phases.
 - Focused verification summary referencing the milestone checks already run
 - Source-of-truth review confirming roadmap and plan status agree
 
-**Status:** Not started
+**Status:** Completed
 
 ## Execution Notes
 
@@ -541,6 +541,12 @@ Update during implementation:
   execution, and preserving the existing runtime-debug response contract with a
   backward-compatible optional field instead of collapsing to first-match
   ordering.
+- 2026-04-18: Completed Milestone 5 close-out by reconciling the touched
+  READMEs, the dedicated metrics-trace-spine plan, and the roadmap so the
+  remaining work is limited to downstream producer convergence and acceptance
+  coverage rather than stale decomposition or ambiguity gaps. The close-out
+  review also confirmed that no remote telemetry, frontend-owned analytics, or
+  other out-of-scope observability expansion slipped into the implementation.
 
 ## Commit Cadence Notes
 
@@ -583,20 +589,50 @@ Update during implementation:
 
 ### Completed
 
-- None yet.
+- Milestones 1 through 5 are complete.
+- Backend-owned filter normalization, workflow-name filtering, authoritative
+  queue timing, execution-first queue attribution, and unique-match runtime
+  metric selection are now frozen across trace, diagnostics, and runtime-debug
+  reads.
+- Oversized hardening insertion points were decomposed into focused backend and
+  Tauri adapter modules before more semantics landed in them.
+- The touched synchronous trace and diagnostics stores now use
+  `parking_lot::Mutex` instead of poison-based `std::sync::Mutex`.
+- Runtime-debug trace reads now resolve to a single backend execution when
+  possible or return additive ambiguity metadata instead of collapsing
+  multi-run scope to incidental ordering.
 
 ### Deviations
 
-- None yet.
+- No out-of-scope observability expansion was introduced.
+- The slice stayed within backend-owned contracts, bounded in-memory state,
+  additive diagnostics transport, and documentation reconciliation. It did not
+  introduce remote telemetry export, new frontend-owned analytics logic, or
+  durable metrics persistence.
 
 ### Follow-Ups
 
-- None yet. Populate only if a re-plan trigger is hit or a downstream-only item
-  remains after implementation.
+- Converge the remaining runtime hosts on the same authoritative
+  `WorkflowTraceRuntimeMetrics` producer contract so every host populates the
+  same lifecycle and reuse fields.
+- Extend direct acceptance coverage for the remaining diagnostics and command
+  transport paths beyond the currently targeted trace, diagnostics, and
+  runtime-debug regression checks.
+- Revisit whether deeper operator-facing metrics inspection belongs in the
+  existing diagnostics command surface or in a dedicated trace/metrics module
+  once later roadmap phases need more than the current bounded debug views.
 
 ### Verification Summary
 
-- None yet.
+- Targeted workflow-service tests covering queue timing, runtime snapshot
+  retention, duplicate-event handling, restart/reset behavior, and runtime
+  metric selection semantics.
+- Targeted `src-tauri` tests covering diagnostics projection behavior, request
+  normalization, runtime-registry snapshot sync, and runtime-debug unique-match
+  versus ambiguous multi-run trace resolution.
+- Standards review against the concurrency and documentation requirements used
+  by the hardening plan, including the `parking_lot::Mutex` migration for the
+  touched synchronous stores.
 
 ### Traceability Links
 
@@ -605,6 +641,6 @@ Update during implementation:
 - Module README updated:
   `src-tauri/src/workflow/diagnostics/README.md`
 - Module README updated:
-  `src-tauri/src/llm/README.md`
+  `src-tauri/src/llm/commands/README.md`
 - ADR added/updated: N/A unless implementation reveals a new ownership boundary
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`
