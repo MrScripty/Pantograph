@@ -98,6 +98,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - `trace_snapshot()` validates backend-owned trace filters through
   `WorkflowTraceSnapshotRequest` instead of accepting arbitrary adapter-local
   filtering rules.
+- Runtime-trace metric reuse must come from a unique backend trace match.
+  Session/workflow-scoped multi-run matches remain ambiguous instead of being
+  collapsed to the first trace in Tauri.
 - `WorkflowDiagnosticsSnapshotRequest` uses the same trimmed optional filter
   model as the combined runtime-debug path and rejects blank filters instead of
   silently dropping them.

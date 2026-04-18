@@ -48,8 +48,8 @@ pub use technical_fit::{
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
     WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRecordResult,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
 };
 pub use workflow::{
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowCapabilityModel,

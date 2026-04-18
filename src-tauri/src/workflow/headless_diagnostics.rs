@@ -179,7 +179,7 @@ pub(crate) fn stored_runtime_trace_metrics(
     workflow_id: Option<&str>,
 ) -> Option<WorkflowTraceRuntimeMetrics> {
     diagnostics_store
-        .trace_snapshot(WorkflowTraceSnapshotRequest {
+        .select_trace_runtime_metrics(&WorkflowTraceSnapshotRequest {
             execution_id: None,
             session_id: session_id.map(ToOwned::to_owned),
             workflow_id: workflow_id.map(ToOwned::to_owned),
@@ -187,10 +187,7 @@ pub(crate) fn stored_runtime_trace_metrics(
             include_completed: Some(true),
         })
         .ok()?
-        .traces
-        .into_iter()
-        .next()
-        .map(|trace| trace.runtime)
+        .runtime
 }
 
 pub(crate) fn stored_runtime_snapshots(
@@ -404,6 +401,63 @@ mod tests {
         assert_eq!(projection.scheduler.trace_execution_id, None);
         assert!(projection.run_order.is_empty());
         assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
+        assert!(
+            stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn stored_runtime_trace_metrics_returns_none_for_ambiguous_multi_run_scope() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+        for (execution_id, runtime_id, captured_at_ms) in [
+            ("run-1", "llama_cpp", 120_u64),
+            ("run-2", "llama_cpp.embedding", 220_u64),
+        ] {
+            workflow_diagnostics_snapshot_projection(
+                &diagnostics_store,
+                Some("session-1".to_string()),
+                Some("wf-1".to_string()),
+                Some("Workflow 1".to_string()),
+                Some(Ok(WorkflowSchedulerSnapshotResponse {
+                    workflow_id: Some("wf-1".to_string()),
+                    session_id: "session-1".to_string(),
+                    trace_execution_id: Some(execution_id.to_string()),
+                    session: running_session_summary(),
+                    items: vec![WorkflowSessionQueueItem {
+                        queue_id: format!("queue-{execution_id}"),
+                        run_id: Some(execution_id.to_string()),
+                        enqueued_at_ms: Some(captured_at_ms.saturating_sub(10)),
+                        dequeued_at_ms: Some(captured_at_ms),
+                        priority: 5,
+                        queue_position: Some(0),
+                        scheduler_admission_outcome: None,
+                        scheduler_decision_reason: None,
+                        status: WorkflowSessionQueueItemStatus::Running,
+                    }],
+                    diagnostics: None,
+                })),
+                Some(Ok(capability_response())),
+                WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some(runtime_id.to_string()),
+                    observed_runtime_ids: vec![runtime_id.to_string()],
+                    runtime_instance_id: Some(format!("{runtime_id}-instance")),
+                    model_target: Some(format!("/models/{runtime_id}.gguf")),
+                    warmup_started_at_ms: Some(captured_at_ms.saturating_sub(9)),
+                    warmup_completed_at_ms: Some(captured_at_ms),
+                    warmup_duration_ms: Some(9),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                },
+                Some(format!("/models/{runtime_id}.gguf")),
+                None,
+                None,
+                None,
+                captured_at_ms,
+            );
+        }
+
         assert!(
             stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1"))
                 .is_none()

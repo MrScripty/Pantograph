@@ -327,6 +327,19 @@ pub struct WorkflowTraceSnapshotResponse {
     pub retained_trace_limit: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WorkflowTraceRuntimeSelection {
+    pub execution_id: Option<String>,
+    pub runtime: Option<WorkflowTraceRuntimeMetrics>,
+    pub matched_execution_ids: Vec<String>,
+}
+
+impl WorkflowTraceRuntimeSelection {
+    pub fn is_ambiguous(&self) -> bool {
+        self.execution_id.is_none() && self.matched_execution_ids.len() > 1
+    }
+}
+
 fn validate_optional_filter(
     value: &Option<String>,
     field_name: &'static str,

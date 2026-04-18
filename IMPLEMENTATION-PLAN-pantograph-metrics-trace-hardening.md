@@ -315,7 +315,7 @@ decomposition do not drift across layers.
       values, never snapshot-capture fallbacks.
 - [x] Freeze execution-attribution rules so `execution_id` remains authoritative
       and any compatibility fallback is narrow, documented, and testable.
-- [ ] Define how session/workflow-scoped runtime-metrics reads behave when
+- [x] Define how session/workflow-scoped runtime-metrics reads behave when
       multiple matching traces exist: resolved execution set, explicit
       ambiguity, or another backend-owned deterministic rule.
 - [ ] Record the planned extraction boundaries for
@@ -465,6 +465,10 @@ Update during implementation:
   documenting execution-first attribution, and adding a regression test that
   prevents another run in the same session from leaking queue metrics into the
   active trace.
+- 2026-04-18: Completed the multi-run runtime-metrics slice by adding a
+  backend-owned unique-match selection helper for trace runtime metrics,
+  exposing matched execution ids for ambiguity, and updating Tauri diagnostics
+  to refuse multi-run session/workflow first-match selection.
 
 ## Commit Cadence Notes
 

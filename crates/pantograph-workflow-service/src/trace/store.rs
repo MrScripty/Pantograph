@@ -115,6 +115,35 @@ impl WorkflowTraceState {
         }
     }
 
+    fn runtime_metrics_selection(
+        &self,
+        request: &WorkflowTraceSnapshotRequest,
+    ) -> super::types::WorkflowTraceRuntimeSelection {
+        let matching_traces: Vec<_> = self
+            .trace_order
+            .iter()
+            .filter_map(|execution_id| self.traces_by_id.get(execution_id))
+            .filter(|trace| trace_matches_request(trace, request))
+            .collect();
+        let matched_execution_ids = matching_traces
+            .iter()
+            .map(|trace| trace.execution_id.clone())
+            .collect::<Vec<_>>();
+
+        match matching_traces.as_slice() {
+            [trace] => super::types::WorkflowTraceRuntimeSelection {
+                execution_id: Some(trace.execution_id.clone()),
+                runtime: Some(trace.runtime.clone()),
+                matched_execution_ids,
+            },
+            _ => super::types::WorkflowTraceRuntimeSelection {
+                execution_id: None,
+                runtime: None,
+                matched_execution_ids,
+            },
+        }
+    }
+
     fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
         self.snapshot(&WorkflowTraceSnapshotRequest::default())
     }
@@ -272,6 +301,19 @@ impl WorkflowTraceStore {
             .lock()
             .expect("workflow trace lock poisoned")
             .snapshot_all()
+    }
+
+    pub fn select_runtime_metrics(
+        &self,
+        request: &WorkflowTraceSnapshotRequest,
+    ) -> Result<super::types::WorkflowTraceRuntimeSelection, WorkflowServiceError> {
+        let request = request.normalized();
+        request.validate()?;
+        Ok(self
+            .state
+            .lock()
+            .expect("workflow trace lock poisoned")
+            .runtime_metrics_selection(&request))
     }
 
     pub fn clear_history(&self) -> WorkflowTraceSnapshotResponse {

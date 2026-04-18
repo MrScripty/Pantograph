@@ -100,6 +100,10 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   exported by `mod.rs`.
 - `snapshot()` validates request filters and returns
   `WorkflowTraceSnapshotResponse` with canonical `WorkflowTraceSummary` values.
+- `select_runtime_metrics()` reuses the same backend-owned request semantics
+  but only returns runtime metrics when the filter resolves to exactly one
+  execution. Multi-run matches stay explicit through
+  `matched_execution_ids` instead of silently picking the first trace.
 - `snapshot()` trims surrounding whitespace from optional filters and rejects
   blank filter values instead of silently inventing adapter-local fallback
   semantics.

@@ -5,7 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStore,
+    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStore,
 };
 
 use super::trace::{diagnostics_run_trace, graph_trace_context, workflow_trace_event};
@@ -161,6 +162,13 @@ impl WorkflowDiagnosticsStore {
         request: WorkflowTraceSnapshotRequest,
     ) -> Result<WorkflowTraceSnapshotResponse, WorkflowServiceError> {
         self.trace_store.snapshot(&request)
+    }
+
+    pub fn select_trace_runtime_metrics(
+        &self,
+        request: &WorkflowTraceSnapshotRequest,
+    ) -> Result<WorkflowTraceRuntimeSelection, WorkflowServiceError> {
+        self.trace_store.select_runtime_metrics(request)
     }
 
     pub fn clear_history(&self) -> WorkflowDiagnosticsProjection {
