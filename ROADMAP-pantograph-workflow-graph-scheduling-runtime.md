@@ -461,6 +461,10 @@ prepare the engine for metric-informed scheduling.
   sequences through `translate_node_event_with_diagnostics`, confirming the
   existing backend-owned event contract is sufficient for the current
   bounded-parallel consumer path without additive transport fields.
+- Phase 2 now also has a real executor-to-adapter acceptance test in
+  `src-tauri/src/workflow/event_adapter/tests.rs`, exercising bounded parallel
+  independent roots through `WorkflowExecutor`, `TauriEventAdapter`, emitted
+  transport events, and diagnostics snapshots in one path.
 
 **Milestones:**
 

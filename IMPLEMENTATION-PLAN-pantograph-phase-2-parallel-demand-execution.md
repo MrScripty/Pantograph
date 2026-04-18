@@ -632,7 +632,7 @@ behind.
 - [ ] Add representative workflow benchmarks or benchmark-like reproducible
       harnesses that compare the sequential baseline with bounded parallel
       execution.
-- [ ] Add cross-layer acceptance coverage for a real workflow path that
+- [x] Add cross-layer acceptance coverage for a real workflow path that
       exercises parallel independent branches through backend execution and
       consumer-visible events.
 - [ ] Update touched README files, this plan, and the roadmap so status and
@@ -644,7 +644,7 @@ behind.
 - Repeated benchmark or harness runs to detect state leakage or unstable timing
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** Not started
+**Status:** In progress
 
 ## Execution Notes
 
@@ -821,6 +821,12 @@ Update during implementation:
   node-engine root event sequences through the real Tauri diagnostics bridge so
   the adapter boundary now pins both overlapping completion timing and waiting
   pause duration without introducing additive transport fields.
+- 2026-04-18: First Milestone 5 acceptance slice landed in
+  `src-tauri/src/workflow/event_adapter/tests.rs`, running a real
+  `node_engine::WorkflowExecutor` through `TauriEventAdapter` so bounded
+  parallel execution now has cross-layer acceptance coverage for
+  consumer-visible events and diagnostics snapshots instead of relying only on
+  replayed event sequences.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are

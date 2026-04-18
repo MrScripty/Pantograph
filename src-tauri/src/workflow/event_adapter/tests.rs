@@ -1,6 +1,12 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use async_trait::async_trait;
 use node_engine::EventSink;
+use node_engine::{
+    Context, ExecutorExtensions, GraphNode as EngineGraphNode, TaskExecutor, WorkflowExecutor,
+};
 use pantograph_workflow_service::{
     graph::WorkflowDerivedGraph, GraphNode, Position, WorkflowGraph,
 };
@@ -33,6 +39,73 @@ fn sample_parallel_graph() -> WorkflowGraph {
             graph_fingerprint: "graph-parallel".to_string(),
             consumer_count_map: std::collections::HashMap::new(),
         }),
+    }
+}
+
+fn make_parallel_roots_graph() -> node_engine::WorkflowGraph {
+    let mut graph = node_engine::WorkflowGraph::new("parallel", "Parallel");
+    for (id, x) in [("left", 0.0), ("right", 100.0)] {
+        graph.nodes.push(EngineGraphNode {
+            id: id.to_string(),
+            node_type: "process".to_string(),
+            data: serde_json::json!({"node": id}),
+            position: (x, 0.0),
+        });
+    }
+    graph
+}
+
+struct YieldingAcceptanceExecutor {
+    current_in_flight: AtomicUsize,
+    max_in_flight: AtomicUsize,
+}
+
+impl YieldingAcceptanceExecutor {
+    fn new() -> Self {
+        Self {
+            current_in_flight: AtomicUsize::new(0),
+            max_in_flight: AtomicUsize::new(0),
+        }
+    }
+
+    fn max_in_flight(&self) -> usize {
+        self.max_in_flight.load(Ordering::SeqCst)
+    }
+
+    fn record_max_in_flight(&self, observed: usize) {
+        let mut current_max = self.max_in_flight.load(Ordering::SeqCst);
+        while observed > current_max {
+            match self.max_in_flight.compare_exchange(
+                current_max,
+                observed,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(actual) => current_max = actual,
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl TaskExecutor for YieldingAcceptanceExecutor {
+    async fn execute_task(
+        &self,
+        task_id: &str,
+        _inputs: HashMap<String, serde_json::Value>,
+        _context: &Context,
+        _extensions: &ExecutorExtensions,
+    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
+        let observed = self.current_in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        self.record_max_in_flight(observed);
+        tokio::task::yield_now().await;
+        self.current_in_flight.fetch_sub(1, Ordering::SeqCst);
+
+        Ok(HashMap::from([(
+            "out".to_string(),
+            serde_json::json!({ "task": task_id }),
+        )]))
     }
 }
 
@@ -694,4 +767,72 @@ fn adapter_send_emits_primary_and_diagnostics_events() {
     assert_eq!(events[1]["type"], "DiagnosticsSnapshot");
     assert_eq!(events[1]["data"]["execution_id"], "exec-1");
     assert_eq!(events[1]["data"]["snapshot"]["runOrder"][0], "exec-1");
+}
+
+#[tokio::test]
+async fn workflow_executor_parallel_run_emits_consumer_visible_events_through_adapter() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    diagnostics_store.set_execution_metadata(
+        "exec-parallel",
+        Some("parallel".to_string()),
+        Some("Parallel Workflow".to_string()),
+    );
+    diagnostics_store.set_execution_graph("exec-parallel", &sample_parallel_graph());
+
+    let emitted = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let captured = emitted.clone();
+    let channel: Channel<super::TauriWorkflowEvent> = Channel::new(move |body| {
+        let value = match body {
+            InvokeResponseBody::Json(json) => {
+                serde_json::from_str::<Value>(&json).expect("channel event json")
+            }
+            InvokeResponseBody::Raw(bytes) => {
+                serde_json::from_slice::<Value>(&bytes).expect("channel event raw json")
+            }
+        };
+        captured.lock().expect("captured events lock").push(value);
+        Ok(())
+    });
+    let adapter = Arc::new(super::TauriEventAdapter::new(
+        channel,
+        "parallel",
+        diagnostics_store,
+    ));
+    let workflow_executor = WorkflowExecutor::new(
+        "exec-parallel",
+        make_parallel_roots_graph(),
+        adapter.clone(),
+    );
+    let executor_impl = YieldingAcceptanceExecutor::new();
+
+    let outputs = workflow_executor
+        .demand_multiple(&["left".to_string(), "right".to_string()], &executor_impl)
+        .await
+        .expect("parallel workflow should succeed");
+
+    assert_eq!(executor_impl.max_in_flight(), 2);
+    assert_eq!(outputs.len(), 2);
+
+    let events = emitted.lock().expect("captured events lock");
+    let event_types = events
+        .iter()
+        .map(|event| event["type"].as_str().unwrap_or_default().to_string())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"IncrementalExecutionStarted".to_string()));
+    assert!(event_types.contains(&"NodeStarted".to_string()));
+    assert!(event_types.contains(&"NodeCompleted".to_string()));
+    assert!(event_types.contains(&"DiagnosticsSnapshot".to_string()));
+
+    let snapshot = events
+        .iter()
+        .rev()
+        .find(|event| event["type"] == "DiagnosticsSnapshot")
+        .expect("final diagnostics snapshot");
+    let run = &snapshot["data"]["snapshot"]["runsById"]["exec-parallel"];
+    assert_eq!(run["workflowName"], "Parallel Workflow");
+    assert_eq!(run["graphFingerprintAtStart"], "graph-parallel");
+    assert_eq!(run["lastIncrementalTaskIds"][0], "left");
+    assert_eq!(run["lastIncrementalTaskIds"][1], "right");
+    assert_eq!(run["nodes"]["left"]["status"], "completed");
+    assert_eq!(run["nodes"]["right"]["status"], "completed");
 }
