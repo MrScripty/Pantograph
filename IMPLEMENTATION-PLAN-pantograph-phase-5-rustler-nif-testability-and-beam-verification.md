@@ -413,8 +413,9 @@ Corrections applied:
 - A first documented BEAM harness scaffold now exists under `bindings/beam/`,
   with a minimal Mix/ExUnit smoke project that loads the compiled NIF through
   `PANTOGRAPH_RUSTLER_NIF_PATH` and exercises real exported Rustler functions.
-- The current environment still lacks `mix` and `elixir`, so the new harness
-  is authored but not yet executed locally.
+- The local environment now has a working Erlang/Elixir toolchain through the
+  existing `mise` install path, and the new Mix/ExUnit smoke harness passes
+  against the compiled `pantograph_rustler` NIF.
 
 ### Milestone 4: Source-of-Truth And Contract Reconciliation
 
@@ -473,9 +474,12 @@ Corrections applied:
 - 2026-04-18: Milestone 3 scaffolding started under `bindings/beam/` with a
   documented Mix/ExUnit smoke harness that targets the compiled
   `pantograph_rustler` NIF through an explicit `PANTOGRAPH_RUSTLER_NIF_PATH`
-  contract. Local execution remains pending until BEAM host tooling is
-  available in the environment.
+  contract.
 - 2026-04-18: Milestone 2 extraction also started inside
   `crates/pantograph-rustler`: workflow graph JSON CRUD and validation helpers
   moved behind a focused `workflow_graph_contract.rs` module so the public NIF
   facade stays stable while the Rustler entry file keeps shrinking.
+- 2026-04-18: The BEAM smoke harness now loads the compiled
+  `pantograph_rustler` NIF successfully under local Mix/ExUnit execution and
+  passes version plus workflow graph round-trip smokes after aligning the
+  Elixir shim with the full default Rustler export surface.

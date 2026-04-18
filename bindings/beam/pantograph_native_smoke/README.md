@@ -19,5 +19,8 @@ local build artifact and exercising a small public contract surface.
 - This harness intentionally avoids Hex dependencies.
 - JSON assertions stay string-based here so the harness remains runnable in
   offline environments without adding parser packages.
+- The local `Pantograph.Native` shim defines generated NIF stubs for the full
+  default Rustler export surface so `:erlang.load_nif/2` can load the compiled
+  library before individual smoke tests call the narrower contract under test.
 - Broader workflow-event and error-envelope coverage can be added here as the
   dedicated Rustler contract extraction work lands.
