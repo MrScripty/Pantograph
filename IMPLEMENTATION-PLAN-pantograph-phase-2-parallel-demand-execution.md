@@ -752,6 +752,11 @@ Update during implementation:
   batch-dispatch plan that applies the explicit execution budget to each
   overlap-safe batch so the coordinator now owns budget-window dispatch even
   before real concurrent execution is enabled.
+- 2026-04-18: Fifth Milestone 3 coordinator-prep slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing explicit
+  per-window completion and interruption outcomes so later concurrent window
+  execution can preserve the same backend-owned stop semantics currently
+  enforced sequentially.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -841,6 +846,8 @@ Update during implementation:
 - The coordinator now also applies the explicit execution budget through a
   private batch-dispatch plan, even though each dispatch window still executes
   sequentially for now.
+- The coordinator now also owns explicit per-window completion and
+  interruption outcomes rather than only batch-level aggregation.
 
 ### Deviations
 

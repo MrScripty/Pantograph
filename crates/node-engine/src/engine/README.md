@@ -71,6 +71,9 @@ changing the public executor surface.
 - Multi-demand batch execution should apply the explicit execution budget
   through a private dispatch plan so later bounded concurrency widens an
   existing backend-owned dispatch contract instead of inventing one.
+- Multi-demand dispatch windows should own their own completion and
+  interruption outcomes so later concurrent execution preserves the same stop
+  semantics as the current sequential runner.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -144,6 +147,9 @@ planning split, plus the private execution-batch schedule derived from it.
   earlier batch pauses for interactive input.
 - Multi-demand batch execution currently dispatches budget-sized windows
   sequentially within each overlap-safe batch.
+- Multi-demand dispatch windows currently execute sequentially, but they now
+  report completion and interruption through explicit backend-owned outcome
+  types.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

@@ -24,6 +24,11 @@ struct DemandBatchExecutionOutcome {
     completed_targets: Vec<NodeId>,
 }
 
+#[derive(Debug, Default)]
+struct DemandDispatchWindowOutcome {
+    completed_targets: Vec<NodeId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DemandBatchDispatchPlan {
     execution_windows: Vec<Vec<NodeId>>,
@@ -32,6 +37,12 @@ struct DemandBatchDispatchPlan {
 #[derive(Debug)]
 enum DemandBatchExecutionResult {
     Completed(DemandBatchExecutionOutcome),
+    Interrupted(NodeEngineError),
+}
+
+#[derive(Debug)]
+enum DemandDispatchWindowResult {
+    Completed(DemandDispatchWindowOutcome),
     Interrupted(NodeEngineError),
 }
 
@@ -208,6 +219,16 @@ impl DemandBatchExecutionOutcome {
     }
 }
 
+impl DemandDispatchWindowOutcome {
+    fn record_completed_target(&mut self, node_id: &NodeId) {
+        self.completed_targets.push(node_id.clone());
+    }
+
+    fn completed_targets(&self) -> &[NodeId] {
+        &self.completed_targets
+    }
+}
+
 impl<'a> DemandMultipleCoordinator<'a> {
     fn new(
         engine: &'a mut DemandEngine,
@@ -274,15 +295,32 @@ impl<'a> DemandMultipleCoordinator<'a> {
         let dispatch_plan = DemandBatchDispatchPlan::from_batch(batch, self.budget);
 
         for window in dispatch_plan.execution_windows() {
-            for node_id in window {
-                if let Err(error) = self.demand_target(node_id).await {
+            match self.execute_window(window).await {
+                DemandDispatchWindowResult::Completed(window_outcome) => {
+                    for node_id in window_outcome.completed_targets() {
+                        outcome.record_completed_target(node_id);
+                    }
+                }
+                DemandDispatchWindowResult::Interrupted(error) => {
                     return DemandBatchExecutionResult::Interrupted(error);
                 }
-                outcome.record_completed_target(node_id);
             }
         }
 
         DemandBatchExecutionResult::Completed(outcome)
+    }
+
+    async fn execute_window(&mut self, window: &[NodeId]) -> DemandDispatchWindowResult {
+        let mut outcome = DemandDispatchWindowOutcome::default();
+
+        for node_id in window {
+            if let Err(error) = self.demand_target(node_id).await {
+                return DemandDispatchWindowResult::Interrupted(error);
+            }
+            outcome.record_completed_target(node_id);
+        }
+
+        DemandDispatchWindowResult::Completed(outcome)
     }
 
     async fn collect_requested_outputs(&mut self) -> Result<()> {
@@ -384,7 +422,8 @@ mod tests {
 
     use super::{
         DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
-        DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults,
+        DemandDispatchWindowOutcome, DemandDispatchWindowResult, DemandExecutionBudget,
+        DemandMultiplePlan, DemandMultipleResults,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -635,6 +674,18 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_window_outcome_tracks_completed_targets_in_order() {
+        let mut outcome = DemandDispatchWindowOutcome::default();
+        outcome.record_completed_target(&"node_a".to_string());
+        outcome.record_completed_target(&"node_b".to_string());
+
+        assert_eq!(
+            outcome.completed_targets(),
+            &["node_a".to_string(), "node_b".to_string()]
+        );
+    }
+
+    #[test]
     fn batch_execution_result_carries_interrupt_error() {
         let result = DemandBatchExecutionResult::Interrupted(NodeEngineError::waiting_for_input(
             "approval",
@@ -643,6 +694,25 @@ mod tests {
 
         match result {
             DemandBatchExecutionResult::Interrupted(NodeEngineError::WaitingForInput {
+                task_id,
+                prompt: Some(prompt),
+            }) => {
+                assert_eq!(task_id, "approval");
+                assert_eq!(prompt, "Approve deployment?");
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dispatch_window_result_carries_interrupt_error() {
+        let result = DemandDispatchWindowResult::Interrupted(NodeEngineError::waiting_for_input(
+            "approval",
+            Some("Approve deployment?".to_string()),
+        ));
+
+        match result {
+            DemandDispatchWindowResult::Interrupted(NodeEngineError::WaitingForInput {
                 task_id,
                 prompt: Some(prompt),
             }) => {

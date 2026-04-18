@@ -416,6 +416,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also applies the explicit execution budget through a private
   batch-dispatch plan, giving the coordinator a real budget-window shape before
   concurrent execution is turned on.
+- Phase 2 now also has explicit per-window completion and interruption
+  outcomes, so future concurrent window execution can preserve the same
+  backend-owned stop semantics as the current sequential runner.
 
 **Milestones:**
 
