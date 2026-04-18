@@ -14,7 +14,7 @@ entrypoint while preserving the current public API.
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
-| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path and the future insertion point for bounded parallel coordination. |
+| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, and the future insertion point for bounded parallel coordination. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
@@ -43,6 +43,8 @@ changing the public executor surface.
   `engine/execution_core.rs` rather than growing back into `engine.rs`.
 - Executor-facing single-demand and multi-demand lock choreography should live
   under `engine/` helpers rather than expanding `engine.rs`.
+- Multi-demand request normalization should stay under `multi_demand.rs` so
+  caller-visible target order and future execution scheduling remain separated.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -59,7 +61,9 @@ assembly details directly. The same applies to executor-facing single-demand
 facade choreography, node preparation, output-cache lifecycle handling, task
 event emission, and in-flight bookkeeping. The remaining recursive demand
 orchestration now lives behind `execution_core.rs` so `engine.rs` can stay a
-thin facade while Phase 2 introduces bounded parallel coordination later.
+thin facade while Phase 2 introduces bounded parallel coordination later. The
+same directory now also owns the private multi-demand request-plan contract so
+future scheduling changes do not have to redefine the facade event payload.
 
 ## Alternatives Rejected
 - Continuing to grow `engine.rs` directly.
@@ -85,6 +89,9 @@ thin facade while Phase 2 introduces bounded parallel coordination later.
 - Single-demand and multi-demand facade helpers remain behaviorally equivalent
   to the prior inline executor methods until the bounded parallel coordinator
   intentionally changes the multi-demand path.
+- Multi-demand request planning currently preserves caller-visible requested
+  target order while keeping execution-target planning as a separate backend
+  concern.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

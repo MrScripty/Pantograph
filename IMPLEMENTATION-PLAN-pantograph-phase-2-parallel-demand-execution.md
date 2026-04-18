@@ -575,7 +575,7 @@ behavior.
 - Concurrency review against `CONCURRENCY-STANDARDS.md`
 - Contract review if additive event or metrics fields are required
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: Land The Bounded Parallel Coordinator
 
@@ -702,6 +702,12 @@ Update during implementation:
   recursive node-demand orchestration behind a private execution-core owner so
   `DemandEngine::demand_internal` is now a thin delegator and Milestone 1's
   decomposition boundary is complete.
+- 2026-04-18: First Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing a private
+  multi-demand plan that preserves caller-visible requested-target order
+  separately from the current sequential execution-target list so later bounded
+  scheduling can change internal coordination without re-entangling the facade
+  event payload contract.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -764,6 +770,9 @@ Update during implementation:
 - The remaining recursive demand orchestration now also lives behind a private
   execution-core owner, leaving `DemandEngine::demand_internal` as a thin
   delegator instead of the last monolithic recursive execution body.
+- Multi-demand target requests are now normalized behind a private plan object
+  that keeps caller-visible requested-target order separate from the current
+  sequential execution-target list ahead of bounded parallel coordination.
 
 ### Deviations
 

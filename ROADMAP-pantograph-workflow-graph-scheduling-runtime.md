@@ -385,6 +385,9 @@ prepare the engine for metric-informed scheduling.
   `node-engine` execution-core owner, completing the Milestone 1 hot-path
   decomposition boundary ahead of the concurrency-contract and coordinator
   slices.
+- Phase 2 now also has a private multi-demand request-plan boundary that keeps
+  caller-visible requested-target order separate from the current sequential
+  execution-target list before bounded parallel scheduling changes land.
 
 **Milestones:**
 
