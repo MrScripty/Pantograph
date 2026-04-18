@@ -2829,6 +2829,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_run_session_returns_invalid_request_for_human_input_workflow() {
+        let temp = TempDir::new().expect("temp dir");
+        write_human_input_workflow(temp.path(), "interactive-human-input");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
+
+        let created = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "interactive-human-input".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: false,
+            })
+            .await
+            .expect("create interactive session");
+
+        let error = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: created.session_id,
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "human-input-1".to_string(),
+                    port_id: "value".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-human-input-session".to_string()),
+            })
+            .await
+            .expect_err("interactive workflow session run should fail for non-streaming callers");
+
+        match error {
+            WorkflowServiceError::InvalidRequest(message) => {
+                assert!(
+                    message.contains("interactive") || message.contains("input"),
+                    "unexpected invalid-request message: {message}"
+                );
+            }
+            other => panic!("expected invalid request error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
         let temp = TempDir::new().expect("temp dir");
         write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");

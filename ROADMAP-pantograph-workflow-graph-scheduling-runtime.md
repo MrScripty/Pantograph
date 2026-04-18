@@ -599,6 +599,10 @@ incremental runs.
   `invalid_request` envelopes through the real `workflow_run` entrypoint, so
   that non-streaming interactive mismatch behavior is covered directly at the
   transport boundary rather than only through helper-level mapping tests.
+- The embedded runtime session-backed non-streaming run path now also has
+  focused interactive-mismatch coverage, so `run_workflow_session` preserves
+  the same backend-owned `invalid_request` contract already pinned on the
+  direct embedded `workflow_run` surface.
 - The concrete embedded-runtime workflow host now also has a focused
   pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
   boundary, so non-streaming cancellation parity is no longer inferred only
