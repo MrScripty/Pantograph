@@ -717,6 +717,11 @@ Update during implementation:
   `crates/node-engine/src/engine/multi_demand.rs`, introducing a private
   multi-demand coordinator owner that still runs sequentially but now owns the
   execution loop the future bounded scheduler will replace.
+- 2026-04-18: Third Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing a private
+  execution-budget contract with a current default of one in-flight target so
+  later bounded scheduling has an explicit budget owner before additive runtime
+  configuration is introduced.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -788,6 +793,8 @@ Update during implementation:
 - The current sequential multi-demand traversal now also runs behind a private
   coordinator owner so later bounded scheduling can change one internal owner
   instead of reopening facade orchestration.
+- Multi-demand execution budget semantics are now also explicit behind a
+  private contract with a current default of one in-flight target.
 
 ### Deviations
 

@@ -19,7 +19,13 @@ struct DemandMultipleResults {
     outputs: HashMap<NodeId, HashMap<String, serde_json::Value>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DemandExecutionBudget {
+    max_in_flight: usize,
+}
+
 struct DemandMultipleCoordinator<'a> {
+    budget: DemandExecutionBudget,
     engine: &'a mut DemandEngine,
     plan: &'a DemandMultiplePlan,
     graph: &'a WorkflowGraph,
@@ -61,6 +67,16 @@ impl DemandMultipleResults {
     }
 }
 
+impl DemandExecutionBudget {
+    fn sequential() -> Self {
+        Self { max_in_flight: 1 }
+    }
+
+    fn max_in_flight(self) -> usize {
+        self.max_in_flight
+    }
+}
+
 impl<'a> DemandMultipleCoordinator<'a> {
     fn new(
         engine: &'a mut DemandEngine,
@@ -72,6 +88,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
         extensions: &'a ExecutorExtensions,
     ) -> Self {
         Self {
+            budget: DemandExecutionBudget::sequential(),
             engine,
             plan,
             graph,
@@ -83,7 +100,16 @@ impl<'a> DemandMultipleCoordinator<'a> {
         }
     }
 
-    async fn run_sequential(mut self) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
+    async fn run(self) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
+        match self.budget.max_in_flight() {
+            1 => self.run_sequential().await,
+            _ => unreachable!("bounded parallel execution is not implemented yet"),
+        }
+    }
+
+    async fn run_sequential(
+        mut self,
+    ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         for node_id in self.plan.execution_targets() {
             self.demand_target(node_id).await?;
         }
@@ -172,7 +198,7 @@ async fn execute_sequential_plan(
         event_sink,
         extensions,
     )
-    .run_sequential()
+    .run()
     .await
 }
 
@@ -180,7 +206,7 @@ async fn execute_sequential_plan(
 mod tests {
     use std::collections::HashMap;
 
-    use super::{DemandMultiplePlan, DemandMultipleResults};
+    use super::{DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults};
 
     #[test]
     fn plan_preserves_requested_target_order_for_event_payloads() {
@@ -217,6 +243,11 @@ mod tests {
 
         assert!(plan.requested_targets().is_empty());
         assert!(plan.execution_targets().is_empty());
+    }
+
+    #[test]
+    fn execution_budget_defaults_to_one_in_flight() {
+        assert_eq!(DemandExecutionBudget::sequential().max_in_flight(), 1);
     }
 
     #[test]

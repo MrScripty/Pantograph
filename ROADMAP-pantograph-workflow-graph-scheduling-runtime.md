@@ -394,6 +394,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also executes the sequential multi-demand path through a private
   coordinator owner so bounded scheduling can land by changing coordinator
   internals instead of reopening facade orchestration.
+- Phase 2 now also has a private execution-budget contract with a current
+  default of one in-flight target, giving later bounded scheduling an explicit
+  budget owner before additive runtime controls land.
 
 **Milestones:**
 
