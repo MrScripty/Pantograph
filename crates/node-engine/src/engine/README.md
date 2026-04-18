@@ -59,6 +59,9 @@ changing the public executor surface.
 - Multi-demand schedule construction should stay private to `multi_demand.rs`
   so the coordinator consumes an explicit batch shape before real parallelism
   is introduced.
+- Multi-demand batch planning should separate roots whose transitive
+  dependency closures overlap while allowing independent roots to share a
+  batch, so the current parallel-eligibility rule remains backend-owned.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -123,6 +126,9 @@ planning split, plus the private execution-batch schedule derived from it.
   covered by other requested dependents.
 - Multi-demand scheduling currently runs one sequential batch even though the
   coordinator now consumes an explicit schedule structure.
+- Multi-demand batch planning currently groups independent roots together and
+  separates roots with shared transitive dependencies into later sequential
+  batches.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

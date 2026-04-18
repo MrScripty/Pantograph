@@ -403,6 +403,10 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also represents root work as an explicit private execution-batch
   schedule, even though the current coordinator still runs a single sequential
   batch.
+- Phase 2 batch planning now also groups independent roots together while
+  separating roots whose transitive dependency closures overlap, establishing
+  the current backend-owned parallel-eligibility rule before concurrent
+  execution is enabled.
 
 **Milestones:**
 

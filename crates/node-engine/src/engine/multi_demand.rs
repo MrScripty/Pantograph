@@ -58,7 +58,7 @@ impl DemandMultiplePlan {
 
         Self {
             requested_targets,
-            execution_batches: into_execution_batches(execution_targets),
+            execution_batches: into_execution_batches(graph, execution_targets),
         }
     }
 
@@ -71,12 +71,51 @@ impl DemandMultiplePlan {
     }
 }
 
-fn into_execution_batches(execution_targets: Vec<NodeId>) -> Vec<Vec<NodeId>> {
-    if execution_targets.is_empty() {
-        Vec::new()
-    } else {
-        vec![execution_targets]
+fn into_execution_batches(
+    graph: &WorkflowGraph,
+    execution_targets: Vec<NodeId>,
+) -> Vec<Vec<NodeId>> {
+    let mut batches = Vec::new();
+    let mut current_batch = Vec::new();
+    let mut current_batch_nodes = HashSet::new();
+
+    for node_id in execution_targets {
+        let dependency_closure = collect_dependency_closure(graph, &node_id, &mut HashSet::new());
+        let overlaps_current_batch = dependency_closure
+            .iter()
+            .any(|dependency_id| current_batch_nodes.contains(dependency_id));
+
+        if overlaps_current_batch && !current_batch.is_empty() {
+            batches.push(current_batch);
+            current_batch = Vec::new();
+            current_batch_nodes = HashSet::new();
+        }
+
+        current_batch_nodes.extend(dependency_closure);
+        current_batch.push(node_id);
     }
+
+    if !current_batch.is_empty() {
+        batches.push(current_batch);
+    }
+
+    batches
+}
+
+fn collect_dependency_closure(
+    graph: &WorkflowGraph,
+    node_id: &NodeId,
+    visited: &mut HashSet<NodeId>,
+) -> HashSet<NodeId> {
+    if !visited.insert(node_id.clone()) {
+        return HashSet::new();
+    }
+
+    let mut closure = HashSet::from([node_id.clone()]);
+    for dependency_id in graph.get_dependencies(node_id) {
+        closure.extend(collect_dependency_closure(graph, &dependency_id, visited));
+    }
+    closure
 }
 
 fn is_redundant_requested_target(
@@ -329,6 +368,100 @@ mod tests {
         }
     }
 
+    fn make_disjoint_branches_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            id: "graph".to_string(),
+            name: "Graph".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "a".to_string(),
+                    node_type: "input".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "b".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (1.0, 0.0),
+                },
+                GraphNode {
+                    id: "x".to_string(),
+                    node_type: "input".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 1.0),
+                },
+                GraphNode {
+                    id: "y".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (1.0, 1.0),
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: "e1".to_string(),
+                    source: "a".to_string(),
+                    source_handle: "out".to_string(),
+                    target: "b".to_string(),
+                    target_handle: "in".to_string(),
+                },
+                GraphEdge {
+                    id: "e2".to_string(),
+                    source: "x".to_string(),
+                    source_handle: "out".to_string(),
+                    target: "y".to_string(),
+                    target_handle: "in".to_string(),
+                },
+            ],
+            groups: Vec::new(),
+        }
+    }
+
+    fn make_shared_dependency_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            id: "graph".to_string(),
+            name: "Graph".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "a".to_string(),
+                    node_type: "input".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "b".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (1.0, 0.0),
+                },
+                GraphNode {
+                    id: "c".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (1.0, 1.0),
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: "e1".to_string(),
+                    source: "a".to_string(),
+                    source_handle: "out".to_string(),
+                    target: "b".to_string(),
+                    target_handle: "in".to_string(),
+                },
+                GraphEdge {
+                    id: "e2".to_string(),
+                    source: "a".to_string(),
+                    source_handle: "out".to_string(),
+                    target: "c".to_string(),
+                    target_handle: "in".to_string(),
+                },
+            ],
+            groups: Vec::new(),
+        }
+    }
+
     #[test]
     fn plan_preserves_requested_target_order_for_event_payloads() {
         let graph = make_linear_graph();
@@ -394,6 +527,30 @@ mod tests {
         assert_eq!(
             plan.execution_batches(),
             &[vec!["c".to_string()]]
+        );
+    }
+
+    #[test]
+    fn plan_groups_independent_root_targets_into_one_batch() {
+        let graph = make_disjoint_branches_graph();
+        let plan =
+            DemandMultiplePlan::from_requested_targets(&["b".to_string(), "y".to_string()], &graph);
+
+        assert_eq!(
+            plan.execution_batches(),
+            &[vec!["b".to_string(), "y".to_string()]]
+        );
+    }
+
+    #[test]
+    fn plan_separates_root_targets_with_shared_dependencies() {
+        let graph = make_shared_dependency_graph();
+        let plan =
+            DemandMultiplePlan::from_requested_targets(&["b".to_string(), "c".to_string()], &graph);
+
+        assert_eq!(
+            plan.execution_batches(),
+            &[vec!["b".to_string()], vec!["c".to_string()]]
         );
     }
 

@@ -732,6 +732,11 @@ Update during implementation:
   execution-target list with an explicit private execution-batch schedule so
   the coordinator now runs against a schedule shape that later bounded
   scheduling can widen instead of a bare vector.
+- 2026-04-18: Fifth Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, teaching the private batch
+  planner to group independent root targets into the same batch while
+  separating roots whose transitive dependency closures overlap, freezing the
+  current parallel-eligibility rule before real concurrent execution lands.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -810,6 +815,9 @@ Update during implementation:
   from the smallest required top-level drive set.
 - The coordinator now also consumes an explicit execution-batch schedule, even
   though the current schedule still contains only one sequential batch.
+- The execution-batch schedule now reflects dependency-overlap eligibility:
+  independent roots may share a batch, while roots with shared transitive
+  dependencies are separated into deterministic sequential batches.
 
 ### Deviations
 
