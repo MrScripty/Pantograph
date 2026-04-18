@@ -18,6 +18,9 @@ use super::connection_intent::{
     rejected_insert_on_edge_response, rejected_insert_response,
 };
 use super::registry::NodeRegistry;
+use super::session_event::{
+    dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
+};
 use super::types::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
     GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, Position,
@@ -87,6 +90,8 @@ pub struct WorkflowGraphEditSessionGraphResponse {
     pub session_id: String,
     pub graph_revision: String,
     pub graph: WorkflowGraph,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_event: Option<node_engine::WorkflowEvent>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -247,12 +252,21 @@ impl GraphEditSession {
     }
 
     fn snapshot_response(&mut self, session_id: &str) -> WorkflowGraphEditSessionGraphResponse {
+        self.snapshot_response_with_event(session_id, None)
+    }
+
+    fn snapshot_response_with_event(
+        &mut self,
+        session_id: &str,
+        workflow_event: Option<node_engine::WorkflowEvent>,
+    ) -> WorkflowGraphEditSessionGraphResponse {
         self.touch();
         self.canonicalize_graph();
         WorkflowGraphEditSessionGraphResponse {
             session_id: session_id.to_string(),
             graph_revision: self.graph.compute_fingerprint(),
             graph: self.graph.clone(),
+            workflow_event,
         }
     }
 
@@ -266,7 +280,9 @@ impl GraphEditSession {
             .ok_or_else(|| WorkflowServiceError::InvalidRequest("Nothing to undo".to_string()))?;
         self.redo_stack.push(self.graph.clone());
         self.graph = previous;
-        Ok(self.snapshot_response(session_id))
+        let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
+        let workflow_event = graph_modified_event(session_id, session_id, dirty_tasks);
+        Ok(self.snapshot_response_with_event(session_id, Some(workflow_event)))
     }
 
     fn redo(
@@ -279,7 +295,9 @@ impl GraphEditSession {
             .ok_or_else(|| WorkflowServiceError::InvalidRequest("Nothing to redo".to_string()))?;
         self.undo_stack.push(self.graph.clone());
         self.graph = next;
-        Ok(self.snapshot_response(session_id))
+        let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
+        let workflow_event = graph_modified_event(session_id, session_id, dirty_tasks);
+        Ok(self.snapshot_response_with_event(session_id, Some(workflow_event)))
     }
 
     fn undo_redo_state(&self) -> UndoRedoState {
@@ -503,7 +521,11 @@ impl GraphSessionStore {
         })?;
         merge_node_data(&mut node.data, request.data);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        Ok(state.snapshot_response(&request.session_id))
+        let dirty_tasks =
+            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id));
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
     }
 
     pub async fn update_node_position(
@@ -528,7 +550,9 @@ impl GraphSessionStore {
         })?;
         node.position = request.position;
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        Ok(state.snapshot_response(&request.session_id))
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, Vec::new());
+        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
     }
 
     pub async fn add_node(
@@ -539,9 +563,13 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.touch();
         state.push_undo_snapshot();
+        let node_id = request.node.id.clone();
         state.graph.nodes.push(request.node);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        Ok(state.snapshot_response(&request.session_id))
+        let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, &[node_id]);
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
     }
 
     pub async fn remove_node(
@@ -558,13 +586,17 @@ impl GraphSessionStore {
             )));
         }
         state.push_undo_snapshot();
+        let dirty_tasks =
+            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id));
         state.graph.nodes.retain(|node| node.id != request.node_id);
         state
             .graph
             .edges
             .retain(|edge| edge.source != request.node_id && edge.target != request.node_id);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        Ok(state.snapshot_response(&request.session_id))
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
     }
 
     pub async fn add_edge(
@@ -575,9 +607,13 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.touch();
         state.push_undo_snapshot();
+        let target_node_id = request.edge.target.clone();
         state.graph.edges.push(request.edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        Ok(state.snapshot_response(&request.session_id))
+        let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, &[target_node_id]);
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
     }
 
     pub async fn remove_edge(
@@ -588,9 +624,20 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.touch();
         state.push_undo_snapshot();
+        let target_node_id = state
+            .graph
+            .edges
+            .iter()
+            .find(|edge| edge.id == request.edge_id)
+            .map(|edge| edge.target.clone());
         state.graph.edges.retain(|edge| edge.id != request.edge_id);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        Ok(state.snapshot_response(&request.session_id))
+        let dirty_tasks = target_node_id
+            .map(|node_id| dirty_tasks_from_seed_nodes(&state.graph, &[node_id]))
+            .unwrap_or_default();
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
     }
 
     pub async fn undo(
@@ -962,6 +1009,17 @@ mod tests {
         assert_eq!(node.data["placeholder"], "Prompt");
         assert_eq!(node.data["label"], "Text Input");
         assert!(node.data.get("definition").is_some());
+        assert!(matches!(
+            response.workflow_event,
+            Some(node_engine::WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+                ..
+            }) if workflow_id == session.session_id
+                && execution_id == session.session_id
+                && dirty_tasks == vec!["text-input".to_string(), "text-output".to_string()]
+        ));
     }
 
     #[tokio::test]
@@ -983,6 +1041,17 @@ mod tests {
             .find_node("text-output")
             .expect("text-output node");
         assert_eq!(node.position, Position { x: 320.0, y: 48.0 });
+        assert!(matches!(
+            response.workflow_event,
+            Some(node_engine::WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+                ..
+            }) if workflow_id == session.session_id
+                && execution_id == session.session_id
+                && dirty_tasks.is_empty()
+        ));
     }
 
     #[tokio::test]
@@ -1000,6 +1069,53 @@ mod tests {
 
         assert!(response.graph.find_node("text-output").is_none());
         assert!(response.graph.edges.is_empty());
+        assert!(matches!(
+            response.workflow_event,
+            Some(node_engine::WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+                ..
+            }) if workflow_id == session.session_id
+                && execution_id == session.session_id
+                && dirty_tasks == vec!["text-output".to_string()]
+        ));
+    }
+
+    #[tokio::test]
+    async fn undo_response_carries_backend_owned_graph_modified_event() {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(sample_graph()).await;
+
+        store
+            .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+                session_id: session.session_id.clone(),
+                node_id: "text-input".to_string(),
+                data: serde_json::json!({
+                    "text": "updated"
+                }),
+            })
+            .await
+            .expect("update node data");
+
+        let response = store
+            .undo(WorkflowGraphEditSessionGraphRequest {
+                session_id: session.session_id.clone(),
+            })
+            .await
+            .expect("undo graph edit");
+
+        assert!(matches!(
+            response.workflow_event,
+            Some(node_engine::WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+                ..
+            }) if workflow_id == session.session_id
+                && execution_id == session.session_id
+                && dirty_tasks == vec!["text-input".to_string(), "text-output".to_string()]
+        ));
     }
 
     #[tokio::test]

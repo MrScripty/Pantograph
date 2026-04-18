@@ -547,6 +547,11 @@ incremental runs.
 - UniFFI frontend-HTTP workflow-run coverage and the Rustler workflow-error
   serializer helper now also pin the same interactive `invalid_request`
   envelope, matching the binding-side `cancelled` coverage already in place.
+- Edit-session graph mutation responses in `pantograph-workflow-service` now
+  also carry an additive backend-owned canonical `GraphModified` event with
+  deterministic dirty-task ordering, so binding-facing graph edit responses no
+  longer need to infer mutation semantics from the returned graph snapshot
+  alone.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
@@ -560,14 +565,17 @@ incremental runs.
 
 **Still missing:**
 
-- Backend-owned emission coverage for the remaining interactive and graph-
-  mutation paths that still do not produce the event vocabulary consistently,
-  especially beyond the executor-owned invalidation, multi-demand, current
-  edit-session human-input pause path, and the now-correct orchestration
-  subgraph pause/cancel path
+- Backend-owned emission coverage for the remaining interactive paths that
+  still do not produce the event vocabulary consistently beyond the current
+  human-input pause path, orchestration subgraph pause/cancel path, and the
+  now-canonical graph-mutation/incremental paths
 - Broader backend emission coverage for any additional cancellable producer
   paths that still terminate without publishing the canonical cancellation
   event, beyond the now-covered orchestration error exits
+- Transport and GUI parity for session-edit graph mutations so Tauri graph
+  edit commands and the shared graph store consume the additive backend-owned
+  `GraphModified` response contract instead of relying on local dirty-state
+  synthesis
 - Extend acceptance coverage for the new `cancelled` envelope across any
   remaining non-streaming/headless command or binding surfaces that still need
   explicit parity checks

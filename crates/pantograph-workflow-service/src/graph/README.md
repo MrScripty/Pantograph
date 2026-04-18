@@ -50,6 +50,13 @@ when the node type matches.
 ## Invariants
 - Edit sessions are distinct from scheduler-managed workflow run sessions.
 - Graph mutations return backend-owned graph snapshots or structured rejections.
+- Graph edit-session mutation responses may also carry an additive canonical
+  backend-owned `workflow_event` so bindings and adapters can forward
+  `GraphModified` semantics without synthesizing them locally.
+- Edit-session graph mutation responses currently use the backend-owned session
+  id for both `workflow_id` and `execution_id` inside that additive event
+  contract because the session-scoped graph DTO does not yet carry a separate
+  persisted workflow identity.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Dynamic `node.data.definition` overlays may add ports for a specific node

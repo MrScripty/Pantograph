@@ -883,6 +883,11 @@ mod tests {
             update_response["graph"]["nodes"][0]["data"]["text"],
             "native edit"
         );
+        assert_eq!(update_response["workflow_event"]["type"], "graphModified");
+        assert_eq!(
+            update_response["workflow_event"]["dirtyTasks"],
+            serde_json::json!(["text-input-1"])
+        );
 
         let undo_state_json = runtime
             .workflow_graph_get_undo_redo_state(
@@ -901,6 +906,7 @@ mod tests {
         let undo_response: serde_json::Value =
             serde_json::from_str(&undo_response_json).expect("parse undo response");
         assert_eq!(undo_response["graph"]["nodes"][0]["data"]["text"], "draft");
+        assert_eq!(undo_response["workflow_event"]["type"], "graphModified");
 
         runtime
             .workflow_graph_close_edit_session(

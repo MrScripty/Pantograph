@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-17
+Last updated: 2026-04-18
 
 ## Current Source-of-Truth Summary
 
@@ -388,7 +388,7 @@ consistently.
 - [ ] Add or normalize event emission for the remaining interactive paths
       beyond the current human-input pause path where backend semantics still
       degrade or flatten.
-- [ ] Add or normalize graph-mutation and incremental-run events for the
+- [x] Add or normalize graph-mutation and incremental-run events for the
       remaining backend-owned execution and edit-session paths that still do
       not emit them consistently.
 - [x] Introduce additive backend-owned structured cancellation outcomes where
@@ -528,6 +528,14 @@ Update during implementation:
   `invalid_request` envelope through the UniFFI frontend-HTTP workflow-run
   surface and the Rustler workflow-error serializer helper, matching the
   previously-added `cancelled` envelope coverage on those boundaries.
+- 2026-04-18: Another Milestone 3 backend-emission slice landed in
+  `pantograph-workflow-service::graph`, where edit-session graph mutation
+  responses now carry an additive backend-owned canonical `GraphModified`
+  event with deterministic dirty-task ordering and session-scoped identity
+  instead of leaving graph-mutation semantics to adapter or GUI inference.
+  UniFFI runtime coverage now also pins that additive response contract so the
+  binding-facing JSON surface can observe it before Tauri transport parity
+  work begins in Milestone 4.
 
 ## Commit Cadence Notes
 

@@ -4,6 +4,7 @@ mod effective_definition;
 mod persistence;
 mod registry;
 mod session;
+mod session_event;
 mod types;
 mod validation;
 
