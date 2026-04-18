@@ -2,10 +2,7 @@
   import { get } from 'svelte/store';
   import { useGraphContext } from '../context/useGraphContext.js';
   import type { WorkflowEvent } from '../types/workflow.js';
-  import {
-    claimWorkflowExecutionIdFromEvent,
-    isWorkflowEventRelevantToExecution,
-  } from '../workflowEventOwnership.js';
+  import { applyWorkflowExecutionEvent } from '../stores/workflowExecutionEvents.js';
 
   const { backend, stores } = useGraphContext();
 
@@ -64,86 +61,46 @@
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
-    activeExecutionId = claimWorkflowExecutionIdFromEvent(event, activeExecutionId);
-    if (!isWorkflowEventRelevantToExecution(event, activeExecutionId)) {
+    const result = applyWorkflowExecutionEvent({
+      event,
+      activeExecutionId,
+      waitingForInput,
+      edges: get(edgesStore),
+      workflow: stores.workflow,
+    });
+
+    activeExecutionId = result.activeExecutionId;
+    waitingForInput = result.waitingForInput;
+
+    if (!result.handled) {
       return;
     }
 
     console.log('Workflow event:', event.type, event.data);
 
     switch (event.type) {
-      case 'NodeStarted':
-        waitingForInput = false;
-        stores.workflow.setNodeExecutionState((event.data as { node_id: string }).node_id, 'running');
-        break;
-      case 'IncrementalExecutionStarted': {
-        waitingForInput = false;
-        const incrementalData = event.data as { task_ids: string[] };
-        for (const taskId of incrementalData.task_ids) {
-          stores.workflow.setNodeExecutionState(taskId, 'running');
-        }
-        break;
-      }
-      case 'NodeCompleted': {
-        const completedData = event.data as { node_id: string; outputs?: Record<string, unknown> };
-        stores.workflow.setNodeExecutionState(completedData.node_id, 'success');
-
-        if (completedData.outputs) {
-          const currentEdges = get(edgesStore);
-          const outgoingEdges = currentEdges.filter(e => e.source === completedData.node_id);
-
-          for (const edge of outgoingEdges) {
-            const sourceHandle = edge.sourceHandle || '';
-            const outputValue = completedData.outputs[sourceHandle];
-            if (outputValue !== undefined) {
-              const targetHandle = edge.targetHandle || '';
-              stores.workflow.updateNodeData(edge.target, {
-                [targetHandle]: outputValue,
-              });
-            }
-          }
-        }
-        break;
-      }
       case 'NodeError': {
         const errorData = event.data as { node_id: string; error: string };
-        stores.workflow.setNodeExecutionState(errorData.node_id, 'error', errorData.error);
         console.error(`Node ${errorData.node_id} failed:`, errorData.error);
-        break;
-      }
-      case 'WaitingForInput': {
-        const waitingData = event.data as { node_id: string; message?: string | null };
-        waitingForInput = true;
-        stores.workflow.setNodeExecutionState(
-          waitingData.node_id,
-          'waiting',
-          waitingData.message || 'Waiting for input',
-        );
-        break;
-      }
-      case 'GraphModified': {
-        const graphModifiedData = event.data as { dirty_tasks?: string[] };
-        for (const taskId of graphModifiedData.dirty_tasks || []) {
-          stores.workflow.setNodeExecutionState(taskId, 'idle');
-        }
         break;
       }
       case 'Completed':
         console.log('Workflow completed successfully');
-        cleanupExecution();
         break;
       case 'Failed': {
         const failedData = event.data as { error: string };
         console.error('Workflow failed:', failedData.error);
-        cleanupExecution();
         break;
       }
       case 'Cancelled': {
         const cancelledData = event.data as { error: string };
         console.warn('Workflow cancelled:', cancelledData.error);
-        cleanupExecution();
         break;
       }
+    }
+
+    if (result.shouldCleanup) {
+      cleanupExecution();
     }
   }
 

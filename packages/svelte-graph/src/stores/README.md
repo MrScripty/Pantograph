@@ -16,6 +16,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
 | `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
 | `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
+| `workflowExecutionEvents.ts` | Reduces backend-owned workflow execution events into read-only execution overlays and downstream runtime-data mirrors for GUI consumers. |
 
 ## Problem
 The graph editor needs a shared state boundary that can serve both UI rendering
@@ -57,6 +58,11 @@ ports from the node-visible definition, and keeps expand-setting schemas stable
 when multiple inference consumers are attached. `definitionOverlay.ts` ensures
 those dynamic ports survive graph rehydration when backend snapshots already
 include per-node `definition.inputs` and `definition.outputs` overlays.
+Workflow execution event reduction now lives in
+`workflowExecutionEvents.ts` instead of `WorkflowToolbar.svelte`, keeping the
+component focused on subscription and run-lifecycle ownership while the store
+boundary owns the read-only event-to-overlay reduction shared by GUI
+consumers.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -79,6 +85,9 @@ include per-node `definition.inputs` and `definition.outputs` overlays.
 - Dynamic inference-setting ports must be derived from backend-owned schema and
   written back into `node.data.definition`; ad hoc component-local copies are
   not authoritative.
+- Backend workflow events may update execution overlays and additive runtime
+  output mirrors in store-managed state, but they must not become a second
+  source of truth for persisted graph structure.
 
 ## Revisit Triggers
 - Multiple simultaneous connection intents need independent store partitions.

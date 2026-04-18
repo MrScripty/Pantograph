@@ -37,6 +37,10 @@ Parallel demand execution now has a dedicated standards-reviewed plan in
 real workflow event contract completion now has a dedicated
 standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`.
+Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
+Tauri workflow adapter, and the shared Svelte graph package, so the remaining
+Phase 5 work can land against focused backend, adapter, and read-only GUI
+boundaries instead of the previous oversized insertion points.
 The roadmap remains the cross-target summary, while milestone-level
 metrics/trace follow-up work, runtime-adapter sequencing, Scheduler V2
 execution constraints, workflow-event completion sequencing, and parallel
@@ -493,6 +497,11 @@ incremental runs.
   separately from editable-session ownership, so session-backed diagnostics
   filtering no longer rejects backend-owned run events before the session UI
   sees a `Started` event.
+- Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
+  contract/helpers and graph-event helpers live behind focused internal
+  modules, the Tauri event adapter is split into translation and diagnostics
+  bridge modules, and `WorkflowToolbar.svelte` now delegates backend workflow
+  event reduction to a focused read-only store helper with targeted tests.
 
 **Still missing:**
 

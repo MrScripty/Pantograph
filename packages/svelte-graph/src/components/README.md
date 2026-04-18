@@ -62,7 +62,11 @@ now claim execution ownership from the first execution-scoped workflow event
 instead of pre-pinning to the edit-session id, so session-backed runs keep
 accepting valid scheduler/runtime or incremental events until the backend
 publishes the real run id and stale events from older runs still stop at the
-execution-id boundary.
+execution-id boundary. `WorkflowToolbar.svelte` now delegates backend
+workflow-event reduction to the focused store helper in
+`stores/workflowExecutionEvents.ts`, keeping the component responsible for
+subscription and run-lifecycle orchestration instead of full event-to-store
+mapping.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.

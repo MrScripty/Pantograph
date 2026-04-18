@@ -296,15 +296,15 @@ Corrections applied:
 logic.
 
 **Tasks:**
-- [ ] Extract `node-engine` workflow event vocabulary and helper logic from the
+- [x] Extract `node-engine` workflow event vocabulary and helper logic from the
       current oversized `events.rs` and `engine.rs` hot spots into focused
       modules without changing the public facade.
 - [x] Extract Tauri event translation and diagnostics-bridge helpers from the
       current oversized `src-tauri/src/workflow/event_adapter.rs`.
-- [ ] Extract GUI execution-event handling from the oversized
+- [x] Extract GUI execution-event handling from the oversized
       `createWorkflowStores.ts` and `WorkflowToolbar.svelte` paths into
       focused read-only consumers or reducers.
-- [ ] Update touched `README.md` files if the directory boundary or ownership
+- [x] Update touched `README.md` files if the directory boundary or ownership
       explanation changes.
 
 **Verification:**
@@ -313,7 +313,7 @@ logic.
 - `npm run typecheck`
 - Focused no-behavior-change tests for extracted event helpers where practical
 
-**Status:** Not started
+**Status:** Completed
 
 ### Milestone 2: Freeze The Completion Matrix
 
@@ -433,6 +433,11 @@ Update during implementation:
   `workflow::event_adapter` facade intact. The same slice also aligned
   cancellation-shaped node-engine failures with backend trace projection so the
   translated `Cancelled` event and diagnostics status remain consistent.
+- 2026-04-17: Fourth Milestone 1 decomposition slice landed in
+  `packages/svelte-graph/src/stores/workflowExecutionEvents.ts`, moving
+  backend workflow-event reduction out of `WorkflowToolbar.svelte` and into a
+  focused read-only store helper with targeted tests and README updates so the
+  GUI keeps subscription ownership without re-owning event semantics.
 
 ## Commit Cadence Notes
 
