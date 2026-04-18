@@ -416,6 +416,9 @@ Corrections applied:
 - The local environment now has a working Erlang/Elixir toolchain through the
   existing `mise` install path, and the new Mix/ExUnit smoke harness passes
   against the compiled `pantograph_rustler` NIF.
+- Host-side smoke coverage now also includes a backend-owned validation error
+  path via `workflow_validate/1`, not just successful NIF loading and
+  graph-round-trip calls.
 
 ### Milestone 4: Source-of-Truth And Contract Reconciliation
 
@@ -483,3 +486,7 @@ Corrections applied:
   `pantograph_rustler` NIF successfully under local Mix/ExUnit execution and
   passes version plus workflow graph round-trip smokes after aligning the
   Elixir shim with the full default Rustler export surface.
+- 2026-04-18: The same BEAM smoke harness now also asserts a real validation
+  failure path by sending an invalid edge reference through
+  `workflow_add_edge/5` and `workflow_validate/1`, proving that backend-owned
+  validation errors cross the NIF boundary into BEAM intact.

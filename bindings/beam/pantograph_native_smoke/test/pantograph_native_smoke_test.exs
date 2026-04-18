@@ -16,4 +16,16 @@ defmodule PantographNativeSmokeTest do
     assert String.contains?(graph_json, "\"name\":\"BEAM Smoke\"")
     assert Pantograph.Native.workflow_from_json(graph_json) == graph_json
   end
+
+  test "workflow_validate returns edge-reference errors for unknown nodes" do
+    graph_json =
+      Pantograph.Native.workflow_new("beam-invalid", "BEAM Invalid")
+      |> Pantograph.Native.workflow_add_edge("missing-source", "out", "missing-target", "in")
+
+    errors = Pantograph.Native.workflow_validate(graph_json)
+
+    assert is_list(errors)
+    assert Enum.any?(errors, &String.contains?(&1, "unknown node 'missing-source'"))
+    assert Enum.any?(errors, &String.contains?(&1, "unknown node 'missing-target'"))
+  end
 end
