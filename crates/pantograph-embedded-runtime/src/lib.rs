@@ -3178,6 +3178,14 @@ mod tests {
                 ..
             } if task_id == "approval" && prompt == "Approve deployment?"
         )));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            node_engine::WorkflowEvent::WorkflowCompleted { .. }
+                | node_engine::WorkflowEvent::WorkflowCancelled { .. }
+        )));
     }
 
     #[tokio::test]
