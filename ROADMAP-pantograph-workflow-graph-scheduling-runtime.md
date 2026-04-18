@@ -15,7 +15,7 @@ layers.
 2. Parallel demand execution: Complete
 3. KV cache implementation: Not started
 4. Scheduler V2: Complete
-5. Real workflow event contract: In progress
+5. Real workflow event contract: Complete
 6. Incremental graph execution: Not started
 7. Runtime adapter unification: Complete
 
@@ -34,9 +34,10 @@ Scheduler V2 planning now also has a dedicated implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`.
 Parallel demand execution now has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`, and
-real workflow event contract completion now has a dedicated
-standards-reviewed plan in
-`IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`.
+real workflow event contract completion now has dedicated
+standards-reviewed plans in
+`IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+and `IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,
@@ -47,7 +48,7 @@ Phase 5 work can land against focused backend, adapter, and read-only GUI
 boundaries instead of the previous oversized insertion points.
 The roadmap remains the cross-target summary, while milestone-level
 metrics/trace follow-up work, runtime-adapter sequencing, Scheduler V2
-execution constraints, workflow-event completion sequencing, and parallel
+execution constraints, closed workflow-event sequencing, and parallel
 execution refactor details are tracked in those dedicated plans.
 The dedicated metrics/trace hardening plan now also reflects current
 implementation reality: Milestone 1 is complete, Milestone 2 is complete, the
@@ -205,8 +206,6 @@ reconciled as the final source of truth.
 - Metrics/trace follow-up hardening, with decomposition and lock-alignment
   complete and the remaining work concentrated in residual producer and
   acceptance coverage
-- Workflow event contract completion planning and backend-owned transport
-  parity preparation
 - Binding platform planning and verification expansion for C#, Python, and
   BEAM host lanes
 - Parallel demand execution planning and `node-engine` decomposition prep
@@ -216,8 +215,9 @@ reconciled as the final source of truth.
 ### Next gate before more implementation breadth
 
 - Keep roadmap/plan status aligned with implementation reality
-- Finish the dedicated Phase 5 and Phase 2 implementation plans before
-  widening execution or graph-surface changes
+- Keep the closed Phase 5 source-of-truth documents reconciled if later work
+  reopens a real backend-owned event-contract gap, rather than quietly mixing
+  that work into binding-platform or graph-execution milestones
 - Build later workflow, scheduler, and incremental-execution work on the
   now-frozen backend-owned runtime-registry and metrics/trace boundaries
   instead of reopening completed adapter-boundary refactors
@@ -569,7 +569,7 @@ session scheduler that makes better admission and reuse decisions.
 
 ### Phase 5: Real Workflow Event Contract
 
-**Status:** In progress
+**Status:** Complete
 
 **Detailed source of truth:**
 
@@ -755,19 +755,13 @@ incremental runs.
   plan, and the cancellation row now reflects the canonical backend-owned
   event path instead of adapter-side failure-message inference.
 
-**Still missing for real workflow event contract completion:**
+**Close-out result:**
 
-- Confirm whether any real backend-owned interactive or cancellable producer
-  path remains unpinned beyond the now-covered human-input pause,
-  orchestration subgraph wait/cancel, graph-modification, and incremental
-  execution paths before landing more producer-side changes
-- Extend acceptance coverage for the new `cancelled` envelope only if a real
-  remaining non-streaming/headless command or runtime-hosted binding surface
-  is still found beyond the now-covered embedded-runtime host and session-run
-  surfaces, streamed Tauri execution helper, UniFFI frontend-HTTP
-  workflow-run/session-run bindings, UniFFI direct embedded-runtime
-  workflow-run/session-run bindings, Rustler workflow host and session-host
-  paths, and frontend-HTTP workflow-run transport
+- The Phase 5 follow-on audit did not find another real backend-owned producer
+  or runtime-hosted transport surface that still required event-contract work
+  beyond the coverage already landed across `node-engine`,
+  `pantograph-embedded-runtime`, Tauri, frontend-HTTP, UniFFI, and the
+  Rustler host-path wrappers.
 
 **Reclassified follow-ons tracked outside event-contract close-out:**
 

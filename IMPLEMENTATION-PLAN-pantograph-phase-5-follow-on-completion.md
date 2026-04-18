@@ -1,17 +1,17 @@
 # Plan: Pantograph Phase 5 Follow-On Completion
 
 ## Status
-In progress
+Complete
 
 Last updated: 2026-04-18
 
 ## Current Source-of-Truth Summary
 
-This document is the dedicated source of truth for the remaining work still
-keeping roadmap Phase 5 open after the main event-contract plan reached its
+This document is the dedicated source of truth for the follow-on audit that
+closed roadmap Phase 5 after the main event-contract plan reached its
 Milestone 5 close-out.
 
-Use this file for:
+Use this file for the recorded close-out result covering:
 
 - the concrete remaining backend-owned workflow-event gaps
 - the standards-driven refactors required in the immediate touched code
@@ -26,6 +26,11 @@ for completed milestone history and already-landed contract work. Use
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md` for broader first-class
 binding platform scope that is not required to close the remaining event
 contract.
+
+This follow-on audit is now complete. It did not find an additional real
+backend-owned producer path or runtime-hosted transport surface that still
+required Phase 5 workflow-event-contract work beyond the coverage already
+landed across backend, adapter, and wrapper boundaries.
 
 ## Objective
 
@@ -349,7 +354,7 @@ and prevent more logic from landing in already non-compliant files.
 - `cargo check -p pantograph-frontend-http-adapter`
 - `npm run typecheck` if any `packages/svelte-graph` files are touched
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 2: Complete Backend-Owned Producer Parity
 
@@ -379,7 +384,12 @@ canonical event contract consistently.
 - Focused tests for any newly pinned cancellation, waiting, restart, or
   replayable producer path
 
-**Status:** Not started
+**Audit result:** The remaining backend-owned producer inventory did not reveal
+another uncovered interactive or cancellable producer path beyond the already
+covered human-input pause, orchestration wait/cancel, graph-modification, and
+incremental rerun flows.
+
+**Status:** Complete
 
 ### Milestone 3: Close Remaining Real Transport And Binding Acceptance Gaps
 
@@ -408,7 +418,14 @@ the current event contract end to end.
 - Cross-layer acceptance path per touched surface as required by
   `TESTING-STANDARDS.md`
 
-**Status:** Not started
+**Audit result:** The remaining transport/binding acceptance inventory did not
+find another real event-contract surface still unpinned after the existing
+embedded-runtime, frontend-HTTP, UniFFI, Rustler host-path, and Tauri adapter
+coverage landed. The only still-distinct BEAM-specific work is opaque-NIF
+verification, which is now tracked outside Phase 5 in the Rustler/binding
+plans.
+
+**Status:** Complete
 
 ### Milestone 4: Reclassify Non-Event Follow-Ons And Close Phase 5 Cleanly
 
@@ -436,7 +453,7 @@ without losing visibility into broader binding-platform follow-ons.
 - Plan-to-roadmap consistency review
 - Focused verification summary referencing the milestone checks already run
 
-**Status:** Not started
+**Status:** Complete
 
 ## Risks And Mitigations
 

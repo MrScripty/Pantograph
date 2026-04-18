@@ -1,7 +1,7 @@
 # Plan: Pantograph Phase 5 Real Workflow Event Contract
 
 ## Status
-In progress
+Complete
 
 Last updated: 2026-04-18
 
@@ -24,6 +24,11 @@ The remaining follow-on scope is now explicitly classified between true
 event-contract closure work and broader binding-platform work, so this file no
 longer acts as a catch-all bucket for every adjacent C#, Python, or BEAM
 follow-on.
+
+The follow-on audit is now complete. No additional real backend-owned producer
+or runtime-hosted transport surface was found that still required Phase 5
+event-contract work, so the roadmap target is closed and only binding-platform
+or future-phase follow-ons remain.
 
 ## Objective
 
@@ -736,16 +741,13 @@ Update during implementation:
   execution remains environment-limited here because the local test binary link
   still depends on Erlang NIF symbols that are not present in this shell
   environment.
-- The overall roadmap target remains in progress even though this plan’s
-  Milestone 5 close-out is complete, because the roadmap deliberately keeps the
-  remaining frozen Phase 5 follow-ons visible instead of declaring the entire
-  target finished early.
+- The overall roadmap target is now complete: the follow-on audit closed the
+  speculative producer/transport remainder without finding another real Phase 5
+  gap, and the broader BEAM/C#/Python/client-surface work remains explicitly
+  routed to the binding-platform plans instead.
 
 ### Follow-Ups
 
-- Extend canonical cancellation emission or acceptance coverage only where a
-  concrete remaining producer or transport surface is still identified in the
-  roadmap’s explicit “Still missing” list.
 - Resolve the separate binding-platform follow-on for curated client-facing
   surface policy instead of expanding wrapper exports opportunistically inside
   this phase.
