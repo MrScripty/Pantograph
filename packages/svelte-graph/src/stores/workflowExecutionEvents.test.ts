@@ -162,3 +162,54 @@ test('applyWorkflowExecutionEvent requests cleanup for cancelled runs', () => {
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, true);
 });
+
+test('applyWorkflowExecutionEvent marks incremental rerun tasks as running and clears waiting state', () => {
+  const { result, stateCalls } = applyEvent(
+    {
+      type: 'IncrementalExecutionStarted',
+      data: {
+        task_ids: ['node-a', 'node-b'],
+        execution_id: 'run-1',
+      },
+    },
+    {
+      activeExecutionId: 'run-1',
+      waitingForInput: true,
+    },
+  );
+
+  assert.deepEqual(stateCalls, [
+    { nodeId: 'node-a', state: 'running', message: undefined },
+    { nodeId: 'node-b', state: 'running', message: undefined },
+  ]);
+  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.waitingForInput, false);
+  assert.equal(result.handled, true);
+  assert.equal(result.shouldCleanup, false);
+});
+
+test('applyWorkflowExecutionEvent replays graph-modified dirty tasks into idle state without clearing waiting input state', () => {
+  const { result, stateCalls } = applyEvent(
+    {
+      type: 'GraphModified',
+      data: {
+        workflow_id: 'wf-1',
+        execution_id: 'run-1',
+        dirty_tasks: ['node-a', 'node-b'],
+      },
+    },
+    {
+      activeExecutionId: 'run-1',
+      waitingForInput: true,
+    },
+  );
+
+  assert.deepEqual(stateCalls, [
+    { nodeId: 'node-a', state: 'idle', message: undefined },
+    { nodeId: 'node-b', state: 'idle', message: undefined },
+  ]);
+  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.waitingForInput, true);
+  assert.equal(result.handled, true);
+  assert.equal(result.shouldCleanup, false);
+});

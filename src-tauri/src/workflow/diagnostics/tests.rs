@@ -1099,6 +1099,70 @@ fn restarted_cancelled_run_clears_stale_overlay_history_and_node_state() {
 }
 
 #[test]
+fn restarted_run_clears_stale_graph_mutation_overlay_state() {
+    let store = WorkflowDiagnosticsStore::default();
+    store.set_execution_metadata(
+        "exec-1",
+        Some("wf-1".to_string()),
+        Some("Retry Workflow".to_string()),
+    );
+    store.set_execution_graph("exec-1", &sample_graph());
+
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Started {
+            workflow_id: "wf-1".to_string(),
+            node_count: 2,
+            execution_id: "exec-1".to_string(),
+        },
+        1_000,
+    );
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::GraphModified {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            graph: None,
+            dirty_tasks: vec!["llm-1".to_string()],
+        },
+        1_020,
+    );
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            task_ids: vec!["llm-1".to_string()],
+        },
+        1_040,
+    );
+    store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Completed {
+            workflow_id: "wf-1".to_string(),
+            outputs: HashMap::new(),
+            execution_id: "exec-1".to_string(),
+        },
+        1_100,
+    );
+
+    let restarted = store.record_workflow_event(
+        &crate::workflow::events::WorkflowEvent::Started {
+            workflow_id: "wf-1".to_string(),
+            node_count: 2,
+            execution_id: "exec-1".to_string(),
+        },
+        2_000,
+    );
+
+    let run = restarted.runs_by_id.get("exec-1").expect("restarted run");
+    assert_eq!(run.status, DiagnosticsRunStatus::Running);
+    assert_eq!(run.started_at_ms, 2_000);
+    assert_eq!(run.event_count, 1);
+    assert_eq!(run.events.len(), 1);
+    assert_eq!(run.events[0].event_type, "Started");
+    assert!(run.nodes.is_empty());
+    assert!(run.last_dirty_tasks.is_empty());
+    assert!(run.last_incremental_task_ids.is_empty());
+}
+
+#[test]
 fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
     let store = WorkflowDiagnosticsStore::default();
 

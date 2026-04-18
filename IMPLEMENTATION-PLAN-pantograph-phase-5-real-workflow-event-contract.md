@@ -555,6 +555,14 @@ Update during implementation:
   `createWorkflowStores`, proving that backend-owned `GraphModified`
   dirty-task semantics reset node execution state through the real GUI store
   flow instead of only through isolated helper tests.
+- 2026-04-18: Milestone 5 acceptance coverage now also includes the focused
+  GUI workflow-event reducer path and diagnostics restart cleanup for the
+  additive graph-edit vocabulary. `workflowExecutionEvents` is now part of the
+  frontend test suite with explicit `IncrementalExecutionStarted` resume and
+  `GraphModified` replay assertions, and Tauri diagnostics tests now pin that
+  restarted runs clear stale `last_dirty_tasks` and
+  `last_incremental_task_ids` instead of carrying mutation state across
+  attempts.
 
 ## Commit Cadence Notes
 

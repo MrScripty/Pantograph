@@ -556,6 +556,11 @@ incremental runs.
   response contract, and the shared graph store consumes the backend-owned
   `GraphModified` payload read-only instead of inventing graph-mutation
   semantics locally for backend round-trip edits.
+- Phase 5 acceptance coverage now also includes the GUI workflow-event reducer
+  path for `IncrementalExecutionStarted` resume and `GraphModified` replay,
+  and Tauri diagnostics restart tests now pin that stale dirty-task and
+  incremental-task overlays are cleared when an execution id is reused for a
+  fresh attempt.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
