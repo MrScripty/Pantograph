@@ -78,7 +78,7 @@ pub trait TaskExecutor: Send + Sync {
 }
 
 /// Cached output for a node with its version
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CachedOutput {
     /// Version of inputs when this output was computed
     pub version: u64,
@@ -90,6 +90,7 @@ pub struct CachedOutput {
 ///
 /// Implements pull-based evaluation where outputs are only computed
 /// when demanded, and only recomputed when inputs have changed.
+#[derive(Clone)]
 pub struct DemandEngine {
     /// Version counter for each node (incremented when inputs change)
     versions: HashMap<NodeId, u64>,
@@ -180,6 +181,12 @@ impl DemandEngine {
             total_versions: self.versions.len(),
             global_version: self.global_version,
         }
+    }
+
+    fn reconcile_isolated_run(&mut self, base: &Self, isolated: &Self) {
+        reconcile_changed_node_entries(&mut self.versions, &base.versions, &isolated.versions);
+        reconcile_changed_node_entries(&mut self.cache, &base.cache, &isolated.cache);
+        self.global_version = self.global_version.max(isolated.global_version);
     }
 
     /// Demand output from a node - the core lazy evaluation method
@@ -307,6 +314,35 @@ impl DemandEngine {
             invalidated.len(),
             node_id
         );
+    }
+}
+
+fn reconcile_changed_node_entries<T>(
+    target: &mut HashMap<NodeId, T>,
+    base: &HashMap<NodeId, T>,
+    isolated: &HashMap<NodeId, T>,
+) where
+    T: Clone + PartialEq,
+{
+    let changed_node_ids: HashSet<NodeId> = base
+        .keys()
+        .chain(isolated.keys())
+        .cloned()
+        .collect();
+
+    for node_id in changed_node_ids {
+        if base.get(&node_id) == isolated.get(&node_id) {
+            continue;
+        }
+
+        match isolated.get(&node_id) {
+            Some(value) => {
+                target.insert(node_id.clone(), value.clone());
+            }
+            None => {
+                target.remove(&node_id);
+            }
+        }
     }
 }
 
@@ -873,6 +909,44 @@ mod tests {
         assert_eq!(stats.cached_nodes, 2);
         assert_eq!(stats.total_versions, 1); // Only 'c' has been modified
         assert_eq!(stats.global_version, 1);
+    }
+
+    #[test]
+    fn test_reconcile_isolated_run_merges_changed_state_without_touching_unrelated_entries() {
+        let graph = make_linear_graph();
+        let mut engine = DemandEngine::new("test");
+        engine.cache_output(&"a".to_string(), serde_json::json!("a"), &graph);
+
+        let base = engine.clone();
+        let mut isolated = base.clone();
+        isolated.cache_output(&"b".to_string(), serde_json::json!("b"), &graph);
+        isolated.mark_modified(&"c".to_string());
+
+        engine.cache_output(&"z".to_string(), serde_json::json!("keep"), &graph);
+        engine.reconcile_isolated_run(&base, &isolated);
+
+        assert!(engine.cache.contains_key("a"));
+        assert!(engine.cache.contains_key("b"));
+        assert!(engine.cache.contains_key("z"));
+        assert_eq!(engine.versions.get("c"), Some(&1));
+        assert_eq!(engine.global_version, 1);
+    }
+
+    #[test]
+    fn test_reconcile_isolated_run_removes_entries_cleared_from_base_state() {
+        let graph = make_linear_graph();
+        let mut engine = DemandEngine::new("test");
+        engine.cache_output(&"b".to_string(), serde_json::json!("b"), &graph);
+        engine.cache_output(&"c".to_string(), serde_json::json!("c"), &graph);
+
+        let base = engine.clone();
+        let mut isolated = base.clone();
+        isolated.invalidate_downstream(&"b".to_string(), &graph);
+
+        engine.reconcile_isolated_run(&base, &isolated);
+
+        assert!(!engine.cache.contains_key("b"));
+        assert!(!engine.cache.contains_key("c"));
     }
 
     #[test]

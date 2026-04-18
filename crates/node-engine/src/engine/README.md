@@ -168,6 +168,9 @@ planning split, plus the private execution-batch schedule derived from it.
 - Private multi-demand entry points now also thread an explicit execution
   budget through coordinator ownership rather than hard-coding a sequential
   path.
+- Parallel-eligible dispatch windows now also run through isolated engine
+  clones that reconcile changed state back into the main engine rather than
+  sharing mutable engine state directly.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

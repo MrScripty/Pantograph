@@ -431,6 +431,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 private multi-demand entry points now also thread an explicit
   execution budget into the coordinator, removing the remaining non-sequential
   panic path before real concurrent window execution lands.
+- Phase 2 parallel-eligible windows now also execute through isolated engine
+  clones that reconcile changed cache/version state back into the main engine,
+  creating the state-ownership boundary needed before real overlap is enabled.
 
 **Milestones:**
 

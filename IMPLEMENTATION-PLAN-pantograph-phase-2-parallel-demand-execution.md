@@ -777,6 +777,12 @@ Update during implementation:
   budget through private multi-demand entry points and coordinator ownership so
   the budgeted path no longer panics before real concurrent window execution
   is implemented.
+- 2026-04-18: Eighth Milestone 3 coordinator-prep slice landed across
+  `crates/node-engine/src/engine.rs` and
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing isolated
+  per-target engine runs plus explicit reconciliation back into the main
+  engine so future concurrent windows can avoid sharing mutable engine state
+  directly.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -879,6 +885,9 @@ Update during implementation:
 - Private multi-demand entry points and the coordinator now also execute
   through an explicit budget owner, so later bounded scheduling can turn on by
   changing coordinator internals instead of by adding a second facade path.
+- Parallel-eligible windows now also execute through isolated engine clones
+  that reconcile only changed state back into the main engine, establishing
+  the backend-owned state boundary real concurrent windows will need later.
 
 ### Deviations
 

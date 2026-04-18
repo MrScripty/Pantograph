@@ -79,6 +79,12 @@ struct DemandWindowRunner<'a> {
     extensions: &'a ExecutorExtensions,
 }
 
+struct DemandIsolatedTargetRun {
+    node_id: NodeId,
+    outputs: HashMap<String, serde_json::Value>,
+    engine: DemandEngine,
+}
+
 impl DemandMultiplePlan {
     fn from_requested_targets(node_ids: &[NodeId], graph: &WorkflowGraph) -> Self {
         let mut requested_targets = Vec::new();
@@ -371,7 +377,32 @@ impl<'a> DemandMultipleCoordinator<'a> {
         &mut self,
         window_plan: &DemandDispatchWindowPlan,
     ) -> DemandDispatchWindowResult {
-        self.execute_sequential_window(window_plan).await
+        let mut outcome = DemandDispatchWindowOutcome::default();
+        let base_engine = self.window_runner.clone_engine();
+
+        for node_id in window_plan.targets() {
+            let isolated_run = match self
+                .window_runner
+                .demand_target_in_isolation(&base_engine, node_id)
+                .await
+            {
+                Ok(isolated_run) => isolated_run,
+                Err(error) => return DemandDispatchWindowResult::Interrupted(error),
+            };
+
+            let DemandIsolatedTargetRun {
+                node_id,
+                outputs,
+                engine,
+            } = isolated_run;
+
+            self.window_runner
+                .reconcile_isolated_target_engine(&base_engine, &engine);
+            self.results.record_success(&node_id, outputs);
+            outcome.record_completed_target(&node_id);
+        }
+
+        DemandDispatchWindowResult::Completed(outcome)
     }
 
     async fn execute_sequential_window(
@@ -423,14 +454,79 @@ impl<'a> DemandWindowRunner<'a> {
         &mut self,
         node_id: &NodeId,
     ) -> Result<HashMap<String, serde_json::Value>> {
+        let graph = self.graph;
+        let executor = self.executor;
+        let context = self.context;
+        let event_sink = self.event_sink;
+        let extensions = self.extensions;
+        let engine = &mut *self.engine;
+
+        Self::demand_target_with_engine(
+            engine,
+            node_id,
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+        )
+        .await
+    }
+
+    fn clone_engine(&self) -> DemandEngine {
+        self.engine.clone()
+    }
+
+    fn reconcile_isolated_target_engine(
+        &mut self,
+        base_engine: &DemandEngine,
+        isolated_engine: &DemandEngine,
+    ) {
         self.engine
+            .reconcile_isolated_run(base_engine, isolated_engine);
+    }
+
+    async fn demand_target_in_isolation(
+        &self,
+        base_engine: &DemandEngine,
+        node_id: &NodeId,
+    ) -> Result<DemandIsolatedTargetRun> {
+        let mut isolated_engine = base_engine.clone();
+        let outputs = Self::demand_target_with_engine(
+            &mut isolated_engine,
+            node_id,
+            self.graph,
+            self.executor,
+            self.context,
+            self.event_sink,
+            self.extensions,
+        )
+        .await?;
+
+        Ok(DemandIsolatedTargetRun {
+            node_id: node_id.clone(),
+            outputs,
+            engine: isolated_engine,
+        })
+    }
+
+    async fn demand_target_with_engine(
+        engine: &mut DemandEngine,
+        node_id: &NodeId,
+        graph: &WorkflowGraph,
+        executor: &dyn TaskExecutor,
+        context: &Context,
+        event_sink: &dyn EventSink,
+        extensions: &ExecutorExtensions,
+    ) -> Result<HashMap<String, serde_json::Value>> {
+        engine
             .demand(
                 node_id,
-                self.graph,
-                self.executor,
-                self.context,
-                self.event_sink,
-                self.extensions,
+                graph,
+                executor,
+                context,
+                event_sink,
+                extensions,
             )
             .await
     }
