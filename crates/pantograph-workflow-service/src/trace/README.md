@@ -63,6 +63,9 @@ they do not own trace lifecycle rules.
 - `queue_wait_ms` is only emitted from measured queue timestamps. Snapshot
   observation time must not be repurposed as enqueue, dequeue, or queue-wait
   data.
+- Queue-item attribution is execution-first. Session identifiers may describe
+  session scope, but they are not a fallback key for attaching queue-item
+  metrics to another execution's trace.
 - Recovery or replay updates for the same execution id update one canonical run
   record in place.
 

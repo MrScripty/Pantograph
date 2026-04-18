@@ -313,7 +313,7 @@ decomposition do not drift across layers.
       support from combined runtime-debug trace reads.
 - [x] Freeze queue timing semantics so `queue_wait_ms` only represents measured
       values, never snapshot-capture fallbacks.
-- [ ] Freeze execution-attribution rules so `execution_id` remains authoritative
+- [x] Freeze execution-attribution rules so `execution_id` remains authoritative
       and any compatibility fallback is narrow, documented, and testable.
 - [ ] Define how session/workflow-scoped runtime-metrics reads behave when
       multiple matching traces exist: resolved execution set, explicit
@@ -460,6 +460,11 @@ Update during implementation:
   `captured_at_ms` fallback synthesis from backend scheduler trace snapshots,
   documenting authoritative-only queue timing, and adding a regression test for
   missing queue timestamps.
+- 2026-04-18: Completed the execution-attribution slice by removing session-id
+  fallback queue-item matching from backend scheduler trace snapshots,
+  documenting execution-first attribution, and adding a regression test that
+  prevents another run in the same session from leaking queue metrics into the
+  active trace.
 
 ## Commit Cadence Notes
 

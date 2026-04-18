@@ -29,7 +29,7 @@ pub(super) fn apply_scheduler_snapshot(
         return;
     }
 
-    let matched_item = matched_queue_item(execution_id, session_id, items);
+    let matched_item = matched_queue_item(execution_id, items);
     let pending_visible = matched_item
         .map(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
         .unwrap_or_else(|| {
@@ -91,19 +91,17 @@ pub(super) fn apply_scheduler_snapshot(
         _ => None,
     };
     trace.queue.scheduler_admission_outcome =
-        scheduler_admission_outcome(execution_id, session_id, session, items);
-    trace.queue.scheduler_decision_reason =
-        scheduler_decision_reason(execution_id, session_id, session, items);
+        scheduler_admission_outcome(execution_id, session, items);
+    trace.queue.scheduler_decision_reason = scheduler_decision_reason(execution_id, session, items);
     trace.queue.scheduler_snapshot_diagnostics = diagnostics.cloned();
 }
 
 fn scheduler_admission_outcome(
     execution_id: &str,
-    session_id: &str,
     session: Option<&WorkflowSessionSummary>,
     items: &[WorkflowSessionQueueItem],
 ) -> Option<String> {
-    let matched_item = matched_queue_item(execution_id, session_id, items);
+    let matched_item = matched_queue_item(execution_id, items);
     let outcome = if let Some(item) = matched_item {
         item.scheduler_admission_outcome.or(match item.status {
             WorkflowSessionQueueItemStatus::Pending => {
@@ -141,11 +139,10 @@ fn scheduler_admission_outcome(
 
 fn scheduler_decision_reason(
     execution_id: &str,
-    session_id: &str,
     session: Option<&WorkflowSessionSummary>,
     items: &[WorkflowSessionQueueItem],
 ) -> Option<String> {
-    let matched_item = matched_queue_item(execution_id, session_id, items);
+    let matched_item = matched_queue_item(execution_id, items);
     let reason = if let Some(item) = matched_item {
         item.scheduler_decision_reason.or(match item.status {
             WorkflowSessionQueueItemStatus::Pending => {
@@ -193,17 +190,10 @@ fn scheduler_decision_reason(
 
 fn matched_queue_item<'a>(
     execution_id: &str,
-    session_id: &str,
     items: &'a [WorkflowSessionQueueItem],
 ) -> Option<&'a WorkflowSessionQueueItem> {
     items
         .iter()
         .find(|item| item.run_id.as_deref() == Some(execution_id))
         .or_else(|| items.iter().find(|item| item.queue_id == execution_id))
-        .or_else(|| {
-            items
-                .iter()
-                .find(|item| item.run_id.as_deref() == Some(session_id))
-        })
-        .or_else(|| items.iter().find(|item| item.queue_id == session_id))
 }
