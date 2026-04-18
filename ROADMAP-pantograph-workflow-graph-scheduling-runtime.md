@@ -618,6 +618,10 @@ incremental runs.
   `cancelled` and interactive `invalid_request` envelopes at the real binding
   boundary, so session-backed non-streaming binding parity is no longer
   inferred only from direct workflow-run coverage.
+- Rustler frontend-HTTP session-host coverage now also pins the same
+  backend-owned `cancelled` and interactive `invalid_request` contracts for
+  session-backed runs, reducing the remaining BEAM-side acceptance gap to the
+  opaque NIF wrapper itself rather than the Rustler-owned workflow host path.
 - The concrete embedded-runtime workflow host now also has a focused
   pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
   boundary, so non-streaming cancellation parity is no longer inferred only

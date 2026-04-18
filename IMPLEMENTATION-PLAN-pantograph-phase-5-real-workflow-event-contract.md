@@ -654,6 +654,12 @@ Update during implementation:
   real `frontend_http_workflow_run_session` binding boundary. Session-backed
   non-streaming binding parity therefore no longer relies on only direct
   `workflow_run` coverage or lower-level envelope helpers.
+- 2026-04-18: Rustler frontend-HTTP session-host coverage now also pins the
+  same backend-owned `cancelled` and interactive `invalid_request` contracts
+  on the Rustler-owned host boundary used for session-backed runs. Even though
+  the NIF error wrapper itself remains opaque in unit tests, the session-run
+  binding host path is now directly covered instead of relying on helper-only
+  envelope assertions.
 
 ## Commit Cadence Notes
 

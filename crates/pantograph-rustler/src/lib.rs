@@ -2525,6 +2525,139 @@ mod tests {
         assert_eq!(response.outputs[0].node_id, "vector-output-1");
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    #[cfg(feature = "frontend-http")]
+    #[ignore = "requires local TCP bind permissions in test environment"]
+    async fn test_rustler_workflow_session_host_contract_preserves_cancelled_envelope() {
+        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let workflow_id = "wf_rustler_session_cancelled";
+        let root = create_temp_workflow_root(workflow_id);
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&root).expect("set cwd");
+
+        let payload = serde_json::json!({
+            "code": "cancelled",
+            "message": "workflow run cancelled"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(409, payload);
+
+        let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                pantograph_workflow_service::WorkflowSessionCreateRequest {
+                    workflow_id: workflow_id.to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create session");
+
+        let err = service
+            .run_workflow_session(
+                &host,
+                pantograph_workflow_service::WorkflowSessionRunRequest {
+                    session_id: created.session_id,
+                    inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello world"),
+                    }],
+                    output_targets: Some(vec![pantograph_workflow_service::WorkflowOutputTarget {
+                        node_id: "vector-output-1".to_string(),
+                        port_id: "vector".to_string(),
+                    }]),
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("cancelled session envelope should be preserved");
+
+        server_thread.join().expect("join server");
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(root);
+
+        match err {
+            pantograph_workflow_service::WorkflowServiceError::Cancelled(message) => {
+                assert_eq!(message, "workflow run cancelled");
+            }
+            other => panic!("expected cancelled envelope, got {other:?}"),
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[cfg(feature = "frontend-http")]
+    #[ignore = "requires local TCP bind permissions in test environment"]
+    async fn test_rustler_workflow_session_host_contract_preserves_invalid_request_envelope() {
+        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let workflow_id = "wf_rustler_session_invalid_request";
+        let root = create_temp_workflow_root(workflow_id);
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&root).expect("set cwd");
+
+        let payload = serde_json::json!({
+            "code": "invalid_request",
+            "message": "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(400, payload);
+
+        let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
+        let service = WorkflowService::new();
+        let created = service
+            .create_workflow_session(
+                &host,
+                pantograph_workflow_service::WorkflowSessionCreateRequest {
+                    workflow_id: workflow_id.to_string(),
+                    usage_profile: None,
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create session");
+
+        let err = service
+            .run_workflow_session(
+                &host,
+                pantograph_workflow_service::WorkflowSessionRunRequest {
+                    session_id: created.session_id,
+                    inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello world"),
+                    }],
+                    output_targets: Some(vec![pantograph_workflow_service::WorkflowOutputTarget {
+                        node_id: "vector-output-1".to_string(),
+                        port_id: "vector".to_string(),
+                    }]),
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("invalid-request session envelope should be preserved");
+
+        server_thread.join().expect("join server");
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(root);
+
+        match err {
+            pantograph_workflow_service::WorkflowServiceError::InvalidRequest(message) => {
+                assert_eq!(
+                    message,
+                    "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
+                );
+            }
+            other => panic!("expected invalid-request envelope, got {other:?}"),
+        }
+    }
+
     #[test]
     #[cfg(feature = "frontend-http")]
     fn test_parse_workflow_outputs_payload_rejects_missing_port() {
