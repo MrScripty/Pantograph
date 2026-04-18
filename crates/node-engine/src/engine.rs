@@ -719,6 +719,27 @@ mod tests {
         }
     }
 
+    struct WaitingExecutor {
+        wait_on: String,
+        execution_log: Mutex<Vec<String>>,
+    }
+
+    impl WaitingExecutor {
+        fn new(wait_on: impl Into<String>) -> Self {
+            Self {
+                wait_on: wait_on.into(),
+                execution_log: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn executed_tasks(&self) -> Vec<String> {
+            self.execution_log
+                .lock()
+                .expect("execution log")
+                .clone()
+        }
+    }
+
     #[async_trait]
     impl TaskExecutor for CountingExecutor {
         async fn execute_task(
@@ -759,6 +780,37 @@ mod tests {
 
             if task_id == self.fail_on {
                 return Err(NodeEngineError::failed(format!("forced failure at {task_id}")));
+            }
+
+            Ok(HashMap::from([(
+                "out".to_string(),
+                serde_json::json!({
+                    "task": task_id,
+                    "inputs": inputs
+                }),
+            )]))
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for WaitingExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            inputs: HashMap<String, serde_json::Value>,
+            _context: &Context,
+            _extensions: &ExecutorExtensions,
+        ) -> Result<HashMap<String, serde_json::Value>> {
+            self.execution_log
+                .lock()
+                .expect("execution log")
+                .push(task_id.to_string());
+
+            if task_id == self.wait_on {
+                return Err(NodeEngineError::waiting_for_input(
+                    task_id.to_string(),
+                    Some(format!("waiting at {task_id}")),
+                ));
             }
 
             Ok(HashMap::from([(
@@ -1176,6 +1228,31 @@ mod tests {
             .expect_err("first batch should fail");
 
         assert!(matches!(error, NodeEngineError::ExecutionFailed(message) if message.contains("forced failure at b")));
+        assert_eq!(
+            executor_impl.executed_tasks(),
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_demand_multiple_stops_after_waiting_batch() {
+        let graph = make_shared_dependency_graph();
+        let event_sink = Arc::new(NullEventSink);
+        let executor_impl = WaitingExecutor::new("b");
+        let workflow_executor = WorkflowExecutor::new("exec_1", graph, event_sink);
+
+        let error = workflow_executor
+            .demand_multiple(&["b".to_string(), "c".to_string()], &executor_impl)
+            .await
+            .expect_err("first batch should pause execution");
+
+        assert!(matches!(
+            error,
+            NodeEngineError::WaitingForInput {
+                task_id,
+                prompt: Some(prompt)
+            } if task_id == "b" && prompt == "waiting at b"
+        ));
         assert_eq!(
             executor_impl.executed_tasks(),
             vec!["a".to_string(), "b".to_string()]

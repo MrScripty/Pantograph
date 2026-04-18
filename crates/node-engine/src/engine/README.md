@@ -65,6 +65,9 @@ changing the public executor surface.
 - Multi-demand batch execution should keep failure cleanup semantics explicit so
   later bounded execution cannot accidentally continue into later batches after
   an earlier batch fails.
+- Multi-demand batch execution should treat waiting-for-input as the same kind
+  of stop boundary as failure for later scheduled batches until a future phase
+  intentionally changes that contract.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -134,6 +137,8 @@ planning split, plus the private execution-batch schedule derived from it.
   batches.
 - Multi-demand batch execution currently stops after the first failed batch and
   does not continue into later scheduled batches.
+- Multi-demand batch execution currently also stops later batches when an
+  earlier batch pauses for interactive input.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

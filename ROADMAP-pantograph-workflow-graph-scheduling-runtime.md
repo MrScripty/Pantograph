@@ -410,6 +410,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 coordinator cleanup semantics are now also explicit: a failed batch
   stops later batches from executing, so future bounded execution must preserve
   that backend-owned failure boundary.
+- Phase 2 interruption semantics now also explicitly stop later batches on
+  waiting-for-input, so interactive pauses share the same backend-owned batch
+  boundary as failures.
 
 **Milestones:**
 

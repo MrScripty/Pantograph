@@ -742,6 +742,11 @@ Update during implementation:
   private batch-execution outcome owner and pinning stop-after-failed-batch
   behavior so later concurrent execution must preserve cleanup semantics
   instead of relying on incidental loop short-circuiting.
+- 2026-04-18: Sixth Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, making waiting-for-input
+  interruption an explicit private batch-execution result so later bounded
+  execution must stop later batches on interactive pause just as it does on
+  terminal failure.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -825,6 +830,9 @@ Update during implementation:
   dependencies are separated into deterministic sequential batches.
 - Batch execution cleanup semantics are now explicit: the current coordinator
   stops after the first failed batch and does not continue into later batches.
+- Batch interruption semantics now also explicitly cover waiting-for-input:
+  the current coordinator stops later batches when an earlier batch pauses for
+  interactive input.
 
 ### Deviations
 

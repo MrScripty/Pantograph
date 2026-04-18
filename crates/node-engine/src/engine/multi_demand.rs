@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use graph_flow::Context;
 
 use super::{DemandEngine, TaskExecutor, WorkflowExecutor};
-use crate::error::Result;
+use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
@@ -22,6 +22,12 @@ struct DemandMultipleResults {
 #[derive(Debug, Default)]
 struct DemandBatchExecutionOutcome {
     completed_targets: Vec<NodeId>,
+}
+
+#[derive(Debug)]
+enum DemandBatchExecutionResult {
+    Completed(DemandBatchExecutionOutcome),
+    Interrupted(NodeEngineError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -215,7 +221,10 @@ impl<'a> DemandMultipleCoordinator<'a> {
         mut self,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         for batch in self.plan.execution_batches() {
-            self.execute_batch(batch).await?;
+            match self.execute_batch(batch).await {
+                DemandBatchExecutionResult::Completed(_outcome) => {}
+                DemandBatchExecutionResult::Interrupted(error) => return Err(error),
+            }
         }
 
         self.collect_requested_outputs().await?;
@@ -239,15 +248,17 @@ impl<'a> DemandMultipleCoordinator<'a> {
         Ok(())
     }
 
-    async fn execute_batch(&mut self, batch: &[NodeId]) -> Result<DemandBatchExecutionOutcome> {
+    async fn execute_batch(&mut self, batch: &[NodeId]) -> DemandBatchExecutionResult {
         let mut outcome = DemandBatchExecutionOutcome::default();
 
         for node_id in batch {
-            self.demand_target(node_id).await?;
+            if let Err(error) = self.demand_target(node_id).await {
+                return DemandBatchExecutionResult::Interrupted(error);
+            }
             outcome.record_completed_target(node_id);
         }
 
-        Ok(outcome)
+        DemandBatchExecutionResult::Completed(outcome)
     }
 
     async fn collect_requested_outputs(&mut self) -> Result<()> {
@@ -344,11 +355,12 @@ async fn execute_sequential_plan(
 mod tests {
     use std::collections::HashMap;
 
+    use crate::error::NodeEngineError;
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
-        DemandBatchExecutionOutcome, DemandExecutionBudget, DemandMultiplePlan,
-        DemandMultipleResults,
+        DemandBatchExecutionOutcome, DemandBatchExecutionResult, DemandExecutionBudget,
+        DemandMultiplePlan, DemandMultipleResults,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -596,6 +608,25 @@ mod tests {
             outcome.completed_targets(),
             &["node_a".to_string(), "node_b".to_string()]
         );
+    }
+
+    #[test]
+    fn batch_execution_result_carries_interrupt_error() {
+        let result = DemandBatchExecutionResult::Interrupted(NodeEngineError::waiting_for_input(
+            "approval",
+            Some("Approve deployment?".to_string()),
+        ));
+
+        match result {
+            DemandBatchExecutionResult::Interrupted(NodeEngineError::WaitingForInput {
+                task_id,
+                prompt: Some(prompt),
+            }) => {
+                assert_eq!(task_id, "approval");
+                assert_eq!(prompt, "Approve deployment?");
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
     }
 
     #[test]
