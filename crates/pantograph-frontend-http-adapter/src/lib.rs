@@ -635,6 +635,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_run_maps_invalid_request_error_envelope_to_service_error() {
+        let workflow_id = "wf-invalid-request";
+        let workflow_root = create_temp_workflow_root_with_output(workflow_id)
+            .join(".pantograph")
+            .join("workflows");
+        let payload = serde_json::json!({
+            "code": "invalid_request",
+            "message": "workflow requires interactive input"
+        });
+        let (base_url, server_thread) = spawn_single_workflow_server(400, payload);
+
+        let host = FrontendHttpWorkflowHost::new(
+            base_url,
+            None,
+            vec![workflow_root],
+            DEFAULT_MAX_INPUT_BINDINGS,
+            DEFAULT_MAX_OUTPUT_TARGETS,
+            DEFAULT_MAX_VALUE_BYTES,
+            DEFAULT_BACKEND_NAME.to_string(),
+        )
+        .expect("build frontend host");
+
+        let err = WorkflowService::new()
+            .workflow_run(
+                &host,
+                WorkflowRunRequest {
+                    workflow_id: workflow_id.to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    run_id: None,
+                },
+            )
+            .await
+            .expect_err("400 invalid_request envelope should map to invalid request");
+
+        server_thread.join().expect("join server");
+        match err {
+            WorkflowServiceError::InvalidRequest(message) => {
+                assert_eq!(message, "workflow requires interactive input");
+            }
+            other => panic!("expected invalid request, got {}", other),
+        }
+    }
+
+    #[tokio::test]
     async fn workflow_run_rejects_non_envelope_non_2xx_error_payload() {
         let workflow_id = "wf-malformed-error";
         let workflow_root = create_temp_workflow_root_with_output(workflow_id)

@@ -595,6 +595,10 @@ incremental runs.
   `cancelled` envelope through its real `workflow_run` entrypoint, reducing
   the remaining acceptance-gap surface for cancellation parity outside Tauri
   and UniFFI.
+- The same frontend-HTTP adapter now also pins backend-owned interactive
+  `invalid_request` envelopes through the real `workflow_run` entrypoint, so
+  that non-streaming interactive mismatch behavior is covered directly at the
+  transport boundary rather than only through helper-level mapping tests.
 - The touched backend trace and Tauri workflow READMEs are now reconciled with
   the landed contract: backend trace ownership explicitly documents
   resume-from-waiting semantics, and the Tauri adapter/workflow boundary docs

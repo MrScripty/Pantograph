@@ -617,6 +617,11 @@ Update during implementation:
   focused workflow-run contract test for backend-owned `cancelled` envelopes.
   That path is therefore pinned at the actual adapter entrypoint, not only in
   the lower-level envelope mapping helper or adjacent binding wrappers.
+- 2026-04-18: The same non-streaming frontend-HTTP host surface now also pins
+  backend-owned interactive `invalid_request` envelopes at the real
+  `workflow_run` entrypoint, so the adapter no longer relies on only lower-
+  level mapper coverage for either of the current non-streaming interactive or
+  cancellation contracts.
 
 ## Commit Cadence Notes
 

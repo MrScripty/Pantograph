@@ -36,6 +36,9 @@ implements `WorkflowHost`.
 - The actual `workflow_run` transport path must preserve backend-owned
   `cancelled` envelopes as `WorkflowServiceError::Cancelled`, not just the
   lower-level envelope mapper helpers.
+- The actual `workflow_run` transport path must also preserve backend-owned
+  interactive `invalid_request` envelopes as `WorkflowServiceError::InvalidRequest`
+  rather than masking them as generic runtime or transport failures.
 
 ## Revisit Triggers
 - A second frontend transport needs the same host semantics.
