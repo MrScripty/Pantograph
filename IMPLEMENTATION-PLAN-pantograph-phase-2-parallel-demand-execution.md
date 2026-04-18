@@ -747,6 +747,11 @@ Update during implementation:
   interruption an explicit private batch-execution result so later bounded
   execution must stop later batches on interactive pause just as it does on
   terminal failure.
+- 2026-04-18: Fourth Milestone 3 coordinator-prep slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing a private
+  batch-dispatch plan that applies the explicit execution budget to each
+  overlap-safe batch so the coordinator now owns budget-window dispatch even
+  before real concurrent execution is enabled.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -833,6 +838,9 @@ Update during implementation:
 - Batch interruption semantics now also explicitly cover waiting-for-input:
   the current coordinator stops later batches when an earlier batch pauses for
   interactive input.
+- The coordinator now also applies the explicit execution budget through a
+  private batch-dispatch plan, even though each dispatch window still executes
+  sequentially for now.
 
 ### Deviations
 

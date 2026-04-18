@@ -24,6 +24,11 @@ struct DemandBatchExecutionOutcome {
     completed_targets: Vec<NodeId>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DemandBatchDispatchPlan {
+    execution_windows: Vec<Vec<NodeId>>,
+}
+
 #[derive(Debug)]
 enum DemandBatchExecutionResult {
     Completed(DemandBatchExecutionOutcome),
@@ -177,6 +182,22 @@ impl DemandExecutionBudget {
     }
 }
 
+impl DemandBatchDispatchPlan {
+    fn from_batch(batch: &[NodeId], budget: DemandExecutionBudget) -> Self {
+        let max_in_flight = budget.max_in_flight().max(1);
+        let execution_windows = batch
+            .chunks(max_in_flight)
+            .map(|window| window.to_vec())
+            .collect();
+
+        Self { execution_windows }
+    }
+
+    fn execution_windows(&self) -> &[Vec<NodeId>] {
+        &self.execution_windows
+    }
+}
+
 impl DemandBatchExecutionOutcome {
     fn record_completed_target(&mut self, node_id: &NodeId) {
         self.completed_targets.push(node_id.clone());
@@ -250,12 +271,15 @@ impl<'a> DemandMultipleCoordinator<'a> {
 
     async fn execute_batch(&mut self, batch: &[NodeId]) -> DemandBatchExecutionResult {
         let mut outcome = DemandBatchExecutionOutcome::default();
+        let dispatch_plan = DemandBatchDispatchPlan::from_batch(batch, self.budget);
 
-        for node_id in batch {
-            if let Err(error) = self.demand_target(node_id).await {
-                return DemandBatchExecutionResult::Interrupted(error);
+        for window in dispatch_plan.execution_windows() {
+            for node_id in window {
+                if let Err(error) = self.demand_target(node_id).await {
+                    return DemandBatchExecutionResult::Interrupted(error);
+                }
+                outcome.record_completed_target(node_id);
             }
-            outcome.record_completed_target(node_id);
         }
 
         DemandBatchExecutionResult::Completed(outcome)
@@ -359,8 +383,8 @@ mod tests {
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
-        DemandBatchExecutionOutcome, DemandBatchExecutionResult, DemandExecutionBudget,
-        DemandMultiplePlan, DemandMultipleResults,
+        DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
+        DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -627,6 +651,39 @@ mod tests {
             }
             other => panic!("unexpected result: {other:?}"),
         }
+    }
+
+    #[test]
+    fn batch_dispatch_plan_splits_windows_by_budget() {
+        let plan = DemandBatchDispatchPlan::from_batch(
+            &[
+                "node_a".to_string(),
+                "node_b".to_string(),
+                "node_c".to_string(),
+            ],
+            DemandExecutionBudget { max_in_flight: 2 },
+        );
+
+        assert_eq!(
+            plan.execution_windows(),
+            &[
+                vec!["node_a".to_string(), "node_b".to_string()],
+                vec!["node_c".to_string()]
+            ]
+        );
+    }
+
+    #[test]
+    fn batch_dispatch_plan_uses_singleton_windows_for_sequential_budget() {
+        let plan = DemandBatchDispatchPlan::from_batch(
+            &["node_a".to_string(), "node_b".to_string()],
+            DemandExecutionBudget::sequential(),
+        );
+
+        assert_eq!(
+            plan.execution_windows(),
+            &[vec!["node_a".to_string()], vec!["node_b".to_string()]]
+        );
     }
 
     #[test]

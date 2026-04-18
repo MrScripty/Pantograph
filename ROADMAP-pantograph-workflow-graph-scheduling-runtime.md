@@ -413,6 +413,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 interruption semantics now also explicitly stop later batches on
   waiting-for-input, so interactive pauses share the same backend-owned batch
   boundary as failures.
+- Phase 2 now also applies the explicit execution budget through a private
+  batch-dispatch plan, giving the coordinator a real budget-window shape before
+  concurrent execution is turned on.
 
 **Milestones:**
 
