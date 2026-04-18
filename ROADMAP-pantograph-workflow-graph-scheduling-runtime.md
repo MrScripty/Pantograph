@@ -364,7 +364,7 @@ adding more scheduling or graph complexity.
 
 ### Phase 2: Parallel Demand Execution
 
-**Status:** In progress
+**Status:** Complete
 
 **Detailed source of truth:**
 
@@ -394,15 +394,16 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also executes the sequential multi-demand path through a private
   coordinator owner so bounded scheduling can land by changing coordinator
   internals instead of reopening facade orchestration.
-- Phase 2 now also has a private execution-budget contract with a current
-  default of one in-flight target, giving later bounded scheduling an explicit
-  budget owner before additive runtime controls land.
+- Phase 2 now also has a private execution-budget contract that the public
+  path now drives with a conservative default of two in-flight targets, giving
+  bounded scheduling an explicit budget owner before additive runtime controls
+  land.
 - Phase 2 planning now also separates caller-visible requested targets from
   minimal root execution targets so redundant top-level drives are pruned
   before coordinator execution begins.
 - Phase 2 now also represents root work as an explicit private execution-batch
-  schedule, even though the current coordinator still runs a single sequential
-  batch.
+  schedule whose windows now execute sequentially or with bounded parallelism
+  depending on overlap and budget.
 - Phase 2 batch planning now also groups independent roots together while
   separating roots whose transitive dependency closures overlap, establishing
   the current backend-owned parallel-eligibility rule before concurrent
@@ -469,6 +470,10 @@ prepare the engine for metric-informed scheduling.
   `crates/node-engine/src/engine/multi_demand.rs` that compares sequential and
   bounded-parallel independent-root execution while pinning output equivalence
   and observed concurrency.
+- The touched engine README and Phase 2 plan now also record the intentional
+  sequential cases that remain under the current coordinator: single-target
+  windows, effective budget-one windows, and root groups separated because
+  their dependency closures overlap.
 
 **Milestones:**
 

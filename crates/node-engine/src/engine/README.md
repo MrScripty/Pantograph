@@ -138,15 +138,18 @@ planning split, plus the private execution-batch schedule derived from it.
 - Multi-demand result aggregation currently preserves deterministic
   last-write-wins map semantics as a separate backend concern from execution
   traversal.
-- Multi-demand traversal currently remains sequential even though it now runs
-  through a dedicated coordinator owner.
-- Multi-demand execution currently uses an explicit one-in-flight budget even
-  though additive runtime controls have not landed yet.
+- Multi-demand traversal now runs through a dedicated coordinator owner that
+  can execute overlap-safe dispatch windows with bounded parallelism while
+  preserving sequential fallback for the remaining cases.
+- Multi-demand execution now uses an explicit execution-budget contract whose
+  public default is a conservative two in-flight targets even though additive
+  runtime controls have not landed yet.
 - Multi-demand planning currently preserves requested-target order for facade
   events while pruning redundant top-level execution targets that are already
   covered by other requested dependents.
-- Multi-demand scheduling currently runs one sequential batch even though the
-  coordinator now consumes an explicit schedule structure.
+- Multi-demand scheduling now runs an explicit execution-batch schedule whose
+  windows may execute sequentially or with bounded parallelism depending on
+  overlap and budget.
 - Multi-demand batch planning currently groups independent roots together and
   separates roots with shared transitive dependencies into later sequential
   batches.
@@ -154,11 +157,12 @@ planning split, plus the private execution-batch schedule derived from it.
   does not continue into later scheduled batches.
 - Multi-demand batch execution currently also stops later batches when an
   earlier batch pauses for interactive input.
-- Multi-demand batch execution currently dispatches budget-sized windows
-  sequentially within each overlap-safe batch.
-- Multi-demand dispatch windows currently execute sequentially, but they now
-  report completion and interruption through explicit backend-owned outcome
-  types.
+- Multi-demand batch execution now dispatches budget-sized windows through an
+  explicit execution mode within each overlap-safe batch.
+- Multi-demand dispatch windows now execute sequentially only when the window
+  contains one target or the effective budget is one; otherwise overlap-safe
+  windows run bounded-parallel isolated target execution and still report
+  completion and interruption through explicit backend-owned outcome types.
 - Multi-demand dispatch windows currently also route demand/cache access
   through a private backend-owned window runner.
 - Multi-demand dispatch windows now also record whether they are eligible for
@@ -176,6 +180,12 @@ planning split, plus the private execution-batch schedule derived from it.
   deterministic target order.
 - Public multi-demand entry points now also default to a conservative bounded
   budget of two in-flight targets instead of hard-coding sequential execution.
+- The following demand shapes intentionally remain sequential under the current
+  coordinator: windows whose effective budget is one, windows that contain only
+  one target, and root groups split into separate batches because their
+  transitive dependency closures overlap. These cases stay sequential to avoid
+  shared-dependency duplication or fake concurrency until a later planner phase
+  intentionally changes the contract.
 - Backend event coverage now also pins task-start and task-complete
   attribution for independent roots under the default bounded path.
 - Backend event coverage now also pins the current parallel failure-path
@@ -186,8 +196,9 @@ planning split, plus the private execution-batch schedule derived from it.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain
-  behaviorally sequential until the bounded parallel coordinator lands
-  intentionally.
+  backend-owned and deterministic while mixing bounded-parallel execution for
+  overlap-safe windows with explicit sequential fallback for the remaining
+  demand shapes.
 
 ## Revisit Triggers
 - Bounded parallel demand execution requires additional planner or coordinator
@@ -255,5 +266,6 @@ use node_engine::{TaskExecutor, WorkflowExecutor};
 - Single-demand helper behavior remains semantically identical to the prior
   inline `WorkflowExecutor::demand` path.
 - Dirty-task lists remain sorted and stable for consumer comparison and tests.
-- Multi-demand helper behavior remains sequential until the Phase 2 bounded
-  parallel coordinator intentionally changes that contract.
+- Multi-demand helper behavior now supports bounded parallel execution for
+  overlap-safe windows while preserving explicit sequential fallback for
+  single-target, budget-constrained, and dependency-overlap cases.

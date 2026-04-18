@@ -635,16 +635,16 @@ behind.
 - [x] Add cross-layer acceptance coverage for a real workflow path that
       exercises parallel independent branches through backend execution and
       consumer-visible events.
-- [ ] Update touched README files, this plan, and the roadmap so status and
+- [x] Update touched README files, this plan, and the roadmap so status and
       ownership stay aligned with implementation reality.
-- [ ] Record any workflows that intentionally remain sequential and why.
+- [x] Record any workflows that intentionally remain sequential and why.
 
 **Verification:**
 - Targeted Rust crate tests for touched packages
 - Repeated benchmark or harness runs to detect state leakage or unstable timing
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Completed
 
 ## Execution Notes
 
@@ -833,6 +833,11 @@ Update during implementation:
   sequential and bounded budgets, preserving output equivalence while making
   the current latency/concurrency comparison reproducible without forcing
   timing-sensitive checks into the default test suite.
+- 2026-04-18: Third Milestone 5 close-out slice landed across
+  `crates/node-engine/src/engine/README.md`, this plan, and the roadmap,
+  reconciling the remaining source-of-truth drift by documenting which demand
+  shapes intentionally stay sequential under the current coordinator and
+  removing stale pre-parallel wording from the touched engine documentation.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
