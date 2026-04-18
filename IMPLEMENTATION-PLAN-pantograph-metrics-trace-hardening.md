@@ -318,9 +318,29 @@ decomposition do not drift across layers.
 - [x] Define how session/workflow-scoped runtime-metrics reads behave when
       multiple matching traces exist: resolved execution set, explicit
       ambiguity, or another backend-owned deterministic rule.
-- [ ] Record the planned extraction boundaries for
+- [x] Record the planned extraction boundaries for
       `trace/store.rs`, `workflow/diagnostics/store.rs`, and
       `llm/commands/registry.rs`.
+
+**Planned extraction boundaries:**
+- `crates/pantograph-workflow-service/src/trace/store.rs`:
+  keep `WorkflowTraceStore` as the facade in `store.rs`, extract request
+  filtering and runtime-selection helpers into `trace/query.rs`, extract
+  retained run-state mutation and restart/replay reconciliation into
+  `trace/state.rs`, and keep event-application delegation in the existing
+  `runtime.rs` and `scheduler.rs` modules.
+- `src-tauri/src/workflow/diagnostics/store.rs`:
+  keep `WorkflowDiagnosticsStore` as the projection facade in `store.rs`,
+  extract overlay bookkeeping and retained-event pruning into
+  `diagnostics/overlay.rs`, extract trace-attempt reconciliation into
+  `diagnostics/attempts.rs`, and keep trace adaptation in `diagnostics/trace.rs`
+  so projection assembly stops carrying overlay mutation details.
+- `src-tauri/src/llm/commands/registry.rs`:
+  keep command entrypoints in `registry.rs`, extract request normalization and
+  validation into `llm/commands/registry/request.rs`, extract runtime-debug
+  snapshot aggregation into `llm/commands/registry/debug.rs`, and extract the
+  current test module into `llm/commands/registry/tests.rs` so transport wiring
+  does not own the aggregation internals.
 
 **Verification:**
 - Contract and ownership review against `ARCHITECTURE-PATTERNS.md` and
@@ -329,7 +349,7 @@ decomposition do not drift across layers.
   milestone task
 - Documentation traceability review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 2: Decompose Immediate Insertion Points
 
@@ -469,6 +489,10 @@ Update during implementation:
   backend-owned unique-match selection helper for trace runtime metrics,
   exposing matched execution ids for ambiguity, and updating Tauri diagnostics
   to refuse multi-run session/workflow first-match selection.
+- 2026-04-18: Completed the Milestone 1 extraction-boundary recording by
+  capturing explicit module targets for the oversized backend trace store,
+  Tauri diagnostics store, and runtime-debug registry command file before
+  decomposition begins.
 
 ## Commit Cadence Notes
 
