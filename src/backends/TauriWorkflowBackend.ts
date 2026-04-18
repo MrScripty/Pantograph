@@ -36,6 +36,7 @@ import {
   normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
 } from '../lib/tauriConnectionIntentWire';
+import { parseWorkflowGraphMutationResponse } from '../lib/workflowGraphMutationResponse';
 
 export class TauriWorkflowBackend implements WorkflowBackend {
   private channel: Channel<WorkflowEvent> | null = null;
@@ -82,24 +83,27 @@ export class TauriWorkflowBackend implements WorkflowBackend {
   // --- Graph Mutation ---
 
   async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('add_node_to_execution', {
+    const response = await invoke<unknown>('add_node_to_execution', {
       executionId: sessionId,
       node,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('remove_node_from_execution', {
+    const response = await invoke<unknown>('remove_node_from_execution', {
       executionId: sessionId,
       nodeId,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('add_edge_to_execution', {
+    const response = await invoke<unknown>('add_edge_to_execution', {
       executionId: sessionId,
       edge,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async getConnectionCandidates(
@@ -197,10 +201,11 @@ export class TauriWorkflowBackend implements WorkflowBackend {
   }
 
   async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('remove_edge_from_execution', {
+    const response = await invoke<unknown>('remove_edge_from_execution', {
       executionId: sessionId,
       edgeId,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async updateNodeData(
@@ -208,11 +213,12 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     data: Record<string, unknown>,
     sessionId: string,
   ): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('update_node_data', {
+    const response = await invoke<unknown>('update_node_data', {
       executionId: sessionId,
       nodeId,
       data,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async updateNodePosition(
@@ -220,11 +226,12 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     position: { x: number; y: number },
     sessionId: string,
   ): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('update_node_position_in_execution', {
+    const response = await invoke<unknown>('update_node_position_in_execution', {
       executionId: sessionId,
       nodeId,
       position,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async getExecutionGraph(sessionId: string): Promise<WorkflowGraph> {
@@ -238,11 +245,13 @@ export class TauriWorkflowBackend implements WorkflowBackend {
   }
 
   async undo(sessionId: string): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('undo_workflow', { executionId: sessionId });
+    const response = await invoke<unknown>('undo_workflow', { executionId: sessionId });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async redo(sessionId: string): Promise<WorkflowGraphMutationResponse> {
-    return invoke<WorkflowGraphMutationResponse>('redo_workflow', { executionId: sessionId });
+    const response = await invoke<unknown>('redo_workflow', { executionId: sessionId });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   // --- Persistence ---

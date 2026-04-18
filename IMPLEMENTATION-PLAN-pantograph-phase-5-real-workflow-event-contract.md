@@ -544,6 +544,11 @@ Update during implementation:
   contract, and the workflow stores now consume backend-owned `GraphModified`
   responses read-only instead of synthesizing local dirty-task semantics for
   backend round-trip edits.
+- 2026-04-18: A follow-on Milestone 4 boundary-validation slice landed in the
+  app Tauri adapters. Graph-mutation `invoke` responses are now parsed through
+  a focused boundary helper before the app backend or workflow service unwraps
+  them, so malformed transport payloads fail fast at the boundary instead of
+  drifting deeper into GUI-owned workflow state.
 
 ## Commit Cadence Notes
 

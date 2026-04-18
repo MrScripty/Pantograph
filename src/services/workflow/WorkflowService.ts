@@ -43,6 +43,7 @@ import {
   normalizeInsertNodeOnEdgeResponse,
   serializeConnectionAnchor,
 } from '../../lib/tauriConnectionIntentWire.ts';
+import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
 
 // Set to false to use real Rust backend, true to use frontend mocks
 const USE_MOCKS = false;
@@ -454,9 +455,9 @@ export class WorkflowService {
       throw new Error('Undo not supported in mock mode');
     }
 
-    return invoke<WorkflowGraphMutationResponse>('undo_workflow', {
+    return invoke<unknown>('undo_workflow', {
       executionId: id,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   /**
@@ -473,9 +474,9 @@ export class WorkflowService {
       throw new Error('Redo not supported in mock mode');
     }
 
-    return invoke<WorkflowGraphMutationResponse>('redo_workflow', {
+    return invoke<unknown>('redo_workflow', {
       executionId: id,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   // --- Graph Modification During Execution ---
@@ -499,11 +500,11 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraphMutationResponse>('update_node_data', {
+    return invoke<unknown>('update_node_data', {
       executionId: id,
       nodeId,
       data,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   async updateNodePosition(
@@ -521,11 +522,11 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraphMutationResponse>('update_node_position_in_execution', {
+    return invoke<unknown>('update_node_position_in_execution', {
       executionId: id,
       nodeId,
       position,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   /**
@@ -542,10 +543,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraphMutationResponse>('add_node_to_execution', {
+    return invoke<unknown>('add_node_to_execution', {
       executionId: id,
       node,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   async removeNode(nodeId: string, executionId?: string): Promise<WorkflowGraph> {
@@ -559,10 +560,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraphMutationResponse>('remove_node_from_execution', {
+    return invoke<unknown>('remove_node_from_execution', {
       executionId: id,
       nodeId,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   /**
@@ -580,10 +581,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraphMutationResponse>('add_edge_to_execution', {
+    return invoke<unknown>('add_edge_to_execution', {
       executionId: id,
       edge,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   async getConnectionCandidates(
@@ -774,10 +775,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraphMutationResponse>('remove_edge_from_execution', {
+    return invoke<unknown>('remove_edge_from_execution', {
       executionId: id,
       edgeId,
-    }).then((response) => response.graph);
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
   /**
