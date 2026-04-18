@@ -1749,7 +1749,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         if run_handle.is_cancelled() {
-            return Err(WorkflowServiceError::RuntimeTimeout(
+            return Err(WorkflowServiceError::Cancelled(
                 "workflow run cancelled before execution started".to_string(),
             ));
         }
@@ -1793,7 +1793,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         let mut run_result = Ok(());
         for node_id in &output_node_ids {
             if run_handle.is_cancelled() {
-                run_result = Err(WorkflowServiceError::RuntimeTimeout(
+                run_result = Err(WorkflowServiceError::Cancelled(
                     "workflow run cancelled during execution".to_string(),
                 ));
                 break;

@@ -501,6 +501,10 @@ incremental runs.
   variant, backend Rust emitters can publish explicit cancellation outcomes,
   and Tauri diagnostics/transport no longer classify `WorkflowFailed` strings
   to infer cancellation for node-engine events.
+- Non-streaming workflow-service surfaces now also expose a backend-owned
+  `cancelled` error code/envelope, and the embedded runtime plus frontend HTTP
+  adapter preserve that contract instead of flattening user-driven
+  cancellation into `runtime_timeout`.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
@@ -521,8 +525,9 @@ incremental runs.
 - Broader backend emission coverage for any additional cancellable producer
   paths that still terminate without publishing the canonical cancellation
   event
-- Final parity decisions for non-streaming/headless cancellation error
-  envelopes if those surfaces should expose a first-class cancelled code
+- Extend acceptance coverage for the new `cancelled` envelope across any
+  remaining non-streaming/headless command or binding surfaces that still need
+  explicit parity checks
 
 ### Phase 6: Incremental Graph Execution
 

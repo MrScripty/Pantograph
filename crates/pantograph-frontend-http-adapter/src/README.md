@@ -30,6 +30,9 @@ implements `WorkflowHost`.
 - This crate is not required for headless Rust API usage.
 - Non-2xx HTTP responses must be translated through backend-owned workflow
   error envelopes instead of adapter-local error taxonomies.
+- Backend-owned cancellation envelopes must stay distinct from timeout
+  envelopes; this adapter must not rewrite `cancelled` into
+  `runtime_timeout`.
 
 ## Revisit Triggers
 - A second frontend transport needs the same host semantics.

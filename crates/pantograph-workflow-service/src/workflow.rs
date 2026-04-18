@@ -385,6 +385,7 @@ pub enum WorkflowErrorCode {
     WorkflowNotFound,
     CapabilityViolation,
     RuntimeNotReady,
+    Cancelled,
     SessionNotFound,
     SessionEvicted,
     QueueItemNotFound,
@@ -474,6 +475,9 @@ pub enum WorkflowServiceError {
     #[error("runtime_not_ready: {0}")]
     RuntimeNotReady(String),
 
+    #[error("cancelled: {0}")]
+    Cancelled(String),
+
     #[error("session_not_found: {0}")]
     SessionNotFound(String),
 
@@ -506,6 +510,7 @@ impl WorkflowServiceError {
             WorkflowServiceError::WorkflowNotFound(_) => WorkflowErrorCode::WorkflowNotFound,
             WorkflowServiceError::CapabilityViolation(_) => WorkflowErrorCode::CapabilityViolation,
             WorkflowServiceError::RuntimeNotReady(_) => WorkflowErrorCode::RuntimeNotReady,
+            WorkflowServiceError::Cancelled(_) => WorkflowErrorCode::Cancelled,
             WorkflowServiceError::SessionNotFound(_) => WorkflowErrorCode::SessionNotFound,
             WorkflowServiceError::SessionEvicted(_) => WorkflowErrorCode::SessionEvicted,
             WorkflowServiceError::QueueItemNotFound(_) => WorkflowErrorCode::QueueItemNotFound,
@@ -522,6 +527,7 @@ impl WorkflowServiceError {
             | WorkflowServiceError::WorkflowNotFound(message)
             | WorkflowServiceError::CapabilityViolation(message)
             | WorkflowServiceError::RuntimeNotReady(message)
+            | WorkflowServiceError::Cancelled(message)
             | WorkflowServiceError::SessionNotFound(message)
             | WorkflowServiceError::SessionEvicted(message)
             | WorkflowServiceError::QueueItemNotFound(message)
@@ -3236,7 +3242,7 @@ mod tests {
             loop {
                 if run_handle.is_cancelled() {
                     self.cancelled.store(true, Ordering::SeqCst);
-                    return Err(WorkflowServiceError::RuntimeTimeout(
+                    return Err(WorkflowServiceError::Cancelled(
                         "workflow run cancelled".to_string(),
                     ));
                 }
@@ -4993,6 +4999,23 @@ mod tests {
             serde_json::from_str(&json).expect("parse workflow error envelope");
         assert_eq!(parsed.code, WorkflowErrorCode::OutputNotProduced);
         assert!(parsed.message.contains("vector-output-1.vector"));
+        assert_eq!(parsed.details, None);
+    }
+
+    #[test]
+    fn workflow_service_cancelled_envelope_roundtrip() {
+        let err = WorkflowServiceError::Cancelled("workflow run cancelled".to_string());
+
+        let envelope = err.to_envelope();
+        assert_eq!(envelope.code, WorkflowErrorCode::Cancelled);
+        assert_eq!(envelope.message, "workflow run cancelled");
+        assert_eq!(envelope.details, None);
+
+        let json = err.to_envelope_json();
+        let parsed: WorkflowErrorEnvelope =
+            serde_json::from_str(&json).expect("parse workflow error envelope");
+        assert_eq!(parsed.code, WorkflowErrorCode::Cancelled);
+        assert_eq!(parsed.message, "workflow run cancelled");
         assert_eq!(parsed.details, None);
     }
 

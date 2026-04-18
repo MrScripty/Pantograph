@@ -779,8 +779,8 @@ mod tests {
                 None,
             ),
             (
-                WorkflowServiceError::RuntimeTimeout("workflow run cancelled".to_string()),
-                WorkflowErrorCode::RuntimeTimeout,
+                WorkflowServiceError::Cancelled("workflow run cancelled".to_string()),
+                WorkflowErrorCode::Cancelled,
                 "workflow run cancelled",
                 None,
             ),

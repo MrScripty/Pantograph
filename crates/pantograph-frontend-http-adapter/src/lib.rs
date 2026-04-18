@@ -180,7 +180,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
         run_handle: WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         if run_handle.is_cancelled() {
-            return Err(WorkflowServiceError::RuntimeTimeout(
+            return Err(WorkflowServiceError::Cancelled(
                 "workflow run cancelled before dispatch".to_string(),
             ));
         }
@@ -203,7 +203,7 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
                     "frontend HTTP workflow request timed out".to_string(),
                 )
             } else if run_handle.is_cancelled() {
-                WorkflowServiceError::RuntimeTimeout("workflow run cancelled".to_string())
+                WorkflowServiceError::Cancelled("workflow run cancelled".to_string())
             } else {
                 WorkflowServiceError::RuntimeNotReady(e.to_string())
             }
@@ -255,6 +255,7 @@ fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServi
         WorkflowErrorCode::RuntimeNotReady => {
             WorkflowServiceError::RuntimeNotReady(envelope.message)
         }
+        WorkflowErrorCode::Cancelled => WorkflowServiceError::Cancelled(envelope.message),
         WorkflowErrorCode::SessionNotFound => {
             WorkflowServiceError::SessionNotFound(envelope.message)
         }
@@ -686,6 +687,10 @@ mod tests {
             (
                 WorkflowErrorCode::RuntimeNotReady,
                 WorkflowServiceError::RuntimeNotReady("x".to_string()),
+            ),
+            (
+                WorkflowErrorCode::Cancelled,
+                WorkflowServiceError::Cancelled("x".to_string()),
             ),
             (
                 WorkflowErrorCode::SessionNotFound,
