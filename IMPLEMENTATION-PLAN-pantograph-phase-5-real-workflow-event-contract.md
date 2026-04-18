@@ -433,9 +433,9 @@ consistently.
 leave accurate documentation behind.
 
 **Tasks:**
-- [ ] Add cross-layer acceptance checks from backend producer through Tauri or
+- [x] Add cross-layer acceptance checks from backend producer through Tauri or
       binding transport into GUI or headless event consumers.
-- [ ] Add replay, duplicate-event, restart, cancellation, and resume coverage
+- [x] Add replay, duplicate-event, restart, cancellation, and resume coverage
       for the completed event vocabulary.
 - [ ] Update touched README files, the roadmap, and any ADR references required
       by the standards.
@@ -449,6 +449,11 @@ leave accurate documentation behind.
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
 **Status:** In progress
+
+Milestone 5 acceptance and replay coverage is now substantially landed. The
+remaining close-out work is the final README/ADR reconciliation and the final
+status/completion summary update once the remaining phase-level gaps are either
+implemented or explicitly frozen in this plan.
 
 ## Execution Notes
 
