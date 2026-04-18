@@ -18,10 +18,10 @@ import type {
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
-import { removeNodeDataKeys } from './runtimeData.js';
-import { buildDerivedGraph } from '../graphRevision.js';
+import { removeNodeDataKeys } from './runtimeData.ts';
+import { buildDerivedGraph } from '../graphRevision.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
-import { applySelectedNodeIds } from '../workflowSelection.js';
+import { applySelectedNodeIds } from '../workflowSelection.ts';
 import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
 import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
 

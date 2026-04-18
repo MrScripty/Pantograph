@@ -448,7 +448,7 @@ leave accurate documentation behind.
 - `npm run typecheck`
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** Not started
+**Status:** In progress
 
 ## Execution Notes
 
@@ -549,6 +549,12 @@ Update during implementation:
   a focused boundary helper before the app backend or workflow service unwraps
   them, so malformed transport payloads fail fast at the boundary instead of
   drifting deeper into GUI-owned workflow state.
+- 2026-04-18: Milestone 5 acceptance coverage is now underway for the
+  graph-mutation transport path. The shared graph package has a focused store
+  test that exercises a backend round-trip mutation response through
+  `createWorkflowStores`, proving that backend-owned `GraphModified`
+  dirty-task semantics reset node execution state through the real GUI store
+  flow instead of only through isolated helper tests.
 
 ## Commit Cadence Notes
 
