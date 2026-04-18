@@ -437,6 +437,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 bounded windows now also execute overlapping isolated target runs in
   place and reconcile them back in deterministic target order, so the bounded
   branch is now real instead of a sequential placeholder.
+- Phase 2 public multi-demand entry points now also default to a conservative
+  bounded budget of two in-flight targets, so overlap-safe windows reach the
+  backend-owned coordinator by default.
 
 **Milestones:**
 

@@ -788,6 +788,12 @@ Update during implementation:
   window placeholder with an in-place concurrent isolated-run poller so
   parallel-eligible windows now execute overlapping target demand futures
   without spawning shared mutable engine state.
+- 2026-04-18: Tenth Milestone 3 coordinator slice landed across
+  `crates/node-engine/src/engine.rs` and
+  `crates/node-engine/src/engine/multi_demand.rs`, switching the public
+  multi-demand entry points to a conservative default bounded budget of two
+  in-flight targets so the backend-owned parallel coordinator is now active by
+  default for overlap-safe windows.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -896,6 +902,9 @@ Update during implementation:
 - Parallel-eligible windows now also execute their isolated runs concurrently
   and then reconcile deterministic target-order results back into the main
   engine, so the bounded branch is now real instead of a sequential placeholder.
+- Public multi-demand entry points now also use a conservative default budget
+  of two in-flight targets, so overlap-safe windows reach the bounded
+  coordinator without requiring a separate facade path or additive configuration.
 
 ### Deviations
 

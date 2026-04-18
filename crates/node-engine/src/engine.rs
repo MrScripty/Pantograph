@@ -277,7 +277,7 @@ impl DemandEngine {
         event_sink: &dyn EventSink,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-        multi_demand::demand_multiple_sequential(
+        multi_demand::demand_multiple_with_default_budget(
             self,
             node_ids,
             graph,

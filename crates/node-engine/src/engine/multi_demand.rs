@@ -218,6 +218,10 @@ impl DemandExecutionBudget {
         }
     }
 
+    fn default_parallel() -> Self {
+        Self::new(2)
+    }
+
     fn sequential() -> Self {
         Self::new(1)
     }
@@ -619,7 +623,7 @@ pub(super) async fn demand_multiple_with_executor(
         workflow_executor,
         node_ids,
         executor,
-        DemandExecutionBudget::sequential(),
+        DemandExecutionBudget::default_parallel(),
     )
     .await
 }
@@ -649,7 +653,7 @@ async fn demand_multiple_with_budget(
     .await
 }
 
-pub(super) async fn demand_multiple_sequential(
+pub(super) async fn demand_multiple_with_default_budget(
     engine: &mut DemandEngine,
     node_ids: &[NodeId],
     graph: &WorkflowGraph,
@@ -661,7 +665,7 @@ pub(super) async fn demand_multiple_sequential(
     demand_multiple_with_explicit_budget(
         engine,
         node_ids,
-        DemandExecutionBudget::sequential(),
+        DemandExecutionBudget::default_parallel(),
         graph,
         executor,
         context,
@@ -734,11 +738,11 @@ mod tests {
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
-        demand_multiple_with_explicit_budget, DemandBatchDispatchPlan, DemandBatchExecutionOutcome,
-        DemandBatchExecutionResult, DemandDispatchWindowExecutionMode,
-        DemandDispatchWindowOutcome, DemandDispatchWindowPlan, DemandDispatchWindowResult,
-        DemandEngine, DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults,
-        TaskExecutor,
+        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
+        DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
+        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome, DemandDispatchWindowPlan,
+        DemandDispatchWindowResult, DemandEngine, DemandExecutionBudget, DemandMultiplePlan,
+        DemandMultipleResults, TaskExecutor,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -1059,6 +1063,11 @@ mod tests {
     }
 
     #[test]
+    fn execution_budget_default_parallel_uses_two_in_flight() {
+        assert_eq!(DemandExecutionBudget::default_parallel().max_in_flight(), 2);
+    }
+
+    #[test]
     fn execution_budget_normalizes_zero_to_one_in_flight() {
         assert_eq!(DemandExecutionBudget::new(0).max_in_flight(), 1);
     }
@@ -1246,6 +1255,33 @@ mod tests {
         )
         .await
         .expect("parallel demand should succeed");
+
+        assert_eq!(executor.max_in_flight(), 2);
+        assert_eq!(outputs.len(), 2);
+        assert!(outputs.contains_key("left"));
+        assert!(outputs.contains_key("right"));
+    }
+
+    #[tokio::test]
+    async fn default_budget_runs_independent_targets_concurrently() {
+        let graph = make_parallel_roots_graph();
+        let mut engine = DemandEngine::new("test");
+        let executor = YieldingConcurrencyExecutor::new();
+        let context = Context::new();
+        let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
+
+        let outputs = demand_multiple_with_default_budget(
+            &mut engine,
+            &["left".to_string(), "right".to_string()],
+            &graph,
+            &executor,
+            &context,
+            &event_sink,
+            &extensions,
+        )
+        .await
+        .expect("default parallel demand should succeed");
 
         assert_eq!(executor.max_in_flight(), 2);
         assert_eq!(outputs.len(), 2);
