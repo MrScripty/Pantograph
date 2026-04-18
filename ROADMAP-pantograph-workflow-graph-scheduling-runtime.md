@@ -434,6 +434,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 parallel-eligible windows now also execute through isolated engine
   clones that reconcile changed cache/version state back into the main engine,
   creating the state-ownership boundary needed before real overlap is enabled.
+- Phase 2 bounded windows now also execute overlapping isolated target runs in
+  place and reconcile them back in deterministic target order, so the bounded
+  branch is now real instead of a sequential placeholder.
 
 **Milestones:**
 

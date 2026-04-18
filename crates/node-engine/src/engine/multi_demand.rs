@@ -1,4 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::future::{poll_fn, Future};
+use std::pin::Pin;
+use std::task::Poll;
 
 use graph_flow::Context;
 
@@ -84,6 +87,9 @@ struct DemandIsolatedTargetRun {
     outputs: HashMap<String, serde_json::Value>,
     engine: DemandEngine,
 }
+
+type DemandIsolatedTargetRunFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<DemandIsolatedTargetRun>> + 'a>>;
 
 impl DemandMultiplePlan {
     fn from_requested_targets(node_ids: &[NodeId], graph: &WorkflowGraph) -> Self {
@@ -353,8 +359,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
                     self.execute_sequential_window(window_plan).await
                 }
                 DemandDispatchWindowExecutionMode::BoundedParallel => {
-                    self.execute_parallel_eligible_window_sequentially(window_plan)
-                        .await
+                    self.execute_bounded_parallel_window(window_plan).await
                 }
             };
 
@@ -373,28 +378,33 @@ impl<'a> DemandMultipleCoordinator<'a> {
         DemandBatchExecutionResult::Completed(outcome)
     }
 
-    async fn execute_parallel_eligible_window_sequentially(
+    async fn execute_bounded_parallel_window(
         &mut self,
         window_plan: &DemandDispatchWindowPlan,
     ) -> DemandDispatchWindowResult {
         let mut outcome = DemandDispatchWindowOutcome::default();
         let base_engine = self.window_runner.clone_engine();
+        let isolated_runs = match self
+            .window_runner
+            .demand_targets_in_isolation_concurrently(&base_engine, window_plan.targets())
+            .await
+        {
+            Ok(isolated_runs) => isolated_runs,
+            Err(error) => return DemandDispatchWindowResult::Interrupted(error),
+        };
+        let mut isolated_runs_by_target = isolated_runs
+            .into_iter()
+            .map(|isolated_run| (isolated_run.node_id.clone(), isolated_run))
+            .collect::<HashMap<_, _>>();
 
         for node_id in window_plan.targets() {
-            let isolated_run = match self
-                .window_runner
-                .demand_target_in_isolation(&base_engine, node_id)
-                .await
-            {
-                Ok(isolated_run) => isolated_run,
-                Err(error) => return DemandDispatchWindowResult::Interrupted(error),
-            };
-
             let DemandIsolatedTargetRun {
                 node_id,
                 outputs,
                 engine,
-            } = isolated_run;
+            } = isolated_runs_by_target
+                .remove(node_id)
+                .expect("bounded window target run should exist");
 
             self.window_runner
                 .reconcile_isolated_target_engine(&base_engine, &engine);
@@ -510,6 +520,28 @@ impl<'a> DemandWindowRunner<'a> {
         })
     }
 
+    async fn demand_targets_in_isolation_concurrently(
+        &self,
+        base_engine: &DemandEngine,
+        node_ids: &[NodeId],
+    ) -> Result<Vec<DemandIsolatedTargetRun>> {
+        let futures = node_ids
+            .iter()
+            .cloned()
+            .map(|node_id| self.demand_target_in_isolation_future(base_engine, node_id))
+            .collect::<Vec<_>>();
+
+        await_isolated_target_runs(futures).await
+    }
+
+    fn demand_target_in_isolation_future<'b>(
+        &'b self,
+        base_engine: &'b DemandEngine,
+        node_id: NodeId,
+    ) -> DemandIsolatedTargetRunFuture<'b> {
+        Box::pin(async move { self.demand_target_in_isolation(base_engine, &node_id).await })
+    }
+
     async fn demand_target_with_engine(
         engine: &mut DemandEngine,
         node_id: &NodeId,
@@ -541,6 +573,41 @@ impl<'a> DemandWindowRunner<'a> {
             self.demand_target(node_id).await
         }
     }
+}
+
+async fn await_isolated_target_runs<'a>(
+    pending_runs: Vec<DemandIsolatedTargetRunFuture<'a>>,
+) -> Result<Vec<DemandIsolatedTargetRun>> {
+    let mut pending_runs = pending_runs.into_iter().map(Some).collect::<Vec<_>>();
+    let mut completed_runs = Vec::new();
+
+    poll_fn(|cx| {
+        let mut pending_count = 0usize;
+
+        for run_future_slot in pending_runs.iter_mut() {
+            let Some(run_future) = run_future_slot.as_mut() else {
+                continue;
+            };
+
+            match run_future.as_mut().poll(cx) {
+                Poll::Ready(Ok(run)) => {
+                    completed_runs.push(run);
+                    *run_future_slot = None;
+                }
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => {
+                    pending_count += 1;
+                }
+            }
+        }
+
+        if pending_count == 0 {
+            Poll::Ready(Ok(std::mem::take(&mut completed_runs)))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
 }
 
 pub(super) async fn demand_multiple_with_executor(
@@ -656,15 +723,22 @@ async fn execute_plan_with_budget(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use graph_flow::Context;
 
     use crate::error::NodeEngineError;
+    use crate::events::NullEventSink;
+    use crate::extensions::ExecutorExtensions;
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
-        DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
-        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome,
-        DemandDispatchWindowPlan, DemandDispatchWindowResult, DemandExecutionBudget,
-        DemandMultiplePlan, DemandMultipleResults,
+        demand_multiple_with_explicit_budget, DemandBatchDispatchPlan, DemandBatchExecutionOutcome,
+        DemandBatchExecutionResult, DemandDispatchWindowExecutionMode,
+        DemandDispatchWindowOutcome, DemandDispatchWindowPlan, DemandDispatchWindowResult,
+        DemandEngine, DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults,
+        TaskExecutor,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -802,6 +876,88 @@ mod tests {
                 },
             ],
             groups: Vec::new(),
+        }
+    }
+
+    fn make_parallel_roots_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            id: "graph".to_string(),
+            name: "Graph".to_string(),
+            nodes: vec![
+                GraphNode {
+                    id: "left".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (0.0, 0.0),
+                },
+                GraphNode {
+                    id: "right".to_string(),
+                    node_type: "output".to_string(),
+                    data: serde_json::json!({}),
+                    position: (1.0, 0.0),
+                },
+            ],
+            edges: Vec::new(),
+            groups: Vec::new(),
+        }
+    }
+
+    struct YieldingConcurrencyExecutor {
+        current_in_flight: AtomicUsize,
+        max_in_flight: AtomicUsize,
+    }
+
+    impl YieldingConcurrencyExecutor {
+        fn new() -> Self {
+            Self {
+                current_in_flight: AtomicUsize::new(0),
+                max_in_flight: AtomicUsize::new(0),
+            }
+        }
+
+        fn max_in_flight(&self) -> usize {
+            self.max_in_flight.load(Ordering::SeqCst)
+        }
+
+        fn record_max_in_flight(&self, observed: usize) {
+            let mut current_max = self.max_in_flight.load(Ordering::SeqCst);
+            while observed > current_max {
+                match self.max_in_flight.compare_exchange(
+                    current_max,
+                    observed,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => break,
+                    Err(actual) => current_max = actual,
+                }
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for YieldingConcurrencyExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            inputs: HashMap<String, serde_json::Value>,
+            _context: &Context,
+            _extensions: &ExecutorExtensions,
+        ) -> crate::error::Result<HashMap<String, serde_json::Value>> {
+            let observed = self.current_in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            self.record_max_in_flight(observed);
+
+            tokio::task::yield_now().await;
+
+            self.current_in_flight.fetch_sub(1, Ordering::SeqCst);
+
+            Ok(HashMap::from([(
+                "out".to_string(),
+                serde_json::json!({
+                    "task": task_id,
+                    "inputs": inputs
+                }),
+            )]))
         }
     }
 
@@ -1067,6 +1223,34 @@ mod tests {
             DemandDispatchWindowExecutionMode::for_window(2, 2),
             DemandDispatchWindowExecutionMode::BoundedParallel
         );
+    }
+
+    #[tokio::test]
+    async fn bounded_parallel_budget_runs_independent_targets_concurrently() {
+        let graph = make_parallel_roots_graph();
+        let mut engine = DemandEngine::new("test");
+        let executor = YieldingConcurrencyExecutor::new();
+        let context = Context::new();
+        let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
+
+        let outputs = demand_multiple_with_explicit_budget(
+            &mut engine,
+            &["left".to_string(), "right".to_string()],
+            DemandExecutionBudget::new(2),
+            &graph,
+            &executor,
+            &context,
+            &event_sink,
+            &extensions,
+        )
+        .await
+        .expect("parallel demand should succeed");
+
+        assert_eq!(executor.max_in_flight(), 2);
+        assert_eq!(outputs.len(), 2);
+        assert!(outputs.contains_key("left"));
+        assert!(outputs.contains_key("right"));
     }
 
     #[test]

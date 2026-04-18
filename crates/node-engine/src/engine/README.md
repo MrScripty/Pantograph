@@ -171,6 +171,9 @@ planning split, plus the private execution-batch schedule derived from it.
 - Parallel-eligible dispatch windows now also run through isolated engine
   clones that reconcile changed state back into the main engine rather than
   sharing mutable engine state directly.
+- Parallel-eligible dispatch windows now also execute their isolated target
+  runs concurrently in place and reconcile the finished runs back in
+  deterministic target order.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain
