@@ -1242,6 +1242,44 @@ mod tests {
     }
 
     #[test]
+    fn workflow_trace_store_incremental_execution_started_resumes_waiting_runs() {
+        let store = WorkflowTraceStore::new(10);
+
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 2,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::WaitingForInput {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_id: "human-input-1".to_string(),
+            },
+            140,
+        );
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::IncrementalExecutionStarted {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+            },
+            180,
+        );
+
+        let trace = snapshot.traces.first().expect("trace");
+        assert_eq!(trace.status, WorkflowTraceStatus::Running);
+        assert!(!trace.waiting_for_input);
+        assert_eq!(trace.started_at_ms, 100);
+        assert_eq!(trace.ended_at_ms, None);
+        assert_eq!(trace.duration_ms, None);
+        assert_eq!(trace.last_error, None);
+        assert_eq!(trace.event_count, 3);
+    }
+
+    #[test]
     fn workflow_trace_store_ignores_duplicate_node_failed_events() {
         let store = WorkflowTraceStore::new(10);
 

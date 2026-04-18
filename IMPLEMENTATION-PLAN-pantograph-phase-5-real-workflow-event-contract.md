@@ -591,6 +591,14 @@ Update during implementation:
   `src-tauri` test in `workflow::event_adapter::tests`, keeping the
   translation contract pinned at the Tauri boundary instead of only in
   downstream GUI reducers.
+- 2026-04-18: A follow-on Milestone 5 parity fix landed in the backend-owned
+  workflow trace state. `IncrementalExecutionStarted` now resumes
+  waiting-for-input runs back to `Running` instead of leaving diagnostics
+  snapshots stuck in `Waiting`, and focused backend plus `src-tauri`
+  adapter tests now pin that additive `GraphModified` dirty-task overlays and
+  incremental-resume task ids survive through the trace and transport
+  boundaries without relying only on downstream diagnostics-store or GUI
+  reducer assertions.
 
 ## Commit Cadence Notes
 

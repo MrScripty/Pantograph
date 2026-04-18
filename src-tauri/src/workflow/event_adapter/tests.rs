@@ -193,6 +193,72 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
         } => {
             assert_eq!(execution_id, "exec-graph");
             assert_eq!(snapshot.run_order, vec!["exec-graph".to_string()]);
+            let trace = snapshot.runs_by_id.get("exec-graph").expect("trace");
+            assert_eq!(
+                trace.last_dirty_tasks,
+                vec!["node-a".to_string(), "node-b".to_string()]
+            );
+            assert!(trace.last_incremental_task_ids.is_empty());
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
+fn translated_incremental_execution_started_event_preserves_resume_task_ids() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::WaitingForInput {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-inc".to_string(),
+            task_id: "human-input-1".to_string(),
+            prompt: Some("Need approval".to_string()),
+            occurred_at_ms: Some(50),
+        },
+    );
+
+    let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-inc".to_string(),
+            tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            occurred_at_ms: Some(61),
+        },
+    );
+
+    match &event {
+        super::TauriWorkflowEvent::IncrementalExecutionStarted {
+            workflow_id,
+            execution_id,
+            task_ids,
+        } => {
+            assert_eq!(workflow_id, "wf-1");
+            assert_eq!(execution_id, "exec-inc");
+            assert_eq!(task_ids, &vec!["node-a".to_string(), "node-b".to_string()]);
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+
+    assert_eq!(translated_execution_id(&event), "exec-inc");
+    match diagnostics_event {
+        super::TauriWorkflowEvent::DiagnosticsSnapshot {
+            execution_id,
+            snapshot,
+        } => {
+            assert_eq!(execution_id, "exec-inc");
+            let trace = snapshot.runs_by_id.get("exec-inc").expect("trace");
+            assert_eq!(
+                trace.status,
+                crate::workflow::diagnostics::DiagnosticsRunStatus::Running
+            );
+            assert!(!trace.waiting_for_input);
+            assert_eq!(
+                trace.last_incremental_task_ids,
+                vec!["node-a".to_string(), "node-b".to_string()]
+            );
+            assert!(trace.last_dirty_tasks.is_empty());
         }
         other => panic!("unexpected diagnostics event: {other:?}"),
     }

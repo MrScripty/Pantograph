@@ -66,6 +66,12 @@ pub(super) fn apply_trace_event(
             trace.waiting_for_input = false;
         }
         WorkflowTraceEvent::NodeStarted { .. } => {}
+        WorkflowTraceEvent::IncrementalExecutionStarted { .. }
+            if trace.status == WorkflowTraceStatus::Waiting =>
+        {
+            trace.status = WorkflowTraceStatus::Running;
+            trace.waiting_for_input = false;
+        }
         WorkflowTraceEvent::NodeStream { .. } => {
             trace.stream_event_count += 1;
         }
