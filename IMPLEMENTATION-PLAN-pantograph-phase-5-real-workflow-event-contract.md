@@ -14,9 +14,16 @@ standards-reviewed implementation plan for completing backend-owned workflow
 event semantics across engine producers, runtime/application adapters,
 transport boundaries, and read-only GUI consumers.
 
-Phase 5 status should be updated here first once implementation begins. The
-roadmap should summarize progress and point back to this file rather than
+This file remains the source of truth for the completed main milestones. The
+remaining Phase 5 closure work now has its own dedicated source of truth in
+`IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`. The roadmap
+should summarize progress and point to the appropriate Phase 5 plan rather than
 duplicating milestone detail.
+
+The remaining follow-on scope is now explicitly classified between true
+event-contract closure work and broader binding-platform work, so this file no
+longer acts as a catch-all bucket for every adjacent C#, Python, or BEAM
+follow-on.
 
 ## Objective
 

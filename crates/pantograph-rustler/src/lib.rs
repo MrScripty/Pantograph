@@ -45,11 +45,8 @@ use node_engine::{
     WorkflowGraph,
 };
 #[cfg(feature = "frontend-http")]
-use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
-#[cfg(feature = "frontend-http")]
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
-    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowCapabilitiesRequest, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService,
     WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
@@ -59,6 +56,14 @@ use pantograph_workflow_service::{
 // Force the linker to include workflow-nodes object files,
 // which contain `inventory::submit!()` statics for built-in node types.
 extern crate workflow_nodes;
+
+mod workflow_event_contract;
+#[cfg(feature = "frontend-http")]
+mod workflow_host_contract;
+
+use workflow_event_contract::serialize_workflow_event_json;
+#[cfg(feature = "frontend-http")]
+use workflow_host_contract::{workflow_run_host_request, workflow_run_scheduler_request};
 
 // ============================================================================
 // Atoms
@@ -396,14 +401,6 @@ impl BeamEventSink {
     }
 }
 
-fn serialize_workflow_event_json(
-    event: &node_engine::WorkflowEvent,
-) -> std::result::Result<String, node_engine::EventError> {
-    serde_json::to_string(event).map_err(|e| node_engine::EventError {
-        message: format!("Serialization error: {}", e),
-    })
-}
-
 impl EventSink for BeamEventSink {
     fn send(
         &self,
@@ -433,116 +430,6 @@ impl EventSink for BeamEventSink {
 // ============================================================================
 // Headless embedding adapter for Rustler
 // ============================================================================
-
-#[cfg(feature = "frontend-http")]
-fn map_workflow_service_error(err: WorkflowServiceError) -> rustler::Error {
-    rustler::Error::Term(Box::new(err.to_envelope_json()))
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> String {
-    let envelope = WorkflowErrorEnvelope {
-        code,
-        message: message.into(),
-        details: None,
-    };
-    serde_json::to_string(&envelope).unwrap_or_else(|_| {
-        r#"{"code":"internal_error","message":"failed to serialize workflow error envelope"}"#
-            .to_string()
-    })
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_error_term(code: WorkflowErrorCode, message: impl Into<String>) -> rustler::Error {
-    rustler::Error::Term(Box::new(workflow_error_json(code, message)))
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_runtime() -> NifResult<tokio::runtime::Runtime> {
-    tokio::runtime::Runtime::new().map_err(|e| {
-        workflow_error_term(
-            WorkflowErrorCode::InternalError,
-            format!("runtime initialization error: {}", e),
-        )
-    })
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_serialize_response<T: serde::Serialize>(value: &T) -> NifResult<String> {
-    serde_json::to_string(value).map_err(|e| {
-        workflow_error_term(
-            WorkflowErrorCode::InternalError,
-            format!("response serialization error: {}", e),
-        )
-    })
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_parse_request<T: serde::de::DeserializeOwned>(request_json: &str) -> NifResult<T> {
-    serde_json::from_str(request_json).map_err(|e| {
-        workflow_error_term(
-            WorkflowErrorCode::InvalidRequest,
-            format!("invalid request: {}", e),
-        )
-    })
-}
-
-#[cfg(feature = "frontend-http")]
-fn build_frontend_http_host(
-    base_url: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<FrontendHttpWorkflowHost> {
-    FrontendHttpWorkflowHost::with_defaults(
-        base_url,
-        pumas_resource.as_ref().map(|resource| resource.api.clone()),
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
-    )
-    .map_err(|e| {
-        workflow_error_term(
-            WorkflowErrorCode::InvalidRequest,
-            format!("frontend HTTP host config error: {}", e),
-        )
-    })
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_run_host_request<Request, Response, Fut>(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-    execute: impl FnOnce(FrontendHttpWorkflowHost, Request) -> Fut,
-) -> NifResult<String>
-where
-    Request: serde::de::DeserializeOwned,
-    Response: serde::Serialize,
-    Fut: std::future::Future<Output = Result<Response, WorkflowServiceError>>,
-{
-    let request: Request = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-    let host = build_frontend_http_host(base_url, pumas_resource)?;
-    let response = runtime
-        .block_on(execute(host, request))
-        .map_err(map_workflow_service_error)?;
-    workflow_serialize_response(&response)
-}
-
-#[cfg(feature = "frontend-http")]
-fn workflow_run_scheduler_request<Request, Response, Fut>(
-    request_json: String,
-    execute: impl FnOnce(Request) -> Fut,
-) -> NifResult<String>
-where
-    Request: serde::de::DeserializeOwned,
-    Response: serde::Serialize,
-    Fut: std::future::Future<Output = Result<Response, WorkflowServiceError>>,
-{
-    let request: Request = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-    let response = runtime
-        .block_on(execute(request))
-        .map_err(map_workflow_service_error)?;
-    workflow_serialize_response(&response)
-}
 
 #[cfg(feature = "frontend-http")]
 fn frontend_http_workflow_run_impl(
@@ -2340,77 +2227,6 @@ mod tests {
         assert_eq!(metadata.label, "My Node");
     }
 
-    #[test]
-    fn test_serialize_workflow_event_json_preserves_graph_modified_contract() {
-        let json = serialize_workflow_event_json(&node_engine::WorkflowEvent::GraphModified {
-            workflow_id: "wf-1".to_string(),
-            execution_id: "exec-1".to_string(),
-            dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
-            occurred_at_ms: Some(123),
-        })
-        .expect("serialize graph-modified event");
-        let value: serde_json::Value =
-            serde_json::from_str(&json).expect("parse graph-modified event");
-
-        assert_eq!(value["type"], "graphModified");
-        assert_eq!(value["workflowId"], "wf-1");
-        assert_eq!(value["executionId"], "exec-1");
-        assert_eq!(
-            value["dirtyTasks"],
-            serde_json::json!(["node-a", "node-b"])
-        );
-    }
-
-    #[test]
-    fn test_serialize_workflow_event_json_preserves_waiting_for_input_contract() {
-        let json =
-            serialize_workflow_event_json(&node_engine::WorkflowEvent::WaitingForInput {
-                workflow_id: "wf-1".to_string(),
-                execution_id: "exec-1".to_string(),
-                task_id: "human-input-1".to_string(),
-                prompt: Some("Need approval".to_string()),
-                occurred_at_ms: Some(456),
-            })
-            .expect("serialize waiting-for-input event");
-        let value: serde_json::Value =
-            serde_json::from_str(&json).expect("parse waiting-for-input event");
-
-        assert_eq!(value["type"], "waitingForInput");
-        assert_eq!(value["workflowId"], "wf-1");
-        assert_eq!(value["executionId"], "exec-1");
-        assert_eq!(value["taskId"], "human-input-1");
-        assert_eq!(value["prompt"], "Need approval");
-    }
-
-    #[test]
-    #[cfg(feature = "frontend-http")]
-    fn test_workflow_error_json_preserves_cancelled_envelope() {
-        let json =
-            workflow_error_json(WorkflowErrorCode::Cancelled, "workflow run cancelled");
-        let envelope: WorkflowErrorEnvelope =
-            serde_json::from_str(&json).expect("parse cancelled envelope");
-
-        assert_eq!(envelope.code, WorkflowErrorCode::Cancelled);
-        assert_eq!(envelope.message, "workflow run cancelled");
-    }
-
-    #[test]
-    #[cfg(feature = "frontend-http")]
-    fn test_workflow_error_json_preserves_invalid_request_envelope() {
-        let json = workflow_error_json(
-            WorkflowErrorCode::InvalidRequest,
-            "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'",
-        );
-        let envelope: WorkflowErrorEnvelope =
-            serde_json::from_str(&json).expect("parse invalid-request envelope");
-
-        assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
-        assert_eq!(
-            envelope.message,
-            "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
-        );
-    }
-
     #[cfg(feature = "frontend-http")]
     static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
@@ -2496,7 +2312,8 @@ mod tests {
         });
         let (base_url, server_thread) = spawn_single_workflow_server(200, payload);
 
-        let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
+        let host = crate::workflow_host_contract::build_frontend_http_host(base_url, None)
+            .expect("frontend HTTP host");
         let request = pantograph_workflow_service::WorkflowRunRequest {
             workflow_id: workflow_id.to_string(),
             inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
@@ -2541,7 +2358,8 @@ mod tests {
         });
         let (base_url, server_thread) = spawn_single_workflow_server(409, payload);
 
-        let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
+        let host = crate::workflow_host_contract::build_frontend_http_host(base_url, None)
+            .expect("frontend HTTP host");
         let service = WorkflowService::new();
         let created = service
             .create_workflow_session(
@@ -2606,7 +2424,8 @@ mod tests {
         });
         let (base_url, server_thread) = spawn_single_workflow_server(400, payload);
 
-        let host = build_frontend_http_host(base_url, None).expect("frontend HTTP host");
+        let host = crate::workflow_host_contract::build_frontend_http_host(base_url, None)
+            .expect("frontend HTTP host");
         let service = WorkflowService::new();
         let created = service
             .create_workflow_session(
@@ -2672,8 +2491,11 @@ mod tests {
     #[test]
     #[cfg(feature = "frontend-http")]
     fn test_validate_workflow_requires_existing_workflow_file() {
-        let host = build_frontend_http_host("http://127.0.0.1:9".to_string(), None)
-            .expect("frontend HTTP host");
+        let host = crate::workflow_host_contract::build_frontend_http_host(
+            "http://127.0.0.1:9".to_string(),
+            None,
+        )
+        .expect("frontend HTTP host");
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         let err = runtime
             .block_on(async {

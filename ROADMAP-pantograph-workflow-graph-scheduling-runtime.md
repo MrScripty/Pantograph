@@ -12,7 +12,7 @@ implementation progress across the runtime, diagnostics, scheduler, and trace
 layers.
 
 1. Metrics/trace spine: Complete
-2. Parallel demand execution: In progress
+2. Parallel demand execution: Complete
 3. KV cache implementation: Not started
 4. Scheduler V2: Complete
 5. Real workflow event contract: In progress
@@ -574,6 +574,7 @@ session scheduler that makes better admission and reuse decisions.
 **Detailed source of truth:**
 
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`
 - `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 
@@ -729,6 +730,11 @@ incremental runs.
   backend-owned `cancelled` and interactive `invalid_request` contracts for
   session-backed runs, reducing the remaining BEAM-side acceptance gap to the
   opaque NIF wrapper itself rather than the Rustler-owned workflow host path.
+- Rustler workflow-event serializer and frontend-HTTP workflow-host boundary
+  helpers now also live in focused modules under
+  `crates/pantograph-rustler/src/`, so the remaining BEAM-side Phase 5 work
+  can land against narrower binding entrypoints instead of deepening the
+  oversized crate facade file.
 - The concrete embedded-runtime workflow host now also has a focused
   pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
   boundary, so non-streaming cancellation parity is no longer inferred only
@@ -749,7 +755,7 @@ incremental runs.
   plan, and the cancellation row now reflects the canonical backend-owned
   event path instead of adapter-side failure-message inference.
 
-**Still missing:**
+**Still missing for real workflow event contract completion:**
 
 - Backend-owned emission coverage for the remaining interactive paths that
   still do not produce the event vocabulary consistently beyond the current
@@ -765,6 +771,9 @@ incremental runs.
   workflow-run/session-run bindings, UniFFI direct embedded-runtime
   workflow-run/session-run bindings, Rustler workflow host and session-host
   paths, and frontend-HTTP workflow-run transport
+
+**Reclassified follow-ons tracked outside event-contract close-out:**
+
 - Binding-platform follow-on: freeze the curated client-facing surface for the
   Pantograph headless binding platform instead of treating wrapper exports as
   the product contract by default

@@ -6,7 +6,9 @@ Rustler NIF adapter surface for Pantograph workflow APIs.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | NIF implementations, resources, and adapter logic delegating to shared service contracts. |
+| `lib.rs` | NIF entrypoints, resource wrappers, and BEAM-facing adapter composition. |
+| `workflow_event_contract.rs` | Focused workflow-event JSON serialization helpers for the BEAM event channel. |
+| `workflow_host_contract.rs` | Focused frontend-HTTP request/response and workflow-error envelope helpers for Rustler. |
 
 ## Workflow NIF Modes
 
@@ -39,3 +41,7 @@ Default (`no features`):
   `pantograph-workflow-service`; the Rustler layer only parses boundary JSON,
   delegates to the Rust service/adapter crates, and returns backend-owned
   response or error-envelope JSON back to the BEAM.
+- Workflow-event JSON serialization is isolated in
+  `workflow_event_contract.rs`, and frontend-HTTP request/error helpers are
+  isolated in `workflow_host_contract.rs`, so the public NIF surface can stay
+  facade-first while touched boundary logic remains decomposed.
