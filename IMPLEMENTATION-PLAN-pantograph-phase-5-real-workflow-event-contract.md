@@ -632,10 +632,10 @@ Update during implementation:
   is pinned to return the same backend-owned `invalid_request` envelope used
   by direct non-streaming workflow runs when a `human-input` workflow is
   invoked without a streaming event contract.
-- 2026-04-18: The raw embedded data-graph execution path now also explicitly
-  pins that `WaitingForInput` is not accompanied by terminal
+- 2026-04-18: The raw embedded data-graph and edit-session execution paths now
+  also explicitly pin that `WaitingForInput` is not accompanied by terminal
   `WorkflowFailed`, `WorkflowCompleted`, or `WorkflowCancelled` drift. That
-  keeps the current human-input producer path aligned with the backend-owned
+  keeps the current human-input producer paths aligned with the backend-owned
   pause contract instead of relying on only positive-event assertions.
 
 ## Commit Cadence Notes

@@ -4669,9 +4669,11 @@ mod tests {
         assert!(!events
             .iter()
             .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowCompleted { .. })));
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            node_engine::WorkflowEvent::WorkflowCompleted { .. }
+                | node_engine::WorkflowEvent::WorkflowCancelled { .. }
+        )));
     }
 
     #[tokio::test]

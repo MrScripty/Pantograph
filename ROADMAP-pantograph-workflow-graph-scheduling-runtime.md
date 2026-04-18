@@ -603,10 +603,10 @@ incremental runs.
   focused interactive-mismatch coverage, so `run_workflow_session` preserves
   the same backend-owned `invalid_request` contract already pinned on the
   direct embedded `workflow_run` surface.
-- The raw embedded data-graph execution path now also explicitly pins that a
-  `WaitingForInput` pause does not drift into terminal failed/completed/
-  cancelled events, tightening the current backend human-input producer path
-  beyond a positive-event-only assertion.
+- The raw embedded data-graph and edit-session execution paths now also
+  explicitly pin that a `WaitingForInput` pause does not drift into terminal
+  failed/completed/cancelled events, tightening the current backend
+  human-input producer paths beyond positive-event-only assertions.
 - The concrete embedded-runtime workflow host now also has a focused
   pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
   boundary, so non-streaming cancellation parity is no longer inferred only
