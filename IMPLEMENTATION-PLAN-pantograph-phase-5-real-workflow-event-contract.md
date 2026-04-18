@@ -503,6 +503,11 @@ Update during implementation:
   or other executor failures. Cancellation-to-terminal-event selection is now
   owned inside the backend executor helper rather than left to adapter
   reconstruction once a cancellable orchestration path is wired through it.
+- 2026-04-17: Milestone 5 acceptance coverage also gained a binding-focused
+  slice: UniFFI frontend-HTTP workflow-run tests now assert that backend-owned
+  `cancelled` envelopes survive the binding boundary intact, and Rustler now
+  has a serializer-parity test confirming that its workflow error envelope
+  helper preserves the same `cancelled` code/message contract.
 
 ## Commit Cadence Notes
 

@@ -508,6 +508,9 @@ incremental runs.
 - `node-engine` orchestration execution now emits a backend-owned terminal
   workflow event for true executor error exits instead of returning those
   failures without a final lifecycle event.
+- Binding-side acceptance coverage now also checks the backend-owned
+  `cancelled` envelope through the UniFFI frontend-HTTP workflow-run surface,
+  and Rustler has matching serializer-parity coverage for the same envelope.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics

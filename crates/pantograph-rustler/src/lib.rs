@@ -2334,6 +2334,18 @@ mod tests {
         assert_eq!(metadata.label, "My Node");
     }
 
+    #[test]
+    #[cfg(feature = "frontend-http")]
+    fn test_workflow_error_json_preserves_cancelled_envelope() {
+        let json =
+            workflow_error_json(WorkflowErrorCode::Cancelled, "workflow run cancelled");
+        let envelope: WorkflowErrorEnvelope =
+            serde_json::from_str(&json).expect("parse cancelled envelope");
+
+        assert_eq!(envelope.code, WorkflowErrorCode::Cancelled);
+        assert_eq!(envelope.message, "workflow run cancelled");
+    }
+
     #[cfg(feature = "frontend-http")]
     static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
