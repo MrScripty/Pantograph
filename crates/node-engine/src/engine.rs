@@ -45,6 +45,7 @@ use crate::types::{NodeId, WorkflowGraph};
 mod graph_events;
 mod multi_demand;
 mod dependency_inputs;
+mod execution_core;
 mod execution_events;
 mod inflight_tracking;
 mod output_cache;
@@ -242,91 +243,17 @@ impl DemandEngine {
         >,
     > {
         Box::pin(async move {
-            // Cycle detection
-            inflight_tracking::begin_node_compute(computing, node_id)?;
-
-            // 1. First, recursively demand ALL dependencies to ensure their versions are current
-            // This is crucial: we must know the current state of dependencies before cache check
-            let dependencies = graph.get_dependencies(node_id);
-            let mut dependency_outputs = HashMap::new();
-
-            for dep_id in &dependencies {
-                // Recursively demand the dependency
-                let dep_outputs = self
-                    .demand_internal(
-                        dep_id, graph, executor, context, event_sink, extensions, computing,
-                    )
-                    .await?;
-                dependency_outputs.insert(dep_id.clone(), dep_outputs);
-            }
-            let mut inputs =
-                dependency_inputs::resolve_dependency_inputs(graph, node_id, &dependency_outputs);
-
-            // 2. NOW compute input version (after dependencies are resolved)
-            let input_version = self.compute_input_version(node_id, graph);
-
-            // 3. Check cache - if version matches, return cached result
-            if let Some(outputs) =
-                output_cache::resolve_fresh_cached_output(&self.cache, node_id, input_version)?
-            {
-                inflight_tracking::finish_node_compute(computing, node_id);
-                return Ok(outputs);
-            }
-
-            // 4. Cache miss - include static data from the node itself
-            if let Some(prompt) =
-                node_preparation::prepare_node_inputs(graph, node_id, &mut inputs)
-            {
-                execution_events::emit_task_started(
-                    event_sink,
-                    node_id.clone(),
-                    self.execution_id.clone(),
-                );
-                execution_events::emit_waiting_for_input(
-                    event_sink,
-                    graph.id.clone(),
-                    self.execution_id.clone(),
-                    node_id.clone(),
-                    prompt.clone(),
-                );
-                inflight_tracking::finish_node_compute(computing, node_id);
-                return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
-            }
-
-            // Send task started event
-            execution_events::emit_task_started(
+            execution_core::DemandExecutionCore::new(
+                self,
+                graph,
+                executor,
+                context,
                 event_sink,
-                node_id.clone(),
-                self.execution_id.clone(),
-            );
-
-            // 5. Execute this node
-            let outputs = executor
-                .execute_task(node_id, inputs, context, extensions)
-                .await?;
-
-            // Send task completed event
-            execution_events::emit_task_completed(
-                event_sink,
-                node_id.clone(),
-                self.execution_id.clone(),
-                &outputs,
-            )?;
-
-            // 6. Cache with current input version
-            output_cache::store_completed_output(
-                &mut self.cache,
-                &mut self.versions,
-                &mut self.global_version,
-                node_id,
-                input_version,
-                &outputs,
-            )?;
-
-            // Remove from computing set
-            inflight_tracking::finish_node_compute(computing, node_id);
-
-            Ok(outputs)
+                extensions,
+                computing,
+            )
+            .run_node(node_id)
+            .await
         })
     }
 

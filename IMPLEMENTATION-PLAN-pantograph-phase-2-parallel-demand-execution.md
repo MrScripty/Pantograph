@@ -250,6 +250,181 @@ Corrections applied:
 - Included benchmark and verification work as first-class close-out criteria
   instead of leaving performance claims implicit.
 
+### Pass 6: Execution-Core Architecture Fit
+
+Reviewed against:
+- `ARCHITECTURE-PATTERNS.md`
+- `CODING-STANDARDS.md`
+
+Corrections applied:
+- Recorded an explicit Option 2 refactor target: introduce a small internal
+  execution-core type under `crates/node-engine/src/engine/` rather than
+  continuing to chip away at `DemandEngine::demand_internal` only with
+  isolated free helpers.
+- Kept the execution core internal to `crates/node-engine` so the public
+  `WorkflowExecutor` facade and downstream package boundaries remain
+  unchanged.
+- Limited the planned touched-area compliance scope to the immediate
+  `crates/node-engine/src/engine/` modules and any directly interacting
+  readmes/tests; adjacent oversized files are not to be expanded casually
+  under this slice.
+
+### Pass 7: Execution-Core Concurrency And Ownership
+
+Reviewed against:
+- `CONCURRENCY-STANDARDS.md`
+- `CODING-STANDARDS.md`
+
+Corrections applied:
+- Required the execution core to own per-call coordination state explicitly,
+  rather than distributing lifecycle transitions across `DemandEngine`,
+  helper modules, and ad hoc local variables.
+- Recorded that lock acquisition order, in-flight tracking, cache state, and
+  cleanup semantics must be explicit in the execution-core design before
+  bounded parallelism is introduced.
+- Prohibited introducing new shared mutable globals or expanding lock scope
+  across `.await` points as part of the execution-core refactor.
+
+### Pass 8: Execution-Core Testing And Contract Stability
+
+Reviewed against:
+- `TESTING-STANDARDS.md`
+- `INTEROP-STANDARDS.md`
+
+Corrections applied:
+- Required the execution-core refactor to remain no-behavior-change at the
+  public contract level, with existing demand, waiting, caching, and event
+  tests kept green while focused execution-core tests are added.
+- Recorded that any new internal execution-core APIs remain private to the
+  crate; contract freeze still applies to public workflow and event surfaces.
+- Required representative recursive-demand tests to continue covering cache
+  hits, diamond dependency reuse, waiting-for-input, and event emission after
+  the refactor.
+
+### Pass 9: Execution-Core Documentation And Traceability
+
+Reviewed against:
+- `DOCUMENTATION-STANDARDS.md`
+- `PLAN-STANDARDS.md`
+
+Corrections applied:
+- Added a dedicated execution-core subsection to this plan so the Option 2
+  refactor is recorded as an explicit source-of-truth decision instead of an
+  implicit implementation preference.
+- Required `crates/node-engine/src/engine/README.md` to be updated in the same
+  logical slice that introduces the execution core, including ownership and
+  invariant changes for touched helpers.
+- Recorded that the roadmap should summarize the execution-core decision
+  briefly rather than duplicating this subsection in detail.
+
+### Pass 10: Security Boundary Applicability
+
+Reviewed against:
+- `SECURITY-STANDARDS.md`
+
+Corrections applied:
+- Recorded this refactor as an internal execution-path change rather than a new
+  external-input boundary; therefore no new validation surface should be
+  introduced casually as part of the execution-core extraction.
+- Added the requirement that any new execution-core constructor or helper
+  continues to trust already-validated internal inputs and does not duplicate
+  validation logic inline.
+- Constrained the touched-area scope so this refactor does not quietly absorb
+  unrelated path/input validation work that belongs at real system boundaries.
+
+### Pass 11: Cross-Platform Applicability
+
+Reviewed against:
+- `CROSS-PLATFORM-STANDARDS.md`
+
+Corrections applied:
+- Recorded that the planned execution-core refactor must remain platform-neutral
+  and must not introduce inline OS branching into `node-engine` business logic.
+- Added the requirement that any future platform-specific concurrency or runtime
+  behavior needed for parallel demand remains isolated behind thin platform
+  modules or existing runtime abstractions, not the execution core.
+- Marked cross-platform impact as structural-only for this slice: the internal
+  module split must continue to compile on the currently supported targets
+  without adding new platform divergence.
+
+### Pass 12: Release And Versioning Applicability
+
+Reviewed against:
+- `RELEASE-STANDARDS.md`
+
+Corrections applied:
+- Recorded this execution-core change as an internal refactor with no intended
+  public API or artifact change; release planning must therefore continue to
+  treat Milestone 1 as behavior-preserving unless a later milestone proves
+  otherwise.
+- Added the requirement that if the execution-core refactor reveals a public
+  contract change after all, that change must trigger re-planning and explicit
+  release-surface documentation instead of being folded silently into the
+  refactor.
+- Kept changelog and release concerns out of the current milestone until a
+  user-visible behavior or public API difference is actually introduced.
+
+### Pass 13: Language Bindings Applicability
+
+Reviewed against:
+- `LANGUAGE-BINDINGS-STANDARDS.md`
+
+Corrections applied:
+- Recorded that the execution-core type must remain a private backend-owned
+  implementation detail inside `crates/node-engine`, not a new FFI-facing layer
+  or binding surface.
+- Added the requirement that any helper signatures or internal ownership
+  changes in this slice must preserve the existing semantics already consumed by
+  UniFFI, Rustler, and other bindings through the current backend contracts.
+- Marked binding-surface impact as indirect-only for this milestone: if a later
+  parallel-demand milestone requires additive event or execution metadata, that
+  will need a separate same-slice binding review.
+
+### Pass 14: Frontend And Accessibility Applicability
+
+Reviewed against:
+- `FRONTEND-STANDARDS.md`
+- `ACCESSIBILITY-STANDARDS.md`
+
+Corrections applied:
+- Recorded these standards as not directly applicable to the execution-core
+  refactor because the touched area is backend Rust under `crates/node-engine`.
+- Added a constraint that the current milestone must not spill into frontend or
+  transport-owned UI synchronization work while decomposing the backend engine.
+- Preserved the requirement that any future user-visible event-shape change
+  still needs same-slice frontend and accessibility review when it crosses a UI
+  boundary, but not during this internal refactor.
+
+### Pass 15: Launcher Workflow Applicability
+
+Reviewed against:
+- `LAUNCHER-STANDARDS.md`
+
+Corrections applied:
+- Recorded launcher standards as indirectly applicable only through future
+  verification workflow exposure, not through the internal execution-core
+  design itself.
+- Added the constraint that no launcher/workflow command changes are part of
+  this refactor unless a later milestone adds a canonical perf or benchmark
+  entrypoint that must be surfaced intentionally.
+- Kept the current verification plan scoped to direct Rust test commands rather
+  than inventing launcher changes prematurely.
+
+### Pass 16: Commit And History Applicability
+
+Reviewed against:
+- `COMMIT-STANDARDS.md`
+
+Corrections applied:
+- Recorded that the execution-core work must continue landing as small
+  no-behavior-change atomic refactor slices with matching doc updates in the
+  same commits.
+- Added the explicit expectation that regression/fix pairs discovered during
+  this refactor are cleaned before more slices accumulate.
+- Kept the milestone plan aligned with the existing commit cadence note so the
+  execution-core work remains auditable and standards-compliant in history as
+  well as in code structure.
+
 ## Definition of Done
 
 - `WorkflowExecutor::demand_multiple` can execute independent nodes in bounded
@@ -270,22 +445,116 @@ Corrections applied:
 **Goal:** Create compliant engine boundaries before landing concurrency logic.
 
 **Tasks:**
-- [ ] Extract dependency-planning and target-resolution helpers from
+- [x] Extract dependency-planning and target-resolution helpers from
       `crates/node-engine/src/engine.rs` into focused modules.
-- [ ] Extract orchestration/event helper logic from oversized engine-adjacent
+- [x] Introduce a small internal execution-core type under
+      `crates/node-engine/src/engine/` that owns the remaining recursive
+      demand flow before bounded parallel coordination lands.
+- [x] Extract orchestration/event helper logic from oversized engine-adjacent
       files where needed so the parallel coordinator has a clear insertion
       boundary.
-- [ ] Update touched `README.md` files if the directory boundary or ownership
+- [x] Update touched `README.md` files if the directory boundary or ownership
       explanation changes.
-- [ ] Keep the existing `WorkflowExecutor` facade unchanged while moving logic
+- [x] Keep the existing `WorkflowExecutor` facade unchanged while moving logic
       behind smaller internal modules.
 
 **Verification:**
 - `cargo check -p node-engine`
 - Focused no-behavior-change tests for extracted helpers where practical
+- Focused recursive-demand regression tests covering cache reuse, diamond
+  dependency reuse, waiting-for-input, and demand event emission
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Complete
+
+#### Option 2 Execution-Core Refactor Plan
+
+**Objective:** Replace the remaining monolithic recursive execution body in
+`DemandEngine::demand_internal` with a compact internal execution-core type
+that owns one node-demand operation end to end without changing public
+behavior.
+
+**Touched-area compliance scope:**
+- `crates/node-engine/src/engine.rs`
+- `crates/node-engine/src/engine/README.md`
+- New internal `crates/node-engine/src/engine/*` execution-core module(s)
+- Existing helper modules directly consumed by the execution core
+- Directly related `node-engine` tests that prove no public behavior change
+
+**Planned internal shape:**
+- Introduce a private execution-core struct, tentatively
+  `DemandExecutionCore<'a>`, under `crates/node-engine/src/engine/`.
+- The core should receive references to the existing backend-owned state it
+  coordinates:
+  `DemandEngine`, `WorkflowGraph`, `TaskExecutor`, `Context`, `EventSink`,
+  `ExecutorExtensions`, and the recursive `computing` set.
+- `DemandEngine::demand_internal` should become a thin delegator that creates
+  the execution core and awaits one method such as `run_node(node_id)`.
+- Existing extracted helpers remain narrow collaborators of the execution core
+  instead of being re-inlined into `engine.rs`.
+
+**Execution-core responsibilities:**
+- Dependency recursion and dependency-output collection
+- Input version computation and cache reuse
+- Node preparation and waiting-for-input handling
+- Demand event emission
+- Completed-output cache/version finalization
+- In-flight bookkeeping begin/finish semantics
+
+**Execution-core responsibilities that remain out of scope:**
+- Public facade/API changes
+- Parallel scheduling policy
+- Cross-run coordination
+- New event contracts or transport behavior
+- Orchestration package redesign outside files directly touched by this slice
+
+**Standards-driven refactor requirements for touched areas:**
+- `engine.rs` must continue shrinking in responsibility; the execution-core
+  slice must remove orchestration detail from the file rather than merely move
+  code around without changing ownership shape.
+- The new execution-core module must have one clear responsibility: own
+  recursive node-demand orchestration for one run path.
+- Helper/module boundaries inside `crates/node-engine/src/engine/` must remain
+  coherent: execution core coordinates, helpers perform narrow work.
+- No touched README may become stale relative to helper ownership.
+- No touched test should be weakened; new tests should pin the execution-core
+  invariants if they are not already covered.
+- No new external-input validation, platform branching, binding-facing surface,
+  frontend/state ownership, launcher workflow, or release-surface changes may
+  be folded into this refactor without triggering re-planning.
+
+**Ordered tasks:**
+1. Define the internal execution-core struct and its constructor inputs,
+   keeping all dependencies backend-owned and private to `node-engine`.
+2. Move the remaining recursive orchestration from
+   `DemandEngine::demand_internal` into one execution-core method while
+   preserving existing helper calls and early-return semantics.
+3. Refactor any touched helper signatures only where needed to make ownership
+   clearer; avoid expanding scope into unrelated modules.
+4. Add or adjust focused tests for execution-core-owned invariants if current
+   tests do not already pin them directly.
+5. Update `crates/node-engine/src/engine/README.md`, this plan, and the
+   roadmap summary in the same logical slice.
+
+**Verification for this option:**
+- `cargo check -p node-engine`
+- `cargo test -p node-engine test_demand_caching`
+- `cargo test -p node-engine test_demand_diamond_graph`
+- `cargo test -p node-engine test_demand_events`
+- `cargo test -p node-engine test_workflow_executor_human_input_emits_waiting_for_input`
+- `cargo test -p node-engine test_workflow_executor_human_input_continues_with_response`
+- Additional focused tests for any new private execution-core invariants added
+  during the refactor
+
+**Re-plan triggers for this option:**
+- The execution core needs new public API surface instead of remaining
+  internal.
+- The refactor reveals that helper sprawl cannot be controlled without
+  touching additional oversized files outside the declared touched-area scope.
+- The execution core cannot own per-call state cleanly without introducing
+  broader concurrency or contract changes that belong in Milestone 2 instead.
+- File ownership or responsibility drift would make the touched area less
+  standards-compliant than before the refactor.
 
 ### Milestone 2: Freeze Parallel Execution Semantics
 
@@ -428,6 +697,15 @@ Update during implementation:
   in-flight node bookkeeping and cycle-detection cleanup out of
   `DemandEngine::demand_internal` so the remaining recursive core owns less
   coordination-state detail before bounded parallel coordination work.
+- 2026-04-18: Tenth Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/execution_core.rs`, moving the remaining
+  recursive node-demand orchestration behind a private execution-core owner so
+  `DemandEngine::demand_internal` is now a thin delegator and Milestone 1's
+  decomposition boundary is complete.
+- 2026-04-18: The plan now also records explicit applicability passes for the
+  remaining standards files in the coding-standards repo, including which
+  standards are directly constraining this backend refactor and which are
+  currently out of direct scope but still impose no-spillover constraints.
 
 ## Commit Cadence Notes
 
@@ -466,7 +744,7 @@ Update during implementation:
 
 ### Completed
 
-- Milestone 1 decomposition has begun with focused no-behavior-change
+- Milestone 1 decomposition is complete with focused no-behavior-change
   extraction slices in `crates/node-engine/src/events/` and
   `crates/node-engine/src/engine/`.
 - Focused engine helpers now own the multi-demand facade choreography and
@@ -483,6 +761,9 @@ Update during implementation:
   demand path.
 - In-flight cycle detection and cleanup now also live behind a focused helper
   instead of remaining embedded in the recursive demand path.
+- The remaining recursive demand orchestration now also lives behind a private
+  execution-core owner, leaving `DemandEngine::demand_internal` as a thin
+  delegator instead of the last monolithic recursive execution body.
 
 ### Deviations
 
@@ -490,9 +771,9 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Continue Milestone 1 by extracting the remaining dependency-planning and
-  target-resolution logic out of `engine.rs` before bounded parallel
-  coordination lands.
+- Continue with Milestone 2 semantic-freeze work so bounded parallel
+  coordination can land on top of the completed Milestone 1 execution-core and
+  helper boundaries without reopening the public contract surface.
 
 ### Verification Summary
 

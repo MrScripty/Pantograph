@@ -10,6 +10,7 @@ entrypoint while preserving the current public API.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path context propagation. |
+| `execution_core.rs` | Private recursive demand-orchestration owner that coordinates dependency recursion, cache reuse, node preparation, event emission, and completed-output finalization. |
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
@@ -38,6 +39,8 @@ changing the public executor surface.
   backend-owned in Rust.
 - In-flight node bookkeeping for cycle detection and cleanup stays
   backend-owned in Rust.
+- The remaining recursive node-demand orchestration should live under
+  `engine/execution_core.rs` rather than growing back into `engine.rs`.
 - Executor-facing single-demand and multi-demand lock choreography should live
   under `engine/` helpers rather than expanding `engine.rs`.
 - Multi-demand helpers must not change behavior until the dedicated parallel
@@ -54,7 +57,9 @@ boundaries for later event and concurrency work. Dependency-input mapping is
 also extracted so future planners and coordinators do not need to own port
 assembly details directly. The same applies to executor-facing single-demand
 facade choreography, node preparation, output-cache lifecycle handling, task
-event emission, and in-flight bookkeeping.
+event emission, and in-flight bookkeeping. The remaining recursive demand
+orchestration now lives behind `execution_core.rs` so `engine.rs` can stay a
+thin facade while Phase 2 introduces bounded parallel coordination later.
 
 ## Alternatives Rejected
 - Continuing to grow `engine.rs` directly.
@@ -75,6 +80,8 @@ event emission, and in-flight bookkeeping.
   than adapter-local reconstruction.
 - In-flight cycle detection remains derived from backend recursive execution
   state rather than adapter-local guards.
+- Recursive node-demand orchestration remains backend-owned and private to
+  `node-engine` rather than becoming a new public or binding-facing surface.
 - Single-demand and multi-demand facade helpers remain behaviorally equivalent
   to the prior inline executor methods until the bounded parallel coordinator
   intentionally changes the multi-demand path.
@@ -99,6 +106,8 @@ event emission, and in-flight bookkeeping.
   helper across sequential and future bounded-parallel demand paths.
 - In-flight bookkeeping grows enough to warrant a shared coordination-state
   helper across sequential and future bounded-parallel demand paths.
+- Recursive demand orchestration grows enough to warrant a more explicit
+  planner/coordinator split than a single execution-core owner.
 - Single-demand execution preparation grows enough to warrant a shared
   execution-preparation helper across single and multi-demand paths.
 - Execution-state recovery or persistence introduces a different owner for
@@ -142,6 +151,9 @@ use node_engine::{TaskExecutor, WorkflowExecutor};
   task-completed semantics for demand execution.
 - In-flight helpers preserve existing cycle-detection and cleanup semantics for
   recursive demand execution.
+- Execution-core behavior preserves existing recursive dependency-demand,
+  cache-check, node-preparation, and completion-finalization semantics for the
+  current sequential demand path.
 - Single-demand helper behavior remains semantically identical to the prior
   inline `WorkflowExecutor::demand` path.
 - Dirty-task lists remain sorted and stable for consumer comparison and tests.

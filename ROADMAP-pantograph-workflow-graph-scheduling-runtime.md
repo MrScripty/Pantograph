@@ -381,6 +381,10 @@ prepare the engine for metric-informed scheduling.
   preparation, output-cache lifecycle handling, demand event emission, and
   in-flight bookkeeping now live behind focused internal modules, creating a
   compliant insertion boundary for the later bounded parallel coordinator.
+- The remaining recursive demand orchestration now also lives behind a private
+  `node-engine` execution-core owner, completing the Milestone 1 hot-path
+  decomposition boundary ahead of the concurrency-contract and coordinator
+  slices.
 
 **Milestones:**
 
