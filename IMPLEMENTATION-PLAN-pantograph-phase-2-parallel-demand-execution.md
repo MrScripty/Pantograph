@@ -727,6 +727,11 @@ Update during implementation:
   multi-demand plan to separate requested targets from minimal root execution
   targets so redundant top-level requests covered by other requested
   dependents are pruned before coordinator execution begins.
+- 2026-04-18: Second Milestone 3 coordinator-prep slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, replacing the flat root
+  execution-target list with an explicit private execution-batch schedule so
+  the coordinator now runs against a schedule shape that later bounded
+  scheduling can widen instead of a bare vector.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -803,6 +808,8 @@ Update during implementation:
 - Multi-demand planning now also separates caller-visible requested targets
   from minimal root execution targets so later bounded scheduling can start
   from the smallest required top-level drive set.
+- The coordinator now also consumes an explicit execution-batch schedule, even
+  though the current schedule still contains only one sequential batch.
 
 ### Deviations
 

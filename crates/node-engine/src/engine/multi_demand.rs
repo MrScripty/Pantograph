@@ -11,7 +11,7 @@ use crate::types::{NodeId, WorkflowGraph};
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DemandMultiplePlan {
     requested_targets: Vec<NodeId>,
-    execution_targets: Vec<NodeId>,
+    execution_batches: Vec<Vec<NodeId>>,
 }
 
 #[derive(Debug, Default)]
@@ -58,7 +58,7 @@ impl DemandMultiplePlan {
 
         Self {
             requested_targets,
-            execution_targets,
+            execution_batches: into_execution_batches(execution_targets),
         }
     }
 
@@ -66,8 +66,16 @@ impl DemandMultiplePlan {
         &self.requested_targets
     }
 
-    fn execution_targets(&self) -> &[NodeId] {
-        &self.execution_targets
+    fn execution_batches(&self) -> &[Vec<NodeId>] {
+        &self.execution_batches
+    }
+}
+
+fn into_execution_batches(execution_targets: Vec<NodeId>) -> Vec<Vec<NodeId>> {
+    if execution_targets.is_empty() {
+        Vec::new()
+    } else {
+        vec![execution_targets]
     }
 }
 
@@ -152,8 +160,10 @@ impl<'a> DemandMultipleCoordinator<'a> {
     async fn run_sequential(
         mut self,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-        for node_id in self.plan.execution_targets() {
-            self.demand_target(node_id).await?;
+        for batch in self.plan.execution_batches() {
+            for node_id in batch {
+                self.demand_target(node_id).await?;
+            }
         }
 
         self.collect_requested_outputs().await?;
@@ -343,7 +353,7 @@ mod tests {
         let graph = make_linear_graph();
         let plan = DemandMultiplePlan::from_requested_targets(&["a".to_string()], &graph);
 
-        assert_eq!(plan.execution_targets(), plan.requested_targets());
+        assert_eq!(plan.execution_batches(), &[vec!["a".to_string()]]);
     }
 
     #[test]
@@ -352,7 +362,7 @@ mod tests {
         let plan = DemandMultiplePlan::from_requested_targets(&[], &graph);
 
         assert!(plan.requested_targets().is_empty());
-        assert!(plan.execution_targets().is_empty());
+        assert!(plan.execution_batches().is_empty());
     }
 
     #[test]
@@ -362,7 +372,7 @@ mod tests {
             DemandMultiplePlan::from_requested_targets(&["b".to_string(), "c".to_string()], &graph);
 
         assert_eq!(plan.requested_targets(), &["b".to_string(), "c".to_string()]);
-        assert_eq!(plan.execution_targets(), &["c".to_string()]);
+        assert_eq!(plan.execution_batches(), &[vec!["c".to_string()]]);
     }
 
     #[test]
@@ -372,7 +382,19 @@ mod tests {
             DemandMultiplePlan::from_requested_targets(&["c".to_string(), "c".to_string()], &graph);
 
         assert_eq!(plan.requested_targets(), &["c".to_string(), "c".to_string()]);
-        assert_eq!(plan.execution_targets(), &["c".to_string()]);
+        assert_eq!(plan.execution_batches(), &[vec!["c".to_string()]]);
+    }
+
+    #[test]
+    fn plan_places_current_root_targets_into_one_batch() {
+        let graph = make_linear_graph();
+        let plan =
+            DemandMultiplePlan::from_requested_targets(&["a".to_string(), "c".to_string()], &graph);
+
+        assert_eq!(
+            plan.execution_batches(),
+            &[vec!["c".to_string()]]
+        );
     }
 
     #[test]

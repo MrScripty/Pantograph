@@ -400,6 +400,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 planning now also separates caller-visible requested targets from
   minimal root execution targets so redundant top-level drives are pruned
   before coordinator execution begins.
+- Phase 2 now also represents root work as an explicit private execution-batch
+  schedule, even though the current coordinator still runs a single sequential
+  batch.
 
 **Milestones:**
 
