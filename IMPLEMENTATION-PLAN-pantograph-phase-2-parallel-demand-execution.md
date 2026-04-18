@@ -607,9 +607,9 @@ consumers.
 **Tasks:**
 - [x] Verify canonical workflow events remain attributable and meaningful under
       overlapping node execution.
-- [ ] Add any strictly necessary additive event or metrics metadata in
-      backend-owned contracts and update affected consumers in the same logical
-      slice only if the current backend-owned contract proves insufficient.
+- [x] Confirm the current backend-owned event and metrics contract remains
+      sufficient for the bounded-parallel consumer path, deferring additive
+      metadata unless a later slice proves the contract insufficient.
 - [x] Confirm metrics/trace aggregation still records correct node/run timing
       under bounded parallel execution.
 - [x] Keep Tauri and frontend consumers read-only with respect to backend-owned
@@ -621,7 +621,7 @@ consumers.
   boundary
 - `npm run typecheck` if mirrored TypeScript contracts change
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Benchmarks, Acceptance Coverage, And Source-of-Truth Close-Out
 
@@ -816,6 +816,11 @@ Update during implementation:
   `ended_at_ms` and `duration_ms` for node-level `WaitingForInput` events so
   waiting nodes capture pause duration instead of remaining open-ended in the
   backend-owned trace store.
+- 2026-04-18: Sixth Milestone 4 consumer-safety slice landed in
+  `src-tauri/src/workflow/event_adapter/tests.rs`, driving overlapping
+  node-engine root event sequences through the real Tauri diagnostics bridge so
+  the adapter boundary now pins both overlapping completion timing and waiting
+  pause duration without introducing additive transport fields.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are

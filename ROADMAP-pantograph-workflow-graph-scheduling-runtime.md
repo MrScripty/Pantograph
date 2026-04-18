@@ -457,6 +457,10 @@ prepare the engine for metric-informed scheduling.
   `WaitingForInput`, recording `ended_at_ms` and `duration_ms` at the pause
   boundary so waiting nodes contribute accurate pause duration to diagnostics
   and metrics consumers.
+- Phase 2 Tauri bridge coverage now also drives overlapping node-engine root
+  sequences through `translate_node_event_with_diagnostics`, confirming the
+  existing backend-owned event contract is sufficient for the current
+  bounded-parallel consumer path without additive transport fields.
 
 **Milestones:**
 

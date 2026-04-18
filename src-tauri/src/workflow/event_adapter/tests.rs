@@ -1,12 +1,40 @@
 use std::sync::{Arc, Mutex};
 
 use node_engine::EventSink;
+use pantograph_workflow_service::{
+    graph::WorkflowDerivedGraph, GraphNode, Position, WorkflowGraph,
+};
 use serde_json::Value;
 use tauri::ipc::{Channel, InvokeResponseBody};
 
 use super::diagnostics_bridge::translate_node_event_with_diagnostics;
 use super::translation::translated_execution_id;
 use crate::workflow::WorkflowDiagnosticsStore;
+
+fn sample_parallel_graph() -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "left".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+            GraphNode {
+                id: "right".to_string(),
+                node_type: "llm-inference".to_string(),
+                position: Position { x: 100.0, y: 0.0 },
+                data: serde_json::json!({}),
+            },
+        ],
+        edges: Vec::new(),
+        derived_graph: Some(WorkflowDerivedGraph {
+            schema_version: 1,
+            graph_fingerprint: "graph-parallel".to_string(),
+            consumer_count_map: std::collections::HashMap::new(),
+        }),
+    }
+}
 
 #[test]
 fn translated_workflow_started_event_preserves_engine_execution_id() {
@@ -307,6 +335,168 @@ fn translated_waiting_for_input_event_preserves_backend_contract_and_waiting_sta
             );
             let node = trace.nodes.get("human-input-1").expect("node overlay");
             assert_eq!(node.last_message.as_deref(), Some("Need approval"));
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
+fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    diagnostics_store.set_execution_metadata(
+        "exec-parallel",
+        Some("wf-parallel".to_string()),
+        Some("Parallel Workflow".to_string()),
+    );
+    diagnostics_store.set_execution_graph("exec-parallel", &sample_parallel_graph());
+
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id: "wf-parallel".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            tasks: vec!["left".to_string(), "right".to_string()],
+            occurred_at_ms: Some(1_000),
+        },
+    );
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskStarted {
+            task_id: "left".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            occurred_at_ms: Some(1_010),
+        },
+    );
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskStarted {
+            task_id: "right".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            occurred_at_ms: Some(1_012),
+        },
+    );
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "left".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            output: Some(serde_json::json!({ "out": "left" })),
+            occurred_at_ms: Some(1_040),
+        },
+    );
+    let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "right".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            output: Some(serde_json::json!({ "out": "right" })),
+            occurred_at_ms: Some(1_060),
+        },
+    );
+
+    assert_eq!(translated_execution_id(&event), "exec-parallel");
+    match diagnostics_event {
+        super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+            let run = snapshot.runs_by_id.get("exec-parallel").expect("trace");
+            assert_eq!(run.workflow_name.as_deref(), Some("Parallel Workflow"));
+            assert_eq!(run.graph_fingerprint_at_start.as_deref(), Some("graph-parallel"));
+            assert_eq!(
+                run.last_incremental_task_ids,
+                vec!["left".to_string(), "right".to_string()]
+            );
+            assert_eq!(run.event_count, 5);
+            assert_eq!(run.last_updated_at_ms, 1_060);
+
+            let left = run.nodes.get("left").expect("left node trace");
+            assert_eq!(left.status, crate::workflow::diagnostics::DiagnosticsNodeStatus::Completed);
+            assert_eq!(left.duration_ms, Some(30));
+
+            let right = run.nodes.get("right").expect("right node trace");
+            assert_eq!(
+                right.status,
+                crate::workflow::diagnostics::DiagnosticsNodeStatus::Completed
+            );
+            assert_eq!(right.duration_ms, Some(48));
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
+fn translated_parallel_waiting_event_preserves_waiting_pause_duration() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    diagnostics_store.set_execution_metadata(
+        "exec-parallel",
+        Some("wf-parallel".to_string()),
+        Some("Parallel Workflow".to_string()),
+    );
+    diagnostics_store.set_execution_graph("exec-parallel", &sample_parallel_graph());
+
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::IncrementalExecutionStarted {
+            workflow_id: "wf-parallel".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            tasks: vec!["left".to_string(), "right".to_string()],
+            occurred_at_ms: Some(2_000),
+        },
+    );
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskStarted {
+            task_id: "left".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            occurred_at_ms: Some(2_010),
+        },
+    );
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskStarted {
+            task_id: "right".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            occurred_at_ms: Some(2_012),
+        },
+    );
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskCompleted {
+            task_id: "left".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            output: Some(serde_json::json!({ "out": "left" })),
+            occurred_at_ms: Some(2_040),
+        },
+    );
+    let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::WaitingForInput {
+            workflow_id: "wf-parallel".to_string(),
+            execution_id: "exec-parallel".to_string(),
+            task_id: "right".to_string(),
+            prompt: Some("waiting at right".to_string()),
+            occurred_at_ms: Some(2_060),
+        },
+    );
+
+    assert_eq!(translated_execution_id(&event), "exec-parallel");
+    match diagnostics_event {
+        super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+            let run = snapshot.runs_by_id.get("exec-parallel").expect("trace");
+            assert_eq!(
+                run.status,
+                crate::workflow::diagnostics::DiagnosticsRunStatus::Waiting
+            );
+            assert!(run.waiting_for_input);
+            assert_eq!(run.last_updated_at_ms, 2_060);
+
+            let left = run.nodes.get("left").expect("left node trace");
+            assert_eq!(left.duration_ms, Some(30));
+
+            let right = run.nodes.get("right").expect("right node trace");
+            assert_eq!(
+                right.status,
+                crate::workflow::diagnostics::DiagnosticsNodeStatus::Waiting
+            );
+            assert_eq!(right.duration_ms, Some(48));
         }
         other => panic!("unexpected diagnostics event: {other:?}"),
     }
