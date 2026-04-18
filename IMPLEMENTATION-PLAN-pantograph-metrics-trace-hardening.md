@@ -379,7 +379,7 @@ modules before semantic hardening deepens them.
   and poisoning/cascade behavior in the touched stores
 - README review to ensure extracted boundaries remain documented
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: Harden Backend Trace Filter And Timing Semantics
 
@@ -493,6 +493,9 @@ Update during implementation:
   capturing explicit module targets for the oversized backend trace store,
   Tauri diagnostics store, and runtime-debug registry command file before
   decomposition begins.
+- 2026-04-18: Began Milestone 2 by extracting backend trace query and runtime
+  selection helpers out of `trace/store.rs` into `trace/query.rs` while
+  preserving `WorkflowTraceStore` as the public facade.
 
 ## Commit Cadence Notes
 

@@ -1,3 +1,4 @@
+mod query;
 mod runtime;
 mod scheduler;
 mod store;

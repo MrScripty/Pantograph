@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::workflow::WorkflowServiceError;
 
+use super::query::{runtime_metrics_selection, snapshot_for_request};
 use super::runtime::apply_runtime_snapshot;
 use super::scheduler::apply_scheduler_snapshot;
 use super::types::{
@@ -59,7 +60,7 @@ pub(super) struct WorkflowTraceRunState {
 }
 
 impl WorkflowTraceRunState {
-    fn snapshot(&self) -> WorkflowTraceSummary {
+    pub(super) fn snapshot(&self) -> WorkflowTraceSummary {
         WorkflowTraceSummary {
             execution_id: self.execution_id.clone(),
             session_id: self.session_id.clone(),
@@ -101,47 +102,25 @@ impl WorkflowTraceState {
     }
 
     fn snapshot(&self, request: &WorkflowTraceSnapshotRequest) -> WorkflowTraceSnapshotResponse {
-        let traces = self
-            .trace_order
-            .iter()
-            .filter_map(|execution_id| self.traces_by_id.get(execution_id))
-            .filter(|trace| trace_matches_request(trace, request))
-            .map(WorkflowTraceRunState::snapshot)
-            .collect();
-
-        WorkflowTraceSnapshotResponse {
-            traces,
-            retained_trace_limit: self.retained_trace_limit,
-        }
+        snapshot_for_request(
+            self.trace_order
+                .iter()
+                .filter_map(|execution_id| self.traces_by_id.get(execution_id)),
+            self.retained_trace_limit,
+            request,
+        )
     }
 
     fn runtime_metrics_selection(
         &self,
         request: &WorkflowTraceSnapshotRequest,
     ) -> super::types::WorkflowTraceRuntimeSelection {
-        let matching_traces: Vec<_> = self
-            .trace_order
-            .iter()
-            .filter_map(|execution_id| self.traces_by_id.get(execution_id))
-            .filter(|trace| trace_matches_request(trace, request))
-            .collect();
-        let matched_execution_ids = matching_traces
-            .iter()
-            .map(|trace| trace.execution_id.clone())
-            .collect::<Vec<_>>();
-
-        match matching_traces.as_slice() {
-            [trace] => super::types::WorkflowTraceRuntimeSelection {
-                execution_id: Some(trace.execution_id.clone()),
-                runtime: Some(trace.runtime.clone()),
-                matched_execution_ids,
-            },
-            _ => super::types::WorkflowTraceRuntimeSelection {
-                execution_id: None,
-                runtime: None,
-                matched_execution_ids,
-            },
-        }
+        runtime_metrics_selection(
+            self.trace_order
+                .iter()
+                .filter_map(|execution_id| self.traces_by_id.get(execution_id)),
+            request,
+        )
     }
 
     fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
@@ -362,44 +341,6 @@ impl WorkflowTraceStore {
             recorded_at_ms,
         }
     }
-}
-
-fn trace_matches_request(
-    trace: &WorkflowTraceRunState,
-    request: &WorkflowTraceSnapshotRequest,
-) -> bool {
-    if let Some(execution_id) = request.execution_id.as_deref() {
-        if trace.execution_id != execution_id {
-            return false;
-        }
-    }
-    if let Some(session_id) = request.session_id.as_deref() {
-        if trace.session_id.as_deref() != Some(session_id) && trace.execution_id != session_id {
-            return false;
-        }
-    }
-    if let Some(workflow_id) = request.workflow_id.as_deref() {
-        if trace.workflow_id.as_deref() != Some(workflow_id) {
-            return false;
-        }
-    }
-    if let Some(workflow_name) = request.workflow_name.as_deref() {
-        if trace.workflow_name.as_deref() != Some(workflow_name) {
-            return false;
-        }
-    }
-    if request.include_completed == Some(false)
-        && matches!(
-            trace.status,
-            WorkflowTraceStatus::Completed
-                | WorkflowTraceStatus::Failed
-                | WorkflowTraceStatus::Cancelled
-        )
-    {
-        return false;
-    }
-
-    true
 }
 
 fn create_trace_run_state(
