@@ -392,11 +392,6 @@ impl WorkflowEvent {
     }
 }
 
-pub(crate) fn is_cancelled_error_message(error: &str) -> bool {
-    let normalized = error.trim().to_ascii_lowercase();
-    normalized.contains("cancelled") || normalized.contains("canceled")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -446,17 +441,5 @@ mod tests {
         assert!(json.contains("/models/main.gguf"));
         assert!(json.contains("/models/embed.gguf"));
         assert!(json.contains("capability unavailable"));
-    }
-
-    #[test]
-    fn cancelled_error_message_helper_matches_common_cancelled_forms() {
-        assert!(is_cancelled_error_message("Workflow cancelled"));
-        assert!(is_cancelled_error_message(
-            "workflow run cancelled during execution"
-        ));
-        assert!(is_cancelled_error_message(
-            "workflow canceled before dispatch"
-        ));
-        assert!(!is_cancelled_error_message("runtime unavailable"));
     }
 }

@@ -336,8 +336,8 @@ adding more scheduling or graph complexity.
   `WorkflowTraceRuntimeMetrics` producer contract.
 - Extend adapter-boundary diagnostics and snapshot-path acceptance coverage for
   the remaining command and transport surfaces.
-- Replace the remaining centralized cancellation-message classifier once every
-  producer can emit explicit machine-readable cancellation outcomes.
+- Extend acceptance coverage around the new backend-owned cancellation contract
+  across the remaining producer and transport surfaces.
 - Decide whether deeper metrics inspection should stay in diagnostics or move
   into a dedicated trace/metrics module.
 
@@ -497,6 +497,10 @@ incremental runs.
   separately from editable-session ownership, so session-backed diagnostics
   filtering no longer rejects backend-owned run events before the session UI
   sees a `Started` event.
+- `node-engine::WorkflowEvent` now includes a canonical `WorkflowCancelled`
+  variant, backend Rust emitters can publish explicit cancellation outcomes,
+  and Tauri diagnostics/transport no longer classify `WorkflowFailed` strings
+  to infer cancellation for node-engine events.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
@@ -505,9 +509,8 @@ incremental runs.
 - Phase 5 Milestone 2 completion-matrix freeze is now also complete: current
   producer/consumer coverage for `WaitingForInput`, `GraphModified`,
   `IncrementalExecutionStarted`, and `Cancelled` is recorded in the dedicated
-  plan, with the remaining transport drift narrowed to canonical cancellation
-  still being inferred at the Tauri boundary instead of emitted by
-  backend-owned workflow events.
+  plan, and the cancellation row now reflects the canonical backend-owned
+  event path instead of adapter-side failure-message inference.
 
 **Still missing:**
 
@@ -515,10 +518,11 @@ incremental runs.
   mutation paths that still do not produce the event vocabulary consistently,
   especially beyond the executor-owned invalidation, multi-demand, and current
   edit-session human-input pause path
-- Canonical backend-owned cancellation events so Tauri/diagnostics no longer
-  classify `WorkflowFailed` messages into `Cancelled` on their own and
-  headless bindings can observe the same cancellation contract
-- Final adapter parity once the backend-owned cancellation contract exists
+- Broader backend emission coverage for any additional cancellable producer
+  paths that still terminate without publishing the canonical cancellation
+  event
+- Final parity decisions for non-streaming/headless cancellation error
+  envelopes if those surfaces should expose a first-class cancelled code
 
 ### Phase 6: Incremental Graph Execution
 

@@ -109,3 +109,21 @@ fn test_composite_empty() {
         .send(WorkflowEvent::task_progress("task1", "exec1", 0.5, None))
         .unwrap();
 }
+
+#[test]
+fn test_workflow_cancelled_now_sets_timestamp() {
+    let event = WorkflowEvent::WorkflowCancelled {
+        workflow_id: "wf-1".to_string(),
+        execution_id: "exec-1".to_string(),
+        error: "workflow cancelled".to_string(),
+        occurred_at_ms: None,
+    }
+    .now();
+
+    match event {
+        WorkflowEvent::WorkflowCancelled { occurred_at_ms, .. } => {
+            assert!(occurred_at_ms.is_some());
+        }
+        other => panic!("expected WorkflowCancelled event, got {other:?}"),
+    }
+}

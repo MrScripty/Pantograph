@@ -841,7 +841,7 @@ impl EmbeddedRuntime {
             .now(),
         );
 
-        let mut workflow_result: Result<(), String> = Ok(());
+        let mut workflow_result: Result<(), node_engine::NodeEngineError> = Ok(());
         let mut waiting_for_input = false;
         for node_id in &terminal_nodes {
             match executor.demand(node_id, &task_executor).await {
@@ -860,7 +860,7 @@ impl EmbeddedRuntime {
                 }
                 Err(error) => {
                     log::error!("Error demanding from node {}: {}", node_id, error);
-                    workflow_result = Err(error.to_string());
+                    workflow_result = Err(error);
                     break;
                 }
             }
@@ -886,15 +886,23 @@ impl EmbeddedRuntime {
                 .now(),
             );
         } else if let Err(error) = &workflow_result {
-            let _ = event_sink.send(
-                node_engine::WorkflowEvent::WorkflowFailed {
+            let terminal_event = match error {
+                node_engine::NodeEngineError::Cancelled => {
+                    node_engine::WorkflowEvent::WorkflowCancelled {
+                        workflow_id: session_id.to_string(),
+                        execution_id: session_id.to_string(),
+                        error: error.to_string(),
+                        occurred_at_ms: None,
+                    }
+                }
+                _ => node_engine::WorkflowEvent::WorkflowFailed {
                     workflow_id: session_id.to_string(),
                     execution_id: session_id.to_string(),
-                    error: error.clone(),
+                    error: error.to_string(),
                     occurred_at_ms: None,
-                }
-                .now(),
-            );
+                },
+            };
+            let _ = event_sink.send(terminal_event.now());
         }
 
         let execution_mode_info =
@@ -946,7 +954,7 @@ impl EmbeddedRuntime {
             trace_runtime_metrics,
             runtime_model_target,
             waiting_for_input,
-            error: workflow_result.err(),
+            error: workflow_result.err().map(|error| error.to_string()),
         })
     }
 

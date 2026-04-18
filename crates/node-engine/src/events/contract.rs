@@ -34,6 +34,16 @@ pub enum WorkflowEvent {
         occurred_at_ms: Option<u64>,
     },
 
+    /// Workflow execution was cancelled before completing successfully.
+    #[serde(rename_all = "camelCase")]
+    WorkflowCancelled {
+        workflow_id: String,
+        execution_id: String,
+        error: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        occurred_at_ms: Option<u64>,
+    },
+
     /// Workflow is waiting for user input.
     #[serde(rename_all = "camelCase")]
     WaitingForInput {
@@ -155,6 +165,7 @@ impl WorkflowEvent {
             Self::WorkflowStarted { occurred_at_ms, .. }
             | Self::WorkflowCompleted { occurred_at_ms, .. }
             | Self::WorkflowFailed { occurred_at_ms, .. }
+            | Self::WorkflowCancelled { occurred_at_ms, .. }
             | Self::WaitingForInput { occurred_at_ms, .. }
             | Self::TaskStarted { occurred_at_ms, .. }
             | Self::TaskCompleted { occurred_at_ms, .. }
@@ -178,6 +189,10 @@ impl WorkflowEvent {
                 ..
             }
             | Self::WorkflowFailed {
+                occurred_at_ms: slot,
+                ..
+            }
+            | Self::WorkflowCancelled {
                 occurred_at_ms: slot,
                 ..
             }

@@ -227,6 +227,7 @@ fn ffi_workflow_event_type(event: &WorkflowEvent) -> &'static str {
         WorkflowEvent::WorkflowStarted { .. } => "WorkflowStarted",
         WorkflowEvent::WorkflowCompleted { .. } => "WorkflowCompleted",
         WorkflowEvent::WorkflowFailed { .. } => "WorkflowFailed",
+        WorkflowEvent::WorkflowCancelled { .. } => "WorkflowCancelled",
         WorkflowEvent::WaitingForInput { .. } => "WaitingForInput",
         WorkflowEvent::TaskStarted { .. } => "TaskStarted",
         WorkflowEvent::TaskCompleted { .. } => "TaskCompleted",
@@ -1206,6 +1207,13 @@ mod tests {
             occurred_at_ms: None,
         })
         .expect("send graph modified event");
+        sink.send(WorkflowEvent::WorkflowCancelled {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            error: "workflow run cancelled during execution".to_string(),
+            occurred_at_ms: None,
+        })
+        .expect("send cancelled event");
         sink.send(WorkflowEvent::IncrementalExecutionStarted {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
@@ -1218,15 +1226,19 @@ mod tests {
             let guard = buffer.read().await;
             guard.clone()
         };
-        assert_eq!(events.len(), 3);
+        assert_eq!(events.len(), 4);
         assert_eq!(events[0].event_type, "WaitingForInput");
         assert_eq!(events[1].event_type, "GraphModified");
-        assert_eq!(events[2].event_type, "IncrementalExecutionStarted");
+        assert_eq!(events[2].event_type, "WorkflowCancelled");
+        assert_eq!(events[3].event_type, "IncrementalExecutionStarted");
         assert!(events[0]
             .event_json
             .contains("\"type\":\"waitingForInput\""));
         assert!(events[1].event_json.contains("\"type\":\"graphModified\""));
         assert!(events[2]
+            .event_json
+            .contains("\"type\":\"workflowCancelled\""));
+        assert!(events[3]
             .event_json
             .contains("\"type\":\"incrementalExecutionStarted\""));
     }

@@ -83,11 +83,11 @@ fn translated_task_progress_event_updates_backend_diagnostics_projection() {
 }
 
 #[test]
-fn translated_workflow_failed_event_maps_cancelled_errors_to_cancelled_event() {
+fn translated_workflow_cancelled_event_maps_directly_to_cancelled_event() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
     let (event, diagnostics_event) = translate_node_event_with_diagnostics(
         &diagnostics_store,
-        node_engine::WorkflowEvent::WorkflowFailed {
+        node_engine::WorkflowEvent::WorkflowCancelled {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
             error: "workflow run cancelled during execution".to_string(),
@@ -114,6 +114,44 @@ fn translated_workflow_failed_event_maps_cancelled_errors_to_cancelled_event() {
             assert_eq!(
                 trace.status,
                 crate::workflow::diagnostics::DiagnosticsRunStatus::Cancelled
+            );
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
+fn translated_workflow_failed_event_stays_failed() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    let (event, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::WorkflowFailed {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            error: "runtime unavailable".to_string(),
+            occurred_at_ms: Some(33),
+        },
+    );
+
+    match event {
+        super::TauriWorkflowEvent::Failed {
+            workflow_id,
+            execution_id,
+            error,
+        } => {
+            assert_eq!(workflow_id, "wf-1");
+            assert_eq!(execution_id, "exec-1");
+            assert_eq!(error, "runtime unavailable");
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+
+    match diagnostics_event {
+        super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+            let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+            assert_eq!(
+                trace.status,
+                crate::workflow::diagnostics::DiagnosticsRunStatus::Failed
             );
         }
         other => panic!("unexpected diagnostics event: {other:?}"),
@@ -282,7 +320,7 @@ fn translated_cancelled_then_restarted_execution_resets_diagnostics_overlay_stat
     );
     let _ = translate_node_event_with_diagnostics(
         &diagnostics_store,
-        node_engine::WorkflowEvent::WorkflowFailed {
+        node_engine::WorkflowEvent::WorkflowCancelled {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
             error: "workflow run cancelled during execution".to_string(),

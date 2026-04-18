@@ -86,8 +86,8 @@ use crate::workflow::event_adapter::TauriEventAdapter;
 ## Structured Producer Contract
 - Translation preserves the canonical Tauri workflow-event DTO shapes already
   published by `workflow/events.rs`.
-- Cancellation-shaped backend failures are still converted into explicit
-  cancelled workflow events at this boundary until every producer emits a fully
-  machine-readable cancellation outcome directly.
+- Backend-owned `WorkflowCancelled` events pass through as explicit cancelled
+  workflow events at this boundary; the adapter must not infer cancellation by
+  classifying free-form failure strings.
 - Diagnostics snapshots emitted here must preserve backend-owned execution ids
   and backend trace timing when present.

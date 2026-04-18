@@ -212,9 +212,9 @@ let snapshot = workflow_service
   may only use the requested session identity or update overlay-only state; it
   must not infer a concrete run id locally.
 - When backend or node-engine failures are cancellation-shaped, the adapter
-  must emit explicit cancelled workflow events and preserve that outcome into
-  diagnostics and trace projections instead of collapsing it into a generic
-  failure badge.
+  contract must already be explicit in backend-owned workflow events; Tauri may
+  only forward `Cancelled` and preserve that outcome into diagnostics and trace
+  projections instead of inferring it from generic failure strings.
 - When scheduler snapshots associate a run execution with a different workflow
   session id, adapters must preserve that backend-owned `session_id` on trace
   summaries and diagnostics projections rather than inferring the relationship

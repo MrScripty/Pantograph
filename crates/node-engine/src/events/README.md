@@ -93,5 +93,7 @@ sink.send(WorkflowEvent::task_progress("node-a", "exec-1", 0.5, None))
   field names.
 - `occurred_at_ms` is additive and optional; consumers must tolerate its
   absence on older producers.
+- Workflow cancellation is a first-class event variant and must not be encoded
+  as a cancellation-shaped failure string at transport boundaries.
 - Event variants and field names should evolve append-only where practical so
   transport and binding consumers can stay compatible.

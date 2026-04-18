@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::super::events::{is_cancelled_error_message, WorkflowEvent as TauriWorkflowEvent};
+use super::super::events::WorkflowEvent as TauriWorkflowEvent;
 
 /// A value that flows through a port.
 type PortValue = serde_json::Value;
@@ -52,21 +52,22 @@ pub(super) fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWo
             execution_id,
             error,
             ..
-        } => {
-            if is_cancelled_error_message(&error) {
-                TauriWorkflowEvent::Cancelled {
-                    workflow_id,
-                    error,
-                    execution_id,
-                }
-            } else {
-                TauriWorkflowEvent::Failed {
-                    workflow_id,
-                    error,
-                    execution_id,
-                }
-            }
-        }
+        } => TauriWorkflowEvent::Failed {
+            workflow_id,
+            error,
+            execution_id,
+        },
+
+        node_engine::WorkflowEvent::WorkflowCancelled {
+            workflow_id,
+            execution_id,
+            error,
+            ..
+        } => TauriWorkflowEvent::Cancelled {
+            workflow_id,
+            error,
+            execution_id,
+        },
 
         node_engine::WorkflowEvent::TaskStarted {
             task_id,
