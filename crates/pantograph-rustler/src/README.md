@@ -10,6 +10,7 @@ Rustler NIF adapter surface for Pantograph workflow APIs.
 | `elixir_data_graph_executor.rs` | Focused orchestration data-graph bridge from Rustler into backend-owned workflow execution. |
 | `resource_registration.rs` | Focused Rustler resource registration boundary used during NIF load. |
 | `workflow_event_contract.rs` | Focused workflow-event JSON serialization helpers for the BEAM event channel. |
+| `workflow_graph_contract.rs` | Focused workflow graph JSON CRUD and validation helpers behind the public NIF facade. |
 | `workflow_host_contract.rs` | Focused frontend-HTTP request/response and workflow-error envelope helpers for Rustler. |
 
 ## Workflow NIF Modes
@@ -47,6 +48,9 @@ Default (`no features`):
   `workflow_event_contract.rs`, and frontend-HTTP request/error helpers are
   isolated in `workflow_host_contract.rs`, so the public NIF surface can stay
   facade-first while touched boundary logic remains decomposed.
+- Workflow graph JSON CRUD and validation helpers now live in
+  `workflow_graph_contract.rs`, isolating graph-shaping adapter logic from the
+  public NIF facade while preserving the existing exported function names.
 - The orchestration data-graph bridge now lives in
   `elixir_data_graph_executor.rs`, isolating the Rustler-specific callback
   bridge from the NIF facade while keeping the actual async execution contract

@@ -346,6 +346,9 @@ Corrections applied:
 - `resource_registration.rs` is now also carved out of the NIF facade so
   load-time resource registration no longer deepens the main Rustler entry
   file or relies on ignored must-use results in `load`.
+- `workflow_graph_contract.rs` now owns the workflow graph JSON CRUD and
+  validation helpers behind the public NIF facade, reducing another large
+  Rustler insertion point before deeper host-side coverage lands.
 - `mix` and `elixir` are not installed in the current environment, so BEAM
   host verification scaffolding can be authored here but not executed locally
   until host tooling is available.
@@ -472,3 +475,7 @@ Corrections applied:
   `pantograph_rustler` NIF through an explicit `PANTOGRAPH_RUSTLER_NIF_PATH`
   contract. Local execution remains pending until BEAM host tooling is
   available in the environment.
+- 2026-04-18: Milestone 2 extraction also started inside
+  `crates/pantograph-rustler`: workflow graph JSON CRUD and validation helpers
+  moved behind a focused `workflow_graph_contract.rs` module so the public NIF
+  facade stays stable while the Rustler entry file keeps shrinking.

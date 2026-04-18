@@ -60,12 +60,18 @@ extern crate workflow_nodes;
 mod elixir_data_graph_executor;
 mod resource_registration;
 mod workflow_event_contract;
+mod workflow_graph_contract;
 #[cfg(feature = "frontend-http")]
 mod workflow_host_contract;
 
 use elixir_data_graph_executor::ElixirDataGraphExecutor;
 use resource_registration::register_resources;
 use workflow_event_contract::serialize_workflow_event_json;
+use workflow_graph_contract::{
+    workflow_add_edge_json, workflow_add_node_json, workflow_from_json_string,
+    workflow_new_json, workflow_remove_edge_json, workflow_remove_node_json,
+    workflow_update_node_data_json, workflow_validate_json,
+};
 #[cfg(feature = "frontend-http")]
 use workflow_host_contract::{workflow_run_host_request, workflow_run_scheduler_request};
 
@@ -751,18 +757,13 @@ fn parse_execution_mode(mode_str: String) -> ElixirExecutionMode {
 /// Create a new empty workflow graph, returned as JSON.
 #[rustler::nif]
 fn workflow_new(id: String, name: String) -> NifResult<String> {
-    let graph = WorkflowGraph::new(&id, &name);
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_new_json(id, name)
 }
 
 /// Parse a JSON string into a WorkflowGraph and re-serialize (validates structure).
 #[rustler::nif]
 fn workflow_from_json(json: String) -> NifResult<String> {
-    let graph: WorkflowGraph = serde_json::from_str(&json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_from_json_string(json)
 }
 
 /// Add a node to a workflow graph (JSON in, JSON out).
@@ -775,36 +776,13 @@ fn workflow_add_node(
     y: f64,
     data_json: String,
 ) -> NifResult<String> {
-    let mut graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let data: serde_json::Value = serde_json::from_str(&data_json).unwrap_or_default();
-
-    let node = node_engine::GraphNode {
-        id: node_id,
-        node_type,
-        position: (x, y),
-        data,
-    };
-    graph.nodes.push(node);
-
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_add_node_json(graph_json, node_id, node_type, x, y, data_json)
 }
 
 /// Remove a node from a workflow graph.
 #[rustler::nif]
 fn workflow_remove_node(graph_json: String, node_id: String) -> NifResult<String> {
-    let mut graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    graph.nodes.retain(|n| n.id != node_id);
-    graph
-        .edges
-        .retain(|e| e.source != node_id && e.target != node_id);
-
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_remove_node_json(graph_json, node_id)
 }
 
 /// Add an edge to a workflow graph.
@@ -816,36 +794,13 @@ fn workflow_add_edge(
     target: String,
     target_handle: String,
 ) -> NifResult<String> {
-    let mut graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let edge_id = format!(
-        "e-{}-{}-{}-{}",
-        source, source_handle, target, target_handle
-    );
-    let edge = node_engine::GraphEdge {
-        id: edge_id,
-        source,
-        source_handle,
-        target,
-        target_handle,
-    };
-    graph.edges.push(edge);
-
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_add_edge_json(graph_json, source, source_handle, target, target_handle)
 }
 
 /// Remove an edge from a workflow graph.
 #[rustler::nif]
 fn workflow_remove_edge(graph_json: String, edge_id: String) -> NifResult<String> {
-    let mut graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    graph.edges.retain(|e| e.id != edge_id);
-
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_remove_edge_json(graph_json, edge_id)
 }
 
 /// Update node data in a workflow graph.
@@ -855,27 +810,13 @@ fn workflow_update_node_data(
     node_id: String,
     data_json: String,
 ) -> NifResult<String> {
-    let mut graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let data: serde_json::Value = serde_json::from_str(&data_json).unwrap_or_default();
-
-    if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == node_id) {
-        node.data = data;
-    }
-
-    serde_json::to_string(&graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    workflow_update_node_data_json(graph_json, node_id, data_json)
 }
 
 /// Validate a workflow graph. Returns error messages.
 #[rustler::nif]
 fn workflow_validate(graph_json: String) -> NifResult<Vec<String>> {
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let errors = node_engine::validation::validate_workflow(&graph, None);
-    Ok(errors.iter().map(|e| e.to_string()).collect())
+    workflow_validate_json(graph_json)
 }
 
 // ============================================================================
