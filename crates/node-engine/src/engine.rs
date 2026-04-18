@@ -49,6 +49,7 @@ use crate::types::{NodeId, WorkflowGraph};
 mod graph_events;
 mod multi_demand;
 mod dependency_inputs;
+mod single_demand;
 
 /// Trait for executing a single node/task
 ///
@@ -568,19 +569,7 @@ impl WorkflowExecutor {
         node_id: &NodeId,
         executor: &dyn TaskExecutor,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let graph = self.graph.read().await;
-        let mut engine = self.demand_engine.write().await;
-
-        engine
-            .demand(
-                node_id,
-                &graph,
-                executor,
-                &self.context,
-                self.event_sink.as_ref(),
-                &self.extensions,
-            )
-            .await
+        single_demand::demand_with_executor(self, node_id, executor).await
     }
 
     /// Demand outputs from multiple nodes

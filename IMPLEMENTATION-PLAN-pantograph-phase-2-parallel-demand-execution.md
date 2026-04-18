@@ -403,6 +403,11 @@ Update during implementation:
   output to node input mapping and Puma-Lib model-path context propagation out
   of `DemandEngine::demand_internal` so later planners and coordinators can
   consume a narrower execution core.
+- 2026-04-18: Fifth Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/single_demand.rs`, moving the
+  `WorkflowExecutor::demand` graph-read and engine-lock choreography behind a
+  focused helper so both single-demand and multi-demand facade entry points
+  now live under the same internal engine boundary.
 
 ## Commit Cadence Notes
 
@@ -446,6 +451,8 @@ Update during implementation:
   `crates/node-engine/src/engine/`.
 - Focused engine helpers now own the multi-demand facade choreography and
   dependency-input assembly that bounded parallel planning will need to reuse.
+- The executor-facing single-demand path also now delegates through an engine
+  helper, reducing the remaining inline hot-path logic in `engine.rs`.
 
 ### Deviations
 
