@@ -591,6 +591,11 @@ incremental runs.
   and pins additive payload parity for `WaitingForInput`, `GraphModified`,
   `WorkflowCancelled`, and `IncrementalExecutionStarted`, tightening the
   binding-side acceptance path beyond canonical event-label checks alone.
+- The touched backend trace and Tauri workflow READMEs are now reconciled with
+  the landed contract: backend trace ownership explicitly documents
+  resume-from-waiting semantics, and the Tauri adapter/workflow boundary docs
+  now state that waiting/input prompts, dirty-task overlays, and incremental
+  resume task ids are preserved as backend-owned transport facts.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics

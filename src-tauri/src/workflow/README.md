@@ -215,6 +215,11 @@ let snapshot = workflow_service
   contract must already be explicit in backend-owned workflow events; Tauri may
   only forward `Cancelled` and preserve that outcome into diagnostics and trace
   projections instead of inferring it from generic failure strings.
+- When `WaitingForInput`, `GraphModified`, or `IncrementalExecutionStarted`
+  cross this directory, Tauri must preserve backend-owned execution identity,
+  prompt/task semantics, dirty-task overlays, and incremental-resume task ids
+  through both the translated workflow event DTOs and diagnostics projection
+  path.
 - When scheduler snapshots associate a run execution with a different workflow
   session id, adapters must preserve that backend-owned `session_id` on trace
   summaries and diagnostics projections rather than inferring the relationship

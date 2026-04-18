@@ -437,9 +437,9 @@ leave accurate documentation behind.
       binding transport into GUI or headless event consumers.
 - [x] Add replay, duplicate-event, restart, cancellation, and resume coverage
       for the completed event vocabulary.
-- [ ] Update touched README files, the roadmap, and any ADR references required
+- [x] Update touched README files, the roadmap, and any ADR references required
       by the standards.
-- [ ] Reconcile this plan’s status and completion summary so it remains the
+- [x] Reconcile this plan’s status and completion summary so it remains the
       authoritative source of truth.
 
 **Verification:**
@@ -451,9 +451,11 @@ leave accurate documentation behind.
 **Status:** In progress
 
 Milestone 5 acceptance and replay coverage is now substantially landed. The
-remaining close-out work is the final README/ADR reconciliation and the final
-status/completion summary update once the remaining phase-level gaps are either
-implemented or explicitly frozen in this plan.
+Milestone 5 close-out tasks in this plan are now complete. The overall Phase 5
+roadmap target remains in progress because the dedicated roadmap still carries
+explicit frozen follow-on gaps around remaining producer coverage, cancellation
+surface breadth, and binding-platform scope decisions beyond the slices landed
+here.
 
 ## Execution Notes
 
@@ -649,15 +651,46 @@ Update during implementation:
 
 ### Completed
 
-- None yet. Phase 5 implementation has not started from this plan.
+- Milestone 1 decomposition completed across `node-engine`, the Tauri
+  event-adapter boundary, and the shared graph GUI reducer path.
+- Milestone 2 contract freeze completed for the current
+  `WaitingForInput`, `GraphModified`, `IncrementalExecutionStarted`, and
+  `Cancelled` producer/consumer matrix.
+- Milestone 3 backend-emission work completed for canonical cancellation,
+  interactive pause propagation, orchestration error exits, and additive
+  graph-mutation event responses in the current backend-owned execution paths.
+- Milestone 4 transport-parity work completed across Tauri graph-mutation
+  responses, GUI reducer consumption, boundary validation, and app-toolbar
+  event handling.
+- Milestone 5 acceptance/replay coverage completed across backend trace
+  restart behavior, Tauri event translation, GUI reducers, headless error
+  envelopes, UniFFI buffered events, and the currently-testable Rustler
+  serializer surface.
+- Milestone 5 source-of-truth close-out completed for the roadmap, this plan,
+  and the touched backend/Tauri module READMEs.
 
 ### Deviations
 
-- None yet.
+- Rustler serializer-parity coverage was added, but full Rustler runtime test
+  execution remains environment-limited here because the local test binary link
+  still depends on Erlang NIF symbols that are not present in this shell
+  environment.
+- The overall roadmap target remains in progress even though this plan’s
+  Milestone 5 close-out is complete, because the roadmap deliberately keeps the
+  remaining frozen Phase 5 follow-ons visible instead of declaring the entire
+  target finished early.
 
 ### Follow-Ups
 
-- None yet. Follow-ups will be recorded here once implementation lands.
+- Extend canonical cancellation emission or acceptance coverage only where a
+  concrete remaining producer or transport surface is still identified in the
+  roadmap’s explicit “Still missing” list.
+- Resolve the separate binding-platform follow-on for curated client-facing
+  surface policy instead of expanding wrapper exports opportunistically inside
+  this phase.
+- Revisit remaining interactive/incremental producer coverage if Scheduler V2,
+  parallel demand execution, or incremental graph execution introduces a new
+  backend-owned entry path that bypasses the current event emitters.
 
 ### Verification Summary
 
@@ -668,10 +701,23 @@ Update during implementation:
   `DEPENDENCY-STANDARDS.md`
 - Inspected current insertion points in `crates/node-engine`,
   `src-tauri/src/workflow`, and `packages/svelte-graph`
+- Verified focused backend trace coverage for resume-from-waiting semantics in
+  `pantograph-workflow-service`
+- Verified focused `src-tauri` adapter coverage for waiting, graph-modified,
+  incremental-resume, restart, and cancellation parity
+- Verified focused UniFFI buffered-event payload parity coverage for the
+  backend-owned workflow-event vocabulary
+- Verified roadmap/plan/module-README reconciliation against the touched
+  ownership boundaries
 
 ### Traceability Links
 
-- Module README updated: N/A
+- Module README updated:
+  `crates/pantograph-workflow-service/src/trace/README.md`
+- Module README updated:
+  `src-tauri/src/workflow/event_adapter/README.md`
+- Module README updated:
+  `src-tauri/src/workflow/README.md`
 - ADR added/updated: N/A
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A
 

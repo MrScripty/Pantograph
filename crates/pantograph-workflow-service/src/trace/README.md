@@ -62,6 +62,10 @@ they do not own trace lifecycle rules.
 - Request validation for snapshot filters stays here, not in adapters.
 - Trace snapshot filter semantics, including `workflow_name`, stay
   backend-owned and must not drift between transport surfaces.
+- When a run is paused by `WaitingForInput`, a later
+  `IncrementalExecutionStarted` or `NodeStarted` event for the same execution
+  must resume the canonical trace back to `Running` rather than leaving the
+  run stuck in a stale waiting state.
 - Runtime and scheduler snapshot application must preserve backend-owned
   execution and session identity when those facts are available.
 - `queue_wait_ms` is only emitted from measured queue timestamps. Snapshot
@@ -129,3 +133,6 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   default rather than adapter-specific filtering behavior.
 - Queue timing fields are authoritative-only: missing queue timestamps remain
   absent instead of being synthesized from scheduler snapshot capture time.
+- `waiting_for_input` and the derived run status are backend-owned lifecycle
+  facts: interactive pause transitions and incremental resume transitions must
+  reconcile here before any adapter or diagnostics projection consumes them.

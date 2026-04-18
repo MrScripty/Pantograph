@@ -45,6 +45,10 @@ insertion points for later event-contract completion work.
   semantics.
 - Event translation preserves backend execution ids rather than synthesizing
   adapter-local ownership.
+- Translation of `WaitingForInput`, `GraphModified`, and
+  `IncrementalExecutionStarted` must preserve backend-owned prompt/task,
+  dirty-task, and resumed-task semantics rather than collapsing them into
+  adapter-local diagnostics-only state.
 - Diagnostics snapshots are derived from backend-owned trace and workflow-event
   projections, not from frontend reconstruction.
 
@@ -89,5 +93,9 @@ use crate::workflow::event_adapter::TauriEventAdapter;
 - Backend-owned `WorkflowCancelled` events pass through as explicit cancelled
   workflow events at this boundary; the adapter must not infer cancellation by
   classifying free-form failure strings.
+- Backend-owned `WaitingForInput`, `GraphModified`, and
+  `IncrementalExecutionStarted` events must preserve execution ownership and
+  their additive payload fields when translated into the app-facing workflow
+  event DTOs and diagnostics snapshots.
 - Diagnostics snapshots emitted here must preserve backend-owned execution ids
   and backend trace timing when present.
