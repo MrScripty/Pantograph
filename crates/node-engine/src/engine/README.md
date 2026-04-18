@@ -9,6 +9,7 @@ entrypoint while preserving the current public API.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path context propagation. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path and the future insertion point for bounded parallel coordination. |
 
@@ -22,6 +23,8 @@ changing the public executor surface.
 ## Constraints
 - `node_engine::engine` remains the stable public facade for callers.
 - Graph-modification and incremental-run semantics stay backend-owned in Rust.
+- Dependency-input assembly and model-context propagation stay backend-owned in
+  Rust.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -32,7 +35,9 @@ changing the public executor surface.
 Extract graph-event and multi-demand helper logic into focused modules under
 `engine/` while keeping `engine.rs` as the public facade and workflow-executor
 entrypoint. This preserves compatibility while creating standards-compliant
-boundaries for later event and concurrency work.
+boundaries for later event and concurrency work. Dependency-input mapping is
+also extracted so future planners and coordinators do not need to own port
+assembly details directly.
 
 ## Alternatives Rejected
 - Continuing to grow `engine.rs` directly.
@@ -43,6 +48,8 @@ boundaries for later event and concurrency work.
 
 ## Invariants
 - Public callers continue to use `node_engine::engine` and `WorkflowExecutor`.
+- Dependency-input mapping stays derived from backend graph state and upstream
+  outputs rather than adapter-local preprocessing.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain
@@ -54,6 +61,8 @@ boundaries for later event and concurrency work.
 - modules.
 - Graph mutation semantics expand enough to warrant a dedicated event-owner
   type instead of helper functions.
+- Dependency planning grows to include explicit plan objects or reusable
+  topological layers.
 - Execution-state recovery or persistence introduces a different owner for
   multi-demand coordination.
 
@@ -85,6 +94,8 @@ use node_engine::{TaskExecutor, WorkflowExecutor};
 ## Structured Producer Contract
 - Graph-modification and incremental-execution helpers emit the canonical
   backend-owned `WorkflowEvent` variants.
+- Dependency-input assembly preserves existing model-path context propagation
+  semantics for Puma-Lib-backed runtime selection.
 - Dirty-task lists remain sorted and stable for consumer comparison and tests.
 - Multi-demand helper behavior remains sequential until the Phase 2 bounded
   parallel coordinator intentionally changes that contract.

@@ -398,6 +398,11 @@ Update during implementation:
   choreography behind the dedicated multi-demand helper boundary so later
   bounded-parallel coordination does not need to be inserted back into
   `engine.rs`.
+- 2026-04-18: Fourth Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/dependency_inputs.rs`, extracting dependency
+  output to node input mapping and Puma-Lib model-path context propagation out
+  of `DemandEngine::demand_internal` so later planners and coordinators can
+  consume a narrower execution core.
 
 ## Commit Cadence Notes
 
@@ -439,6 +444,8 @@ Update during implementation:
 - Milestone 1 decomposition has begun with focused no-behavior-change
   extraction slices in `crates/node-engine/src/events/` and
   `crates/node-engine/src/engine/`.
+- Focused engine helpers now own the multi-demand facade choreography and
+  dependency-input assembly that bounded parallel planning will need to reuse.
 
 ### Deviations
 

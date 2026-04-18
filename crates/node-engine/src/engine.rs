@@ -48,6 +48,7 @@ use crate::types::{NodeId, WorkflowGraph};
 
 mod graph_events;
 mod multi_demand;
+mod dependency_inputs;
 
 /// Trait for executing a single node/task
 ///
@@ -272,8 +273,8 @@ impl DemandEngine {
 
             // 1. First, recursively demand ALL dependencies to ensure their versions are current
             // This is crucial: we must know the current state of dependencies before cache check
-            let mut inputs: HashMap<String, serde_json::Value> = HashMap::new();
             let dependencies = graph.get_dependencies(node_id);
+            let mut dependency_outputs = HashMap::new();
 
             for dep_id in &dependencies {
                 // Recursively demand the dependency
@@ -282,42 +283,10 @@ impl DemandEngine {
                         dep_id, graph, executor, context, event_sink, extensions, computing,
                     )
                     .await?;
-
-                // Find the edge(s) connecting this dependency to our node
-                for edge in graph.incoming_edges(node_id) {
-                    if edge.source == *dep_id {
-                        // Get the output value from the dependency
-                        if let Some(value) = dep_outputs.get(&edge.source_handle) {
-                            inputs.insert(edge.target_handle.clone(), value.clone());
-                        }
-
-                        // Model dependency context rides along the model_path connection.
-                        // This keeps runtime preflight aligned with the selections made
-                        // in the Puma-Lib node even when those fields are not explicitly
-                        // wired as separate graph edges.
-                        if edge.target_handle == "model_path" {
-                            for context_key in [
-                                "model_id",
-                                "model_type",
-                                "task_type_primary",
-                                "backend_key",
-                                "recommended_backend",
-                                "selected_binding_ids",
-                                "platform_context",
-                                "dependency_bindings",
-                                "dependency_requirements_id",
-                            ] {
-                                if inputs.contains_key(context_key) {
-                                    continue;
-                                }
-                                if let Some(value) = dep_outputs.get(context_key) {
-                                    inputs.insert(context_key.to_string(), value.clone());
-                                }
-                            }
-                        }
-                    }
-                }
+                dependency_outputs.insert(dep_id.clone(), dep_outputs);
             }
+            let mut inputs =
+                dependency_inputs::resolve_dependency_inputs(graph, node_id, &dependency_outputs);
 
             // 2. NOW compute input version (after dependencies are resolved)
             let input_version = self.compute_input_version(node_id, graph);

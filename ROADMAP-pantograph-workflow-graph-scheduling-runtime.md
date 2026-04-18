@@ -377,8 +377,9 @@ prepare the engine for metric-informed scheduling.
 
 - Phase 2 decomposition is underway in `crates/node-engine`: workflow-event
   helpers, graph-event helpers, and the executor-facing `demand_multiple`
-  choreography now live behind focused internal modules, creating a compliant
-  insertion boundary for the later bounded parallel coordinator.
+  choreography now live behind focused internal modules, and dependency-input
+  assembly has been extracted out of `DemandEngine::demand_internal`, creating
+  a compliant insertion boundary for the later bounded parallel coordinator.
 
 **Milestones:**
 
