@@ -2773,6 +2773,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn embedded_workflow_host_run_workflow_returns_cancelled_for_precancelled_run_handle() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
+
+        let run_handle = pantograph_workflow_service::WorkflowRunHandle::new();
+        run_handle.cancel();
+
+        let error = runtime
+            .host()
+            .run_workflow(
+                "runtime-text",
+                &[WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                Some(&[WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                WorkflowRunOptions { timeout_ms: None },
+                run_handle,
+            )
+            .await
+            .expect_err("pre-cancelled host run should return cancelled");
+
+        match error {
+            WorkflowServiceError::Cancelled(message) => {
+                assert!(
+                    message.contains("cancelled before execution started"),
+                    "unexpected cancelled message: {message}"
+                );
+            }
+            other => panic!("expected cancelled error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
         let temp = TempDir::new().expect("temp dir");
         write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");

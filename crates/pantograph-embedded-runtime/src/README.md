@@ -182,6 +182,11 @@ embedded-runtime crate.
   backend Rust onto stable workflow-service error codes so adapters do not
   collapse admission or runtime-unavailable decisions into generic internal
   failures.
+- The concrete embedded workflow host must preserve backend-owned
+  non-streaming cancellation semantics at the runtime boundary itself, so a
+  pre-cancelled `WorkflowRunHandle` returns `WorkflowServiceError::Cancelled`
+  before execution begins instead of being flattened by adapter-local error
+  handling.
 - Runtime-registry unhealthy projection from host health assessment must stay
   in backend Rust so adapters do not drift on when a failed runtime transitions
   from observed-ready lifecycle into registry `unhealthy` state.

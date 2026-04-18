@@ -599,6 +599,10 @@ incremental runs.
   `invalid_request` envelopes through the real `workflow_run` entrypoint, so
   that non-streaming interactive mismatch behavior is covered directly at the
   transport boundary rather than only through helper-level mapping tests.
+- The concrete embedded-runtime workflow host now also has a focused
+  pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
+  boundary, so non-streaming cancellation parity is no longer inferred only
+  through workflow-service or outer adapter wrappers.
 - The touched backend trace and Tauri workflow READMEs are now reconciled with
   the landed contract: backend trace ownership explicitly documents
   resume-from-waiting semantics, and the Tauri adapter/workflow boundary docs
@@ -626,8 +630,8 @@ incremental runs.
   event, beyond the now-covered orchestration error exits
 - Extend acceptance coverage for the new `cancelled` envelope only where a
   remaining non-streaming/headless command or runtime-hosted binding surface is
-  still not directly pinned beyond the now-covered Tauri helper, UniFFI, and
-  frontend-HTTP workflow-run paths
+  still not directly pinned beyond the now-covered embedded-runtime host,
+  Tauri helper, UniFFI, and frontend-HTTP workflow-run paths
 - Binding-platform follow-on: freeze the curated client-facing surface for the
   Pantograph headless binding platform instead of treating wrapper exports as
   the product contract by default
