@@ -12,6 +12,7 @@ frontend code.
 | ----------- | ----------- |
 | `mod.rs` | Module entrypoint that exposes trace contracts and the trace store facade. |
 | `query.rs` | Owns backend trace snapshot filtering and unique-match runtime selection helpers. |
+| `state.rs` | Owns trace run-state creation, restart resets, and event-application helpers. |
 | `types.rs` | Canonical workflow trace DTOs, event enums, and request/response contracts. |
 | `store.rs` | Owns retained trace state, replay behavior, request filtering, and snapshot generation. |
 | `runtime.rs` | Applies runtime snapshot events to canonical workflow trace state. |
@@ -39,9 +40,10 @@ and runtime views would drift across hosts and recovery flows.
 Keep canonical workflow trace ownership in `pantograph-workflow-service`.
 `types.rs` freezes the transport-safe trace vocabulary, `store.rs` owns the
 in-memory retained trace state and facade, `query.rs` owns backend trace
-filtering and unique-match runtime selection, and `runtime.rs` plus
-`scheduler.rs` apply backend-owned runtime/scheduler facts into the canonical
-run state. The canonical trace snapshot filter model is
+filtering and unique-match runtime selection, `state.rs` owns run-state
+creation and event application, and `runtime.rs` plus `scheduler.rs` apply
+backend-owned runtime/scheduler facts into the canonical run state. The
+canonical trace snapshot filter model is
 `execution_id`, `session_id`, `workflow_id`, `workflow_name`, plus
 `include_completed`, with whitespace trimming and blank-filter rejection applied
 inside this boundary. Adapters may project or transport these contracts, but

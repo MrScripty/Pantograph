@@ -1,6 +1,7 @@
 mod query;
 mod runtime;
 mod scheduler;
+mod state;
 mod store;
 mod types;
 

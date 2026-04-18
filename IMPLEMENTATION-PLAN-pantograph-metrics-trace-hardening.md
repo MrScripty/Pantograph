@@ -496,6 +496,9 @@ Update during implementation:
 - 2026-04-18: Began Milestone 2 by extracting backend trace query and runtime
   selection helpers out of `trace/store.rs` into `trace/query.rs` while
   preserving `WorkflowTraceStore` as the public facade.
+- 2026-04-18: Continued Milestone 2 by extracting backend trace run-state
+  creation and event-application helpers out of `trace/store.rs` into
+  `trace/state.rs` while preserving existing trace event semantics.
 
 ## Commit Cadence Notes
 
