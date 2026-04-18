@@ -311,7 +311,7 @@ decomposition do not drift across layers.
 - [x] Decide the `workflow_name` story explicitly:
       either add backend-owned trace support for it or remove adapter-local
       support from combined runtime-debug trace reads.
-- [ ] Freeze queue timing semantics so `queue_wait_ms` only represents measured
+- [x] Freeze queue timing semantics so `queue_wait_ms` only represents measured
       values, never snapshot-capture fallbacks.
 - [ ] Freeze execution-attribution rules so `execution_id` remains authoritative
       and any compatibility fallback is narrow, documented, and testable.
@@ -456,6 +456,10 @@ Update during implementation:
 - 2026-04-18: Began Milestone 1 by freezing the shared filter model, adding the
   backend-owned `workflow_name` trace filter, and aligning request trimming plus
   blank-filter rejection across trace, diagnostics, and runtime-debug reads.
+- 2026-04-18: Completed the queue-timing semantics slice by removing
+  `captured_at_ms` fallback synthesis from backend scheduler trace snapshots,
+  documenting authoritative-only queue timing, and adding a regression test for
+  missing queue timestamps.
 
 ## Commit Cadence Notes
 

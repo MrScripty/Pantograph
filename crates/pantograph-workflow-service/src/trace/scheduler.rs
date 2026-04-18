@@ -12,7 +12,7 @@ pub(super) fn apply_scheduler_snapshot(
     items: &[WorkflowSessionQueueItem],
     diagnostics: Option<&WorkflowSchedulerSnapshotDiagnostics>,
     error: Option<&str>,
-    captured_at_ms: u64,
+    _captured_at_ms: u64,
 ) {
     if trace.session_id.is_none() {
         trace.session_id = Some(session_id.to_string());
@@ -54,8 +54,6 @@ pub(super) fn apply_scheduler_snapshot(
     if pending_visible {
         if let Some(enqueued_at_ms) = matched_item.and_then(|item| item.enqueued_at_ms) {
             trace.queue.enqueued_at_ms.get_or_insert(enqueued_at_ms);
-        } else {
-            trace.queue.enqueued_at_ms.get_or_insert(captured_at_ms);
         }
         if !matches!(
             trace.status,
@@ -74,8 +72,6 @@ pub(super) fn apply_scheduler_snapshot(
         }
         if let Some(dequeued_at_ms) = matched_item.and_then(|item| item.dequeued_at_ms) {
             trace.queue.dequeued_at_ms.get_or_insert(dequeued_at_ms);
-        } else {
-            trace.queue.dequeued_at_ms.get_or_insert(captured_at_ms);
         }
         if !matches!(
             trace.status,

@@ -1402,6 +1402,57 @@ mod tests {
     }
 
     #[test]
+    fn workflow_trace_store_does_not_synthesize_queue_timing_from_snapshot_capture_time() {
+        let store = WorkflowTraceStore::new(10);
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::SchedulerSnapshotCaptured {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                captured_at_ms: 200,
+                session: Some(crate::workflow::WorkflowSessionSummary {
+                    session_id: "session-1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                    state: crate::workflow::WorkflowSessionState::Running,
+                    queued_runs: 0,
+                    run_count: 1,
+                }),
+                items: vec![crate::workflow::WorkflowSessionQueueItem {
+                    queue_id: "queue-1".to_string(),
+                    run_id: Some("exec-1".to_string()),
+                    enqueued_at_ms: None,
+                    dequeued_at_ms: None,
+                    priority: 5,
+                    queue_position: None,
+                    scheduler_admission_outcome: None,
+                    scheduler_decision_reason: None,
+                    status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
+                }],
+                diagnostics: None,
+                error: None,
+            },
+            200,
+        );
+
+        let trace = snapshot.traces.first().expect("trace summary");
+        assert_eq!(trace.status, WorkflowTraceStatus::Running);
+        assert_eq!(trace.queue.enqueued_at_ms, None);
+        assert_eq!(trace.queue.dequeued_at_ms, None);
+        assert_eq!(trace.queue.queue_wait_ms, None);
+        assert_eq!(
+            trace.queue.scheduler_admission_outcome.as_deref(),
+            Some("admitted")
+        );
+        assert_eq!(
+            trace.queue.scheduler_decision_reason.as_deref(),
+            Some("matched_running_item")
+        );
+    }
+
+    #[test]
     fn workflow_trace_store_prefers_backend_scheduler_decision_reason_from_queue_item() {
         let store = WorkflowTraceStore::new(10);
         let snapshot = store.record_event(

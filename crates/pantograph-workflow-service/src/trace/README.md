@@ -60,6 +60,9 @@ they do not own trace lifecycle rules.
   backend-owned and must not drift between transport surfaces.
 - Runtime and scheduler snapshot application must preserve backend-owned
   execution and session identity when those facts are available.
+- `queue_wait_ms` is only emitted from measured queue timestamps. Snapshot
+  observation time must not be repurposed as enqueue, dequeue, or queue-wait
+  data.
 - Recovery or replay updates for the same execution id update one canonical run
   record in place.
 
@@ -113,3 +116,5 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   `execution_id`, `session_id`, `workflow_id`, and `workflow_name`.
 - When a filter field is omitted, snapshot semantics fall back to the backend
   default rather than adapter-specific filtering behavior.
+- Queue timing fields are authoritative-only: missing queue timestamps remain
+  absent instead of being synthesized from scheduler snapshot capture time.
