@@ -1,7 +1,7 @@
 # Plan: Pantograph Rustler Send-Safe Verification Unblock
 
 ## Status
-In progress
+Complete
 
 Last updated: 2026-04-18
 
@@ -293,19 +293,32 @@ can absorb the fix without deepening standards debt.
 orchestration bridge can satisfy the existing `Send` requirement.
 
 **Tasks:**
-- [ ] Change `DemandIsolatedTargetRunFuture<'a>` to require `+ Send`.
-- [ ] Fix any non-`Send` captures or guard lifetimes revealed by that change.
-- [ ] Keep behavior and event semantics unchanged while making the future chain
+- [x] Change `DemandIsolatedTargetRunFuture<'a>` to require `+ Send`.
+- [x] Fix any non-`Send` captures or guard lifetimes revealed by that change.
+- [x] Keep behavior and event semantics unchanged while making the future chain
       safe for the trait boundary.
-- [ ] Add focused backend tests that pin the repaired path where the compiler
+- [x] Add focused backend tests that pin the repaired path where the compiler
       previously failed.
+
+**Milestone 2 result:**
+
+- `DemandIsolatedTargetRunFuture<'a>` in
+  `crates/node-engine/src/engine/multi_demand.rs` now requires `+ Send`,
+  matching the `DataGraphExecutor` async contract without weakening the shared
+  trait boundary.
+- No additional non-`Send` captures or guard-lifetime issues were exposed by
+  the repair; existing multi-demand behavior remained intact.
+- A focused compile-time backend test now asserts that the isolated-target
+  future satisfies the `Send` boundary directly in `node-engine`.
+- The repaired path restores native compilation for `pantograph_rustler`
+  without moving orchestration policy into the Rustler wrapper.
 
 **Verification:**
 - `cargo test -p node-engine`
 - `cargo check -p pantograph_rustler`
 - `cargo test -p pantograph_rustler` if the library build is restored cleanly
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 3: Conditional Fallback, Add A Backend-Owned Sequential Orchestration Path
 
@@ -325,7 +338,7 @@ current bridge should not use the concurrent isolated-target path.
 - `cargo check -p pantograph_rustler`
 - `cargo test -p pantograph_rustler`
 
-**Status:** Not started
+**Status:** Not needed
 
 ### Milestone 4: Reconcile Verification And Traceability
 
@@ -333,19 +346,30 @@ current bridge should not use the concurrent isolated-target path.
 state after the blocking contract is fixed.
 
 **Tasks:**
-- [ ] Update `crates/pantograph-rustler/src/README.md` if module ownership or
+- [x] Update `crates/pantograph-rustler/src/README.md` if module ownership or
       execution-path notes changed.
-- [ ] Update the broader Rustler NIF verification plan if the blocking native
+- [x] Update the broader Rustler NIF verification plan if the blocking native
       verification issue is resolved.
-- [ ] Record whether BEAM-hosted acceptance remains the only distinct
+- [x] Record whether BEAM-hosted acceptance remains the only distinct
       verification gap after native verification is restored.
+
+**Milestone 4 result:**
+
+- The Rustler README already reflects the extracted Elixir data-graph executor
+  module introduced during Milestone 1.
+- The broader BEAM/NIF verification plan now records that the `Send` mismatch
+  is resolved and that the remaining distinct gap is real BEAM-hosted symbol
+  linkage and acceptance coverage.
+- This unblock plan closes with the native compile boundary restored and the
+  residual `enif_*` symbol problem handed back to the dedicated Rustler NIF
+  verification lane.
 
 **Verification:**
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 - Plan-to-code consistency review
 - Focused verification summary for the chosen milestone path
 
-**Status:** Not started
+**Status:** Complete
 
 ## Execution Notes
 
@@ -356,6 +380,14 @@ Update during implementation:
   was extracted into a focused Rustler module, and the exact blocking contract
   mismatch was frozen against `DataGraphExecutor` and
   `DemandIsolatedTargetRunFuture<'a>`.
+- 2026-04-18: Milestone 2 completed. `DemandIsolatedTargetRunFuture<'a>` now
+  carries `+ Send`, and `node-engine` includes a focused compile-time test that
+  pins the repaired async boundary.
+- 2026-04-18: Native verification is restored for the compile boundary:
+  `cargo test -p node-engine` passes and `cargo check -p pantograph_rustler`
+  succeeds. `cargo test -p pantograph_rustler` is now blocked only by the
+  separate BEAM-hosted `enif_*` linker-symbol boundary tracked in the broader
+  Rustler NIF plan.
 
 ## Commit Cadence Notes
 

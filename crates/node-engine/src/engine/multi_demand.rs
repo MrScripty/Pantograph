@@ -89,7 +89,7 @@ struct DemandIsolatedTargetRun {
 }
 
 type DemandIsolatedTargetRunFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<DemandIsolatedTargetRun>> + 'a>>;
+    Pin<Box<dyn Future<Output = Result<DemandIsolatedTargetRun>> + Send + 'a>>;
 
 impl DemandMultiplePlan {
     fn from_requested_targets(node_ids: &[NodeId], graph: &WorkflowGraph) -> Self {
@@ -727,6 +727,7 @@ async fn execute_plan_with_budget(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::future::Future;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
@@ -741,9 +742,10 @@ mod tests {
     use super::{
         demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
         DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
-        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome, DemandDispatchWindowPlan,
-        DemandDispatchWindowResult, DemandEngine, DemandExecutionBudget, DemandMultiplePlan,
-        DemandMultipleResults, TaskExecutor,
+        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome,
+        DemandDispatchWindowPlan, DemandDispatchWindowResult, DemandEngine,
+        DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults, DemandWindowRunner,
+        TaskExecutor,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -1060,6 +1062,12 @@ mod tests {
         }
     }
 
+    fn assert_send_future<F>(_: &F)
+    where
+        F: Future + Send,
+    {
+    }
+
     #[test]
     fn plan_preserves_requested_target_order_for_event_payloads() {
         let graph = make_linear_graph();
@@ -1094,6 +1102,28 @@ mod tests {
 
         assert!(plan.requested_targets().is_empty());
         assert!(plan.execution_batches().is_empty());
+    }
+
+    #[test]
+    fn isolated_target_future_satisfies_send_boundary() {
+        let graph = make_parallel_roots_graph();
+        let mut engine = DemandEngine::new("test");
+        let executor = YieldingConcurrencyExecutor::new();
+        let context = Context::new();
+        let event_sink = NullEventSink;
+        let extensions = ExecutorExtensions::new();
+        let runner = DemandWindowRunner::new(
+            &mut engine,
+            &graph,
+            &executor,
+            &context,
+            &event_sink,
+            &extensions,
+        );
+        let base_engine = runner.clone_engine();
+        let future = runner.demand_target_in_isolation_future(&base_engine, "left".to_string());
+
+        assert_send_future(&future);
     }
 
     #[test]
