@@ -717,6 +717,19 @@ mod tests {
         graph
     }
 
+    fn make_parallel_roots_graph() -> WorkflowGraph {
+        let mut graph = WorkflowGraph::new("parallel", "Parallel");
+        for (id, x) in [("left", 0.0), ("right", 100.0)] {
+            graph.nodes.push(GraphNode {
+                id: id.to_string(),
+                node_type: "process".to_string(),
+                data: serde_json::json!({"node": id}),
+                position: (x, 0.0),
+            });
+        }
+        graph
+    }
+
     /// A simple test executor that counts invocations
     struct CountingExecutor {
         execution_count: AtomicUsize,
@@ -731,6 +744,39 @@ mod tests {
 
         fn count(&self) -> usize {
             self.execution_count.load(Ordering::SeqCst)
+        }
+    }
+
+    struct YieldingExecutor {
+        current_in_flight: AtomicUsize,
+        max_in_flight: AtomicUsize,
+    }
+
+    impl YieldingExecutor {
+        fn new() -> Self {
+            Self {
+                current_in_flight: AtomicUsize::new(0),
+                max_in_flight: AtomicUsize::new(0),
+            }
+        }
+
+        fn max_in_flight(&self) -> usize {
+            self.max_in_flight.load(Ordering::SeqCst)
+        }
+
+        fn record_max_in_flight(&self, observed: usize) {
+            let mut current_max = self.max_in_flight.load(Ordering::SeqCst);
+            while observed > current_max {
+                match self.max_in_flight.compare_exchange(
+                    current_max,
+                    observed,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => break,
+                    Err(actual) => current_max = actual,
+                }
+            }
         }
     }
 
@@ -797,6 +843,32 @@ mod tests {
                 }),
             );
             Ok(outputs)
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for YieldingExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            inputs: HashMap<String, serde_json::Value>,
+            _context: &Context,
+            _extensions: &ExecutorExtensions,
+        ) -> Result<HashMap<String, serde_json::Value>> {
+            let observed = self.current_in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            self.record_max_in_flight(observed);
+
+            tokio::task::yield_now().await;
+
+            self.current_in_flight.fetch_sub(1, Ordering::SeqCst);
+
+            Ok(HashMap::from([(
+                "out".to_string(),
+                serde_json::json!({
+                    "task": task_id,
+                    "inputs": inputs
+                }),
+            )]))
         }
     }
 
@@ -1268,6 +1340,47 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_demand_multiple_emits_task_lifecycle_for_parallel_roots() {
+        let graph = make_parallel_roots_graph();
+        let event_sink = Arc::new(VecEventSink::new());
+        let executor_impl = YieldingExecutor::new();
+        let workflow_executor = WorkflowExecutor::new("exec_parallel", graph, event_sink.clone());
+
+        let outputs = workflow_executor
+            .demand_multiple(&["left".to_string(), "right".to_string()], &executor_impl)
+            .await
+            .expect("parallel incremental demand succeeds");
+
+        assert_eq!(executor_impl.max_in_flight(), 2);
+        assert_eq!(outputs.len(), 2);
+
+        let events = event_sink.events();
+        let started_tasks = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkflowEvent::TaskStarted { task_id, .. } => Some(task_id.clone()),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
+        let completed_tasks = events
+            .iter()
+            .filter_map(|event| match event {
+                WorkflowEvent::TaskCompleted { task_id, .. } => Some(task_id.clone()),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            started_tasks,
+            HashSet::from(["left".to_string(), "right".to_string()])
+        );
+        assert_eq!(
+            completed_tasks,
+            HashSet::from(["left".to_string(), "right".to_string()])
+        );
     }
 
     #[tokio::test]

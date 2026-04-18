@@ -440,6 +440,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 public multi-demand entry points now also default to a conservative
   bounded budget of two in-flight targets, so overlap-safe windows reach the
   backend-owned coordinator by default.
+- Phase 2 now also has backend event-contract coverage for independent roots
+  under the default bounded path, pinning task lifecycle attribution before
+  adapter and trace follow-up work.
 
 **Milestones:**
 

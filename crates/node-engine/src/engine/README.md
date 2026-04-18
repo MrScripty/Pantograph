@@ -176,6 +176,8 @@ planning split, plus the private execution-batch schedule derived from it.
   deterministic target order.
 - Public multi-demand entry points now also default to a conservative bounded
   budget of two in-flight targets instead of hard-coding sequential execution.
+- Backend event coverage now also pins task-start and task-complete
+  attribution for independent roots under the default bounded path.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

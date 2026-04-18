@@ -794,6 +794,10 @@ Update during implementation:
   multi-demand entry points to a conservative default bounded budget of two
   in-flight targets so the backend-owned parallel coordinator is now active by
   default for overlap-safe windows.
+- 2026-04-18: First Milestone 4 consumer-safety slice landed in
+  `crates/node-engine/src/engine.rs`, adding backend event-contract coverage
+  for independent roots under the default bounded path so task-start and
+  task-complete attribution stays pinned before adapter and trace work lands.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -905,6 +909,9 @@ Update during implementation:
 - Public multi-demand entry points now also use a conservative default budget
   of two in-flight targets, so overlap-safe windows reach the bounded
   coordinator without requiring a separate facade path or additive configuration.
+- Backend event coverage now also asserts that default-bounded independent
+  roots still emit attributable task lifecycle events for every completed
+  target.
 
 ### Deviations
 
