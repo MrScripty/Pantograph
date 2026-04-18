@@ -442,12 +442,9 @@ impl WorkflowExecutor {
         workflow_session_id: &str,
     ) -> WorkflowSessionCheckpointSummary {
         let graph_revision = self.graph.read().await.id.clone();
-        let residency = self.workflow_session_residency().await;
-        WorkflowSessionCheckpointSummary::unavailable(
-            workflow_session_id,
-            graph_revision,
-            residency,
-        )
+        self.session_state
+            .checkpoint_summary(workflow_session_id, &graph_revision)
+            .await
     }
 
     /// Set a value in the context
@@ -627,8 +624,8 @@ mod tests {
     use super::*;
     use crate::events::{NullEventSink, VecEventSink};
     use crate::types::{GraphEdge, GraphNode};
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn make_linear_graph() -> WorkflowGraph {
         let mut graph = WorkflowGraph::new("test", "Test");

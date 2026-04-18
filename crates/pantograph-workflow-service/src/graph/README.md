@@ -15,7 +15,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `effective_definition.rs` | Merges registry metadata with additive per-node definition overlays before validation or candidate lookup. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
-| `session_contract.rs` | Additive graph snapshot contracts, including the Phase 6 workflow-session state view surfaced to transport layers. |
+| `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view surfaced to transport layers. |
 | `session.rs` | Edit-session store, undo/redo state, graph mutation orchestration, and graph-to-engine conversion helpers. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 

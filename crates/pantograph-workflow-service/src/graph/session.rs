@@ -19,7 +19,7 @@ use super::connection_intent::{
 };
 use super::registry::NodeRegistry;
 use super::session_contract::{
-    WorkflowGraphEditSessionGraphResponse, build_workflow_session_state_view,
+    WorkflowGraphEditSessionGraphResponse, build_graph_session_response,
 };
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
@@ -255,18 +255,7 @@ impl GraphEditSession {
     ) -> WorkflowGraphEditSessionGraphResponse {
         self.touch();
         self.canonicalize_graph();
-        let graph_revision = self.graph.compute_fingerprint();
-        WorkflowGraphEditSessionGraphResponse {
-            session_id: session_id.to_string(),
-            graph_revision: graph_revision.clone(),
-            graph: self.graph.clone(),
-            workflow_session_state: Some(build_workflow_session_state_view(
-                session_id,
-                &graph_revision,
-                workflow_event.as_ref(),
-            )),
-            workflow_event,
-        }
+        build_graph_session_response(session_id, &self.graph, workflow_event)
     }
 
     fn undo(

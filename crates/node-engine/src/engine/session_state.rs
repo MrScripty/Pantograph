@@ -156,6 +156,18 @@ impl WorkflowExecutorSessionState {
     pub(crate) async fn set_residency(&self, state: WorkflowSessionResidencyState) {
         *self.residency.write().await = state;
     }
+
+    pub(crate) async fn checkpoint_summary(
+        &self,
+        workflow_session_id: &str,
+        graph_revision: &str,
+    ) -> WorkflowSessionCheckpointSummary {
+        WorkflowSessionCheckpointSummary::unavailable(
+            workflow_session_id,
+            graph_revision,
+            self.residency().await,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -174,11 +186,13 @@ mod tests {
 
         assert!(impact.fallback_to_full_invalidation);
         assert_eq!(impact.node_decisions.len(), 3);
-        assert!(impact
-            .node_decisions
-            .iter()
-            .all(|decision| decision.compatibility
-                == NodeMemoryCompatibility::FallbackFullInvalidation));
+        assert!(
+            impact
+                .node_decisions
+                .iter()
+                .all(|decision| decision.compatibility
+                    == NodeMemoryCompatibility::FallbackFullInvalidation)
+        );
     }
 
     #[test]
@@ -212,5 +226,16 @@ mod tests {
             state.residency().await,
             WorkflowSessionResidencyState::CheckpointedButUnloaded
         );
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_builds_checkpoint_summary() {
+        let state = WorkflowExecutorSessionState::new();
+        let summary = state.checkpoint_summary("session-1", "graph-1").await;
+
+        assert_eq!(summary.session_id, "session-1");
+        assert_eq!(summary.graph_revision, "graph-1");
+        assert_eq!(summary.residency, WorkflowSessionResidencyState::Active);
+        assert!(!summary.checkpoint_available);
     }
 }

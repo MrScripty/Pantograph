@@ -35,6 +35,25 @@ pub struct WorkflowGraphEditSessionGraphResponse {
     pub workflow_session_state: Option<WorkflowGraphSessionStateView>,
 }
 
+pub(crate) fn build_graph_session_response(
+    session_id: &str,
+    graph: &super::types::WorkflowGraph,
+    workflow_event: Option<WorkflowEvent>,
+) -> WorkflowGraphEditSessionGraphResponse {
+    let graph_revision = graph.compute_fingerprint();
+    WorkflowGraphEditSessionGraphResponse {
+        session_id: session_id.to_string(),
+        graph_revision: graph_revision.clone(),
+        graph: graph.clone(),
+        workflow_event: workflow_event.clone(),
+        workflow_session_state: Some(build_workflow_session_state_view(
+            session_id,
+            &graph_revision,
+            workflow_event.as_ref(),
+        )),
+    }
+}
+
 pub(crate) fn build_workflow_session_state_view(
     session_id: &str,
     graph_revision: &str,
@@ -69,9 +88,11 @@ fn graph_memory_impact_from_event(
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::WorkflowGraph;
     use super::{
         PHASE6_FALLBACK_INVALIDATION_REASON, PHASE6_SESSION_STATE_CONTRACT_VERSION,
-        WorkflowGraphSessionStateView, build_workflow_session_state_view,
+        WorkflowGraphSessionStateView, build_graph_session_response,
+        build_workflow_session_state_view,
     };
     use node_engine::{NodeMemoryCompatibility, WorkflowEvent, WorkflowSessionResidencyState};
 
@@ -113,5 +134,15 @@ mod tests {
             decision.compatibility == NodeMemoryCompatibility::FallbackFullInvalidation
                 && decision.reason.as_deref() == Some(PHASE6_FALLBACK_INVALIDATION_REASON)
         }));
+    }
+
+    #[test]
+    fn graph_session_response_builds_revision_and_state_view() {
+        let graph = WorkflowGraph::new();
+        let response = build_graph_session_response("session-1", &graph, None);
+
+        assert_eq!(response.session_id, "session-1");
+        assert_eq!(response.graph, graph);
+        assert!(response.workflow_session_state.is_some());
     }
 }

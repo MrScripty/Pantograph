@@ -17,7 +17,7 @@ entrypoint while preserving the current public API.
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, and the future insertion point for bounded parallel coordination. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
-| `session_state.rs` | Phase 6 workflow-session residency, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned session-state scaffold. |
+| `session_state.rs` | Phase 6 workflow-session residency, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned session-state scaffold and checkpoint-summary helper. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
 
 ## Problem

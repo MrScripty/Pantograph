@@ -568,7 +568,7 @@ the new system safely.
 - `cargo test -p node-engine --lib`
 - README review for touched backend source directories
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: Implement Workflow-Session Node Memory
 
@@ -756,6 +756,10 @@ Update during implementation:
   `workflow_session_state` snapshot contract that marks current graph mutation
   behavior as conservative fallback full invalidation until later
   reconciliation slices land.
+- 2026-04-18: Milestone 2 started. Graph snapshot response assembly now lives
+  in `graph/session_contract.rs` instead of `graph/session.rs`, and checkpoint-
+  summary assembly now lives behind `node-engine::engine::session_state`
+  instead of expanding `WorkflowExecutor` inline.
 
 ## Commit Cadence Notes
 
