@@ -45,6 +45,7 @@ use crate::types::{NodeId, WorkflowGraph};
 mod graph_events;
 mod multi_demand;
 mod dependency_inputs;
+mod output_cache;
 mod node_preparation;
 mod single_demand;
 
@@ -271,25 +272,11 @@ impl DemandEngine {
             let input_version = self.compute_input_version(node_id, graph);
 
             // 3. Check cache - if version matches, return cached result
-            if let Some(cached) = self.cache.get(node_id) {
-                if cached.version == input_version {
-                    log::debug!(
-                        "Cache hit for node '{}' (version {})",
-                        node_id,
-                        input_version
-                    );
-                    // Parse cached value back to HashMap
-                    let outputs: HashMap<String, serde_json::Value> =
-                        serde_json::from_value(cached.value.clone())?;
-                    computing.remove(node_id);
-                    return Ok(outputs);
-                }
-                log::debug!(
-                    "Cache miss for node '{}': version {} != {}",
-                    node_id,
-                    cached.version,
-                    input_version
-                );
+            if let Some(outputs) =
+                output_cache::resolve_fresh_cached_output(&self.cache, node_id, input_version)?
+            {
+                computing.remove(node_id);
+                return Ok(outputs);
             }
 
             // 4. Cache miss - include static data from the node itself
@@ -333,17 +320,14 @@ impl DemandEngine {
             });
 
             // 6. Cache with current input version
-            self.cache.insert(
-                node_id.clone(),
-                CachedOutput {
-                    version: input_version,
-                    value: serde_json::to_value(&outputs)?,
-                },
-            );
-
-            // 7. Update this node's version to global (marks it as "fresh")
-            self.global_version += 1;
-            self.versions.insert(node_id.clone(), self.global_version);
+            output_cache::store_completed_output(
+                &mut self.cache,
+                &mut self.versions,
+                &mut self.global_version,
+                node_id,
+                input_version,
+                &outputs,
+            )?;
 
             // Remove from computing set
             computing.remove(node_id);

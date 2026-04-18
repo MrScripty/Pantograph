@@ -13,6 +13,7 @@ entrypoint while preserving the current public API.
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path and the future insertion point for bounded parallel coordination. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
+| `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
 
 ## Problem
@@ -29,6 +30,8 @@ changing the public executor surface.
   Rust.
 - Static node-data injection and human-input pause detection stay backend-owned
   in Rust.
+- Cache hit resolution and completed-output version finalization stay
+  backend-owned in Rust.
 - Executor-facing single-demand and multi-demand lock choreography should live
   under `engine/` helpers rather than expanding `engine.rs`.
 - Multi-demand helpers must not change behavior until the dedicated parallel
@@ -44,7 +47,7 @@ entrypoint. This preserves compatibility while creating standards-compliant
 boundaries for later event and concurrency work. Dependency-input mapping is
 also extracted so future planners and coordinators do not need to own port
 assembly details directly. The same applies to executor-facing single-demand
-facade choreography and node preparation.
+facade choreography, node preparation, and output-cache lifecycle handling.
 
 ## Alternatives Rejected
 - Continuing to grow `engine.rs` directly.
@@ -59,6 +62,8 @@ facade choreography and node preparation.
   outputs rather than adapter-local preprocessing.
 - Human-input pause detection remains driven by backend node type and input
   state rather than by adapter-local interpretation.
+- Cache freshness and version bump semantics remain derived from backend-owned
+  version tracking rather than adapter-local memoization.
 - Single-demand and multi-demand facade helpers remain behaviorally equivalent
   to the prior inline executor methods until the bounded parallel coordinator
   intentionally changes the multi-demand path.
@@ -77,6 +82,8 @@ facade choreography and node preparation.
   topological layers.
 - Node preparation grows enough to warrant a shared execution-preparation
   object across single and multi-demand coordination paths.
+- Cache lifecycle handling grows enough to warrant a shared execution-state
+  helper across sequential and future bounded-parallel demand paths.
 - Single-demand execution preparation grows enough to warrant a shared
   execution-preparation helper across single and multi-demand paths.
 - Execution-state recovery or persistence introduces a different owner for
@@ -114,6 +121,8 @@ use node_engine::{TaskExecutor, WorkflowExecutor};
   semantics for Puma-Lib-backed runtime selection.
 - Node preparation preserves existing `_data` injection and human-input pause
   semantics for demand execution.
+- Output-cache helpers preserve existing cache-hit reuse and completed-output
+  version bump semantics for demand execution.
 - Single-demand helper behavior remains semantically identical to the prior
   inline `WorkflowExecutor::demand` path.
 - Dirty-task lists remain sorted and stable for consumer comparison and tests.

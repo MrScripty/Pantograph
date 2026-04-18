@@ -413,6 +413,11 @@ Update during implementation:
   data injection and human-input pause detection out of
   `DemandEngine::demand_internal` so the remaining execution core can be
   narrowed further before bounded parallel coordination begins.
+- 2026-04-18: Seventh Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/output_cache.rs`, extracting fresh-cache
+  resolution and completed-output cache/version finalization out of
+  `DemandEngine::demand_internal` so the remaining recursive demand core owns
+  less state-transition detail ahead of the coordinator work.
 
 ## Commit Cadence Notes
 
@@ -461,6 +466,8 @@ Update during implementation:
 - Node preparation for `_data` injection and `human-input` waiting semantics
   now also lives behind a focused helper instead of remaining embedded in the
   recursive demand path.
+- Output-cache hit and completion-finalization rules now also live behind a
+  focused helper instead of remaining embedded in the recursive demand path.
 
 ### Deviations
 
