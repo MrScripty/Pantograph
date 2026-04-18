@@ -12,6 +12,7 @@ entrypoint while preserving the current public API.
 | `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path context propagation. |
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
+| `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path and the future insertion point for bounded parallel coordination. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
@@ -35,6 +36,8 @@ changing the public executor surface.
   backend-owned in Rust.
 - Task-start, waiting-for-input, and task-completed demand events stay
   backend-owned in Rust.
+- In-flight node bookkeeping for cycle detection and cleanup stays
+  backend-owned in Rust.
 - Executor-facing single-demand and multi-demand lock choreography should live
   under `engine/` helpers rather than expanding `engine.rs`.
 - Multi-demand helpers must not change behavior until the dedicated parallel
@@ -50,8 +53,8 @@ entrypoint. This preserves compatibility while creating standards-compliant
 boundaries for later event and concurrency work. Dependency-input mapping is
 also extracted so future planners and coordinators do not need to own port
 assembly details directly. The same applies to executor-facing single-demand
-facade choreography, node preparation, output-cache lifecycle handling, and
-task event emission.
+facade choreography, node preparation, output-cache lifecycle handling, task
+event emission, and in-flight bookkeeping.
 
 ## Alternatives Rejected
 - Continuing to grow `engine.rs` directly.
@@ -70,6 +73,8 @@ task event emission.
   version tracking rather than adapter-local memoization.
 - Demand event emission remains derived from backend execution state rather
   than adapter-local reconstruction.
+- In-flight cycle detection remains derived from backend recursive execution
+  state rather than adapter-local guards.
 - Single-demand and multi-demand facade helpers remain behaviorally equivalent
   to the prior inline executor methods until the bounded parallel coordinator
   intentionally changes the multi-demand path.
@@ -91,6 +96,8 @@ task event emission.
 - Cache lifecycle handling grows enough to warrant a shared execution-state
   helper across sequential and future bounded-parallel demand paths.
 - Demand event emission grows enough to warrant a shared execution-notification
+  helper across sequential and future bounded-parallel demand paths.
+- In-flight bookkeeping grows enough to warrant a shared coordination-state
   helper across sequential and future bounded-parallel demand paths.
 - Single-demand execution preparation grows enough to warrant a shared
   execution-preparation helper across single and multi-demand paths.
@@ -133,6 +140,8 @@ use node_engine::{TaskExecutor, WorkflowExecutor};
   version bump semantics for demand execution.
 - Execution-event helpers preserve existing task-started, waiting, and
   task-completed semantics for demand execution.
+- In-flight helpers preserve existing cycle-detection and cleanup semantics for
+  recursive demand execution.
 - Single-demand helper behavior remains semantically identical to the prior
   inline `WorkflowExecutor::demand` path.
 - Dirty-task lists remain sorted and stable for consumer comparison and tests.

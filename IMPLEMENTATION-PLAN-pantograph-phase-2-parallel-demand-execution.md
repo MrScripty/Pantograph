@@ -423,6 +423,11 @@ Update during implementation:
   waiting-for-input, and task-completed event emission out of
   `DemandEngine::demand_internal` so backend-owned demand event choreography
   now lives behind a focused helper before bounded parallel coordination work.
+- 2026-04-18: Ninth Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/inflight_tracking.rs`, extracting recursive
+  in-flight node bookkeeping and cycle-detection cleanup out of
+  `DemandEngine::demand_internal` so the remaining recursive core owns less
+  coordination-state detail before bounded parallel coordination work.
 
 ## Commit Cadence Notes
 
@@ -476,6 +481,8 @@ Update during implementation:
 - Demand event emission for started, waiting, and completed states now also
   lives behind a focused helper instead of remaining embedded in the recursive
   demand path.
+- In-flight cycle detection and cleanup now also live behind a focused helper
+  instead of remaining embedded in the recursive demand path.
 
 ### Deviations
 

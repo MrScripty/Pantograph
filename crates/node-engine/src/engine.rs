@@ -46,6 +46,7 @@ mod graph_events;
 mod multi_demand;
 mod dependency_inputs;
 mod execution_events;
+mod inflight_tracking;
 mod output_cache;
 mod node_preparation;
 mod single_demand;
@@ -242,15 +243,7 @@ impl DemandEngine {
     > {
         Box::pin(async move {
             // Cycle detection
-            if computing.contains(node_id) {
-                return Err(NodeEngineError::ExecutionFailed(format!(
-                    "Cycle detected: node '{}' is already being computed",
-                    node_id
-                )));
-            }
-
-            // Mark as computing for cycle detection
-            computing.insert(node_id.clone());
+            inflight_tracking::begin_node_compute(computing, node_id)?;
 
             // 1. First, recursively demand ALL dependencies to ensure their versions are current
             // This is crucial: we must know the current state of dependencies before cache check
@@ -276,7 +269,7 @@ impl DemandEngine {
             if let Some(outputs) =
                 output_cache::resolve_fresh_cached_output(&self.cache, node_id, input_version)?
             {
-                computing.remove(node_id);
+                inflight_tracking::finish_node_compute(computing, node_id);
                 return Ok(outputs);
             }
 
@@ -296,7 +289,7 @@ impl DemandEngine {
                     node_id.clone(),
                     prompt.clone(),
                 );
-                computing.remove(node_id);
+                inflight_tracking::finish_node_compute(computing, node_id);
                 return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
             }
 
@@ -331,7 +324,7 @@ impl DemandEngine {
             )?;
 
             // Remove from computing set
-            computing.remove(node_id);
+            inflight_tracking::finish_node_compute(computing, node_id);
 
             Ok(outputs)
         })
