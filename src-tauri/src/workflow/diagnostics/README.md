@@ -10,9 +10,10 @@ TypeScript or command handlers.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `attempts.rs` | Owns trace-attempt lookup, execution-id extraction, and overlay reset/record decisions across workflow trace events. |
 | `mod.rs` | Module entrypoint that exposes the diagnostics store and transport-facing DTOs. |
 | `overlay.rs` | Owns retained overlay state, pruning, and workflow-event overlay mutation helpers. |
-| `store.rs` | Owns the diagnostics facade and trace-attempt coordination over backend-owned trace snapshots. |
+| `store.rs` | Owns the diagnostics facade and orchestrates backend trace snapshots with additive overlay application. |
 | `trace.rs` | Converts workflow events and backend trace summaries into diagnostics-friendly run projections. |
 | `types.rs` | Defines the Tauri-facing diagnostics DTOs and snapshot request/response shapes. |
 | `tests.rs` | Regression coverage for projection, replay, and clear-history behavior. |
@@ -39,12 +40,12 @@ the frontend would become a second owner of execution state.
 
 ## Decision
 Keep Tauri diagnostics as a projection-only boundary. `store.rs` owns the
-facade and trace-attempt coordination, `overlay.rs` owns the retained overlays
-that do not exist in canonical workflow trace state, and `trace.rs` plus
-`types.rs` adapt backend-owned `WorkflowTraceStore`, runtime-lifecycle
-snapshots, and scheduler snapshots into the GUI diagnostics shape. This
-preserves one backend source of truth while still supporting desktop debug
-views and retained event history.
+facade, `attempts.rs` owns trace-attempt reconciliation over backend trace
+snapshots, `overlay.rs` owns the retained overlays that do not exist in
+canonical workflow trace state, and `trace.rs` plus `types.rs` adapt
+backend-owned `WorkflowTraceStore`, runtime-lifecycle snapshots, and scheduler
+snapshots into the GUI diagnostics shape. This preserves one backend source of
+truth while still supporting desktop debug views and retained event history.
 
 ## Alternatives Rejected
 - Rebuild diagnostics state in TypeScript.

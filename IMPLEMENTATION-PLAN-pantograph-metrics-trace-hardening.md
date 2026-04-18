@@ -367,7 +367,7 @@ modules before semantic hardening deepens them.
 - [x] Split `crates/pantograph-workflow-service/src/trace/store.rs` into focused
       modules for request/filter handling, run-state mutation/restart logic, and
       store facade behavior while preserving the public trace facade.
-- [ ] Split `src-tauri/src/workflow/diagnostics/store.rs` so overlay-state
+- [x] Split `src-tauri/src/workflow/diagnostics/store.rs` so overlay-state
       bookkeeping, trace-attempt resolution, and projection assembly no longer
       live in one monolithic store file.
 - [ ] Split `src-tauri/src/llm/commands/registry.rs` so request normalization,
@@ -513,6 +513,11 @@ Update during implementation:
   state, pruning, and event-to-overlay mutation helpers out of
   `workflow/diagnostics/store.rs` into `workflow/diagnostics/overlay.rs` while
   keeping trace-attempt coordination in the facade for the next slice.
+- 2026-04-18: Continued Milestone 2 by extracting Tauri diagnostics
+  trace-attempt lookup, execution-id reconciliation, and overlay reset/record
+  decisions out of `workflow/diagnostics/store.rs` into
+  `workflow/diagnostics/attempts.rs` so the facade only orchestrates backend
+  trace snapshots and overlay application.
 
 ## Commit Cadence Notes
 

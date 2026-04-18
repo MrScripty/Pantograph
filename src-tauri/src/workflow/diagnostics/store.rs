@@ -8,6 +8,10 @@ use pantograph_workflow_service::{
     WorkflowTraceStore,
 };
 
+use super::attempts::{
+    overlay_record_decision, trace_attempt_state_for_execution, trace_attempt_state_in_snapshot,
+    trace_event_execution_id, OverlayRecordDecision,
+};
 use super::overlay::{event_execution_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
@@ -43,25 +47,6 @@ impl WorkflowDiagnosticsStore {
             state: Mutex::new(WorkflowDiagnosticsState::new(retained_event_limit)),
             trace_store: WorkflowTraceStore::new(retained_event_limit),
         }
-    }
-
-    fn trace_attempt_state_for_execution(&self, execution_id: &str) -> Option<TraceAttemptState> {
-        self.trace_store
-            .snapshot(&WorkflowTraceSnapshotRequest {
-                execution_id: Some(execution_id.to_string()),
-                session_id: None,
-                workflow_id: None,
-                workflow_name: None,
-                include_completed: Some(true),
-            })
-            .expect("trace snapshot request should be valid")
-            .traces
-            .into_iter()
-            .next()
-            .map(|trace| TraceAttemptState {
-                started_at_ms: trace.started_at_ms,
-                event_count: trace.event_count,
-            })
     }
 
     pub fn snapshot(&self) -> WorkflowDiagnosticsProjection {
@@ -242,7 +227,8 @@ impl WorkflowDiagnosticsStore {
         let (traces, execution_id, overlay_decision) = workflow_trace_event(event)
             .map(|trace_event| {
                 let execution_id = trace_event_execution_id(&trace_event).to_string();
-                let previous_state = self.trace_attempt_state_for_execution(&execution_id);
+                let previous_state =
+                    trace_attempt_state_for_execution(&self.trace_store, &execution_id);
                 let traces = self.trace_store.record_event(&trace_event, timestamp_ms);
                 let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
                 (
@@ -284,7 +270,8 @@ impl WorkflowDiagnosticsStore {
         let (traces, timestamp_ms, execution_id, overlay_decision) = workflow_trace_event(event)
             .map(|trace_event| {
                 let execution_id = trace_event_execution_id(&trace_event).to_string();
-                let previous_state = self.trace_attempt_state_for_execution(&execution_id);
+                let previous_state =
+                    trace_attempt_state_for_execution(&self.trace_store, &execution_id);
                 let result = self.trace_store.record_event_now(&trace_event);
                 let current_state =
                     trace_attempt_state_in_snapshot(&result.snapshot, &execution_id);
@@ -330,7 +317,7 @@ impl WorkflowDiagnosticsStore {
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
         let execution_id = trace_event_execution_id(trace_event).to_string();
-        let previous_state = self.trace_attempt_state_for_execution(&execution_id);
+        let previous_state = trace_attempt_state_for_execution(&self.trace_store, &execution_id);
         let traces = self.trace_store.record_event(trace_event, timestamp_ms);
         let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
         let overlay_decision = overlay_record_decision(previous_state, current_state);
@@ -350,79 +337,3 @@ impl WorkflowDiagnosticsStore {
 }
 
 pub type SharedWorkflowDiagnosticsStore = Arc<WorkflowDiagnosticsStore>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct TraceAttemptState {
-    started_at_ms: u64,
-    event_count: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OverlayRecordDecision {
-    reset_overlay: bool,
-    record_overlay: bool,
-}
-
-fn trace_attempt_state_in_snapshot(
-    traces: &WorkflowTraceSnapshotResponse,
-    execution_id: &str,
-) -> Option<TraceAttemptState> {
-    traces
-        .traces
-        .iter()
-        .find(|trace| trace.execution_id == execution_id)
-        .map(|trace| TraceAttemptState {
-            started_at_ms: trace.started_at_ms,
-            event_count: trace.event_count,
-        })
-}
-
-fn overlay_record_decision(
-    previous_state: Option<TraceAttemptState>,
-    current_state: Option<TraceAttemptState>,
-) -> OverlayRecordDecision {
-    match (previous_state, current_state) {
-        (None, Some(_)) => OverlayRecordDecision {
-            reset_overlay: false,
-            record_overlay: true,
-        },
-        (Some(previous), Some(current))
-            if current.started_at_ms != previous.started_at_ms
-                || current.event_count < previous.event_count =>
-        {
-            OverlayRecordDecision {
-                reset_overlay: true,
-                record_overlay: true,
-            }
-        }
-        (Some(previous), Some(current)) if current.event_count > previous.event_count => {
-            OverlayRecordDecision {
-                reset_overlay: false,
-                record_overlay: true,
-            }
-        }
-        _ => OverlayRecordDecision {
-            reset_overlay: false,
-            record_overlay: false,
-        },
-    }
-}
-
-fn trace_event_execution_id(event: &WorkflowTraceEvent) -> &str {
-    match event {
-        WorkflowTraceEvent::RunStarted { execution_id, .. }
-        | WorkflowTraceEvent::RunCompleted { execution_id, .. }
-        | WorkflowTraceEvent::RunFailed { execution_id, .. }
-        | WorkflowTraceEvent::RunCancelled { execution_id, .. }
-        | WorkflowTraceEvent::NodeStarted { execution_id, .. }
-        | WorkflowTraceEvent::NodeProgress { execution_id, .. }
-        | WorkflowTraceEvent::NodeStream { execution_id, .. }
-        | WorkflowTraceEvent::NodeCompleted { execution_id, .. }
-        | WorkflowTraceEvent::NodeFailed { execution_id, .. }
-        | WorkflowTraceEvent::WaitingForInput { execution_id, .. }
-        | WorkflowTraceEvent::GraphModified { execution_id, .. }
-        | WorkflowTraceEvent::IncrementalExecutionStarted { execution_id, .. }
-        | WorkflowTraceEvent::RuntimeSnapshotCaptured { execution_id, .. }
-        | WorkflowTraceEvent::SchedulerSnapshotCaptured { execution_id, .. } => execution_id,
-    }
-}
