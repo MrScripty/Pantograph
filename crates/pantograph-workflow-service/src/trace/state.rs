@@ -193,6 +193,10 @@ pub(super) fn apply_trace_event(
         }
         WorkflowTraceEvent::WaitingForInput { .. } => {
             node.status = WorkflowTraceNodeStatus::Waiting;
+            node.ended_at_ms = Some(timestamp_ms);
+            node.duration_ms = node
+                .started_at_ms
+                .map(|started_at_ms| timestamp_ms.saturating_sub(started_at_ms));
         }
         WorkflowTraceEvent::RunStarted { .. }
         | WorkflowTraceEvent::RunCompleted { .. }

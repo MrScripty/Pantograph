@@ -605,14 +605,14 @@ backend-owned coordinator.
 consumers.
 
 **Tasks:**
-- [ ] Verify canonical workflow events remain attributable and meaningful under
+- [x] Verify canonical workflow events remain attributable and meaningful under
       overlapping node execution.
 - [ ] Add any strictly necessary additive event or metrics metadata in
       backend-owned contracts and update affected consumers in the same logical
-      slice.
-- [ ] Confirm metrics/trace aggregation still records correct node/run timing
+      slice only if the current backend-owned contract proves insufficient.
+- [x] Confirm metrics/trace aggregation still records correct node/run timing
       under bounded parallel execution.
-- [ ] Keep Tauri and frontend consumers read-only with respect to backend-owned
+- [x] Keep Tauri and frontend consumers read-only with respect to backend-owned
       execution state.
 
 **Verification:**
@@ -621,7 +621,7 @@ consumers.
   boundary
 - `npm run typecheck` if mirrored TypeScript contracts change
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Benchmarks, Acceptance Coverage, And Source-of-Truth Close-Out
 
@@ -806,6 +806,16 @@ Update during implementation:
   `crates/node-engine/src/engine.rs`, adding backend event-contract coverage
   for the parallel waiting-for-input path so in-flight root lifecycle and
   waiting attribution remain explicit when one bounded window target pauses.
+- 2026-04-18: Fourth Milestone 4 consumer-safety slice landed across
+  `src-tauri/src/workflow/diagnostics/tests.rs` and
+  `crates/pantograph-workflow-service/src/trace/`, adding diagnostics
+  projection coverage for overlapping node-engine root execution so backend
+  trace timing remains attributable when bounded siblings overlap.
+- 2026-04-18: Fifth Milestone 4 consumer-safety slice landed in
+  `crates/pantograph-workflow-service/src/trace/state.rs`, recording
+  `ended_at_ms` and `duration_ms` for node-level `WaitingForInput` events so
+  waiting nodes capture pause duration instead of remaining open-ended in the
+  backend-owned trace store.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are

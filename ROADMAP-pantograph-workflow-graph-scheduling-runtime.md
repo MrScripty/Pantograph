@@ -449,6 +449,14 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 backend event coverage now also pins the current parallel
   waiting-for-input path, including the possibility that one in-flight sibling
   emits `TaskCompleted` before another sibling emits `WaitingForInput`.
+- Phase 2 diagnostics projection coverage now also feeds translated
+  `node_engine::WorkflowEvent` trace events through the backend-owned workflow
+  diagnostics store, pinning overlapping root timing without moving trace
+  ownership into Tauri.
+- Backend workflow trace state now also closes node timing on
+  `WaitingForInput`, recording `ended_at_ms` and `duration_ms` at the pause
+  boundary so waiting nodes contribute accurate pause duration to diagnostics
+  and metrics consumers.
 
 **Milestones:**
 
