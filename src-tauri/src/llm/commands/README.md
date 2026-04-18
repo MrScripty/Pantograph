@@ -37,6 +37,9 @@ LLM gateway, process management, and Tauri command handlers for model and server
 - Keep runtime-debug snapshot DTOs and cross-layer aggregation helpers in
   `registry/debug.rs` so the command facade stays focused on host-state lookup
   and command-level error envelopes.
+- When runtime-debug trace requests resolve to multiple backend traces, return
+  additive trace-selection ambiguity metadata instead of silently collapsing to
+  incidental ordering in the command layer.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.

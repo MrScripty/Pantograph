@@ -8,8 +8,8 @@ use inference::{EmbeddingMemoryMode, LlamaCppEmbeddingRuntime};
 use tokio::sync::mpsc;
 
 use super::{
-    reclaim_runtime, runtime_debug_snapshot_response, runtime_registry_snapshot_response,
-    RuntimeDebugSnapshotRequest,
+    reclaim_runtime, resolve_runtime_debug_trace_scope, runtime_debug_snapshot_response,
+    runtime_registry_snapshot_response, RuntimeDebugSnapshotRequest,
 };
 use crate::llm::health_monitor::{
     HealthCheckResult, HealthMonitor, HealthMonitorConfig, HealthStatus, SharedHealthMonitor,
@@ -254,6 +254,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
         Some(&recovery_manager),
         Some(workflow_diagnostics_projection),
         Some(workflow_trace),
+        None,
     )
     .await;
 
@@ -413,6 +414,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
         None,
         Some(workflow_diagnostics_projection),
         Some(workflow_trace),
+        None,
     )
     .await;
 
@@ -521,5 +523,103 @@ fn runtime_debug_snapshot_request_normalizes_and_rejects_blank_filters() {
         ),
         "unexpected validation error: {:?}",
         error
+    );
+}
+
+#[test]
+fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
+    let diagnostics_store: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
+    diagnostics_store.record_runtime_snapshot(
+        "workflow-debug".to_string(),
+        "execution-debug".to_string(),
+        123,
+        None,
+        WorkflowTraceRuntimeMetrics {
+            runtime_id: Some("llama.cpp.embedding".to_string()),
+            observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
+            runtime_instance_id: Some("llama-cpp-embedding-21".to_string()),
+            model_target: Some("/models/embed.gguf".to_string()),
+            warmup_started_at_ms: Some(10),
+            warmup_completed_at_ms: Some(20),
+            warmup_duration_ms: Some(10),
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("runtime_ready".to_string()),
+        },
+        Some("/models/embed.gguf".to_string()),
+        None,
+        None,
+        None,
+        None,
+    );
+
+    let (request, selection) = resolve_runtime_debug_trace_scope(
+        Some(&diagnostics_store),
+        &WorkflowTraceSnapshotRequest {
+            execution_id: None,
+            session_id: None,
+            workflow_id: Some("workflow-debug".to_string()),
+            workflow_name: None,
+            include_completed: Some(true),
+        },
+    )
+    .expect("trace selection should succeed")
+    .expect("trace selection should exist");
+
+    assert_eq!(request.execution_id.as_deref(), Some("execution-debug"));
+    assert_eq!(selection.execution_id.as_deref(), Some("execution-debug"));
+    assert!(!selection.ambiguous);
+    assert_eq!(
+        selection.matched_execution_ids,
+        vec!["execution-debug".to_string()]
+    );
+}
+
+#[test]
+fn resolve_runtime_debug_trace_scope_marks_multi_run_scope_ambiguous() {
+    let diagnostics_store: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
+    for execution_id in ["execution-a", "execution-b"] {
+        diagnostics_store.record_runtime_snapshot(
+            "workflow-debug".to_string(),
+            execution_id.to_string(),
+            123,
+            None,
+            WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
+                runtime_instance_id: Some(format!("runtime-{}", execution_id)),
+                model_target: Some("/models/embed.gguf".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            Some("/models/embed.gguf".to_string()),
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+
+    let (request, selection) = resolve_runtime_debug_trace_scope(
+        Some(&diagnostics_store),
+        &WorkflowTraceSnapshotRequest {
+            execution_id: None,
+            session_id: None,
+            workflow_id: Some("workflow-debug".to_string()),
+            workflow_name: None,
+            include_completed: Some(true),
+        },
+    )
+    .expect("trace selection should succeed")
+    .expect("trace selection should exist");
+
+    assert!(request.execution_id.is_none());
+    assert!(selection.execution_id.is_none());
+    assert!(selection.ambiguous);
+    assert_eq!(
+        selection.matched_execution_ids,
+        vec!["execution-b".to_string(), "execution-a".to_string()]
     );
 }

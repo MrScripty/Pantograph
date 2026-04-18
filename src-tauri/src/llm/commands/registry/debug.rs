@@ -7,8 +7,30 @@ use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::workflow::diagnostics::{
     DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
 };
-use pantograph_workflow_service::WorkflowTraceSnapshotResponse;
+use pantograph_workflow_service::{
+    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotResponse,
+};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeDebugTraceSelection {
+    pub execution_id: Option<String>,
+    #[serde(default)]
+    pub matched_execution_ids: Vec<String>,
+    pub ambiguous: bool,
+}
+
+impl From<WorkflowTraceRuntimeSelection> for RuntimeDebugTraceSelection {
+    fn from(value: WorkflowTraceRuntimeSelection) -> Self {
+        let ambiguous = value.is_ambiguous();
+        Self {
+            execution_id: value.execution_id,
+            matched_execution_ids: value.matched_execution_ids,
+            ambiguous,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -30,6 +52,8 @@ pub struct RuntimeDebugSnapshot {
     pub workflow_runtime_diagnostics: Option<DiagnosticsRuntimeSnapshot>,
     pub workflow_scheduler_diagnostics: Option<DiagnosticsSchedulerSnapshot>,
     pub workflow_trace: Option<WorkflowTraceSnapshotResponse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_trace_selection: Option<RuntimeDebugTraceSelection>,
 }
 
 pub(crate) async fn runtime_registry_snapshot_response(
@@ -46,6 +70,7 @@ pub(crate) async fn runtime_debug_snapshot_response(
     recovery_manager: Option<&SharedRecoveryManager>,
     workflow_diagnostics: Option<WorkflowDiagnosticsProjection>,
     workflow_trace: Option<WorkflowTraceSnapshotResponse>,
+    workflow_trace_selection: Option<RuntimeDebugTraceSelection>,
 ) -> RuntimeDebugSnapshot {
     let mode_info = synced_server_mode_info(gateway, runtime_registry).await;
     let health_monitor_running = health_monitor
@@ -80,5 +105,6 @@ pub(crate) async fn runtime_debug_snapshot_response(
         workflow_runtime_diagnostics,
         workflow_scheduler_diagnostics,
         workflow_trace,
+        workflow_trace_selection,
     }
 }

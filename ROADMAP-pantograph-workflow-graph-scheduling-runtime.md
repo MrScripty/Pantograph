@@ -58,7 +58,9 @@ runtime-debug registry commands now split request/debug/test boundaries into
 `request.rs`, `debug.rs`, and `tests.rs`, backend queue timing is
 authoritative-only, queue attribution is execution-first, session/workflow-
 scoped runtime metric reuse now requires a unique backend trace match instead
-of collapsing to the first trace, and the touched synchronous stores now use
+of collapsing to the first trace, runtime-debug trace reads now resolve to one
+execution or return explicit ambiguity metadata instead of silently merging
+multi-run scope, and the touched synchronous stores now use
 `parking_lot::Mutex` instead of poison-based `std::sync::Mutex` locking.
 
 Milestone 5 transport hardening, binding review, recovery/idempotency

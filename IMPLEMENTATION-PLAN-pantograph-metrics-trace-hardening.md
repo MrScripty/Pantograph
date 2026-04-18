@@ -427,7 +427,7 @@ the hardened backend semantics without reintroducing local ambiguity.
       backend-owned filter semantics from Milestone 1 and Milestone 3.
 - [x] Remove first-match runtime-metrics selection for session/workflow-only
       reads when multiple traces can match.
-- [ ] Make combined diagnostics-plus-trace runtime-debug responses operate on
+- [x] Make combined diagnostics-plus-trace runtime-debug responses operate on
       the same resolved execution criteria or return explicit ambiguity instead
       of silently merging mismatched slices.
 - [x] Harden the selection helpers in
@@ -436,7 +436,7 @@ the hardened backend semantics without reintroducing local ambiguity.
 - [x] Preserve Tauri as a projection/transport boundary and keep any new
       selection logic backend-owned or explicitly delegated to a backend-owned
       helper.
-- [ ] Add compatibility-preserving adapters only where required to keep existing
+- [x] Add compatibility-preserving adapters only where required to keep existing
       command surfaces stable.
 
 **Verification:**
@@ -449,7 +449,7 @@ the hardened backend semantics without reintroducing local ambiguity.
 - Architecture review confirming no new backend-owned semantics moved into
   Tauri modules
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Documentation, Roadmap Reconciliation, And Close-Out
 
@@ -535,6 +535,12 @@ Update during implementation:
   `std::sync::Mutex` poison-based locking to `parking_lot::Mutex` for their
   synchronous critical sections, removing poison-cascade `expect(...)` paths
   without widening lock scope or introducing async-held locks.
+- 2026-04-18: Completed the remaining Milestone 4 runtime-debug hardening by
+  resolving trace requests through backend trace selection, returning additive
+  trace-selection ambiguity metadata when multi-run scope cannot resolve to one
+  execution, and preserving the existing runtime-debug response contract with a
+  backward-compatible optional field instead of collapsing to first-match
+  ordering.
 
 ## Commit Cadence Notes
 

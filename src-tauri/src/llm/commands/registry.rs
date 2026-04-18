@@ -17,7 +17,7 @@ use crate::workflow::diagnostics::WorkflowDiagnosticsSnapshotRequest;
 use crate::workflow::headless_diagnostics_transport::{
     workflow_diagnostics_snapshot_response, workflow_trace_snapshot_response,
 };
-use pantograph_workflow_service::WorkflowTraceSnapshotRequest;
+use pantograph_workflow_service::{WorkflowServiceError, WorkflowTraceSnapshotRequest};
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
 
@@ -26,6 +26,7 @@ use crate::llm::runtime_registry::{
 };
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 pub(crate) use debug::{runtime_debug_snapshot_response, runtime_registry_snapshot_response};
+pub(crate) use debug::RuntimeDebugTraceSelection;
 pub use debug::RuntimeDebugSnapshot;
 pub use request::RuntimeDebugSnapshotRequest;
 
@@ -48,6 +49,31 @@ async fn reclaim_runtime(
         reclaim,
         snapshot: runtime_registry.snapshot(),
     })
+}
+
+fn resolve_runtime_debug_trace_scope(
+    diagnostics_store: Option<&SharedWorkflowDiagnosticsStore>,
+    request: &WorkflowTraceSnapshotRequest,
+) -> Result<Option<(WorkflowTraceSnapshotRequest, RuntimeDebugTraceSelection)>, WorkflowServiceError>
+{
+    let Some(diagnostics_store) = diagnostics_store else {
+        return Ok(None);
+    };
+
+    let selection =
+        RuntimeDebugTraceSelection::from(diagnostics_store.select_trace_runtime_metrics(request)?);
+    let resolved_request = WorkflowTraceSnapshotRequest {
+        execution_id: selection
+            .execution_id
+            .clone()
+            .or_else(|| request.execution_id.clone()),
+        session_id: request.session_id.clone(),
+        workflow_id: request.workflow_id.clone(),
+        workflow_name: request.workflow_name.clone(),
+        include_completed: request.include_completed,
+    };
+
+    Ok(Some((resolved_request, selection)))
 }
 
 #[command]
@@ -118,23 +144,29 @@ pub async fn get_runtime_debug_snapshot(
         (Some(store), _, _, _) => Some(store.snapshot()),
         _ => None,
     };
-    let workflow_trace = if include_trace {
-        workflow_diagnostics_store
-            .map(|store| {
-                workflow_trace_snapshot_response(
-                    &store,
-                    WorkflowTraceSnapshotRequest {
-                        execution_id: execution_id_filter,
-                        session_id: session_id_filter,
-                        workflow_id: workflow_id_filter,
-                        workflow_name: workflow_name_filter,
-                        include_completed,
-                    },
-                )
-            })
-            .transpose()?
+    let trace_request = WorkflowTraceSnapshotRequest {
+        execution_id: execution_id_filter,
+        session_id: session_id_filter,
+        workflow_id: workflow_id_filter,
+        workflow_name: workflow_name_filter,
+        include_completed,
+    };
+    let (workflow_trace, workflow_trace_selection) = if include_trace {
+        let selection = resolve_runtime_debug_trace_scope(
+            workflow_diagnostics_store.as_ref(),
+            &trace_request,
+        )
+        .map_err(|error| error.to_envelope_json())?;
+        let workflow_trace = match (workflow_diagnostics_store, selection.as_ref()) {
+            (Some(store), Some((_, selection))) if selection.ambiguous => None,
+            (Some(store), Some((resolved_request, _))) => {
+                Some(workflow_trace_snapshot_response(&store, resolved_request.clone())?)
+            }
+            _ => None,
+        };
+        (workflow_trace, selection.map(|(_, selection)| selection))
     } else {
-        None
+        (None, None)
     };
 
     Ok(runtime_debug_snapshot_response(
@@ -144,6 +176,7 @@ pub async fn get_runtime_debug_snapshot(
         recovery_manager.as_ref(),
         workflow_diagnostics,
         workflow_trace,
+        workflow_trace_selection,
     )
     .await)
 }
