@@ -505,6 +505,9 @@ incremental runs.
   `cancelled` error code/envelope, and the embedded runtime plus frontend HTTP
   adapter preserve that contract instead of flattening user-driven
   cancellation into `runtime_timeout`.
+- `node-engine` orchestration execution now emits a backend-owned terminal
+  workflow event for true executor error exits instead of returning those
+  failures without a final lifecycle event.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
@@ -524,7 +527,7 @@ incremental runs.
   edit-session human-input pause path
 - Broader backend emission coverage for any additional cancellable producer
   paths that still terminate without publishing the canonical cancellation
-  event
+  event, beyond the now-covered orchestration error exits
 - Extend acceptance coverage for the new `cancelled` envelope across any
   remaining non-streaming/headless command or binding surfaces that still need
   explicit parity checks

@@ -496,6 +496,13 @@ Update during implementation:
   `cancelled` error envelope for non-streaming workflow APIs so user-driven
   cancellation no longer shares the `runtime_timeout` contract with actual
   timeout paths.
+- 2026-04-17: Third Milestone 3 backend-emission slice landed in
+  `crates/node-engine/src/orchestration/executor.rs`, so orchestration runs
+  now emit a canonical backend terminal workflow event even when execution
+  exits through real `Err(NodeEngineError)` paths such as missing Start nodes
+  or other executor failures. Cancellation-to-terminal-event selection is now
+  owned inside the backend executor helper rather than left to adapter
+  reconstruction once a cancellable orchestration path is wired through it.
 
 ## Commit Cadence Notes
 

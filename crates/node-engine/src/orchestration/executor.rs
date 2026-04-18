@@ -137,103 +137,112 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         // Emit started event
         self.emit_workflow_started(event_sink, &graph.id);
 
-        // Find the start node
-        let start_node = graph
-            .find_start_node()
-            .ok_or_else(|| NodeEngineError::failed("Orchestration graph has no Start node"))?;
+        let execution = async {
+            // Find the start node
+            let start_node = graph
+                .find_start_node()
+                .ok_or_else(|| NodeEngineError::failed("Orchestration graph has no Start node"))?;
 
-        // Begin execution from the start node
-        let mut current_node_id = start_node.id.clone();
+            // Begin execution from the start node
+            let mut current_node_id = start_node.id.clone();
 
-        loop {
-            // Check execution limit
-            if nodes_executed >= self.max_nodes {
-                let elapsed = start_time.elapsed().as_millis() as u64;
-                let error = format!("Execution limit reached ({} nodes)", self.max_nodes);
-                self.emit_workflow_failed(event_sink, &graph.id, &error);
-                return Ok(OrchestrationResult::failure(error, nodes_executed, elapsed));
-            }
-
-            // Find the current node
-            let node = graph.find_node(&current_node_id).ok_or_else(|| {
-                NodeEngineError::failed(format!("Node '{}' not found in graph", current_node_id))
-            })?;
-
-            // Emit node started event
-            self.emit_task_started(event_sink, &node.id);
-
-            nodes_executed += 1;
-
-            // Execute the node
-            let result = match node.node_type {
-                OrchestrationNodeType::DataGraph => {
-                    // Special handling for data graph nodes
-                    self.execute_data_graph_node(graph, node, &mut context, event_sink)
-                        .await?
+            loop {
+                // Check execution limit
+                if nodes_executed >= self.max_nodes {
+                    let elapsed = start_time.elapsed().as_millis() as u64;
+                    let error = format!("Execution limit reached ({} nodes)", self.max_nodes);
+                    self.emit_workflow_failed(event_sink, &graph.id, &error);
+                    return Ok(OrchestrationResult::failure(error, nodes_executed, elapsed));
                 }
-                _ => {
-                    // Regular node execution
-                    execute_node(node, &mut context)?
+
+                // Find the current node
+                let node = graph.find_node(&current_node_id).ok_or_else(|| {
+                    NodeEngineError::failed(format!("Node '{}' not found in graph", current_node_id))
+                })?;
+
+                // Emit node started event
+                self.emit_task_started(event_sink, &node.id);
+
+                nodes_executed += 1;
+
+                // Execute the node
+                let result = match node.node_type {
+                    OrchestrationNodeType::DataGraph => {
+                        // Special handling for data graph nodes
+                        self.execute_data_graph_node(graph, node, &mut context, event_sink)
+                            .await?
+                    }
+                    _ => {
+                        // Regular node execution
+                        execute_node(node, &mut context)?
+                    }
+                };
+
+                // Apply context updates
+                for (key, value) in result.context_updates {
+                    context.set(key, value);
                 }
-            };
 
-            // Apply context updates
-            for (key, value) in result.context_updates {
-                context.set(key, value);
-            }
+                // Emit task completed event
+                self.emit_task_completed(event_sink, &node.id, result.message.clone());
 
-            // Emit task completed event
-            self.emit_task_completed(event_sink, &node.id, result.message.clone());
-
-            // Emit specific events based on node type
-            match node.node_type {
-                OrchestrationNodeType::Condition => {
-                    self.emit_task_progress(
-                        event_sink,
-                        &node.id,
-                        1.0,
-                        Some(format!(
-                            "Condition: {}",
-                            if result.next_handle == "true" {
-                                "true"
-                            } else {
-                                "false"
-                            }
-                        )),
-                    );
-                }
-                OrchestrationNodeType::Loop => {
-                    if result.next_handle == "iteration" {
-                        let iteration = context.get_loop_iteration(&node.id);
+                // Emit specific events based on node type
+                match node.node_type {
+                    OrchestrationNodeType::Condition => {
                         self.emit_task_progress(
                             event_sink,
                             &node.id,
-                            0.0,
-                            Some(format!("Loop iteration: {}", iteration)),
+                            1.0,
+                            Some(format!(
+                                "Condition: {}",
+                                if result.next_handle == "true" {
+                                    "true"
+                                } else {
+                                    "false"
+                                }
+                            )),
                         );
                     }
+                    OrchestrationNodeType::Loop => {
+                        if result.next_handle == "iteration" {
+                            let iteration = context.get_loop_iteration(&node.id);
+                            self.emit_task_progress(
+                                event_sink,
+                                &node.id,
+                                0.0,
+                                Some(format!("Loop iteration: {}", iteration)),
+                            );
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
+
+                // Check for End node (empty next handle)
+                if result.next_handle.is_empty() {
+                    let elapsed = start_time.elapsed().as_millis() as u64;
+                    let outputs = context.into_data();
+
+                    self.emit_workflow_completed(event_sink, &graph.id);
+
+                    return Ok(OrchestrationResult::success(
+                        outputs,
+                        nodes_executed,
+                        elapsed,
+                    ));
+                }
+
+                // Find the next node by following the edge
+                let next_node_id = self.find_next_node(graph, &node.id, &result.next_handle)?;
+                current_node_id = next_node_id;
             }
-
-            // Check for End node (empty next handle)
-            if result.next_handle.is_empty() {
-                let elapsed = start_time.elapsed().as_millis() as u64;
-                let outputs = context.into_data();
-
-                self.emit_workflow_completed(event_sink, &graph.id);
-
-                return Ok(OrchestrationResult::success(
-                    outputs,
-                    nodes_executed,
-                    elapsed,
-                ));
-            }
-
-            // Find the next node by following the edge
-            let next_node_id = self.find_next_node(graph, &node.id, &result.next_handle)?;
-            current_node_id = next_node_id;
         }
+        .await;
+
+        if let Err(error) = &execution {
+            self.emit_terminal_workflow_error(event_sink, &graph.id, error);
+        }
+
+        execution
     }
 
     /// Execute a DataGraph node by running the associated data graph.
@@ -359,6 +368,36 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         });
     }
 
+    fn emit_workflow_cancelled(
+        &self,
+        event_sink: &dyn EventSink,
+        workflow_id: &str,
+        error: &str,
+    ) {
+        let _ = event_sink.send(WorkflowEvent::WorkflowCancelled {
+            workflow_id: workflow_id.to_string(),
+            execution_id: self.execution_id.clone(),
+            error: error.to_string(),
+            occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
+        });
+    }
+
+    fn emit_terminal_workflow_error(
+        &self,
+        event_sink: &dyn EventSink,
+        workflow_id: &str,
+        error: &NodeEngineError,
+    ) {
+        match error {
+            NodeEngineError::Cancelled => {
+                self.emit_workflow_cancelled(event_sink, workflow_id, &error.to_string());
+            }
+            _ => {
+                self.emit_workflow_failed(event_sink, workflow_id, &error.to_string());
+            }
+        }
+    }
+
     fn emit_task_started(&self, event_sink: &dyn EventSink, task_id: &str) {
         let _ = event_sink.send(WorkflowEvent::TaskStarted {
             task_id: task_id.to_string(),
@@ -410,7 +449,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::NullEventSink;
+    use crate::events::{NullEventSink, VecEventSink};
     use crate::orchestration::types::{OrchestrationEdge, OrchestrationNode};
 
     /// Mock data graph executor for testing.
@@ -642,5 +681,59 @@ mod tests {
             result.outputs.get("output_value"),
             Some(&Value::String("success".to_string()))
         );
+    }
+
+    #[tokio::test]
+    async fn test_missing_start_node_emits_workflow_failed() {
+        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new())
+            .with_execution_id("orch-exec-test");
+        let graph = OrchestrationGraph::new("test", "Missing Start");
+        let event_sink = VecEventSink::new();
+
+        let result = executor.execute(&graph, HashMap::new(), &event_sink).await;
+
+        assert!(matches!(result, Err(NodeEngineError::ExecutionFailed(_))));
+
+        let events = event_sink.events();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], WorkflowEvent::WorkflowStarted { .. }));
+        assert!(matches!(
+            &events[1],
+            WorkflowEvent::WorkflowFailed {
+                workflow_id,
+                execution_id,
+                error,
+                ..
+            } if workflow_id == "test"
+                && execution_id == "orch-exec-test"
+                && error == "Task execution failed: Orchestration graph has no Start node"
+        ));
+    }
+
+    #[test]
+    fn test_emit_terminal_workflow_error_uses_cancelled_variant() {
+        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new())
+            .with_execution_id("orch-exec-test");
+        let event_sink = VecEventSink::new();
+
+        executor.emit_terminal_workflow_error(
+            &event_sink,
+            "test",
+            &NodeEngineError::Cancelled,
+        );
+
+        let events = event_sink.events();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            WorkflowEvent::WorkflowCancelled {
+                workflow_id,
+                execution_id,
+                error,
+                ..
+            } if workflow_id == "test"
+                && execution_id == "orch-exec-test"
+                && error == "Workflow cancelled"
+        ));
     }
 }
