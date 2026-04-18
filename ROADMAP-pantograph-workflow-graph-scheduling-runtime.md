@@ -502,6 +502,12 @@ incremental runs.
   modules, the Tauri event adapter is split into translation and diagnostics
   bridge modules, and `WorkflowToolbar.svelte` now delegates backend workflow
   event reduction to a focused read-only store helper with targeted tests.
+- Phase 5 Milestone 2 completion-matrix freeze is now also complete: current
+  producer/consumer coverage for `WaitingForInput`, `GraphModified`,
+  `IncrementalExecutionStarted`, and `Cancelled` is recorded in the dedicated
+  plan, with the remaining transport drift narrowed to canonical cancellation
+  still being inferred at the Tauri boundary instead of emitted by
+  backend-owned workflow events.
 
 **Still missing:**
 
@@ -509,7 +515,10 @@ incremental runs.
   mutation paths that still do not produce the event vocabulary consistently,
   especially beyond the executor-owned invalidation, multi-demand, and current
   edit-session human-input pause path
-- Full adapter parity between backend-owned events and frontend consumers
+- Canonical backend-owned cancellation events so Tauri/diagnostics no longer
+  classify `WorkflowFailed` messages into `Cancelled` on their own and
+  headless bindings can observe the same cancellation contract
+- Final adapter parity once the backend-owned cancellation contract exists
 
 ### Phase 6: Incremental Graph Execution
 

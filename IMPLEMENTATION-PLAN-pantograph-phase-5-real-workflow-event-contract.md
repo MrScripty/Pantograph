@@ -321,15 +321,15 @@ logic.
 spreads.
 
 **Tasks:**
-- [ ] Inventory every remaining producer path that should emit
+- [x] Inventory every remaining producer path that should emit
       `WaitingForInput`, `Cancelled`, `GraphModified`, or
       `IncrementalExecutionStarted`, and record which paths are currently
       missing or partial.
-- [ ] Freeze any additive event payload fields needed for machine-readable
+- [x] Freeze any additive event payload fields needed for machine-readable
       cancellation, interactive pause metadata, or graph-mutation attribution.
-- [ ] Record the intended consumer behavior for Tauri, headless bindings, and
+- [x] Record the intended consumer behavior for Tauri, headless bindings, and
       GUI readers so the backend contract remains the source of truth.
-- [ ] Update roadmap/README references so the new source-of-truth file is the
+- [x] Update roadmap/README references so the new source-of-truth file is the
       authoritative planning entry.
 
 **Verification:**
@@ -337,7 +337,46 @@ spreads.
 - Serialization and type-alignment checks for any additive DTO changes
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
 
-**Status:** Not started
+**Status:** Completed
+
+### Frozen Completion Matrix
+
+| Contract | Current backend producer coverage | Current transport / consumer parity | Remaining gap frozen for implementation |
+| -------- | --------------------------------- | ----------------------------------- | --------------------------------------- |
+| `WaitingForInput` | `node-engine::DemandEngine::demand` emits `WorkflowEvent::WaitingForInput` for unresolved `human-input` nodes before returning `NodeEngineError::WaitingForInput`. | Tauri translates and traces it directly; `packages/svelte-graph` now reduces it through the store helper; UniFFI buffers preserve the canonical event name; Rustler forwards the raw serialized engine event. | Non-streaming embedded/frontend-http workflow runners still surface interactive mismatch through final error envelopes rather than a streamed event contract. Keep that behavior explicit until a dedicated headless streaming boundary exists. |
+| `GraphModified` | `WorkflowExecutor` emits `GraphModified` for `mark_modified`, `update_node_data`, `add_node`, `add_edge`, `remove_edge`, and `restore_graph_snapshot`. | Tauri translation, diagnostics projection, and the shared graph GUI all consume the canonical event; UniFFI and Rustler preserve the backend shape without adapter-local reinterpretation. | Additional backend-owned graph mutation paths must either route through `WorkflowExecutor` or add equivalent backend-owned emission; no new adapter-local graph mutation synthesis is permitted. |
+| `IncrementalExecutionStarted` | `WorkflowExecutor::demand_multiple` emits the event before executing the requested task set. | Tauri translation, diagnostics projection, and the shared graph GUI consume the canonical event; UniFFI and Rustler preserve it without renaming drift. | Incremental execution outside the current `demand_multiple` path, including future scheduler-driven or parallel demand entry points, must emit the same backend-owned contract instead of relying on diagnostics-only inference. |
+| `Cancelled` | No canonical `node-engine` cancellation event exists yet. Cancellation currently surfaces as `WorkflowFailed` with cancellation-shaped messages, plus direct service-layer cancelled errors in non-streaming runners. | Tauri and diagnostics derive `Cancelled` through `is_cancelled_error_message`; GUI consumers therefore see a stable cancelled event only on the Tauri boundary. UniFFI and Rustler still observe backend `WorkflowFailed` / error envelopes rather than a canonical cancelled variant. | Milestone 3 must add a backend-owned structured cancellation outcome and canonical event path so transport boundaries stop classifying free-form messages and bindings gain the same cancellation semantics as Tauri. |
+
+### Frozen Additive Payload Direction
+
+- `Cancelled` needs a backend-owned structured cancellation outcome so adapters
+  do not infer cancellation from free-form error text.
+- `WaitingForInput` already carries the minimum machine-readable fields needed
+  for the current GUI and diagnostics readers: `workflow_id`, `execution_id`,
+  `node_id`, and optional prompt/message text.
+- `GraphModified` remains keyed by `workflow_id`, `execution_id`, and
+  `dirty_tasks`; future full-graph snapshots remain additive via the existing
+  optional transport field rather than changing the engine contract.
+- `IncrementalExecutionStarted` remains keyed by `workflow_id`,
+  `execution_id`, and the incremental task set; future scheduler metadata must
+  be additive and backend-owned if introduced.
+
+### Frozen Consumer Behavior
+
+- Tauri remains a validator/transport layer: it may translate naming and casing
+  and project diagnostics state, but it must not remain the owner of
+  cancellation classification once backend-owned cancellation outcomes exist.
+- `packages/svelte-graph` remains a read-only consumer of backend-owned
+  workflow events. It may mirror runtime outputs into transient node data for
+  execution UX, but it must not synthesize missing workflow events or become a
+  second owner of lifecycle semantics.
+- UniFFI must continue exposing canonical backend event names for buffered
+  workflow events and must adopt the future backend-owned cancelled contract in
+  the same slice that introduces it.
+- Rustler continues forwarding serialized backend events directly; additive
+  backend contract changes therefore remain the only accepted way to expand its
+  event language.
 
 ### Milestone 3: Complete Backend Event Emission
 
@@ -438,6 +477,12 @@ Update during implementation:
   backend workflow-event reduction out of `WorkflowToolbar.svelte` and into a
   focused read-only store helper with targeted tests and README updates so the
   GUI keeps subscription ownership without re-owning event semantics.
+- 2026-04-17: Milestone 2 is now frozen around the current codebase: direct
+  producer/consumer coverage is recorded for `WaitingForInput`,
+  `GraphModified`, `IncrementalExecutionStarted`, and `Cancelled`, and the
+  remaining hard gap is explicit that canonical cancellation semantics still
+  stop at Tauri/diagnostics classification instead of originating in
+  backend-owned workflow events.
 
 ## Commit Cadence Notes
 
