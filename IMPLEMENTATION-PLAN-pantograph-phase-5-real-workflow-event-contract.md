@@ -508,6 +508,12 @@ Update during implementation:
   `cancelled` envelopes survive the binding boundary intact, and Rustler now
   has a serializer-parity test confirming that its workflow error envelope
   helper preserves the same `cancelled` code/message contract.
+- 2026-04-17: Another Milestone 3 backend-emission slice landed in
+  `crates/node-engine/src/orchestration/executor.rs`, where orchestration
+  data-graph execution now propagates backend-owned `WaitingForInput` and
+  `Cancelled` outcomes instead of flattening them into the generic data-node
+  error handle. Canonical interactive and cancellation semantics therefore
+  remain owned by backend producers when subgraph execution pauses or stops.
 
 ## Commit Cadence Notes
 

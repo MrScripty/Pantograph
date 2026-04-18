@@ -511,6 +511,9 @@ incremental runs.
 - Binding-side acceptance coverage now also checks the backend-owned
   `cancelled` envelope through the UniFFI frontend-HTTP workflow-run surface,
   and Rustler has matching serializer-parity coverage for the same envelope.
+- Orchestration subgraph execution now preserves backend-owned interactive and
+  cancellation outcomes instead of flattening `WaitingForInput` or `Cancelled`
+  into the generic data-node error-handle path.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
@@ -526,8 +529,9 @@ incremental runs.
 
 - Backend-owned emission coverage for the remaining interactive and graph-
   mutation paths that still do not produce the event vocabulary consistently,
-  especially beyond the executor-owned invalidation, multi-demand, and current
-  edit-session human-input pause path
+  especially beyond the executor-owned invalidation, multi-demand, current
+  edit-session human-input pause path, and the now-correct orchestration
+  subgraph pause/cancel path
 - Broader backend emission coverage for any additional cancellable producer
   paths that still terminate without publishing the canonical cancellation
   event, beyond the now-covered orchestration error exits

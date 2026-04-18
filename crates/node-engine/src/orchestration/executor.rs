@@ -309,10 +309,13 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                     .with_updates(context_updates)
                     .with_message(format!("Data graph '{}' completed", data_graph_id)))
             }
+            Err(error @ (NodeEngineError::Cancelled | NodeEngineError::WaitingForInput { .. })) => {
+                Err(error)
+            }
             Err(e) => {
                 self.emit_task_failed(event_sink, &node.id, &e.to_string());
 
-                // Route to error handle if available
+                // Route ordinary execution failures through the orchestration error handle.
                 Ok(NodeExecutionResult::handle("error")
                     .with_update(format!("{}.error", node.id), Value::String(e.to_string()))
                     .with_message(format!("Data graph '{}' failed: {}", data_graph_id, e)))
@@ -392,6 +395,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             NodeEngineError::Cancelled => {
                 self.emit_workflow_cancelled(event_sink, workflow_id, &error.to_string());
             }
+            NodeEngineError::WaitingForInput { .. } => {}
             _ => {
                 self.emit_workflow_failed(event_sink, workflow_id, &error.to_string());
             }
@@ -453,19 +457,36 @@ mod tests {
     use crate::orchestration::types::{OrchestrationEdge, OrchestrationNode};
 
     /// Mock data graph executor for testing.
+    #[derive(Clone)]
+    enum MockDataGraphError {
+        WaitingForInput {
+            task_id: String,
+            prompt: Option<String>,
+            emit_event: bool,
+        },
+        Cancelled,
+    }
+
     struct MockDataGraphExecutor {
         outputs: HashMap<String, HashMap<String, Value>>,
+        errors: HashMap<String, MockDataGraphError>,
     }
 
     impl MockDataGraphExecutor {
         fn new() -> Self {
             Self {
                 outputs: HashMap::new(),
+                errors: HashMap::new(),
             }
         }
 
         fn with_output(mut self, graph_id: &str, outputs: HashMap<String, Value>) -> Self {
             self.outputs.insert(graph_id.to_string(), outputs);
+            self
+        }
+
+        fn with_error(mut self, graph_id: &str, error: MockDataGraphError) -> Self {
+            self.errors.insert(graph_id.to_string(), error);
             self
         }
     }
@@ -476,8 +497,30 @@ mod tests {
             &self,
             graph_id: &str,
             _inputs: HashMap<String, Value>,
-            _event_sink: &dyn EventSink,
+            event_sink: &dyn EventSink,
         ) -> Result<HashMap<String, Value>> {
+            if let Some(error) = self.errors.get(graph_id) {
+                return Err(match error {
+                    MockDataGraphError::WaitingForInput {
+                        task_id,
+                        prompt,
+                        emit_event,
+                    } => {
+                        if *emit_event {
+                            let _ = event_sink.send(WorkflowEvent::WaitingForInput {
+                                workflow_id: graph_id.to_string(),
+                                execution_id: "data-graph-exec".to_string(),
+                                task_id: task_id.clone(),
+                                prompt: prompt.clone(),
+                                occurred_at_ms: None,
+                            });
+                        }
+                        NodeEngineError::waiting_for_input(task_id.clone(), prompt.clone())
+                    }
+                    MockDataGraphError::Cancelled => NodeEngineError::Cancelled,
+                });
+            }
+
             self.outputs
                 .get(graph_id)
                 .cloned()
@@ -681,6 +724,124 @@ mod tests {
             result.outputs.get("output_value"),
             Some(&Value::String("success".to_string()))
         );
+    }
+
+    #[tokio::test]
+    async fn test_data_graph_waiting_for_input_propagates_without_terminal_failure() {
+        let mock_executor = MockDataGraphExecutor::new().with_error(
+            "test_graph",
+            MockDataGraphError::WaitingForInput {
+                task_id: "human-input-1".to_string(),
+                prompt: Some("Approve deployment?".to_string()),
+                emit_event: true,
+            },
+        );
+        let executor = OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
+        let event_sink = VecEventSink::new();
+
+        let mut graph = OrchestrationGraph::new("test", "Test");
+        graph.nodes.push(OrchestrationNode::new(
+            "start",
+            OrchestrationNodeType::Start,
+            (0.0, 0.0),
+        ));
+        graph.nodes.push(OrchestrationNode::with_config(
+            "data",
+            OrchestrationNodeType::DataGraph,
+            (100.0, 0.0),
+            serde_json::json!({
+                "dataGraphId": "test_graph",
+                "inputMappings": {},
+                "outputMappings": {"result": "output_value"}
+            }),
+        ));
+        graph.nodes.push(OrchestrationNode::new(
+            "end",
+            OrchestrationNodeType::End,
+            (200.0, 0.0),
+        ));
+        graph.edges.push(OrchestrationEdge::new(
+            "e1", "start", "next", "data", "input",
+        ));
+        graph
+            .edges
+            .push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
+
+        let result = executor.execute(&graph, HashMap::new(), &event_sink).await;
+
+        assert!(matches!(
+            result,
+            Err(NodeEngineError::WaitingForInput { task_id, prompt })
+                if task_id == "human-input-1"
+                    && prompt.as_deref() == Some("Approve deployment?")
+        ));
+
+        let events = event_sink.events();
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WaitingForInput { task_id, prompt, .. }
+                if task_id == "human-input-1"
+                    && prompt.as_deref() == Some("Approve deployment?"))));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_data_graph_cancelled_propagates_without_task_failure() {
+        let mock_executor = MockDataGraphExecutor::new()
+            .with_error("test_graph", MockDataGraphError::Cancelled);
+        let executor = OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
+        let event_sink = VecEventSink::new();
+
+        let mut graph = OrchestrationGraph::new("test", "Test");
+        graph.nodes.push(OrchestrationNode::new(
+            "start",
+            OrchestrationNodeType::Start,
+            (0.0, 0.0),
+        ));
+        graph.nodes.push(OrchestrationNode::with_config(
+            "data",
+            OrchestrationNodeType::DataGraph,
+            (100.0, 0.0),
+            serde_json::json!({
+                "dataGraphId": "test_graph",
+                "inputMappings": {},
+                "outputMappings": {"result": "output_value"}
+            }),
+        ));
+        graph.nodes.push(OrchestrationNode::new(
+            "end",
+            OrchestrationNodeType::End,
+            (200.0, 0.0),
+        ));
+        graph.edges.push(OrchestrationEdge::new(
+            "e1", "start", "next", "data", "input",
+        ));
+        graph
+            .edges
+            .push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
+
+        let result = executor.execute(&graph, HashMap::new(), &event_sink).await;
+
+        assert!(matches!(result, Err(NodeEngineError::Cancelled)));
+
+        let events = event_sink.events();
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { workflow_id, execution_id, error, .. }
+                if workflow_id == "test"
+                    && execution_id == "orch-exec-test"
+                    && error == "Workflow cancelled")));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")));
     }
 
     #[tokio::test]
