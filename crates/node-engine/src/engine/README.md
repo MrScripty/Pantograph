@@ -180,6 +180,9 @@ planning split, plus the private execution-batch schedule derived from it.
   attribution for independent roots under the default bounded path.
 - Backend event coverage now also pins the current parallel failure-path
   attribution when one in-flight sibling completes before another fails.
+- Backend event coverage now also pins the current parallel waiting-path
+  attribution when one in-flight sibling completes before another pauses for
+  input.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

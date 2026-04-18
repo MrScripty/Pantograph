@@ -446,6 +446,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 backend event coverage now also pins the current parallel failure
   path, including the possibility that one in-flight sibling emits
   `TaskCompleted` before another sibling failure interrupts the bounded window.
+- Phase 2 backend event coverage now also pins the current parallel
+  waiting-for-input path, including the possibility that one in-flight sibling
+  emits `TaskCompleted` before another sibling emits `WaitingForInput`.
 
 **Milestones:**
 
