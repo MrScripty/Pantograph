@@ -514,6 +514,10 @@ incremental runs.
 - Orchestration subgraph execution now preserves backend-owned interactive and
   cancellation outcomes instead of flattening `WaitingForInput` or `Cancelled`
   into the generic data-node error-handle path.
+- Embedded data-graph execution now also preserves backend-owned
+  `WaitingForInput` outcomes instead of converting them into synthetic
+  terminal-node error outputs before orchestration sees them, and the Tauri
+  orchestration adapter now forwards that backend result directly.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics

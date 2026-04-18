@@ -653,7 +653,7 @@ impl EmbeddedRuntime {
         graph: &WorkflowGraph,
         inputs: &HashMap<String, serde_json::Value>,
         event_sink: Arc<dyn EventSink>,
-    ) -> Result<HashMap<String, serde_json::Value>, WorkflowServiceError> {
+    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
         let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
         let execution_id = format!("data-graph-{}-{}", graph_id, Uuid::new_v4());
         let workflow_event_sink = event_sink.clone();
@@ -689,12 +689,21 @@ impl EmbeddedRuntime {
 
         let mut node_outputs = HashMap::new();
         let mut terminal_errors = HashMap::new();
+        let mut terminal_outcome_error = None;
         for terminal_id in &terminal_nodes {
             match executor.demand(terminal_id, &task_executor).await {
                 Ok(outputs) => {
                     node_outputs.insert(terminal_id.clone(), outputs);
                 }
                 Err(error) => {
+                    if matches!(
+                        error,
+                        node_engine::NodeEngineError::WaitingForInput { .. }
+                            | node_engine::NodeEngineError::Cancelled
+                    ) {
+                        terminal_outcome_error = Some(error);
+                        break;
+                    }
                     log::error!(
                         "Error executing terminal node '{}' in data graph '{}': {}",
                         terminal_id,
@@ -711,7 +720,12 @@ impl EmbeddedRuntime {
 
         let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshots();
         self.host()
-            .observe_python_runtime_execution_metadata(&python_runtime_execution_metadata)?;
+            .observe_python_runtime_execution_metadata(&python_runtime_execution_metadata)
+            .map_err(|error| node_engine::NodeEngineError::failed(error.to_string()))?;
+
+        if let Some(error) = terminal_outcome_error {
+            return Err(error);
+        }
 
         let mut outputs = EmbeddedWorkflowHost::collect_data_graph_outputs(
             graph_id,
@@ -2993,6 +3007,62 @@ mod tests {
         assert_eq!(onnx.status, RuntimeRegistryStatus::Stopped);
         assert!(onnx.runtime_instance_id.is_none());
         assert!(onnx.models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn execute_data_graph_propagates_waiting_for_input_without_synthetic_error_output() {
+        let temp = TempDir::new().expect("temp dir");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::from_components(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Arc::new(ProcessPythonRuntimeAdapter),
+        );
+        let event_sink = Arc::new(node_engine::VecEventSink::new());
+        let graph = node_engine::WorkflowGraph {
+            id: "interactive-data-graph".to_string(),
+            name: "Interactive Data Graph".to_string(),
+            nodes: vec![node_engine::GraphNode {
+                id: "approval".to_string(),
+                node_type: "human-input".to_string(),
+                data: serde_json::json!({ "prompt": "Approve deployment?" }),
+                position: (0.0, 0.0),
+            }],
+            edges: Vec::new(),
+            groups: Vec::new(),
+        };
+
+        let result = runtime
+            .execute_data_graph("interactive-data-graph", &graph, &HashMap::new(), event_sink.clone())
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(node_engine::NodeEngineError::WaitingForInput { task_id, prompt })
+                if task_id == "approval"
+                    && prompt.as_deref() == Some("Approve deployment?")
+        ));
+        let events = event_sink.events();
+        assert!(events.iter().any(|event| matches!(
+            event,
+            node_engine::WorkflowEvent::WaitingForInput {
+                task_id,
+                prompt: Some(prompt),
+                ..
+            } if task_id == "approval" && prompt == "Approve deployment?"
+        )));
     }
 
     #[tokio::test]

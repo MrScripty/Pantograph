@@ -514,6 +514,12 @@ Update during implementation:
   `Cancelled` outcomes instead of flattening them into the generic data-node
   error handle. Canonical interactive and cancellation semantics therefore
   remain owned by backend producers when subgraph execution pauses or stops.
+- 2026-04-17: The follow-on backend slice landed in
+  `crates/pantograph-embedded-runtime/src/lib.rs`, so embedded data-graph
+  execution now returns real `WaitingForInput` outcomes instead of converting
+  them into synthetic `*.error` outputs. The Tauri orchestration adapter was
+  reduced to a passthrough for that backend-owned result instead of rewriting
+  it at the boundary.
 
 ## Commit Cadence Notes
 

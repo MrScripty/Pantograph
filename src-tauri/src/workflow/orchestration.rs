@@ -64,7 +64,6 @@ impl DataGraphExecutor for PantographDataGraphExecutor {
         self.runtime
             .execute_data_graph(graph_id, &graph, &inputs, self.event_sink.clone())
             .await
-            .map_err(|error| node_engine::NodeEngineError::failed(error.to_string()))
     }
 
     fn get_data_graph(&self, graph_id: &str) -> Option<WorkflowGraph> {
