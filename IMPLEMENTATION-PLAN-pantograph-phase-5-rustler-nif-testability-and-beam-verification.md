@@ -349,6 +349,9 @@ Corrections applied:
 - `workflow_graph_contract.rs` now owns the workflow graph JSON CRUD and
   validation helpers behind the public NIF facade, reducing another large
   Rustler insertion point before deeper host-side coverage lands.
+- `type_parsing_contract.rs` now owns the string-to-enum adapter logic behind
+  the public Rustler type-parsing NIFs, reducing another small but repeated
+  block of wrapper-local facade code.
 - `mix` and `elixir` are not installed in the current environment, so BEAM
   host verification scaffolding can be authored here but not executed locally
   until host tooling is available.
@@ -485,6 +488,10 @@ Corrections applied:
   `crates/pantograph-rustler`: workflow graph JSON CRUD and validation helpers
   moved behind a focused `workflow_graph_contract.rs` module so the public NIF
   facade stays stable while the Rustler entry file keeps shrinking.
+- 2026-04-18: Milestone 2 extraction also moved the type-parsing NIF helpers
+  behind `type_parsing_contract.rs`, continuing the facade-first decomposition
+  of `crates/pantograph-rustler/src/lib.rs` without changing the exported
+  BEAM surface.
 - 2026-04-18: The BEAM smoke harness now loads the compiled
   `pantograph_rustler` NIF successfully under local Mix/ExUnit execution and
   passes version plus workflow graph round-trip smokes after aligning the

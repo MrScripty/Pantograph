@@ -59,6 +59,7 @@ extern crate workflow_nodes;
 
 mod elixir_data_graph_executor;
 mod resource_registration;
+mod type_parsing_contract;
 mod workflow_event_contract;
 mod workflow_graph_contract;
 #[cfg(feature = "frontend-http")]
@@ -66,6 +67,9 @@ mod workflow_host_contract;
 
 use elixir_data_graph_executor::ElixirDataGraphExecutor;
 use resource_registration::register_resources;
+use type_parsing_contract::{
+    parse_execution_mode_string, parse_node_category_string, parse_port_data_type_string,
+};
 use workflow_event_contract::serialize_workflow_event_json;
 use workflow_graph_contract::{
     workflow_add_edge_json, workflow_add_node_json, workflow_from_json_string,
@@ -712,42 +716,19 @@ fn version() -> String {
 /// Parse a port data type string to enum.
 #[rustler::nif]
 fn parse_port_data_type(type_str: String) -> ElixirPortDataType {
-    match type_str.to_lowercase().as_str() {
-        "string" => ElixirPortDataType::String,
-        "number" => ElixirPortDataType::Number,
-        "boolean" => ElixirPortDataType::Boolean,
-        "json" => ElixirPortDataType::Json,
-        "image" => ElixirPortDataType::Image,
-        "audio" => ElixirPortDataType::Audio,
-        "video" => ElixirPortDataType::Video,
-        "embedding" => ElixirPortDataType::Embedding,
-        "document" => ElixirPortDataType::Document,
-        "binary" => ElixirPortDataType::Binary,
-        _ => ElixirPortDataType::Any,
-    }
+    parse_port_data_type_string(type_str)
 }
 
 /// Parse a node category string to enum.
 #[rustler::nif]
 fn parse_node_category(category_str: String) -> ElixirNodeCategory {
-    match category_str.to_lowercase().as_str() {
-        "input" => ElixirNodeCategory::Input,
-        "output" => ElixirNodeCategory::Output,
-        "processing" => ElixirNodeCategory::Processing,
-        "control" => ElixirNodeCategory::Control,
-        "storage" => ElixirNodeCategory::Storage,
-        _ => ElixirNodeCategory::Integration,
-    }
+    parse_node_category_string(category_str)
 }
 
 /// Parse an execution mode string to enum.
 #[rustler::nif]
 fn parse_execution_mode(mode_str: String) -> ElixirExecutionMode {
-    match mode_str.to_lowercase().as_str() {
-        "manual" => ElixirExecutionMode::Manual,
-        "stream" => ElixirExecutionMode::Stream,
-        _ => ElixirExecutionMode::Reactive,
-    }
+    parse_execution_mode_string(mode_str)
 }
 
 // ============================================================================
