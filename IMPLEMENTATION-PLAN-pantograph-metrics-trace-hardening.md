@@ -522,6 +522,10 @@ Update during implementation:
   normalization and blank-filter validation out of
   `llm/commands/registry.rs` into `llm/commands/registry/request.rs` while
   keeping the command facade and response assembly stable.
+- 2026-04-18: Continued Milestone 2 by extracting runtime-debug snapshot DTOs
+  and cross-layer aggregation helpers out of `llm/commands/registry.rs` into
+  `llm/commands/registry/debug.rs` so the command facade only coordinates host
+  state lookup, trace requests, and reclaim entrypoints.
 
 ## Commit Cadence Notes
 

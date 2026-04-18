@@ -33,6 +33,9 @@ LLM gateway, process management, and Tauri command handlers for model and server
   command-local logic.
 - Keep `registry.rs` as the command facade while extracting request contracts,
   runtime-debug aggregation, and tests into `registry/` support modules.
+- Keep runtime-debug snapshot DTOs and cross-layer aggregation helpers in
+  `registry/debug.rs` so the command facade stays focused on host-state lookup
+  and command-level error envelopes.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
