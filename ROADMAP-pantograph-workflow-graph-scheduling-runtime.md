@@ -443,6 +443,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also has backend event-contract coverage for independent roots
   under the default bounded path, pinning task lifecycle attribution before
   adapter and trace follow-up work.
+- Phase 2 backend event coverage now also pins the current parallel failure
+  path, including the possibility that one in-flight sibling emits
+  `TaskCompleted` before another sibling failure interrupts the bounded window.
 
 **Milestones:**
 

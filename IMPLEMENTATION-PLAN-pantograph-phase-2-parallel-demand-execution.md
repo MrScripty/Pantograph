@@ -798,6 +798,10 @@ Update during implementation:
   `crates/node-engine/src/engine.rs`, adding backend event-contract coverage
   for independent roots under the default bounded path so task-start and
   task-complete attribution stays pinned before adapter and trace work lands.
+- 2026-04-18: Second Milestone 4 consumer-safety slice landed in
+  `crates/node-engine/src/engine.rs`, adding backend event-contract coverage
+  for the parallel failure path so in-flight root start/completion attribution
+  remains explicit when one bounded window target fails.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -912,6 +916,9 @@ Update during implementation:
 - Backend event coverage now also asserts that default-bounded independent
   roots still emit attributable task lifecycle events for every completed
   target.
+- Backend event coverage now also pins the current failure-path attribution for
+  parallel roots: in-flight siblings may already have completed and emitted
+  `TaskCompleted` before a sibling failure interrupts the bounded window.
 
 ### Deviations
 

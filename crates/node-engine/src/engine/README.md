@@ -178,6 +178,8 @@ planning split, plus the private execution-batch schedule derived from it.
   budget of two in-flight targets instead of hard-coding sequential execution.
 - Backend event coverage now also pins task-start and task-complete
   attribution for independent roots under the default bounded path.
+- Backend event coverage now also pins the current parallel failure-path
+  attribution when one in-flight sibling completes before another fails.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain
