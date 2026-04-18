@@ -407,6 +407,11 @@ Corrections applied:
 
 - This milestone now owns the remaining `enif_*` linker-symbol verification
   gap for true Rustler NIF loading and host-boundary assertions.
+- A first documented BEAM harness scaffold now exists under `bindings/beam/`,
+  with a minimal Mix/ExUnit smoke project that loads the compiled NIF through
+  `PANTOGRAPH_RUSTLER_NIF_PATH` and exercises real exported Rustler functions.
+- The current environment still lacks `mix` and `elixir`, so the new harness
+  is authored but not yet executed locally.
 
 ### Milestone 4: Source-of-Truth And Contract Reconciliation
 
@@ -462,3 +467,8 @@ Corrections applied:
   `crates/pantograph-rustler`: resource registration moved into a focused
   `resource_registration.rs` module so `lib.rs` remains facade-first while the
   NIF load boundary becomes easier to evolve for later BEAM harness work.
+- 2026-04-18: Milestone 3 scaffolding started under `bindings/beam/` with a
+  documented Mix/ExUnit smoke harness that targets the compiled
+  `pantograph_rustler` NIF through an explicit `PANTOGRAPH_RUSTLER_NIF_PATH`
+  contract. Local execution remains pending until BEAM host tooling is
+  available in the environment.
