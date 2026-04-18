@@ -418,6 +418,11 @@ Update during implementation:
   resolution and completed-output cache/version finalization out of
   `DemandEngine::demand_internal` so the remaining recursive demand core owns
   less state-transition detail ahead of the coordinator work.
+- 2026-04-18: Eighth Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/execution_events.rs`, extracting task-start,
+  waiting-for-input, and task-completed event emission out of
+  `DemandEngine::demand_internal` so backend-owned demand event choreography
+  now lives behind a focused helper before bounded parallel coordination work.
 
 ## Commit Cadence Notes
 
@@ -468,6 +473,9 @@ Update during implementation:
   recursive demand path.
 - Output-cache hit and completion-finalization rules now also live behind a
   focused helper instead of remaining embedded in the recursive demand path.
+- Demand event emission for started, waiting, and completed states now also
+  lives behind a focused helper instead of remaining embedded in the recursive
+  demand path.
 
 ### Deviations
 

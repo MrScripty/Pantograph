@@ -45,6 +45,7 @@ use crate::types::{NodeId, WorkflowGraph};
 mod graph_events;
 mod multi_demand;
 mod dependency_inputs;
+mod execution_events;
 mod output_cache;
 mod node_preparation;
 mod single_demand;
@@ -283,28 +284,28 @@ impl DemandEngine {
             if let Some(prompt) =
                 node_preparation::prepare_node_inputs(graph, node_id, &mut inputs)
             {
-                let _ = event_sink.send(WorkflowEvent::TaskStarted {
-                    task_id: node_id.clone(),
-                    execution_id: self.execution_id.clone(),
-                    occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-                });
-                let _ = event_sink.send(WorkflowEvent::WaitingForInput {
-                    workflow_id: graph.id.clone(),
-                    execution_id: self.execution_id.clone(),
-                    task_id: node_id.clone(),
-                    prompt: prompt.clone(),
-                    occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-                });
+                execution_events::emit_task_started(
+                    event_sink,
+                    node_id.clone(),
+                    self.execution_id.clone(),
+                );
+                execution_events::emit_waiting_for_input(
+                    event_sink,
+                    graph.id.clone(),
+                    self.execution_id.clone(),
+                    node_id.clone(),
+                    prompt.clone(),
+                );
                 computing.remove(node_id);
                 return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
             }
 
             // Send task started event
-            let _ = event_sink.send(WorkflowEvent::TaskStarted {
-                task_id: node_id.clone(),
-                execution_id: self.execution_id.clone(),
-                occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-            });
+            execution_events::emit_task_started(
+                event_sink,
+                node_id.clone(),
+                self.execution_id.clone(),
+            );
 
             // 5. Execute this node
             let outputs = executor
@@ -312,12 +313,12 @@ impl DemandEngine {
                 .await?;
 
             // Send task completed event
-            let _ = event_sink.send(WorkflowEvent::TaskCompleted {
-                task_id: node_id.clone(),
-                execution_id: self.execution_id.clone(),
-                output: Some(serde_json::to_value(&outputs)?),
-                occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-            });
+            execution_events::emit_task_completed(
+                event_sink,
+                node_id.clone(),
+                self.execution_id.clone(),
+                &outputs,
+            )?;
 
             // 6. Cache with current input version
             output_cache::store_completed_output(
