@@ -784,10 +784,16 @@ mod tests {
                     && prompt.as_deref() == Some("Approve deployment?"))));
         assert!(!events
             .iter()
+            .any(|event| matches!(event, WorkflowEvent::TaskCompleted { task_id, .. } if task_id == "data")));
+        assert!(!events
+            .iter()
             .any(|event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")));
         assert!(!events
             .iter()
             .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. })));
         assert!(!events
             .iter()
             .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. })));
@@ -841,7 +847,16 @@ mod tests {
                     && error == "Workflow cancelled")));
         assert!(!events
             .iter()
+            .any(|event| matches!(event, WorkflowEvent::TaskCompleted { task_id, .. } if task_id == "data")));
+        assert!(!events
+            .iter()
             .any(|event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. })));
     }
 
     #[tokio::test]

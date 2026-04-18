@@ -607,6 +607,9 @@ incremental runs.
   explicitly pin that a `WaitingForInput` pause does not drift into terminal
   failed/completed/cancelled events, tightening the current backend
   human-input producer paths beyond positive-event-only assertions.
+- The backend `node-engine` orchestration wait/cancel producer tests now also
+  explicitly pin that subgraph pauses and cancellations do not drift into
+  completed or mismatched terminal workflow events at the orchestration layer.
 - The concrete embedded-runtime workflow host now also has a focused
   pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
   boundary, so non-streaming cancellation parity is no longer inferred only

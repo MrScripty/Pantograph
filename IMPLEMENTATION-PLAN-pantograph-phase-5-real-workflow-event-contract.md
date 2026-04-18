@@ -637,6 +637,12 @@ Update during implementation:
   `WorkflowFailed`, `WorkflowCompleted`, or `WorkflowCancelled` drift. That
   keeps the current human-input producer paths aligned with the backend-owned
   pause contract instead of relying on only positive-event assertions.
+- 2026-04-18: The backend `node-engine` orchestration wait/cancel producer
+  tests now also explicitly reject terminal-event drift. Waiting subgraph
+  pauses cannot silently emit `TaskCompleted`, `WorkflowCompleted`, or
+  terminal failure/cancellation mismatches for the data-graph wrapper node,
+  and orchestration cancellation cannot drift back into completed or failed
+  workflow terminals.
 
 ## Commit Cadence Notes
 
