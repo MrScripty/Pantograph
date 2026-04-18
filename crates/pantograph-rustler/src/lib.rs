@@ -2346,6 +2346,23 @@ mod tests {
         assert_eq!(envelope.message, "workflow run cancelled");
     }
 
+    #[test]
+    #[cfg(feature = "frontend-http")]
+    fn test_workflow_error_json_preserves_invalid_request_envelope() {
+        let json = workflow_error_json(
+            WorkflowErrorCode::InvalidRequest,
+            "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'",
+        );
+        let envelope: WorkflowErrorEnvelope =
+            serde_json::from_str(&json).expect("parse invalid-request envelope");
+
+        assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+        assert_eq!(
+            envelope.message,
+            "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
+        );
+    }
+
     #[cfg(feature = "frontend-http")]
     static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| std::sync::Mutex::new(()));

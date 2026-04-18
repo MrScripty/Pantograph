@@ -1429,6 +1429,54 @@ mod tests {
 
     #[test]
     #[cfg(feature = "frontend-http")]
+    fn test_workflow_run_contract_preserves_invalid_request_envelope() {
+        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let workflow_id = "wf_contract_invalid_request";
+        let root = create_temp_workflow_root(workflow_id);
+        let original_cwd = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(&root).expect("set cwd");
+
+        let payload = serde_json::to_value(WorkflowErrorEnvelope {
+            code: WorkflowErrorCode::InvalidRequest,
+            message:
+                "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
+                    .to_string(),
+            details: None,
+        })
+        .expect("serialize envelope");
+        let (base_url, server_thread) = spawn_single_workflow_server(400, payload);
+
+        let request_json = serde_json::json!({
+            "workflow_id": workflow_id,
+            "inputs": [{ "node_id": "text-input-1", "port_id": "text", "value": "hello world" }],
+            "output_targets": [{ "node_id": "vector-output-1", "port_id": "vector" }]
+        })
+        .to_string();
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let err = runtime
+            .block_on(frontend_http_workflow_run(base_url, request_json, None))
+            .expect_err("invalid-request envelope should be preserved");
+
+        server_thread.join().expect("join server");
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(root);
+
+        let message = match err {
+            FfiError::Other { message } => message,
+            other => panic!("expected FfiError::Other with envelope JSON, got {other:?}"),
+        };
+        let envelope: WorkflowErrorEnvelope =
+            serde_json::from_str(&message).expect("parse invalid-request envelope");
+        assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+        assert_eq!(
+            envelope.message,
+            "workflow 'interactive-human-input' requires interactive input at node 'human-input-1'"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "frontend-http")]
     fn test_workflow_get_capabilities_contract_success() {
         let _guard = CWD_LOCK.lock().expect("lock cwd");
         let workflow_id = "wf_contract_caps";

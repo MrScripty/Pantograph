@@ -524,6 +524,10 @@ Update during implementation:
   `src-tauri/src/workflow/headless_workflow_commands.rs` so the headless error
   envelope helper is now explicitly pinned for the backend-owned interactive
   `invalid_request` contract emitted by non-streaming workflow runs.
+- 2026-04-17: Binding acceptance coverage now also pins the same interactive
+  `invalid_request` envelope through the UniFFI frontend-HTTP workflow-run
+  surface and the Rustler workflow-error serializer helper, matching the
+  previously-added `cancelled` envelope coverage on those boundaries.
 
 ## Commit Cadence Notes
 
