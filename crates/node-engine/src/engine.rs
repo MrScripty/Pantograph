@@ -37,10 +37,6 @@ use async_trait::async_trait;
 use graph_flow::Context;
 use tokio::sync::RwLock;
 
-use crate::core_executor::{
-    human_input_auto_accept, human_input_default_value, human_input_prompt,
-    human_input_response_value,
-};
 use crate::error::{NodeEngineError, Result};
 use crate::events::{EventSink, WorkflowEvent};
 use crate::extensions::ExecutorExtensions;
@@ -49,6 +45,7 @@ use crate::types::{NodeId, WorkflowGraph};
 mod graph_events;
 mod multi_demand;
 mod dependency_inputs;
+mod node_preparation;
 mod single_demand;
 
 /// Trait for executing a single node/task
@@ -98,25 +95,6 @@ pub struct DemandEngine {
     global_version: u64,
     /// Execution ID for events
     execution_id: String,
-}
-
-fn unresolved_human_input_prompt(
-    node_type: &str,
-    inputs: &HashMap<String, serde_json::Value>,
-) -> Option<Option<String>> {
-    if node_type != "human-input" {
-        return None;
-    }
-
-    if human_input_response_value(inputs).is_some() {
-        return None;
-    }
-
-    if human_input_auto_accept(inputs) && human_input_default_value(inputs).is_some() {
-        return None;
-    }
-
-    Some(human_input_prompt(inputs))
 }
 
 impl DemandEngine {
@@ -315,27 +293,23 @@ impl DemandEngine {
             }
 
             // 4. Cache miss - include static data from the node itself
-            if let Some(node) = graph.find_node(node_id) {
-                if !node.data.is_null() {
-                    inputs.insert("_data".to_string(), node.data.clone());
-                }
-
-                if let Some(prompt) = unresolved_human_input_prompt(&node.node_type, &inputs) {
-                    let _ = event_sink.send(WorkflowEvent::TaskStarted {
-                        task_id: node_id.clone(),
-                        execution_id: self.execution_id.clone(),
-                        occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-                    });
-                    let _ = event_sink.send(WorkflowEvent::WaitingForInput {
-                        workflow_id: graph.id.clone(),
-                        execution_id: self.execution_id.clone(),
-                        task_id: node_id.clone(),
-                        prompt: prompt.clone(),
-                        occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
-                    });
-                    computing.remove(node_id);
-                    return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
-                }
+            if let Some(prompt) =
+                node_preparation::prepare_node_inputs(graph, node_id, &mut inputs)
+            {
+                let _ = event_sink.send(WorkflowEvent::TaskStarted {
+                    task_id: node_id.clone(),
+                    execution_id: self.execution_id.clone(),
+                    occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
+                });
+                let _ = event_sink.send(WorkflowEvent::WaitingForInput {
+                    workflow_id: graph.id.clone(),
+                    execution_id: self.execution_id.clone(),
+                    task_id: node_id.clone(),
+                    prompt: prompt.clone(),
+                    occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
+                });
+                computing.remove(node_id);
+                return Err(NodeEngineError::waiting_for_input(node_id.clone(), prompt));
             }
 
             // Send task started event

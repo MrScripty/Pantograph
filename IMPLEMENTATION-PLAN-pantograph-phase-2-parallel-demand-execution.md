@@ -408,6 +408,11 @@ Update during implementation:
   `WorkflowExecutor::demand` graph-read and engine-lock choreography behind a
   focused helper so both single-demand and multi-demand facade entry points
   now live under the same internal engine boundary.
+- 2026-04-18: Sixth Milestone 1 decomposition slice landed in
+  `crates/node-engine/src/engine/node_preparation.rs`, extracting static node
+  data injection and human-input pause detection out of
+  `DemandEngine::demand_internal` so the remaining execution core can be
+  narrowed further before bounded parallel coordination begins.
 
 ## Commit Cadence Notes
 
@@ -453,6 +458,9 @@ Update during implementation:
   dependency-input assembly that bounded parallel planning will need to reuse.
 - The executor-facing single-demand path also now delegates through an engine
   helper, reducing the remaining inline hot-path logic in `engine.rs`.
+- Node preparation for `_data` injection and `human-input` waiting semantics
+  now also lives behind a focused helper instead of remaining embedded in the
+  recursive demand path.
 
 ### Deviations
 
