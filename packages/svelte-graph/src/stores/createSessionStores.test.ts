@@ -36,13 +36,13 @@ function createBackendStub(): WorkflowBackend {
     async removeSession() {},
     async executeWorkflow() {},
     async addNode() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async removeNode() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async addEdge() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async getConnectionCandidates() {
       throw new Error('not implemented');
@@ -60,13 +60,13 @@ function createBackendStub(): WorkflowBackend {
       throw new Error('not implemented');
     },
     async removeEdge() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async updateNodeData() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async updateNodePosition() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async getExecutionGraph() {
       throw new Error('not implemented');
@@ -75,10 +75,10 @@ function createBackendStub(): WorkflowBackend {
       return { canUndo: false, canRedo: false, undoCount: 0 };
     },
     async undo() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async redo() {
-      throw new Error('not implemented');
+      return { graph: { nodes: [], edges: [] } };
     },
     async saveWorkflow() {
       return '';

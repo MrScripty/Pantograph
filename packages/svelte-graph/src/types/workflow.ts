@@ -349,6 +349,11 @@ export interface WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> 
   data: WorkflowEventData[T];
 }
 
+export interface WorkflowGraphMutationResponse {
+  graph: WorkflowGraph;
+  workflow_event?: WorkflowEvent<'GraphModified'> | null;
+}
+
 // --- Execution State ---
 
 export type NodeExecutionState = 'idle' | 'running' | 'waiting' | 'success' | 'error';

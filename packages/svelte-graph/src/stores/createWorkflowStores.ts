@@ -22,6 +22,8 @@ import { removeNodeDataKeys } from './runtimeData.js';
 import { buildDerivedGraph } from '../graphRevision.js';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 import { applySelectedNodeIds } from '../workflowSelection.js';
+import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
+import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
 
 interface InferenceParamSchema {
   key: string;
@@ -221,7 +223,7 @@ export function createWorkflowStores(
 
   function syncGraphMutationFromBackend(
     action: string,
-    mutate: (sessionId: string) => Promise<WorkflowGraph>,
+    mutate: (sessionId: string) => Promise<WorkflowGraphMutationResponse>,
   ) {
     if (!activeSessionId) {
       console.warn(`[workflowStores] Ignoring ${action} without an active session`);
@@ -229,8 +231,11 @@ export function createWorkflowStores(
     }
 
     void mutate(activeSessionId)
-      .then((graph) => {
-        applyWorkflowGraph(graph, { markDirty: true });
+      .then((response) => {
+        applyWorkflowGraph(response.graph, { markDirty: true });
+        applyWorkflowGraphMutationResponse(response, {
+          setNodeExecutionState,
+        });
       })
       .catch((error) => {
         console.error(`[workflowStores] Failed to ${action}:`, error);

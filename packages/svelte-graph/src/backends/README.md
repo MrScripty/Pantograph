@@ -43,6 +43,10 @@ native backend.
 ## Invariants
 - `WorkflowBackend` implementations must treat sessions as the authority for
   graph mutation methods.
+- Session-scoped graph mutation methods may return an additive backend-owned
+  `workflow_event` envelope alongside the updated graph so GUI consumers can
+  react to canonical `GraphModified` semantics without synthesizing them
+  locally.
 - `getConnectionCandidates` must describe eligible targets for one source
   anchor, not a whole-graph recommendation pass.
 - `connectAnchors` must return structured rejection data on failure instead of
@@ -101,6 +105,9 @@ const candidates = await backend.getConnectionCandidates(
 ## Structured Producer Contract (Machine-Consumed Modules)
 - Candidate responses always include `graph_revision`, `revision_matches`,
   `source_anchor`, `compatible_nodes`, and `insertable_node_types`.
+- Graph-mutation responses may include a backend-owned `workflow_event`; when
+  present, consumers should forward or consume that contract read-only instead
+  of rebuilding `GraphModified` semantics from the graph snapshot alone.
 - Compatible target ordering is backend-defined; consumers must not infer
   semantic priority unless the backend documents one.
 - Rejection reasons use stable snake_case labels shared with Rust/Tauri DTOs.

@@ -17,6 +17,7 @@ import type {
   NodeDefinition,
   PortDataType,
   WorkflowGraph,
+  WorkflowGraphMutationResponse,
   WorkflowFile,
   WorkflowMetadata,
   WorkflowEvent,
@@ -110,6 +111,24 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   /** Optionally override mock node definitions */
   constructor(private nodeDefinitions: NodeDefinition[] = MOCK_NODE_DEFINITIONS) {}
+
+  private graphMutationResponse(
+    graph: WorkflowGraph,
+    sessionId: string,
+    dirtyTasks: string[],
+  ): WorkflowGraphMutationResponse {
+    return {
+      graph: structuredClone(graph),
+      workflow_event: {
+        type: 'GraphModified',
+        data: {
+          workflow_id: sessionId,
+          execution_id: sessionId,
+          dirty_tasks: dirtyTasks,
+        },
+      },
+    };
+  }
 
   async getNodeDefinitions(): Promise<NodeDefinition[]> {
     return this.nodeDefinitions;
@@ -244,29 +263,29 @@ export class MockWorkflowBackend implements WorkflowBackend {
     await this.simulateExecution(graph);
   }
 
-  async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraph> {
+  async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.nodes.push(node);
     graph.derived_graph = buildDerivedGraph(graph);
-    return structuredClone(graph);
+    return this.graphMutationResponse(graph, sessionId, [node.id]);
   }
 
-  async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraph> {
+  async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.nodes = graph.nodes.filter((node) => node.id !== nodeId);
     graph.edges = graph.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
     graph.derived_graph = buildDerivedGraph(graph);
-    return structuredClone(graph);
+    return this.graphMutationResponse(graph, sessionId, [nodeId]);
   }
 
-  async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph> {
+  async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     graph.edges.push(edge);
     graph.derived_graph = buildDerivedGraph(graph);
-    return structuredClone(graph);
+    return this.graphMutationResponse(graph, sessionId, [edge.target]);
   }
 
   async getConnectionCandidates(
@@ -632,19 +651,20 @@ export class MockWorkflowBackend implements WorkflowBackend {
     };
   }
 
-  async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph> {
+  async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    const targetNodeId = graph.edges.find((edge) => edge.id === edgeId)?.target ?? null;
     graph.edges = graph.edges.filter((e) => e.id !== edgeId);
     graph.derived_graph = buildDerivedGraph(graph);
-    return structuredClone(graph);
+    return this.graphMutationResponse(graph, sessionId, targetNodeId ? [targetNodeId] : []);
   }
 
   async updateNodeData(
     nodeId: string,
     data: Record<string, unknown>,
     sessionId: string,
-  ): Promise<WorkflowGraph> {
+  ): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     const node = graph.nodes.find((n) => n.id === nodeId);
@@ -652,14 +672,14 @@ export class MockWorkflowBackend implements WorkflowBackend {
       node.data = { ...node.data, ...data };
     }
     graph.derived_graph = buildDerivedGraph(graph);
-    return structuredClone(graph);
+    return this.graphMutationResponse(graph, sessionId, [nodeId]);
   }
 
   async updateNodePosition(
     nodeId: string,
     position: { x: number; y: number },
     sessionId: string,
-  ): Promise<WorkflowGraph> {
+  ): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
     const node = graph.nodes.find((n) => n.id === nodeId);
@@ -667,7 +687,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
       node.position = position;
     }
     graph.derived_graph = buildDerivedGraph(graph);
-    return structuredClone(graph);
+    return this.graphMutationResponse(graph, sessionId, []);
   }
 
   async getExecutionGraph(sessionId: string): Promise<WorkflowGraph> {
@@ -680,11 +700,11 @@ export class MockWorkflowBackend implements WorkflowBackend {
     return { canUndo: false, canRedo: false, undoCount: 0 };
   }
 
-  async undo(_sessionId: string): Promise<WorkflowGraph> {
+  async undo(_sessionId: string): Promise<WorkflowGraphMutationResponse> {
     throw new Error('Undo not supported in mock mode');
   }
 
-  async redo(_sessionId: string): Promise<WorkflowGraph> {
+  async redo(_sessionId: string): Promise<WorkflowGraphMutationResponse> {
     throw new Error('Redo not supported in mock mode');
   }
 

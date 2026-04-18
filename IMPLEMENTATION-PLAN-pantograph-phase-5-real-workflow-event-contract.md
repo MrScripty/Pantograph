@@ -425,7 +425,7 @@ consistently.
 - Targeted binding tests where the event envelope changes
 - `npm run typecheck`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Acceptance, Recovery, And Source-of-Truth Close-Out
 
@@ -536,6 +536,14 @@ Update during implementation:
   UniFFI runtime coverage now also pins that additive response contract so the
   binding-facing JSON surface can observe it before Tauri transport parity
   work begins in Milestone 4.
+- 2026-04-18: The first Milestone 4 transport-parity slice landed across
+  `src-tauri`, the app-facing `TauriWorkflowBackend`, and
+  `packages/svelte-graph`. Tauri edit-session mutation commands now forward
+  the full additive backend response instead of collapsing it to a graph-only
+  payload, the shared graph package exposes a dedicated mutation-response
+  contract, and the workflow stores now consume backend-owned `GraphModified`
+  responses read-only instead of synthesizing local dirty-task semantics for
+  backend round-trip edits.
 
 ## Commit Cadence Notes
 

@@ -40,6 +40,7 @@ export type {
   WorkflowEventType,
   WorkflowEventData,
   WorkflowEvent,
+  WorkflowGraphMutationResponse,
   NodeExecutionState,
   NodeExecutionInfo,
 } from './types/workflow.js';

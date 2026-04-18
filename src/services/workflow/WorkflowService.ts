@@ -9,6 +9,7 @@ import type {
   WorkflowCapabilitiesResponse,
   WorkflowEvent,
   WorkflowGraph,
+  WorkflowGraphMutationResponse,
   WorkflowFile,
   WorkflowSessionHandle,
   WorkflowSchedulerSnapshotResponse,
@@ -453,7 +454,9 @@ export class WorkflowService {
       throw new Error('Undo not supported in mock mode');
     }
 
-    return invoke<WorkflowGraph>('undo_workflow', { executionId: id });
+    return invoke<WorkflowGraphMutationResponse>('undo_workflow', {
+      executionId: id,
+    }).then((response) => response.graph);
   }
 
   /**
@@ -470,7 +473,9 @@ export class WorkflowService {
       throw new Error('Redo not supported in mock mode');
     }
 
-    return invoke<WorkflowGraph>('redo_workflow', { executionId: id });
+    return invoke<WorkflowGraphMutationResponse>('redo_workflow', {
+      executionId: id,
+    }).then((response) => response.graph);
   }
 
   // --- Graph Modification During Execution ---
@@ -494,7 +499,11 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraph>('update_node_data', { executionId: id, nodeId, data });
+    return invoke<WorkflowGraphMutationResponse>('update_node_data', {
+      executionId: id,
+      nodeId,
+      data,
+    }).then((response) => response.graph);
   }
 
   async updateNodePosition(
@@ -512,11 +521,11 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraph>('update_node_position_in_execution', {
+    return invoke<WorkflowGraphMutationResponse>('update_node_position_in_execution', {
       executionId: id,
       nodeId,
       position,
-    });
+    }).then((response) => response.graph);
   }
 
   /**
@@ -533,7 +542,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraph>('add_node_to_execution', { executionId: id, node });
+    return invoke<WorkflowGraphMutationResponse>('add_node_to_execution', {
+      executionId: id,
+      node,
+    }).then((response) => response.graph);
   }
 
   async removeNode(nodeId: string, executionId?: string): Promise<WorkflowGraph> {
@@ -547,7 +559,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraph>('remove_node_from_execution', { executionId: id, nodeId });
+    return invoke<WorkflowGraphMutationResponse>('remove_node_from_execution', {
+      executionId: id,
+      nodeId,
+    }).then((response) => response.graph);
   }
 
   /**
@@ -565,7 +580,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraph>('add_edge_to_execution', { executionId: id, edge });
+    return invoke<WorkflowGraphMutationResponse>('add_edge_to_execution', {
+      executionId: id,
+      edge,
+    }).then((response) => response.graph);
   }
 
   async getConnectionCandidates(
@@ -756,7 +774,10 @@ export class WorkflowService {
       return { nodes: [], edges: [] };
     }
 
-    return invoke<WorkflowGraph>('remove_edge_from_execution', { executionId: id, edgeId });
+    return invoke<WorkflowGraphMutationResponse>('remove_edge_from_execution', {
+      executionId: id,
+      edgeId,
+    }).then((response) => response.graph);
   }
 
   /**

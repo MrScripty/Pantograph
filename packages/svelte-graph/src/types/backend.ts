@@ -7,6 +7,7 @@ import type {
   WorkflowFile,
   WorkflowMetadata,
   WorkflowEvent,
+  WorkflowGraphMutationResponse,
   WorkflowSessionHandle,
   GraphNode,
   GraphEdge,
@@ -88,13 +89,13 @@ export interface WorkflowBackend {
   // --- Graph Mutation (session-scoped) ---
 
   /** Add a node. Returns the updated graph for frontend sync. */
-  addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraph>;
+  addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   /** Remove a node and any attached edges. Returns the updated graph for frontend sync. */
-  removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraph>;
+  removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   /** Add an edge. Returns the updated graph for frontend sync. */
-  addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph>;
+  addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   /** Discover eligible targets and insertable node types for an active source anchor. */
   getConnectionCandidates(
@@ -139,21 +140,21 @@ export interface WorkflowBackend {
   ): Promise<InsertNodeOnEdgeResponse>;
 
   /** Remove an edge. Returns the updated graph for frontend sync. */
-  removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph>;
+  removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   /** Update a node's data. Returns the updated graph for frontend sync. */
   updateNodeData(
     nodeId: string,
     data: Record<string, unknown>,
     sessionId: string,
-  ): Promise<WorkflowGraph>;
+  ): Promise<WorkflowGraphMutationResponse>;
 
   /** Update a node's position. Returns the updated graph for frontend sync. */
   updateNodePosition(
     nodeId: string,
     position: { x: number; y: number },
     sessionId: string,
-  ): Promise<WorkflowGraph>;
+  ): Promise<WorkflowGraphMutationResponse>;
 
   /** Get the current graph state from a session */
   getExecutionGraph(sessionId: string): Promise<WorkflowGraph>;
@@ -164,10 +165,10 @@ export interface WorkflowBackend {
   getUndoRedoState(sessionId: string): Promise<UndoRedoState>;
 
   /** Undo the last graph modification. Returns restored graph. */
-  undo(sessionId: string): Promise<WorkflowGraph>;
+  undo(sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   /** Redo the last undone modification. Returns restored graph. */
-  redo(sessionId: string): Promise<WorkflowGraph>;
+  redo(sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   // --- Persistence ---
 

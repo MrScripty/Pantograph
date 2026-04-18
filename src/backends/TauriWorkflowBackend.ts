@@ -10,6 +10,7 @@ import type {
   UndoRedoState,
   NodeDefinition,
   WorkflowGraph,
+  WorkflowGraphMutationResponse,
   WorkflowFile,
   WorkflowMetadata,
   WorkflowEvent,
@@ -80,19 +81,25 @@ export class TauriWorkflowBackend implements WorkflowBackend {
 
   // --- Graph Mutation ---
 
-  async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('add_node_to_execution', { executionId: sessionId, node });
+  async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('add_node_to_execution', {
+      executionId: sessionId,
+      node,
+    });
   }
 
-  async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('remove_node_from_execution', {
+  async removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('remove_node_from_execution', {
       executionId: sessionId,
       nodeId,
     });
   }
 
-  async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('add_edge_to_execution', { executionId: sessionId, edge });
+  async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('add_edge_to_execution', {
+      executionId: sessionId,
+      edge,
+    });
   }
 
   async getConnectionCandidates(
@@ -189,24 +196,31 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     return normalizeInsertNodeOnEdgeResponse(response) as InsertNodeOnEdgeResponse;
   }
 
-  async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('remove_edge_from_execution', { executionId: sessionId, edgeId });
+  async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('remove_edge_from_execution', {
+      executionId: sessionId,
+      edgeId,
+    });
   }
 
   async updateNodeData(
     nodeId: string,
     data: Record<string, unknown>,
     sessionId: string,
-  ): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('update_node_data', { executionId: sessionId, nodeId, data });
+  ): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('update_node_data', {
+      executionId: sessionId,
+      nodeId,
+      data,
+    });
   }
 
   async updateNodePosition(
     nodeId: string,
     position: { x: number; y: number },
     sessionId: string,
-  ): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('update_node_position_in_execution', {
+  ): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('update_node_position_in_execution', {
       executionId: sessionId,
       nodeId,
       position,
@@ -223,12 +237,12 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     return invoke<UndoRedoState>('get_undo_redo_state', { executionId: sessionId });
   }
 
-  async undo(sessionId: string): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('undo_workflow', { executionId: sessionId });
+  async undo(sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('undo_workflow', { executionId: sessionId });
   }
 
-  async redo(sessionId: string): Promise<WorkflowGraph> {
-    return invoke<WorkflowGraph>('redo_workflow', { executionId: sessionId });
+  async redo(sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    return invoke<WorkflowGraphMutationResponse>('redo_workflow', { executionId: sessionId });
   }
 
   // --- Persistence ---

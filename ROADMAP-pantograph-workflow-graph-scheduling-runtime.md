@@ -552,6 +552,10 @@ incremental runs.
   deterministic dirty-task ordering, so binding-facing graph edit responses no
   longer need to infer mutation semantics from the returned graph snapshot
   alone.
+- Tauri edit-session mutation commands now also forward that additive backend
+  response contract, and the shared graph store consumes the backend-owned
+  `GraphModified` payload read-only instead of inventing graph-mutation
+  semantics locally for backend round-trip edits.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
@@ -572,10 +576,6 @@ incremental runs.
 - Broader backend emission coverage for any additional cancellable producer
   paths that still terminate without publishing the canonical cancellation
   event, beyond the now-covered orchestration error exits
-- Transport and GUI parity for session-edit graph mutations so Tauri graph
-  edit commands and the shared graph store consume the additive backend-owned
-  `GraphModified` response contract instead of relying on local dirty-state
-  synthesis
 - Extend acceptance coverage for the new `cancelled` envelope across any
   remaining non-streaming/headless command or binding surfaces that still need
   explicit parity checks
