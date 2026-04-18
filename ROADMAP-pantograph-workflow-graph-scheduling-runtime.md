@@ -425,6 +425,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 dispatch windows now also carry an explicit parallel-eligibility
   decision, freezing where future concurrent execution is allowed to branch
   under the current overlap and budget rules.
+- Phase 2 now also represents that window-level decision as an explicit
+  execution mode, so later bounded coordinator work can branch from a typed
+  backend-owned contract instead of a boolean flag.
 
 **Milestones:**
 

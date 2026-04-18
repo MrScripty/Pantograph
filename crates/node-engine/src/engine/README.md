@@ -80,6 +80,9 @@ changing the public executor surface.
 - Multi-demand dispatch windows should carry an explicit parallel-eligibility
   decision so future concurrent execution branches from a backend-owned
   contract instead of recomputing eligibility ad hoc.
+- Multi-demand dispatch windows should expose that decision through an explicit
+  execution-mode contract so later coordinator work branches from a typed
+  backend-owned value rather than a boolean flag.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -160,6 +163,8 @@ planning split, plus the private execution-batch schedule derived from it.
   through a private backend-owned window runner.
 - Multi-demand dispatch windows now also record whether they are eligible for
   bounded concurrent execution under the current overlap and budget rules.
+- Multi-demand dispatch windows now also expose that decision as an explicit
+  execution mode rather than a bare boolean.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

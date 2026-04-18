@@ -29,10 +29,16 @@ struct DemandDispatchWindowOutcome {
     completed_targets: Vec<NodeId>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DemandDispatchWindowExecutionMode {
+    Sequential,
+    BoundedParallel,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DemandDispatchWindowPlan {
     targets: Vec<NodeId>,
-    parallel_eligible: bool,
+    execution_mode: DemandDispatchWindowExecutionMode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,7 +217,10 @@ impl DemandBatchDispatchPlan {
             .map(|window| {
                 DemandDispatchWindowPlan::new(
                     window.to_vec(),
-                    budget.max_in_flight() > 1 && window.len() > 1,
+                    DemandDispatchWindowExecutionMode::for_window(
+                        budget.max_in_flight(),
+                        window.len(),
+                    ),
                 )
             })
             .collect();
@@ -224,11 +233,21 @@ impl DemandBatchDispatchPlan {
     }
 }
 
+impl DemandDispatchWindowExecutionMode {
+    fn for_window(max_in_flight: usize, window_len: usize) -> Self {
+        if max_in_flight > 1 && window_len > 1 {
+            Self::BoundedParallel
+        } else {
+            Self::Sequential
+        }
+    }
+}
+
 impl DemandDispatchWindowPlan {
-    fn new(targets: Vec<NodeId>, parallel_eligible: bool) -> Self {
+    fn new(targets: Vec<NodeId>, execution_mode: DemandDispatchWindowExecutionMode) -> Self {
         Self {
             targets,
-            parallel_eligible,
+            execution_mode,
         }
     }
 
@@ -236,8 +255,8 @@ impl DemandDispatchWindowPlan {
         &self.targets
     }
 
-    fn parallel_eligible(&self) -> bool {
-        self.parallel_eligible
+    fn execution_mode(&self) -> DemandDispatchWindowExecutionMode {
+        self.execution_mode
     }
 }
 
@@ -319,11 +338,14 @@ impl<'a> DemandMultipleCoordinator<'a> {
         let dispatch_plan = DemandBatchDispatchPlan::from_batch(batch, self.budget);
 
         for window_plan in dispatch_plan.execution_windows() {
-            let window_result = if window_plan.parallel_eligible() {
-                self.execute_parallel_eligible_window_sequentially(window_plan)
-                    .await
-            } else {
-                self.execute_sequential_window(window_plan).await
+            let window_result = match window_plan.execution_mode() {
+                DemandDispatchWindowExecutionMode::Sequential => {
+                    self.execute_sequential_window(window_plan).await
+                }
+                DemandDispatchWindowExecutionMode::BoundedParallel => {
+                    self.execute_parallel_eligible_window_sequentially(window_plan)
+                        .await
+                }
             };
 
             match window_result {
@@ -498,8 +520,9 @@ mod tests {
 
     use super::{
         DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
-        DemandDispatchWindowOutcome, DemandDispatchWindowPlan, DemandDispatchWindowResult,
-        DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults,
+        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome,
+        DemandDispatchWindowPlan, DemandDispatchWindowResult, DemandExecutionBudget,
+        DemandMultiplePlan, DemandMultipleResults,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -815,9 +838,12 @@ mod tests {
             &[
                 DemandDispatchWindowPlan::new(
                     vec!["node_a".to_string(), "node_b".to_string()],
-                    true,
+                    DemandDispatchWindowExecutionMode::BoundedParallel,
                 ),
-                DemandDispatchWindowPlan::new(vec!["node_c".to_string()], false)
+                DemandDispatchWindowPlan::new(
+                    vec!["node_c".to_string()],
+                    DemandDispatchWindowExecutionMode::Sequential,
+                )
             ]
         );
     }
@@ -832,21 +858,46 @@ mod tests {
         assert_eq!(
             plan.execution_windows(),
             &[
-                DemandDispatchWindowPlan::new(vec!["node_a".to_string()], false),
-                DemandDispatchWindowPlan::new(vec!["node_b".to_string()], false)
+                DemandDispatchWindowPlan::new(
+                    vec!["node_a".to_string()],
+                    DemandDispatchWindowExecutionMode::Sequential,
+                ),
+                DemandDispatchWindowPlan::new(
+                    vec!["node_b".to_string()],
+                    DemandDispatchWindowExecutionMode::Sequential,
+                )
             ]
         );
     }
 
     #[test]
-    fn dispatch_window_plan_marks_parallel_eligibility() {
+    fn dispatch_window_plan_marks_execution_mode() {
         let window = DemandDispatchWindowPlan::new(
             vec!["node_a".to_string(), "node_b".to_string()],
-            true,
+            DemandDispatchWindowExecutionMode::BoundedParallel,
         );
 
         assert_eq!(window.targets(), &["node_a".to_string(), "node_b".to_string()]);
-        assert!(window.parallel_eligible());
+        assert_eq!(
+            window.execution_mode(),
+            DemandDispatchWindowExecutionMode::BoundedParallel
+        );
+    }
+
+    #[test]
+    fn dispatch_window_execution_mode_falls_back_to_sequential() {
+        assert_eq!(
+            DemandDispatchWindowExecutionMode::for_window(1, 2),
+            DemandDispatchWindowExecutionMode::Sequential
+        );
+        assert_eq!(
+            DemandDispatchWindowExecutionMode::for_window(2, 1),
+            DemandDispatchWindowExecutionMode::Sequential
+        );
+        assert_eq!(
+            DemandDispatchWindowExecutionMode::for_window(2, 2),
+            DemandDispatchWindowExecutionMode::BoundedParallel
+        );
     }
 
     #[test]

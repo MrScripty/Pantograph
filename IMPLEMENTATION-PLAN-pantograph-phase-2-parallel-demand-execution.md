@@ -767,6 +767,11 @@ Update during implementation:
   window vectors with explicit window plans that mark whether each window is
   eligible for bounded concurrent execution under the current batch and budget
   rules.
+- 2026-04-18: Eighth Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, replacing the interim
+  parallel-eligibility boolean with an explicit dispatch-window execution mode
+  so later coordinator work branches from a typed backend-owned contract
+  instead of boolean state.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -863,6 +868,9 @@ Update during implementation:
 - Dispatch windows now also carry an explicit parallel-eligibility decision so
   future concurrent execution branches from a frozen backend-owned contract
   instead of recomputing eligibility ad hoc.
+- Dispatch windows now also expose that decision as an explicit execution-mode
+  contract so later bounded coordinator work branches from a typed backend
+  value rather than a boolean flag.
 
 ### Deviations
 
