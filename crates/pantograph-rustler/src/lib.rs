@@ -396,14 +396,20 @@ impl BeamEventSink {
     }
 }
 
+fn serialize_workflow_event_json(
+    event: &node_engine::WorkflowEvent,
+) -> std::result::Result<String, node_engine::EventError> {
+    serde_json::to_string(event).map_err(|e| node_engine::EventError {
+        message: format!("Serialization error: {}", e),
+    })
+}
+
 impl EventSink for BeamEventSink {
     fn send(
         &self,
         event: node_engine::WorkflowEvent,
     ) -> std::result::Result<(), node_engine::EventError> {
-        let json = serde_json::to_string(&event).map_err(|e| node_engine::EventError {
-            message: format!("Serialization error: {}", e),
-        })?;
+        let json = serialize_workflow_event_json(&event)?;
 
         // Send via std::thread::spawn to avoid "current thread is managed" panic
         // when called from DirtyCpu scheduler threads
@@ -2332,6 +2338,48 @@ mod tests {
         let metadata: node_engine::TaskMetadata = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.node_type, "my-node");
         assert_eq!(metadata.label, "My Node");
+    }
+
+    #[test]
+    fn test_serialize_workflow_event_json_preserves_graph_modified_contract() {
+        let json = serialize_workflow_event_json(&node_engine::WorkflowEvent::GraphModified {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            occurred_at_ms: Some(123),
+        })
+        .expect("serialize graph-modified event");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse graph-modified event");
+
+        assert_eq!(value["type"], "graphModified");
+        assert_eq!(value["workflowId"], "wf-1");
+        assert_eq!(value["executionId"], "exec-1");
+        assert_eq!(
+            value["dirtyTasks"],
+            serde_json::json!(["node-a", "node-b"])
+        );
+    }
+
+    #[test]
+    fn test_serialize_workflow_event_json_preserves_waiting_for_input_contract() {
+        let json =
+            serialize_workflow_event_json(&node_engine::WorkflowEvent::WaitingForInput {
+                workflow_id: "wf-1".to_string(),
+                execution_id: "exec-1".to_string(),
+                task_id: "human-input-1".to_string(),
+                prompt: Some("Need approval".to_string()),
+                occurred_at_ms: Some(456),
+            })
+            .expect("serialize waiting-for-input event");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse waiting-for-input event");
+
+        assert_eq!(value["type"], "waitingForInput");
+        assert_eq!(value["workflowId"], "wf-1");
+        assert_eq!(value["executionId"], "exec-1");
+        assert_eq!(value["taskId"], "human-input-1");
+        assert_eq!(value["prompt"], "Need approval");
     }
 
     #[test]

@@ -575,6 +575,12 @@ Update during implementation:
   boundary now explicitly pins backend-owned `WaitingForInput` state
   transitions and cancelled-run cleanup, rather than relying on indirect
   assertions through resume behavior alone.
+- 2026-04-18: The BEAM-side Rustler boundary now also pins serializer parity
+  for the backend-owned event vocabulary that flows through `BeamEventSink`.
+  Focused Rust tests assert that `GraphModified` and `WaitingForInput` retain
+  their canonical transport labels and additive fields when serialized for the
+  NIF event channel, instead of leaving that contract covered only by the
+  frontend-http error-envelope tests.
 
 ## Commit Cadence Notes
 

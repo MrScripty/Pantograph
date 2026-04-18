@@ -569,6 +569,10 @@ incremental runs.
 - The focused toolbar helper coverage now also explicitly pins
   `WaitingForInput` transitions and cancelled-run cleanup at the app boundary,
   so the GUI contract is not only inferred through resume behavior.
+- Rustler now also has focused serializer-parity coverage for backend-owned
+  `GraphModified` and `WaitingForInput` event JSON at the BEAM boundary, so
+  the NIF event channel no longer relies on inference from downstream
+  consumers for those transport labels and additive fields.
 - Phase 5 Milestone 1 decomposition is now complete: `node-engine` event
   contract/helpers and graph-event helpers live behind focused internal
   modules, the Tauri event adapter is split into translation and diagnostics
