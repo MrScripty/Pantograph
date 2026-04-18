@@ -653,8 +653,10 @@ incremental runs.
   event, beyond the now-covered orchestration error exits
 - Extend acceptance coverage for the new `cancelled` envelope only where a
   remaining non-streaming/headless command or runtime-hosted binding surface is
-  still not directly pinned beyond the now-covered embedded-runtime host,
-  Tauri helper, UniFFI, and frontend-HTTP workflow-run paths
+  still not directly pinned beyond the now-covered embedded-runtime host and
+  session-run surfaces, streamed Tauri execution helper, UniFFI workflow-run
+  and session-run bindings, Rustler workflow host and session-host paths, and
+  frontend-HTTP workflow-run transport
 - Binding-platform follow-on: freeze the curated client-facing surface for the
   Pantograph headless binding platform instead of treating wrapper exports as
   the product contract by default
