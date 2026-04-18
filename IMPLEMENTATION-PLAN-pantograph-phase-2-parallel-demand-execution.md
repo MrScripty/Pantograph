@@ -708,6 +708,11 @@ Update during implementation:
   separately from the current sequential execution-target list so later bounded
   scheduling can change internal coordination without re-entangling the facade
   event payload contract.
+- 2026-04-18: Second Milestone 2 semantic-freeze slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing a private
+  multi-demand result collector that freezes deterministic last-write-wins
+  result-map merge semantics separately from the execution loop that currently
+  populates it.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -773,6 +778,9 @@ Update during implementation:
 - Multi-demand target requests are now normalized behind a private plan object
   that keeps caller-visible requested-target order separate from the current
   sequential execution-target list ahead of bounded parallel coordination.
+- Multi-demand result aggregation now also lives behind a private collector so
+  deterministic merge semantics are explicit before concurrent completion paths
+  are introduced.
 
 ### Deviations
 

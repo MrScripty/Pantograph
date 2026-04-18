@@ -14,6 +14,11 @@ struct DemandMultiplePlan {
     execution_targets: Vec<NodeId>,
 }
 
+#[derive(Debug, Default)]
+struct DemandMultipleResults {
+    outputs: HashMap<NodeId, HashMap<String, serde_json::Value>>,
+}
+
 impl DemandMultiplePlan {
     fn from_requested_targets(node_ids: &[NodeId]) -> Self {
         Self {
@@ -28,6 +33,20 @@ impl DemandMultiplePlan {
 
     fn execution_targets(&self) -> &[NodeId] {
         &self.execution_targets
+    }
+}
+
+impl DemandMultipleResults {
+    fn record_success(
+        &mut self,
+        node_id: &NodeId,
+        outputs: HashMap<String, serde_json::Value>,
+    ) {
+        self.outputs.insert(node_id.clone(), outputs);
+    }
+
+    fn into_outputs(self) -> HashMap<NodeId, HashMap<String, serde_json::Value>> {
+        self.outputs
     }
 }
 
@@ -86,21 +105,23 @@ async fn execute_sequential_plan(
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    let mut results = HashMap::new();
+    let mut results = DemandMultipleResults::default();
 
     for node_id in plan.execution_targets() {
         let output = engine
             .demand(node_id, graph, executor, context, event_sink, extensions)
             .await?;
-        results.insert(node_id.clone(), output);
+        results.record_success(node_id, output);
     }
 
-    Ok(results)
+    Ok(results.into_outputs())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::DemandMultiplePlan;
+    use std::collections::HashMap;
+
+    use super::{DemandMultiplePlan, DemandMultipleResults};
 
     #[test]
     fn plan_preserves_requested_target_order_for_event_payloads() {
@@ -137,5 +158,46 @@ mod tests {
 
         assert!(plan.requested_targets().is_empty());
         assert!(plan.execution_targets().is_empty());
+    }
+
+    #[test]
+    fn results_keep_distinct_targets() {
+        let mut results = DemandMultipleResults::default();
+        let output_a = HashMap::from([(
+            "value".to_string(),
+            serde_json::json!("first"),
+        )]);
+        let output_b = HashMap::from([(
+            "value".to_string(),
+            serde_json::json!("second"),
+        )]);
+
+        results.record_success(&"node_a".to_string(), output_a);
+        results.record_success(&"node_b".to_string(), output_b);
+
+        let outputs = results.into_outputs();
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs["node_a"]["value"], serde_json::json!("first"));
+        assert_eq!(outputs["node_b"]["value"], serde_json::json!("second"));
+    }
+
+    #[test]
+    fn results_use_last_write_for_duplicate_targets() {
+        let mut results = DemandMultipleResults::default();
+        let first_output = HashMap::from([(
+            "value".to_string(),
+            serde_json::json!("first"),
+        )]);
+        let second_output = HashMap::from([(
+            "value".to_string(),
+            serde_json::json!("second"),
+        )]);
+
+        results.record_success(&"node_a".to_string(), first_output);
+        results.record_success(&"node_a".to_string(), second_output);
+
+        let outputs = results.into_outputs();
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs["node_a"]["value"], serde_json::json!("second"));
     }
 }

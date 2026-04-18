@@ -388,6 +388,9 @@ prepare the engine for metric-informed scheduling.
 - Phase 2 now also has a private multi-demand request-plan boundary that keeps
   caller-visible requested-target order separate from the current sequential
   execution-target list before bounded parallel scheduling changes land.
+- Phase 2 now also has a private multi-demand result collector that makes the
+  current deterministic result-map merge semantics explicit before concurrent
+  completion paths are introduced.
 
 **Milestones:**
 
