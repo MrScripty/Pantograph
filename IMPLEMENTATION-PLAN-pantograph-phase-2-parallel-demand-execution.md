@@ -737,6 +737,11 @@ Update during implementation:
   planner to group independent root targets into the same batch while
   separating roots whose transitive dependency closures overlap, freezing the
   current parallel-eligibility rule before real concurrent execution lands.
+- 2026-04-18: Third Milestone 3 coordinator-prep slice landed in
+  `crates/node-engine/src/engine/multi_demand.rs`, introducing an explicit
+  private batch-execution outcome owner and pinning stop-after-failed-batch
+  behavior so later concurrent execution must preserve cleanup semantics
+  instead of relying on incidental loop short-circuiting.
 - 2026-04-18: The plan now also records explicit applicability passes for the
   remaining standards files in the coding-standards repo, including which
   standards are directly constraining this backend refactor and which are
@@ -818,6 +823,8 @@ Update during implementation:
 - The execution-batch schedule now reflects dependency-overlap eligibility:
   independent roots may share a batch, while roots with shared transitive
   dependencies are separated into deterministic sequential batches.
+- Batch execution cleanup semantics are now explicit: the current coordinator
+  stops after the first failed batch and does not continue into later batches.
 
 ### Deviations
 

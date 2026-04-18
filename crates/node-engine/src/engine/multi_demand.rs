@@ -19,6 +19,11 @@ struct DemandMultipleResults {
     outputs: HashMap<NodeId, HashMap<String, serde_json::Value>>,
 }
 
+#[derive(Debug, Default)]
+struct DemandBatchExecutionOutcome {
+    completed_targets: Vec<NodeId>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DemandExecutionBudget {
     max_in_flight: usize,
@@ -166,6 +171,16 @@ impl DemandExecutionBudget {
     }
 }
 
+impl DemandBatchExecutionOutcome {
+    fn record_completed_target(&mut self, node_id: &NodeId) {
+        self.completed_targets.push(node_id.clone());
+    }
+
+    fn completed_targets(&self) -> &[NodeId] {
+        &self.completed_targets
+    }
+}
+
 impl<'a> DemandMultipleCoordinator<'a> {
     fn new(
         engine: &'a mut DemandEngine,
@@ -200,9 +215,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
         mut self,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         for batch in self.plan.execution_batches() {
-            for node_id in batch {
-                self.demand_target(node_id).await?;
-            }
+            self.execute_batch(batch).await?;
         }
 
         self.collect_requested_outputs().await?;
@@ -224,6 +237,17 @@ impl<'a> DemandMultipleCoordinator<'a> {
             .await?;
         self.results.record_success(node_id, output);
         Ok(())
+    }
+
+    async fn execute_batch(&mut self, batch: &[NodeId]) -> Result<DemandBatchExecutionOutcome> {
+        let mut outcome = DemandBatchExecutionOutcome::default();
+
+        for node_id in batch {
+            self.demand_target(node_id).await?;
+            outcome.record_completed_target(node_id);
+        }
+
+        Ok(outcome)
     }
 
     async fn collect_requested_outputs(&mut self) -> Result<()> {
@@ -322,7 +346,10 @@ mod tests {
 
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
-    use super::{DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults};
+    use super::{
+        DemandBatchExecutionOutcome, DemandExecutionBudget, DemandMultiplePlan,
+        DemandMultipleResults,
+    };
 
     fn make_linear_graph() -> WorkflowGraph {
         WorkflowGraph {
@@ -557,6 +584,18 @@ mod tests {
     #[test]
     fn execution_budget_defaults_to_one_in_flight() {
         assert_eq!(DemandExecutionBudget::sequential().max_in_flight(), 1);
+    }
+
+    #[test]
+    fn batch_execution_outcome_tracks_completed_targets_in_order() {
+        let mut outcome = DemandBatchExecutionOutcome::default();
+        outcome.record_completed_target(&"node_a".to_string());
+        outcome.record_completed_target(&"node_b".to_string());
+
+        assert_eq!(
+            outcome.completed_targets(),
+            &["node_a".to_string(), "node_b".to_string()]
+        );
     }
 
     #[test]

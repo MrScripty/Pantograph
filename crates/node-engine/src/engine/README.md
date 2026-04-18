@@ -62,6 +62,9 @@ changing the public executor surface.
 - Multi-demand batch planning should separate roots whose transitive
   dependency closures overlap while allowing independent roots to share a
   batch, so the current parallel-eligibility rule remains backend-owned.
+- Multi-demand batch execution should keep failure cleanup semantics explicit so
+  later bounded execution cannot accidentally continue into later batches after
+  an earlier batch fails.
 - Multi-demand helpers must not change behavior until the dedicated parallel
   execution phase intentionally does so.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
@@ -129,6 +132,8 @@ planning split, plus the private execution-batch schedule derived from it.
 - Multi-demand batch planning currently groups independent roots together and
   separates roots with shared transitive dependencies into later sequential
   batches.
+- Multi-demand batch execution currently stops after the first failed batch and
+  does not continue into later scheduled batches.
 - Graph-modification events remain derived from backend graph state, not from
   adapter-local inference.
 - The current executor-facing and engine-facing multi-demand helpers remain

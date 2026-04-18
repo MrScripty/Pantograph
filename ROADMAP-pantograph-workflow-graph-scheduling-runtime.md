@@ -407,6 +407,9 @@ prepare the engine for metric-informed scheduling.
   separating roots whose transitive dependency closures overlap, establishing
   the current backend-owned parallel-eligibility rule before concurrent
   execution is enabled.
+- Phase 2 coordinator cleanup semantics are now also explicit: a failed batch
+  stops later batches from executing, so future bounded execution must preserve
+  that backend-owned failure boundary.
 
 **Milestones:**
 

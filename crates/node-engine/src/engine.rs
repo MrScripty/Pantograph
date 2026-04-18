@@ -572,6 +572,7 @@ mod tests {
     use super::*;
     use crate::events::{NullEventSink, VecEventSink};
     use crate::types::{GraphEdge, GraphNode};
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -653,6 +654,33 @@ mod tests {
         graph
     }
 
+    fn make_shared_dependency_graph() -> WorkflowGraph {
+        let mut graph = WorkflowGraph::new("shared", "Shared");
+        for (id, x, y) in [("a", 0.0, 0.0), ("b", 100.0, 0.0), ("c", 100.0, 100.0)] {
+            graph.nodes.push(GraphNode {
+                id: id.to_string(),
+                node_type: "process".to_string(),
+                data: serde_json::json!({"node": id}),
+                position: (x, y),
+            });
+        }
+        graph.edges.push(GraphEdge {
+            id: "e1".to_string(),
+            source: "a".to_string(),
+            source_handle: "out".to_string(),
+            target: "b".to_string(),
+            target_handle: "in".to_string(),
+        });
+        graph.edges.push(GraphEdge {
+            id: "e2".to_string(),
+            source: "a".to_string(),
+            source_handle: "out".to_string(),
+            target: "c".to_string(),
+            target_handle: "in".to_string(),
+        });
+        graph
+    }
+
     /// A simple test executor that counts invocations
     struct CountingExecutor {
         execution_count: AtomicUsize,
@@ -667,6 +695,27 @@ mod tests {
 
         fn count(&self) -> usize {
             self.execution_count.load(Ordering::SeqCst)
+        }
+    }
+
+    struct FailingExecutor {
+        fail_on: String,
+        execution_log: Mutex<Vec<String>>,
+    }
+
+    impl FailingExecutor {
+        fn new(fail_on: impl Into<String>) -> Self {
+            Self {
+                fail_on: fail_on.into(),
+                execution_log: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn executed_tasks(&self) -> Vec<String> {
+            self.execution_log
+                .lock()
+                .expect("execution log")
+                .clone()
         }
     }
 
@@ -691,6 +740,34 @@ mod tests {
                 }),
             );
             Ok(outputs)
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for FailingExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            inputs: HashMap<String, serde_json::Value>,
+            _context: &Context,
+            _extensions: &ExecutorExtensions,
+        ) -> Result<HashMap<String, serde_json::Value>> {
+            self.execution_log
+                .lock()
+                .expect("execution log")
+                .push(task_id.to_string());
+
+            if task_id == self.fail_on {
+                return Err(NodeEngineError::failed(format!("forced failure at {task_id}")));
+            }
+
+            Ok(HashMap::from([(
+                "out".to_string(),
+                serde_json::json!({
+                    "task": task_id,
+                    "inputs": inputs
+                }),
+            )]))
         }
     }
 
@@ -1084,6 +1161,25 @@ mod tests {
         assert!(outputs.contains_key("c"));
         assert_eq!(outputs["b"]["out"]["task"], serde_json::json!("b"));
         assert_eq!(outputs["c"]["out"]["task"], serde_json::json!("c"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_executor_demand_multiple_stops_after_failed_batch() {
+        let graph = make_shared_dependency_graph();
+        let event_sink = Arc::new(NullEventSink);
+        let executor_impl = FailingExecutor::new("b");
+        let workflow_executor = WorkflowExecutor::new("exec_1", graph, event_sink);
+
+        let error = workflow_executor
+            .demand_multiple(&["b".to_string(), "c".to_string()], &executor_impl)
+            .await
+            .expect_err("first batch should fail");
+
+        assert!(matches!(error, NodeEngineError::ExecutionFailed(message) if message.contains("forced failure at b")));
+        assert_eq!(
+            executor_impl.executed_tasks(),
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 
     #[tokio::test]
