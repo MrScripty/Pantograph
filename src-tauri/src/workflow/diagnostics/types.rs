@@ -4,8 +4,9 @@ use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
 use pantograph_workflow_service::{
-    WorkflowSchedulerSnapshotDiagnostics, WorkflowSessionQueueItem, WorkflowSessionSummary,
-    WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
+    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionSummary, WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -317,14 +318,33 @@ impl WorkflowDiagnosticsSnapshotRequest {
             workflow_name: normalize_optional_filter(&self.workflow_name),
         }
     }
+
+    pub(crate) fn validate(&self) -> Result<(), WorkflowServiceError> {
+        validate_optional_filter(&self.session_id, "session_id")?;
+        validate_optional_filter(&self.workflow_id, "workflow_id")?;
+        validate_optional_filter(&self.workflow_name, "workflow_name")?;
+        Ok(())
+    }
 }
 
 fn normalize_optional_filter(value: &Option<String>) -> Option<String> {
-    value
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+    value.as_deref().map(str::trim).map(ToOwned::to_owned)
+}
+
+fn validate_optional_filter(
+    value: &Option<String>,
+    field_name: &'static str,
+) -> Result<(), WorkflowServiceError> {
+    if let Some(value) = value {
+        if value.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "workflow diagnostics snapshot request field '{}' must not be blank",
+                field_name
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 pub(crate) fn diagnostics_run_status(status: WorkflowTraceStatus) -> DiagnosticsRunStatus {

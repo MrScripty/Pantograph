@@ -22,7 +22,7 @@ fn sample_graph() -> pantograph_workflow_service::WorkflowGraph {
 }
 
 #[test]
-fn workflow_diagnostics_snapshot_request_normalizes_blank_filters() {
+fn workflow_diagnostics_snapshot_request_normalizes_trimmed_filters() {
     let normalized = WorkflowDiagnosticsSnapshotRequest {
         session_id: Some("  session-1  ".to_string()),
         workflow_id: Some("   ".to_string()),
@@ -31,8 +31,33 @@ fn workflow_diagnostics_snapshot_request_normalizes_blank_filters() {
     .normalized();
 
     assert_eq!(normalized.session_id.as_deref(), Some("session-1"));
-    assert_eq!(normalized.workflow_id, None);
+    assert_eq!(normalized.workflow_id.as_deref(), Some(""));
     assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
+}
+
+#[test]
+fn workflow_diagnostics_snapshot_request_rejects_blank_filters() {
+    let request = WorkflowDiagnosticsSnapshotRequest {
+        session_id: None,
+        workflow_id: Some("   ".to_string()),
+        workflow_name: None,
+    }
+    .normalized();
+
+    let error = request
+        .validate()
+        .expect_err("blank workflow_id should be rejected");
+
+    assert!(
+        matches!(
+            error,
+            pantograph_workflow_service::WorkflowServiceError::InvalidRequest(ref message)
+                if message
+                    == "workflow diagnostics snapshot request field 'workflow_id' must not be blank"
+        ),
+        "unexpected validation error: {:?}",
+        error
+    );
 }
 
 #[test]
@@ -500,6 +525,7 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             execution_id: Some("exec-runtime".to_string()),
             session_id: None,
             workflow_id: None,
+            workflow_name: None,
             include_completed: None,
         })
         .expect("trace snapshot")
@@ -728,6 +754,7 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
             execution_id: Some("edit-session-1".to_string()),
             session_id: None,
             workflow_id: None,
+            workflow_name: None,
             include_completed: None,
         })
         .expect("trace snapshot")
@@ -939,6 +966,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             execution_id: Some("restored-exec".to_string()),
             session_id: None,
             workflow_id: None,
+            workflow_name: None,
             include_completed: Some(true),
         })
         .expect("trace snapshot")
@@ -1204,6 +1232,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             execution_id: Some("exec-1".to_string()),
             session_id: None,
             workflow_id: None,
+            workflow_name: None,
             include_completed: Some(true),
         })
         .expect("trace snapshot");
@@ -1278,6 +1307,7 @@ fn trace_snapshot_filters_runs_without_projection_overlay_rules() {
             execution_id: None,
             session_id: None,
             workflow_id: None,
+            workflow_name: None,
             include_completed: Some(false),
         })
         .expect("trace snapshot");

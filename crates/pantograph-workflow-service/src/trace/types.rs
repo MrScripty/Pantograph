@@ -293,14 +293,27 @@ pub struct WorkflowTraceSnapshotRequest {
     #[serde(default)]
     pub workflow_id: Option<String>,
     #[serde(default)]
+    pub workflow_name: Option<String>,
+    #[serde(default)]
     pub include_completed: Option<bool>,
 }
 
 impl WorkflowTraceSnapshotRequest {
+    pub fn normalized(&self) -> Self {
+        Self {
+            execution_id: normalize_optional_filter(&self.execution_id),
+            session_id: normalize_optional_filter(&self.session_id),
+            workflow_id: normalize_optional_filter(&self.workflow_id),
+            workflow_name: normalize_optional_filter(&self.workflow_name),
+            include_completed: self.include_completed,
+        }
+    }
+
     pub fn validate(&self) -> Result<(), WorkflowServiceError> {
         validate_optional_filter(&self.execution_id, "execution_id")?;
         validate_optional_filter(&self.session_id, "session_id")?;
         validate_optional_filter(&self.workflow_id, "workflow_id")?;
+        validate_optional_filter(&self.workflow_name, "workflow_name")?;
         Ok(())
     }
 }
@@ -328,4 +341,8 @@ fn validate_optional_filter(
     }
 
     Ok(())
+}
+
+fn normalize_optional_filter(value: &Option<String>) -> Option<String> {
+    value.as_deref().map(str::trim).map(ToOwned::to_owned)
 }

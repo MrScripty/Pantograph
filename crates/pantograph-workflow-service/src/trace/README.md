@@ -31,13 +31,18 @@ and runtime views would drift across hosts and recovery flows.
   trace contract semantics.
 - Snapshot fields and enum labels are machine-consumed and must remain
   deterministic.
+- Snapshot filter normalization and blank-filter rejection must be enforced here
+  so every host reads traces through the same trimmed, backend-owned contract.
 
 ## Decision
 Keep canonical workflow trace ownership in `pantograph-workflow-service`.
 `types.rs` freezes the transport-safe trace vocabulary, `store.rs` owns the
 in-memory retained trace state and request validation path, and `runtime.rs`
 plus `scheduler.rs` apply backend-owned runtime/scheduler facts into the
-canonical run state. Adapters may project or transport these contracts, but
+canonical run state. The canonical trace snapshot filter model is
+`execution_id`, `session_id`, `workflow_id`, `workflow_name`, plus
+`include_completed`, with whitespace trimming and blank-filter rejection applied
+inside this boundary. Adapters may project or transport these contracts, but
 they do not own trace lifecycle rules.
 
 ## Alternatives Rejected
@@ -51,6 +56,8 @@ they do not own trace lifecycle rules.
 ## Invariants
 - `WorkflowTraceStore` is the canonical owner of retained workflow trace state.
 - Request validation for snapshot filters stays here, not in adapters.
+- Trace snapshot filter semantics, including `workflow_name`, stay
+  backend-owned and must not drift between transport surfaces.
 - Runtime and scheduler snapshot application must preserve backend-owned
   execution and session identity when those facts are available.
 - Recovery or replay updates for the same execution id update one canonical run
@@ -87,6 +94,9 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   exported by `mod.rs`.
 - `snapshot()` validates request filters and returns
   `WorkflowTraceSnapshotResponse` with canonical `WorkflowTraceSummary` values.
+- `snapshot()` trims surrounding whitespace from optional filters and rejects
+  blank filter values instead of silently inventing adapter-local fallback
+  semantics.
 - `snapshot_all()` and `clear_history()` operate on the retained in-memory
   trace set owned by this directory.
 - Callers may set execution metadata and graph context additively before or
@@ -99,5 +109,7 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   backend-observed producer runtime id retained for the run.
 - `WorkflowTraceSnapshotResponse.retained_trace_limit` communicates the current
   in-memory retention bound to consumers.
+- `WorkflowTraceSnapshotRequest` supports additive filtering by
+  `execution_id`, `session_id`, `workflow_id`, and `workflow_name`.
 - When a filter field is omitted, snapshot semantics fall back to the backend
   default rather than adapter-specific filtering behavior.

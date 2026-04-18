@@ -12,7 +12,7 @@ use pantograph_workflow_service::{
     WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 
-fn workflow_error_json(error: WorkflowServiceError) -> String {
+pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
 }
 
@@ -183,6 +183,7 @@ pub(crate) fn stored_runtime_trace_metrics(
             execution_id: None,
             session_id: session_id.map(ToOwned::to_owned),
             workflow_id: workflow_id.map(ToOwned::to_owned),
+            workflow_name: None,
             include_completed: Some(true),
         })
         .ok()?

@@ -374,6 +374,7 @@ mod tests {
                 execution_id: Some("run-1".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             })
             .expect("trace snapshot")
@@ -450,6 +451,7 @@ mod tests {
                 execution_id: Some("run-1".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             })
             .expect("trace snapshot")
@@ -511,6 +513,7 @@ mod tests {
                 execution_id: None,
                 session_id: None,
                 workflow_id: Some("wf-1".to_string()),
+                workflow_name: None,
                 include_completed: None,
             })
             .expect("trace snapshot");
@@ -576,6 +579,7 @@ mod tests {
                 execution_id: Some("run-1".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             })
             .expect("trace snapshot")
@@ -681,6 +685,7 @@ mod tests {
                 execution_id: Some("run-1".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             },
         )
@@ -732,6 +737,7 @@ mod tests {
                 execution_id: None,
                 session_id: Some("session-1".to_string()),
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             },
         )
@@ -753,6 +759,7 @@ mod tests {
                 execution_id: Some("   ".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             },
         )

@@ -429,6 +429,7 @@ impl WorkflowDiagnosticsStore {
                 execution_id: Some(execution_id.to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: Some(true),
             })
             .expect("trace snapshot request should be valid")

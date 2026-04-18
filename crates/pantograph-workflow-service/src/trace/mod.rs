@@ -311,6 +311,7 @@ mod tests {
             execution_id: Some("exec-1".to_string()),
             session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
+            workflow_name: Some("Workflow 1".to_string()),
             include_completed: Some(true),
         };
         request.validate().expect("valid trace snapshot request");
@@ -321,6 +322,7 @@ mod tests {
             "execution_id": "exec-1",
             "session_id": "session-1",
             "workflow_id": "wf-1",
+            "workflow_name": "Workflow 1",
             "include_completed": true
         });
 
@@ -333,6 +335,7 @@ mod tests {
             execution_id: Some("   ".to_string()),
             session_id: None,
             workflow_id: None,
+            workflow_name: None,
             include_completed: None,
         };
 
@@ -349,6 +352,24 @@ mod tests {
             "unexpected validation error: {:?}",
             error
         );
+    }
+
+    #[test]
+    fn workflow_trace_snapshot_request_normalizes_trimmed_filters() {
+        let normalized = WorkflowTraceSnapshotRequest {
+            execution_id: Some("  exec-1  ".to_string()),
+            session_id: Some("\tsession-1\t".to_string()),
+            workflow_id: Some(" wf-1 ".to_string()),
+            workflow_name: Some("  Workflow 1  ".to_string()),
+            include_completed: Some(false),
+        }
+        .normalized();
+
+        assert_eq!(normalized.execution_id.as_deref(), Some("exec-1"));
+        assert_eq!(normalized.session_id.as_deref(), Some("session-1"));
+        assert_eq!(normalized.workflow_id.as_deref(), Some("wf-1"));
+        assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
+        assert_eq!(normalized.include_completed, Some(false));
     }
 
     #[test]
@@ -456,6 +477,7 @@ mod tests {
                 execution_id: None,
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: Some(false),
             })
             .expect("filtered snapshot");
@@ -514,6 +536,7 @@ mod tests {
                 execution_id: None,
                 session_id: Some("session-1".to_string()),
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: None,
             })
             .expect("session-filtered snapshot");
@@ -521,6 +544,54 @@ mod tests {
         assert_eq!(filtered.traces.len(), 1);
         assert_eq!(filtered.traces[0].execution_id, "run-1");
         assert_eq!(filtered.traces[0].session_id.as_deref(), Some("session-1"));
+    }
+
+    #[test]
+    fn workflow_trace_store_filters_by_workflow_name() {
+        let store = WorkflowTraceStore::new(10);
+        store.set_execution_metadata(
+            "run-1",
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+        );
+        store.set_execution_metadata(
+            "run-2",
+            Some("wf-2".to_string()),
+            Some("Workflow 2".to_string()),
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "run-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                node_count: 0,
+            },
+            100,
+        );
+        store.record_event(
+            &WorkflowTraceEvent::RunStarted {
+                execution_id: "run-2".to_string(),
+                workflow_id: Some("wf-2".to_string()),
+                node_count: 0,
+            },
+            120,
+        );
+
+        let filtered = store
+            .snapshot(&WorkflowTraceSnapshotRequest {
+                execution_id: None,
+                session_id: None,
+                workflow_id: None,
+                workflow_name: Some("Workflow 1".to_string()),
+                include_completed: None,
+            })
+            .expect("workflow-name-filtered snapshot");
+
+        assert_eq!(filtered.traces.len(), 1);
+        assert_eq!(filtered.traces[0].execution_id, "run-1");
+        assert_eq!(
+            filtered.traces[0].workflow_name.as_deref(),
+            Some("Workflow 1")
+        );
     }
 
     #[test]
@@ -956,6 +1027,7 @@ mod tests {
                 execution_id: Some("exec-mixed".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: Some(true),
             })
             .expect("trace snapshot")

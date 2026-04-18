@@ -258,12 +258,13 @@ impl WorkflowTraceStore {
         &self,
         request: &WorkflowTraceSnapshotRequest,
     ) -> Result<WorkflowTraceSnapshotResponse, WorkflowServiceError> {
+        let request = request.normalized();
         request.validate()?;
         Ok(self
             .state
             .lock()
             .expect("workflow trace lock poisoned")
-            .snapshot(request))
+            .snapshot(&request))
     }
 
     pub fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
@@ -337,6 +338,11 @@ fn trace_matches_request(
     }
     if let Some(workflow_id) = request.workflow_id.as_deref() {
         if trace.workflow_id.as_deref() != Some(workflow_id) {
+            return false;
+        }
+    }
+    if let Some(workflow_name) = request.workflow_name.as_deref() {
+        if trace.workflow_name.as_deref() != Some(workflow_name) {
             return false;
         }
     }

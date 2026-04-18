@@ -14,7 +14,9 @@ use crate::workflow::diagnostics::{
 use crate::workflow::headless_diagnostics_transport::{
     workflow_diagnostics_snapshot_response, workflow_trace_snapshot_response,
 };
-use pantograph_workflow_service::{WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse};
+use pantograph_workflow_service::{
+    WorkflowServiceError, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
 
@@ -68,6 +70,47 @@ pub struct RuntimeDebugSnapshotRequest {
     pub include_trace: Option<bool>,
     #[serde(default)]
     pub include_completed: Option<bool>,
+}
+
+impl RuntimeDebugSnapshotRequest {
+    fn normalized(&self) -> Self {
+        Self {
+            execution_id: normalize_optional_filter(&self.execution_id),
+            session_id: normalize_optional_filter(&self.session_id),
+            workflow_id: normalize_optional_filter(&self.workflow_id),
+            workflow_name: normalize_optional_filter(&self.workflow_name),
+            include_trace: self.include_trace,
+            include_completed: self.include_completed,
+        }
+    }
+
+    fn validate(&self) -> Result<(), WorkflowServiceError> {
+        validate_optional_filter(&self.execution_id, "execution_id")?;
+        validate_optional_filter(&self.session_id, "session_id")?;
+        validate_optional_filter(&self.workflow_id, "workflow_id")?;
+        validate_optional_filter(&self.workflow_name, "workflow_name")?;
+        Ok(())
+    }
+}
+
+fn normalize_optional_filter(value: &Option<String>) -> Option<String> {
+    value.as_deref().map(str::trim).map(ToOwned::to_owned)
+}
+
+fn validate_optional_filter(
+    value: &Option<String>,
+    field_name: &'static str,
+) -> Result<(), WorkflowServiceError> {
+    if let Some(value) = value {
+        if value.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "runtime debug snapshot request field '{}' must not be blank",
+                field_name
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 async fn runtime_registry_snapshot_response(
@@ -165,7 +208,10 @@ pub async fn get_runtime_debug_snapshot(
     let extensions = app
         .try_state::<SharedExtensions>()
         .map(|extensions| (*extensions).clone());
-    let workflow_request = request.unwrap_or_default();
+    let workflow_request = request.unwrap_or_default().normalized();
+    workflow_request
+        .validate()
+        .map_err(|error| error.to_envelope_json())?;
     let execution_id_filter = workflow_request.execution_id.clone();
     let session_id_filter = workflow_request.session_id.clone();
     let workflow_id_filter = workflow_request.workflow_id.clone();
@@ -209,6 +255,7 @@ pub async fn get_runtime_debug_snapshot(
                         execution_id: execution_id_filter,
                         session_id: session_id_filter,
                         workflow_id: workflow_id_filter,
+                        workflow_name: workflow_name_filter,
                         include_completed,
                     },
                 )
@@ -260,8 +307,9 @@ mod tests {
     use crate::workflow::diagnostics::SharedWorkflowDiagnosticsStore;
     use chrono::Utc;
     use pantograph_workflow_service::{
-        graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowSessionState,
-        WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+        graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowServiceError,
+        WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+        WorkflowTraceSnapshotRequest,
     };
 
     struct MockProcessHandle;
@@ -483,6 +531,7 @@ mod tests {
                 execution_id: Some("execution-debug".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: Some(true),
             })
             .expect("workflow trace snapshot");
@@ -641,6 +690,7 @@ mod tests {
                 execution_id: Some("execution-debug".to_string()),
                 session_id: None,
                 workflow_id: None,
+                workflow_name: None,
                 include_completed: Some(true),
             })
             .expect("workflow trace snapshot");
@@ -728,6 +778,38 @@ mod tests {
                 "include_trace": true,
                 "include_completed": false
             })
+        );
+    }
+
+    #[test]
+    fn runtime_debug_snapshot_request_normalizes_and_rejects_blank_filters() {
+        let normalized = RuntimeDebugSnapshotRequest {
+            execution_id: Some("  execution-1  ".to_string()),
+            session_id: Some("  ".to_string()),
+            workflow_id: Some("\tworkflow-1\t".to_string()),
+            workflow_name: Some("  Workflow 1  ".to_string()),
+            include_trace: Some(true),
+            include_completed: Some(false),
+        }
+        .normalized();
+
+        assert_eq!(normalized.execution_id.as_deref(), Some("execution-1"));
+        assert_eq!(normalized.session_id.as_deref(), Some(""));
+        assert_eq!(normalized.workflow_id.as_deref(), Some("workflow-1"));
+        assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
+
+        let error = normalized
+            .validate()
+            .expect_err("blank session_id should be rejected");
+        assert!(
+            matches!(
+                error,
+                WorkflowServiceError::InvalidRequest(ref message)
+                    if message
+                        == "runtime debug snapshot request field 'session_id' must not be blank"
+            ),
+            "unexpected validation error: {:?}",
+            error
         );
     }
 }

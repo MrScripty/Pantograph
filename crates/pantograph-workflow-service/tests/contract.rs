@@ -481,6 +481,7 @@ fn workflow_trace_snapshot_request_contract_snapshot() {
         execution_id: Some("exec-1".to_string()),
         session_id: Some("session-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
+        workflow_name: Some("Workflow 1".to_string()),
         include_completed: Some(true),
     };
     request
@@ -492,6 +493,7 @@ fn workflow_trace_snapshot_request_contract_snapshot() {
         "execution_id": "exec-1",
         "session_id": "session-1",
         "workflow_id": "wf-1",
+        "workflow_name": "Workflow 1",
         "include_completed": true
     });
 
@@ -504,6 +506,7 @@ fn workflow_trace_snapshot_request_rejects_blank_contract_filter() {
         execution_id: Some(String::new()),
         session_id: None,
         workflow_id: None,
+        workflow_name: None,
         include_completed: None,
     };
 

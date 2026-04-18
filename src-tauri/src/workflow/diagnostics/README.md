@@ -32,6 +32,9 @@ the frontend would become a second owner of execution state.
   field names and omission semantics.
 - Clear-history and replay flows must rebuild from backend-owned trace state
   rather than preserving stale adapter-local runs.
+- Diagnostics request trimming may happen here, but canonical trace filter
+  acceptance and rejection semantics must remain aligned with the backend trace
+  contract instead of diverging in Tauri.
 
 ## Decision
 Keep Tauri diagnostics as a projection-only boundary. `store.rs` owns only the
@@ -95,6 +98,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - `trace_snapshot()` validates backend-owned trace filters through
   `WorkflowTraceSnapshotRequest` instead of accepting arbitrary adapter-local
   filtering rules.
+- `WorkflowDiagnosticsSnapshotRequest` uses the same trimmed optional filter
+  model as the combined runtime-debug path and rejects blank filters instead of
+  silently dropping them.
 - `clear_history()` clears retained overlays and backend trace history together
   so the GUI does not keep stale local diagnostics after a reset.
 

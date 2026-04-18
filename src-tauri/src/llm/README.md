@@ -127,6 +127,12 @@ app.manage(gateway);
   building a second local diagnostics path. Optional workflow trace reads must
   likewise reuse the shared backend workflow trace snapshot helper so Tauri
   does not start owning trace assembly or fallback logic.
+- Runtime-debug request normalization may trim filter values at the command
+  boundary, but blank-filter rejection and the accepted filter vocabulary must
+  stay aligned with the backend-owned trace/diagnostics contracts. If
+  `workflow_name` is supported for a combined diagnostics-plus-trace read, that
+  support must come from the backend trace contract rather than from a
+  Tauri-only filter path.
 - Long-lived host services such as health monitoring and recovery must be
   started and stopped by the app composition root or another explicit owner,
   not by arbitrary UI calls. Command handlers may invoke those managed
