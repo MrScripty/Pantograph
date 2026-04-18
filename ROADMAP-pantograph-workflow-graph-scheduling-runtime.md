@@ -614,6 +614,10 @@ incremental runs.
   coverage for its waiting-versus-error result mapping, so backend
   `waiting_for_input` outcomes remain non-error transport states instead of
   being tested only indirectly through the broader execution flow.
+- UniFFI frontend-HTTP session-run coverage now also pins backend-owned
+  `cancelled` and interactive `invalid_request` envelopes at the real binding
+  boundary, so session-backed non-streaming binding parity is no longer
+  inferred only from direct workflow-run coverage.
 - The concrete embedded-runtime workflow host now also has a focused
   pre-cancelled `WorkflowRunHandle` test at the real `WorkflowHost::run_workflow`
   boundary, so non-streaming cancellation parity is no longer inferred only

@@ -649,6 +649,11 @@ Update during implementation:
   transport outcome while still surfacing terminal backend errors directly,
   and that mapping now has dedicated tests instead of being inferred from the
   surrounding runtime execution flow.
+- 2026-04-18: UniFFI frontend-HTTP session-run coverage now also pins
+  backend-owned `cancelled` and interactive `invalid_request` envelopes at the
+  real `frontend_http_workflow_run_session` binding boundary. Session-backed
+  non-streaming binding parity therefore no longer relies on only direct
+  `workflow_run` coverage or lower-level envelope helpers.
 
 ## Commit Cadence Notes
 
