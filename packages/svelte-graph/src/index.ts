@@ -79,6 +79,7 @@ export { DEFAULT_ANIMATION } from './types/view.js';
 // --- Store Factories ---
 export { createWorkflowStores } from './stores/createWorkflowStores.js';
 export type { WorkflowStores } from './stores/createWorkflowStores.js';
+export { applyWorkflowGraphMutationResponse } from './stores/workflowGraphMutationResponse.js';
 
 export { createViewStores } from './stores/createViewStores.js';
 export type { ViewStores, ViewStoreOptions } from './stores/createViewStores.js';

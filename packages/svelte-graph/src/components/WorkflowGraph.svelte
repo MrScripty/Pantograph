@@ -14,6 +14,7 @@
   import { get } from 'svelte/store';
 
   import { useGraphContext } from '../context/useGraphContext.js';
+  import { applyWorkflowGraphMutationResponse } from '../stores/workflowGraphMutationResponse.js';
   import type {
     NodeDefinition,
     GraphEdge,
@@ -458,6 +459,9 @@
 
       if (response.accepted && response.graph) {
         stores.workflow.loadWorkflow(response.graph, get(workflowMetadataStore) ?? undefined);
+        applyWorkflowGraphMutationResponse(response, {
+          setNodeExecutionState: stores.workflow.setNodeExecutionState,
+        });
         clearConnectionInteraction();
         return;
       }
@@ -716,6 +720,9 @@
 
     if (response.accepted && response.graph) {
       stores.workflow.syncEdgesFromBackend(response.graph);
+      applyWorkflowGraphMutationResponse(response, {
+        setNodeExecutionState: stores.workflow.setNodeExecutionState,
+      });
       clearConnectionInteraction();
       return response;
     }
@@ -905,6 +912,9 @@
 
       if (response.accepted && response.graph) {
         stores.workflow.syncEdgesFromBackend(response.graph);
+        applyWorkflowGraphMutationResponse(response, {
+          setNodeExecutionState: stores.workflow.setNodeExecutionState,
+        });
         clearConnectionInteraction();
         return;
       }

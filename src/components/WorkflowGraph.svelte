@@ -30,6 +30,7 @@
     supportsInsertFromConnectionDrag,
     syncHorseshoeDisplay,
     updateHorseshoeAnchor,
+    applyWorkflowGraphMutationResponse,
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
     type ConnectionDragState,
@@ -55,6 +56,7 @@
     clearConnectionIntent,
     loadWorkflow,
     selectedNodeIds,
+    setNodeExecutionState,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
   import type {
@@ -702,6 +704,14 @@
 
       if (response.accepted && response.graph) {
         loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
+        applyWorkflowGraphMutationResponse(
+          {
+            graph: response.graph,
+            workflow_event: response.workflow_event,
+            workflow_session_state: response.workflow_session_state,
+          },
+          { setNodeExecutionState },
+        );
         return true;
       }
 
@@ -882,6 +892,14 @@
 
       if (response.accepted && response.graph) {
         loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
+        applyWorkflowGraphMutationResponse(
+          {
+            graph: response.graph,
+            workflow_event: response.workflow_event,
+            workflow_session_state: response.workflow_session_state,
+          },
+          { setNodeExecutionState },
+        );
         clearConnectionInteraction();
         return;
       }
@@ -1102,6 +1120,14 @@
 
     if (response.accepted && response.graph) {
       syncEdgesFromBackend(response.graph);
+      applyWorkflowGraphMutationResponse(
+        {
+          graph: response.graph,
+          workflow_event: response.workflow_event,
+          workflow_session_state: response.workflow_session_state,
+        },
+        { setNodeExecutionState },
+      );
       clearConnectionInteraction();
       return response;
     }
@@ -1285,6 +1311,14 @@
 
       if (response.accepted && response.graph) {
         syncEdgesFromBackend(response.graph);
+        applyWorkflowGraphMutationResponse(
+          {
+            graph: response.graph,
+            workflow_event: response.workflow_event,
+            workflow_session_state: response.workflow_session_state,
+          },
+          { setNodeExecutionState },
+        );
         clearConnectionInteraction();
         return;
       }
