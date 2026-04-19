@@ -3,6 +3,7 @@
 //! This backend wraps the LlamaServer sidecar management code,
 //! providing the InferenceBackend trait interface.
 
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -14,9 +15,12 @@ use super::{
     EmbeddingResult, InferenceBackend,
 };
 use crate::config::DeviceConfig;
+use crate::constants::defaults;
+use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::process::ProcessSpawner;
-use crate::server::LlamaServer;
+use crate::server::{LlamaServer, ServerMode};
 use crate::types::{RerankRequest, RerankResponse, RerankResult};
+use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
 /// llama.cpp backend using sidecar process management
 ///
@@ -194,6 +198,90 @@ impl LlamaCppBackend {
         });
 
         Box::pin(stream)
+    }
+
+    fn kv_cache_runtime_fingerprint_for_mode(
+        mode: &ServerMode,
+        active_config: Option<&BackendConfig>,
+    ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
+        let (model_path, mmproj_path, device) = match mode {
+            ServerMode::SidecarInference {
+                model_path,
+                mmproj_path,
+                device,
+                ..
+            } => (model_path.as_str(), mmproj_path.as_deref(), device),
+            ServerMode::External { .. } => {
+                return Err(BackendError::Inference(
+                    "KV cache reuse is not supported for external llama.cpp runtimes".to_string(),
+                ));
+            }
+            _ => {
+                return Err(BackendError::Inference(
+                    "KV cache reuse requires llama.cpp inference mode".to_string(),
+                ));
+            }
+        };
+
+        let context_size = active_config
+            .and_then(|config| config.context_size)
+            .unwrap_or(defaults::CONTEXT_SIZE);
+
+        Ok(KvCacheRuntimeFingerprint {
+            runtime_id: canonical_runtime_id("llama.cpp"),
+            backend_key: canonical_runtime_backend_key("llama.cpp"),
+            tokenizer_fingerprint: format!(
+                "llamacpp:{}:{}:{}:{}",
+                model_path, device.device, device.gpu_layers, context_size
+            ),
+            prompt_format_fingerprint: Some(if mmproj_path.is_some() {
+                "llamacpp_completion_multimodal".to_string()
+            } else {
+                "llamacpp_completion".to_string()
+            }),
+            runtime_build_fingerprint: Some(format!("ctx-{}", context_size)),
+        })
+    }
+
+    fn kv_cache_model_fingerprint_for_mode(
+        mode: &ServerMode,
+        active_config: Option<&BackendConfig>,
+    ) -> Result<ModelFingerprint, BackendError> {
+        let (model_path, mmproj_path, device) = match mode {
+            ServerMode::SidecarInference {
+                model_path,
+                mmproj_path,
+                device,
+                ..
+            } => (model_path.as_str(), mmproj_path.as_deref(), device),
+            ServerMode::External { .. } => {
+                return Err(BackendError::Inference(
+                    "KV cache model fingerprint is not supported for external llama.cpp runtimes"
+                        .to_string(),
+                ));
+            }
+            _ => {
+                return Err(BackendError::Inference(
+                    "KV cache model fingerprint requires llama.cpp inference mode".to_string(),
+                ));
+            }
+        };
+
+        let context_size = active_config
+            .and_then(|config| config.context_size)
+            .unwrap_or(defaults::CONTEXT_SIZE);
+
+        Ok(ModelFingerprint {
+            model_id: model_path.to_string(),
+            config_hash: format!(
+                "llamacpp:{}:{}:{}:{}:{}",
+                model_path,
+                mmproj_path.unwrap_or("none"),
+                device.device,
+                device.gpu_layers,
+                context_size
+            ),
+        })
     }
 }
 
@@ -547,6 +635,47 @@ impl InferenceBackend for LlamaCppBackend {
             Err(error) => Err(error),
         }
     }
+
+    async fn kv_cache_runtime_fingerprint(
+        &self,
+        active_config: Option<&BackendConfig>,
+    ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
+        Self::kv_cache_runtime_fingerprint_for_mode(self.server.current_mode(), active_config)
+    }
+
+    async fn kv_cache_model_fingerprint(
+        &self,
+        active_config: Option<&BackendConfig>,
+    ) -> Result<ModelFingerprint, BackendError> {
+        Self::kv_cache_model_fingerprint_for_mode(self.server.current_mode(), active_config)
+    }
+
+    async fn save_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
+        let filename = path.to_str().ok_or_else(|| {
+            BackendError::Config("KV cache slot path must be valid UTF-8".to_string())
+        })?;
+        self.server
+            .save_slot(slot_id, filename)
+            .await
+            .map_err(BackendError::Inference)
+    }
+
+    async fn restore_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
+        let filename = path.to_str().ok_or_else(|| {
+            BackendError::Config("KV cache slot path must be valid UTF-8".to_string())
+        })?;
+        self.server
+            .restore_slot(slot_id, filename)
+            .await
+            .map_err(BackendError::Inference)
+    }
+
+    async fn clear_kv_cache_slot(&self, slot_id: u32) -> Result<(), BackendError> {
+        self.server
+            .erase_slot(slot_id)
+            .await
+            .map_err(BackendError::Inference)
+    }
 }
 
 #[cfg(test)]
@@ -601,6 +730,64 @@ mod tests {
         let backend = LlamaCppBackend::new();
         assert!(!backend.is_ready());
         assert!(backend.base_url().is_none());
+    }
+
+    #[test]
+    fn kv_cache_runtime_fingerprint_reflects_active_inference_mode() {
+        let mode = ServerMode::SidecarInference {
+            port: 8080,
+            model_path: "/models/main.gguf".to_string(),
+            mmproj_path: None,
+            device: DeviceConfig {
+                device: "Vulkan0".to_string(),
+                gpu_layers: 40,
+            },
+        };
+        let config = BackendConfig {
+            context_size: Some(8192),
+            ..BackendConfig::default()
+        };
+
+        let fingerprint =
+            LlamaCppBackend::kv_cache_runtime_fingerprint_for_mode(&mode, Some(&config))
+                .expect("llama.cpp inference mode should support KV fingerprints");
+
+        assert_eq!(fingerprint.runtime_id, "llama_cpp");
+        assert_eq!(fingerprint.backend_key, "llama_cpp");
+        assert!(fingerprint
+            .tokenizer_fingerprint
+            .contains("/models/main.gguf"));
+        assert_eq!(
+            fingerprint.prompt_format_fingerprint.as_deref(),
+            Some("llamacpp_completion")
+        );
+        assert_eq!(
+            fingerprint.runtime_build_fingerprint.as_deref(),
+            Some("ctx-8192")
+        );
+    }
+
+    #[test]
+    fn kv_cache_model_fingerprint_reflects_context_and_device() {
+        let mode = ServerMode::SidecarInference {
+            port: 8080,
+            model_path: "/models/main.gguf".to_string(),
+            mmproj_path: Some("/models/vision.mmproj".to_string()),
+            device: DeviceConfig {
+                device: "auto".to_string(),
+                gpu_layers: -1,
+            },
+        };
+
+        let fingerprint = LlamaCppBackend::kv_cache_model_fingerprint_for_mode(&mode, None)
+            .expect("llama.cpp inference mode should support model fingerprints");
+
+        assert_eq!(fingerprint.model_id, "/models/main.gguf");
+        assert!(fingerprint.config_hash.contains("/models/vision.mmproj"));
+        assert!(fingerprint.config_hash.contains("auto"));
+        assert!(fingerprint
+            .config_hash
+            .contains(&defaults::CONTEXT_SIZE.to_string()));
     }
 
     #[tokio::test]

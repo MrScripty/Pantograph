@@ -17,6 +17,7 @@ use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use crate::types::ServerModeInfo;
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
+const KV_SLOT_SAVE_DIR: &str = "llama-kv-slots";
 
 fn normalize_server_url(url: &str) -> String {
     url.trim_end_matches('/').to_string()
@@ -50,6 +51,27 @@ fn oom_error_message(hint: Option<&str>) -> String {
     match hint {
         Some(line) if !line.is_empty() => format!("Out of GPU memory (OOM): {}", line),
         _ => "Out of GPU memory (OOM).".to_string(),
+    }
+}
+
+fn kv_slot_save_dir(app_data_dir: &std::path::Path) -> PathBuf {
+    app_data_dir.join(KV_SLOT_SAVE_DIR)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SlotAction {
+    Save,
+    Restore,
+    Erase,
+}
+
+impl SlotAction {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Save => "save",
+            Self::Restore => "restore",
+            Self::Erase => "erase",
+        }
     }
 }
 
@@ -208,6 +230,10 @@ impl LlamaServer {
         let app_data_dir = spawner.app_data_dir()?;
         let pid_file = app_data_dir.join(SIDECAR_PID_FILE);
         let pid_file_str = pid_file.to_string_lossy().to_string();
+        let slot_save_dir = kv_slot_save_dir(&app_data_dir);
+        fs::create_dir_all(&slot_save_dir)
+            .map_err(|e| format!("Failed to create llama.cpp KV slot directory: {}", e))?;
+        let slot_save_dir_str = slot_save_dir.to_string_lossy().to_string();
 
         // Build base args
         let mut args: Vec<String> = vec![
@@ -224,6 +250,9 @@ impl LlamaServer {
             gpu_layers_str,
             "--pid-file".to_string(),
             pid_file_str,
+            "--slots".to_string(),
+            "--slot-save-path".to_string(),
+            slot_save_dir_str,
         ];
 
         // Add mmproj only for vision/multimodal models
@@ -650,6 +679,64 @@ impl LlamaServer {
         &self.mode
     }
 
+    async fn execute_slot_action(
+        &self,
+        slot_id: u32,
+        action: SlotAction,
+        filename: Option<&str>,
+    ) -> Result<(), String> {
+        if !self.ready {
+            return Err("llama-server is not ready".to_string());
+        }
+
+        let base_url = self
+            .base_url()
+            .ok_or_else(|| "llama-server has no base URL".to_string())?;
+        let client = reqwest::Client::new();
+        let url = format!("{}/slots/{}?action={}", base_url, slot_id, action.as_str());
+
+        let request = if let Some(filename) = filename {
+            client
+                .post(&url)
+                .json(&serde_json::json!({ "filename": filename }))
+        } else {
+            client.post(&url)
+        };
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("llama.cpp slot {} request failed: {}", action.as_str(), e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!(
+                "llama.cpp slot {} failed with status {}: {}",
+                action.as_str(),
+                status,
+                body
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub async fn save_slot(&self, slot_id: u32, filename: &str) -> Result<(), String> {
+        self.execute_slot_action(slot_id, SlotAction::Save, Some(filename))
+            .await
+    }
+
+    pub async fn restore_slot(&self, slot_id: u32, filename: &str) -> Result<(), String> {
+        self.execute_slot_action(slot_id, SlotAction::Restore, Some(filename))
+            .await
+    }
+
+    pub async fn erase_slot(&self, slot_id: u32) -> Result<(), String> {
+        self.execute_slot_action(slot_id, SlotAction::Erase, None)
+            .await
+    }
+
     #[cfg(test)]
     pub(crate) fn set_test_runtime_state(&mut self, mode: ServerMode, ready: bool) {
         self.mode = mode;
@@ -741,6 +828,15 @@ mod tests {
         );
 
         assert_eq!(server.base_url().as_deref(), Some("http://127.0.0.1:18080"));
+    }
+
+    #[test]
+    fn kv_slot_save_dir_is_scoped_under_app_data_dir() {
+        let dir = super::kv_slot_save_dir(std::path::Path::new("/tmp/pantograph"));
+        assert_eq!(
+            dir,
+            std::path::PathBuf::from("/tmp/pantograph").join("llama-kv-slots")
+        );
     }
 
     #[test]

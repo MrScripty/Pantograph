@@ -18,6 +18,7 @@ use crate::backend::{
     BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
+use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::process::ProcessSpawner;
 use crate::types::{
     ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse,
@@ -178,6 +179,63 @@ impl InferenceGateway {
     /// Get the name of the currently active backend
     pub async fn current_backend_name(&self) -> String {
         self.current_backend_name.read().await.clone()
+    }
+
+    pub async fn kv_cache_runtime_fingerprint(
+        &self,
+    ) -> Result<KvCacheRuntimeFingerprint, GatewayError> {
+        let active_config = self.current_runtime_config.read().await.clone();
+        self.backend
+            .read()
+            .await
+            .kv_cache_runtime_fingerprint(active_config.as_ref())
+            .await
+            .map_err(GatewayError::Backend)
+    }
+
+    pub async fn kv_cache_model_fingerprint(&self) -> Result<ModelFingerprint, GatewayError> {
+        let active_config = self.current_runtime_config.read().await.clone();
+        self.backend
+            .read()
+            .await
+            .kv_cache_model_fingerprint(active_config.as_ref())
+            .await
+            .map_err(GatewayError::Backend)
+    }
+
+    pub async fn save_kv_cache_slot(
+        &self,
+        slot_id: u32,
+        path: &std::path::Path,
+    ) -> Result<(), GatewayError> {
+        self.backend
+            .read()
+            .await
+            .save_kv_cache_slot(slot_id, path)
+            .await
+            .map_err(GatewayError::Backend)
+    }
+
+    pub async fn restore_kv_cache_slot(
+        &self,
+        slot_id: u32,
+        path: &std::path::Path,
+    ) -> Result<(), GatewayError> {
+        self.backend
+            .read()
+            .await
+            .restore_kv_cache_slot(slot_id, path)
+            .await
+            .map_err(GatewayError::Backend)
+    }
+
+    pub async fn clear_kv_cache_slot(&self, slot_id: u32) -> Result<(), GatewayError> {
+        self.backend
+            .read()
+            .await
+            .clear_kv_cache_slot(slot_id)
+            .await
+            .map_err(GatewayError::Backend)
     }
 
     /// Build backend-owned startup config for inference mode using the active backend.
@@ -753,6 +811,7 @@ mod tests {
     struct MockReusedBackend;
     struct MockImplicitLifecycleBackend;
     struct MockFailingBackend;
+    struct MockKvBackend;
 
     struct MockProcessHandle;
 
@@ -1147,6 +1206,109 @@ mod tests {
         }
     }
 
+    #[async_trait]
+    impl InferenceBackend for MockKvBackend {
+        fn name(&self) -> &'static str {
+            "MockKv"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock backend with KV support"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome::default())
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            Some("http://127.0.0.1:11434".to_string())
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
+        async fn kv_cache_runtime_fingerprint(
+            &self,
+            _active_config: Option<&BackendConfig>,
+        ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
+            Ok(KvCacheRuntimeFingerprint {
+                runtime_id: "mock".to_string(),
+                backend_key: "mock".to_string(),
+                tokenizer_fingerprint: "tok".to_string(),
+                prompt_format_fingerprint: Some("prompt".to_string()),
+                runtime_build_fingerprint: Some("build".to_string()),
+            })
+        }
+
+        async fn kv_cache_model_fingerprint(
+            &self,
+            _active_config: Option<&BackendConfig>,
+        ) -> Result<ModelFingerprint, BackendError> {
+            Ok(ModelFingerprint {
+                model_id: "model".to_string(),
+                config_hash: "cfg".to_string(),
+            })
+        }
+
+        async fn save_kv_cache_slot(
+            &self,
+            _slot_id: u32,
+            _path: &std::path::Path,
+        ) -> Result<(), BackendError> {
+            Ok(())
+        }
+
+        async fn restore_kv_cache_slot(
+            &self,
+            _slot_id: u32,
+            _path: &std::path::Path,
+        ) -> Result<(), BackendError> {
+            Ok(())
+        }
+
+        async fn clear_kv_cache_slot(&self, _slot_id: u32) -> Result<(), BackendError> {
+            Ok(())
+        }
+    }
+
     #[cfg(feature = "backend-llamacpp")]
     #[test]
     fn test_gateway_creation() {
@@ -1403,6 +1565,37 @@ mod tests {
         assert_eq!(mode.backend_name.as_deref(), Some("mock"));
         assert_eq!(mode.backend_key.as_deref(), Some("mock"));
         assert!(mode.active_runtime.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_kv_gateway_methods_delegate_to_backend() {
+        let gateway = InferenceGateway::with_backend(Box::new(MockKvBackend), "mock-kv");
+
+        let runtime = gateway
+            .kv_cache_runtime_fingerprint()
+            .await
+            .expect("runtime fingerprint should be available");
+        assert_eq!(runtime.runtime_id, "mock");
+
+        let model = gateway
+            .kv_cache_model_fingerprint()
+            .await
+            .expect("model fingerprint should be available");
+        assert_eq!(model.model_id, "model");
+
+        let path = std::path::Path::new("/tmp/mock-slot.bin");
+        gateway
+            .save_kv_cache_slot(0, path)
+            .await
+            .expect("save should delegate to backend");
+        gateway
+            .restore_kv_cache_slot(0, path)
+            .await
+            .expect("restore should delegate to backend");
+        gateway
+            .clear_kv_cache_slot(0)
+            .await
+            .expect("clear should delegate to backend");
     }
 
     #[tokio::test]

@@ -18,6 +18,7 @@ pub mod candle;
 #[cfg(feature = "backend-pytorch")]
 pub mod pytorch;
 
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -25,6 +26,7 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 
+use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
 use crate::process::ProcessSpawner;
 use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
@@ -266,6 +268,48 @@ pub trait InferenceBackend: Send + Sync {
     ) -> Result<ImageGenerationResult, BackendError> {
         Err(BackendError::Inference(
             "Image generation not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Describe the active runtime semantics that govern whether one KV artifact
+    /// may be reused by this backend.
+    async fn kv_cache_runtime_fingerprint(
+        &self,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
+        Err(BackendError::Inference(
+            "KV cache runtime fingerprint not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Describe the active model configuration for KV-compatibility checks.
+    async fn kv_cache_model_fingerprint(
+        &self,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<ModelFingerprint, BackendError> {
+        Err(BackendError::Inference(
+            "KV cache model fingerprint not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Persist the active runtime slot state into a backend-owned file.
+    async fn save_kv_cache_slot(&self, _slot_id: u32, _path: &Path) -> Result<(), BackendError> {
+        Err(BackendError::Inference(
+            "KV cache slot save not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Restore a backend-owned file into a live runtime slot.
+    async fn restore_kv_cache_slot(&self, _slot_id: u32, _path: &Path) -> Result<(), BackendError> {
+        Err(BackendError::Inference(
+            "KV cache slot restore not supported by this backend".to_string(),
+        ))
+    }
+
+    /// Clear the active runtime slot state after a restore, failure, or reset.
+    async fn clear_kv_cache_slot(&self, _slot_id: u32) -> Result<(), BackendError> {
+        Err(BackendError::Inference(
+            "KV cache slot clear not supported by this backend".to_string(),
         ))
     }
 }

@@ -338,7 +338,7 @@ end-to-end KV behavior.
   later compatible reuse
 - Re-run affected suites to detect durable cache-state leakage
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Integrate KV With Workflow Sessions And Partial Reruns
 

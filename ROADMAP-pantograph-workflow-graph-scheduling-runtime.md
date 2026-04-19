@@ -68,7 +68,10 @@ descriptor-only stubs that direct execution to `CoreTaskExecutor`. The third
 slice now gives the workflow graph a first-class `kv_cache` port type across
 backend, transport, and Svelte graph mirrors, and compatible inference/storage
 descriptors now expose explicit KV ports instead of hiding reuse behind
-generic JSON.
+generic JSON. Milestone 4 is now in progress in the inference layer: the
+backend/gateway boundary exposes backend-owned KV runtime fingerprints, model
+fingerprints, and live llama.cpp slot save/restore hooks so node execution can
+compose through one runtime adapter instead of inventing host-side KV logic.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -540,6 +543,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - Workflow graphs now expose a first-class `kv_cache` port type, validation now
   rejects `kv_cache` connections to non-`kv_cache` ports, and compatible
   inference/storage descriptors now publish explicit KV input/output ports
+- The inference layer now exposes backend-owned KV runtime hooks, and the first
+  concrete runtime adapter is llama.cpp slot persistence plus runtime/model
+  fingerprint derivation through the gateway/backend boundary
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

@@ -37,6 +37,12 @@ artifacts, but the inference KV store remains the single cache owner.
 
 - Runtime implementations provide the actual capture, restore, and truncation
   behavior through `KvCacheCodec`.
+- The inference backend and gateway layers expose backend-owned runtime
+  fingerprint, model fingerprint, and live slot persistence hooks before
+  `node-engine` consumes them.
+- The first concrete runtime adapter is llama.cpp slot persistence. It owns the
+  live-runtime save/restore boundary; later workflow execution slices should
+  compose through that adapter instead of duplicating HTTP slot logic.
 - `node-engine` owns execution-path behavior for KV save/load/truncate nodes.
 - Workflow-node descriptor code may describe KV ports, but it must not become a
   parallel KV execution owner.
