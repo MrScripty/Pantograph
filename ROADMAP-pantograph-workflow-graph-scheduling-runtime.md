@@ -172,6 +172,10 @@ reconciled as the final source of truth.
   workflow-service runtime-preflight helpers before reservation/warmup, so
   direct load callers cannot bypass redistributable readiness enforcement
   while Milestone 4 restore/recovery follow-up remains in progress.
+- Checkpointed keep-alive session resumes now also have backend regression
+  coverage for runtime-readiness failure and retry, proving a missing
+  redistributable blocks restore without discarding the checkpointed session
+  state needed for a later successful resume.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

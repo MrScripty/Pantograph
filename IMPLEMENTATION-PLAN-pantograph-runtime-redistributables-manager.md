@@ -533,6 +533,11 @@ Update during implementation:
   before reservation/warmup when the selected redistributable is missing or
   not ready. The remaining Milestone 4 restore work is now narrowed to
   replay/recovery-specific paths instead of the generic host load boundary.
+- 2026-04-19: Milestone 4 slice 5 added resume/recovery coverage for
+  checkpointed keep-alive sessions whose selected redistributable becomes
+  unavailable between unload and restore. The resume path now has regression
+  coverage proving it returns `RuntimeNotReady`, preserves the checkpoint for
+  retry, and resumes successfully after the runtime becomes ready again.
 
 ## Commit Cadence Notes
 

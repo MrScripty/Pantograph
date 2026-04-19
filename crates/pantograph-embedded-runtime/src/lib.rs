@@ -4807,6 +4807,184 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir: app_data_dir.clone(),
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let session = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+
+        runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("alpha"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-first".to_string()),
+            })
+            .await
+            .expect("run keep-alive session");
+
+        let executor = runtime
+            .session_executions
+            .handle(&session.session_id)
+            .expect("session execution lookup should succeed")
+            .expect("keep-alive executor should exist");
+
+        let one_shot = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("batch".to_string()),
+                keep_alive: false,
+            })
+            .await
+            .expect("create one-shot session");
+
+        let one_shot_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: one_shot.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("beta"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-one-shot".to_string()),
+            })
+            .await
+            .expect("run one-shot session to force keep-alive rebalance");
+        assert_eq!(one_shot_output.outputs[0].value, serde_json::json!("beta"));
+
+        let checkpointed_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+        assert!(checkpointed_summary.checkpoint_available);
+
+        std::fs::remove_dir_all(app_data_dir.join("runtimes").join("llama-cpp"))
+            .expect("remove fake runtime before resume");
+
+        let error = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-resume-missing-runtime".to_string()),
+            })
+            .await
+            .expect_err("resume should fail when the selected runtime is no longer ready");
+        match error {
+            WorkflowServiceError::RuntimeNotReady(message) => {
+                assert!(
+                    message.contains("llama.cpp"),
+                    "unexpected runtime-not-ready message: {message}"
+                );
+            }
+            other => panic!("expected runtime-not-ready error, got {other:?}"),
+        }
+
+        let failed_resume_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+        assert!(failed_resume_summary.checkpoint_available);
+        assert_eq!(
+            failed_resume_summary.checkpointed_at_ms,
+            checkpointed_summary.checkpointed_at_ms
+        );
+        assert_eq!(
+            failed_resume_summary.residency,
+            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        );
+
+        install_fake_default_runtime(&app_data_dir);
+
+        let resumed_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-resume-runtime-restored".to_string()),
+            })
+            .await
+            .expect("resume should succeed after the runtime becomes ready again");
+        assert_eq!(resumed_output.outputs[0].value, serde_json::json!("alpha"));
+
+        let resumed_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+        assert!(!resumed_summary.checkpoint_available);
+        assert_eq!(
+            resumed_summary.residency,
+            node_engine::WorkflowSessionResidencyState::Warm
+        );
+
+        runtime
+            .close_workflow_session(WorkflowSessionCloseRequest {
+                session_id: session.session_id.clone(),
+            })
+            .await
+            .expect("close resumed keep-alive session");
+    }
+
+    #[tokio::test]
     async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes() {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");
