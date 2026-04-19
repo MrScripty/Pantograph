@@ -2,9 +2,9 @@ use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
-    WorkflowHost, WorkflowHostCapabilities, WorkflowRuntimeCapability, WorkflowRuntimeIssue,
-    WorkflowRuntimeRequirements, WorkflowService, WorkflowServiceError, evaluate_runtime_preflight,
-    validate_workflow_id,
+    evaluate_runtime_preflight, validate_workflow_id, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowRuntimeCapability, WorkflowRuntimeIssue, WorkflowRuntimeRequirements, WorkflowService,
+    WorkflowServiceError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

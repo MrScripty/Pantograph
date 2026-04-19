@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use node_engine::GraphMemoryImpactSummary;
 use serde::{Deserialize, Serialize};
 
-use crate::WorkflowSchedulerSnapshotDiagnostics;
 use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary,
 };
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

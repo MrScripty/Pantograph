@@ -310,7 +310,8 @@ pub(crate) async fn run_session_workflow(
     let mut node_outputs = HashMap::new();
     let run_result = async {
         if replayed_inputs {
-            let carried_inputs = replay_carried_inputs(&executor, workflow_session_id, host).await?;
+            let carried_inputs =
+                replay_carried_inputs(&executor, workflow_session_id, host).await?;
             host.session_executions
                 .set_carried_inputs(workflow_session_id, carried_inputs)?;
         }
@@ -345,9 +346,7 @@ pub(crate) async fn run_session_workflow(
     }
     if restored_from_checkpoint {
         executor
-            .set_workflow_session_residency(
-                node_engine::WorkflowSessionResidencyState::Restored,
-            )
+            .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Restored)
             .await;
         executor
             .clear_workflow_session_checkpoint(workflow_session_id)

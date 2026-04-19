@@ -139,9 +139,9 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        RecoveryAttemptPlanError, RecoveryRestartPlanError, RecoveryStrategy,
         build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
-        recovery_strategy_for_attempt,
+        recovery_strategy_for_attempt, RecoveryAttemptPlanError, RecoveryRestartPlanError,
+        RecoveryStrategy,
     };
 
     #[test]

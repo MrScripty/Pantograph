@@ -23,7 +23,7 @@ pub use persistence::{
     FileSystemWorkflowGraphStore, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
-pub use registry::{NodeRegistry, validate_workflow_connection};
+pub use registry::{validate_workflow_connection, NodeRegistry};
 pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use session_graph::convert_graph_to_node_engine;

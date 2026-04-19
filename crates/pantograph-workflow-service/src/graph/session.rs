@@ -6,8 +6,8 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionSummary, scheduler_snapshot_trace_execution_id,
+    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowSessionQueueItem, WorkflowSessionSummary,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -19,9 +19,9 @@ use super::connection_intent::{
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
+    build_workflow_session_state_view, resolve_workflow_session_memory_impact,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
-    WorkflowGraphSessionStateView, build_workflow_session_state_view,
-    resolve_workflow_session_memory_impact,
+    WorkflowGraphSessionStateView,
 };
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
@@ -1198,12 +1198,10 @@ mod tests {
         assert!(response.accepted);
         let graph = response.graph.expect("updated graph");
         assert_eq!(graph.edges.len(), 2);
-        assert!(
-            graph
-                .edges
-                .iter()
-                .all(|edge| edge.id != "text-input-text-text-output-text")
-        );
+        assert!(graph
+            .edges
+            .iter()
+            .all(|edge| edge.id != "text-input-text-text-output-text"));
         let inserted_node_id = response.inserted_node_id.expect("inserted node id");
         assert!(graph.find_node(&inserted_node_id).is_some());
         assert!(matches!(
@@ -1220,12 +1218,10 @@ mod tests {
             .expect("workflow session state")
             .memory_impact
             .expect("memory impact");
-        assert!(
-            response_memory_impact
-                .node_decisions
-                .iter()
-                .any(|decision| decision.node_id == inserted_node_id)
-        );
+        assert!(response_memory_impact
+            .node_decisions
+            .iter()
+            .any(|decision| decision.node_id == inserted_node_id));
 
         let snapshot = store
             .get_session_graph(&session.session_id)
@@ -1237,12 +1233,10 @@ mod tests {
             .memory_impact
             .expect("memory impact");
         assert!(!memory_impact.node_decisions.is_empty());
-        assert!(
-            memory_impact
-                .node_decisions
-                .iter()
-                .any(|decision| decision.node_id == inserted_node_id)
-        );
+        assert!(memory_impact
+            .node_decisions
+            .iter()
+            .any(|decision| decision.node_id == inserted_node_id));
     }
 
     #[tokio::test]

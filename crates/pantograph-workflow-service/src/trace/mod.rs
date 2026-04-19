@@ -91,12 +91,14 @@ mod tests {
                 node_decisions: vec![
                     node_engine::NodeMemoryCompatibilitySnapshot {
                         node_id: "merge".to_string(),
-                        compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                        compatibility:
+                            node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
                         reason: Some("upstream input updated".to_string()),
                     },
                     node_engine::NodeMemoryCompatibilitySnapshot {
                         node_id: "output".to_string(),
-                        compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                        compatibility:
+                            node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
                         reason: Some("compatibility unknown".to_string()),
                     },
                 ],
@@ -1312,7 +1314,10 @@ mod tests {
         assert_eq!(trace.duration_ms, None);
         assert_eq!(trace.last_error, None);
         assert_eq!(trace.event_count, 3);
-        assert_eq!(trace.last_incremental_task_ids, vec!["resume-node".to_string()]);
+        assert_eq!(
+            trace.last_incremental_task_ids,
+            vec!["resume-node".to_string()]
+        );
     }
 
     #[test]
@@ -1328,12 +1333,14 @@ mod tests {
                     node_decisions: vec![
                         node_engine::NodeMemoryCompatibilitySnapshot {
                             node_id: "merge".to_string(),
-                            compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                            compatibility:
+                                node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
                             reason: Some("upstream input updated".to_string()),
                         },
                         node_engine::NodeMemoryCompatibilitySnapshot {
                             node_id: "output".to_string(),
-                            compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                            compatibility:
+                                node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
                             reason: Some("compatibility unknown".to_string()),
                         },
                     ],
@@ -1354,12 +1361,14 @@ mod tests {
                 node_decisions: vec![
                     node_engine::NodeMemoryCompatibilitySnapshot {
                         node_id: "merge".to_string(),
-                        compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                        compatibility:
+                            node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
                         reason: Some("upstream input updated".to_string()),
                     },
                     node_engine::NodeMemoryCompatibilitySnapshot {
                         node_id: "output".to_string(),
-                        compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                        compatibility:
+                            node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
                         reason: Some("compatibility unknown".to_string()),
                     },
                 ],

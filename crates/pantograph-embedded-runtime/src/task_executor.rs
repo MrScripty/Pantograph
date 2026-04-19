@@ -6,15 +6,16 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
 use node_engine::{
-    Context, DependencyState, EventSink, ExecutorExtensions, ModelDependencyRequest,
-    ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, NodeEngineError,
-    Result, TaskExecutor, WorkflowEvent, core_executor::resolve_node_type, extension_keys,
+    core_executor::resolve_node_type, extension_keys, Context, DependencyState, EventSink,
+    ExecutorExtensions, ModelDependencyRequest, ModelDependencyRequirements,
+    ModelDependencyResolver, ModelDependencyStatus, NodeEngineError, Result, TaskExecutor,
+    WorkflowEvent,
 };
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
@@ -1494,10 +1495,10 @@ impl TaskExecutor for TauriTaskExecutor {
 mod tests {
     use super::*;
     use node_engine::{
-        DependencyState, DependencyValidationState, ExecutorExtensions, ModelDependencyBinding,
-        ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
-        ModelDependencyRequirements, ModelDependencyResolver, ModelDependencyStatus, ModelRefV2,
-        VecEventSink, WorkflowEvent, extension_keys,
+        extension_keys, DependencyState, DependencyValidationState, ExecutorExtensions,
+        ModelDependencyBinding, ModelDependencyBindingStatus, ModelDependencyInstallResult,
+        ModelDependencyRequest, ModelDependencyRequirements, ModelDependencyResolver,
+        ModelDependencyStatus, ModelRefV2, VecEventSink, WorkflowEvent,
     };
     use std::sync::Mutex;
 
