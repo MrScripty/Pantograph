@@ -99,6 +99,9 @@ changing the public executor surface.
   also project from backend cache state through `workflow_session.rs` after
   successful execution rather than reintroducing Phase 6 memory persistence
   logic into `engine.rs` or transport adapters.
+- Execution-time node-memory projection should capture backend-resolved input
+  snapshots before task execution so later Phase 6 inspection and reuse logic
+  does not have to infer inputs back out of cached outputs or adapter state.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under

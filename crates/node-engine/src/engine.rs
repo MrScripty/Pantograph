@@ -105,6 +105,9 @@ pub struct DemandEngine {
     versions: HashMap<NodeId, u64>,
     /// Cached outputs with their computed-at version
     cache: HashMap<NodeId, CachedOutput>,
+    /// Last resolved task inputs captured at execution time for node-memory
+    /// projection and inspection.
+    last_inputs: HashMap<NodeId, serde_json::Value>,
     /// Global version counter (for marking external changes)
     global_version: u64,
     /// Execution ID for events
@@ -117,6 +120,7 @@ impl DemandEngine {
         Self {
             versions: HashMap::new(),
             cache: HashMap::new(),
+            last_inputs: HashMap::new(),
             global_version: 0,
             execution_id: execution_id.into(),
         }
@@ -132,6 +136,7 @@ impl DemandEngine {
         // Clear this node's cache (downstream caches will auto-invalidate
         // due to version mismatch on next demand)
         self.cache.remove(node_id);
+        self.last_inputs.remove(node_id);
     }
 
     /// Get the cached output for a node, if valid
@@ -176,6 +181,7 @@ impl DemandEngine {
     /// Clear the entire cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.last_inputs.clear();
     }
 
     /// Get the execution ID
@@ -195,7 +201,23 @@ impl DemandEngine {
     fn reconcile_isolated_run(&mut self, base: &Self, isolated: &Self) {
         reconcile_changed_node_entries(&mut self.versions, &base.versions, &isolated.versions);
         reconcile_changed_node_entries(&mut self.cache, &base.cache, &isolated.cache);
+        reconcile_changed_node_entries(
+            &mut self.last_inputs,
+            &base.last_inputs,
+            &isolated.last_inputs,
+        );
         self.global_version = self.global_version.max(isolated.global_version);
+    }
+
+    fn record_input_snapshot(
+        &mut self,
+        node_id: &NodeId,
+        inputs: HashMap<String, serde_json::Value>,
+    ) {
+        self.last_inputs.insert(
+            node_id.clone(),
+            serde_json::Value::Object(inputs.into_iter().collect()),
+        );
     }
 
     /// Demand output from a node - the core lazy evaluation method
@@ -298,6 +320,7 @@ impl DemandEngine {
             if invalidated.insert(current.clone()) {
                 // Remove from cache
                 self.cache.remove(&current);
+                self.last_inputs.remove(&current);
 
                 // Add all dependents (downstream nodes)
                 for dependent in graph.get_dependents(&current) {

@@ -819,6 +819,11 @@ Update during implementation:
   semantics across repeated runs against the same bound session, closing the
   Milestone 3 state-isolation test slice without claiming memory-consumption or
   restore behavior that has not landed yet.
+- 2026-04-18: Milestone 3 continued. `DemandEngine` now also preserves backend-
+  resolved input snapshots alongside cached outputs, and Phase 6 cache
+  projection now emits canonical input fingerprints plus inspection metadata
+  from those real execution-time inputs for both sequential and bounded-
+  parallel multi-demand paths.
 
 ## Commit Cadence Notes
 

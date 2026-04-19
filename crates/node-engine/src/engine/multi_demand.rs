@@ -1443,6 +1443,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_executor_parallel_multi_demand_reconciles_input_snapshots() {
+        let workflow_executor = WorkflowExecutor::new(
+            "exec-1",
+            make_parallel_roots_graph(),
+            Arc::new(NullEventSink),
+        );
+        workflow_executor.bind_workflow_session("session-1").await;
+
+        workflow_executor
+            .demand_multiple(
+                &["left".to_string(), "right".to_string()],
+                &SnapshotTaskExecutor,
+            )
+            .await
+            .expect("parallel multi-demand graph");
+
+        let snapshots = workflow_executor
+            .workflow_session_node_memory_snapshots("session-1")
+            .await;
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(
+            snapshots
+                .iter()
+                .map(|snapshot| snapshot.identity.node_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["left", "right"]
+        );
+        assert!(
+            snapshots
+                .iter()
+                .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}"))
+        );
+        assert!(snapshots.iter().all(|snapshot| {
+            snapshot.inspection_metadata
+                == Some(serde_json::json!({
+                    "projection_source": "demand_engine_cache",
+                    "cache_version": 0,
+                    "input_snapshot": { "_data": {} }
+                }))
+        }));
+    }
+
+    #[tokio::test]
     #[ignore = "benchmark-like harness for comparing sequential and bounded parallel demand"]
     async fn demand_harness_compares_sequential_and_parallel_baselines() {
         let sequential = run_parallel_demand_harness(1).await;

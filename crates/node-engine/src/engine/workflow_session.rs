@@ -85,7 +85,13 @@ pub(super) async fn sync_bound_session_node_memory_from_cache(executor: &Workflo
             .cache
             .iter()
             .filter_map(|(node_id, cached)| {
-                node_memory_snapshot_from_cache_entry(&workflow_session_id, node_id, cached, &graph)
+                node_memory_snapshot_from_cache_entry(
+                    &workflow_session_id,
+                    node_id,
+                    cached,
+                    demand_engine.last_inputs.get(node_id),
+                    &graph,
+                )
             })
             .collect::<Vec<_>>()
     };
@@ -99,6 +105,7 @@ fn node_memory_snapshot_from_cache_entry(
     workflow_session_id: &str,
     node_id: &NodeId,
     cached: &super::CachedOutput,
+    input_snapshot: Option<&serde_json::Value>,
     graph: &crate::types::WorkflowGraph,
 ) -> Option<NodeMemorySnapshot> {
     let node = graph.find_node(node_id)?;
@@ -110,10 +117,10 @@ fn node_memory_snapshot_from_cache_entry(
             schema_version: node_schema_version(&node.data),
         },
         status: NodeMemoryStatus::Ready,
-        input_fingerprint: None,
+        input_fingerprint: input_snapshot.map(canonical_json_fingerprint),
         output_snapshot: Some(cached.value.clone()),
         private_state: None,
-        inspection_metadata: None,
+        inspection_metadata: Some(cache_projection_metadata(input_snapshot, cached.version)),
     })
 }
 
@@ -131,6 +138,59 @@ fn node_schema_version(node_data: &serde_json::Value) -> Option<String> {
                 })
         })
         .map(str::to_string)
+}
+
+fn cache_projection_metadata(
+    input_snapshot: Option<&serde_json::Value>,
+    cache_version: u64,
+) -> serde_json::Value {
+    let mut metadata = serde_json::Map::from_iter([
+        (
+            "projection_source".to_string(),
+            serde_json::json!("demand_engine_cache"),
+        ),
+        (
+            "cache_version".to_string(),
+            serde_json::json!(cache_version),
+        ),
+    ]);
+    if let Some(input_snapshot) = input_snapshot {
+        metadata.insert("input_snapshot".to_string(), input_snapshot.clone());
+    }
+    serde_json::Value::Object(metadata)
+}
+
+fn canonical_json_fingerprint(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "null".to_string(),
+        serde_json::Value::Bool(value) => value.to_string(),
+        serde_json::Value::Number(value) => value.to_string(),
+        serde_json::Value::String(value) => serde_json::to_string(value).unwrap_or_default(),
+        serde_json::Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(canonical_json_fingerprint)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        serde_json::Value::Object(values) => {
+            let mut entries = values.iter().collect::<Vec<_>>();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            format!(
+                "{{{}}}",
+                entries
+                    .into_iter()
+                    .map(|(key, value)| format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_default(),
+                        canonical_json_fingerprint(value)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+    }
 }
 
 #[cfg(test)]
@@ -163,10 +223,10 @@ mod tests {
             _context: &graph_flow::Context,
             _extensions: &crate::extensions::ExecutorExtensions,
         ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
-            Ok(std::collections::HashMap::from([(
-                "value".to_string(),
-                serde_json::json!(task_id),
-            )]))
+            Ok(std::collections::HashMap::from([
+                ("out".to_string(), serde_json::json!(task_id)),
+                ("value".to_string(), serde_json::json!(task_id)),
+            ]))
         }
     }
 
@@ -192,13 +252,14 @@ mod tests {
             _extensions: &crate::extensions::ExecutorExtensions,
         ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
             let sequence = self.execution_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            Ok(std::collections::HashMap::from([(
-                "value".to_string(),
-                serde_json::json!({
-                    "task": task_id,
-                    "sequence": sequence,
-                }),
-            )]))
+            let payload = serde_json::json!({
+                "task": task_id,
+                "sequence": sequence,
+            });
+            Ok(std::collections::HashMap::from([
+                ("out".to_string(), payload.clone()),
+                ("value".to_string(), payload),
+            ]))
         }
     }
 
@@ -349,7 +410,25 @@ mod tests {
         assert_eq!(snapshots[0].identity.schema_version.as_deref(), Some("v1"));
         assert_eq!(
             snapshots[2].output_snapshot,
-            Some(serde_json::json!({ "value": "c" }))
+            Some(serde_json::json!({
+                "out": "c",
+                "value": "c"
+            }))
+        );
+        assert_eq!(
+            snapshots[1].input_fingerprint.as_deref(),
+            Some("{\"_data\":{},\"in\":\"a\"}")
+        );
+        assert_eq!(
+            snapshots[1].inspection_metadata,
+            Some(serde_json::json!({
+                "projection_source": "demand_engine_cache",
+                "cache_version": 1,
+                "input_snapshot": {
+                    "_data": {},
+                    "in": "a"
+                }
+            }))
         );
     }
 
@@ -368,6 +447,10 @@ mod tests {
         assert_eq!(
             first_snapshots[2].output_snapshot,
             Some(serde_json::json!({
+                "out": {
+                    "task": "c",
+                    "sequence": 3,
+                },
                 "value": {
                     "task": "c",
                     "sequence": 3,
@@ -393,11 +476,19 @@ mod tests {
         assert_eq!(
             second_snapshots[2].output_snapshot,
             Some(serde_json::json!({
+                "out": {
+                    "task": "c",
+                    "sequence": 6,
+                },
                 "value": {
                     "task": "c",
                     "sequence": 6,
                 }
             }))
+        );
+        assert_ne!(
+            first_snapshots[2].input_fingerprint,
+            second_snapshots[2].input_fingerprint
         );
     }
 }

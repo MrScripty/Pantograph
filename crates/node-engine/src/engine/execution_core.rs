@@ -92,6 +92,7 @@ impl<'a> DemandExecutionCore<'a> {
                     self.engine.execution_id.clone(),
                 );
 
+                let task_inputs = inputs.clone();
                 let outputs = match self
                     .executor
                     .execute_task(node_id, inputs, self.context, self.extensions)
@@ -126,6 +127,7 @@ impl<'a> DemandExecutionCore<'a> {
                     input_version,
                     &outputs,
                 )?;
+                self.engine.record_input_snapshot(node_id, task_inputs);
 
                 Ok(outputs)
             }
@@ -141,8 +143,9 @@ impl<'a> DemandExecutionCore<'a> {
         node_id: &'b NodeId,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<Output = Result<HashMap<NodeId, HashMap<String, serde_json::Value>>>>
-                + Send
+            dyn std::future::Future<
+                    Output = Result<HashMap<NodeId, HashMap<String, serde_json::Value>>>,
+                > + Send
                 + 'b,
         >,
     > {

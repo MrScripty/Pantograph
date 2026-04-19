@@ -853,6 +853,10 @@ the affected downstream closure.
   workflow sessions and replacement semantics across repeated runs against the
   same bound session, which closes the current Milestone 3 state-isolation
   testing gap without overstating later restore or memory-consumption support.
+- Phase 6 cache projection now also carries backend-resolved input snapshots
+  through `DemandEngine`, letting node-memory snapshots expose canonical input
+  fingerprints and inspection metadata for both sequential and bounded-parallel
+  multi-demand execution without moving that ownership into adapters.
 
 **Milestones:**
 
