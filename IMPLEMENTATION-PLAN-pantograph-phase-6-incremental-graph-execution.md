@@ -1,7 +1,7 @@
 # Plan: Pantograph Phase 6 Incremental Graph Execution And Node Memory
 
 ## Status
-Active
+Complete
 
 Last updated: 2026-04-18
 
@@ -1245,7 +1245,7 @@ checkpoint semantics.
   and any KV-cache-backed execution-state substrate stay in later persistence
   or cache-focused roadmap work.
 
-**Status:** Not started
+**Status:** Complete
 
 ## Rollout Strategy
 

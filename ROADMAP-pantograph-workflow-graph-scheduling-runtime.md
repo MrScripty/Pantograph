@@ -501,7 +501,7 @@ prepare the engine for metric-informed scheduling.
 
 ### Phase 3: KV Cache Implementation
 
-**Status:** In progress
+**Status:** Complete
 
 **Goal:** Convert the existing KV cache scaffolding into a real workflow
 primitive that improves reruns, prompt-prefix reuse, and iterative local work.
