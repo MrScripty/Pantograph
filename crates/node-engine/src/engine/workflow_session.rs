@@ -1061,7 +1061,10 @@ mod tests {
 
         let suffix_input_node_id = "suffix-input".to_string();
         executor
-            .update_node_data(&suffix_input_node_id, serde_json::json!({ "text": "suffix-beta" }))
+            .update_node_data(
+                &suffix_input_node_id,
+                serde_json::json!({ "text": "suffix-beta" }),
+            )
             .await
             .expect("update suffix input");
         let second_outputs = executor
