@@ -13,6 +13,18 @@ members = [
     "crates/pantograph-uniffi",
     "src-tauri",
 ]
+default-members = [
+    "crates/inference",
+    "crates/node-engine",
+    "crates/pantograph-runtime-identity",
+    "crates/pantograph-runtime-registry",
+    "crates/pantograph-embedded-runtime",
+    "crates/pantograph-frontend-http-adapter",
+    "crates/pantograph-workflow-service",
+    "crates/workflow-nodes",
+    "crates/pantograph-uniffi",
+    "src-tauri",
+]
 
 [workspace.package]
 edition = "2021"
