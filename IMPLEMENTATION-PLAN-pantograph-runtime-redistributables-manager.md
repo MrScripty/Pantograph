@@ -499,6 +499,10 @@ Update during implementation:
   fallback resolution for preexisting single-directory installs, so future
   runtime versions can coexist without collapsing back to one shared install
   path.
+- 2026-04-19: Milestone 3 slice 3 split strict execution-time install-root
+  resolution from projection-time fallback resolution, so stale selected
+  version state now degrades cleanly for capability/snapshot reads without
+  weakening launch-time validation.
 
 ## Commit Cadence Notes
 

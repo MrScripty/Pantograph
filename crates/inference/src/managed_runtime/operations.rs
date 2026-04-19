@@ -50,7 +50,7 @@ pub fn binary_capability(
     id: ManagedBinaryId,
 ) -> Result<ManagedBinaryCapability, String> {
     let definition = definition(id);
-    let install_dir = resolve_runtime_install_dir(app_data_dir, id)?;
+    let install_dir = runtime_install_dir_for_projection(app_data_dir, id)?;
     let has_managed_install = install_dir.exists();
 
     if definition.system_command().is_some() {
@@ -732,6 +732,26 @@ fn resolve_runtime_install_dir(
     app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<PathBuf, String> {
+    resolve_runtime_install_dir_with_mode(app_data_dir, id, InstallDirResolutionMode::Strict)
+}
+
+fn runtime_install_dir_for_projection(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+) -> Result<PathBuf, String> {
+    resolve_runtime_install_dir_with_mode(app_data_dir, id, InstallDirResolutionMode::BestEffort)
+}
+
+enum InstallDirResolutionMode {
+    Strict,
+    BestEffort,
+}
+
+fn resolve_runtime_install_dir_with_mode(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    mode: InstallDirResolutionMode,
+) -> Result<PathBuf, String> {
     let state = load_managed_runtime_state(app_data_dir)?;
     let fallback_install_dir = managed_install_dir(app_data_dir, id);
     let Some(runtime) = runtime_state_entry(&state, id) else {
@@ -749,17 +769,20 @@ fn resolve_runtime_install_dir(
         return Ok(fallback_install_dir);
     };
 
-    let persisted_version = runtime
+    let Some(persisted_version) = runtime
         .versions
         .iter()
         .find(|entry| entry.version == version)
-        .ok_or_else(|| {
-            format!(
+    else {
+        return match mode {
+            InstallDirResolutionMode::Strict => Err(format!(
                 "{} selected version '{}' is not installed",
                 id.display_name(),
                 version
-            )
-        })?;
+            )),
+            InstallDirResolutionMode::BestEffort => Ok(fallback_install_dir),
+        };
+    };
 
     Ok(persisted_version
         .install_root
@@ -778,8 +801,9 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        persist_install_success, persist_remove_success, readiness_state_for_capability,
-        resolve_runtime_install_dir, select_managed_runtime_version,
+        binary_capability, persist_install_success, persist_remove_success,
+        readiness_state_for_capability, resolve_runtime_install_dir,
+        runtime_install_dir_for_projection, select_managed_runtime_version,
         set_default_managed_runtime_version, snapshot_from_capability, ManagedBinaryCapability,
         ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeReadinessState,
     };
@@ -993,5 +1017,65 @@ mod tests {
             .expect_err("missing selected version should fail");
 
         assert!(error.contains("selected version 'other' is not installed"));
+    }
+
+    #[test]
+    fn runtime_install_dir_for_projection_falls_back_when_selected_version_is_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+
+        persist_install_success(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            &install_dir,
+        )
+        .expect("persist install success");
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = state
+            .runtimes
+            .iter_mut()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+        runtime.selection.selected_version = Some("other".to_string());
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let resolved_install_dir =
+            runtime_install_dir_for_projection(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+                .expect("resolve projection install dir");
+
+        assert_eq!(
+            resolved_install_dir,
+            temp_dir.path().join("runtimes/llama-cpp")
+        );
+    }
+
+    #[test]
+    fn binary_capability_tolerates_stale_selected_version_state() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+
+        persist_install_success(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            &install_dir,
+        )
+        .expect("persist install success");
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = state
+            .runtimes
+            .iter_mut()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+        runtime.selection.selected_version = Some("other".to_string());
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let capability =
+            binary_capability(temp_dir.path(), ManagedBinaryId::LlamaCpp).expect("read capability");
+
+        assert_eq!(capability.install_state, ManagedBinaryInstallState::Missing);
     }
 }

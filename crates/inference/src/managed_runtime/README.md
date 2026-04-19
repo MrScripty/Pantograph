@@ -155,6 +155,10 @@ fn inspect_runtime(app_data_dir: &Path) {
 - Managed runtime installs are version-scoped under the runtime root, while
   command resolution keeps a legacy fallback path for older single-directory
   installs that predate versioned layout support.
+- Projection reads such as capability and snapshot queries degrade to the
+  legacy runtime root when persisted selection state is stale, while strict
+  execution-time command resolution still rejects invalid selected-version
+  state explicitly.
 - Selection changes only become durable through the exported backend mutation
   functions, which validate installed versions before persisting new
   selected/default version state and append an install-history event for audit
