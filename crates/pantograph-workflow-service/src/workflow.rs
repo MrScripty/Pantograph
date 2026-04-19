@@ -22,32 +22,34 @@ use crate::graph::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 use crate::scheduler::{
-    unix_timestamp_ms, WorkflowSessionPreflightCache, WorkflowSessionStore,
-    WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowSessionPreflightCache, WorkflowSessionStore,
+    unix_timestamp_ms,
 };
 use crate::technical_fit::{
     WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride, WorkflowTechnicalFitRequest,
 };
+
+mod session_runtime;
 
 #[cfg(test)]
 use crate::graph::WorkflowSessionKind;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
-    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
-    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
-    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
-    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
-    WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
+    WorkflowSessionStaleCleanupResponse, WorkflowSessionStaleCleanupWorker,
+    WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
+    WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    select_runtime_unload_candidate_by_affinity,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -947,185 +949,6 @@ impl WorkflowService {
         self.session_store
             .lock()
             .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))
-    }
-
-    async fn ensure_session_runtime_loaded<H: WorkflowHost>(
-        &self,
-        host: &H,
-        session_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
-        enum RuntimeDecision {
-            Ready,
-            SelectUnloadCandidate {
-                target: WorkflowSessionRuntimeSelectionTarget,
-                candidates: Vec<WorkflowSessionRuntimeUnloadCandidate>,
-                loaded_session_count: usize,
-                max_loaded_sessions: usize,
-            },
-            LoadTarget {
-                workflow_id: String,
-                usage_profile: Option<String>,
-                retention_hint: WorkflowSessionRetentionHint,
-            },
-        }
-
-        loop {
-            let decision = {
-                let store = self.session_store.lock().map_err(|_| {
-                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
-                })?;
-                let target = store.active.get(session_id).ok_or_else(|| {
-                    WorkflowServiceError::SessionNotFound(format!(
-                        "session '{}' not found",
-                        session_id
-                    ))
-                })?;
-                if target.runtime_loaded {
-                    RuntimeDecision::Ready
-                } else if store.loaded_session_count() >= store.max_loaded_sessions {
-                    let loaded_session_count = store.loaded_session_count();
-                    RuntimeDecision::SelectUnloadCandidate {
-                        target: WorkflowSessionRuntimeSelectionTarget {
-                            session_id: session_id.to_string(),
-                            workflow_id: target.workflow_id.clone(),
-                            usage_profile: target.usage_profile.clone(),
-                            required_backends: target.required_backends.clone(),
-                            required_models: target.required_models.clone(),
-                        },
-                        candidates: store.runtime_unload_candidates(session_id),
-                        loaded_session_count,
-                        max_loaded_sessions: store.max_loaded_sessions,
-                    }
-                } else {
-                    RuntimeDecision::LoadTarget {
-                        workflow_id: target.workflow_id.clone(),
-                        usage_profile: target.usage_profile.clone(),
-                        retention_hint: if target.keep_alive {
-                            WorkflowSessionRetentionHint::KeepAlive
-                        } else {
-                            WorkflowSessionRetentionHint::Ephemeral
-                        },
-                    }
-                }
-            };
-
-            match decision {
-                RuntimeDecision::Ready => return Ok(()),
-                RuntimeDecision::SelectUnloadCandidate {
-                    target,
-                    candidates,
-                    loaded_session_count,
-                    max_loaded_sessions,
-                } => {
-                    let Some(candidate) = host
-                        .select_runtime_unload_candidate(&target, &candidates)
-                        .await?
-                    else {
-                        return Err(WorkflowServiceError::scheduler_runtime_capacity_exhausted(
-                            loaded_session_count,
-                            max_loaded_sessions,
-                            candidates.len(),
-                        ));
-                    };
-                    host.unload_session_runtime(
-                        &candidate.session_id,
-                        &candidate.workflow_id,
-                        WorkflowSessionUnloadReason::CapacityRebalance,
-                    )
-                    .await?;
-                    if let Ok(mut store) = self.session_store.lock() {
-                        let _ = store.mark_runtime_loaded(&candidate.session_id, false);
-                    }
-                }
-                RuntimeDecision::LoadTarget {
-                    workflow_id,
-                    usage_profile,
-                    retention_hint,
-                } => {
-                    host.load_session_runtime(
-                        session_id,
-                        &workflow_id,
-                        usage_profile.as_deref(),
-                        retention_hint,
-                    )
-                    .await?;
-                    let mut store = self.session_store.lock().map_err(|_| {
-                        WorkflowServiceError::Internal("session store lock poisoned".to_string())
-                    })?;
-                    store.mark_runtime_loaded(session_id, true)?;
-                    return Ok(());
-                }
-            }
-        }
-    }
-
-    async fn ensure_session_runtime_preflight<H: WorkflowHost>(
-        &self,
-        host: &H,
-        session_id: &str,
-        workflow_id: &str,
-        override_selection: Option<WorkflowTechnicalFitOverride>,
-    ) -> Result<WorkflowSessionPreflightCache, WorkflowServiceError> {
-        let graph_fingerprint = host.workflow_graph_fingerprint(workflow_id).await?;
-        let runtime_capabilities = host.runtime_capabilities().await?;
-        let runtime_capability_fingerprint =
-            compute_runtime_capability_fingerprint(&runtime_capabilities);
-
-        {
-            let store = self.session_store.lock().map_err(|_| {
-                WorkflowServiceError::Internal("session store lock poisoned".to_string())
-            })?;
-            if let Some(cached) = store.cached_preflight(session_id)? {
-                if cached.graph_fingerprint == graph_fingerprint
-                    && cached.runtime_capability_fingerprint == runtime_capability_fingerprint
-                    && cached.override_selection == override_selection
-                {
-                    return Ok(cached);
-                }
-            }
-        }
-
-        let capabilities = host.workflow_capabilities(workflow_id).await?;
-        let runtime_preflight = self
-            .workflow_session_runtime_preflight_assessment(
-                host,
-                session_id,
-                &capabilities,
-                override_selection.clone(),
-            )
-            .await?;
-        let cache = WorkflowSessionPreflightCache {
-            graph_fingerprint,
-            runtime_capability_fingerprint,
-            override_selection,
-            required_backends: capabilities.runtime_requirements.required_backends.clone(),
-            required_models: capabilities.runtime_requirements.required_models.clone(),
-            blocking_runtime_issues: runtime_preflight.blocking_runtime_issues,
-        };
-
-        let mut store = self.session_store.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session store lock poisoned".to_string())
-        })?;
-        store.cache_preflight(session_id, cache.clone())?;
-        Ok(cache)
-    }
-
-    async fn refresh_session_runtime_affinity_basis<H: WorkflowHost>(
-        &self,
-        host: &H,
-        session_id: &str,
-        workflow_id: &str,
-    ) -> Result<(), WorkflowServiceError> {
-        let capabilities = host.workflow_capabilities(workflow_id).await?;
-        let mut store = self.session_store.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session store lock poisoned".to_string())
-        })?;
-        store.update_runtime_affinity_basis(
-            session_id,
-            capabilities.runtime_requirements.required_backends,
-            capabilities.runtime_requirements.required_models,
-        )?;
-        Ok(())
     }
 
     pub async fn create_workflow_session<H: WorkflowHost>(
@@ -2734,11 +2557,11 @@ fn extract_nested_trimmed_str(data: &serde_json::Value, path: &[&str]) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WorkflowSchedulerRuntimeCapacityPressure;
     use crate::technical_fit::{
         WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
         WorkflowTechnicalFitSelectionMode,
     };
-    use crate::WorkflowSchedulerRuntimeCapacityPressure;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -3954,9 +3777,10 @@ mod tests {
             .expect_err("technical-fit decision should block run");
 
         assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
-        assert!(err
-            .to_string()
-            .contains("technical-fit could not select a ready runtime"));
+        assert!(
+            err.to_string()
+                .contains("technical-fit could not select a ready runtime")
+        );
     }
 
     #[tokio::test]
@@ -3980,9 +3804,10 @@ mod tests {
             .expect_err("invalid host output should be internal");
 
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("outputs.0.port_id must be non-empty"));
+        assert!(
+            err.to_string()
+                .contains("outputs.0.port_id must be non-empty")
+        );
     }
 
     #[tokio::test]
@@ -4231,19 +4056,23 @@ mod tests {
             response.inputs[0].ports[0].data_type.as_deref(),
             Some("string")
         );
-        assert!(response.inputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "legacy-out"));
+        assert!(
+            response.inputs[0]
+                .ports
+                .iter()
+                .all(|port| port.port_id != "legacy-out")
+        );
 
         assert_eq!(response.outputs.len(), 1);
         assert_eq!(response.outputs[0].node_id, "text-output-1");
         assert_eq!(response.outputs[0].ports.len(), 1);
         assert_eq!(response.outputs[0].ports[0].port_id, "text");
-        assert!(response.outputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "stream"));
+        assert!(
+            response.outputs[0]
+                .ports
+                .iter()
+                .all(|port| port.port_id != "stream")
+        );
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -4400,9 +4229,10 @@ mod tests {
             .expect_err("workflow io should reject missing io_binding_origin");
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
-        assert!(err
-            .to_string()
-            .contains("missing definition.io_binding_origin"));
+        assert!(
+            err.to_string()
+                .contains("missing definition.io_binding_origin")
+        );
         let _ = fs::remove_dir_all(temp_root);
     }
 
@@ -4605,9 +4435,10 @@ mod tests {
             .expect_err("expected output_not_produced");
 
         assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-        assert!(err
-            .to_string()
-            .contains("requested output target 'text-output-1.text' was not produced"));
+        assert!(
+            err.to_string()
+                .contains("requested output target 'text-output-1.text' was not produced")
+        );
     }
 
     #[tokio::test]
@@ -4674,10 +4505,12 @@ mod tests {
         assert_eq!(response.invalid_targets.len(), 1);
         assert_eq!(response.invalid_targets[0].node_id, "text-output-1");
         assert_eq!(response.invalid_targets[0].port_id, "stream");
-        assert!(response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata")));
+        assert!(
+            response
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not declare required metadata"))
+        );
     }
 
     #[tokio::test]
@@ -4709,10 +4542,12 @@ mod tests {
         assert_eq!(response.graph_fingerprint, "preflight-graph");
         assert!(response.missing_required_inputs.is_empty());
         assert!(response.invalid_targets.is_empty());
-        assert!(response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata")));
+        assert!(
+            response
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not declare required metadata"))
+        );
     }
 
     #[tokio::test]
@@ -4785,9 +4620,11 @@ mod tests {
             })
         );
         assert!(response.blocking_runtime_issues.is_empty());
-        assert!(response.runtime_warnings.iter().any(|issue| issue
-            .message
-            .contains("selected 'llama_cpp' conservatively")));
+        assert!(response.runtime_warnings.iter().any(|issue| {
+            issue
+                .message
+                .contains("selected 'llama_cpp' conservatively")
+        }));
     }
 
     #[tokio::test]
@@ -4908,9 +4745,11 @@ mod tests {
         assert_eq!(runtime_warnings.len(), 1);
         assert_eq!(blocking_runtime_issues.len(), 1);
         assert_eq!(blocking_runtime_issues[0].runtime_id, "remote-llama");
-        assert!(blocking_runtime_issues[0]
-            .message
-            .contains("Remote llama.cpp is not configured"));
+        assert!(
+            blocking_runtime_issues[0]
+                .message
+                .contains("Remote llama.cpp is not configured")
+        );
     }
 
     #[test]
@@ -5302,12 +5141,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(second.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &third_session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &first.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &third_session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &first.session_id)
+        );
     }
 
     #[tokio::test]
@@ -5371,12 +5214,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(non_affine.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &affine.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &target.session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &affine.session_id)
+        );
     }
 
     #[tokio::test]
@@ -5452,12 +5299,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(other_model.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &shared_model.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &target.session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &shared_model.session_id)
+        );
     }
 
     #[tokio::test]
@@ -5536,12 +5387,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(other_backend.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &shared_backend.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &target.session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &shared_backend.session_id)
+        );
     }
 
     #[tokio::test]
@@ -6038,8 +5893,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available(
-    ) {
+    async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available()
+     {
         let host = MockWorkflowHost::new(8, 1024);
         let service = WorkflowService::with_capacity_limits(2, 1);
         let loaded = service
@@ -6942,8 +6797,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed(
-    ) {
+    async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed()
+     {
         let host = MockWorkflowHost::new(8, 1024);
         let service = WorkflowService::with_capacity_limits(3, 1);
         let _loaded = service
@@ -7060,10 +6915,12 @@ mod tests {
 
         assert_eq!(snapshot.trace_execution_id, None);
         assert_eq!(snapshot.items.len(), 2);
-        assert!(snapshot
-            .items
-            .iter()
-            .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending));
+        assert!(
+            snapshot
+                .items
+                .iter()
+                .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+        );
     }
 
     #[tokio::test]

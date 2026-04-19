@@ -10,6 +10,9 @@ Host-agnostic application service contracts and orchestration entrypoints for Pa
 
 ## Contents
 - `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
+- `workflow/`: focused backend-owned workflow-session runtime coordination
+  helpers that keep load/preflight/affinity lifecycle logic out of the main
+  `workflow.rs` facade.
 - `scheduler/`: backend-owned workflow-session scheduler contracts and queue
   store boundary used by `workflow.rs` so queue policy does not stay embedded
   in the service facade.
