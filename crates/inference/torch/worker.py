@@ -40,6 +40,7 @@ from block_diffusion import (
 from autoregressive import (
     _generate_autoregressive,
     _generate_autoregressive_streaming,
+    _continue_sdar_cached,
     _generate_sdar_cached,
 )
 
@@ -80,6 +81,36 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     single EOS and a small min_new_tokens floor when that happens.
     """
     global _live_kv_state
+    if _live_kv_state is not None:
+        cached_token_ids = _live_kv_state.get("token_ids")
+        cached_cache = _live_kv_state.get("cache")
+        if isinstance(cached_token_ids, list) and cached_cache is not None:
+            try:
+                text, token_ids, cache = _continue_sdar_cached(
+                    _model,
+                    _tokenizer,
+                    _device,
+                    formatted_prompt,
+                    max_tokens,
+                    temperature,
+                    top_p,
+                    cached_token_ids,
+                    cached_cache,
+                    top_k=top_k,
+                )
+                _live_kv_state = {
+                    "token_ids": token_ids,
+                    "cache": cache,
+                    "model_path": str(_model_path) if _model_path else None,
+                    "model_type": _model_type,
+                    "device": str(_device) if _device is not None else None,
+                }
+                if text and text.strip():
+                    return text
+            except Exception as exc:
+                logger.warning("Live KV reuse failed; falling back to fresh decode: %s", exc)
+                _live_kv_state = None
+
     text, token_ids, cache = _generate_sdar_cached(
         _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p, top_k=top_k,
     )
@@ -803,6 +834,7 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
 
     # Masked prompt routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
         return _generate_dllm_masked(
@@ -821,6 +853,7 @@ def generate(prompt, system_prompt=None, max_tokens=512, temperature=0.7, top_p=
         return _generate_dllm_autoregressive_safe(
             formatted, max_tokens, temperature, top_p, top_k=top_k,
         )
+    clear_live_kv_cache()
     return _generate_autoregressive(
         _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
     )
@@ -841,6 +874,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
 
     # Masked prompt streaming routing for dLLM models
     if masked_prompt_json is not None and _model_type == "dllm":
+        clear_live_kv_cache()
         mp = json.loads(masked_prompt_json)
         segments = mp.get("segments", [])
         yield from _generate_dllm_masked_streaming(
@@ -860,6 +894,7 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         )
         yield {"mode": "replace", "text": final_text}
     else:
+        clear_live_kv_cache()
         yield from _generate_autoregressive_streaming(
             _model, _tokenizer, _device, formatted, max_tokens, temperature, top_p, top_k=top_k,
         )

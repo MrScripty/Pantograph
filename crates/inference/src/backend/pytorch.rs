@@ -118,6 +118,30 @@ fn extract_live_kv_info(value: &Bound<'_, PyAny>) -> Result<PyTorchLiveKvInfo, B
     })
 }
 
+fn extract_loaded_model_info(value: &Bound<'_, PyAny>) -> Result<LoadedModelInfo, BackendError> {
+    let model_path = value
+        .get_item("model_path")
+        .map_err(|e| BackendError::Inference(format!("Missing loaded model_path: {}", e)))?
+        .extract::<String>()
+        .map_err(|e| BackendError::Inference(format!("Invalid loaded model_path: {}", e)))?;
+    let model_type = value
+        .get_item("model_type")
+        .map_err(|e| BackendError::Inference(format!("Missing loaded model_type: {}", e)))?
+        .extract::<String>()
+        .map_err(|e| BackendError::Inference(format!("Invalid loaded model_type: {}", e)))?;
+    let device = value
+        .get_item("device")
+        .map_err(|e| BackendError::Inference(format!("Missing loaded device: {}", e)))?
+        .extract::<String>()
+        .map_err(|e| BackendError::Inference(format!("Invalid loaded device: {}", e)))?;
+
+    Ok(LoadedModelInfo {
+        model_path,
+        model_type,
+        device,
+    })
+}
+
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///
 /// Loads models via HuggingFace transformers with `trust_remote_code=True`,
@@ -147,7 +171,7 @@ pub struct PyTorchLiveKvInfo {
 pub fn kv_cache_runtime_fingerprint_for_live_kv(
     info: &PyTorchLiveKvInfo,
 ) -> KvCacheRuntimeFingerprint {
-    PyTorchBackend::kv_cache_runtime_fingerprint_for_loaded_model(&LoadedModelInfo {
+    kv_cache_runtime_fingerprint_for_loaded_model(&LoadedModelInfo {
         model_path: info.model_path.clone(),
         model_type: info.model_type.clone(),
         device: info.device.clone(),
@@ -155,11 +179,46 @@ pub fn kv_cache_runtime_fingerprint_for_live_kv(
 }
 
 pub fn kv_cache_model_fingerprint_for_live_kv(info: &PyTorchLiveKvInfo) -> ModelFingerprint {
-    PyTorchBackend::kv_cache_model_fingerprint_for_loaded_model(&LoadedModelInfo {
+    kv_cache_model_fingerprint_for_loaded_model(&LoadedModelInfo {
         model_path: info.model_path.clone(),
         model_type: info.model_type.clone(),
         device: info.device.clone(),
     })
+}
+
+pub fn kv_cache_runtime_fingerprint_for_loaded_model(
+    loaded: &LoadedModelInfo,
+) -> KvCacheRuntimeFingerprint {
+    PyTorchBackend::kv_cache_runtime_fingerprint_for_loaded_model(loaded)
+}
+
+pub fn kv_cache_model_fingerprint_for_loaded_model(loaded: &LoadedModelInfo) -> ModelFingerprint {
+    PyTorchBackend::kv_cache_model_fingerprint_for_loaded_model(loaded)
+}
+
+pub fn supports_live_kv_reuse(model_type: &str) -> bool {
+    model_type == "dllm"
+}
+
+pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError> {
+    tokio::task::spawn_blocking(move || {
+        Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+            let worker = worker_module(py).map_err(|e| {
+                BackendError::Inference(format!("Failed to get worker module: {}", e))
+            })?;
+            let result = worker.call_method0("get_loaded_info").map_err(|e| {
+                BackendError::Inference(format!("PyTorch get_loaded_info failed: {}", e))
+            })?;
+            if result.is_none() {
+                return Err(BackendError::Inference(
+                    "PyTorch KV operations require an active loaded model".to_string(),
+                ));
+            }
+            extract_loaded_model_info(&result)
+        })
+    })
+    .await
+    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
 }
 
 pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
@@ -173,6 +232,44 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
                 .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
                 .map_err(|e| BackendError::Inference(format!("PyTorch KV save failed: {}", e)))?;
             extract_live_kv_info(&result)
+        })
+    })
+    .await
+    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+}
+
+pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, BackendError> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
+            let worker = worker_module(py).map_err(|e| {
+                BackendError::Inference(format!("Failed to get worker module: {}", e))
+            })?;
+            let result = worker
+                .call_method1(
+                    "restore_live_kv_cache",
+                    (path.to_string_lossy().to_string(),),
+                )
+                .map_err(|e| {
+                    BackendError::Inference(format!("PyTorch KV restore failed: {}", e))
+                })?;
+            extract_live_kv_info(&result)
+        })
+    })
+    .await
+    .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+}
+
+pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
+    tokio::task::spawn_blocking(move || {
+        Python::with_gil(|py| -> Result<(), BackendError> {
+            let worker = worker_module(py).map_err(|e| {
+                BackendError::Inference(format!("Failed to get worker module: {}", e))
+            })?;
+            worker
+                .call_method0("clear_live_kv_cache")
+                .map_err(|e| BackendError::Inference(format!("PyTorch KV clear failed: {}", e)))?;
+            Ok(())
         })
     })
     .await

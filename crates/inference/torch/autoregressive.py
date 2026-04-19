@@ -111,6 +111,88 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
     return tokenizer.decode(generated_ids, skip_special_tokens=True), full_sequence, past_key_values
 
 
+def _continue_sdar_cached(model, tokenizer, device, formatted_prompt,
+                          max_tokens, temperature, top_p,
+                          cached_token_ids, past_key_values, top_k=None):
+    """Continue SDAR/TraDo decoding from a previously captured KV cache.
+
+    `formatted_prompt` is treated as a suffix to append to the existing cached
+    context represented by `cached_token_ids` + `past_key_values`.
+    """
+    if not cached_token_ids:
+        raise RuntimeError("Live KV cache is missing cached token_ids")
+    if past_key_values is None:
+        raise RuntimeError("Live KV cache is missing cache data")
+    if not hasattr(past_key_values, "crop"):
+        raise RuntimeError("Live KV cache does not support crop-based replay")
+
+    resolved_top_k = _resolve_top_k(model, top_k)
+    eos_ids = _eos_ids(tokenizer)
+    full_sequence = [int(token_id) for token_id in cached_token_ids]
+    cur_pos = len(full_sequence)
+
+    suffix_inputs = tokenizer(
+        formatted_prompt,
+        return_tensors="pt",
+        add_special_tokens=False,
+    ).to(device)
+    suffix_token_ids = suffix_inputs["input_ids"][0].detach().cpu().tolist()
+
+    logits = None
+
+    if suffix_token_ids:
+        for token_id in suffix_token_ids:
+            next_input = torch.tensor([[int(token_id)]], device=device)
+            with torch.no_grad():
+                outputs = model(
+                    next_input,
+                    position_ids=torch.tensor([[cur_pos]], device=device),
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                    store_kv=True,
+                )
+                logits = outputs.logits[:, -1, :]
+            full_sequence.append(int(token_id))
+            cur_pos += 1
+    else:
+        replay_position = cur_pos - 1
+        past_key_values.crop(replay_position)
+        replay_token = torch.tensor([[full_sequence[-1]]], device=device)
+        with torch.no_grad():
+            outputs = model(
+                replay_token,
+                position_ids=torch.tensor([[replay_position]], device=device),
+                past_key_values=past_key_values,
+                use_cache=True,
+                store_kv=True,
+            )
+            logits = outputs.logits[:, -1, :]
+
+    generated_ids = []
+    for _ in range(max_tokens):
+        next_token = _sample_next_token(logits, temperature, top_p, resolved_top_k)
+        token_id = int(next_token.item())
+        if token_id in eos_ids:
+            break
+        generated_ids.append(token_id)
+        full_sequence.append(token_id)
+
+        with torch.no_grad():
+            outputs = model(
+                next_token,
+                position_ids=torch.tensor([[cur_pos]], device=device),
+                past_key_values=past_key_values,
+                use_cache=True,
+                store_kv=True,
+            )
+            logits = outputs.logits[:, -1, :]
+        cur_pos += 1
+
+    if not generated_ids:
+        return "", full_sequence, past_key_values
+    return tokenizer.decode(generated_ids, skip_special_tokens=True), full_sequence, past_key_values
+
+
 def _generate_autoregressive(model, tokenizer, device, formatted_prompt,
                              max_tokens, temperature, top_p, top_k=None):
     """Generate a complete response using standard autoregressive decoding.

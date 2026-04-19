@@ -87,9 +87,9 @@ backend/gateway boundary, so unsupported runtimes fail from the backend-owned
 path instead of a node-engine placeholder. llama.cpp remains capture/restore
 only until a real slot-snapshot truncation codec exists. PyTorch now also has
 backend-owned KV runtime/model identity plus worker snapshot save/restore and
-file-truncate primitives for `dllm`-style live caches, which makes it the
-first in-tree candidate for a real non-llama KV codec path once the workflow
-executor starts emitting and consuming those artifacts.
+file-truncate primitives for `dllm`-style live caches, and
+`pytorch-inference` now restores compatible `kv_cache_in` handles and emits
+fresh `kv_cache_out` handles through the same shared store contract.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -567,9 +567,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - `llamacpp-inference` now uses that runtime adapter to restore compatible KV
   handles before generation and capture a fresh reusable handle afterward
 - PyTorch backend-owned worker snapshot primitives are now also wired into
-  `pytorch-inference` output capture, so compatible runs can emit typed
-  `kv_cache_out` handles through the same store contract even though input-side
-  restore/reuse is still pending
+  `pytorch-inference` restore/capture flow for `dllm`, so compatible runs can
+  consume typed `kv_cache_in` handles and emit fresh `kv_cache_out` handles
+  through the same store contract
 - KV save/load now follow the typed-handle contract in `node-engine`, and KV
   truncation now fails with an explicit backend-specific unsupported reason
 - Implement a real KV cache store with memory and disk policies

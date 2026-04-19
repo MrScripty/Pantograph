@@ -256,6 +256,89 @@ pub(super) async fn capture_llamacpp_output_handle(
 }
 
 #[cfg(feature = "pytorch-nodes")]
+pub(super) async fn restore_pytorch_input_handle(
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+) -> Result<bool> {
+    let active_model = inference::backend::pytorch::active_loaded_model_info()
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "PyTorch loaded-model lookup failed: {}",
+                error
+            ))
+        })?;
+
+    let Some(handle_value) = inputs.get("kv_cache_in").filter(|value| !value.is_null()) else {
+        inference::backend::pytorch::clear_live_kv_snapshot()
+            .await
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch live KV clear failed: {}", error))
+            })?;
+        return Ok(false);
+    };
+
+    if !inference::backend::pytorch::supports_live_kv_reuse(&active_model.model_type) {
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "PyTorch KV reuse currently supports only dllm models, but '{}' is active",
+            active_model.model_type
+        )));
+    }
+
+    let handle: KvCacheHandle = serde_json::from_value(handle_value.clone())?;
+    let store = require_store(extensions)?;
+    let runtime_fingerprint =
+        inference::backend::pytorch::kv_cache_runtime_fingerprint_for_loaded_model(&active_model);
+    let model_fingerprint =
+        inference::backend::pytorch::kv_cache_model_fingerprint_for_loaded_model(&active_model);
+
+    if !handle.is_compatible_with(&model_fingerprint, &runtime_fingerprint) {
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "KV cache handle '{}' is incompatible with the active PyTorch runtime",
+            handle.cache_id
+        )));
+    }
+
+    let entry = store
+        .load_for_execution(&handle.cache_id, &model_fingerprint, &runtime_fingerprint)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache load failed: {error}"))
+        })?;
+    let snapshot_path = kv_slot_temp_path("pytorch-restore", handle.cache_id.as_str());
+    fs::write(&snapshot_path, &entry.data).map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!(
+            "Failed to write temporary PyTorch KV snapshot file '{}': {}",
+            snapshot_path.display(),
+            error
+        ))
+    })?;
+
+    let restore_result = inference::backend::pytorch::restore_live_kv_snapshot(&snapshot_path)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "PyTorch KV snapshot restore failed: {}",
+                error
+            ))
+        });
+    let _ = fs::remove_file(&snapshot_path);
+    let restored_info = restore_result?;
+
+    let restored_runtime =
+        inference::backend::pytorch::kv_cache_runtime_fingerprint_for_live_kv(&restored_info);
+    let restored_model =
+        inference::backend::pytorch::kv_cache_model_fingerprint_for_live_kv(&restored_info);
+    if restored_runtime != runtime_fingerprint || restored_model != model_fingerprint {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Restored PyTorch KV snapshot did not match the active model/runtime".to_string(),
+        ));
+    }
+
+    Ok(true)
+}
+
+#[cfg(feature = "pytorch-nodes")]
 pub(super) async fn capture_pytorch_output_handle(
     task_id: &str,
     extensions: &ExecutorExtensions,
@@ -264,6 +347,18 @@ pub(super) async fn capture_pytorch_output_handle(
     else {
         return Ok(serde_json::Value::Null);
     };
+
+    let active_model = inference::backend::pytorch::active_loaded_model_info()
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "PyTorch loaded-model lookup failed: {}",
+                error
+            ))
+        })?;
+    if !inference::backend::pytorch::supports_live_kv_reuse(&active_model.model_type) {
+        return Ok(serde_json::Value::Null);
+    }
 
     let snapshot_path = kv_slot_temp_path("pytorch-capture", task_id);
     let save_info = inference::backend::pytorch::save_live_kv_snapshot(&snapshot_path)

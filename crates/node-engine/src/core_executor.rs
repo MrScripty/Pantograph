@@ -2885,6 +2885,8 @@ async fn execute_pytorch_inference(
         .map_err(|e| NodeEngineError::ExecutionFailed(e))?;
     }
 
+    let _restored_kv_cache = kv_cache::restore_pytorch_input_handle(inputs, extensions).await?;
+
     // Read model-specific inference settings to forward as Python kwargs
     let extra_settings = build_extra_settings(inputs);
     // Keep top_p explicit even when inference_settings schema is missing.
