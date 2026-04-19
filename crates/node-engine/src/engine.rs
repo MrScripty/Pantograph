@@ -446,6 +446,26 @@ impl WorkflowExecutor {
         workflow_session::workflow_session_checkpoint_summary(self, workflow_session_id).await
     }
 
+    /// Return the backend-owned logical node-memory snapshots for one workflow
+    /// session.
+    pub async fn workflow_session_node_memory_snapshots(
+        &self,
+        workflow_session_id: &str,
+    ) -> Vec<NodeMemorySnapshot> {
+        workflow_session::workflow_session_node_memory_snapshots(self, workflow_session_id).await
+    }
+
+    /// Record or replace the logical node-memory snapshot for one node in one
+    /// workflow session.
+    pub async fn record_workflow_session_node_memory(&self, snapshot: NodeMemorySnapshot) {
+        workflow_session::record_workflow_session_node_memory(self, snapshot).await;
+    }
+
+    /// Clear all recorded logical node memory for one workflow session.
+    pub async fn clear_workflow_session_node_memory(&self, workflow_session_id: &str) {
+        workflow_session::clear_workflow_session_node_memory(self, workflow_session_id).await;
+    }
+
     /// Set a value in the context
     pub async fn set_context_value<T: serde::Serialize + Send + Sync>(&self, key: &str, value: T) {
         self.context.set(key, value).await;

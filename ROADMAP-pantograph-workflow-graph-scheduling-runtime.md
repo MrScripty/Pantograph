@@ -830,6 +830,11 @@ the affected downstream closure.
   runtime coordination now lives behind `workflow/session_runtime.rs`, and the
   Tauri execution manager no longer keeps execution lifecycle and per-handle
   state collapsed in one file.
+- Milestone 3 is now started in `node-engine`: the private executor session
+  state owns a backend-only per-session node-memory store keyed by session id
+  and node id, executor facades can now inspect and update that store, and
+  bounded checkpoint summaries now report preserved-node counts from recorded
+  node memory without claiming restore semantics that have not landed yet.
 
 **Milestones:**
 

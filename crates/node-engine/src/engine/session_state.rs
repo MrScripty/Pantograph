@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -140,12 +142,14 @@ impl WorkflowSessionCheckpointSummary {
 #[derive(Debug)]
 pub(crate) struct WorkflowExecutorSessionState {
     residency: RwLock<WorkflowSessionResidencyState>,
+    node_memories: RwLock<HashMap<String, HashMap<String, NodeMemorySnapshot>>>,
 }
 
 impl WorkflowExecutorSessionState {
     pub(crate) fn new() -> Self {
         Self {
             residency: RwLock::new(WorkflowSessionResidencyState::Active),
+            node_memories: RwLock::new(HashMap::new()),
         }
     }
 
@@ -157,24 +161,57 @@ impl WorkflowExecutorSessionState {
         *self.residency.write().await = state;
     }
 
+    pub(crate) async fn record_node_memory(&self, snapshot: NodeMemorySnapshot) {
+        let session_id = snapshot.identity.session_id.clone();
+        let node_id = snapshot.identity.node_id.clone();
+        let mut node_memories = self.node_memories.write().await;
+        node_memories
+            .entry(session_id)
+            .or_default()
+            .insert(node_id, snapshot);
+    }
+
+    pub(crate) async fn node_memory_snapshots(
+        &self,
+        workflow_session_id: &str,
+    ) -> Vec<NodeMemorySnapshot> {
+        let mut snapshots = self
+            .node_memories
+            .read()
+            .await
+            .get(workflow_session_id)
+            .map(|records| records.values().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        snapshots.sort_by(|left, right| left.identity.node_id.cmp(&right.identity.node_id));
+        snapshots
+    }
+
+    pub(crate) async fn clear_node_memory(&self, workflow_session_id: &str) {
+        self.node_memories.write().await.remove(workflow_session_id);
+    }
+
     pub(crate) async fn checkpoint_summary(
         &self,
         workflow_session_id: &str,
         graph_revision: &str,
     ) -> WorkflowSessionCheckpointSummary {
-        WorkflowSessionCheckpointSummary::unavailable(
+        let preserved_node_count = self.node_memory_snapshots(workflow_session_id).await.len();
+        let mut summary = WorkflowSessionCheckpointSummary::unavailable(
             workflow_session_id,
             graph_revision,
             self.residency().await,
-        )
+        );
+        summary.preserved_node_count = preserved_node_count;
+        summary
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphMemoryImpactSummary, NodeMemoryCompatibility, WorkflowExecutorSessionState,
-        WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
+        GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryIdentity, NodeMemorySnapshot,
+        NodeMemoryStatus, WorkflowExecutorSessionState, WorkflowSessionCheckpointSummary,
+        WorkflowSessionResidencyState,
     };
 
     #[test]
@@ -237,5 +274,98 @@ mod tests {
         assert_eq!(summary.graph_revision, "graph-1");
         assert_eq!(summary.residency, WorkflowSessionResidencyState::Active);
         assert!(!summary.checkpoint_available);
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_keeps_node_memory_isolated_per_session() {
+        let state = WorkflowExecutorSessionState::new();
+        state
+            .record_node_memory(NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "node-a".to_string(),
+                    node_type: "text-input".to_string(),
+                    schema_version: Some("v1".to_string()),
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: Some("fp-a".to_string()),
+                output_snapshot: Some(serde_json::json!({ "text": "alpha" })),
+                private_state: Some(serde_json::json!({ "cursor": 1 })),
+                inspection_metadata: Some(serde_json::json!({ "label": "Alpha" })),
+            })
+            .await;
+        state
+            .record_node_memory(NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-2".to_string(),
+                    node_id: "node-a".to_string(),
+                    node_type: "text-input".to_string(),
+                    schema_version: Some("v1".to_string()),
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: Some("fp-b".to_string()),
+                output_snapshot: Some(serde_json::json!({ "text": "beta" })),
+                private_state: None,
+                inspection_metadata: None,
+            })
+            .await;
+
+        let session_1 = state.node_memory_snapshots("session-1").await;
+        let session_2 = state.node_memory_snapshots("session-2").await;
+        assert_eq!(session_1.len(), 1);
+        assert_eq!(session_2.len(), 1);
+        assert_eq!(session_1[0].identity.session_id, "session-1");
+        assert_eq!(session_2[0].identity.session_id, "session-2");
+        assert_eq!(
+            session_1[0].output_snapshot,
+            Some(serde_json::json!({ "text": "alpha" }))
+        );
+        assert_eq!(
+            session_2[0].output_snapshot,
+            Some(serde_json::json!({ "text": "beta" }))
+        );
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_checkpoint_summary_counts_preserved_node_memory() {
+        let state = WorkflowExecutorSessionState::new();
+        state
+            .record_node_memory(NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "node-a".to_string(),
+                    node_type: "text-input".to_string(),
+                    schema_version: None,
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: None,
+                output_snapshot: None,
+                private_state: None,
+                inspection_metadata: None,
+            })
+            .await;
+        state
+            .record_node_memory(NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "node-b".to_string(),
+                    node_type: "text-output".to_string(),
+                    schema_version: None,
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: None,
+                output_snapshot: None,
+                private_state: None,
+                inspection_metadata: None,
+            })
+            .await;
+
+        let summary = state.checkpoint_summary("session-1", "graph-1").await;
+        assert_eq!(summary.preserved_node_count, 2);
+        assert!(!summary.checkpoint_available);
+
+        state.clear_node_memory("session-1").await;
+        let cleared_summary = state.checkpoint_summary("session-1", "graph-1").await;
+        assert_eq!(cleared_summary.preserved_node_count, 0);
     }
 }

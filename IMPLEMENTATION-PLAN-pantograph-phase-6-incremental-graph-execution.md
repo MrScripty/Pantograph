@@ -576,7 +576,7 @@ the new system safely.
 execution.
 
 **Tasks:**
-- [ ] Add workflow-session memory records keyed by session id and node id.
+- [x] Add workflow-session memory records keyed by session id and node id.
 - [ ] Define memory record fields for identity, last input fingerprint, last
       output snapshot, private node state, status, and inspection metadata.
 - [ ] Make the per-node memory contract explicit enough that a node's logical
@@ -596,7 +596,7 @@ execution.
 - Focused `cargo test -p pantograph-workflow-service` coverage for graph-memory
   store ownership and state isolation
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Add Graph-Edit Reconciliation And Incremental Reinjection
 
@@ -787,6 +787,12 @@ Update during implementation:
   preflight caching, and affinity refresh helpers now live behind
   `workflow/session_runtime.rs` instead of keeping that Phase 6 runtime
   coordination inline inside `workflow.rs`.
+- 2026-04-18: Milestone 3 started. `node-engine::engine::session_state` now
+  owns a backend-only per-session node-memory store keyed by session id and
+  node id, `WorkflowExecutor` now exposes thin node-memory inspection/update
+  facades through `engine/workflow_session.rs`, and checkpoint summaries now
+  report preserved-node counts from that store without implying full
+  checkpoint/restore support yet.
 
 ## Commit Cadence Notes
 
