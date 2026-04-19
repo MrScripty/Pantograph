@@ -136,3 +136,7 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
 - `waiting_for_input` and the derived run status are backend-owned lifecycle
   facts: interactive pause transitions and incremental resume transitions must
   reconcile here before any adapter or diagnostics projection consumes them.
+- The latest dirty-task set, incremental rerun task ids, and graph-memory
+  impact summary are backend-owned trace facts. Adapters may cache or replay
+  them for live presentation, but they must not become the canonical owner of
+  graph-reconciliation history.

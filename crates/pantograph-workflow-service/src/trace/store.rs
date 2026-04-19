@@ -12,6 +12,7 @@ use super::types::{
     WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
 };
+use node_engine::GraphMemoryImpactSummary;
 
 const DEFAULT_RETAINED_TRACE_LIMIT: usize = 200;
 
@@ -53,6 +54,9 @@ pub(super) struct WorkflowTraceRunState {
     pub(super) node_count_at_start: usize,
     pub(super) event_count: usize,
     pub(super) stream_event_count: usize,
+    pub(super) last_dirty_tasks: Vec<String>,
+    pub(super) last_incremental_task_ids: Vec<String>,
+    pub(super) last_graph_memory_impact: Option<GraphMemoryImpactSummary>,
     pub(super) waiting_for_input: bool,
     pub(super) last_error: Option<String>,
     pub(super) nodes_by_id: BTreeMap<String, WorkflowTraceNodeRecord>,
@@ -75,6 +79,9 @@ impl WorkflowTraceRunState {
             node_count_at_start: self.node_count_at_start,
             event_count: self.event_count,
             stream_event_count: self.stream_event_count,
+            last_dirty_tasks: self.last_dirty_tasks.clone(),
+            last_incremental_task_ids: self.last_incremental_task_ids.clone(),
+            last_graph_memory_impact: self.last_graph_memory_impact.clone(),
             waiting_for_input: self.waiting_for_input,
             last_error: self.last_error.clone(),
             nodes: self.nodes_by_id.values().cloned().collect(),

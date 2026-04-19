@@ -30,6 +30,9 @@ pub(super) fn create_trace_run_state(
         node_count_at_start,
         event_count: 0,
         stream_event_count: 0,
+        last_dirty_tasks: Vec::new(),
+        last_incremental_task_ids: Vec::new(),
+        last_graph_memory_impact: None,
         waiting_for_input: false,
         last_error: None,
         nodes_by_id: BTreeMap::new(),
@@ -59,6 +62,9 @@ pub(super) fn apply_trace_event(
                 trace.ended_at_ms = None;
                 trace.duration_ms = None;
                 trace.node_count_at_start = *node_count;
+                trace.last_dirty_tasks.clear();
+                trace.last_incremental_task_ids.clear();
+                trace.last_graph_memory_impact = None;
             }
         }
         WorkflowTraceEvent::NodeStarted { .. } if trace.status == WorkflowTraceStatus::Waiting => {
@@ -66,14 +72,26 @@ pub(super) fn apply_trace_event(
             trace.waiting_for_input = false;
         }
         WorkflowTraceEvent::NodeStarted { .. } => {}
-        WorkflowTraceEvent::IncrementalExecutionStarted { .. }
+        WorkflowTraceEvent::IncrementalExecutionStarted { task_ids, .. }
             if trace.status == WorkflowTraceStatus::Waiting =>
         {
             trace.status = WorkflowTraceStatus::Running;
             trace.waiting_for_input = false;
+            trace.last_incremental_task_ids = task_ids.clone();
+        }
+        WorkflowTraceEvent::IncrementalExecutionStarted { task_ids, .. } => {
+            trace.last_incremental_task_ids = task_ids.clone();
         }
         WorkflowTraceEvent::NodeStream { .. } => {
             trace.stream_event_count += 1;
+        }
+        WorkflowTraceEvent::GraphModified {
+            dirty_tasks,
+            memory_impact,
+            ..
+        } => {
+            trace.last_dirty_tasks = dirty_tasks.clone();
+            trace.last_graph_memory_impact = memory_impact.clone();
         }
         WorkflowTraceEvent::WaitingForInput { .. } => {
             trace.status = WorkflowTraceStatus::Waiting;
@@ -134,9 +152,7 @@ pub(super) fn apply_trace_event(
         ),
         WorkflowTraceEvent::NodeProgress { .. }
         | WorkflowTraceEvent::NodeCompleted { .. }
-        | WorkflowTraceEvent::NodeFailed { .. }
-        | WorkflowTraceEvent::GraphModified { .. }
-        | WorkflowTraceEvent::IncrementalExecutionStarted { .. } => {}
+        | WorkflowTraceEvent::NodeFailed { .. } => {}
     }
 
     let Some(node_id) = event.node_id() else {
@@ -288,6 +304,9 @@ fn reset_trace_for_restart(
     trace.node_count_at_start = node_count_at_start;
     trace.event_count = 1;
     trace.stream_event_count = 0;
+    trace.last_dirty_tasks.clear();
+    trace.last_incremental_task_ids.clear();
+    trace.last_graph_memory_impact = None;
     trace.waiting_for_input = false;
     trace.last_error = None;
     trace.nodes_by_id.clear();

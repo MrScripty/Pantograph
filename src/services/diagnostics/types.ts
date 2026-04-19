@@ -200,6 +200,9 @@ export interface WorkflowTraceSummary {
   node_count_at_start: number;
   event_count: number;
   stream_event_count: number;
+  last_dirty_tasks?: string[];
+  last_incremental_task_ids?: string[];
+  last_graph_memory_impact?: GraphMemoryImpactSummary | null;
   waiting_for_input: boolean;
   last_error?: string | null;
   nodes: WorkflowTraceNodeRecord[];

@@ -901,6 +901,11 @@ the affected downstream closure.
   `memory_impact` when graph-diff compatibility analysis is available, and the
   Tauri diagnostics overlay retains the latest graph-memory impact alongside
   dirty-task and incremental-task facts for restarted-run reset behavior.
+- The backend-owned workflow trace summary now also retains the latest dirty
+  tasks, incremental rerun task ids, and graph-memory impact, so diagnostics
+  consumers can inspect graph reconciliation and rerun facts from the
+  canonical trace contract instead of depending on a transport-local overlay
+  to own that state.
 - The existing GUI graph diagnostics tab now also renders the latest backend-
   owned graph-memory impact summary from diagnostics state, showing read-only
   compatibility counts and per-node reasons without rebuilding reconciliation

@@ -335,6 +335,23 @@ fn workflow_trace_contract_snapshot() {
             node_count_at_start: 2,
             event_count: 4,
             stream_event_count: 1,
+            last_dirty_tasks: vec!["merge".to_string(), "output".to_string()],
+            last_incremental_task_ids: vec!["output".to_string()],
+            last_graph_memory_impact: Some(node_engine::GraphMemoryImpactSummary {
+                node_decisions: vec![
+                    node_engine::NodeMemoryCompatibilitySnapshot {
+                        node_id: "merge".to_string(),
+                        compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                        reason: Some("upstream input updated".to_string()),
+                    },
+                    node_engine::NodeMemoryCompatibilitySnapshot {
+                        node_id: "output".to_string(),
+                        compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                        reason: Some("compatibility unknown".to_string()),
+                    },
+                ],
+                fallback_to_full_invalidation: true,
+            }),
             waiting_for_input: false,
             last_error: None,
             nodes: vec![WorkflowTraceNodeRecord {
@@ -397,6 +414,23 @@ fn workflow_trace_contract_snapshot() {
             "node_count_at_start": 2,
             "event_count": 4,
             "stream_event_count": 1,
+            "last_dirty_tasks": ["merge", "output"],
+            "last_incremental_task_ids": ["output"],
+            "last_graph_memory_impact": {
+                "node_decisions": [
+                    {
+                        "node_id": "merge",
+                        "compatibility": "preserve_with_input_refresh",
+                        "reason": "upstream input updated"
+                    },
+                    {
+                        "node_id": "output",
+                        "compatibility": "fallback_full_invalidation",
+                        "reason": "compatibility unknown"
+                    }
+                ],
+                "fallback_to_full_invalidation": true
+            },
             "waiting_for_input": false,
             "last_error": null,
             "nodes": [{

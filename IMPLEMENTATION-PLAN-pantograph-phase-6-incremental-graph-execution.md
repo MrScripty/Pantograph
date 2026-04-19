@@ -875,6 +875,12 @@ Update during implementation:
   app diagnostics state, using focused read-only presenters for compatibility
   counts and labels so the frontend remains a renderer over backend-owned
   mutation diagnostics rather than a second owner of reconciliation policy.
+- 2026-04-18: Milestone 6 continued. The backend-owned workflow trace summary
+  now retains the latest dirty-task set, incremental rerun task ids, and
+  graph-memory impact summary, and Tauri diagnostics consume those trace-owned
+  facts as the primary source of truth so restarted attempts clear graph-
+  reconciliation state in one backend reset path instead of relying on a
+  transport-local overlay to own mutation history.
 
 ## Commit Cadence Notes
 

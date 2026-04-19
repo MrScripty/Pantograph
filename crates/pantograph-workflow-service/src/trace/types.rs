@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use node_engine::GraphMemoryImpactSummary;
 use serde::{Deserialize, Serialize};
 
 use crate::WorkflowSchedulerSnapshotDiagnostics;
@@ -119,6 +120,12 @@ pub struct WorkflowTraceSummary {
     pub event_count: usize,
     #[serde(default)]
     pub stream_event_count: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub last_dirty_tasks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub last_incremental_task_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_graph_memory_impact: Option<GraphMemoryImpactSummary>,
     #[serde(default)]
     pub waiting_for_input: bool,
     #[serde(default)]
@@ -185,10 +192,13 @@ pub enum WorkflowTraceEvent {
     GraphModified {
         execution_id: String,
         workflow_id: Option<String>,
+        dirty_tasks: Vec<String>,
+        memory_impact: Option<GraphMemoryImpactSummary>,
     },
     IncrementalExecutionStarted {
         execution_id: String,
         workflow_id: Option<String>,
+        task_ids: Vec<String>,
     },
     RuntimeSnapshotCaptured {
         execution_id: String,

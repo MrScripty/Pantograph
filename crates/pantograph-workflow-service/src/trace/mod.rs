@@ -85,6 +85,23 @@ mod tests {
             node_count_at_start: 2,
             event_count: 3,
             stream_event_count: 1,
+            last_dirty_tasks: vec!["merge".to_string(), "output".to_string()],
+            last_incremental_task_ids: vec!["output".to_string()],
+            last_graph_memory_impact: Some(node_engine::GraphMemoryImpactSummary {
+                node_decisions: vec![
+                    node_engine::NodeMemoryCompatibilitySnapshot {
+                        node_id: "merge".to_string(),
+                        compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                        reason: Some("upstream input updated".to_string()),
+                    },
+                    node_engine::NodeMemoryCompatibilitySnapshot {
+                        node_id: "output".to_string(),
+                        compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                        reason: Some("compatibility unknown".to_string()),
+                    },
+                ],
+                fallback_to_full_invalidation: true,
+            }),
             waiting_for_input: false,
             last_error: None,
             nodes: vec![WorkflowTraceNodeRecord {
@@ -144,6 +161,23 @@ mod tests {
             "node_count_at_start": 2,
             "event_count": 3,
             "stream_event_count": 1,
+            "last_dirty_tasks": ["merge", "output"],
+            "last_incremental_task_ids": ["output"],
+            "last_graph_memory_impact": {
+                "node_decisions": [
+                    {
+                        "node_id": "merge",
+                        "compatibility": "preserve_with_input_refresh",
+                        "reason": "upstream input updated"
+                    },
+                    {
+                        "node_id": "output",
+                        "compatibility": "fallback_full_invalidation",
+                        "reason": "compatibility unknown"
+                    }
+                ],
+                "fallback_to_full_invalidation": true
+            },
             "waiting_for_input": false,
             "last_error": null,
             "nodes": [{
@@ -1265,6 +1299,7 @@ mod tests {
             &WorkflowTraceEvent::IncrementalExecutionStarted {
                 execution_id: "exec-1".to_string(),
                 workflow_id: Some("wf-1".to_string()),
+                task_ids: vec!["resume-node".to_string()],
             },
             180,
         );
@@ -1277,6 +1312,60 @@ mod tests {
         assert_eq!(trace.duration_ms, None);
         assert_eq!(trace.last_error, None);
         assert_eq!(trace.event_count, 3);
+        assert_eq!(trace.last_incremental_task_ids, vec!["resume-node".to_string()]);
+    }
+
+    #[test]
+    fn workflow_trace_store_records_graph_reconciliation_facts() {
+        let store = WorkflowTraceStore::new(10);
+
+        let snapshot = store.record_event(
+            &WorkflowTraceEvent::GraphModified {
+                execution_id: "exec-1".to_string(),
+                workflow_id: Some("wf-1".to_string()),
+                dirty_tasks: vec!["merge".to_string(), "output".to_string()],
+                memory_impact: Some(node_engine::GraphMemoryImpactSummary {
+                    node_decisions: vec![
+                        node_engine::NodeMemoryCompatibilitySnapshot {
+                            node_id: "merge".to_string(),
+                            compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                            reason: Some("upstream input updated".to_string()),
+                        },
+                        node_engine::NodeMemoryCompatibilitySnapshot {
+                            node_id: "output".to_string(),
+                            compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                            reason: Some("compatibility unknown".to_string()),
+                        },
+                    ],
+                    fallback_to_full_invalidation: true,
+                }),
+            },
+            180,
+        );
+
+        let trace = snapshot.traces.first().expect("trace");
+        assert_eq!(
+            trace.last_dirty_tasks,
+            vec!["merge".to_string(), "output".to_string()]
+        );
+        assert_eq!(
+            trace.last_graph_memory_impact,
+            Some(node_engine::GraphMemoryImpactSummary {
+                node_decisions: vec![
+                    node_engine::NodeMemoryCompatibilitySnapshot {
+                        node_id: "merge".to_string(),
+                        compatibility: node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh,
+                        reason: Some("upstream input updated".to_string()),
+                    },
+                    node_engine::NodeMemoryCompatibilitySnapshot {
+                        node_id: "output".to_string(),
+                        compatibility: node_engine::NodeMemoryCompatibility::FallbackFullInvalidation,
+                        reason: Some("compatibility unknown".to_string()),
+                    },
+                ],
+                fallback_to_full_invalidation: true,
+            })
+        );
     }
 
     #[test]
@@ -1287,6 +1376,7 @@ mod tests {
             &WorkflowTraceEvent::IncrementalExecutionStarted {
                 execution_id: "exec-1".to_string(),
                 workflow_id: Some("wf-1".to_string()),
+                task_ids: vec!["node-1".to_string()],
             },
             100,
         );

@@ -123,18 +123,24 @@ pub(crate) fn node_engine_workflow_trace_event(
         node_engine::WorkflowEvent::GraphModified {
             workflow_id,
             execution_id,
+            dirty_tasks,
+            memory_impact,
             ..
         } => WorkflowTraceEvent::GraphModified {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
+            dirty_tasks: dirty_tasks.clone(),
+            memory_impact: memory_impact.clone(),
         },
         node_engine::WorkflowEvent::IncrementalExecutionStarted {
             workflow_id,
             execution_id,
+            tasks,
             ..
         } => WorkflowTraceEvent::IncrementalExecutionStarted {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
+            task_ids: tasks.clone(),
         },
     };
 
@@ -233,18 +239,24 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
         WorkflowEvent::GraphModified {
             workflow_id,
             execution_id,
+            dirty_tasks,
+            memory_impact,
             ..
         } => Some(WorkflowTraceEvent::GraphModified {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
+            dirty_tasks: dirty_tasks.clone(),
+            memory_impact: memory_impact.clone(),
         }),
         WorkflowEvent::IncrementalExecutionStarted {
             workflow_id,
             execution_id,
+            task_ids,
             ..
         } => Some(WorkflowTraceEvent::IncrementalExecutionStarted {
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
+            task_ids: task_ids.clone(),
         }),
         WorkflowEvent::RuntimeSnapshot {
             workflow_id,
@@ -292,12 +304,25 @@ pub(crate) fn diagnostics_run_trace(
 ) -> DiagnosticsRunTrace {
     let DiagnosticsRunOverlay {
         last_updated_at_ms,
-        last_dirty_tasks,
-        last_incremental_task_ids,
-        last_graph_memory_impact,
+        last_dirty_tasks: overlay_last_dirty_tasks,
+        last_incremental_task_ids: overlay_last_incremental_task_ids,
+        last_graph_memory_impact: overlay_last_graph_memory_impact,
         nodes_by_id,
         events,
     } = overlay.unwrap_or_else(|| DiagnosticsRunOverlay::new(trace.started_at_ms));
+
+    let last_dirty_tasks = if overlay_last_dirty_tasks.is_empty() {
+        trace.last_dirty_tasks.clone()
+    } else {
+        overlay_last_dirty_tasks
+    };
+    let last_incremental_task_ids = if overlay_last_incremental_task_ids.is_empty() {
+        trace.last_incremental_task_ids.clone()
+    } else {
+        overlay_last_incremental_task_ids
+    };
+    let last_graph_memory_impact =
+        overlay_last_graph_memory_impact.or_else(|| trace.last_graph_memory_impact.clone());
 
     DiagnosticsRunTrace {
         execution_id: trace.execution_id.clone(),
