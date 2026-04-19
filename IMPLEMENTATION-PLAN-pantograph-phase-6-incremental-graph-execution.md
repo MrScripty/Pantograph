@@ -771,6 +771,10 @@ Update during implementation:
 - 2026-04-18: Milestone 2 continued. `node-engine` graph mutation, snapshot,
   and restore helpers now live behind `engine/graph_state.rs` instead of
   keeping those Phase 6 insertion points inline inside `engine.rs`.
+- 2026-04-18: Milestone 2 continued. Graph edit-session request/response DTOs
+  and local undo/session-kind types now live behind `graph/session_types.rs`
+  instead of keeping those contract declarations inline at the top of
+  `graph/session.rs`.
 
 ## Commit Cadence Notes
 

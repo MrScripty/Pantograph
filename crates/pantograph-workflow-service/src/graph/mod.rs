@@ -7,6 +7,7 @@ mod session;
 mod session_contract;
 mod session_event;
 mod session_runtime;
+mod session_types;
 mod types;
 mod validation;
 
@@ -20,8 +21,10 @@ pub use persistence::{
     WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
 pub use registry::{NodeRegistry, validate_workflow_connection};
-pub use session::{
-    GraphSessionStore, UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+pub use session::{GraphSessionStore, convert_graph_to_node_engine};
+pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
+pub use session_types::{
+    UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
     WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
     WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
     WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
@@ -30,9 +33,8 @@ pub use session::{
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
-    WorkflowSessionKind, convert_graph_to_node_engine,
+    WorkflowSessionKind,
 };
-pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
     ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,

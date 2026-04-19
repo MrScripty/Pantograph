@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use super::session::WorkflowSessionKind;
+use super::session_types::WorkflowSessionKind;
 use crate::workflow::{
     WorkflowSchedulerAdmissionOutcome, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
     WorkflowSessionState, WorkflowSessionSummary,

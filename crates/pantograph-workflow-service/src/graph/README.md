@@ -17,6 +17,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view surfaced to transport layers. |
 | `session_runtime.rs` | Focused runtime/lifecycle state for one graph edit session, including active execution metadata, queue projection, and run counters. |
+| `session_types.rs` | Edit-session request/response DTOs and local undo/redo/session-kind types that are shared by the graph session boundary. |
 | `session.rs` | Edit-session store, undo/redo state, graph mutation orchestration, and graph-to-engine conversion helpers. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 
