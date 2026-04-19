@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::graph::WorkflowSessionKind;
+use crate::graph::{WorkflowGraphSessionStateView, WorkflowSessionKind};
 
 /// Stale workflow-session cleanup request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -95,6 +95,22 @@ pub struct WorkflowSessionStatusRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowSessionStatusResponse {
     pub session: WorkflowSessionSummary,
+}
+
+/// Session inspection request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionInspectionRequest {
+    pub session_id: String,
+}
+
+/// Session inspection response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSessionInspectionResponse {
+    pub session: WorkflowSessionSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_session_state: Option<WorkflowGraphSessionStateView>,
 }
 
 /// Session queue item status.

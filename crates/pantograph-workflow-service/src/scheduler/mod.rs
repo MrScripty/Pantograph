@@ -8,7 +8,8 @@ pub use contracts::{
     WorkflowSchedulerRuntimeCapacityPressure, WorkflowSchedulerRuntimeRegistryDiagnostics,
     WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
     WorkflowSchedulerSnapshotDiagnostics, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowSessionInspectionRequest,
+    WorkflowSessionInspectionResponse, WorkflowSessionKeepAliveRequest,
     WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
     WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
@@ -19,9 +20,9 @@ pub use contracts::{
     WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
     WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };
-pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
 pub use policy::select_runtime_unload_candidate_by_affinity;
+pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
 pub(crate) use store::{
-    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowSessionPreflightCache, WorkflowSessionStore,
-    unix_timestamp_ms,
+    unix_timestamp_ms, WorkflowSessionPreflightCache, WorkflowSessionStore,
+    WORKFLOW_SESSION_QUEUE_POLL_MS,
 };

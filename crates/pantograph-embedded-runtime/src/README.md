@@ -158,6 +158,9 @@ embedded-runtime crate.
   the same backend session-execution unload transition as direct
   `CapacityRebalance` unload so the runtime-registry boundary does not become a
   second owner of checkpoint semantics.
+- Live workflow-session inspection for diagnostics must read node memory,
+  checkpoint, and residency state from the retained backend session executor
+  instead of reconstructing that state inside Tauri transports.
 - Scheduler runtime-registry diagnostics shaping, including reclaim-candidate
   lookup and warmup-decision translation, must stay in shared backend registry
   helpers so workflow providers do not drift on registry-to-workflow mapping.

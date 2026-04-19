@@ -883,20 +883,22 @@ behavior.
 out of the backend.
 
 **Tasks:**
-- [ ] Extend backend trace/diagnostics contracts with additive node-memory and
-      checkpoint-inspection facts.
-- [ ] Add thin Tauri transport forwarding for those diagnostics.
-- [ ] Refactor touched package/frontend files so they remain read-only
-      presenters of backend-owned memory and mutation diagnostics.
+- [ ] Extend backend trace/diagnostics contracts with additive workflow-session
+      inspection facts for node memory, reconciliation, and checkpoint state.
+- [ ] Add thin Tauri transport forwarding for those backend-owned inspection
+      facts without introducing adapter-local policy.
+- [ ] Refactor touched frontend/Tauri files so they remain read-only
+      presenters and transport facades for backend-owned memory and mutation
+      diagnostics.
 - [ ] Expose enough inspection data for debugger/system-builder tooling to see
       the pre-edit preserved node state, the post-edit reconciliation result,
-      and the post-rerun node-memory state without reconstructing backend
-      policy in the GUI.
-- [ ] Keep `WorkflowGraph.svelte`, `createWorkflowStores.ts`, and
-      `WorkflowService.ts` healthy by extracting any touched helper logic before
-      more stateful behavior lands there.
-- [ ] Add README updates documenting the inspection contract and the "backend is
-      source of truth" rule for node memory.
+      the current checkpoint summary, and the post-rerun node-memory state
+      without reconstructing backend policy in the GUI.
+- [ ] Keep `WorkflowGraph.svelte`, `storeInstances.ts`, `diagnosticsStore.ts`,
+      and `WorkflowService.ts` healthy by extracting any touched helper logic
+      before more diagnostics behavior lands there.
+- [ ] Add README updates documenting the inspection contract and the "backend
+      is source of truth" rule for node memory.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service`
@@ -906,6 +908,309 @@ out of the backend.
   diagnostics projection
 
 **Status:** In progress
+
+**Completed so far:**
+- The backend-owned graph-session state contract already exists in
+  `pantograph-workflow-service` through `WorkflowGraphSessionStateView`, with
+  additive `node_memory`, `memory_impact`, and `checkpoint` fields.
+- The additive `GraphModified` event now carries backend-owned
+  `memory_impact`, and the workflow trace summary already retains latest dirty
+  tasks, incremental task ids, and graph-memory impact.
+- Tauri diagnostics already forward backend-owned graph-memory impact into the
+  retained diagnostics snapshot, and the existing GUI graph diagnostics tab
+  renders those compatibility decisions through pure presentation helpers.
+- Frontend diagnostics already have a single store owner in
+  `src/stores/diagnosticsStore.ts`, which gives Milestone 6 a compliant place
+  to consume additional backend-owned inspection facts without adding polling
+  loops or component-local event subscriptions.
+
+**Remaining focus:**
+- Extend the current diagnostics contract from graph-memory impact only to the
+  full workflow-session inspection surface needed for pre-edit, post-edit,
+  checkpoint, and post-rerun debugging.
+- Keep Tauri and Svelte as thin readers over backend-owned inspection facts
+  while refactoring the touched oversized files so diagnostics work does not
+  worsen their current health.
+
+#### Milestone 6 Detailed Remaining Plan
+
+**Objective:** Finish the inspection and diagnostics rollout for Phase 6 by
+extending one backend-owned workflow-session inspection contract from Rust
+through Tauri into the existing GUI, while keeping adapters and components as
+read-only consumers of backend-owned node-memory, reconciliation, and
+checkpoint semantics.
+
+**Scope**
+
+**In scope:**
+- backend diagnostics/trace contracts for workflow-session inspection facts
+- headless/Tauri diagnostics transport and projection updates
+- GUI diagnostics/store/service changes needed to render backend-owned node
+  memory and checkpoint facts
+- standards-driven refactors in the immediate touched files so diagnostics
+  work does not deepen existing file-size or ownership problems
+- README and source-of-truth updates for touched diagnostics boundaries
+
+**Out of scope:**
+- new persistence/durable-history requirements beyond the bounded checkpoint
+  model already approved in Phase 6
+- scheduler policy, runtime policy, or checkpoint semantics owned anywhere
+  outside backend Rust
+- broader `WorkflowGraph.svelte` cleanup unrelated to diagnostics/inspection
+  touches
+- productizing diagnostics beyond the existing internal GUI/debugger surfaces
+
+**Definition of done:**
+- One backend-owned structured inspection contract exposes the current
+  workflow-session node-memory snapshots, the latest graph-reconciliation
+  result, and the current checkpoint summary needed for debugging resumed or
+  edited workflow sessions.
+- Tauri forwards that contract without re-deriving memory or checkpoint
+  semantics locally.
+- Frontend diagnostics render those facts through read-only presenters and a
+  single diagnostics store owner, with no component-local workflow policy.
+- The GUI can inspect:
+  pre-edit preserved node state,
+  post-edit reconciliation impact,
+  current checkpoint/residency facts,
+  and post-rerun node-memory state.
+- Immediate touched files and directories remain standards-compliant,
+  including README coverage and decomposition of touched oversized files where
+  diagnostics logic would otherwise accumulate.
+
+**Assumptions:**
+- `WorkflowGraphSessionStateView` remains the canonical backend-owned
+  structured inspection DTO rather than introducing a second frontend-only or
+  Tauri-only memory contract.
+- Run-level trace summaries and current session-state inspection serve
+  different purposes and can coexist additively:
+  trace for retained execution history,
+  session-state inspection for current logical memory/checkpoint facts.
+- The existing diagnostics panel remains the primary GUI target for this
+  milestone rather than creating a new top-level diagnostics route.
+
+**Dependencies:**
+- `node-engine` workflow-session node-memory and checkpoint contracts already
+  landed in earlier Phase 6 milestones
+- `pantograph-workflow-service` graph/session and trace contracts
+- Tauri diagnostics store/projection path under `src-tauri/src/workflow`
+- existing frontend diagnostics store and diagnostics components
+
+**Affected structured contracts:**
+- `pantograph_workflow_service::graph::session_contract::WorkflowGraphSessionStateView`
+- `pantograph_workflow_service::trace::types::WorkflowTraceSummary`
+- Tauri diagnostics projection structs under `src-tauri/src/workflow/diagnostics/types.rs`
+- frontend diagnostics DTOs under `src/services/diagnostics/types.ts`
+- any additive diagnostics snapshot response shape exposed through
+  `WorkflowService.ts`
+
+**Affected persisted artifacts:**
+- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+- `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md` if milestone
+  status/progress wording changes during execution
+- touched module `README.md` files in:
+  - `src/components/diagnostics`
+  - `src/stores`
+  - `src-tauri/src/workflow`
+  - `crates/pantograph-workflow-service/src/trace`
+  - any additional touched `src/` directory required by the final extraction
+
+**Targeted file boundary for the remaining work:**
+- `crates/pantograph-workflow-service/src/trace/types.rs`
+- `crates/pantograph-workflow-service/src/trace/state.rs`
+- `crates/pantograph-workflow-service/src/trace/README.md`
+- `crates/pantograph-workflow-service/src/graph/session_contract.rs`
+- `crates/pantograph-embedded-runtime/src/workflow_runtime.rs`
+- `src-tauri/src/workflow/headless_diagnostics.rs`
+- `src-tauri/src/workflow/headless_diagnostics_transport.rs`
+- `src-tauri/src/workflow/diagnostics/types.rs`
+- `src-tauri/src/workflow/README.md`
+- `src/services/diagnostics/types.ts`
+- `src/services/workflow/WorkflowService.ts`
+- `src/stores/diagnosticsStore.ts`
+- `src/stores/storeInstances.ts`
+- `src/stores/README.md`
+- `src/components/diagnostics/DiagnosticsPanel.svelte`
+- `src/components/diagnostics/DiagnosticsGraph.svelte`
+- `src/components/diagnostics/presenters.ts`
+- `src/components/diagnostics/README.md`
+- `src/components/WorkflowGraph.svelte` only if the inspection panel wiring
+  requires touch-points that would otherwise worsen its size/ownership shape
+
+**Ownership and lifecycle note:**
+- Backend Rust remains the single owner of node-memory snapshots, checkpoint
+  summaries, reconciliation decisions, and any semantics about what those
+  fields mean.
+- Tauri owns only request orchestration and serialization of backend-owned
+  diagnostics snapshots.
+- `src/stores/diagnosticsStore.ts` remains the single frontend owner for
+  diagnostics subscriptions and refresh sequencing; components must not create
+  parallel listeners or refresh loops.
+- If diagnostics refresh sequencing changes, the store remains the single
+  lifecycle owner that starts, stops, and deduplicates refresh work.
+
+**Public facade preservation note:**
+- Preserve the existing `workflowService.getDiagnosticsSnapshot(...)`,
+  `diagnosticsSnapshot`, and diagnostics panel entrypoints as the stable
+  frontend facade while extracting helper modules under the hood where needed.
+- Any additive fields must be append-only on diagnostics DTOs and must not
+  break existing diagnostics consumers.
+
+**Detailed slices:**
+
+**Slice 6A: Freeze the backend-owned inspection contract**
+- Decide and document one additive inspection contract for Milestone 6 built on
+  `WorkflowGraphSessionStateView` instead of inventing a parallel
+  diagnostics-only memory DTO.
+- Extend the backend trace/diagnostics surface with additive current-session
+  inspection facts needed for:
+  latest node-memory snapshots,
+  latest reconciliation impact,
+  latest checkpoint summary/residency.
+- Keep run-history trace facts and current session-state inspection facts
+  explicitly separate so trace summaries do not become a dump bucket for all
+  current session state.
+- Update touched backend READMEs in the same slice so the contract owner is
+  recorded where the code lives.
+
+**Slice 6B: Keep Tauri as thin transport**
+- Forward the additive inspection contract through the existing headless
+  diagnostics path without re-deriving policy in
+  `headless_diagnostics.rs` or `headless_diagnostics_transport.rs`.
+- If Tauri diagnostics types need more fields, keep them as serialization and
+  projection structures only; do not add checkpoint or node-memory decision
+  helpers there.
+- Extract focused projection helpers if the touched Tauri diagnostics files
+  would otherwise absorb multiple responsibilities.
+
+**Slice 6C: Frontend diagnostics consume backend-owned inspection facts**
+- Extend `src/services/diagnostics/types.ts` and the diagnostics snapshot store
+  with additive read-only fields for workflow-session inspection.
+- Keep `WorkflowService.ts` as a thin command facade; extract DTO parsing or
+  diagnostics snapshot normalization helpers before adding more logic to the
+  file.
+- Keep `diagnosticsStore.ts` as the only diagnostics lifecycle owner; if
+  snapshot shaping grows, extract a pure snapshot builder or selector helper
+  rather than embedding more state shaping inline.
+- Use the existing diagnostics panel and tab structure instead of adding a
+  second store or duplicated service path.
+
+**Slice 6D: GUI inspection surface renders pre-edit, post-edit, checkpoint, and post-rerun facts**
+- Extend diagnostics presenters/components so the graph-facing diagnostics tab
+  or an adjacent diagnostics view can show:
+  preserved node-memory snapshots before rerun,
+  post-edit reconciliation results,
+  checkpoint availability/residency,
+  post-rerun node-memory state.
+- Keep formatting logic in pure presenter helpers; Svelte components should
+  stay declarative renderers over diagnostics snapshots.
+- If touching `WorkflowGraph.svelte` is required for panel wiring, extract the
+  diagnostics-specific boundary first and keep the graph component from
+  absorbing new diagnostics orchestration.
+
+**Slice 6E: Standards close-out for touched diagnostics boundaries**
+- Reconcile module READMEs and this plan after each landed slice.
+- Update source-of-truth docs so the milestone records what inspection facts
+  are available from traces versus current workflow-session state.
+- Record any follow-on work that belongs to Milestone 7 or a later durability
+  phase instead of silently broadening Milestone 6.
+
+**Verification plan:**
+- `cargo test -p pantograph-workflow-service`
+- focused Rust tests covering additive diagnostics/trace/session-state contract
+  shaping and reset semantics
+- focused Tauri diagnostics tests covering producer-to-projection parity for
+  the new inspection fields
+- `npm run typecheck`
+- focused frontend tests for any new presenter helpers or diagnostics snapshot
+  selectors
+- at least one cross-layer acceptance path from backend workflow-session
+  inspection facts through Tauri diagnostics projection into the GUI-facing
+  diagnostics snapshot
+- rerun any affected diagnostics suites more than once if the touched store or
+  projection path mutates retained state
+
+**Implementation risks and mitigations:**
+- Current inspection facts are split across trace summaries and graph-session
+  state, leading to duplicate or contradictory contracts.
+  Mitigation: freeze one additive ownership model in Slice 6A and document the
+  difference between historical trace data and current session-state
+  inspection.
+- Tauri becomes a second owner of node-memory or checkpoint semantics while
+  translating diagnostics.
+  Mitigation: restrict Tauri changes to forwarding/projection and reject any
+  adapter-local compatibility logic.
+- Frontend diagnostics state spreads across components or `WorkflowGraph.svelte`
+  instead of staying under `diagnosticsStore.ts`.
+  Mitigation: require store-owned lifecycle and extract pure helpers before
+  touching oversized UI files.
+- Oversized files get worse in the course of landing diagnostics.
+  Mitigation: front-load extraction work in touched files that exceed the
+  decomposition thresholds.
+- Diagnostics/state refresh introduces duplicate polling or stale refresh races.
+  Mitigation: keep `diagnosticsStore.ts` the single owner and verify cleanup
+  and refresh sequencing.
+
+**Re-plan triggers:**
+- The chosen inspection contract cannot reuse `WorkflowGraphSessionStateView`
+  without breaking an existing diagnostics consumer.
+- A touched frontend or Tauri file requires changes large enough that the
+  planned extraction boundary is no longer sufficient.
+- Cross-layer acceptance shows that run-history trace data and current
+  session-state inspection need a different boundary than planned.
+- Milestone 6 requires durable inspection history beyond the bounded current
+  session-state and retained-trace model already approved in Phase 6.
+
+#### Milestone 6 Standards Review Passes
+
+**Pass 1: Plan and architecture standards review**
+- Checked against `PLAN-STANDARDS.md` and `ARCHITECTURE-PATTERNS.md`.
+- Corrections applied to the plan:
+  - added explicit scope, assumptions, dependencies, affected contracts,
+    affected artifacts, definition of done, re-plan triggers, and lifecycle
+    ownership notes
+  - fixed the stale `createWorkflowStores.ts` reference to the actual
+    `src/stores/storeInstances.ts` boundary
+  - required one backend-owned inspection contract instead of parallel
+    backend/Tauri/frontend memory DTO ownership
+  - kept backend-owned data flow explicit:
+    backend Rust as source of truth,
+    Tauri as transport,
+    GUI as presentation
+
+**Pass 2: Coding and frontend standards review**
+- Checked against `CODING-STANDARDS.md` and `FRONTEND-STANDARDS.md`.
+- Corrections applied to the plan:
+  - called out decomposition review explicitly for touched oversized files:
+    `src/components/WorkflowGraph.svelte` at 2092 lines,
+    `src/services/workflow/WorkflowService.ts` at 895 lines,
+    `crates/pantograph-embedded-runtime/src/workflow_runtime.rs` at 1631 lines,
+    and `src-tauri/src/workflow/headless_workflow_commands.rs` at 1372 lines
+  - constrained frontend changes to declarative read-only rendering and store
+    ownership rather than component-local synchronization or imperative DOM
+    logic
+  - required helper extraction in `WorkflowService.ts` and `diagnosticsStore.ts`
+    before more diagnostics shaping is added inline
+
+**Pass 3: Concurrency and testing standards review**
+- Checked against `CONCURRENCY-STANDARDS.md` and `TESTING-STANDARDS.md`.
+- Corrections applied to the plan:
+  - kept `diagnosticsStore.ts` as the single owner for refresh sequencing and
+    diagnostics subscriptions to avoid split ownership of stateful flows
+  - required cross-layer acceptance from backend inspection facts to GUI-facing
+    diagnostics state, not just unit/type checks
+  - required reruns of affected suites when retained diagnostics state is
+    mutated, to catch hidden leakage or refresh-order races
+
+**Pass 4: Documentation standards review**
+- Checked against `DOCUMENTATION-STANDARDS.md`.
+- Corrections applied to the plan:
+  - listed the touched README boundaries that must be updated alongside code
+  - required README updates to explain inspection-contract ownership and the
+    difference between retained trace history and current session-state
+    inspection
+  - preserved the “backend is source of truth” rule as a documented invariant
+    instead of only an implementation preference
 
 ### Milestone 7: Close Out Source Of Truth And Rollout Safety
 

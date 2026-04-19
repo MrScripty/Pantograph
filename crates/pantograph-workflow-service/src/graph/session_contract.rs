@@ -3,7 +3,7 @@ use node_engine::{
     WorkflowSessionResidencyState,
 };
 
-const PHASE6_SESSION_STATE_CONTRACT_VERSION: u32 = 1;
+pub const PHASE6_SESSION_STATE_CONTRACT_VERSION: u32 = 1;
 const PHASE6_FALLBACK_INVALIDATION_REASON: &str =
     "phase_6_graph_reconciliation_not_implemented_yet";
 
@@ -41,6 +41,23 @@ pub struct WorkflowGraphSessionStateView {
     pub memory_impact: Option<GraphMemoryImpactSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<WorkflowSessionCheckpointSummary>,
+}
+
+impl WorkflowGraphSessionStateView {
+    pub fn new(
+        residency: WorkflowSessionResidencyState,
+        node_memory: Vec<NodeMemorySnapshot>,
+        memory_impact: Option<GraphMemoryImpactSummary>,
+        checkpoint: Option<WorkflowSessionCheckpointSummary>,
+    ) -> Self {
+        Self {
+            contract_version: PHASE6_SESSION_STATE_CONTRACT_VERSION,
+            residency,
+            node_memory,
+            memory_impact,
+            checkpoint,
+        }
+    }
 }
 
 /// Canonical graph snapshot response for edit-session transport surfaces.
@@ -93,19 +110,18 @@ pub(crate) fn build_workflow_session_state_view(
 ) -> WorkflowGraphSessionStateView {
     let projection = projection.cloned().unwrap_or_default();
     let memory_impact = resolve_workflow_session_memory_impact(workflow_event, Some(&projection));
-    WorkflowGraphSessionStateView {
-        contract_version: PHASE6_SESSION_STATE_CONTRACT_VERSION,
-        residency: projection.residency.clone(),
-        node_memory: projection.node_memory,
+    WorkflowGraphSessionStateView::new(
+        projection.residency.clone(),
+        projection.node_memory,
         memory_impact,
-        checkpoint: projection.checkpoint.or_else(|| {
+        projection.checkpoint.or_else(|| {
             Some(WorkflowSessionCheckpointSummary::unavailable(
                 session_id,
                 graph_revision,
                 projection.residency,
             ))
         }),
-    }
+    )
 }
 
 pub(crate) fn resolve_workflow_session_memory_impact(
@@ -139,10 +155,10 @@ fn graph_memory_impact_from_event(
 mod tests {
     use super::super::types::WorkflowGraph;
     use super::{
-        PHASE6_FALLBACK_INVALIDATION_REASON, PHASE6_SESSION_STATE_CONTRACT_VERSION,
-        WorkflowGraphSessionStateProjection, WorkflowGraphSessionStateView,
         build_graph_session_response, build_graph_session_response_with_state,
-        build_workflow_session_state_view,
+        build_workflow_session_state_view, WorkflowGraphSessionStateProjection,
+        WorkflowGraphSessionStateView, PHASE6_FALLBACK_INVALIDATION_REASON,
+        PHASE6_SESSION_STATE_CONTRACT_VERSION,
     };
     use node_engine::{
         NodeMemoryCompatibility, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,

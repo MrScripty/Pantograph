@@ -13,6 +13,7 @@ use pantograph_runtime_registry::{
     SharedRuntimeRegistry,
 };
 use pantograph_workflow_service::capabilities;
+use pantograph_workflow_service::graph::WorkflowGraphSessionStateView;
 use pantograph_workflow_service::{
     convert_graph_to_node_engine, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, FileSystemWorkflowGraphStore, InsertNodeConnectionResponse,
@@ -35,6 +36,7 @@ use pantograph_workflow_service::{
     WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerRuntimeRegistryDiagnostics,
     WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
     WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
+    WorkflowSessionInspectionRequest, WorkflowSessionInspectionResponse,
     WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
     WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
@@ -600,6 +602,16 @@ impl EmbeddedRuntime {
     ) -> Result<WorkflowSessionStatusResponse, WorkflowServiceError> {
         self.workflow_service
             .workflow_get_session_status(request)
+            .await
+    }
+
+    pub async fn workflow_get_session_inspection(
+        &self,
+        request: WorkflowSessionInspectionRequest,
+    ) -> Result<WorkflowSessionInspectionResponse, WorkflowServiceError> {
+        let host = self.host();
+        self.workflow_service
+            .workflow_get_session_inspection(&host, request)
             .await
     }
 
@@ -1768,6 +1780,36 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         request: &WorkflowTechnicalFitRequest,
     ) -> Result<Option<WorkflowTechnicalFitDecision>, WorkflowServiceError> {
         technical_fit::workflow_technical_fit_decision(self, request).await
+    }
+
+    async fn workflow_session_inspection_state(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+    ) -> Result<Option<WorkflowGraphSessionStateView>, WorkflowServiceError> {
+        let Some(entry) = self.session_executions.get(session_id)? else {
+            return Ok(None);
+        };
+        if entry.workflow_id != workflow_id {
+            return Ok(None);
+        }
+
+        let executor = entry.executor.lock().await;
+        let residency = executor.workflow_session_residency().await;
+        let node_memory = executor
+            .workflow_session_node_memory_snapshots(session_id)
+            .await;
+        let checkpoint = Some(
+            executor
+                .workflow_session_checkpoint_summary(session_id)
+                .await,
+        );
+        Ok(Some(WorkflowGraphSessionStateView::new(
+            residency,
+            node_memory,
+            None,
+            checkpoint,
+        )))
     }
 
     async fn run_workflow(

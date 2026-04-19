@@ -39,6 +39,7 @@ Primary operations:
 - `run_workflow_session`
 - `close_workflow_session`
 - `workflow_get_session_status`
+- `workflow_get_session_inspection`
 - `workflow_list_session_queue`
 - `workflow_cancel_session_queue_item`
 - `workflow_reprioritize_session_queue_item`
