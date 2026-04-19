@@ -15,6 +15,7 @@ pub(super) struct DemandExecutionCore<'a> {
     context: &'a Context,
     event_sink: &'a dyn EventSink,
     extensions: &'a ExecutorExtensions,
+    node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
     computing: &'a mut HashSet<NodeId>,
 }
 
@@ -26,6 +27,7 @@ impl<'a> DemandExecutionCore<'a> {
         context: &'a Context,
         event_sink: &'a dyn EventSink,
         extensions: &'a ExecutorExtensions,
+        node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
         computing: &'a mut HashSet<NodeId>,
     ) -> Self {
         Self {
@@ -35,6 +37,7 @@ impl<'a> DemandExecutionCore<'a> {
             context,
             event_sink,
             extensions,
+            node_memories,
             computing,
         }
     }
@@ -66,6 +69,13 @@ impl<'a> DemandExecutionCore<'a> {
                     input_version,
                 )? {
                     return Ok(outputs);
+                }
+
+                if let Some(snapshot) = self
+                    .node_memories
+                    .and_then(|node_memories| node_memories.get(node_id))
+                {
+                    super::workflow_session::inject_node_memory_input(&mut inputs, snapshot)?;
                 }
 
                 if let Some(prompt) =

@@ -2,6 +2,7 @@ use super::{
     NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutor,
     WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
 };
+use crate::error::Result;
 use crate::types::NodeId;
 
 pub(super) async fn workflow_session_residency(
@@ -71,6 +72,34 @@ pub(super) async fn clear_workflow_session_node_memory(
         .session_state
         .clear_node_memory(workflow_session_id)
         .await;
+}
+
+pub(super) async fn bound_workflow_session_node_memory_view(
+    executor: &WorkflowExecutor,
+) -> Option<std::collections::HashMap<NodeId, NodeMemorySnapshot>> {
+    let workflow_session_id = executor.session_state.bound_workflow_session_id().await?;
+    let snapshots = executor
+        .session_state
+        .node_memory_snapshots(&workflow_session_id)
+        .await;
+    if snapshots.is_empty() {
+        return None;
+    }
+
+    Some(
+        snapshots
+            .into_iter()
+            .map(|snapshot| (snapshot.identity.node_id.clone(), snapshot))
+            .collect(),
+    )
+}
+
+pub(super) fn inject_node_memory_input(
+    inputs: &mut std::collections::HashMap<String, serde_json::Value>,
+    snapshot: &NodeMemorySnapshot,
+) -> Result<()> {
+    inputs.insert("_node_memory".to_string(), serde_json::to_value(snapshot)?);
+    Ok(())
 }
 
 pub(super) async fn sync_bound_session_node_memory_from_cache(executor: &WorkflowExecutor) {
@@ -263,6 +292,51 @@ mod tests {
         }
     }
 
+    struct MemoryConsumingTaskExecutor {
+        execution_counter: AtomicUsize,
+    }
+
+    impl MemoryConsumingTaskExecutor {
+        fn new() -> Self {
+            Self {
+                execution_counter: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for MemoryConsumingTaskExecutor {
+        async fn execute_task(
+            &self,
+            _task_id: &str,
+            inputs: std::collections::HashMap<String, serde_json::Value>,
+            _context: &graph_flow::Context,
+            _extensions: &crate::extensions::ExecutorExtensions,
+        ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
+            let sequence = self.execution_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            let previous_output = inputs
+                .get("_node_memory")
+                .and_then(|memory| memory.get("output_snapshot"))
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let memory_status = inputs
+                .get("_node_memory")
+                .and_then(|memory| memory.get("status"))
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let payload = serde_json::json!({
+                "sequence": sequence,
+                "previous_output": previous_output,
+                "memory_status": memory_status,
+            });
+
+            Ok(std::collections::HashMap::from([
+                ("out".to_string(), payload.clone()),
+                ("value".to_string(), payload),
+            ]))
+        }
+    }
+
     fn linear_graph() -> crate::types::WorkflowGraph {
         let mut graph = crate::types::WorkflowGraph::new("graph-1", "Graph");
         graph.nodes.push(crate::types::GraphNode {
@@ -298,6 +372,17 @@ mod tests {
             source_handle: "out".to_string(),
             target: "c".to_string(),
             target_handle: "in".to_string(),
+        });
+        graph
+    }
+
+    fn single_node_graph() -> crate::types::WorkflowGraph {
+        let mut graph = crate::types::WorkflowGraph::new("graph-1", "Graph");
+        graph.nodes.push(crate::types::GraphNode {
+            id: "memory".to_string(),
+            node_type: "process".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
         });
         graph
     }
@@ -489,6 +574,52 @@ mod tests {
         assert_ne!(
             first_snapshots[2].input_fingerprint,
             second_snapshots[2].input_fingerprint
+        );
+    }
+
+    #[tokio::test]
+    async fn rerun_can_consume_prior_node_memory_from_the_bound_workflow_session() {
+        let executor =
+            WorkflowExecutor::new("exec-1", single_node_graph(), Arc::new(NullEventSink));
+        let task_executor = MemoryConsumingTaskExecutor::new();
+        bind_workflow_session(&executor, "session-1").await;
+
+        let first_run = executor
+            .demand(&"memory".to_string(), &task_executor)
+            .await
+            .expect("run first memory demand");
+        assert_eq!(
+            first_run.get("value"),
+            Some(&serde_json::json!({
+                "sequence": 1,
+                "previous_output": null,
+                "memory_status": null,
+            }))
+        );
+
+        executor.mark_modified(&"memory".to_string()).await;
+        let second_run = executor
+            .demand(&"memory".to_string(), &task_executor)
+            .await
+            .expect("run second memory demand");
+        assert_eq!(
+            second_run.get("value"),
+            Some(&serde_json::json!({
+                "sequence": 2,
+                "previous_output": {
+                    "out": {
+                        "sequence": 1,
+                        "previous_output": null,
+                        "memory_status": null,
+                    },
+                    "value": {
+                        "sequence": 1,
+                        "previous_output": null,
+                        "memory_status": null,
+                    }
+                },
+                "memory_status": "ready",
+            }))
         );
     }
 }

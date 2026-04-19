@@ -246,6 +246,22 @@ impl DemandEngine {
         event_sink: &dyn EventSink,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
+        self.demand_with_node_memory(
+            node_id, graph, executor, context, event_sink, extensions, None,
+        )
+        .await
+    }
+
+    pub(crate) async fn demand_with_node_memory(
+        &mut self,
+        node_id: &NodeId,
+        graph: &WorkflowGraph,
+        executor: &dyn TaskExecutor,
+        context: &Context,
+        event_sink: &dyn EventSink,
+        extensions: &ExecutorExtensions,
+        node_memories: Option<&HashMap<NodeId, NodeMemorySnapshot>>,
+    ) -> Result<HashMap<String, serde_json::Value>> {
         // Track which nodes we're currently computing to detect cycles
         let mut computing = HashSet::new();
         self.demand_internal(
@@ -255,6 +271,7 @@ impl DemandEngine {
             context,
             event_sink,
             extensions,
+            node_memories,
             &mut computing,
         )
         .await
@@ -272,6 +289,7 @@ impl DemandEngine {
         context: &'a Context,
         event_sink: &'a dyn EventSink,
         extensions: &'a ExecutorExtensions,
+        node_memories: Option<&'a HashMap<NodeId, NodeMemorySnapshot>>,
         computing: &'a mut HashSet<NodeId>,
     ) -> std::pin::Pin<
         Box<
@@ -282,7 +300,14 @@ impl DemandEngine {
     > {
         Box::pin(async move {
             execution_core::DemandExecutionCore::new(
-                self, graph, executor, context, event_sink, extensions, computing,
+                self,
+                graph,
+                executor,
+                context,
+                event_sink,
+                extensions,
+                node_memories,
+                computing,
             )
             .run_node(node_id)
             .await
@@ -303,7 +328,7 @@ impl DemandEngine {
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
         multi_demand::demand_multiple_with_default_budget(
-            self, node_ids, graph, executor, context, event_sink, extensions,
+            self, node_ids, graph, executor, context, event_sink, extensions, None,
         )
         .await
     }

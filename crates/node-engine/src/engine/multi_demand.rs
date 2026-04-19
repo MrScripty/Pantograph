@@ -80,6 +80,7 @@ struct DemandWindowRunner<'a> {
     context: &'a Context,
     event_sink: &'a dyn EventSink,
     extensions: &'a ExecutorExtensions,
+    node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
 }
 
 struct DemandIsolatedTargetRun {
@@ -311,12 +312,19 @@ impl<'a> DemandMultipleCoordinator<'a> {
         context: &'a Context,
         event_sink: &'a dyn EventSink,
         extensions: &'a ExecutorExtensions,
+        node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
     ) -> Self {
         Self {
             budget,
             plan,
             window_runner: DemandWindowRunner::new(
-                engine, graph, executor, context, event_sink, extensions,
+                engine,
+                graph,
+                executor,
+                context,
+                event_sink,
+                extensions,
+                node_memories,
             ),
             results: DemandMultipleResults::default(),
         }
@@ -447,6 +455,7 @@ impl<'a> DemandWindowRunner<'a> {
         context: &'a Context,
         event_sink: &'a dyn EventSink,
         extensions: &'a ExecutorExtensions,
+        node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
     ) -> Self {
         Self {
             engine,
@@ -455,6 +464,7 @@ impl<'a> DemandWindowRunner<'a> {
             context,
             event_sink,
             extensions,
+            node_memories,
         }
     }
 
@@ -470,7 +480,14 @@ impl<'a> DemandWindowRunner<'a> {
         let engine = &mut *self.engine;
 
         Self::demand_target_with_engine(
-            engine, node_id, graph, executor, context, event_sink, extensions,
+            engine,
+            node_id,
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+            self.node_memories,
         )
         .await
     }
@@ -502,6 +519,7 @@ impl<'a> DemandWindowRunner<'a> {
             self.context,
             self.event_sink,
             self.extensions,
+            self.node_memories,
         )
         .await?;
 
@@ -542,9 +560,18 @@ impl<'a> DemandWindowRunner<'a> {
         context: &Context,
         event_sink: &dyn EventSink,
         extensions: &ExecutorExtensions,
+        node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
     ) -> Result<HashMap<String, serde_json::Value>> {
         engine
-            .demand(node_id, graph, executor, context, event_sink, extensions)
+            .demand_with_node_memory(
+                node_id,
+                graph,
+                executor,
+                context,
+                event_sink,
+                extensions,
+                node_memories,
+            )
             .await
     }
 
@@ -615,6 +642,8 @@ async fn demand_multiple_with_budget(
     executor: &dyn TaskExecutor,
     budget: DemandExecutionBudget,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
+    let node_memories =
+        super::workflow_session::bound_workflow_session_node_memory_view(workflow_executor).await;
     let graph = workflow_executor.graph.read().await;
     let plan = DemandMultiplePlan::from_requested_targets(node_ids, &graph);
     workflow_executor
@@ -630,6 +659,7 @@ async fn demand_multiple_with_budget(
         &workflow_executor.context,
         workflow_executor.event_sink.as_ref(),
         &workflow_executor.extensions,
+        node_memories.as_ref(),
     )
     .await?;
     drop(demand_engine);
@@ -647,6 +677,7 @@ pub(super) async fn demand_multiple_with_default_budget(
     context: &Context,
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
+    node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     demand_multiple_with_explicit_budget(
         engine,
@@ -657,6 +688,7 @@ pub(super) async fn demand_multiple_with_default_budget(
         context,
         event_sink,
         extensions,
+        node_memories,
     )
     .await
 }
@@ -670,11 +702,20 @@ async fn demand_multiple_with_explicit_budget(
     context: &Context,
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
+    node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     let plan = DemandMultiplePlan::from_requested_targets(node_ids, graph);
 
     execute_plan_with_budget(
-        engine, &plan, budget, graph, executor, context, event_sink, extensions,
+        engine,
+        &plan,
+        budget,
+        graph,
+        executor,
+        context,
+        event_sink,
+        extensions,
+        node_memories,
     )
     .await
 }
@@ -688,9 +729,18 @@ async fn execute_plan_with_budget(
     context: &Context,
     event_sink: &dyn EventSink,
     extensions: &ExecutorExtensions,
+    node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     DemandMultipleCoordinator::new(
-        engine, plan, budget, graph, executor, context, event_sink, extensions,
+        engine,
+        plan,
+        budget,
+        graph,
+        executor,
+        context,
+        event_sink,
+        extensions,
+        node_memories,
     )
     .run()
     .await
@@ -1042,6 +1092,7 @@ mod tests {
             &context,
             &event_sink,
             &extensions,
+            None,
         )
         .await
         .expect("demand harness should succeed");
@@ -1113,6 +1164,7 @@ mod tests {
             &context,
             &event_sink,
             &extensions,
+            None,
         );
         let base_engine = runner.clone_engine();
         let future = runner.demand_target_in_isolation_future(&base_engine, "left".to_string());
@@ -1377,6 +1429,7 @@ mod tests {
             &context,
             &event_sink,
             &extensions,
+            None,
         )
         .await
         .expect("parallel demand should succeed");
@@ -1404,6 +1457,7 @@ mod tests {
             &context,
             &event_sink,
             &extensions,
+            None,
         )
         .await
         .expect("default parallel demand should succeed");

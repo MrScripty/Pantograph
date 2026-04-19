@@ -857,6 +857,10 @@ the affected downstream closure.
   through `DemandEngine`, letting node-memory snapshots expose canonical input
   fingerprints and inspection metadata for both sequential and bounded-parallel
   multi-demand execution without moving that ownership into adapters.
+- Bound workflow-session execution now also injects prior serializable
+  node-memory snapshots into task inputs under a backend-owned `_node_memory`
+  contract, giving reruns an initial memory-consumption seam while keeping
+  non-serializable runtime/process handles out of the current payload.
 
 **Milestones:**
 

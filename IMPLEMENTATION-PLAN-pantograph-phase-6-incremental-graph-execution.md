@@ -584,7 +584,7 @@ execution.
       process state.
 - [x] Integrate execution-time writes so successful demand paths update
       backend-owned node memory through workflow-session contracts.
-- [ ] Integrate execution-time reads/writes so nodes can consume and update
+- [x] Integrate execution-time reads/writes so nodes can consume and update
       their memory through backend-owned contracts.
 - [ ] Keep runtime handles and non-serializable process state out of the memory
       payload; represent them through indirect references and restore rules.
@@ -824,6 +824,10 @@ Update during implementation:
   projection now emits canonical input fingerprints plus inspection metadata
   from those real execution-time inputs for both sequential and bounded-
   parallel multi-demand paths.
+- 2026-04-18: Milestone 3 continued. Backend execution now also injects prior
+  serializable node-memory snapshots into task inputs under a reserved
+  `_node_memory` contract for bound workflow sessions, so reruns can consume
+  backend-owned prior memory without moving that state into adapters or Tauri.
 
 ## Commit Cadence Notes
 

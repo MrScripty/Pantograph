@@ -102,6 +102,10 @@ changing the public executor surface.
 - Execution-time node-memory projection should capture backend-resolved input
   snapshots before task execution so later Phase 6 inspection and reuse logic
   does not have to infer inputs back out of cached outputs or adapter state.
+- Bound workflow-session execution may inject prior serializable node memory
+  into task inputs through a reserved backend-owned `_node_memory` key so
+  memory consumption remains owned by Rust execution paths instead of
+  transport adapters.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under
