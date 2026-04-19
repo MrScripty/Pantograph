@@ -200,6 +200,10 @@ reconciled as the final source of truth.
   history from that shared service boundary, narrowing the remaining Milestone
   5 GUI gap to explicit pause/resume/cancel controls and broader event-driven
   progress wiring.
+- The binary-management GUI now also exposes backend-owned selected/default
+  version updates through the shared managed-runtime service contract, so
+  version policy no longer requires direct command calls or frontend-owned
+  runtime-selection shaping.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

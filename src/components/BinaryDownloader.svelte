@@ -26,6 +26,7 @@
     install_history: []
   });
   let downloading = $state(false);
+  let selectionUpdating = $state(false);
   let progress: ManagedRuntimeProgress = $state({
     runtime_id: 'llama_cpp',
     status: '',
@@ -36,12 +37,16 @@
   });
   let error: string | null = $state(null);
 
-  onMount(async () => {
+  async function loadStatus() {
     try {
       status = await managedRuntimeService.inspectRuntime('llama_cpp');
     } catch (e) {
       console.error('Failed to check binary status:', e);
     }
+  }
+
+  onMount(async () => {
+    await loadStatus();
   });
 
   async function download() {
@@ -65,12 +70,38 @@
         }
         if (event.done && !event.error) {
           downloading = false;
-          status = await managedRuntimeService.inspectRuntime('llama_cpp');
+          await loadStatus();
         }
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       downloading = false;
+    }
+  }
+
+  async function updateSelectedVersion(version: string | null) {
+    selectionUpdating = true;
+    error = null;
+
+    try {
+      status = await managedRuntimeService.selectRuntimeVersion('llama_cpp', version);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      selectionUpdating = false;
+    }
+  }
+
+  async function updateDefaultVersion(version: string | null) {
+    selectionUpdating = true;
+    error = null;
+
+    try {
+      status = await managedRuntimeService.setDefaultRuntimeVersion('llama_cpp', version);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      selectionUpdating = false;
     }
   }
 
@@ -98,6 +129,9 @@
     status.versions.filter(
       (version) => version.install_state === 'installed' || version.install_state === 'system_provided'
     )
+  );
+  let selectableVersions = $derived(
+    installedVersions.filter((version) => version.version !== null)
   );
   let latestHistoryEntry = $derived(status.install_history.at(-1) ?? null);
 </script>
@@ -171,6 +205,40 @@
           {#if latestHistoryEntry.detail}
             <div class="text-[11px] text-neutral-500">{latestHistoryEntry.detail}</div>
           {/if}
+        </div>
+      {/if}
+      {#if selectableVersions.length > 0}
+        <div class="space-y-2 mb-3">
+          <label class="block text-xs text-neutral-500">
+            Selected version
+            <select
+              class="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+              value={status.selection.selected_version ?? ''}
+              disabled={selectionUpdating || downloading}
+              onchange={(event) =>
+                updateSelectedVersion((event.currentTarget as HTMLSelectElement).value || null)}
+            >
+              <option value="">Automatic</option>
+              {#each selectableVersions as version (version.display_label)}
+                <option value={version.version ?? ''}>{version.display_label}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="block text-xs text-neutral-500">
+            Default version
+            <select
+              class="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+              value={status.selection.default_version ?? ''}
+              disabled={selectionUpdating || downloading}
+              onchange={(event) =>
+                updateDefaultVersion((event.currentTarget as HTMLSelectElement).value || null)}
+            >
+              <option value="">Unset</option>
+              {#each selectableVersions as version (version.display_label)}
+                <option value={version.version ?? ''}>{version.display_label}</option>
+              {/each}
+            </select>
+          </label>
         </div>
       {/if}
       {#if status.missing_files.length > 0}

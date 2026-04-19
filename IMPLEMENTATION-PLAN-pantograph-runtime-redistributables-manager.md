@@ -569,6 +569,10 @@ Update during implementation:
   managed-runtime service. Pause/resume/cancel controls still remain open, but
   the frontend now consumes the richer backend snapshot instead of hiding that
   state behind binary-present/missing booleans.
+- 2026-04-19: Milestone 5 slice 4 wired the existing backend-owned
+  selected/default version commands into the managed-runtime GUI, so runtime
+  version policy can now be updated through the shared frontend service
+  boundary without reintroducing version-selection logic into Tauri or Svelte.
 
 ## Commit Cadence Notes
 
