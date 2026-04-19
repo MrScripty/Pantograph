@@ -12,6 +12,8 @@ components.
 - Request cancellation for an active managed runtime install job.
 - Remove a managed runtime.
 - Update selected and default runtime versions.
+- Surface backend-owned retained download-artifact facts for read-only GUI
+  status rendering.
 
 ## Constraints
 - This layer stays transport-only.
@@ -25,3 +27,5 @@ components.
 - Progress callbacks surface backend download state unchanged.
 - UI callers should not call redistributable Tauri commands directly when this
   service already owns the app-facing contract.
+- Retained artifact, resumability, and readiness facts remain backend-owned;
+  this service only projects them into the GUI contract.

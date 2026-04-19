@@ -23,6 +23,7 @@
       default_version: null
     },
     active_job: null,
+    job_artifact: null,
     install_history: []
   });
   let downloading = $state(false);
@@ -221,6 +222,14 @@
         <div class="text-xs text-neutral-500 mb-3">
           Active job: {status.active_job.status}
         </div>
+        {#if status.job_artifact}
+          <div class="text-xs text-neutral-500 mb-3">
+            Retained artifact: {formatBytes(status.job_artifact.downloaded_bytes)} / {formatBytes(status.job_artifact.total_bytes)}
+            <div class="text-[11px] text-neutral-600">
+              {status.job_artifact.archive_name} ({status.job_artifact.version})
+            </div>
+          </div>
+        {/if}
         {#if status.active_job.cancellable}
           <button
             type="button"

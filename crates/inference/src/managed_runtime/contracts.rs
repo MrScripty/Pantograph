@@ -128,6 +128,16 @@ pub struct ManagedRuntimeJobStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub struct ManagedRuntimeJobArtifactStatus {
+    pub version: String,
+    pub archive_name: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+    pub retained: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeSnapshot {
     pub id: ManagedBinaryId,
     pub display_name: String,
@@ -143,6 +153,7 @@ pub struct ManagedRuntimeSnapshot {
     #[serde(default)]
     pub selection: ManagedRuntimeSelectionState,
     pub active_job: Option<ManagedRuntimeJobStatus>,
+    pub job_artifact: Option<ManagedRuntimeJobArtifactStatus>,
 }
 
 #[derive(Debug, Clone, Serialize)]

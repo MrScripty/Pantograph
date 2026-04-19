@@ -68,10 +68,12 @@ pub use managed_runtime::{
     save_managed_runtime_state, select_managed_runtime_version,
     set_default_managed_runtime_version, BinaryStatus, DownloadProgress,
     ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState,
-    ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobState,
-    ManagedRuntimeJobStatus, ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState,
-    ManagedRuntimePersistedVersion, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
-    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus, ResolvedCommand,
+    ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry,
+    ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
+    ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
+    ManagedRuntimePersistedState, ManagedRuntimePersistedVersion,
+    ManagedRuntimeReadinessState, ManagedRuntimeSelectionState, ManagedRuntimeSnapshot,
+    ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

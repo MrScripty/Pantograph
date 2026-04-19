@@ -64,6 +64,14 @@ export interface ManagedRuntimeJobStatus {
   error: string | null;
 }
 
+export interface ManagedRuntimeJobArtifactStatus {
+  version: string;
+  archive_name: string;
+  downloaded_bytes: number;
+  total_bytes: number;
+  retained: boolean;
+}
+
 export interface ManagedRuntimeInstallHistoryEntry {
   event: ManagedRuntimeHistoryEventKind;
   version: string | null;
@@ -84,6 +92,7 @@ export interface ManagedRuntimeManagerRuntimeView {
   versions: ManagedRuntimeVersionStatus[];
   selection: ManagedRuntimeSelectionState;
   active_job: ManagedRuntimeJobStatus | null;
+  job_artifact: ManagedRuntimeJobArtifactStatus | null;
   install_history: ManagedRuntimeInstallHistoryEntry[];
 }
 

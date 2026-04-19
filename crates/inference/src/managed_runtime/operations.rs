@@ -2,8 +2,8 @@ use super::archive::extract_archive;
 use super::contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
     ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeReadinessState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
-    ResolvedCommand,
+    ManagedRuntimeJobArtifactStatus, ManagedRuntimeReadinessState, ManagedRuntimeSnapshot,
+    ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 use super::definitions::definition;
 use super::paths::{
@@ -12,8 +12,8 @@ use super::paths::{
 use super::state::{
     ensure_runtime_state_entry, load_managed_runtime_state, runtime_state_entry,
     runtime_state_entry_mut, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
-    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedRuntime,
-    ManagedRuntimePersistedVersion,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedJobArtifact,
+    ManagedRuntimePersistedRuntime, ManagedRuntimePersistedVersion,
 };
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
@@ -309,15 +309,38 @@ where
             .map_err(|e| format!("Failed to write chunk: {}", e))?;
         downloaded += chunk.len() as u64;
 
+        let job_artifact = ManagedRuntimePersistedJobArtifact {
+            version: runtime_version.clone(),
+            archive_name: release_asset.archive_name.clone(),
+            archive_path: temp_path.display().to_string(),
+            downloaded_bytes: downloaded,
+            total_bytes: total_size,
+        };
+
+        persist_active_job_with_artifact(
+            app_data_dir,
+            id,
+            ManagedRuntimeJobStatus {
+                state: ManagedRuntimeJobState::Downloading,
+                status: "Downloading".to_string(),
+                current: downloaded,
+                total: total_size,
+                resumable: downloaded > 0,
+                cancellable: true,
+                error: None,
+            },
+            Some(job_artifact.clone()),
+        )?;
+
         if finish_requested_cancellation(
             app_data_dir,
             id,
             &runtime_version,
             downloaded,
             total_size,
+            Some(job_artifact),
         )? {
             drop(file);
-            let _ = fs::remove_file(&temp_path);
             on_progress(DownloadProgress {
                 status: "Cancelled".to_string(),
                 current: downloaded,
@@ -335,25 +358,25 @@ where
             done: false,
             error: None,
         });
-
-        persist_active_job(
-            app_data_dir,
-            id,
-            ManagedRuntimeJobStatus {
-                state: ManagedRuntimeJobState::Downloading,
-                status: "Downloading".to_string(),
-                current: downloaded,
-                total: total_size,
-                resumable: false,
-                cancellable: true,
-                error: None,
-            },
-        )?;
     }
     drop(file);
 
-    if finish_requested_cancellation(app_data_dir, id, &runtime_version, downloaded, total_size)? {
-        let _ = fs::remove_file(&temp_path);
+    let download_artifact = ManagedRuntimePersistedJobArtifact {
+        version: runtime_version.clone(),
+        archive_name: release_asset.archive_name.clone(),
+        archive_path: temp_path.display().to_string(),
+        downloaded_bytes: downloaded,
+        total_bytes: total_size,
+    };
+
+    if finish_requested_cancellation(
+        app_data_dir,
+        id,
+        &runtime_version,
+        downloaded,
+        total_size,
+        Some(download_artifact.clone()),
+    )? {
         on_progress(DownloadProgress {
             status: "Cancelled".to_string(),
             current: downloaded,
@@ -419,7 +442,14 @@ where
         return Err(error);
     }
 
-    if finish_requested_cancellation(app_data_dir, id, &runtime_version, total_size, total_size)? {
+    if finish_requested_cancellation(
+        app_data_dir,
+        id,
+        &runtime_version,
+        total_size,
+        total_size,
+        None,
+    )? {
         let _ = fs::remove_dir_all(&staging_dir);
         on_progress(DownloadProgress {
             status: "Cancelled".to_string(),
@@ -463,7 +493,14 @@ where
         return Err(error);
     }
 
-    if finish_requested_cancellation(app_data_dir, id, &runtime_version, total_size, total_size)? {
+    if finish_requested_cancellation(
+        app_data_dir,
+        id,
+        &runtime_version,
+        total_size,
+        total_size,
+        None,
+    )? {
         let _ = fs::remove_dir_all(&staging_dir);
         on_progress(DownloadProgress {
             status: "Cancelled".to_string(),
@@ -572,6 +609,8 @@ fn snapshot_from_capability(
         .map(|runtime| runtime.selection.clone())
         .unwrap_or_default();
     let active_job = persisted_runtime.and_then(|runtime| runtime.active_job.clone());
+    let job_artifact =
+        persisted_runtime.and_then(projected_job_artifact_status);
     let versions = persisted_runtime
         .filter(|runtime| !runtime.versions.is_empty())
         .map(|runtime| {
@@ -626,7 +665,21 @@ fn snapshot_from_capability(
         versions,
         selection,
         active_job,
+        job_artifact,
     }
+}
+
+fn projected_job_artifact_status(
+    runtime: &ManagedRuntimePersistedRuntime,
+) -> Option<ManagedRuntimeJobArtifactStatus> {
+    let artifact = runtime.active_job_artifact.as_ref()?;
+    Some(ManagedRuntimeJobArtifactStatus {
+        version: artifact.version.clone(),
+        archive_name: artifact.archive_name.clone(),
+        downloaded_bytes: artifact.downloaded_bytes,
+        total_bytes: artifact.total_bytes,
+        retained: Path::new(&artifact.archive_path).exists(),
+    })
 }
 
 fn projected_snapshot_readiness_state(
@@ -747,9 +800,21 @@ fn persist_active_job(
     id: ManagedBinaryId,
     job: ManagedRuntimeJobStatus,
 ) -> Result<(), String> {
+    persist_active_job_with_artifact(app_data_dir, id, job, None)
+}
+
+fn persist_active_job_with_artifact(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    job: ManagedRuntimeJobStatus,
+    job_artifact: Option<ManagedRuntimePersistedJobArtifact>,
+) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
     runtime.active_job = Some(job);
+    if let Some(job_artifact) = job_artifact {
+        runtime.active_job_artifact = Some(job_artifact);
+    }
     save_managed_runtime_state(app_data_dir, &state)
 }
 
@@ -771,6 +836,7 @@ fn persist_failed_job(
         cancellable: false,
         error: Some(error.clone()),
     });
+    runtime.active_job_artifact = None;
     upsert_persisted_version(
         runtime,
         ManagedRuntimePersistedVersion {
@@ -800,6 +866,7 @@ fn persist_cancelled_job(
     version: &str,
     current: u64,
     total: u64,
+    job_artifact: Option<ManagedRuntimePersistedJobArtifact>,
 ) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
@@ -808,17 +875,22 @@ fn persist_cancelled_job(
         status: "Cancelled".to_string(),
         current,
         total,
-        resumable: false,
+        resumable: job_artifact.is_some(),
         cancellable: false,
         error: None,
     });
+    runtime.active_job_artifact = job_artifact;
     runtime
         .install_history
         .push(ManagedRuntimeInstallHistoryEntry {
             event: ManagedRuntimeHistoryEventKind::Cancelled,
             version: Some(version.to_string()),
             at_ms: current_unix_timestamp_ms(),
-            detail: Some("Managed runtime install cancelled".to_string()),
+            detail: Some(if runtime.active_job_artifact.is_some() {
+                "Managed runtime install cancelled with retained download artifact".to_string()
+            } else {
+                "Managed runtime install cancelled".to_string()
+            }),
         });
     save_managed_runtime_state(app_data_dir, &state)
 }
@@ -832,6 +904,7 @@ fn persist_install_success(
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
     runtime.active_job = None;
+    runtime.active_job_artifact = None;
     upsert_persisted_version(
         runtime,
         ManagedRuntimePersistedVersion {
@@ -875,6 +948,7 @@ fn persist_remove_success(app_data_dir: &Path, id: ManagedBinaryId) -> Result<()
         .collect::<Vec<_>>();
     runtime.versions.clear();
     runtime.active_job = None;
+    runtime.active_job_artifact = None;
     if runtime
         .selection
         .selected_version
@@ -909,12 +983,13 @@ fn finish_requested_cancellation(
     version: &str,
     current: u64,
     total: u64,
+    job_artifact: Option<ManagedRuntimePersistedJobArtifact>,
 ) -> Result<bool, String> {
     if !take_cancellation_request(id) {
         return Ok(false);
     }
 
-    persist_cancelled_job(app_data_dir, id, version, current, total)?;
+    persist_cancelled_job(app_data_dir, id, version, current, total, job_artifact)?;
     Ok(true)
 }
 
@@ -1084,7 +1159,7 @@ mod tests {
     };
     use crate::managed_runtime::{
         load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
-        ManagedRuntimePersistedVersion,
+        ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedVersion,
     };
     use std::path::Path;
 
@@ -1530,6 +1605,7 @@ mod tests {
             "b8248",
             32,
             64,
+            None,
         )
         .expect("finish cancellation");
 
@@ -1545,6 +1621,7 @@ mod tests {
         assert_eq!(active_job.status, "Cancelled");
         assert_eq!(active_job.current, 32);
         assert_eq!(active_job.total, 64);
+        assert!(runtime.active_job_artifact.is_none());
         assert_eq!(
             runtime
                 .install_history
@@ -1552,5 +1629,43 @@ mod tests {
                 .map(|entry| entry.event.clone()),
             Some(ManagedRuntimeHistoryEventKind::Cancelled)
         );
+    }
+
+    #[test]
+    fn managed_runtime_snapshot_projects_retained_job_artifact() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let artifact_path = temp_dir.path().join("partial-llama.tar.gz");
+        std::fs::write(&artifact_path, []).expect("write retained artifact");
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Cancelled,
+            status: "Cancelled".to_string(),
+            current: 64,
+            total: 128,
+            resumable: true,
+            cancellable: false,
+            error: None,
+        });
+        runtime.active_job_artifact = Some(ManagedRuntimePersistedJobArtifact {
+            version: "b8248".to_string(),
+            archive_name: "llama-b8248.tar.gz".to_string(),
+            archive_path: artifact_path.display().to_string(),
+            downloaded_bytes: 64,
+            total_bytes: 128,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let snapshot =
+            crate::managed_runtime::managed_runtime_snapshot(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+                .expect("managed runtime snapshot");
+
+        let artifact = snapshot.job_artifact.expect("job artifact");
+        assert_eq!(artifact.version, "b8248");
+        assert_eq!(artifact.archive_name, "llama-b8248.tar.gz");
+        assert_eq!(artifact.downloaded_bytes, 64);
+        assert_eq!(artifact.total_bytes, 128);
+        assert!(artifact.retained);
     }
 }

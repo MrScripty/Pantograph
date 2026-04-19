@@ -11,8 +11,9 @@ mod state;
 pub use contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
     ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeReadinessState, ManagedRuntimeSelectionState, ManagedRuntimeSnapshot,
-    ManagedRuntimeVersionStatus, ResolvedCommand,
+    ManagedRuntimeJobArtifactStatus, ManagedRuntimeReadinessState,
+    ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    ResolvedCommand,
 };
 pub use operations::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,
@@ -23,8 +24,9 @@ pub use operations::{
 pub use paths::managed_runtime_dir;
 pub use state::{
     load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
-    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedRuntime,
-    ManagedRuntimePersistedState, ManagedRuntimePersistedVersion,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedJobArtifact,
+    ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState,
+    ManagedRuntimePersistedVersion,
 };
 
 pub(crate) use contracts::{ArchiveKind, ReleaseAsset};

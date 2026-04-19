@@ -607,6 +607,7 @@ mod tests {
                     default_version: Some("b8248".to_string()),
                 },
                 active_job: None,
+                job_artifact: None,
             }],
             &[inference::BackendInfo {
                 name: "llama.cpp".to_string(),
@@ -658,6 +659,7 @@ mod tests {
                     default_version: Some("b8248".to_string()),
                 },
                 active_job: None,
+                job_artifact: None,
             }],
             &[inference::BackendInfo {
                 name: "llama.cpp".to_string(),
@@ -774,6 +776,7 @@ mod tests {
                     cancellable: false,
                     error: None,
                 }),
+                job_artifact: None,
             }],
             &[],
             "llama_cpp",

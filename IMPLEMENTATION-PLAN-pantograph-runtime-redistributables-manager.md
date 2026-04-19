@@ -410,8 +410,8 @@ core logic into Tauri.
   remove, select-version, and inspect-history
 - [x] Define a GUI view contract for available versions, installed versions,
   selected/default/active status, job progress, readiness, and error state
-- [ ] Ensure the GUI can render resumable/pausable download progress and
-  install history without becoming the state owner
+- [ ] Ensure the GUI can render resumable/pausable download progress,
+  retained-artifact state, and install history without becoming the state owner
 - [ ] Prefer backend event/subscription projection for job progress and state
   changes; if polling remains necessary anywhere, scope it narrowly and
   document why an event-driven path was not feasible
@@ -579,6 +579,13 @@ Update during implementation:
   `managedRuntime` frontend service, and surfaced cancel controls in the
   current GUI while leaving pause/resume and broader event-stream behavior as
   the remaining open job-control work.
+- 2026-04-19: Milestone 5 slice 6 now persists backend-owned retained
+  download-artifact metadata alongside the active managed-runtime job, projects
+  that additive state through the embedded-runtime manager view and shared
+  frontend service contract, and renders the retained artifact read-only in
+  the current GUI. This narrows the remaining Milestone 5 gap to true
+  pause/resume orchestration and broader event-driven state delivery rather
+  than basic retained-download visibility.
 
 ## Commit Cadence Notes
 

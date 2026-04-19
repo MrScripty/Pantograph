@@ -2249,6 +2249,7 @@ mod tests {
                     default_version: Some(version.to_string()),
                 },
                 active_job: None,
+                active_job_artifact: None,
                 install_history: Vec::new(),
             }],
         };
@@ -2272,6 +2273,7 @@ mod tests {
                     cancellable: true,
                     error: None,
                 }),
+                active_job_artifact: None,
                 install_history: Vec::new(),
             }],
         };

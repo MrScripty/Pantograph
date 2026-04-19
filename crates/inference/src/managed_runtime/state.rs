@@ -46,6 +46,16 @@ pub struct ManagedRuntimePersistedVersion {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub struct ManagedRuntimePersistedJobArtifact {
+    pub version: String,
+    pub archive_name: String,
+    pub archive_path: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimePersistedRuntime {
     pub id: ManagedBinaryId,
     #[serde(default)]
@@ -53,6 +63,7 @@ pub struct ManagedRuntimePersistedRuntime {
     #[serde(default)]
     pub selection: ManagedRuntimeSelectionState,
     pub active_job: Option<ManagedRuntimeJobStatus>,
+    pub active_job_artifact: Option<ManagedRuntimePersistedJobArtifact>,
     #[serde(default)]
     pub install_history: Vec<ManagedRuntimeInstallHistoryEntry>,
 }
@@ -144,6 +155,7 @@ pub(crate) fn ensure_runtime_state_entry(
         versions: Vec::new(),
         selection: ManagedRuntimeSelectionState::default(),
         active_job: None,
+        active_job_artifact: None,
         install_history: Vec::new(),
     });
     state
@@ -191,6 +203,9 @@ fn reconcile_interrupted_jobs(state: &mut ManagedRuntimePersistedState) {
         if job.error.is_none() {
             job.error = Some(detail.clone());
         }
+        if runtime.active_job_artifact.is_some() {
+            job.resumable = true;
+        }
 
         runtime
             .install_history
@@ -227,8 +242,8 @@ mod tests {
     use super::{
         load_managed_runtime_state, runtime_state_entry, save_managed_runtime_state,
         ManagedBinaryId, ManagedRuntimeHistoryEventKind, ManagedRuntimeJobState,
-        ManagedRuntimeJobStatus, ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState,
-        ManagedRuntimeSelectionState,
+        ManagedRuntimeJobStatus, ManagedRuntimePersistedJobArtifact,
+        ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState, ManagedRuntimeSelectionState,
     };
 
     #[test]
@@ -253,6 +268,7 @@ mod tests {
                     default_version: None,
                 },
                 active_job: None,
+                active_job_artifact: None,
                 install_history: Vec::new(),
             }],
         };
@@ -283,6 +299,17 @@ mod tests {
                     cancellable: true,
                     error: None,
                 }),
+                active_job_artifact: Some(ManagedRuntimePersistedJobArtifact {
+                    version: "b8248".to_string(),
+                    archive_name: "llama-b8248.tar.gz".to_string(),
+                    archive_path: temp_dir
+                        .path()
+                        .join("partial-llama.tar.gz")
+                        .display()
+                        .to_string(),
+                    downloaded_bytes: 5,
+                    total_bytes: 10,
+                }),
                 install_history: Vec::new(),
             }],
         };
@@ -294,6 +321,8 @@ mod tests {
         let job = runtime.active_job.as_ref().expect("reconciled job");
 
         assert_eq!(job.state, ManagedRuntimeJobState::Failed);
+        assert!(job.resumable);
+        assert!(runtime.active_job_artifact.is_some());
         assert!(runtime
             .install_history
             .iter()

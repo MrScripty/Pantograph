@@ -209,6 +209,12 @@ reconciled as the final source of truth.
   shared GUI service boundary. The remaining Milestone 5 job-control gap is
   now narrowed to pause/resume semantics and broader event-driven state
   projection.
+- Managed-runtime durable state now also preserves retained download-artifact
+  metadata for cancelled/interrupted install jobs, and that backend-owned
+  artifact summary is projected through the manager/service GUI contract as
+  read-only status. The remaining Milestone 5 gap is therefore no longer basic
+  retained-download visibility; it is true pause/resume orchestration plus
+  broader event-driven progress/state delivery.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

@@ -4,8 +4,8 @@ use inference::{
     cancel_binary_download, download_binary, list_managed_runtime_snapshots,
     load_managed_runtime_state, remove_binary, select_managed_runtime_version,
     set_default_managed_runtime_version, DownloadProgress, ManagedBinaryId,
-    ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobStatus, ManagedRuntimeSelectionState,
-    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobStatus,
+    ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,7 @@ pub struct ManagedRuntimeManagerRuntimeView {
     #[serde(default)]
     pub selection: ManagedRuntimeSelectionState,
     pub active_job: Option<ManagedRuntimeJobStatus>,
+    pub job_artifact: Option<ManagedRuntimeJobArtifactStatus>,
     #[serde(default)]
     pub install_history: Vec<ManagedRuntimeInstallHistoryEntry>,
 }
@@ -132,6 +133,7 @@ fn runtime_view_from_snapshot(
         versions: snapshot.versions.clone(),
         selection: snapshot.selection.clone(),
         active_job: snapshot.active_job.clone(),
+        job_artifact: snapshot.job_artifact.clone(),
         install_history,
     }
 }
@@ -184,6 +186,7 @@ mod tests {
                 default_version: Some("b8248".to_string()),
             },
             active_job: None,
+            active_job_artifact: None,
             install_history: vec![ManagedRuntimeInstallHistoryEntry {
                 event: ManagedRuntimeHistoryEventKind::Installed,
                 version: Some("b8248".to_string()),
@@ -238,6 +241,7 @@ mod tests {
             }],
             selection: ManagedRuntimeSelectionState::default(),
             active_job: None,
+            active_job_artifact: None,
             install_history: Vec::new(),
         });
         save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
