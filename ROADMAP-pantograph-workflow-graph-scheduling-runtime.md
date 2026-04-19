@@ -51,6 +51,17 @@ real workflow event contract completion now has dedicated
 standards-reviewed plans in
 `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 and `IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`.
+Managed runtime redistributable work now also has a dedicated
+standards-reviewed plan in
+`IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`. That
+plan is now the active source of truth for runtime-binary and redistributable
+management because the work has expanded beyond the older narrow
+cross-platform managed-binary framing into backend-owned version catalogs,
+durable install job state, selected-version policy, workflow/scheduler
+readiness enforcement, and thin Tauri runtime-manager transport. The older
+`IMPLEMENTATION-PLAN-managed-binary-cross-platform.md` document remains in the
+repo only as a historical precursor and must not be used as the active
+implementation plan.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,
@@ -254,6 +265,9 @@ reconciled as the final source of truth.
 - Metrics/trace follow-up hardening, with decomposition and lock-alignment
   complete and the remaining work concentrated in residual producer and
   acceptance coverage
+- Runtime redistributables manager implementation planning complete, with the
+  active execution source of truth now in
+  `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`
 - Binding platform planning and verification expansion for C#, Python, and
   BEAM host lanes
 - Parallel demand execution planning and `node-engine` decomposition prep

@@ -1,5 +1,24 @@
 # Plan: Managed Binary Cross-Platform
 
+## Source Of Truth Status
+
+This plan is now a historical precursor, not the active source of truth for
+runtime redistributable work.
+
+Use
+`IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`
+for new implementation. That newer plan supersedes this document because the
+problem has expanded beyond cross-platform binary fetch/install into:
+
+- backend-owned version catalogs and selected-version policy
+- persistent install/download job state with restart reconciliation
+- workflow and scheduler readiness enforcement
+- explicit standards-compliance refactors for the immediate touched files
+- GUI-facing runtime-manager projection contracts with Tauri kept adapter-only
+
+This document remains useful only as a record of the narrower earlier framing:
+shared binary orchestration plus `llama.cpp` and `Ollama` migration.
+
 ## Objective
 
 Create a reusable managed-binary subsystem for cross-platform fetch, install,
@@ -135,6 +154,9 @@ binary-specific and `Ollama` remains Linux-only and inconsistently integrated.
 
 Update during implementation:
 - 2026-03-09: Plan created after reviewing current `llama.cpp` and `Ollama` binary handling.
+- 2026-04-19: Marked historical-only after the broader
+  `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md` plan
+  became the active source of truth. Do not start new work from this file.
 
 ## Commit Cadence Notes
 
@@ -162,11 +184,13 @@ Update during implementation:
 
 ### Deviations
 
-- N/A
+- The newer runtime redistributables manager plan superseded this document's
+  narrower scope before implementation proceeded from it.
 
 ### Follow-Ups
 
-- N/A
+- Use `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md` for
+  all future runtime redistributable implementation sequencing.
 
 ### Verification Summary
 
@@ -180,4 +204,5 @@ Update during implementation:
 
 ## Brevity Note
 
-This plan stays concise and records only execution-relevant details.
+This plan stays in the repo as a concise historical precursor, but it is no
+longer the active implementation plan.
