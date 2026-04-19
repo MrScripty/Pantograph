@@ -16,6 +16,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view surfaced to transport layers. |
+| `session_runtime.rs` | Focused runtime/lifecycle state for one graph edit session, including active execution metadata, queue projection, and run counters. |
 | `session.rs` | Edit-session store, undo/redo state, graph mutation orchestration, and graph-to-engine conversion helpers. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 
@@ -29,6 +30,8 @@ business-logic owners.
 - Persisted workflow files must stay compatible with existing `.pantograph/workflows` JSON.
 - Mutation rejection must be structured for expected incompatibility cases.
 - Edit-session state must serialize mutations per session without global blocking.
+- Active execution metadata, queue projection, and run counters for graph edit
+  sessions must stay backend-owned and must not be recomputed in adapters.
 - Saved graphs may persist additive `node.data.definition` port overlays for
   model-derived settings, but those overlays must never replace registry-owned
   static contracts wholesale.

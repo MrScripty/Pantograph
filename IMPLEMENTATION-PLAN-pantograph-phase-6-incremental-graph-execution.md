@@ -760,6 +760,10 @@ Update during implementation:
   in `graph/session_contract.rs` instead of `graph/session.rs`, and checkpoint-
   summary assembly now lives behind `node-engine::engine::session_state`
   instead of expanding `WorkflowExecutor` inline.
+- 2026-04-18: Milestone 2 continued. Graph edit-session runtime/lifecycle state
+  now lives behind `graph/session_runtime.rs` instead of keeping active
+  execution metadata, queue projection, and run counters inside
+  `graph/session.rs`.
 
 ## Commit Cadence Notes
 

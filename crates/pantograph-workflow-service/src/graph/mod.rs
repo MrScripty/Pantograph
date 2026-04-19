@@ -6,6 +6,7 @@ mod registry;
 mod session;
 mod session_contract;
 mod session_event;
+mod session_runtime;
 mod types;
 mod validation;
 

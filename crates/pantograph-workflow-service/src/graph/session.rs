@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, scheduler_snapshot_trace_execution_id,
 };
 
@@ -24,6 +23,7 @@ use super::session_contract::{
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
 };
+use super::session_runtime::GraphEditSessionRuntime;
 use super::types::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
     GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, Position,
@@ -32,13 +32,6 @@ use super::types::{
 use super::{ConnectionAnchor, InsertNodePositionHint};
 
 const DEFAULT_MAX_UNDO_SNAPSHOTS: usize = 64;
-
-fn unix_timestamp_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
-}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -199,35 +192,28 @@ struct GraphEditSession {
     graph: WorkflowGraph,
     undo_stack: Vec<WorkflowGraph>,
     redo_stack: Vec<WorkflowGraph>,
-    active_execution_id: Option<String>,
-    active_execution_started_at_ms: Option<u64>,
-    run_count: u64,
-    last_accessed: Instant,
+    runtime: GraphEditSessionRuntime,
 }
 
 impl GraphEditSession {
     fn new(mut graph: WorkflowGraph) -> Self {
         graph = hydrate_embedding_emit_metadata_flags(graph);
-        let now = Instant::now();
         let mut session = Self {
             graph,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
-            active_execution_id: None,
-            active_execution_started_at_ms: None,
-            run_count: 0,
-            last_accessed: now,
+            runtime: GraphEditSessionRuntime::new(),
         };
         session.canonicalize_graph();
         session
     }
 
     fn touch(&mut self) {
-        self.last_accessed = Instant::now();
+        self.runtime.touch();
     }
 
     fn is_stale(&self, timeout: Duration) -> bool {
-        self.last_accessed.elapsed() > timeout
+        self.runtime.is_stale(timeout)
     }
 
     fn push_undo_snapshot(&mut self) {
@@ -297,59 +283,19 @@ impl GraphEditSession {
     }
 
     fn session_summary(&self, session_id: &str) -> WorkflowSessionSummary {
-        WorkflowSessionSummary {
-            session_id: session_id.to_string(),
-            workflow_id: session_id.to_string(),
-            session_kind: WorkflowSessionKind::Edit,
-            usage_profile: None,
-            keep_alive: false,
-            state: if self.active_execution_id.is_some() {
-                WorkflowSessionState::Running
-            } else {
-                WorkflowSessionState::IdleLoaded
-            },
-            queued_runs: usize::from(self.active_execution_id.is_some()),
-            run_count: self.run_count,
-        }
+        self.runtime.session_summary(session_id)
     }
 
     fn queue_items(&self) -> Vec<WorkflowSessionQueueItem> {
-        self.active_execution_id
-            .as_ref()
-            .map(|execution_id| {
-                let started_at_ms = self.active_execution_started_at_ms;
-                WorkflowSessionQueueItem {
-                    queue_id: execution_id.clone(),
-                    run_id: Some(execution_id.clone()),
-                    enqueued_at_ms: started_at_ms,
-                    dequeued_at_ms: started_at_ms,
-                    priority: 0,
-                    queue_position: Some(0),
-                    scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Admitted),
-                    scheduler_decision_reason: None,
-                    status: WorkflowSessionQueueItemStatus::Running,
-                }
-            })
-            .into_iter()
-            .collect()
+        self.runtime.queue_items()
     }
 
     fn mark_running(&mut self, session_id: &str) {
-        self.touch();
-        if self.active_execution_id.as_deref() != Some(session_id)
-            || self.active_execution_started_at_ms.is_none()
-        {
-            self.active_execution_started_at_ms = Some(unix_timestamp_ms());
-        }
-        self.active_execution_id = Some(session_id.to_string());
+        self.runtime.mark_running(session_id);
     }
 
     fn finish_run(&mut self) {
-        self.touch();
-        if self.active_execution_id.take().is_some() {
-            self.active_execution_started_at_ms = None;
-            self.run_count = self.run_count.saturating_add(1);
-        }
+        self.runtime.finish_run();
     }
 }
 
