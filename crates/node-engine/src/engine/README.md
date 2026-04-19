@@ -152,7 +152,8 @@ planning split, plus the private execution-batch schedule derived from it.
   local transport state.
 - Checkpoint availability and checkpoint timestamps for workflow-session
   executors remain backend-owned Rust state tied to preserved node memory
-  rather than host-local unload bookkeeping.
+  rather than host-local unload bookkeeping, and repeated checkpoint marks must
+  preserve the original timestamp until restore or teardown clears it.
 - Demand event emission remains derived from backend execution state rather
   than adapter-local reconstruction.
 - In-flight cycle detection remains derived from backend recursive execution

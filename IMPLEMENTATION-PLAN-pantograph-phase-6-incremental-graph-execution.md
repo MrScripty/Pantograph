@@ -890,6 +890,11 @@ Update during implementation:
   logical session state. The next resumed keep-alive run clears the checkpoint
   marker, transitions residency through `restored` to `warm`, and reuses the
   same backend executor with preserved node memory.
+- 2026-04-18: Milestone 5 checkpoint unload semantics are now idempotent for
+  the keep-alive executor path: repeated `CapacityRebalance` unload preserves
+  the original backend checkpoint timestamp instead of rewriting checkpoint
+  identity, and explicit keep-alive disable after that checkpointed unload
+  still tears the retained executor down.
 
 ## Commit Cadence Notes
 

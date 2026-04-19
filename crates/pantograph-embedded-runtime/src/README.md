@@ -141,7 +141,9 @@ embedded-runtime crate.
   registry update call when session keep-alive policy changes.
 - Keep-alive session executor unload behavior must stay backend-owned in Rust:
   capacity rebalance may checkpoint and retain logical workflow-session state,
-  while explicit keep-alive disable and session close may tear that state down.
+  repeated capacity-rebalance unload must preserve the original checkpoint
+  identity for that retained session state, and explicit keep-alive disable and
+  session close may tear that state down.
 - Scheduler runtime-registry diagnostics shaping, including reclaim-candidate
   lookup and warmup-decision translation, must stay in shared backend registry
   helpers so workflow providers do not drift on registry-to-workflow mapping.

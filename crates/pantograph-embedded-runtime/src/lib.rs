@@ -4176,6 +4176,119 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disable_clears_it() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let session = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+
+        runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("alpha"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-first".to_string()),
+            })
+            .await
+            .expect("run keep-alive session");
+
+        let executor = runtime
+            .session_executions
+            .handle(&session.session_id)
+            .expect("session execution lookup should succeed")
+            .expect("keep-alive executor should exist");
+
+        WorkflowHost::unload_session_runtime(
+            &runtime.host(),
+            &session.session_id,
+            "runtime-text",
+            pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        )
+        .await
+        .expect("first capacity unload");
+        let first_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+        WorkflowHost::unload_session_runtime(
+            &runtime.host(),
+            &session.session_id,
+            "runtime-text",
+            pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        )
+        .await
+        .expect("second capacity unload should be idempotent");
+        let second_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+
+        assert!(first_summary.checkpoint_available);
+        assert_eq!(first_summary.checkpointed_at_ms, second_summary.checkpointed_at_ms);
+        assert_eq!(
+            second_summary.residency,
+            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        );
+
+        runtime
+            .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
+                session_id: session.session_id.clone(),
+                keep_alive: false,
+            })
+            .await
+            .expect("disable keep-alive after checkpoint");
+
+        assert!(
+            runtime
+                .session_executions
+                .handle(&session.session_id)
+                .expect("session execution lookup should succeed")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
     async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");

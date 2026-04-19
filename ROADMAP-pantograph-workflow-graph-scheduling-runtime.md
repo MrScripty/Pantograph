@@ -891,6 +891,10 @@ the affected downstream closure.
   checkpointed-but-unloaded residency state with preserved node memory, and
   the next keep-alive run restores it instead of rebuilding the logical
   session state from scratch.
+- Repeated capacity-rebalance unload for the same keep-alive workflow session
+  now preserves the original backend checkpoint timestamp instead of rewriting
+  checkpoint identity on every unload pass, while explicit keep-alive disable
+  after a checkpointed unload still tears the retained executor down.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
   diagnostics can inspect the most recent compatibility decision after node-

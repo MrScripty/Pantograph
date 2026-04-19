@@ -288,10 +288,11 @@ impl WorkflowExecutorSessionState {
     }
 
     pub(crate) async fn mark_checkpoint_available(&self, workflow_session_id: &str) {
-        self.checkpoints.write().await.insert(
-            workflow_session_id.to_string(),
-            crate::events::unix_timestamp_ms(),
-        );
+        self.checkpoints
+            .write()
+            .await
+            .entry(workflow_session_id.to_string())
+            .or_insert_with(crate::events::unix_timestamp_ms);
     }
 
     pub(crate) async fn clear_checkpoint(&self, workflow_session_id: &str) {
@@ -503,6 +504,20 @@ mod tests {
         let cleared = state.checkpoint_summary("session-1", "graph-1").await;
         assert!(!cleared.checkpoint_available);
         assert_eq!(cleared.checkpointed_at_ms, None);
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_keeps_existing_checkpoint_timestamp_on_repeat_mark() {
+        let state = WorkflowExecutorSessionState::new();
+
+        state.mark_checkpoint_available("session-1").await;
+        let first = state.checkpoint_summary("session-1", "graph-1").await;
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        state.mark_checkpoint_available("session-1").await;
+        let second = state.checkpoint_summary("session-1", "graph-1").await;
+
+        assert!(first.checkpoint_available);
+        assert_eq!(first.checkpointed_at_ms, second.checkpointed_at_ms);
     }
 
     #[tokio::test]
