@@ -366,9 +366,9 @@ end-to-end KV behavior.
       tokenizer/config change,
       upstream prompt-prefix change,
       graph edit breaking prefix compatibility.
-- [ ] Reuse KV artifacts only through backend-owned partial-rerun semantics;
+- [x] Reuse KV artifacts only through backend-owned partial-rerun semantics;
       do not let the frontend or Tauri decide reuse.
-- [ ] Ensure reclaim/restore and checkpoint paths keep logical ownership of KV
+- [x] Ensure reclaim/restore and checkpoint paths keep logical ownership of KV
       references aligned with the workflow session.
 
 **Verification:**
@@ -377,7 +377,7 @@ end-to-end KV behavior.
   suffix
 - Replay/idempotency checks for restore/retry flows that include KV references
 
-**Status:** In progress
+**Status:** Complete
 
 Latest landed slice:
 - Bound workflow-session node-memory projection now preserves compatible
@@ -402,8 +402,10 @@ Latest landed slice:
   explicit graph wiring from upstream `kv_cache_out` to downstream
   `kv_cache_in` lets the demand engine keep the prefix node cached while only
   rerunning the downstream suffix consumer after suffix-input edits.
-- Phase 6 node-memory remains the lifecycle owner for those references; reuse
-  policy for suffix-only reruns is still deferred to later Milestone 5 slices.
+- The combined node-memory, demand-engine, and checkpoint/reclaim coverage now
+  closes Milestone 5: KV reuse decisions stay in backend Rust execution paths,
+  and logical KV-reference ownership remains aligned with the workflow session
+  across reruns, invalidation, checkpoint, restore, and reclaim.
 
 ### Milestone 6: Add Diagnostics, Runtime Requirements, And Source-Of-Truth Close-Out
 
@@ -567,26 +569,21 @@ Re-plan before implementation if:
 - Structured KV execution diagnostics now flow from backend execution through
   workflow trace and Tauri diagnostics without shifting reuse-policy ownership
   into adapters.
+- Workflow-session reuse is now fully covered: bound node-memory projection,
+  rerun injection, explicit suffix-only graph-wired reuse, invalidation
+  taxonomy, and checkpoint/reclaim ownership all stay backend-owned.
 - The roadmap and touched module READMEs are reconciled with the landed Phase 3
   implementation state.
-- Revisit trigger: Phase 5/Phase 6 session-memory and partial-rerun work
-  begins, because broader kept-alive reuse still belongs there.
 
 ### Deviations
 
-- Milestone 5 remains intentionally open.
-- Reason: workflow-session KV reuse, partial reruns, and checkpoint ownership
-  depend on the broader Phase 6 incremental-execution/session-memory design and
-  were not folded prematurely into the per-node KV execution slice.
-- Revisit trigger: when the next Phase 6 memory/persistence slice lands.
+- None.
 
 ### Follow-Ups
 
-- Implement Phase 6 workflow-session/node-memory semantics so kept-alive runs,
-  graph edits, and selective input reinjection can reuse compatible KV
-  artifacts without turning the frontend into a lifecycle owner.
-- Return to Phase 3 Milestone 5 once those Phase 6 ownership boundaries are
-  concrete.
+- Future work, if any, belongs in later roadmap phases rather than reopening
+  the completed Phase 3 contract unless a new backend/runtime demands a
+  contract change.
 
 ### Verification Summary
 

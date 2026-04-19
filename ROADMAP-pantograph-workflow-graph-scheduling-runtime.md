@@ -536,7 +536,7 @@ prepare the engine for metric-informed scheduling.
 
 ### Phase 3: KV Cache Implementation
 
-**Status:** In progress
+**Status:** Complete
 
 **Detailed source of truth:**
 
@@ -597,12 +597,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   backend-owned: explicit graph wiring from upstream `kv_cache_out` to
   downstream `kv_cache_in` keeps the prefix node cached while only the
   suffix consumer reruns after suffix-input edits
-- Implement a real KV cache store with memory and disk policies
-- Validate cache compatibility against model fingerprints
-- Support markers and truncation for partial reuse
-- Add cache metadata and eviction policy
-- Surface cache hits, misses, and invalidation reasons in diagnostics
-- Integrate cacheability with runtime selection and preflight where useful
+- Phase 3 is now complete in the dedicated implementation plan; later reuse or
+  runtime expansion should extend a new phase or follow-up plan rather than
+  reopening the closed KV-cache contract by drift
 
 ### Phase 4: Scheduler V2
 
