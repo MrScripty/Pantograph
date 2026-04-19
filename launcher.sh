@@ -37,6 +37,7 @@ Usage:
   ./${SCRIPT_NAME} --install
   ./${SCRIPT_NAME} --build
   ./${SCRIPT_NAME} --build-release
+  ./${SCRIPT_NAME} --release-smoke
   ./${SCRIPT_NAME} --run [-- <app args...>]
   ./${SCRIPT_NAME} --run-release [-- <app args...>]
 
@@ -45,6 +46,7 @@ Required action flags (choose exactly one):
   --run-release    Run the release binary artifact directly
   --build          Build development artifacts
   --build-release  Build release artifacts
+  --release-smoke  Run the bounded redistributables smoke against a built release artifact
   --install        Install/verify dependencies
   --help           Print this help and exit
 
@@ -52,6 +54,7 @@ Examples:
   ./${SCRIPT_NAME} --install
   ./${SCRIPT_NAME} --build
   ./${SCRIPT_NAME} --build-release
+  ./${SCRIPT_NAME} --release-smoke
   ./${SCRIPT_NAME} --run
   ./${SCRIPT_NAME} --run -- --verbose
   ./${SCRIPT_NAME} --run-release
@@ -229,17 +232,10 @@ run_release_app() {
   activate_python_env
 
   local release_bin=""
-  local candidate=""
-  for candidate in "${RELEASE_BIN_CANDIDATES[@]}"; do
-    if [[ -x "$candidate" ]]; then
-      release_bin="$candidate"
-      break
-    fi
-  done
-
-  if [[ -z "$release_bin" ]]; then
+  if ! release_bin="$(resolve_release_artifact)"; then
     log "missing release artifact"
     log "expected one of:"
+    local candidate=""
     for candidate in "${RELEASE_BIN_CANDIDATES[@]}"; do
       log "  $candidate"
     done
@@ -254,12 +250,44 @@ run_release_app() {
   exec "$release_bin"
 }
 
+resolve_release_artifact() {
+  local candidate=""
+  for candidate in "${RELEASE_BIN_CANDIDATES[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+run_release_smoke() {
+  ensure_runtime_dependencies
+  activate_python_env
+
+  local release_bin=""
+  if ! release_bin="$(resolve_release_artifact)"; then
+    log "missing release artifact"
+    log "expected one of:"
+    local candidate=""
+    for candidate in "${RELEASE_BIN_CANDIDATES[@]}"; do
+      log "  $candidate"
+    done
+    log "run ./${SCRIPT_NAME} --build-release first"
+    exit "$EXIT_MISSING_RELEASE_ARTIFACT"
+  fi
+
+  log "[smoke] running runtime redistributables smoke against $release_bin"
+  "$ROOT_DIR/scripts/check-runtime-redistributables-smoke.sh" "$release_bin"
+}
+
 ACTION=""
 RUN_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --run|--run-release|--build|--build-release|--install|--help)
+    --run|--run-release|--build|--build-release|--release-smoke|--install|--help)
       if [[ -n "$ACTION" ]]; then
         die_usage "exactly one action flag is allowed"
       fi
@@ -301,6 +329,9 @@ case "$ACTION" in
     ;;
   --build-release)
     build_app release
+    ;;
+  --release-smoke)
+    run_release_smoke
     ;;
   --run)
     run_app

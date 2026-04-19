@@ -370,7 +370,11 @@ reconciled as the final source of truth.
   `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`; reuse for
   future managed runtimes is captured as an additive backend-extension path
   rather than as a new Tauri-owned transport lane, and the current residual
-  platform limits are now documented explicitly instead of being left implicit
+  platform limits are now documented explicitly instead of being left implicit.
+  The launcher now also exposes `./launcher.sh --release-smoke`, which verifies
+  a built desktop release artifact exists and then runs the bounded
+  redistributables contract smoke Pantograph can support today without a
+  headless desktop entrypoint.
 - Binding platform planning and verification expansion for C#, Python, and
   BEAM host lanes
 - Parallel demand execution planning and `node-engine` decomposition prep

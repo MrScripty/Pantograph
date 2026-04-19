@@ -8,6 +8,7 @@ main app entrypoint.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded managed-runtime contract smoke that covers runtime-manager view projection, workflow preflight blocking, and diagnostics projection. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies, then runs the authoring path against the packaged native library; does not restore NuGet packages. |
 | `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime session diffusion smoke; requires a local diffusers model directory and Python environment. |
@@ -66,6 +67,7 @@ specific script being executed.
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
 ./scripts/check-no-python-linkage.sh
+./scripts/check-runtime-redistributables-smoke.sh
 ./scripts/check-uniffi-embedded-runtime-surface.sh
 ./scripts/check-uniffi-csharp-smoke.sh
 PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh

@@ -75,6 +75,7 @@ npm run build:desktop
 
 ```bash
 ./launcher.sh --help
+./launcher.sh --release-smoke
 ```
 
 ### Vision Backend Options

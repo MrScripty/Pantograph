@@ -438,7 +438,7 @@ additional runtimes and referenced as the canonical runtime-manager design.
   is the source of truth and stale narrower wording is removed or superseded
 - [x] Capture the reuse path for additional redistributables such as Ollama or
   other managed runtime hosts without implementing all of them immediately
-- [ ] Add launcher/release-smoke integration where required so install/readiness
+- [x] Add launcher/release-smoke integration where required so install/readiness
   failures are visible in bounded verification flows
 - [x] Update ADR/README traceability for the final backend-owned runtime
   manager boundary
@@ -451,7 +451,7 @@ additional runtimes and referenced as the canonical runtime-manager design.
   smoke path available for Pantograph
 - Source-of-truth review across roadmap, plan, README, and ADR links
 
-**Status:** Not started
+**Status:** Complete
 
 ## Execution Notes
 
@@ -647,6 +647,13 @@ Update during implementation:
   unsupported targets must fail as unsupported instead of partially
   installing, and `Ollama` continues to prefer a host-provided system command
   when present.
+- 2026-04-19: Milestone 6 slice 4 adds a bounded launcher-integrated
+  redistributables smoke path via `./launcher.sh --release-smoke` and
+  `scripts/check-runtime-redistributables-smoke.sh`. Because the desktop
+  release binary still lacks a true headless smoke entrypoint, the smoke now
+  verifies that a built release artifact exists and then runs targeted managed
+  runtime manager, workflow preflight, and diagnostics projection tests that
+  cover the current redistributables safety boundary.
 
 ## Commit Cadence Notes
 
