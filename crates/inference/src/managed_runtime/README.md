@@ -165,8 +165,8 @@ fn inspect_runtime(app_data_dir: &Path) {
   state explicitly.
 - Selection changes only become durable through the exported backend mutation
   functions, which validate installed versions before persisting new
-  selected/default version state and append an install-history event for audit
-  visibility.
+  selected/default version state, reject non-ready versions, and append an
+  install-history event for audit visibility.
 - `ResolvedCommand` is the backend-produced launch contract for host adapters.
 - `ArchiveKind` and `ReleaseAsset` are internal producer contracts used by
   runtime definitions and platform adapters; changes here must keep the adapter

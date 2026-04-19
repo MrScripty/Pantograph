@@ -508,6 +508,10 @@ Update during implementation:
   executable readiness across persisted versions and runtime snapshots, so
   later execution and host layers can consume one backend-owned compatibility
   contract instead of re-deriving those facts.
+- 2026-04-19: Milestone 3 slice 5 tightened backend selection policy so only
+  ready versions can become selected/default targets, closing the remaining
+  gap where failed versions still existed in state but should not have been
+  selectable.
 
 ## Commit Cadence Notes
 

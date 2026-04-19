@@ -733,13 +733,21 @@ fn update_runtime_selection(
     let runtime = ensure_runtime_state_entry(&mut state, id);
 
     if let Some(version) = version {
-        if !runtime
+        let Some(persisted_version) = runtime
             .versions
             .iter()
-            .any(|entry| entry.version == version)
-        {
+            .find(|entry| entry.version == version)
+        else {
             return Err(format!(
                 "{} version '{}' is not installed",
+                id.display_name(),
+                version
+            ));
+        };
+
+        if persisted_version.readiness_state != ManagedRuntimeReadinessState::Ready {
+            return Err(format!(
+                "{} version '{}' is not ready for selection",
                 id.display_name(),
                 version
             ));
@@ -841,8 +849,8 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        binary_capability, persist_install_success, persist_remove_success,
-        readiness_state_for_capability, resolve_runtime_install_dir,
+        binary_capability, ensure_runtime_state_entry, persist_install_success,
+        persist_remove_success, readiness_state_for_capability, resolve_runtime_install_dir,
         runtime_install_dir_for_projection, select_managed_runtime_version,
         set_default_managed_runtime_version, snapshot_from_capability, ManagedBinaryCapability,
         ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeReadinessState,
@@ -1015,6 +1023,32 @@ mod tests {
         .expect_err("unknown version should fail");
 
         assert!(error.contains("is not installed"));
+    }
+
+    #[test]
+    fn select_managed_runtime_version_rejects_non_ready_version() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.versions.push(ManagedRuntimePersistedVersion {
+            version: "b8248".to_string(),
+            runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+            platform_key: Some("linux-x86_64".to_string()),
+            readiness_state: ManagedRuntimeReadinessState::Failed,
+            install_root: None,
+            last_ready_at_ms: None,
+            last_error: Some("validation failed".to_string()),
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let error = select_managed_runtime_version(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            Some("b8248"),
+        )
+        .expect_err("non-ready version should fail");
+
+        assert!(error.contains("is not ready for selection"));
     }
 
     #[test]
