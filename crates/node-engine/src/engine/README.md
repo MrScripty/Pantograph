@@ -112,6 +112,9 @@ changing the public executor surface.
 - KV-capable execution paths that emit `kv_cache_out` should project that
   handle into node-memory indirect references rather than embedding runtime
   reuse policy into cached outputs or Tauri-side session state.
+- Node preparation may synthesize `kv_cache_in` from a preserved node-memory
+  indirect reference when execution did not receive an explicit override, so
+  suffix reruns remain backend-owned and transport-neutral.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under

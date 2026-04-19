@@ -383,6 +383,9 @@ Latest landed slice:
 - Bound workflow-session node-memory projection now preserves compatible
   `kv_cache_out` handles as backend-owned indirect references with inspection
   metadata instead of dropping those runtime-restorable artifacts between runs.
+- Backend node preparation now projects a preserved KV handle reference back
+  into typed `kv_cache_in` inputs when rerunning a bound session without an
+  explicit override, so reuse handoff stays in Rust execution paths.
 - Phase 6 node-memory remains the lifecycle owner for those references; reuse
   policy for suffix-only reruns is still deferred to later Milestone 5 slices.
 

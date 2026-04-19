@@ -733,6 +733,103 @@ mod tests {
         );
     }
 
+    struct KvCacheReusingTaskExecutor {
+        execution_counter: AtomicUsize,
+    }
+
+    impl KvCacheReusingTaskExecutor {
+        fn new() -> Self {
+            Self {
+                execution_counter: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for KvCacheReusingTaskExecutor {
+        async fn execute_task(
+            &self,
+            _task_id: &str,
+            inputs: std::collections::HashMap<String, serde_json::Value>,
+            _context: &graph_flow::Context,
+            _extensions: &crate::extensions::ExecutorExtensions,
+        ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
+            let run_number = self.execution_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            let kv_cache_in = inputs.get("kv_cache_in").cloned();
+            Ok(std::collections::HashMap::from([
+                (
+                    "out".to_string(),
+                    serde_json::json!({ "run_number": run_number }),
+                ),
+                (
+                    "kv_cache_out".to_string(),
+                    serde_json::json!({
+                        "cache_id": format!("cache-run-{run_number}"),
+                        "compatibility": {
+                            "model_fingerprint": {
+                                "model_id": "model-1",
+                                "config_hash": "cfg-1",
+                            },
+                            "runtime_fingerprint": {
+                                "runtime_id": "runtime-1",
+                                "backend_key": "llamacpp",
+                                "tokenizer_fingerprint": "tok-1",
+                                "prompt_format_fingerprint": "prompt-1",
+                                "runtime_build_fingerprint": "build-1",
+                            }
+                        }
+                    }),
+                ),
+                (
+                    "observed_kv_cache_in".to_string(),
+                    kv_cache_in.unwrap_or(serde_json::Value::Null),
+                ),
+            ]))
+        }
+    }
+
+    #[tokio::test]
+    async fn rerun_projects_preserved_kv_cache_reference_back_into_inputs() {
+        let executor =
+            WorkflowExecutor::new("exec-1", single_node_graph(), Arc::new(NullEventSink));
+        let task_executor = KvCacheReusingTaskExecutor::new();
+        bind_workflow_session(&executor, "session-1").await;
+
+        let first_outputs = executor
+            .demand(&"memory".to_string(), &task_executor)
+            .await
+            .expect("first run should succeed");
+        assert_eq!(
+            first_outputs.get("observed_kv_cache_in"),
+            Some(&serde_json::Value::Null)
+        );
+
+        executor.mark_modified(&"memory".to_string()).await;
+        let second_outputs = executor
+            .demand(&"memory".to_string(), &task_executor)
+            .await
+            .expect("second run should succeed");
+        assert_eq!(
+            second_outputs.get("observed_kv_cache_in"),
+            Some(&serde_json::json!({
+                "cache_id": "cache-run-1",
+                "compatibility": {
+                    "model_fingerprint": {
+                        "model_id": "model-1",
+                        "config_hash": "cfg-1",
+                    },
+                    "runtime_fingerprint": {
+                        "runtime_id": "runtime-1",
+                        "backend_key": "llamacpp",
+                        "tokenizer_fingerprint": "tok-1",
+                        "prompt_format_fingerprint": "prompt-1",
+                        "runtime_build_fingerprint": "build-1",
+                    }
+                }
+            }))
+        );
+    }
+
     #[tokio::test]
     async fn rerun_can_consume_prior_node_memory_from_the_bound_workflow_session() {
         let executor =
