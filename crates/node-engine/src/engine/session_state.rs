@@ -228,6 +228,42 @@ impl WorkflowExecutorSessionState {
         self.node_memories.write().await.remove(workflow_session_id);
     }
 
+    pub(crate) async fn reconcile_node_memory(
+        &self,
+        workflow_session_id: &str,
+        memory_impact: &GraphMemoryImpactSummary,
+    ) {
+        let mut node_memories = self.node_memories.write().await;
+        let Some(session_memories) = node_memories.get_mut(workflow_session_id) else {
+            return;
+        };
+
+        let mut removals = Vec::new();
+        for decision in &memory_impact.node_decisions {
+            match decision.compatibility {
+                NodeMemoryCompatibility::PreserveAsIs => {}
+                NodeMemoryCompatibility::PreserveWithInputRefresh
+                | NodeMemoryCompatibility::FallbackFullInvalidation => {
+                    if let Some(snapshot) = session_memories.get_mut(&decision.node_id) {
+                        snapshot.status = NodeMemoryStatus::Invalidated;
+                    }
+                }
+                NodeMemoryCompatibility::DropOnIdentityChange
+                | NodeMemoryCompatibility::DropOnSchemaIncompatibility => {
+                    removals.push(decision.node_id.clone());
+                }
+            }
+        }
+
+        for node_id in removals {
+            session_memories.remove(&node_id);
+        }
+
+        if session_memories.is_empty() {
+            node_memories.remove(workflow_session_id);
+        }
+    }
+
     pub(crate) async fn checkpoint_summary(
         &self,
         workflow_session_id: &str,
@@ -247,10 +283,10 @@ impl WorkflowExecutorSessionState {
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryIdentity,
-        NodeMemoryIndirectStateReference, NodeMemoryRestoreStrategy, NodeMemorySnapshot,
-        NodeMemoryStatus, WorkflowExecutorSessionState, WorkflowSessionCheckpointSummary,
-        WorkflowSessionResidencyState,
+        GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot,
+        NodeMemoryIdentity, NodeMemoryIndirectStateReference, NodeMemoryRestoreStrategy,
+        NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutorSessionState,
+        WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
     };
 
     #[test]
@@ -475,5 +511,149 @@ mod tests {
         state.clear_node_memory("session-1").await;
         let cleared_summary = state.checkpoint_summary("session-1", "graph-1").await;
         assert_eq!(cleared_summary.preserved_node_count, 0);
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_reconciles_node_memory_status_and_removals() {
+        let state = WorkflowExecutorSessionState::new();
+        for node_id in ["node-a", "node-b", "node-c"] {
+            state
+                .record_node_memory(NodeMemorySnapshot {
+                    identity: NodeMemoryIdentity {
+                        session_id: "session-1".to_string(),
+                        node_id: node_id.to_string(),
+                        node_type: "text-node".to_string(),
+                        schema_version: Some("v1".to_string()),
+                    },
+                    status: NodeMemoryStatus::Ready,
+                    input_fingerprint: Some(format!("fp-{node_id}")),
+                    output_snapshot: Some(serde_json::json!({ "node": node_id })),
+                    private_state: None,
+                    indirect_state_reference: None,
+                    inspection_metadata: None,
+                })
+                .await;
+        }
+
+        state
+            .reconcile_node_memory(
+                "session-1",
+                &GraphMemoryImpactSummary {
+                    node_decisions: vec![
+                        NodeMemoryCompatibilitySnapshot {
+                            node_id: "node-a".to_string(),
+                            compatibility: NodeMemoryCompatibility::PreserveAsIs,
+                            reason: Some("unchanged".to_string()),
+                        },
+                        NodeMemoryCompatibilitySnapshot {
+                            node_id: "node-b".to_string(),
+                            compatibility: NodeMemoryCompatibility::PreserveWithInputRefresh,
+                            reason: Some("upstream_input_changed".to_string()),
+                        },
+                        NodeMemoryCompatibilitySnapshot {
+                            node_id: "node-c".to_string(),
+                            compatibility: NodeMemoryCompatibility::DropOnIdentityChange,
+                            reason: Some("node_removed".to_string()),
+                        },
+                    ],
+                    fallback_to_full_invalidation: false,
+                },
+            )
+            .await;
+
+        let snapshots = state.node_memory_snapshots("session-1").await;
+        assert_eq!(
+            snapshots
+                .iter()
+                .map(|snapshot| snapshot.identity.node_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["node-a", "node-b"]
+        );
+        assert_eq!(snapshots[0].status, NodeMemoryStatus::Ready);
+        assert_eq!(snapshots[1].status, NodeMemoryStatus::Invalidated);
+        assert_eq!(
+            snapshots[1].output_snapshot,
+            Some(serde_json::json!({ "node": "node-b" }))
+        );
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_fallback_reconciliation_invalidates_remaining_nodes() {
+        let state = WorkflowExecutorSessionState::new();
+        state
+            .record_node_memory(NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "node-a".to_string(),
+                    node_type: "text-input".to_string(),
+                    schema_version: Some("v1".to_string()),
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: Some("fp-a".to_string()),
+                output_snapshot: Some(serde_json::json!({ "text": "alpha" })),
+                private_state: None,
+                indirect_state_reference: None,
+                inspection_metadata: None,
+            })
+            .await;
+
+        state
+            .reconcile_node_memory(
+                "session-1",
+                &GraphMemoryImpactSummary::fallback_full_invalidation(
+                    ["node-a", "node-missing"],
+                    "graph_edit_not_proven",
+                ),
+            )
+            .await;
+
+        let snapshots = state.node_memory_snapshots("session-1").await;
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].identity.node_id, "node-a");
+        assert_eq!(snapshots[0].status, NodeMemoryStatus::Invalidated);
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_reconciliation_drops_empty_session_bucket() {
+        let state = WorkflowExecutorSessionState::new();
+        state
+            .record_node_memory(NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "node-a".to_string(),
+                    node_type: "text-input".to_string(),
+                    schema_version: Some("v1".to_string()),
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: None,
+                output_snapshot: None,
+                private_state: None,
+                indirect_state_reference: None,
+                inspection_metadata: None,
+            })
+            .await;
+
+        state
+            .reconcile_node_memory(
+                "session-1",
+                &GraphMemoryImpactSummary {
+                    node_decisions: vec![NodeMemoryCompatibilitySnapshot {
+                        node_id: "node-a".to_string(),
+                        compatibility: NodeMemoryCompatibility::DropOnSchemaIncompatibility,
+                        reason: Some("schema_version_changed".to_string()),
+                    }],
+                    fallback_to_full_invalidation: false,
+                },
+            )
+            .await;
+
+        assert!(state.node_memory_snapshots("session-1").await.is_empty());
+        assert_eq!(
+            state
+                .checkpoint_summary("session-1", "graph-1")
+                .await
+                .preserved_node_count,
+            0
+        );
     }
 }

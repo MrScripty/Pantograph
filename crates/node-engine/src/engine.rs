@@ -532,6 +532,21 @@ impl WorkflowExecutor {
         workflow_session::clear_workflow_session_node_memory(self, workflow_session_id).await;
     }
 
+    /// Apply backend-owned graph memory impact reconciliation rules to one
+    /// workflow session's recorded node memory.
+    pub async fn reconcile_workflow_session_node_memory(
+        &self,
+        workflow_session_id: &str,
+        memory_impact: &GraphMemoryImpactSummary,
+    ) {
+        workflow_session::reconcile_workflow_session_node_memory(
+            self,
+            workflow_session_id,
+            memory_impact,
+        )
+        .await;
+    }
+
     /// Set a value in the context
     pub async fn set_context_value<T: serde::Serialize + Send + Sync>(&self, key: &str, value: T) {
         self.context.set(key, value).await;

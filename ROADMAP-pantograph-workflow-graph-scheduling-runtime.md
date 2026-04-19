@@ -876,6 +876,10 @@ the affected downstream closure.
   the embedded runtime, and let omitted inputs carry forward while changed
   inputs invalidate the affected suffix. That reused state is still dropped on
   runtime unload until Milestone 5 checkpoint and restore work is completed.
+- The node-engine session-state core now also owns compatibility application
+  for stored workflow-session node memory, so later graph-change integration
+  can reuse one backend reconciliation rule set instead of duplicating drop vs.
+  invalidate semantics in host-specific runtime code.
 
 **Milestones:**
 

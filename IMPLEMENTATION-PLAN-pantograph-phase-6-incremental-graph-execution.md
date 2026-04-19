@@ -843,6 +843,11 @@ Update during implementation:
   unchanged inputs can carry forward while selectively updated inputs only
   invalidate the affected suffix. Runtime unload still clears that executor
   until Milestone 5 checkpoint/restore work lands.
+- 2026-04-18: `node-engine` session state now owns a backend-only node-memory
+  reconciliation helper that applies `GraphMemoryImpactSummary` decisions to
+  recorded workflow-session node memory by preserving compatible entries,
+  invalidating refresh-required entries, and dropping incompatible entries so
+  later graph-change wiring can reuse one backend source of truth.
 
 ## Commit Cadence Notes
 

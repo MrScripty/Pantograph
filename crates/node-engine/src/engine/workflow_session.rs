@@ -1,6 +1,6 @@
 use super::{
-    NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutor,
-    WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
+    GraphMemoryImpactSummary, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,
+    WorkflowExecutor, WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
 };
 use crate::error::Result;
 use crate::types::NodeId;
@@ -71,6 +71,17 @@ pub(super) async fn clear_workflow_session_node_memory(
     executor
         .session_state
         .clear_node_memory(workflow_session_id)
+        .await;
+}
+
+pub(super) async fn reconcile_workflow_session_node_memory(
+    executor: &WorkflowExecutor,
+    workflow_session_id: &str,
+    memory_impact: &GraphMemoryImpactSummary,
+) {
+    executor
+        .session_state
+        .reconcile_node_memory(workflow_session_id, memory_impact)
         .await;
 }
 
@@ -234,13 +245,15 @@ mod tests {
     use crate::events::NullEventSink;
 
     use super::{
-        NodeMemorySnapshot, WorkflowExecutor, WorkflowSessionResidencyState, bind_workflow_session,
-        bound_workflow_session_id, clear_bound_workflow_session,
-        clear_workflow_session_node_memory, record_workflow_session_node_memory,
+        GraphMemoryImpactSummary, NodeMemorySnapshot, WorkflowExecutor,
+        WorkflowSessionResidencyState, bind_workflow_session, bound_workflow_session_id,
+        clear_bound_workflow_session, clear_workflow_session_node_memory,
+        reconcile_workflow_session_node_memory, record_workflow_session_node_memory,
         set_workflow_session_residency, sync_bound_session_node_memory_from_cache,
         workflow_session_checkpoint_summary, workflow_session_node_memory_snapshots,
         workflow_session_residency,
     };
+    use crate::{NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot};
 
     struct SnapshotTaskExecutor;
 
@@ -623,5 +636,48 @@ mod tests {
                 "memory_status": "ready",
             }))
         );
+    }
+
+    #[tokio::test]
+    async fn workflow_session_helpers_reconcile_recorded_node_memory() {
+        let executor = WorkflowExecutor::new("exec-1", linear_graph(), Arc::new(NullEventSink));
+        bind_workflow_session(&executor, "session-1").await;
+        record_workflow_session_node_memory(
+            &executor,
+            NodeMemorySnapshot {
+                identity: super::NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "b".to_string(),
+                    node_type: "process".to_string(),
+                    schema_version: Some("v1".to_string()),
+                },
+                status: super::NodeMemoryStatus::Ready,
+                input_fingerprint: Some("fp-b".to_string()),
+                output_snapshot: Some(serde_json::json!({ "out": "b" })),
+                private_state: None,
+                indirect_state_reference: None,
+                inspection_metadata: None,
+            },
+        )
+        .await;
+
+        reconcile_workflow_session_node_memory(
+            &executor,
+            "session-1",
+            &GraphMemoryImpactSummary {
+                node_decisions: vec![NodeMemoryCompatibilitySnapshot {
+                    node_id: "b".to_string(),
+                    compatibility: NodeMemoryCompatibility::PreserveWithInputRefresh,
+                    reason: Some("upstream_dependency_changed".to_string()),
+                }],
+                fallback_to_full_invalidation: false,
+            },
+        )
+        .await;
+
+        let snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].identity.node_id, "b");
+        assert_eq!(snapshots[0].status, super::NodeMemoryStatus::Invalidated);
     }
 }
