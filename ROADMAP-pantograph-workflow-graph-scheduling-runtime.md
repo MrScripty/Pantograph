@@ -874,8 +874,10 @@ the affected downstream closure.
   workflow sessions: repeated `run_workflow_session` calls carry the logical
   session id through backend run options, reuse a backend-owned executor inside
   the embedded runtime, and let omitted inputs carry forward while changed
-  inputs invalidate the affected suffix. That reused state is still dropped on
-  runtime unload until Milestone 5 checkpoint and restore work is completed.
+  inputs invalidate the affected suffix. Capacity-driven unload now preserves
+  that logical session state as a backend-owned checkpoint instead of dropping
+  the keep-alive executor outright, while explicit keep-alive disable and
+  session close still tear it down.
 - The node-engine session-state core now also owns compatibility application
   for stored workflow-session node memory, so later graph-change integration
   can reuse one backend reconciliation rule set instead of duplicating drop vs.
@@ -885,8 +887,10 @@ the affected downstream closure.
   the updated graph into the existing backend executor, applies the shared
   graph-diff memory-impact contract to stored node memory, and replays carried
   input bindings that still target valid nodes before demand execution
-  continues. Runtime unload still clears executor residency until Milestone 5
-  checkpoint/restore work lands.
+  continues. Capacity-rebalance unload now transitions that executor into a
+  checkpointed-but-unloaded residency state with preserved node memory, and
+  the next keep-alive run restores it instead of rebuilding the logical
+  session state from scratch.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
   diagnostics can inspect the most recent compatibility decision after node-

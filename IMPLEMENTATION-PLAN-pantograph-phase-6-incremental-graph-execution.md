@@ -841,8 +841,9 @@ Update during implementation:
   `workflow_session_id` through backend run options, and the embedded runtime
   reuses a backend-owned session executor for repeated session runs so
   unchanged inputs can carry forward while selectively updated inputs only
-  invalidate the affected suffix. Runtime unload still clears that executor
-  until Milestone 5 checkpoint/restore work lands.
+  invalidate the affected suffix. Capacity-rebalance unload now checkpoints
+  that keep-alive executor instead of clearing it, while explicit keep-alive
+  disable and session close still tear the session executor down.
 - 2026-04-18: `node-engine` session state now owns a backend-only node-memory
   reconciliation helper that applies `GraphMemoryImpactSummary` decisions to
   recorded workflow-session node memory by preserving compatible entries,
@@ -881,6 +882,14 @@ Update during implementation:
   facts as the primary source of truth so restarted attempts clear graph-
   reconciliation state in one backend reset path instead of relying on a
   transport-local overlay to own mutation history.
+- 2026-04-18: Milestone 5 started. `node-engine` session state now tracks
+  backend-owned checkpoint availability and timestamp metadata alongside
+  preserved node memory, and the embedded runtime now treats
+  `CapacityRebalance` unload as a checkpoint transition for keep-alive session
+  executors by marking them `checkpointed_but_unloaded` instead of deleting the
+  logical session state. The next resumed keep-alive run clears the checkpoint
+  marker, transitions residency through `restored` to `warm`, and reuses the
+  same backend executor with preserved node memory.
 
 ## Commit Cadence Notes
 

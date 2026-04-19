@@ -1722,10 +1722,29 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         &self,
         session_id: &str,
         _workflow_id: &str,
-        _reason: pantograph_workflow_service::WorkflowSessionUnloadReason,
+        reason: pantograph_workflow_service::WorkflowSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         self.release_loaded_session_runtime(session_id).await?;
-        self.session_executions.remove(session_id)
+        match reason {
+            pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance => {
+                if let Some(entry) = self.session_executions.get(session_id)? {
+                    let executor = entry.executor.lock().await;
+                    executor
+                        .set_workflow_session_residency(
+                            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded,
+                        )
+                        .await;
+                    executor
+                        .mark_workflow_session_checkpoint_available(session_id)
+                        .await;
+                }
+                Ok(())
+            }
+            pantograph_workflow_service::WorkflowSessionUnloadReason::KeepAliveDisabled
+            | pantograph_workflow_service::WorkflowSessionUnloadReason::SessionClosed => {
+                self.session_executions.remove(session_id)
+            }
+        }
     }
 
     async fn select_runtime_unload_candidate(
@@ -4027,6 +4046,133 @@ mod tests {
                 .iter()
                 .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready)
         );
+    }
+
+    #[tokio::test]
+    async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let first = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create first keep-alive session");
+
+        let first_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: first.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("alpha"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-first".to_string()),
+            })
+            .await
+            .expect("run first keep-alive session");
+        assert_eq!(first_output.outputs[0].value, serde_json::json!("alpha"));
+
+        let first_executor = runtime
+            .session_executions
+            .handle(&first.session_id)
+            .expect("first session execution lookup should succeed")
+            .expect("first keep-alive executor should exist");
+
+        WorkflowHost::unload_session_runtime(
+            &runtime.host(),
+            &first.session_id,
+            "runtime-text",
+            pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        )
+        .await
+        .expect("checkpoint keep-alive session for capacity rebalance");
+
+        let checkpointed_summary = {
+            let executor = first_executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&first.session_id)
+                .await
+        };
+        assert!(checkpointed_summary.checkpoint_available);
+        assert_eq!(
+            checkpointed_summary.residency,
+            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        );
+        assert!(
+            checkpointed_summary.preserved_node_count >= 2,
+            "checkpoint should preserve node memory for the keep-alive session"
+        );
+
+        let resumed_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: first.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-resume".to_string()),
+            })
+            .await
+            .expect("resume first keep-alive session from checkpoint");
+        assert_eq!(resumed_output.outputs[0].value, serde_json::json!("alpha"));
+
+        let resumed_executor = runtime
+            .session_executions
+            .handle(&first.session_id)
+            .expect("resumed session execution lookup should succeed")
+            .expect("resumed keep-alive executor should exist");
+        assert!(Arc::ptr_eq(&first_executor, &resumed_executor));
+
+        let resumed_summary = {
+            let executor = resumed_executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&first.session_id)
+                .await
+        };
+        assert!(!resumed_summary.checkpoint_available);
+        assert_eq!(
+            resumed_summary.residency,
+            node_engine::WorkflowSessionResidencyState::Warm
+        );
+
+        runtime
+            .close_workflow_session(WorkflowSessionCloseRequest {
+                session_id: first.session_id.clone(),
+            })
+            .await
+            .expect("close resumed keep-alive session");
     }
 
     #[tokio::test]

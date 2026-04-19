@@ -182,6 +182,7 @@ pub(crate) struct WorkflowExecutorSessionState {
     residency: RwLock<WorkflowSessionResidencyState>,
     bound_workflow_session_id: RwLock<Option<String>>,
     node_memories: RwLock<HashMap<String, HashMap<String, NodeMemorySnapshot>>>,
+    checkpoints: RwLock<HashMap<String, u64>>,
 }
 
 impl WorkflowExecutorSessionState {
@@ -190,6 +191,7 @@ impl WorkflowExecutorSessionState {
             residency: RwLock::new(WorkflowSessionResidencyState::Active),
             bound_workflow_session_id: RwLock::new(None),
             node_memories: RwLock::new(HashMap::new()),
+            checkpoints: RwLock::new(HashMap::new()),
         }
     }
 
@@ -240,6 +242,7 @@ impl WorkflowExecutorSessionState {
 
     pub(crate) async fn clear_node_memory(&self, workflow_session_id: &str) {
         self.node_memories.write().await.remove(workflow_session_id);
+        self.checkpoints.write().await.remove(workflow_session_id);
     }
 
     pub(crate) async fn reconcile_node_memory(
@@ -273,9 +276,26 @@ impl WorkflowExecutorSessionState {
             session_memories.remove(&node_id);
         }
 
-        if session_memories.is_empty() {
+        let remove_checkpoint = session_memories.is_empty();
+        if remove_checkpoint {
             node_memories.remove(workflow_session_id);
         }
+        drop(node_memories);
+
+        if remove_checkpoint {
+            self.checkpoints.write().await.remove(workflow_session_id);
+        }
+    }
+
+    pub(crate) async fn mark_checkpoint_available(&self, workflow_session_id: &str) {
+        self.checkpoints.write().await.insert(
+            workflow_session_id.to_string(),
+            crate::events::unix_timestamp_ms(),
+        );
+    }
+
+    pub(crate) async fn clear_checkpoint(&self, workflow_session_id: &str) {
+        self.checkpoints.write().await.remove(workflow_session_id);
     }
 
     pub(crate) async fn checkpoint_summary(
@@ -290,6 +310,16 @@ impl WorkflowExecutorSessionState {
             self.residency().await,
         );
         summary.preserved_node_count = preserved_node_count;
+        if let Some(checkpointed_at_ms) = self
+            .checkpoints
+            .read()
+            .await
+            .get(workflow_session_id)
+            .copied()
+        {
+            summary.checkpoint_available = true;
+            summary.checkpointed_at_ms = Some(checkpointed_at_ms);
+        }
         summary
     }
 }
@@ -457,6 +487,22 @@ mod tests {
         assert_eq!(summary.graph_revision, "graph-1");
         assert_eq!(summary.residency, WorkflowSessionResidencyState::Active);
         assert!(!summary.checkpoint_available);
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_marks_checkpoint_availability() {
+        let state = WorkflowExecutorSessionState::new();
+
+        state.mark_checkpoint_available("session-1").await;
+        let summary = state.checkpoint_summary("session-1", "graph-1").await;
+
+        assert!(summary.checkpoint_available);
+        assert!(summary.checkpointed_at_ms.is_some());
+
+        state.clear_checkpoint("session-1").await;
+        let cleared = state.checkpoint_summary("session-1", "graph-1").await;
+        assert!(!cleared.checkpoint_available);
+        assert_eq!(cleared.checkpointed_at_ms, None);
     }
 
     #[tokio::test]

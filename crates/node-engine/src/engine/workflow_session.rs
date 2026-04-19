@@ -47,6 +47,26 @@ pub(super) async fn workflow_session_checkpoint_summary(
         .await
 }
 
+pub(super) async fn mark_workflow_session_checkpoint_available(
+    executor: &WorkflowExecutor,
+    workflow_session_id: &str,
+) {
+    executor
+        .session_state
+        .mark_checkpoint_available(workflow_session_id)
+        .await;
+}
+
+pub(super) async fn clear_workflow_session_checkpoint(
+    executor: &WorkflowExecutor,
+    workflow_session_id: &str,
+) {
+    executor
+        .session_state
+        .clear_checkpoint(workflow_session_id)
+        .await;
+}
+
 pub(super) async fn workflow_session_node_memory_snapshots(
     executor: &WorkflowExecutor,
     workflow_session_id: &str,
@@ -247,7 +267,9 @@ mod tests {
     use super::{
         GraphMemoryImpactSummary, NodeMemorySnapshot, WorkflowExecutor,
         WorkflowSessionResidencyState, bind_workflow_session, bound_workflow_session_id,
-        clear_bound_workflow_session, clear_workflow_session_node_memory,
+        clear_bound_workflow_session, clear_workflow_session_checkpoint,
+        clear_workflow_session_node_memory,
+        mark_workflow_session_checkpoint_available,
         reconcile_workflow_session_node_memory, record_workflow_session_node_memory,
         set_workflow_session_residency, sync_bound_session_node_memory_from_cache,
         workflow_session_checkpoint_summary, workflow_session_node_memory_snapshots,
@@ -428,6 +450,15 @@ mod tests {
             WorkflowSessionResidencyState::CheckpointedButUnloaded
         );
         assert!(!summary.checkpoint_available);
+
+        mark_workflow_session_checkpoint_available(&executor, "session-1").await;
+        let checkpointed_summary = workflow_session_checkpoint_summary(&executor, "session-1").await;
+        assert!(checkpointed_summary.checkpoint_available);
+        assert!(checkpointed_summary.checkpointed_at_ms.is_some());
+
+        clear_workflow_session_checkpoint(&executor, "session-1").await;
+        let cleared_summary = workflow_session_checkpoint_summary(&executor, "session-1").await;
+        assert!(!cleared_summary.checkpoint_available);
     }
 
     #[tokio::test]

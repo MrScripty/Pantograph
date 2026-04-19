@@ -512,6 +512,18 @@ impl WorkflowExecutor {
         workflow_session::workflow_session_checkpoint_summary(self, workflow_session_id).await
     }
 
+    /// Mark the bound workflow session as having a backend-owned checkpoint
+    /// artifact available for restore.
+    pub async fn mark_workflow_session_checkpoint_available(&self, workflow_session_id: &str) {
+        workflow_session::mark_workflow_session_checkpoint_available(self, workflow_session_id)
+            .await;
+    }
+
+    /// Clear any backend-owned checkpoint marker for one workflow session.
+    pub async fn clear_workflow_session_checkpoint(&self, workflow_session_id: &str) {
+        workflow_session::clear_workflow_session_checkpoint(self, workflow_session_id).await;
+    }
+
     /// Return the backend-owned logical node-memory snapshots for one workflow
     /// session.
     pub async fn workflow_session_node_memory_snapshots(

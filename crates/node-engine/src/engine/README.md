@@ -18,7 +18,7 @@ entrypoint while preserving the current public API.
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, bounded-parallel coordination, and bound-session node-memory projection after successful runs. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
-| `session_state.rs` | Phase 6 workflow-session residency, bound workflow-session identity, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned per-session node-memory store, compatibility-reconciliation helper, and checkpoint-summary helper. |
+| `session_state.rs` | Phase 6 workflow-session residency, bound workflow-session identity, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned per-session node-memory store, compatibility-reconciliation helper, checkpoint-availability tracking, and checkpoint-summary helper. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
 | `workflow_session.rs` | Executor-facing workflow-session binding, residency, node-memory inspection/update/reconciliation, and checkpoint-summary helpers that keep the Phase 6 facade wiring out of `engine.rs`. |
 
@@ -150,6 +150,9 @@ planning split, plus the private execution-batch schedule derived from it.
 - Workflow-session residency, node-memory compatibility classes, and bounded
   checkpoint summaries remain backend-owned contracts in Rust rather than host-
   local transport state.
+- Checkpoint availability and checkpoint timestamps for workflow-session
+  executors remain backend-owned Rust state tied to preserved node memory
+  rather than host-local unload bookkeeping.
 - Demand event emission remains derived from backend execution state rather
   than adapter-local reconstruction.
 - In-flight cycle detection remains derived from backend recursive execution

@@ -19,11 +19,11 @@ struct WorkflowSessionExecutionEntry {
 }
 
 #[derive(Clone)]
-struct WorkflowSessionExecutionHandle {
-    workflow_id: String,
-    graph_fingerprint: String,
-    executor: Arc<tokio::sync::Mutex<WorkflowExecutor>>,
-    carried_inputs: Vec<WorkflowPortBinding>,
+pub(crate) struct WorkflowSessionExecutionHandle {
+    pub(crate) workflow_id: String,
+    pub(crate) graph_fingerprint: String,
+    pub(crate) executor: Arc<tokio::sync::Mutex<WorkflowExecutor>>,
+    pub(crate) carried_inputs: Vec<WorkflowPortBinding>,
 }
 
 #[derive(Default)]
@@ -36,7 +36,7 @@ impl WorkflowSessionExecutionStore {
         Self::default()
     }
 
-    fn get(
+    pub(crate) fn get(
         &self,
         session_id: &str,
     ) -> Result<Option<WorkflowSessionExecutionHandle>, WorkflowServiceError> {
@@ -255,6 +255,21 @@ pub(crate) async fn run_session_workflow(
     );
 
     let mut executor = session_executor.lock().await;
+    match executor.workflow_session_residency().await {
+        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded => {
+            executor
+                .clear_workflow_session_checkpoint(workflow_session_id)
+                .await;
+            executor
+                .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Restored)
+                .await;
+        }
+        _ => {
+            executor
+                .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Active)
+                .await;
+        }
+    }
     apply_runtime_extensions_for_execution(
         &mut executor,
         &runtime_ext,
@@ -284,6 +299,9 @@ pub(crate) async fn run_session_workflow(
             .map_err(node_engine_error_to_workflow_service_error)?;
         node_outputs.insert(node_id.clone(), outputs);
     }
+    executor
+        .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Warm)
+        .await;
     drop(executor);
 
     let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshots();
