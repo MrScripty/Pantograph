@@ -57,7 +57,7 @@ impl PythonRuntimeExecutionRecorder {
 
 #[cfg(test)]
 mod tests {
-    use crate::runtime_health::{failed_runtime_health_assessment, RuntimeHealthState};
+    use crate::runtime_health::{RuntimeHealthState, failed_runtime_health_assessment};
 
     use super::*;
 

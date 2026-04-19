@@ -1253,7 +1253,10 @@ mod tests {
         );
 
         assert_eq!(cancelled_json["type"], "workflowCancelled");
-        assert_eq!(cancelled_json["error"], "workflow run cancelled during execution");
+        assert_eq!(
+            cancelled_json["error"],
+            "workflow run cancelled during execution"
+        );
 
         assert_eq!(incremental_json["type"], "incrementalExecutionStarted");
         assert_eq!(incremental_json["workflowId"], "wf-1");

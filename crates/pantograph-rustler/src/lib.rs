@@ -72,9 +72,9 @@ use type_parsing_contract::{
 };
 use workflow_event_contract::serialize_workflow_event_json;
 use workflow_graph_contract::{
-    workflow_add_edge_json, workflow_add_node_json, workflow_from_json_string,
-    workflow_new_json, workflow_remove_edge_json, workflow_remove_node_json,
-    workflow_update_node_data_json, workflow_validate_json,
+    workflow_add_edge_json, workflow_add_node_json, workflow_from_json_string, workflow_new_json,
+    workflow_remove_edge_json, workflow_remove_node_json, workflow_update_node_data_json,
+    workflow_validate_json,
 };
 #[cfg(feature = "frontend-http")]
 use workflow_host_contract::{workflow_run_host_request, workflow_run_scheduler_request};
