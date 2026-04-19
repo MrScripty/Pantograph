@@ -6,6 +6,7 @@ pub(crate) fn parse_port_data_type_string(type_str: String) -> ElixirPortDataTyp
         "number" => ElixirPortDataType::Number,
         "boolean" => ElixirPortDataType::Boolean,
         "json" => ElixirPortDataType::Json,
+        "kv_cache" => ElixirPortDataType::KvCache,
         "image" => ElixirPortDataType::Image,
         "audio" => ElixirPortDataType::Audio,
         "video" => ElixirPortDataType::Video,

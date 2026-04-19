@@ -36,6 +36,7 @@
     audio_stream: '#38bdf8',
     stream: '#22d3ee',
     json: '#fb923c',
+    kv_cache: '#a3e635',
     component: '#f472b6',
     document: '#2dd4bf',
     tools: '#fbbf24',

@@ -47,7 +47,7 @@ impl TaskDescriptor for KvCacheLoadTask {
                 ),
             ],
             outputs: vec![
-                PortMetadata::required(PORT_CACHE_DATA, "Cache Data", PortDataType::Json),
+                PortMetadata::required(PORT_CACHE_DATA, "Cache Data", PortDataType::KvCache),
                 PortMetadata::required(PORT_METADATA, "Metadata", PortDataType::Json),
                 PortMetadata::required(PORT_VALID, "Valid", PortDataType::Boolean),
             ],

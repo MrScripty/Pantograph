@@ -64,7 +64,11 @@ owner, and replaces placeholder directory READMEs with explicit ownership
 boundaries before broader execution behavior lands. The second slice now moves
 KV save/load/truncate executor logic behind a focused `node-engine`
 `core_executor::kv_cache` module and turns the `workflow-nodes` KV files into
-descriptor-only stubs that direct execution to `CoreTaskExecutor`.
+descriptor-only stubs that direct execution to `CoreTaskExecutor`. The third
+slice now gives the workflow graph a first-class `kv_cache` port type across
+backend, transport, and Svelte graph mirrors, and compatible inference/storage
+descriptors now expose explicit KV ports instead of hiding reuse behind
+generic JSON.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -533,6 +537,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   `crates/node-engine/src/core_executor/kv_cache.rs`, and the
   `workflow-nodes` KV save/load/truncate tasks now fail fast unless executed
   through `CoreTaskExecutor`
+- Workflow graphs now expose a first-class `kv_cache` port type, validation now
+  rejects `kv_cache` connections to non-`kv_cache` ports, and compatible
+  inference/storage descriptors now publish explicit KV input/output ports
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

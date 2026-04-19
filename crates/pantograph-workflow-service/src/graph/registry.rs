@@ -79,6 +79,7 @@ fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
         node_engine::PortDataType::Embedding => PortDataType::Embedding,
         node_engine::PortDataType::Document => PortDataType::Document,
         node_engine::PortDataType::Json => PortDataType::Json,
+        node_engine::PortDataType::KvCache => PortDataType::KvCache,
         node_engine::PortDataType::Boolean => PortDataType::Boolean,
         node_engine::PortDataType::Number => PortDataType::Number,
         node_engine::PortDataType::VectorDb => PortDataType::VectorDb,

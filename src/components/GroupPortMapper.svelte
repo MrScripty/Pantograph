@@ -122,6 +122,7 @@
     audio_stream: 'bg-sky-500',
     stream: 'bg-cyan-500',
     json: 'bg-orange-500',
+    kv_cache: 'bg-lime-500',
     component: 'bg-pink-600',
     document: 'bg-teal-500',
     tools: 'bg-amber-600',

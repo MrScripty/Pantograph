@@ -98,12 +98,16 @@ impl InferenceTask {
     pub const PORT_CONTEXT: &'static str = "context";
     /// Port ID for tools input
     pub const PORT_TOOLS: &'static str = "tools";
+    /// Port ID for optional reusable KV-cache input
+    pub const PORT_KV_CACHE_IN: &'static str = "kv_cache_in";
     /// Port ID for response output
     pub const PORT_RESPONSE: &'static str = "response";
     /// Port ID for tool calls output
     pub const PORT_TOOL_CALLS: &'static str = "tool_calls";
     /// Port ID for has_tool_calls output
     pub const PORT_HAS_TOOL_CALLS: &'static str = "has_tool_calls";
+    /// Port ID for optional reusable KV-cache output
+    pub const PORT_KV_CACHE_OUT: &'static str = "kv_cache_out";
     /// Port ID for stream output
     pub const PORT_STREAM: &'static str = "stream";
 
@@ -147,6 +151,11 @@ impl TaskDescriptor for InferenceTask {
                 PortMetadata::optional(Self::PORT_CONTEXT, "Context", PortDataType::String),
                 PortMetadata::optional(Self::PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
                 PortMetadata::optional(
+                    Self::PORT_KV_CACHE_IN,
+                    "KV Cache In",
+                    PortDataType::KvCache,
+                ),
+                PortMetadata::optional(
                     "inference_settings",
                     "Inference Settings",
                     PortDataType::Json,
@@ -159,6 +168,11 @@ impl TaskDescriptor for InferenceTask {
                     Self::PORT_HAS_TOOL_CALLS,
                     "Has Tool Calls",
                     PortDataType::Boolean,
+                ),
+                PortMetadata::optional(
+                    Self::PORT_KV_CACHE_OUT,
+                    "KV Cache Out",
+                    PortDataType::KvCache,
                 ),
                 PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
             ],
@@ -389,6 +403,7 @@ mod tests {
 
         // Check for tools input
         assert!(meta.inputs.iter().any(|p| p.id == "tools"));
+        assert!(meta.inputs.iter().any(|p| p.id == "kv_cache_in"));
         assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
 
         // Check for tool_calls output
@@ -396,6 +411,7 @@ mod tests {
 
         // Check for has_tool_calls output
         assert!(meta.outputs.iter().any(|p| p.id == "has_tool_calls"));
+        assert!(meta.outputs.iter().any(|p| p.id == "kv_cache_out"));
     }
 
     #[test]

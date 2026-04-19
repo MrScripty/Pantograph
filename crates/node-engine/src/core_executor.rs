@@ -1098,7 +1098,10 @@ fn read_optional_input_value(
         .or_else(|| inputs.get("_data").and_then(|d| d.get(key)).cloned())
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg_attr(
+    not(any(feature = "inference-nodes", feature = "audio-nodes")),
+    allow(dead_code)
+)]
 fn read_optional_input_string_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
@@ -1108,7 +1111,10 @@ fn read_optional_input_string_aliases(
         .find_map(|key| read_optional_input_string(inputs, key))
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg_attr(
+    not(any(feature = "inference-nodes", feature = "audio-nodes")),
+    allow(dead_code)
+)]
 fn read_optional_input_value_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
@@ -1118,7 +1124,10 @@ fn read_optional_input_value_aliases(
         .find_map(|key| read_optional_input_value(inputs, key))
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg_attr(
+    not(any(feature = "inference-nodes", feature = "audio-nodes")),
+    allow(dead_code)
+)]
 fn read_optional_input_bool(
     inputs: &HashMap<String, serde_json::Value>,
     key: &str,
@@ -1136,7 +1145,10 @@ fn read_optional_input_bool(
         })
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg_attr(
+    not(any(feature = "inference-nodes", feature = "audio-nodes")),
+    allow(dead_code)
+)]
 fn read_optional_input_bool_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],

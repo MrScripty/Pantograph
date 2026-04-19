@@ -20,8 +20,10 @@ const PORT_MAX_TOKENS: &str = "max_tokens";
 const PORT_DEVICE: &str = "device";
 const PORT_MODEL_TYPE: &str = "model_type";
 const PORT_ENVIRONMENT_REF: &str = "environment_ref";
+const PORT_KV_CACHE_IN: &str = "kv_cache_in";
 const PORT_RESPONSE: &str = "response";
 const PORT_MODEL_REF: &str = "model_ref";
+const PORT_KV_CACHE_OUT: &str = "kv_cache_out";
 const PORT_STREAM: &str = "stream";
 
 /// Stub descriptor for the PyTorch inference node.
@@ -60,6 +62,7 @@ impl TaskDescriptor for PyTorchInferenceTask {
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
                 PortMetadata::optional(PORT_DEVICE, "Device", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_TYPE, "Model Type", PortDataType::String),
+                PortMetadata::optional(PORT_KV_CACHE_IN, "KV Cache In", PortDataType::KvCache),
                 PortMetadata::optional(
                     "inference_settings",
                     "Inference Settings",
@@ -70,6 +73,7 @@ impl TaskDescriptor for PyTorchInferenceTask {
             outputs: vec![
                 PortMetadata::required(PORT_RESPONSE, "Response", PortDataType::String),
                 PortMetadata::optional(PORT_MODEL_REF, "Model Reference", PortDataType::Json),
+                PortMetadata::optional(PORT_KV_CACHE_OUT, "KV Cache Out", PortDataType::KvCache),
                 PortMetadata::optional(PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             execution_mode: ExecutionMode::Stream,
@@ -106,9 +110,9 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = PyTorchInferenceTask::descriptor();
 
-        // 10 inputs: model_path, prompt, audio, system_prompt, temperature, max_tokens, device,
-        // model_type, inference_settings, environment_ref
-        assert_eq!(meta.inputs.len(), 10);
+        // 11 inputs: model_path, prompt, audio, system_prompt, temperature,
+        // max_tokens, device, model_type, kv_cache_in, inference_settings, environment_ref
+        assert_eq!(meta.inputs.len(), 11);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "audio"));
@@ -117,13 +121,15 @@ mod tests {
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));
         assert!(meta.inputs.iter().any(|p| p.id == "device"));
         assert!(meta.inputs.iter().any(|p| p.id == "model_type"));
+        assert!(meta.inputs.iter().any(|p| p.id == "kv_cache_in"));
         assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
         assert!(meta.inputs.iter().any(|p| p.id == "environment_ref"));
 
-        // 3 outputs: response, model_ref, stream
-        assert_eq!(meta.outputs.len(), 3);
+        // 4 outputs: response, model_ref, kv_cache_out, stream
+        assert_eq!(meta.outputs.len(), 4);
         assert!(meta.outputs.iter().any(|p| p.id == "response"));
         assert!(meta.outputs.iter().any(|p| p.id == "model_ref"));
+        assert!(meta.outputs.iter().any(|p| p.id == "kv_cache_out"));
         assert!(meta.outputs.iter().any(|p| p.id == "stream"));
     }
 

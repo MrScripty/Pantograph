@@ -44,6 +44,8 @@ pub enum PortDataType {
     Document,
     /// JSON object
     Json,
+    /// KV-cache artifact handle exchanged between compatible inference nodes
+    KvCache,
     /// Boolean value
     Boolean,
     /// Numeric value
@@ -358,7 +360,9 @@ mod tests {
         assert!(PortDataType::Number.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::Boolean.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::Json.is_compatible_with(&PortDataType::String));
+        assert!(PortDataType::KvCache.is_compatible_with(&PortDataType::KvCache));
         assert!(!PortDataType::Number.is_compatible_with(&PortDataType::Boolean));
+        assert!(!PortDataType::KvCache.is_compatible_with(&PortDataType::Json));
     }
 
     #[test]

@@ -18,9 +18,11 @@ const PORT_SYSTEM_PROMPT: &str = "system_prompt";
 const PORT_TEMPERATURE: &str = "temperature";
 const PORT_MAX_TOKENS: &str = "max_tokens";
 const PORT_TOOLS: &str = "tools";
+const PORT_KV_CACHE_IN: &str = "kv_cache_in";
 const PORT_RESPONSE: &str = "response";
 const PORT_TOOL_CALLS: &str = "tool_calls";
 const PORT_HAS_TOOL_CALLS: &str = "has_tool_calls";
+const PORT_KV_CACHE_OUT: &str = "kv_cache_out";
 const PORT_STREAM: &str = "stream";
 const PORT_MODEL_REF: &str = "model_ref";
 
@@ -56,6 +58,7 @@ impl TaskDescriptor for LlamaCppInferenceTask {
                 PortMetadata::optional(PORT_TEMPERATURE, "Temperature", PortDataType::Number),
                 PortMetadata::optional(PORT_MAX_TOKENS, "Max Tokens", PortDataType::Number),
                 PortMetadata::optional(PORT_TOOLS, "Tools", PortDataType::Tools).multiple(),
+                PortMetadata::optional(PORT_KV_CACHE_IN, "KV Cache In", PortDataType::KvCache),
                 PortMetadata::optional(
                     "inference_settings",
                     "Inference Settings",
@@ -72,6 +75,7 @@ impl TaskDescriptor for LlamaCppInferenceTask {
                     "Has Tool Calls",
                     PortDataType::Boolean,
                 ),
+                PortMetadata::optional(PORT_KV_CACHE_OUT, "KV Cache Out", PortDataType::KvCache),
                 PortMetadata::optional(PORT_STREAM, "Stream", PortDataType::Stream),
             ],
             execution_mode: ExecutionMode::Stream,
@@ -109,23 +113,27 @@ mod tests {
     fn test_descriptor_has_correct_ports() {
         let meta = LlamaCppInferenceTask::descriptor();
 
-        // 7 inputs: model_path, prompt, system_prompt, temperature, max_tokens, tools, inference_settings
-        assert_eq!(meta.inputs.len(), 7);
+        // 8 inputs: model_path, prompt, system_prompt, temperature, max_tokens,
+        // tools, kv_cache_in, inference_settings
+        assert_eq!(meta.inputs.len(), 8);
         assert!(meta.inputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.inputs.iter().any(|p| p.id == "prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "system_prompt"));
         assert!(meta.inputs.iter().any(|p| p.id == "temperature"));
         assert!(meta.inputs.iter().any(|p| p.id == "max_tokens"));
         assert!(meta.inputs.iter().any(|p| p.id == "tools"));
+        assert!(meta.inputs.iter().any(|p| p.id == "kv_cache_in"));
         assert!(meta.inputs.iter().any(|p| p.id == "inference_settings"));
 
-        // 6 outputs: response, model_path, model_ref, tool_calls, has_tool_calls, stream
-        assert_eq!(meta.outputs.len(), 6);
+        // 7 outputs: response, model_path, model_ref, tool_calls,
+        // has_tool_calls, kv_cache_out, stream
+        assert_eq!(meta.outputs.len(), 7);
         assert!(meta.outputs.iter().any(|p| p.id == "model_ref"));
         assert!(meta.outputs.iter().any(|p| p.id == "response"));
         assert!(meta.outputs.iter().any(|p| p.id == "model_path"));
         assert!(meta.outputs.iter().any(|p| p.id == "tool_calls"));
         assert!(meta.outputs.iter().any(|p| p.id == "has_tool_calls"));
+        assert!(meta.outputs.iter().any(|p| p.id == "kv_cache_out"));
         assert!(meta.outputs.iter().any(|p| p.id == "stream"));
     }
 

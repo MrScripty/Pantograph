@@ -107,6 +107,7 @@ pub enum ElixirPortDataType {
     Number,
     Boolean,
     Json,
+    KvCache,
     Image,
     Audio,
     Video,

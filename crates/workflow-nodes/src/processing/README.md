@@ -42,7 +42,10 @@ candidate-document, and ranked-result contracts while the host owns the
 runtime-specific llama.cpp execution details. `expand_settings.rs` follows the
 same contract-first rule: model-specific settings stay graph-visible as
 matching optional input/output ports while the schema itself still passes
-through unchanged for downstream inference merging.
+through unchanged for downstream inference merging. Compatible text-generation
+descriptors now also reserve explicit `kv_cache_in` and `kv_cache_out` ports
+using the first-class `kv_cache` graph type so KV reuse remains graph-visible
+instead of hiding behind generic JSON ports.
 
 ## Alternatives Rejected
 - Leave dependency environment handoff as an undocumented runtime-only input.
@@ -55,6 +58,8 @@ through unchanged for downstream inference merging.
 - Python-backed node contracts must stay additive across releases.
 - Dependency environment handoff, when used, is represented as structured JSON
   rather than opaque string flags.
+- KV-cache reuse, when exposed by processing nodes, uses explicit `kv_cache`
+  ports rather than generic `json` ports.
 - Expand-settings contracts must preserve the static `inference_settings`
   passthrough while keeping per-setting override ports additive and keyed by the
   source schema.

@@ -17,6 +17,7 @@ pub enum PortDataType {
     Embedding,
     Document,
     Json,
+    KvCache,
     Boolean,
     Number,
     VectorDb,

@@ -14,6 +14,7 @@ export type PortDataType =
   | 'embedding'
   | 'document'
   | 'json'
+  | 'kv_cache'
   | 'boolean'
   | 'number'
   | 'vector_db';

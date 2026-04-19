@@ -293,25 +293,25 @@ end-to-end KV behavior.
 **Goal:** Make KV usage explicit and typed in the workflow graph.
 
 **Tasks:**
-- [ ] Add a typed KV port/data contract for graph connectivity instead of
+- [x] Add a typed KV port/data contract for graph connectivity instead of
       treating KV artifacts as generic JSON.
-- [ ] Extend compatible inference-node descriptors with explicit optional KV
+- [x] Extend compatible inference-node descriptors with explicit optional KV
       input and KV output ports.
-- [ ] Keep incompatible nodes out of the first rollout; do not add KV ports to
+- [x] Keep incompatible nodes out of the first rollout; do not add KV ports to
       runtimes that cannot prove text-generation-style KV reuse semantics.
-- [ ] Update graph compatibility checks so KV ports only connect to KV ports.
-- [ ] Ensure graph load/save and structured workflow artifacts treat missing KV
+- [x] Update graph compatibility checks so KV ports only connect to KV ports.
+- [x] Ensure graph load/save and structured workflow artifacts treat missing KV
       settings as "disabled" for backward compatibility.
-- [ ] Touch frontend graph/node code only if needed to render or order the new
+- [x] Touch frontend graph/node code only if needed to render or order the new
       ports; keep the frontend declarative and backend-contract-driven.
-- [ ] Update `processing/README.md` if inference-node port contracts change.
+- [x] Update `processing/README.md` if inference-node port contracts change.
 
 **Verification:**
 - Focused Rust tests for descriptor and graph-port compatibility
 - Focused frontend typecheck/tests only if node rendering is touched
 - Backward-compatibility load check for workflows without KV fields
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 4: Integrate Real Runtime Capture, Restore, And Truncation
 

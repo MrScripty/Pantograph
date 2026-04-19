@@ -564,6 +564,7 @@ fn port_data_type_to_param_type(data_type: &PortDataType) -> &'static str {
         PortDataType::Boolean => "Boolean",
         PortDataType::Number => "Number",
         PortDataType::String => "String",
+        PortDataType::KvCache => "String",
         _ => "String",
     }
 }

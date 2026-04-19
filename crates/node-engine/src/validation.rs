@@ -110,10 +110,60 @@ pub fn validate_workflow(
 
     if let Some(reg) = registry {
         validate_node_types(graph, reg, &mut errors);
+        validate_port_types(graph, reg, &mut errors);
         validate_required_inputs(graph, reg, &mut errors);
     }
 
     errors
+}
+
+/// Check that each edge connects compatible output and input port types.
+fn validate_port_types(
+    graph: &WorkflowGraph,
+    registry: &NodeRegistry,
+    errors: &mut Vec<ValidationError>,
+) {
+    for edge in &graph.edges {
+        let Some(source_node) = graph.nodes.iter().find(|node| node.id == edge.source) else {
+            continue;
+        };
+        let Some(target_node) = graph.nodes.iter().find(|node| node.id == edge.target) else {
+            continue;
+        };
+
+        let Some(source_metadata) = registry.get_metadata(&source_node.node_type) else {
+            continue;
+        };
+        let Some(target_metadata) = registry.get_metadata(&target_node.node_type) else {
+            continue;
+        };
+
+        let Some(source_port) = source_metadata
+            .outputs
+            .iter()
+            .find(|port| port.id == edge.source_handle)
+        else {
+            continue;
+        };
+        let Some(target_port) = target_metadata
+            .inputs
+            .iter()
+            .find(|port| port.id == edge.target_handle)
+        else {
+            continue;
+        };
+
+        if !source_port
+            .data_type
+            .is_compatible_with(&target_port.data_type)
+        {
+            errors.push(ValidationError::IncompatiblePortTypes {
+                edge_id: edge.id.clone(),
+                source_type: format!("{:?}", source_port.data_type),
+                target_type: format!("{:?}", target_port.data_type),
+            });
+        }
+    }
 }
 
 /// Validate an orchestration graph
@@ -320,6 +370,41 @@ mod tests {
             outputs: vec![],
             execution_mode: ExecutionMode::Reactive,
         });
+        registry.register_metadata(TaskMetadata {
+            node_type: "kv-source".to_string(),
+            category: NodeCategory::Processing,
+            label: "KV Source".to_string(),
+            description: "Produces a KV-cache artifact".to_string(),
+            inputs: vec![],
+            outputs: vec![PortMetadata::optional(
+                "kv_cache_out",
+                "KV Cache Out",
+                PortDataType::KvCache,
+            )],
+            execution_mode: ExecutionMode::Reactive,
+        });
+        registry.register_metadata(TaskMetadata {
+            node_type: "kv-target".to_string(),
+            category: NodeCategory::Processing,
+            label: "KV Target".to_string(),
+            description: "Consumes a KV-cache artifact".to_string(),
+            inputs: vec![PortMetadata::required(
+                "kv_cache_in",
+                "KV Cache In",
+                PortDataType::KvCache,
+            )],
+            outputs: vec![],
+            execution_mode: ExecutionMode::Reactive,
+        });
+        registry.register_metadata(TaskMetadata {
+            node_type: "json-target".to_string(),
+            category: NodeCategory::Processing,
+            label: "JSON Target".to_string(),
+            description: "Consumes JSON".to_string(),
+            inputs: vec![PortMetadata::required("json", "Json", PortDataType::Json)],
+            outputs: vec![],
+            execution_mode: ExecutionMode::Reactive,
+        });
         registry
     }
 
@@ -334,6 +419,41 @@ mod tests {
         let registry = make_test_registry();
         let errors = validate_workflow(&graph, Some(&registry));
         assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+    }
+
+    #[test]
+    fn test_kv_cache_ports_accept_matching_connections() {
+        let graph = WorkflowBuilder::new("wf", "KV Cache")
+            .add_node("a", "kv-source", (0.0, 0.0))
+            .add_node("b", "kv-target", (100.0, 0.0))
+            .add_edge("a", "kv_cache_out", "b", "kv_cache_in")
+            .build();
+
+        let registry = make_test_registry();
+        let errors = validate_workflow(&graph, Some(&registry));
+        assert!(errors.is_empty(), "Expected no errors, got: {:?}", errors);
+    }
+
+    #[test]
+    fn test_kv_cache_ports_reject_json_targets() {
+        let graph = WorkflowBuilder::new("wf", "KV Cache Mismatch")
+            .add_node("a", "kv-source", (0.0, 0.0))
+            .add_node("b", "json-target", (100.0, 0.0))
+            .add_edge("a", "kv_cache_out", "b", "json")
+            .build();
+
+        let registry = make_test_registry();
+        let errors = validate_workflow(&graph, Some(&registry));
+        assert!(errors.iter().any(|error| {
+            matches!(
+                error,
+                ValidationError::IncompatiblePortTypes {
+                    source_type,
+                    target_type,
+                    ..
+                } if source_type == "KvCache" && target_type == "Json"
+            )
+        }));
     }
 
     #[test]
