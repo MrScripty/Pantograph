@@ -64,7 +64,10 @@ repo only as a historical precursor and must not be used as the active
 implementation plan. Managed runtime selection/default-version policy is now
 also exposed as an explicit backend mutation API in `crates/inference`, so
 future Tauri/runtime-manager slices can update version policy without writing
-the durable state file directly.
+the durable state file directly. Managed runtime command resolution now also
+consumes that persisted backend selection/install-root state, so future host
+adapters do not need to guess which installed runtime path execution should
+launch.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,

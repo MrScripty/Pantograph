@@ -368,7 +368,7 @@ version policy, and install/download jobs.
   `CROSS-PLATFORM-STANDARDS.md`
 - `cargo check --workspace`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 4: Workflow And Scheduler Safety Integration
 
@@ -490,6 +490,10 @@ Update during implementation:
   APIs for selected/default version policy, exported them through the public
   inference surface, and covered installed-versus-unknown version behavior so
   host adapters no longer need to mutate durable state directly.
+- 2026-04-19: Milestone 3 started by routing managed runtime command
+  resolution through persisted selected/default/active version policy and
+  recorded install roots, so execution no longer ignores backend-owned version
+  selection state once it exists.
 
 ## Commit Cadence Notes
 

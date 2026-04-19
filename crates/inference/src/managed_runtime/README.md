@@ -126,7 +126,10 @@ fn inspect_runtime(app_data_dir: &Path) {
   mutating `state.json` or rebuilding selection rules locally.
 - `resolve_binary_command()` returns the executable path, working directory,
   sanitized arguments, environment overrides, and optional pid-file path needed
-  for host launchers.
+  for host launchers. When a managed runtime has persisted selected/default/
+  active version state, command resolution uses that backend-owned version
+  policy and its recorded install root instead of rebuilding the launch target
+  from Tauri-local assumptions.
 - System-provided runtimes take precedence when a definition explicitly supports
   them, as `Ollama` currently does.
 
