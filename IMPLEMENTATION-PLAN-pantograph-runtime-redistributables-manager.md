@@ -512,6 +512,12 @@ Update during implementation:
   ready versions can become selected/default targets, closing the remaining
   gap where failed versions still existed in state but should not have been
   selectable.
+- 2026-04-19: Milestone 4 started with the embedded-runtime capability bridge
+  switching from flat managed-binary capability reads to backend-owned managed
+  runtime snapshots, so workflow/runtime capability projection now preserves
+  readiness-phase and selected-version context through `configured` and
+  `unavailable_reason` instead of rebuilding that context in workflow or Tauri
+  layers.
 
 ## Commit Cadence Notes
 

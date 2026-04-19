@@ -15,7 +15,7 @@ use pantograph_workflow_service::{
 };
 
 pub fn managed_runtime_capabilities(
-    runtimes: &[inference::ManagedBinaryCapability],
+    runtimes: &[inference::ManagedRuntimeSnapshot],
     available_backends: &[inference::BackendInfo],
     selected_backend_key: &str,
 ) -> Vec<WorkflowRuntimeCapability> {
@@ -28,7 +28,8 @@ pub fn managed_runtime_capabilities(
                 display_name: runtime.display_name.clone(),
                 install_state: managed_runtime_install_state(runtime.install_state),
                 available: runtime.available,
-                configured: runtime.available,
+                configured: runtime.readiness_state
+                    == inference::ManagedRuntimeReadinessState::Ready,
                 can_install: runtime.can_install,
                 can_remove: runtime.can_remove,
                 source_kind: WorkflowRuntimeSourceKind::Managed,
@@ -39,7 +40,10 @@ pub fn managed_runtime_capabilities(
                 ),
                 backend_keys,
                 missing_files: runtime.missing_files.clone(),
-                unavailable_reason: runtime.unavailable_reason.clone(),
+                unavailable_reason: runtime
+                    .unavailable_reason
+                    .clone()
+                    .or_else(|| managed_runtime_unavailable_reason(runtime)),
             }
         })
         .collect()
@@ -285,6 +289,78 @@ fn managed_runtime_install_state(
     }
 }
 
+fn managed_runtime_unavailable_reason(
+    runtime: &inference::ManagedRuntimeSnapshot,
+) -> Option<String> {
+    match runtime.readiness_state {
+        inference::ManagedRuntimeReadinessState::Ready => None,
+        inference::ManagedRuntimeReadinessState::Unknown => {
+            Some(format!("{} readiness is unknown", runtime.display_name))
+        }
+        inference::ManagedRuntimeReadinessState::Missing => Some(
+            runtime
+                .selection
+                .selected_version
+                .as_ref()
+                .map(|version| {
+                    format!(
+                        "{} selected version '{}' is not installed",
+                        runtime.display_name, version
+                    )
+                })
+                .unwrap_or_else(|| format!("{} is not installed", runtime.display_name)),
+        ),
+        inference::ManagedRuntimeReadinessState::Downloading
+        | inference::ManagedRuntimeReadinessState::Extracting
+        | inference::ManagedRuntimeReadinessState::Validating => Some(
+            runtime
+                .active_job
+                .as_ref()
+                .map(|job| job.status.clone())
+                .filter(|status| !status.trim().is_empty())
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} is {}",
+                        runtime.display_name,
+                        readiness_label(runtime.readiness_state)
+                    )
+                }),
+        ),
+        inference::ManagedRuntimeReadinessState::Failed => Some(
+            runtime
+                .active_job
+                .as_ref()
+                .and_then(|job| job.error.clone())
+                .or_else(|| {
+                    runtime.selection.selected_version.as_ref().map(|version| {
+                        format!(
+                            "{} selected version '{}' failed validation",
+                            runtime.display_name, version
+                        )
+                    })
+                })
+                .unwrap_or_else(|| format!("{} is not ready", runtime.display_name)),
+        ),
+        inference::ManagedRuntimeReadinessState::Unsupported => Some(format!(
+            "{} is unsupported on this platform",
+            runtime.display_name
+        )),
+    }
+}
+
+fn readiness_label(state: inference::ManagedRuntimeReadinessState) -> &'static str {
+    match state {
+        inference::ManagedRuntimeReadinessState::Unknown => "unknown",
+        inference::ManagedRuntimeReadinessState::Missing => "missing",
+        inference::ManagedRuntimeReadinessState::Downloading => "downloading",
+        inference::ManagedRuntimeReadinessState::Extracting => "extracting",
+        inference::ManagedRuntimeReadinessState::Validating => "validating",
+        inference::ManagedRuntimeReadinessState::Ready => "ready",
+        inference::ManagedRuntimeReadinessState::Failed => "failed",
+        inference::ManagedRuntimeReadinessState::Unsupported => "unsupported",
+    }
+}
+
 fn runtime_matches_backend(backend_keys: &[String], selected_backend_key: &str) -> bool {
     backend_keys
         .iter()
@@ -471,15 +547,23 @@ mod tests {
     #[test]
     fn managed_runtime_capabilities_preserve_external_connection_support() {
         let capabilities = managed_runtime_capabilities(
-            &[inference::ManagedBinaryCapability {
+            &[inference::ManagedRuntimeSnapshot {
                 id: inference::ManagedBinaryId::LlamaCpp,
                 display_name: "llama.cpp".to_string(),
                 install_state: inference::ManagedBinaryInstallState::Installed,
+                readiness_state: inference::ManagedRuntimeReadinessState::Ready,
                 available: true,
                 can_install: false,
                 can_remove: true,
                 missing_files: Vec::new(),
                 unavailable_reason: None,
+                versions: Vec::new(),
+                selection: inference::ManagedRuntimeSelectionState {
+                    selected_version: Some("b8248".to_string()),
+                    active_version: Some("b8248".to_string()),
+                    default_version: Some("b8248".to_string()),
+                },
+                active_job: None,
             }],
             &[inference::BackendInfo {
                 name: "llama.cpp".to_string(),
@@ -514,15 +598,23 @@ mod tests {
     #[test]
     fn runtime_capability_contract_family_stays_aligned_across_producers() {
         let managed_capability = managed_runtime_capabilities(
-            &[inference::ManagedBinaryCapability {
+            &[inference::ManagedRuntimeSnapshot {
                 id: inference::ManagedBinaryId::LlamaCpp,
                 display_name: "llama.cpp".to_string(),
                 install_state: inference::ManagedBinaryInstallState::Installed,
+                readiness_state: inference::ManagedRuntimeReadinessState::Ready,
                 available: true,
                 can_install: false,
                 can_remove: true,
                 missing_files: Vec::new(),
                 unavailable_reason: None,
+                versions: Vec::new(),
+                selection: inference::ManagedRuntimeSelectionState {
+                    selected_version: Some("b8248".to_string()),
+                    active_version: Some("b8248".to_string()),
+                    default_version: Some("b8248".to_string()),
+                },
+                active_job: None,
             }],
             &[inference::BackendInfo {
                 name: "llama.cpp".to_string(),
@@ -608,6 +700,48 @@ mod tests {
             "pytorch",
             WorkflowRuntimeSourceKind::System,
             WorkflowRuntimeInstallState::SystemProvided,
+        );
+    }
+
+    #[test]
+    fn managed_runtime_capabilities_preserve_readiness_context_in_reason() {
+        let capabilities = managed_runtime_capabilities(
+            &[inference::ManagedRuntimeSnapshot {
+                id: inference::ManagedBinaryId::LlamaCpp,
+                display_name: "llama.cpp".to_string(),
+                install_state: inference::ManagedBinaryInstallState::Installed,
+                readiness_state: inference::ManagedRuntimeReadinessState::Validating,
+                available: false,
+                can_install: false,
+                can_remove: true,
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+                versions: Vec::new(),
+                selection: inference::ManagedRuntimeSelectionState {
+                    selected_version: Some("b8248".to_string()),
+                    active_version: None,
+                    default_version: Some("b8248".to_string()),
+                },
+                active_job: Some(inference::ManagedRuntimeJobStatus {
+                    state: inference::ManagedRuntimeJobState::Validating,
+                    status: "Validating b8248".to_string(),
+                    current: 1,
+                    total: 1,
+                    resumable: false,
+                    cancellable: false,
+                    error: None,
+                }),
+            }],
+            &[],
+            "llama_cpp",
+        );
+
+        assert_eq!(capabilities.len(), 1);
+        let capability = &capabilities[0];
+        assert!(!capability.configured);
+        assert_eq!(
+            capability.unavailable_reason.as_deref(),
+            Some("Validating b8248")
         );
     }
 

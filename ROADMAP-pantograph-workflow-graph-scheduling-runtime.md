@@ -71,7 +71,11 @@ launch. Managed runtime installs now land under version-scoped runtime roots,
 with legacy single-directory fallback preserved for older already-installed
 artifacts. Runtime snapshots now also carry backend-owned runtime/platform/
 install-root/executable compatibility metadata so later host and execution
-layers do not need to reconstruct those facts locally.
+layers do not need to reconstruct those facts locally. The first workflow
+integration slice is also landed in the embedded-runtime bridge: workflow
+runtime capabilities now project from managed-runtime snapshots rather than
+flat install-only capability records, preserving readiness-phase context for
+preflight and diagnostics.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,

@@ -20,7 +20,7 @@ packages.
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
-| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime, host-runtime, dedicated-embedding, and Python-sidecar capability builders plus capability-to-lifecycle projection. |
+| `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, and Python-sidecar capability builders plus capability-to-lifecycle projection. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
@@ -108,6 +108,10 @@ embedded-runtime crate.
 - Managed-runtime, host-runtime, and Python-sidecar capability shaping must
   stay in the shared backend capability helper module rather than being
   rebuilt inside `EmbeddedWorkflowHost` or Tauri adapters.
+- Managed-runtime capability shaping must consume backend-owned managed-runtime
+  snapshots rather than flatter install-only capability records, so workflow
+  preflight can see backend-owned readiness and selected-version context
+  without Tauri-local reconstruction.
 - Capability parity across managed, host, dedicated-embedding, and Python-
   sidecar producers must be pinned by backend tests so later producer-specific
   additions do not silently drift on runtime ids, install-state semantics, or
