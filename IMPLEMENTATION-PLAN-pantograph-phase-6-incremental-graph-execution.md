@@ -672,6 +672,11 @@ affected downstream closure.
 - Repeated checkpoint marks and repeated capacity unloads now preserve the
   original checkpoint timestamp, and explicit keep-alive disable still tears
   the retained executor down.
+- Embedded-runtime construction now applies the configured loaded-session
+  capacity limit to the injected workflow service, and scheduler-driven
+  rebalance now routes reclaim-selected keep-alive sessions through the same
+  backend session-execution unload transition used by direct
+  `CapacityRebalance` unload.
 
 **Remaining focus:**
 - Integrate scheduler-driven reclaim and restore flows with the same
@@ -680,6 +685,192 @@ affected downstream closure.
 - Finish broader restore ordering and multi-session isolation semantics so
   reclaim, restore, and parallel workflow pressure cannot race or cross-wire
   logical node memory.
+
+#### Milestone 5 Detailed Remaining Plan
+
+**Objective:** Finish the scheduler-driven reclaim and restore path without
+creating a second owner for checkpoint semantics or letting runtime-registry
+and queue pressure paths drift from the already-landed direct keep-alive unload
+behavior.
+
+**Definition of done:**
+- Scheduler-driven reclaim uses the same backend-owned checkpoint lifecycle as
+  direct `CapacityRebalance` unload for reclaimable keep-alive workflow
+  sessions.
+- Restore sequencing is explicit and idempotent: runtime/process restore,
+  workflow-session reattachment, checkpoint clearing, and residency transitions
+  occur in one documented order with no double-restore side path.
+- Parallel or temporarily unloaded workflow sessions keep isolated logical
+  node-memory and checkpoint state while reclaim/restore pressure is applied to
+  neighboring sessions.
+- Touched scheduler/runtime READMEs, this plan, and the roadmap remain aligned
+  with the landed behavior.
+
+**Affected structured contracts for the remaining work:**
+- backend-owned workflow-session checkpoint summaries and residency state
+- runtime reclaim candidate and scheduler diagnostics DTOs
+- any additive backend restore/reclaim result contracts needed so adapters
+  consume checkpoint state without re-deriving it
+
+**Affected persisted artifacts for the remaining work:**
+- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+- `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
+- touched module `README.md` files in:
+  - `crates/pantograph-workflow-service/src/scheduler`
+  - `crates/pantograph-embedded-runtime/src`
+  - `crates/node-engine/src/engine`
+- any focused reclaim/restore fixtures added to pin checkpoint sequencing
+
+**Targeted file boundary for this remaining slice:**
+- `crates/pantograph-workflow-service/src/scheduler/store.rs`
+- `crates/pantograph-workflow-service/src/workflow.rs`
+- `crates/pantograph-workflow-service/src/scheduler/README.md`
+- `crates/pantograph-embedded-runtime/src/lib.rs`
+- `crates/pantograph-embedded-runtime/src/workflow_session_execution.rs`
+- `crates/pantograph-embedded-runtime/src/runtime_registry.rs`
+- `crates/pantograph-embedded-runtime/src/runtime_registry_lifecycle.rs`
+- `crates/pantograph-embedded-runtime/src/README.md`
+- `crates/node-engine/src/engine/session_state.rs`
+- `crates/node-engine/src/engine/workflow_session.rs`
+- `crates/node-engine/src/engine/README.md`
+
+**Ownership and lifecycle note for the remaining work:**
+- `node-engine` remains the single owner of logical checkpoint identity,
+  workflow-session residency state, and checkpoint clearing.
+- `pantograph-workflow-service` scheduler and workflow modules may choose when
+  reclaim pressure exists, but they must not invent checkpoint semantics or
+  mutate node-memory policy directly.
+- `pantograph-embedded-runtime` remains the orchestration layer for reclaim and
+  restore sequencing, but it must consume backend checkpoint helpers instead of
+  storing adapter-local restore state.
+- Any reclaim or restore worker path introduced by this slice must have a
+  single start owner, a single completion owner, and explicit no-op semantics
+  when the target session is already checkpointed, restored, or torn down.
+
+**Detailed slices:**
+
+**Slice 5A: Scheduler reclaim handoff consumes the checkpoint contract**
+- Refactor the reclaim path so reclaimable keep-alive workflow sessions route
+  through the same backend checkpoint/unload helper already used by direct
+  capacity rebalance.
+- Keep scheduler store ownership limited to session admission, queue pressure,
+  and reclaim candidacy; do not duplicate residency or checkpoint truth there.
+- If `workflow.rs` or `lib.rs` needs more orchestration logic, extract it into
+  focused helper modules first instead of growing the existing facade files.
+- Update touched scheduler/runtime READMEs in the same commit so reclaim no
+  longer appears to be a separate logical-state system.
+
+**Slice 5B: Restore ordering and failure semantics become explicit**
+- Define and implement one restore order for checkpointed sessions:
+  runtime readiness,
+  executor reattachment,
+  checkpoint-backed session reuse,
+  checkpoint clear on success,
+  residency transition to `restored` then `warm`.
+- Preserve checkpoint state on failed restore so retries do not discard
+  recoverable logical node memory.
+- Make repeated restore attempts idempotent and safe if the runtime is already
+  warm or the session was already restored by a concurrent winner.
+- Keep runtime-registry reconciliation additive and backend-owned; do not let
+  restore status drift into Tauri or frontend transport state.
+
+**Slice 5C: Parallel-session isolation and reclaim pressure coverage**
+- Define how reclaim selection interacts with multiple checkpointable sessions
+  so reclaim pressure cannot cross-wire one session's logical node memory into
+  another session.
+- Ensure queue admission, reclaim candidacy, restore, and repeated invocation
+  continue to use workflow-session identity as the stable key for node-memory
+  and checkpoint lookup.
+- Add any narrow refactors needed so session-isolation logic stays near the
+  scheduler/runtime boundary rather than being reconstructed in tests or
+  adapters.
+- Keep per-session durable state isolated in tests and implementation helpers;
+  do not add shared mutable test fixtures for reclaim or restore flows.
+
+**Slice 5D: Source-of-truth close-out for the remaining Milestone 5 work**
+- Reconcile the roadmap and this plan after each landed reclaim/restore slice.
+- Finalize touched scheduler/runtime READMEs with the settled reclaim and
+  restore invariants.
+- Record any residual durability or persistence work that belongs to a later
+  phase instead of silently broadening Milestone 5.
+
+**Verification plan for the remaining work:**
+- `cargo test -p node-engine --lib`
+- `cargo test -p pantograph-workflow-service`
+- Focused embedded-runtime reclaim/restore tests covering:
+  reclaim-triggered checkpoint preservation,
+  failed restore retaining checkpoint state,
+  repeated restore idempotency,
+  explicit keep-alive disable after reclaim checkpoint,
+  multi-session isolation under reclaim pressure
+- At least one cross-layer acceptance path from scheduler reclaim selection
+  through embedded-runtime unload/restore back to a resumed workflow-session
+  run with preserved logical state
+- Re-run reclaim/restore suites to detect hidden durable-state leakage or
+  ordering races
+
+**Implementation risks and mitigations for the remaining work:**
+- Reclaim path bypasses the checkpoint helper and silently diverges from direct
+  keep-alive unload.
+  Mitigation: route reclaim through the same backend helper and pin that with
+  focused tests.
+- Restore clears checkpoint state before runtime/session reattachment fully
+  succeeds.
+  Mitigation: clear checkpoint only after successful restore completion and
+  prove failure retention in tests.
+- Parallel reclaim/restore operations observe stale or shared mutable session
+  state.
+  Mitigation: keep workflow-session identity as the single lookup key and add
+  multi-session isolation coverage.
+- Scheduler/runtime files absorb too much new orchestration in place.
+  Mitigation: require local extraction before adding more stateful logic to
+  `workflow.rs` or embedded-runtime facade files.
+
+#### Milestone 5 Standards Review Passes
+
+**Pass 1: Plan and architecture standards review**
+- Checked the remaining Milestone 5 work against `PLAN-STANDARDS.md` and
+  `ARCHITECTURE-PATTERNS.md`.
+- Resulting corrections:
+  - added explicit done criteria, affected contracts, affected persisted
+    artifacts, and lifecycle ownership for the remaining reclaim/restore work
+  - kept backend-owned checkpoint truth in Rust packages and limited scheduler
+    and embedded-runtime changes to orchestration and transport-safe additive
+    contracts
+  - identified the immediate touched files so implementation cannot spread into
+    unrelated layers
+
+**Pass 2: Concurrency standards review**
+- Checked the remaining Milestone 5 work against
+  `CONCURRENCY-STANDARDS.md`.
+- Resulting corrections:
+  - required one restore order and one checkpoint owner instead of multiple
+    reclaim/restore mutation paths
+  - required explicit idempotency for repeated reclaim and restore attempts
+  - required multi-session isolation coverage and no shared mutable reclaim
+    fixtures
+  - required lifecycle ownership for any background or retry-style restore path
+
+**Pass 3: Testing and documentation standards review**
+- Checked the remaining Milestone 5 work against `TESTING-STANDARDS.md` and
+  `DOCUMENTATION-STANDARDS.md`.
+- Resulting corrections:
+  - added a required cross-layer acceptance path rather than relying only on
+    unit tests
+  - required durable-state isolation and suite re-runs for reclaim/restore
+    coverage
+  - required README updates in the touched scheduler/runtime directories as the
+    reclaim/restore ownership settles
+
+**Pass 4: Standards-compliance conclusion**
+- If implemented as written, the remaining Milestone 5 slices will keep
+  business logic in backend Rust, preserve facade-first boundaries, declare the
+  concurrency/lifecycle owner for reclaim and restore, and satisfy the current
+  testing and documentation expectations for the touched areas.
+- Re-plan before implementation if the work requires:
+  additive public contracts outside the listed boundaries,
+  a second long-lived restore worker,
+  or persistence beyond the bounded checkpoint model already approved here.
 
 ### Milestone 6: Add Inspection And Diagnostics Surfaces
 
@@ -913,6 +1104,13 @@ Update during implementation:
   the original backend checkpoint timestamp instead of rewriting checkpoint
   identity, and explicit keep-alive disable after that checkpointed unload
   still tears the retained executor down.
+- 2026-04-18: Milestone 5 Slice 5A landed. Non-standalone embedded-runtime
+  construction now applies `EmbeddedRuntimeConfig.max_loaded_sessions` to the
+  injected workflow service, scheduler-driven rebalance proves the reclaim-
+  selected keep-alive session is forwarded as `CapacityRebalance`, and the
+  embedded-runtime unload boundary now routes both scheduler-driven rebalance
+  and direct capacity unload through one backend session-execution transition
+  helper.
 
 ## Commit Cadence Notes
 

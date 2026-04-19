@@ -899,6 +899,12 @@ the affected downstream closure.
   keep-alive checkpoint path is landed, but scheduler-driven reclaim/restore
   integration, broader restore ordering, and multi-session isolation semantics
   remain open before the milestone can be closed.
+- Non-standalone embedded-runtime construction now also applies the configured
+  loaded-session capacity limit to the injected workflow service, and
+  scheduler-driven rebalance routes reclaim-selected keep-alive sessions
+  through the same backend session-execution unload transition used by direct
+  `CapacityRebalance` unload instead of relying on a separate reclaim-local
+  checkpoint path.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
   diagnostics can inspect the most recent compatibility decision after node-

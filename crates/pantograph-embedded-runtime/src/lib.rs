@@ -14,15 +14,16 @@ use pantograph_runtime_registry::{
 };
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::{
-    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
-    FileSystemWorkflowGraphStore, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowFile,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
-    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    convert_graph_to_node_engine, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, FileSystemWorkflowGraphStore, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowFile, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
@@ -42,7 +43,7 @@ use pantograph_workflow_service::{
     WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
     WorkflowSessionStaleCleanupResponse, WorkflowSessionState, WorkflowSessionStatusRequest,
     WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
-    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
+    WorkflowTraceRuntimeMetrics,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -71,7 +72,7 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
-pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
+pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
@@ -320,6 +321,9 @@ impl EmbeddedRuntime {
         rag_backend: Option<Arc<dyn RagBackend>>,
         python_runtime: Arc<dyn PythonRuntimeAdapter>,
     ) -> Self {
+        workflow_service
+            .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
+            .expect("embedded runtime should apply the configured loaded-session capacity limit");
         Self {
             config,
             gateway,
@@ -1725,26 +1729,12 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         reason: pantograph_workflow_service::WorkflowSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         self.release_loaded_session_runtime(session_id).await?;
-        match reason {
-            pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance => {
-                if let Some(entry) = self.session_executions.get(session_id)? {
-                    let executor = entry.executor.lock().await;
-                    executor
-                        .set_workflow_session_residency(
-                            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded,
-                        )
-                        .await;
-                    executor
-                        .mark_workflow_session_checkpoint_available(session_id)
-                        .await;
-                }
-                Ok(())
-            }
-            pantograph_workflow_service::WorkflowSessionUnloadReason::KeepAliveDisabled
-            | pantograph_workflow_service::WorkflowSessionUnloadReason::SessionClosed => {
-                self.session_executions.remove(session_id)
-            }
-        }
+        workflow_session_execution::apply_session_execution_unload_transition(
+            &self.session_executions,
+            session_id,
+            reason,
+        )
+        .await
     }
 
     async fn select_runtime_unload_candidate(
@@ -3240,11 +3230,9 @@ mod tests {
                 ..
             } if task_id == "approval" && prompt == "Approve deployment?"
         )));
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
-        );
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
         assert!(!events.iter().any(|event| matches!(
             event,
             node_engine::WorkflowEvent::WorkflowCompleted { .. }
@@ -3318,11 +3306,9 @@ mod tests {
 
         let released_snapshot = runtime_registry.snapshot();
         assert!(released_snapshot.reservations.is_empty());
-        assert!(
-            released_snapshot.runtimes[0]
-                .active_reservation_ids
-                .is_empty()
-        );
+        assert!(released_snapshot.runtimes[0]
+            .active_reservation_ids
+            .is_empty());
         assert_eq!(
             released_snapshot.runtimes[0].status,
             RuntimeRegistryStatus::Stopped
@@ -3330,8 +3316,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics_to_start_runtime()
-     {
+    async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics_to_start_runtime(
+    ) {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");
 
@@ -3717,12 +3703,10 @@ mod tests {
 
         let snapshot = runtime_registry.snapshot();
         assert!(snapshot.reservations.is_empty());
-        assert!(
-            snapshot
-                .runtimes
-                .iter()
-                .all(|runtime| runtime.active_reservation_ids.is_empty())
-        );
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.active_reservation_ids.is_empty()));
         assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
     }
 
@@ -3787,19 +3771,15 @@ mod tests {
 
         let snapshot = runtime_registry.snapshot();
         assert!(snapshot.reservations.is_empty());
-        assert!(
-            snapshot
-                .runtimes
-                .iter()
-                .all(|runtime| runtime.active_reservation_ids.is_empty())
-        );
-        assert!(
-            runtime
-                .session_executions
-                .handle(&created.session_id)
-                .expect("session execution lookup should succeed")
-                .is_none()
-        );
+        assert!(snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.active_reservation_ids.is_empty()));
+        assert!(runtime
+            .session_executions
+            .handle(&created.session_id)
+            .expect("session execution lookup should succeed")
+            .is_none());
     }
 
     #[tokio::test]
@@ -3867,16 +3847,12 @@ mod tests {
                 .await
         };
         assert_eq!(first_snapshots.len(), 2);
-        assert!(
-            first_snapshots
-                .iter()
-                .any(|snapshot| snapshot.identity.node_id == "text-input-1")
-        );
-        assert!(
-            first_snapshots
-                .iter()
-                .any(|snapshot| snapshot.identity.node_id == "text-output-1")
-        );
+        assert!(first_snapshots
+            .iter()
+            .any(|snapshot| snapshot.identity.node_id == "text-input-1"));
+        assert!(first_snapshots
+            .iter()
+            .any(|snapshot| snapshot.identity.node_id == "text-output-1"));
 
         let second_run = runtime
             .run_workflow_session(WorkflowSessionRunRequest {
@@ -3936,13 +3912,11 @@ mod tests {
             })
             .await
             .expect("close keep-alive session");
-        assert!(
-            runtime
-                .session_executions
-                .handle(&session_id)
-                .expect("session execution lookup should succeed")
-                .is_none()
-        );
+        assert!(runtime
+            .session_executions
+            .handle(&session_id)
+            .expect("session execution lookup should succeed")
+            .is_none());
     }
 
     #[tokio::test]
@@ -4041,11 +4015,9 @@ mod tests {
                 .await
         };
         assert_eq!(snapshots.len(), 2);
-        assert!(
-            snapshots
-                .iter()
-                .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready)
-        );
+        assert!(snapshots
+            .iter()
+            .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready));
     }
 
     #[tokio::test]
@@ -4066,7 +4038,7 @@ mod tests {
             },
             Arc::new(inference::InferenceGateway::new()),
             Arc::new(RwLock::new(ExecutorExtensions::new())),
-            Arc::new(WorkflowService::new()),
+            Arc::new(WorkflowService::with_capacity_limits(4, 1)),
             None,
         );
 
@@ -4176,6 +4148,160 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let keep_alive = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+
+        let first_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: keep_alive.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("alpha"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-keep-alive".to_string()),
+            })
+            .await
+            .expect("run keep-alive session");
+        assert_eq!(first_output.outputs[0].value, serde_json::json!("alpha"));
+
+        let keep_alive_executor = runtime
+            .session_executions
+            .handle(&keep_alive.session_id)
+            .expect("keep-alive session lookup should succeed")
+            .expect("keep-alive executor should exist");
+
+        let one_shot = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("batch".to_string()),
+                keep_alive: false,
+            })
+            .await
+            .expect("create one-shot session");
+
+        let second_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: one_shot.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("beta"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-one-shot".to_string()),
+            })
+            .await
+            .expect("run one-shot session under capacity pressure");
+        assert_eq!(second_output.outputs[0].value, serde_json::json!("beta"));
+
+        let checkpointed_summary = {
+            let executor = keep_alive_executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&keep_alive.session_id)
+                .await
+        };
+        assert!(checkpointed_summary.checkpoint_available);
+        assert_eq!(
+            checkpointed_summary.residency,
+            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        );
+        assert!(
+            checkpointed_summary.preserved_node_count >= 2,
+            "scheduler-driven rebalance should preserve node memory for keep-alive sessions"
+        );
+
+        let resumed_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: keep_alive.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-keep-alive-resume".to_string()),
+            })
+            .await
+            .expect("resume keep-alive session after scheduler rebalance");
+        assert_eq!(resumed_output.outputs[0].value, serde_json::json!("alpha"));
+
+        let resumed_executor = runtime
+            .session_executions
+            .handle(&keep_alive.session_id)
+            .expect("resumed keep-alive session lookup should succeed")
+            .expect("resumed keep-alive executor should exist");
+        assert!(Arc::ptr_eq(&keep_alive_executor, &resumed_executor));
+
+        let resumed_summary = {
+            let executor = resumed_executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&keep_alive.session_id)
+                .await
+        };
+        assert!(!resumed_summary.checkpoint_available);
+        assert_eq!(
+            resumed_summary.residency,
+            node_engine::WorkflowSessionResidencyState::Warm
+        );
+
+        runtime
+            .close_workflow_session(WorkflowSessionCloseRequest {
+                session_id: keep_alive.session_id.clone(),
+            })
+            .await
+            .expect("close resumed keep-alive session");
+        runtime
+            .close_workflow_session(WorkflowSessionCloseRequest {
+                session_id: one_shot.session_id.clone(),
+            })
+            .await
+            .expect("close one-shot session");
+    }
+
+    #[tokio::test]
     async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disable_clears_it() {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");
@@ -4265,7 +4391,10 @@ mod tests {
         };
 
         assert!(first_summary.checkpoint_available);
-        assert_eq!(first_summary.checkpointed_at_ms, second_summary.checkpointed_at_ms);
+        assert_eq!(
+            first_summary.checkpointed_at_ms,
+            second_summary.checkpointed_at_ms
+        );
         assert_eq!(
             second_summary.residency,
             node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
@@ -4279,13 +4408,11 @@ mod tests {
             .await
             .expect("disable keep-alive after checkpoint");
 
-        assert!(
-            runtime
-                .session_executions
-                .handle(&session.session_id)
-                .expect("session execution lookup should succeed")
-                .is_none()
-        );
+        assert!(runtime
+            .session_executions
+            .handle(&session.session_id)
+            .expect("session execution lookup should succeed")
+            .is_none());
     }
 
     #[tokio::test]
@@ -4522,12 +4649,10 @@ mod tests {
             })
             .await
             .expect("workflow capabilities");
-        assert!(
-            capabilities
-                .runtime_capabilities
-                .iter()
-                .any(|capability| capability.runtime_id == "llama.cpp.embedding")
-        );
+        assert!(capabilities
+            .runtime_capabilities
+            .iter()
+            .any(|capability| capability.runtime_id == "llama.cpp.embedding"));
     }
 
     #[tokio::test]
@@ -5232,11 +5357,9 @@ mod tests {
                 ..
             } if task_id == "approval" && prompt == "Approve deployment?"
         )));
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
-        );
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
         assert!(!events.iter().any(|event| matches!(
             event,
             node_engine::WorkflowEvent::WorkflowCompleted { .. }

@@ -81,6 +81,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   queue state.
 - Runtime unload/reclaim decisions consume scheduler facts from this directory,
   but runtime-registry policy remains outside this boundary.
+- When the scheduler selects a reclaimable keep-alive session, it must still
+  forward `CapacityRebalance` through the backend host unload boundary rather
+  than creating a second checkpoint or restore policy path in scheduler code.
 - Scheduler DTOs are machine-consumable contracts that adapters forward
   without reconstructing local scheduler truth.
 

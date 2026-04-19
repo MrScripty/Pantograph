@@ -27,6 +27,7 @@ packages.
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, warmup coordination, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
+| `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
 
 ## Problem
 Pantograph needs a host-owned runtime layer that can execute workflow graphs,
@@ -144,6 +145,10 @@ embedded-runtime crate.
   repeated capacity-rebalance unload must preserve the original checkpoint
   identity for that retained session state, and explicit keep-alive disable and
   session close may tear that state down.
+- Scheduler-driven reclaim for keep-alive workflow sessions must route through
+  the same backend session-execution unload transition as direct
+  `CapacityRebalance` unload so the runtime-registry boundary does not become a
+  second owner of checkpoint semantics.
 - Scheduler runtime-registry diagnostics shaping, including reclaim-candidate
   lookup and warmup-decision translation, must stay in shared backend registry
   helpers so workflow providers do not drift on registry-to-workflow mapping.
@@ -273,7 +278,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   boot decisions.
 - `EmbeddedRuntimeConfig` and `StandaloneRuntimeConfig` may carry an optional
   `max_loaded_sessions` limit so hosts can tune loaded-runtime residency
-  without moving unload policy ownership out of backend Rust services.
+  without moving unload policy ownership out of backend Rust services, and the
+  embedded-runtime constructors apply that limit to the injected
+  `WorkflowService` so scheduler-driven reclaim pressure is enforced on the
+  same backend path outside the standalone bootstrap.
 - Hosts may optionally inject a shared runtime registry; when present, session
   runtime load/unload lifecycle is translated into registry reservation
   acquire/release operations.

@@ -2751,12 +2751,15 @@ mod tests {
 
     struct SelectingRuntimeHost {
         selected_session_id: String,
-        unloads: Arc<Mutex<Vec<String>>>,
+        unloads: Arc<Mutex<Vec<(String, WorkflowSessionUnloadReason)>>>,
         capabilities: WorkflowHostCapabilities,
     }
 
     impl SelectingRuntimeHost {
-        fn new(selected_session_id: String, unloads: Arc<Mutex<Vec<String>>>) -> Self {
+        fn new(
+            selected_session_id: String,
+            unloads: Arc<Mutex<Vec<(String, WorkflowSessionUnloadReason)>>>,
+        ) -> Self {
             Self {
                 selected_session_id,
                 unloads,
@@ -3265,12 +3268,12 @@ mod tests {
             &self,
             session_id: &str,
             _workflow_id: &str,
-            _reason: WorkflowSessionUnloadReason,
+            reason: WorkflowSessionUnloadReason,
         ) -> Result<(), WorkflowServiceError> {
             self.unloads
                 .lock()
                 .expect("unloads lock poisoned")
-                .push(session_id.to_string());
+                .push((session_id.to_string(), reason));
             Ok(())
         }
 
@@ -5202,18 +5205,21 @@ mod tests {
 
         let unloads = unloads.lock().expect("unloads lock poisoned");
         assert_eq!(
-            unloads.first().map(String::as_str),
-            Some(second.session_id.as_str())
+            unloads.first(),
+            Some(&(
+                second.session_id.clone(),
+                WorkflowSessionUnloadReason::CapacityRebalance,
+            ))
         );
         assert!(
             unloads
                 .iter()
-                .any(|session_id| session_id == &third_session_id)
+                .any(|(session_id, _)| session_id == &third_session_id)
         );
         assert!(
             !unloads
                 .iter()
-                .any(|session_id| session_id == &first.session_id)
+                .any(|(session_id, _)| session_id == &first.session_id)
         );
     }
 

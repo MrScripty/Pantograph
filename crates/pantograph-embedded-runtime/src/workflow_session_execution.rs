@@ -3,12 +3,12 @@ use std::sync::{Arc, Mutex};
 
 use crate::task_executor;
 use crate::{
-    EmbeddedWorkflowHost, RuntimeExtensionsSnapshot, apply_runtime_extensions_for_execution,
+    apply_runtime_extensions_for_execution, EmbeddedWorkflowHost, RuntimeExtensionsSnapshot,
 };
 use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
-    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
-    WorkflowServiceError, graph_memory_impact_from_node_engine_graph_change,
+    graph_memory_impact_from_node_engine_graph_change, WorkflowHost, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRunHandle, WorkflowServiceError, WorkflowSessionUnloadReason,
 };
 
 struct WorkflowSessionExecutionEntry {
@@ -155,6 +155,32 @@ impl WorkflowSessionExecutionStore {
     }
 }
 
+pub(crate) async fn apply_session_execution_unload_transition(
+    store: &WorkflowSessionExecutionStore,
+    workflow_session_id: &str,
+    reason: WorkflowSessionUnloadReason,
+) -> Result<(), WorkflowServiceError> {
+    match reason {
+        WorkflowSessionUnloadReason::CapacityRebalance => {
+            let Some(entry) = store.get(workflow_session_id)? else {
+                return Ok(());
+            };
+            let executor = entry.executor.lock().await;
+            executor
+                .set_workflow_session_residency(
+                    node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded,
+                )
+                .await;
+            executor
+                .mark_workflow_session_checkpoint_available(workflow_session_id)
+                .await;
+            Ok(())
+        }
+        WorkflowSessionUnloadReason::KeepAliveDisabled
+        | WorkflowSessionUnloadReason::SessionClosed => store.remove(workflow_session_id),
+    }
+}
+
 pub(crate) async fn run_session_workflow(
     host: &EmbeddedWorkflowHost,
     workflow_id: &str,
@@ -261,7 +287,9 @@ pub(crate) async fn run_session_workflow(
                 .clear_workflow_session_checkpoint(workflow_session_id)
                 .await;
             executor
-                .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Restored)
+                .set_workflow_session_residency(
+                    node_engine::WorkflowSessionResidencyState::Restored,
+                )
                 .await;
         }
         _ => {
