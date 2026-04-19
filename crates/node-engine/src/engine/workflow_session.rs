@@ -1,6 +1,7 @@
 use super::{
-    GraphMemoryImpactSummary, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,
-    WorkflowExecutor, WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
+    GraphMemoryImpactSummary, NodeMemoryIdentity, NodeMemoryIndirectStateReference,
+    NodeMemoryRestoreStrategy, NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutor,
+    WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
 };
 use crate::error::Result;
 use crate::types::NodeId;
@@ -180,8 +181,35 @@ fn node_memory_snapshot_from_cache_entry(
         input_fingerprint: input_snapshot.map(canonical_json_fingerprint),
         output_snapshot: Some(cached.value.clone()),
         private_state: None,
-        indirect_state_reference: None,
+        indirect_state_reference: kv_cache_reference_from_output_snapshot(&cached.value),
         inspection_metadata: Some(cache_projection_metadata(input_snapshot, cached.version)),
+    })
+}
+
+fn kv_cache_reference_from_output_snapshot(
+    output_snapshot: &serde_json::Value,
+) -> Option<NodeMemoryIndirectStateReference> {
+    let handle = output_snapshot.get("kv_cache_out")?;
+    if handle.is_null() {
+        return None;
+    }
+
+    let cache_id = handle.get("cache_id")?.as_str()?;
+    let compatibility = handle.get("compatibility")?;
+    let model_fingerprint = compatibility.get("model_fingerprint")?.clone();
+    let runtime_fingerprint = compatibility.get("runtime_fingerprint")?.clone();
+    let backend_key = runtime_fingerprint.get("backend_key")?.as_str()?;
+
+    Some(NodeMemoryIndirectStateReference {
+        reference_kind: "kv_cache_handle".to_string(),
+        reference_id: cache_id.to_string(),
+        restore_strategy: NodeMemoryRestoreStrategy::RehydrateBeforeResume,
+        inspection_metadata: Some(serde_json::json!({
+            "source_port": "kv_cache_out",
+            "backend_key": backend_key,
+            "model_fingerprint": model_fingerprint,
+            "runtime_fingerprint": runtime_fingerprint,
+        })),
     })
 }
 
@@ -620,6 +648,88 @@ mod tests {
         assert_ne!(
             first_snapshots[2].input_fingerprint,
             second_snapshots[2].input_fingerprint
+        );
+    }
+
+    struct KvCacheProducingTaskExecutor;
+
+    #[async_trait]
+    impl TaskExecutor for KvCacheProducingTaskExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            _inputs: std::collections::HashMap<String, serde_json::Value>,
+            _context: &graph_flow::Context,
+            _extensions: &crate::extensions::ExecutorExtensions,
+        ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
+            Ok(std::collections::HashMap::from([
+                ("out".to_string(), serde_json::json!(task_id)),
+                (
+                    "kv_cache_out".to_string(),
+                    serde_json::json!({
+                        "cache_id": format!("cache-{task_id}"),
+                        "compatibility": {
+                            "model_fingerprint": {
+                                "model_id": format!("model-{task_id}"),
+                                "config_hash": "cfg-1",
+                            },
+                            "runtime_fingerprint": {
+                                "runtime_id": "runtime-1",
+                                "backend_key": "llamacpp",
+                                "tokenizer_fingerprint": "tok-1",
+                                "prompt_format_fingerprint": "prompt-1",
+                                "runtime_build_fingerprint": "build-1",
+                            }
+                        }
+                    }),
+                ),
+            ]))
+        }
+    }
+
+    #[tokio::test]
+    async fn sync_bound_session_node_memory_from_cache_projects_kv_cache_reference() {
+        let mut graph = crate::types::WorkflowGraph::new("graph-1", "Graph");
+        graph.nodes.push(crate::types::GraphNode {
+            id: "llm".to_string(),
+            node_type: "llamacpp-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        });
+
+        let executor = WorkflowExecutor::new("exec-1", graph, Arc::new(NullEventSink));
+        bind_workflow_session(&executor, "session-1").await;
+
+        executor
+            .demand(&"llm".to_string(), &KvCacheProducingTaskExecutor)
+            .await
+            .expect("run kv-producing demand");
+        sync_bound_session_node_memory_from_cache(&executor).await;
+
+        let snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(
+            snapshots[0].indirect_state_reference,
+            Some(crate::engine::NodeMemoryIndirectStateReference {
+                reference_kind: "kv_cache_handle".to_string(),
+                reference_id: "cache-llm".to_string(),
+                restore_strategy: crate::engine::NodeMemoryRestoreStrategy::RehydrateBeforeResume,
+                inspection_metadata: Some(serde_json::json!({
+                    "source_port": "kv_cache_out",
+                    "backend_key": "llamacpp",
+                    "model_fingerprint": {
+                        "model_id": "model-llm",
+                        "config_hash": "cfg-1",
+                    },
+                    "runtime_fingerprint": {
+                        "runtime_id": "runtime-1",
+                        "backend_key": "llamacpp",
+                        "tokenizer_fingerprint": "tok-1",
+                        "prompt_format_fingerprint": "prompt-1",
+                        "runtime_build_fingerprint": "build-1",
+                    }
+                })),
+            })
         );
     }
 

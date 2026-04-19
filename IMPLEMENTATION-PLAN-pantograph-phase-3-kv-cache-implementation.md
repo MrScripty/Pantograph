@@ -356,7 +356,7 @@ end-to-end KV behavior.
 **Goal:** Make KV reuse useful for kept-alive workflows and suffix-only reruns.
 
 **Tasks:**
-- [ ] Extend Phase 6 workflow-session memory to carry indirect KV references
+- [x] Extend Phase 6 workflow-session memory to carry indirect KV references
       for compatible inference nodes.
 - [ ] Define how repeated kept-alive invocations reuse compatible KV when only
       downstream suffix inputs change.
@@ -377,7 +377,14 @@ end-to-end KV behavior.
   suffix
 - Replay/idempotency checks for restore/retry flows that include KV references
 
-**Status:** Not started
+**Status:** In progress
+
+Latest landed slice:
+- Bound workflow-session node-memory projection now preserves compatible
+  `kv_cache_out` handles as backend-owned indirect references with inspection
+  metadata instead of dropping those runtime-restorable artifacts between runs.
+- Phase 6 node-memory remains the lifecycle owner for those references; reuse
+  policy for suffix-only reruns is still deferred to later Milestone 5 slices.
 
 ### Milestone 6: Add Diagnostics, Runtime Requirements, And Source-Of-Truth Close-Out
 

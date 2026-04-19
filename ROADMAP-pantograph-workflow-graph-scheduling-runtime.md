@@ -579,6 +579,10 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - KV execution now emits backend-owned structured diagnostics for restore,
   capture, and truncate outcomes, and those facts flow through workflow trace
   plus Tauri diagnostics using the canonical `kv_cache` extension contract
+- Phase 6 session-memory projection now also preserves compatible
+  `kv_cache_out` handles as backend-owned indirect node-memory references,
+  starting the Milestone 5 workflow-session reuse lane without moving reuse
+  policy into Tauri or the frontend
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

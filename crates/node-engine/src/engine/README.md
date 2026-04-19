@@ -109,6 +109,9 @@ changing the public executor surface.
 - Non-serializable runtime/process state should stay out of `private_state`
   and instead use the explicit indirect reference plus restore-strategy
   contract defined in `session_state.rs`.
+- KV-capable execution paths that emit `kv_cache_out` should project that
+  handle into node-memory indirect references rather than embedding runtime
+  reuse policy into cached outputs or Tauri-side session state.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under
