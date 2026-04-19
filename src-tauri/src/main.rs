@@ -17,27 +17,26 @@ use constants::paths::DATA_DIR;
 use llm::{
     cancel_managed_runtime_job, check_embedding_server, check_health_now, check_port_status,
     checkout_commit, clear_rag_cache, connect_to_server, create_vector_database,
-    find_alternate_port, get_app_config,
-    get_backend_capabilities, get_component_history, get_current_backend, get_current_commit_info,
-    get_default_port, get_device_config, get_embedding_memory_mode,
-    get_embedding_runtime_lifecycle_snapshot, get_embedding_server_url, get_health_status,
-    get_llm_status, get_model_config, get_rag_status, get_recovery_attempt_count,
-    get_recovery_config, get_redo_count, get_runtime_debug_snapshot, get_runtime_registry_snapshot,
-    get_sandbox_config, get_svelte_docs_status, get_system_prompt, get_timeline_commits,
-    hard_delete_commit, index_docs_with_switch, index_rag_documents, inspect_managed_runtime,
-    install_managed_runtime, is_embedding_server_ready, is_health_monitor_running,
-    is_recovery_in_progress, list_backends, list_chunkable_docs, list_devices,
-    list_generated_components, list_managed_runtimes, list_vector_databases, load_rag_from_disk,
-    pause_managed_runtime_job,
-    preview_doc_chunks, reclaim_runtime_registry_runtime, redo_component_change,
-    remove_managed_runtime, reset_recovery_state, resolve_conflict, run_agent, search_rag,
-    select_managed_runtime_version, send_vision_prompt, set_app_config,
-    set_default_managed_runtime_version, set_device_config, set_embedding_memory_mode,
-    set_embedding_server_url, set_model_config, set_sandbox_config, set_system_prompt,
-    start_health_monitor, start_sidecar_embedding, start_sidecar_inference, start_sidecar_llm,
-    stop_health_monitor, stop_llm, switch_backend, trigger_recovery, undo_component_change,
-    update_svelte_docs, validate_component, InferenceGateway, RuntimeRegistry, SharedAppConfig,
-    SharedGateway, SharedHealthMonitor, SharedRecoveryManager, SharedRuntimeRegistry,
+    find_alternate_port, get_app_config, get_backend_capabilities, get_component_history,
+    get_current_backend, get_current_commit_info, get_default_port, get_device_config,
+    get_embedding_memory_mode, get_embedding_runtime_lifecycle_snapshot, get_embedding_server_url,
+    get_health_status, get_llm_status, get_model_config, get_rag_status,
+    get_recovery_attempt_count, get_recovery_config, get_redo_count, get_runtime_debug_snapshot,
+    get_runtime_registry_snapshot, get_sandbox_config, get_svelte_docs_status, get_system_prompt,
+    get_timeline_commits, hard_delete_commit, index_docs_with_switch, index_rag_documents,
+    inspect_managed_runtime, install_managed_runtime, is_embedding_server_ready,
+    is_health_monitor_running, is_recovery_in_progress, list_backends, list_chunkable_docs,
+    list_devices, list_generated_components, list_managed_runtimes, list_vector_databases,
+    load_rag_from_disk, pause_managed_runtime_job, preview_doc_chunks,
+    reclaim_runtime_registry_runtime, redo_component_change, remove_managed_runtime,
+    reset_recovery_state, resolve_conflict, run_agent, search_rag, select_managed_runtime_version,
+    send_vision_prompt, set_app_config, set_default_managed_runtime_version, set_device_config,
+    set_embedding_memory_mode, set_embedding_server_url, set_model_config, set_sandbox_config,
+    set_system_prompt, start_health_monitor, start_sidecar_embedding, start_sidecar_inference,
+    start_sidecar_llm, stop_health_monitor, stop_llm, switch_backend, trigger_recovery,
+    undo_component_change, update_svelte_docs, validate_component, InferenceGateway,
+    RuntimeRegistry, SharedAppConfig, SharedGateway, SharedHealthMonitor, SharedRecoveryManager,
+    SharedRuntimeRegistry,
 };
 use project_root::resolve_project_root;
 use std::sync::Arc;
@@ -135,16 +134,18 @@ fn main() {
             let workflow_service = workflow_service.clone();
             move |app| {
                 let workflow_service_for_cleanup = workflow_service.clone();
+                let runtime_handle = tauri::async_runtime::handle().inner().clone();
                 let workflow_session_cleanup_worker: workflow::commands::SharedWorkflowSessionStaleCleanupWorker =
-                    Arc::new(tauri::async_runtime::block_on(async move {
+                    Arc::new(
                         workflow_service_for_cleanup
                             .clone()
-                            .spawn_workflow_session_stale_cleanup_worker(
+                            .spawn_workflow_session_stale_cleanup_worker_with_handle(
                                 pantograph_workflow_service::WorkflowSessionStaleCleanupWorkerConfig::default(
                                 ),
+                                runtime_handle,
                             )
-                            .expect("failed to start workflow-session stale cleanup worker")
-                    }));
+                            .expect("failed to start workflow-session stale cleanup worker"),
+                    );
                 app.manage(workflow_session_cleanup_worker);
 
                 let app_data_dir = app

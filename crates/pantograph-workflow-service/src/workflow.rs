@@ -1347,15 +1347,34 @@ impl WorkflowService {
             ));
         }
 
-        let idle_timeout_ms = config.idle_timeout.as_millis().min(u128::from(u64::MAX)) as u64;
-        let interval = config.interval;
-        let service = Arc::clone(self);
         let runtime_handle = tokio::runtime::Handle::try_current().map_err(|_| {
             WorkflowServiceError::Internal(
                 "workflow-session stale cleanup worker requires an active Tokio runtime"
                     .to_string(),
             )
         })?;
+        self.spawn_workflow_session_stale_cleanup_worker_with_handle(config, runtime_handle)
+    }
+
+    pub fn spawn_workflow_session_stale_cleanup_worker_with_handle(
+        self: &Arc<Self>,
+        config: WorkflowSessionStaleCleanupWorkerConfig,
+        runtime_handle: tokio::runtime::Handle,
+    ) -> Result<WorkflowSessionStaleCleanupWorker, WorkflowServiceError> {
+        if config.interval.is_zero() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow-session stale cleanup interval must be greater than zero".to_string(),
+            ));
+        }
+        if config.idle_timeout.is_zero() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow-session stale cleanup idle timeout must be greater than zero".to_string(),
+            ));
+        }
+
+        let idle_timeout_ms = config.idle_timeout.as_millis().min(u128::from(u64::MAX)) as u64;
+        let interval = config.interval;
+        let service = Arc::clone(self);
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
         let join_handle = runtime_handle.spawn(async move {
             loop {
@@ -6591,6 +6610,22 @@ mod tests {
             WorkflowServiceError::Internal(ref message)
                 if message.contains("requires an active Tokio runtime")
         ));
+    }
+
+    #[test]
+    fn workflow_stale_cleanup_worker_accepts_explicit_runtime_handle() {
+        let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
+        let service = Arc::new(WorkflowService::new());
+        let worker = service
+            .spawn_workflow_session_stale_cleanup_worker_with_handle(
+                WorkflowSessionStaleCleanupWorkerConfig::default(),
+                runtime.handle().clone(),
+            )
+            .expect("spawn stale cleanup worker with explicit runtime handle");
+
+        runtime.block_on(async move {
+            worker.shutdown().await;
+        });
     }
 
     #[tokio::test]
