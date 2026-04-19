@@ -1,16 +1,21 @@
 # Plan: Pantograph Milestone 4 Technical-Fit Selection
 
 ## Status
-Active
+Completed
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Current Source-of-Truth Summary
 
-This document is the dedicated source of truth for runtime-registry Milestone 4.
-It replaces the short Milestone 4 stub in
+This document records the completed source of truth for runtime-registry
+Milestone 4. It replaced the short Milestone 4 stub in
 `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 for detailed sequencing, standards compliance, and immediate refactor scope.
+
+Technical-fit selection is now completed in code. Remaining workflow transport,
+recovery, and diagnostics hardening moved to
+`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+and the runtime-registry umbrella plan.
 
 ## Objective
 
@@ -372,20 +377,24 @@ and execution without turning orchestration or adapters into policy owners.
 
 ### Milestone 5: Documentation, Diagnostics, And Hardening
 
-**Goal:** Keep the new selector observable, reviewable, and standards-aligned
-once wired through the runtime path.
+**Goal:** Close Milestone 4 cleanly and hand off any transport- or recovery-
+shaped follow-through to the next runtime-registry milestone without reopening
+technical-fit ownership.
 
 **Tasks:**
-- [ ] Expose additive technical-fit diagnostics only through backend-owned
-      inspection surfaces where the decision is already machine-consumed.
-- [ ] Add replay, retry, recovery, and idempotency verification where registry
-      state and technical-fit decisions can overlap.
-- [ ] Update `README.md` files for touched directories and update ADRs only if
+- [x] Keep additive technical-fit diagnostics limited to backend-owned
+      inspection or response surfaces where the decision is already machine-
+      consumed.
+- [x] Carry replay, retry, recovery, and idempotency follow-through into the
+      dedicated Milestone 5 workflow/adapter plan because the remaining checks
+      now cross transport and recovery boundaries beyond pure selector work.
+- [x] Update `README.md` files for touched directories and update ADRs only if
       the architectural ownership boundary changes.
-- [ ] Update the umbrella runtime-registry plan and roadmap status wording so
+- [x] Update the umbrella runtime-registry plan and roadmap status wording so
       Milestone 4 progress remains accurate.
-- [ ] Validate any new checked-in fixtures or machine-consumed debug snapshots
-      with the repo tooling expected by `TOOLING-STANDARDS.md`.
+- [x] Record that no new checked-in fixtures or machine-consumed debug
+      snapshots were introduced by Milestone 4, so no additional tooling hook
+      was required for this close-out.
 
 **Verification:**
 - Documentation review against `DOCUMENTATION-STANDARDS.md`
@@ -393,7 +402,7 @@ once wired through the runtime path.
 - Recovery/idempotency checks required by `TESTING-STANDARDS.md`
 - Final compile/test pass for all touched crates and adapter boundaries
 
-**Status:** Not started
+**Status:** Completed
 
 ## Execution Notes
 
@@ -450,6 +459,10 @@ Update during implementation:
   normalized override through session queue caching, and verified that Tauri,
   UniFFI, and Rustler bindings remain parse-and-forward transport wrappers
   instead of technical-fit policy owners.
+- 2026-04-16: Closed Milestone 4 as completed. The remaining replay/recovery
+  verification and workflow transport hardening were explicitly carried into
+  the dedicated Milestone 5 workflow/adapter plan so the technical-fit plan no
+  longer reports stale in-progress close-out work.
 
 
 ## Commit Cadence Notes
@@ -480,6 +493,8 @@ Update during implementation:
 - Backend-owned technical-fit selection is now wired through workflow
   preflight, direct runs, and session runs with additive explicit override
   support and transport-only adapter boundaries.
+- Milestone 4 close-out, source-of-truth updates, and handoff into the
+  dedicated Milestone 5 workflow/adapter plan are now recorded here.
 
 ### Deviations
 
@@ -487,11 +502,11 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Start Milestone 5 hardening work around diagnostics, replay/recovery
-  verification, and source-of-truth upkeep without moving selector policy into
-  adapters.
+- Continue Milestone 5 hardening work around workflow diagnostics transport,
+  replay/recovery verification, and source-of-truth upkeep without moving
+  selector policy into adapters.
 - Keep the umbrella runtime-registry plan and roadmap synchronized with the
-  completed Milestone 4 state before starting the next runtime milestone.
+  completed Milestone 4 state while Milestone 5 progresses.
 
 ### Verification Summary
 
