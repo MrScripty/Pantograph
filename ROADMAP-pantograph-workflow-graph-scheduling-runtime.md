@@ -586,6 +586,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - Bound rerun preparation now only rehydrates those preserved KV handles while
   the node-memory snapshot remains `ready`, so graph-edit or upstream-prefix
   invalidation does not silently reuse stale KV state
+- Keep-alive checkpoint and scheduler-driven reclaim coverage now explicitly
+  proves those preserved KV references remain owned by the workflow session and
+  do not cross-wire across resumed executors
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

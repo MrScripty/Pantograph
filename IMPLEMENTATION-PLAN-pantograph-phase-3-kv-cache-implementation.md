@@ -389,6 +389,10 @@ Latest landed slice:
 - Backend rerun preparation now also refuses to project preserved KV handles
   from node-memory snapshots whose status is already `invalidated`, so
   upstream-prefix or graph-edit invalidation does not silently reuse stale KV.
+- Embedded keep-alive checkpoint and scheduler-reclaim coverage now asserts
+  that workflow-session-owned KV references survive backend restore paths and
+  remain isolated per session instead of cross-wiring across retained
+  executors.
 - Phase 6 node-memory remains the lifecycle owner for those references; reuse
   policy for suffix-only reruns is still deferred to later Milestone 5 slices.
 

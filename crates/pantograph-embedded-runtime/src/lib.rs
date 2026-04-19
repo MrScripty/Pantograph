@@ -2760,6 +2760,53 @@ mod tests {
         }
     }
 
+    fn synthetic_kv_node_memory_snapshot(
+        session_id: &str,
+        node_id: &str,
+        cache_id: &str,
+    ) -> node_engine::NodeMemorySnapshot {
+        node_engine::NodeMemorySnapshot {
+            identity: node_engine::NodeMemoryIdentity {
+                session_id: session_id.to_string(),
+                node_id: node_id.to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                schema_version: Some("v1".to_string()),
+            },
+            status: node_engine::NodeMemoryStatus::Ready,
+            input_fingerprint: Some(format!("fp-{cache_id}")),
+            output_snapshot: Some(serde_json::json!({
+                "kv_cache_out": {
+                    "cache_id": cache_id,
+                }
+            })),
+            private_state: None,
+            indirect_state_reference: Some(node_engine::engine::NodeMemoryIndirectStateReference {
+                reference_kind: "kv_cache_handle".to_string(),
+                reference_id: cache_id.to_string(),
+                restore_strategy:
+                    node_engine::engine::NodeMemoryRestoreStrategy::RehydrateBeforeResume,
+                inspection_metadata: Some(serde_json::json!({
+                    "source_port": "kv_cache_out",
+                    "backend_key": "llamacpp",
+                    "model_fingerprint": {
+                        "model_id": "model-1",
+                        "config_hash": "cfg-1",
+                    },
+                    "runtime_fingerprint": {
+                        "runtime_id": "runtime-1",
+                        "backend_key": "llamacpp",
+                        "tokenizer_fingerprint": "tok-1",
+                        "prompt_format_fingerprint": "prompt-1",
+                        "runtime_build_fingerprint": "build-1",
+                    }
+                })),
+            }),
+            inspection_metadata: Some(serde_json::json!({
+                "projection_source": "test",
+            })),
+        }
+    }
+
     #[tokio::test]
     async fn test_runtime_run_and_session_execution() {
         let temp = TempDir::new().expect("temp dir");
@@ -4156,6 +4203,16 @@ mod tests {
             .handle(&first.session_id)
             .expect("first session execution lookup should succeed")
             .expect("first keep-alive executor should exist");
+        {
+            let executor = first_executor.lock().await;
+            executor
+                .record_workflow_session_node_memory(synthetic_kv_node_memory_snapshot(
+                    &first.session_id,
+                    "kv-memory",
+                    "cache-session-1",
+                ))
+                .await;
+        }
 
         WorkflowHost::unload_session_runtime(
             &runtime.host(),
@@ -4180,6 +4237,23 @@ mod tests {
         assert!(
             checkpointed_summary.preserved_node_count >= 2,
             "checkpoint should preserve node memory for the keep-alive session"
+        );
+        let checkpointed_snapshots = {
+            let executor = first_executor.lock().await;
+            executor
+                .workflow_session_node_memory_snapshots(&first.session_id)
+                .await
+        };
+        assert!(
+            checkpointed_snapshots.iter().any(|snapshot| {
+                snapshot.identity.node_id == "kv-memory"
+                    && snapshot
+                        .indirect_state_reference
+                        .as_ref()
+                        .map(|reference| reference.reference_id.as_str())
+                        == Some("cache-session-1")
+            }),
+            "checkpoint should preserve the synthetic KV node-memory reference"
         );
 
         let resumed_output = runtime
@@ -4216,6 +4290,23 @@ mod tests {
         assert_eq!(
             resumed_summary.residency,
             node_engine::WorkflowSessionResidencyState::Warm
+        );
+        let resumed_snapshots = {
+            let executor = resumed_executor.lock().await;
+            executor
+                .workflow_session_node_memory_snapshots(&first.session_id)
+                .await
+        };
+        assert!(
+            resumed_snapshots.iter().any(|snapshot| {
+                snapshot.identity.node_id == "kv-memory"
+                    && snapshot
+                        .indirect_state_reference
+                        .as_ref()
+                        .map(|reference| reference.reference_id.as_str())
+                        == Some("cache-session-1")
+            }),
+            "restored keep-alive session should retain its KV node-memory reference"
         );
 
         runtime
@@ -4715,6 +4806,16 @@ mod tests {
             .handle(&session_a.session_id)
             .expect("first session execution lookup should succeed")
             .expect("first keep-alive executor should exist");
+        {
+            let executor = executor_a.lock().await;
+            executor
+                .record_workflow_session_node_memory(synthetic_kv_node_memory_snapshot(
+                    &session_a.session_id,
+                    "kv-memory-a",
+                    "cache-session-a",
+                ))
+                .await;
+        }
 
         let second_output = runtime
             .run_workflow_session(WorkflowSessionRunRequest {
@@ -4742,6 +4843,16 @@ mod tests {
             .handle(&session_b.session_id)
             .expect("second session execution lookup should succeed")
             .expect("second keep-alive executor should exist");
+        {
+            let executor = executor_b.lock().await;
+            executor
+                .record_workflow_session_node_memory(synthetic_kv_node_memory_snapshot(
+                    &session_b.session_id,
+                    "kv-memory-b",
+                    "cache-session-b",
+                ))
+                .await;
+        }
         assert!(
             !Arc::ptr_eq(&executor_a, &executor_b),
             "distinct workflow sessions must not share the same executor"
@@ -4787,6 +4898,33 @@ mod tests {
             resumed_a_summary.residency,
             node_engine::WorkflowSessionResidencyState::Warm
         );
+        let resumed_a_snapshots = {
+            let executor = executor_a.lock().await;
+            executor
+                .workflow_session_node_memory_snapshots(&session_a.session_id)
+                .await
+        };
+        assert!(
+            resumed_a_snapshots.iter().any(|snapshot| {
+                snapshot.identity.node_id == "kv-memory-a"
+                    && snapshot
+                        .indirect_state_reference
+                        .as_ref()
+                        .map(|reference| reference.reference_id.as_str())
+                        == Some("cache-session-a")
+            }),
+            "session A should retain only its own KV node-memory reference after resume"
+        );
+        assert!(
+            resumed_a_snapshots.iter().all(|snapshot| {
+                snapshot
+                    .indirect_state_reference
+                    .as_ref()
+                    .map(|reference| reference.reference_id.as_str())
+                    != Some("cache-session-b")
+            }),
+            "session A should not observe session B KV references"
+        );
 
         let second_checkpoint_summary = {
             let executor = executor_b.lock().await;
@@ -4827,6 +4965,33 @@ mod tests {
         assert_eq!(
             resumed_b_summary.residency,
             node_engine::WorkflowSessionResidencyState::Warm
+        );
+        let resumed_b_snapshots = {
+            let executor = executor_b.lock().await;
+            executor
+                .workflow_session_node_memory_snapshots(&session_b.session_id)
+                .await
+        };
+        assert!(
+            resumed_b_snapshots.iter().any(|snapshot| {
+                snapshot.identity.node_id == "kv-memory-b"
+                    && snapshot
+                        .indirect_state_reference
+                        .as_ref()
+                        .map(|reference| reference.reference_id.as_str())
+                        == Some("cache-session-b")
+            }),
+            "session B should retain only its own KV node-memory reference after resume"
+        );
+        assert!(
+            resumed_b_snapshots.iter().all(|snapshot| {
+                snapshot
+                    .indirect_state_reference
+                    .as_ref()
+                    .map(|reference| reference.reference_id.as_str())
+                    != Some("cache-session-a")
+            }),
+            "session B should not observe session A KV references"
         );
 
         runtime
