@@ -892,6 +892,11 @@ the affected downstream closure.
   diagnostics can inspect the most recent compatibility decision after node-
   data, connection, or node-insertion edits until a later non-invalidating
   edit replaces or clears that state.
+- Direct connect and insert mutation responses now also carry additive backend-
+  owned `workflow_event` and `workflow_session_state` facts, so graph-shape
+  mutation callers can consume compatibility impact immediately instead of
+  requiring a separate session snapshot fetch to observe the same Phase 6
+  state.
 
 **Milestones:**
 

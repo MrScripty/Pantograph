@@ -337,6 +337,8 @@ pub fn rejected_commit_response(
         accepted: false,
         graph_revision: graph.compute_fingerprint(),
         graph: Some(graph.clone()),
+        workflow_event: None,
+        workflow_session_state: None,
         rejection: Some(rejection),
     }
 }
@@ -664,6 +666,8 @@ pub fn rejected_insert_response(
         graph_revision: graph.compute_fingerprint(),
         inserted_node_id: None,
         graph: Some(graph.clone()),
+        workflow_event: None,
+        workflow_session_state: None,
         rejection: Some(rejection),
     }
 }
@@ -690,6 +694,8 @@ pub fn rejected_insert_on_edge_response(
         inserted_node_id: None,
         bridge: None,
         graph: Some(graph.clone()),
+        workflow_event: None,
+        workflow_session_state: None,
         rejection: Some(rejection),
     }
 }

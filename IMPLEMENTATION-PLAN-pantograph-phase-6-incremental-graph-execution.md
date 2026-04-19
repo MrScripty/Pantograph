@@ -859,6 +859,11 @@ Update during implementation:
   `get_session_graph` reads, so diagnostics can inspect the most recent
   compatibility result after node-data, connection, or node-insertion
   mutations until a subsequent non-invalidating edit clears that state.
+- 2026-04-18: Milestone 4 continued. Successful direct graph-shape mutation
+  responses for connect and insert flows now carry the same additive backend-
+  owned `workflow_event` and `workflow_session_state` contract as snapshot
+  mutations, so adapters and GUI flows no longer need a separate follow-up
+  snapshot read to observe mutation impact facts.
 
 ## Commit Cadence Notes
 

@@ -86,6 +86,18 @@ test('normalizeConnectionCommitResponse converts camelCase payloads', () => {
     normalizeConnectionCommitResponse({
       accepted: false,
       graphRevision: 'rev-2',
+      workflowEvent: {
+        type: 'GraphModified',
+        data: {
+          workflow_id: 'session-1',
+          execution_id: 'session-1',
+          dirty_tasks: ['target-node'],
+        },
+      },
+      workflowSessionState: {
+        contract_version: 1,
+        residency: 'active',
+      },
       rejection: {
         reason: 'incompatible_types',
         message: 'Types are incompatible',
@@ -95,6 +107,18 @@ test('normalizeConnectionCommitResponse converts camelCase payloads', () => {
       accepted: false,
       graph_revision: 'rev-2',
       graph: undefined,
+      workflow_event: {
+        type: 'GraphModified',
+        data: {
+          workflow_id: 'session-1',
+          execution_id: 'session-1',
+          dirty_tasks: ['target-node'],
+        },
+      },
+      workflow_session_state: {
+        contract_version: 1,
+        residency: 'active',
+      },
       rejection: {
         reason: 'incompatible_types',
         message: 'Types are incompatible',
@@ -109,12 +133,21 @@ test('normalizeInsertNodeConnectionResponse converts camelCase payloads', () => 
       accepted: true,
       graphRevision: 'rev-3',
       insertedNodeId: 'new-node',
+      workflowSessionState: {
+        contract_version: 1,
+        residency: 'warm',
+      },
     }),
     {
       accepted: true,
       graph_revision: 'rev-3',
       inserted_node_id: 'new-node',
       graph: undefined,
+      workflow_event: undefined,
+      workflow_session_state: {
+        contract_version: 1,
+        residency: 'warm',
+      },
       rejection: undefined,
     },
   );
@@ -148,6 +181,14 @@ test('normalizeInsertNodeOnEdgeResponse converts camelCase payloads', () => {
       accepted: true,
       graphRevision: 'rev-5',
       insertedNodeId: 'inserted-node',
+      workflowEvent: {
+        type: 'GraphModified',
+        data: {
+          workflow_id: 'session-2',
+          execution_id: 'session-2',
+          dirty_tasks: ['inserted-node', 'target'],
+        },
+      },
       bridge: {
         inputPortId: 'prompt',
         outputPortId: 'response',
@@ -162,6 +203,15 @@ test('normalizeInsertNodeOnEdgeResponse converts camelCase payloads', () => {
         output_port_id: 'response',
       },
       graph: undefined,
+      workflow_event: {
+        type: 'GraphModified',
+        data: {
+          workflow_id: 'session-2',
+          execution_id: 'session-2',
+          dirty_tasks: ['inserted-node', 'target'],
+        },
+      },
+      workflow_session_state: undefined,
       rejection: undefined,
     },
   );

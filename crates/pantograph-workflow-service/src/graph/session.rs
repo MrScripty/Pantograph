@@ -20,6 +20,7 @@ use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
+    WorkflowGraphSessionStateView, build_workflow_session_state_view,
     resolve_workflow_session_memory_impact,
 };
 use super::session_event::{
@@ -189,14 +190,23 @@ impl GraphEditSession {
         self.runtime.finish_run();
     }
 
-    fn remember_memory_impact_for_seed_nodes(
+    fn mutation_session_state_view(
         &mut self,
-        before_graph: &WorkflowGraph,
-        seed_node_ids: &[String],
-    ) {
-        let dirty_tasks = dirty_tasks_from_seed_nodes(&self.graph, seed_node_ids);
-        self.last_memory_impact =
-            graph_memory_impact_from_graph_change(before_graph, &self.graph, &dirty_tasks);
+        session_id: &str,
+        workflow_event: Option<&node_engine::WorkflowEvent>,
+        projection: Option<WorkflowGraphSessionStateProjection>,
+    ) -> WorkflowGraphSessionStateView {
+        let projection =
+            resolved_phase6_memory_impact_projection(workflow_event, projection.as_ref());
+        self.last_memory_impact = projection.as_ref().and_then(|projection| {
+            resolve_workflow_session_memory_impact(workflow_event, Some(projection))
+        });
+        build_workflow_session_state_view(
+            session_id,
+            &self.graph.compute_fingerprint(),
+            workflow_event,
+            projection.as_ref(),
+        )
     }
 }
 
@@ -638,14 +648,26 @@ impl GraphSessionStore {
         });
         sync_embedding_emit_metadata_flags(&mut state.graph);
         state.canonicalize_graph();
-        state.remember_memory_impact_for_seed_nodes(
+        let dirty_tasks =
+            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id));
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        let memory_impact = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
             &before_graph,
-            std::slice::from_ref(&target_node_id),
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id)),
+        ));
+        let workflow_session_state = state.mutation_session_state_view(
+            &request.session_id,
+            Some(&workflow_event),
+            memory_impact,
         );
         Ok(ConnectionCommitResponse {
             accepted: true,
             graph_revision: state.graph.compute_fingerprint(),
             graph: Some(state.graph.clone()),
+            workflow_event: Some(workflow_event),
+            workflow_session_state: Some(workflow_session_state),
             rejection: None,
         })
     }
@@ -677,9 +699,19 @@ impl GraphSessionStore {
         state.graph.edges.push(inserted_edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         state.canonicalize_graph();
-        state.remember_memory_impact_for_seed_nodes(
+        let dirty_tasks =
+            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id));
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        let memory_impact = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
             &before_graph,
-            std::slice::from_ref(&inserted_node.id),
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id)),
+        ));
+        let workflow_session_state = state.mutation_session_state_view(
+            &request.session_id,
+            Some(&workflow_event),
+            memory_impact,
         );
 
         Ok(InsertNodeConnectionResponse {
@@ -687,6 +719,8 @@ impl GraphSessionStore {
             graph_revision: state.graph.compute_fingerprint(),
             inserted_node_id: Some(inserted_node.id),
             graph: Some(state.graph.clone()),
+            workflow_event: Some(workflow_event),
+            workflow_session_state: Some(workflow_session_state),
             rejection: None,
         })
     }
@@ -749,9 +783,19 @@ impl GraphSessionStore {
         state.graph.edges.push(outgoing_edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         state.canonicalize_graph();
-        state.remember_memory_impact_for_seed_nodes(
+        let dirty_tasks =
+            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id));
+        let workflow_event =
+            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
+        let memory_impact = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
             &before_graph,
-            std::slice::from_ref(&inserted_node.id),
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id)),
+        ));
+        let workflow_session_state = state.mutation_session_state_view(
+            &request.session_id,
+            Some(&workflow_event),
+            memory_impact,
         );
 
         Ok(InsertNodeOnEdgeResponse {
@@ -760,6 +804,8 @@ impl GraphSessionStore {
             inserted_node_id: Some(inserted_node.id),
             bridge: Some(bridge),
             graph: Some(state.graph.clone()),
+            workflow_event: Some(workflow_event),
+            workflow_session_state: Some(workflow_session_state),
             rejection: None,
         })
     }
@@ -1088,7 +1134,7 @@ mod tests {
 
         let response = store
             .insert_node_on_edge(WorkflowGraphInsertNodeOnEdgeRequest {
-                session_id,
+                session_id: session_id.clone(),
                 edge_id: "text-input-text-text-output-text".to_string(),
                 node_type: "llm-inference".to_string(),
                 graph_revision: session.graph_revision,
@@ -1110,6 +1156,26 @@ mod tests {
         );
         let inserted_node_id = response.inserted_node_id.expect("inserted node id");
         assert!(graph.find_node(&inserted_node_id).is_some());
+        assert!(matches!(
+            response.workflow_event,
+            Some(node_engine::WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                ..
+            }) if workflow_id == session_id && execution_id == session_id
+        ));
+        let response_memory_impact = response
+            .workflow_session_state
+            .clone()
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert!(
+            response_memory_impact
+                .node_decisions
+                .iter()
+                .any(|decision| decision.node_id == inserted_node_id)
+        );
 
         let snapshot = store
             .get_session_graph(&session.session_id)
@@ -1150,6 +1216,28 @@ mod tests {
             .await
             .expect("connect nodes");
         assert!(response.accepted);
+        assert!(matches!(
+            response.workflow_event,
+            Some(node_engine::WorkflowEvent::GraphModified {
+                workflow_id,
+                execution_id,
+                dirty_tasks,
+                ..
+            }) if workflow_id == session.session_id
+                && execution_id == session.session_id
+                && dirty_tasks == vec!["text-output".to_string()]
+        ));
+        let response_memory_impact = response
+            .workflow_session_state
+            .clone()
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert_eq!(response_memory_impact.node_decisions.len(), 1);
+        assert_eq!(
+            response_memory_impact.node_decisions[0].node_id,
+            "text-output"
+        );
 
         let snapshot = store
             .get_session_graph(&session.session_id)

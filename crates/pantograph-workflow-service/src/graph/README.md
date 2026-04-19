@@ -73,6 +73,10 @@ when the node type matches.
 - Graph edit-session snapshot reads should retain the most recent backend-owned
   memory-impact decision for inspection until a later non-invalidating edit
   explicitly clears that persisted compatibility state.
+- Successful direct connection and insertion mutation responses should forward
+  the same additive backend-owned `workflow_event` and
+  `workflow_session_state` projection as graph snapshot mutations so transport
+  clients do not need a second read to observe mutation impact facts.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Dynamic `node.data.definition` overlays may add ports for a specific node

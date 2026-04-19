@@ -14,10 +14,15 @@ test('parseWorkflowGraphMutationResponse accepts graph payloads with additive gr
         dirty_tasks: ['node-a'],
       },
     },
+    workflow_session_state: {
+      contract_version: 1,
+      residency: 'active',
+    },
   });
 
   assert.deepEqual(response.graph, { nodes: [], edges: [] });
   assert.equal(response.workflow_event?.type, 'GraphModified');
+  assert.equal(response.workflow_session_state?.contract_version, 1);
 });
 
 test('parseWorkflowGraphMutationResponse rejects payloads without graph data', () => {
@@ -35,5 +40,16 @@ test('parseWorkflowGraphMutationResponse rejects malformed workflow events', () 
         workflow_event: { type: 'Cancelled', data: {} },
       }),
     /invalid workflow_event payload/,
+  );
+});
+
+test('parseWorkflowGraphMutationResponse rejects malformed workflow session state', () => {
+  assert.throws(
+    () =>
+      parseWorkflowGraphMutationResponse({
+        graph: { nodes: [], edges: [] },
+        workflow_session_state: { contract_version: 'v1', residency: 'active' },
+      }),
+    /invalid workflow_session_state payload/,
   );
 });

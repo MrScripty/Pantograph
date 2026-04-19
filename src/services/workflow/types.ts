@@ -127,6 +127,8 @@ export interface ConnectionCommitResponse {
   accepted: boolean;
   graph_revision: string;
   graph?: WorkflowGraph;
+  workflow_event?: WorkflowEvent<'GraphModified'> | null;
+  workflow_session_state?: WorkflowGraphSessionStateView | null;
   rejection?: ConnectionRejection;
 }
 
@@ -135,6 +137,8 @@ export interface InsertNodeConnectionResponse {
   graph_revision: string;
   inserted_node_id?: string;
   graph?: WorkflowGraph;
+  workflow_event?: WorkflowEvent<'GraphModified'> | null;
+  workflow_session_state?: WorkflowGraphSessionStateView | null;
   rejection?: ConnectionRejection;
 }
 
@@ -156,6 +160,8 @@ export interface InsertNodeOnEdgeResponse {
   inserted_node_id?: string;
   bridge?: EdgeInsertionBridge;
   graph?: WorkflowGraph;
+  workflow_event?: WorkflowEvent<'GraphModified'> | null;
+  workflow_session_state?: WorkflowGraphSessionStateView | null;
   rejection?: ConnectionRejection;
 }
 
@@ -397,6 +403,79 @@ export type WorkflowEvent<T extends WorkflowEventType = WorkflowEventType> =
 export interface WorkflowGraphMutationResponse {
   graph: WorkflowGraph;
   workflow_event?: WorkflowEvent<'GraphModified'> | null;
+  workflow_session_state?: WorkflowGraphSessionStateView | null;
+}
+
+export type WorkflowSessionResidencyState =
+  | 'active'
+  | 'warm'
+  | 'checkpointed_but_unloaded'
+  | 'restored';
+
+export type NodeMemoryCompatibility =
+  | 'preserve_as_is'
+  | 'preserve_with_input_refresh'
+  | 'drop_on_identity_change'
+  | 'drop_on_schema_incompatibility'
+  | 'fallback_full_invalidation';
+
+export type NodeMemoryStatus = 'empty' | 'ready' | 'invalidated';
+
+export type NodeMemoryRestoreStrategy =
+  | 'rehydrate_before_resume'
+  | 'rebind_host_resource'
+  | 'drop_if_unavailable';
+
+export interface NodeMemoryIdentity {
+  session_id: string;
+  node_id: string;
+  node_type: string;
+  schema_version?: string | null;
+}
+
+export interface NodeMemoryIndirectStateReference {
+  reference_kind: string;
+  reference_id: string;
+  restore_strategy: NodeMemoryRestoreStrategy;
+  inspection_metadata?: unknown;
+}
+
+export interface NodeMemorySnapshot {
+  identity: NodeMemoryIdentity;
+  status: NodeMemoryStatus;
+  input_fingerprint?: string | null;
+  output_snapshot?: unknown;
+  private_state?: unknown;
+  indirect_state_reference?: NodeMemoryIndirectStateReference | null;
+  inspection_metadata?: unknown;
+}
+
+export interface NodeMemoryCompatibilitySnapshot {
+  node_id: string;
+  compatibility: NodeMemoryCompatibility;
+  reason?: string | null;
+}
+
+export interface GraphMemoryImpactSummary {
+  node_decisions?: NodeMemoryCompatibilitySnapshot[];
+  fallback_to_full_invalidation: boolean;
+}
+
+export interface WorkflowSessionCheckpointSummary {
+  session_id: string;
+  graph_revision: string;
+  residency: WorkflowSessionResidencyState;
+  checkpoint_available: boolean;
+  preserved_node_count: number;
+  checkpointed_at_ms?: number | null;
+}
+
+export interface WorkflowGraphSessionStateView {
+  contract_version: number;
+  residency: WorkflowSessionResidencyState;
+  node_memory?: NodeMemorySnapshot[];
+  memory_impact?: GraphMemoryImpactSummary | null;
+  checkpoint?: WorkflowSessionCheckpointSummary | null;
 }
 
 export type NodeExecutionState = 'idle' | 'running' | 'waiting' | 'success' | 'error';

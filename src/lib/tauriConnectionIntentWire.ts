@@ -97,6 +97,10 @@ interface WireConnectionCommitResponse {
   graphRevision?: string;
   graph_revision?: string;
   graph?: AnyCommitResponse['graph'];
+  workflowEvent?: AnyCommitResponse['workflow_event'];
+  workflow_event?: AnyCommitResponse['workflow_event'];
+  workflowSessionState?: AnyCommitResponse['workflow_session_state'];
+  workflow_session_state?: AnyCommitResponse['workflow_session_state'];
   rejection?: WireConnectionRejection;
 }
 
@@ -107,6 +111,10 @@ interface WireInsertNodeConnectionResponse {
   insertedNodeId?: string;
   inserted_node_id?: string;
   graph?: AnyInsertResponse['graph'];
+  workflowEvent?: AnyInsertResponse['workflow_event'];
+  workflow_event?: AnyInsertResponse['workflow_event'];
+  workflowSessionState?: AnyInsertResponse['workflow_session_state'];
+  workflow_session_state?: AnyInsertResponse['workflow_session_state'];
   rejection?: WireConnectionRejection;
 }
 
@@ -126,6 +134,10 @@ interface WireInsertNodeOnEdgeResponse {
   inserted_node_id?: string;
   bridge?: WireEdgeInsertionBridge;
   graph?: AnyInsertNodeOnEdgeResponse['graph'];
+  workflowEvent?: AnyInsertNodeOnEdgeResponse['workflow_event'];
+  workflow_event?: AnyInsertNodeOnEdgeResponse['workflow_event'];
+  workflowSessionState?: AnyInsertNodeOnEdgeResponse['workflow_session_state'];
+  workflow_session_state?: AnyInsertNodeOnEdgeResponse['workflow_session_state'];
   rejection?: WireConnectionRejection;
 }
 
@@ -208,6 +220,8 @@ export function normalizeConnectionCommitResponse(
     accepted: response.accepted,
     graph_revision: readString(response.graph_revision ?? response.graphRevision),
     graph: response.graph,
+    workflow_event: response.workflow_event ?? response.workflowEvent,
+    workflow_session_state: response.workflow_session_state ?? response.workflowSessionState,
     rejection: normalizeConnectionRejection(response.rejection),
   };
 }
@@ -220,6 +234,8 @@ export function normalizeInsertNodeConnectionResponse(
     graph_revision: readString(response.graph_revision ?? response.graphRevision),
     inserted_node_id: response.inserted_node_id ?? response.insertedNodeId,
     graph: response.graph,
+    workflow_event: response.workflow_event ?? response.workflowEvent,
+    workflow_session_state: response.workflow_session_state ?? response.workflowSessionState,
     rejection: normalizeConnectionRejection(response.rejection),
   };
 }
@@ -244,6 +260,8 @@ export function normalizeInsertNodeOnEdgeResponse(
     inserted_node_id: response.inserted_node_id ?? response.insertedNodeId,
     bridge: normalizeEdgeInsertionBridge(response.bridge),
     graph: response.graph,
+    workflow_event: response.workflow_event ?? response.workflowEvent,
+    workflow_session_state: response.workflow_session_state ?? response.workflowSessionState,
     rejection: normalizeConnectionRejection(response.rejection),
   };
 }

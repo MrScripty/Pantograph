@@ -217,6 +217,10 @@ pub struct ConnectionCommitResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<WorkflowGraph>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_event: Option<node_engine::WorkflowEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_session_state: Option<super::session_contract::WorkflowGraphSessionStateView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }
 
@@ -229,6 +233,10 @@ pub struct InsertNodeConnectionResponse {
     pub inserted_node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<WorkflowGraph>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_event: Option<node_engine::WorkflowEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_session_state: Option<super::session_contract::WorkflowGraphSessionStateView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }
@@ -262,6 +270,10 @@ pub struct InsertNodeOnEdgeResponse {
     pub bridge: Option<EdgeInsertionBridge>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<WorkflowGraph>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_event: Option<node_engine::WorkflowEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_session_state: Option<super::session_contract::WorkflowGraphSessionStateView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }
