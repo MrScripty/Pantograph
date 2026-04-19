@@ -256,24 +256,23 @@ fn canonical_json_fingerprint(value: &serde_json::Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     use async_trait::async_trait;
 
-    use crate::TaskExecutor;
     use crate::events::NullEventSink;
+    use crate::TaskExecutor;
 
     use super::{
+        bind_workflow_session, bound_workflow_session_id, clear_bound_workflow_session,
+        clear_workflow_session_checkpoint, clear_workflow_session_node_memory,
+        mark_workflow_session_checkpoint_available, reconcile_workflow_session_node_memory,
+        record_workflow_session_node_memory, set_workflow_session_residency,
+        sync_bound_session_node_memory_from_cache, workflow_session_checkpoint_summary,
+        workflow_session_node_memory_snapshots, workflow_session_residency,
         GraphMemoryImpactSummary, NodeMemorySnapshot, WorkflowExecutor,
-        WorkflowSessionResidencyState, bind_workflow_session, bound_workflow_session_id,
-        clear_bound_workflow_session, clear_workflow_session_checkpoint,
-        clear_workflow_session_node_memory,
-        mark_workflow_session_checkpoint_available,
-        reconcile_workflow_session_node_memory, record_workflow_session_node_memory,
-        set_workflow_session_residency, sync_bound_session_node_memory_from_cache,
-        workflow_session_checkpoint_summary, workflow_session_node_memory_snapshots,
-        workflow_session_residency,
+        WorkflowSessionResidencyState,
     };
     use crate::{NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot};
 
@@ -452,7 +451,8 @@ mod tests {
         assert!(!summary.checkpoint_available);
 
         mark_workflow_session_checkpoint_available(&executor, "session-1").await;
-        let checkpointed_summary = workflow_session_checkpoint_summary(&executor, "session-1").await;
+        let checkpointed_summary =
+            workflow_session_checkpoint_summary(&executor, "session-1").await;
         assert!(checkpointed_summary.checkpoint_available);
         assert!(checkpointed_summary.checkpointed_at_ms.is_some());
 

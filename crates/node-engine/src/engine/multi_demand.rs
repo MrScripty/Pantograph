@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::future::{Future, poll_fn};
+use std::future::{poll_fn, Future};
 use std::pin::Pin;
 use std::task::Poll;
 
@@ -750,8 +750,8 @@ async fn execute_plan_with_budget(
 mod tests {
     use std::collections::HashMap;
     use std::future::Future;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     use async_trait::async_trait;
@@ -764,11 +764,11 @@ mod tests {
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
+        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
         DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
         DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome, DemandDispatchWindowPlan,
         DemandDispatchWindowResult, DemandEngine, DemandExecutionBudget, DemandMultiplePlan,
         DemandMultipleResults, DemandWindowRunner, TaskExecutor,
-        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -1524,11 +1524,9 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["left", "right"]
         );
-        assert!(
-            snapshots
-                .iter()
-                .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}"))
-        );
+        assert!(snapshots
+            .iter()
+            .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}")));
         assert!(snapshots.iter().all(|snapshot| {
             snapshot.inspection_metadata
                 == Some(serde_json::json!({

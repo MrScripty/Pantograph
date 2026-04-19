@@ -135,9 +135,7 @@ impl GraphMemoryImpactSummary {
         let mut node_ids = self
             .node_decisions
             .iter()
-            .filter(|decision| {
-                decision.compatibility != NodeMemoryCompatibility::PreserveAsIs
-            })
+            .filter(|decision| decision.compatibility != NodeMemoryCompatibility::PreserveAsIs)
             .map(|decision| decision.node_id.clone())
             .collect::<Vec<_>>();
         node_ids.sort();
@@ -343,13 +341,11 @@ mod tests {
 
         assert!(impact.fallback_to_full_invalidation);
         assert_eq!(impact.node_decisions.len(), 3);
-        assert!(
-            impact
-                .node_decisions
-                .iter()
-                .all(|decision| decision.compatibility
-                    == NodeMemoryCompatibility::FallbackFullInvalidation)
-        );
+        assert!(impact
+            .node_decisions
+            .iter()
+            .all(|decision| decision.compatibility
+                == NodeMemoryCompatibility::FallbackFullInvalidation));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::error::{NodeEngineError, Result};
 use crate::types::{GraphEdge, GraphNode, NodeId, WorkflowGraph};
 
-use super::{WorkflowExecutor, graph_events};
+use super::{graph_events, WorkflowExecutor};
 
 pub(super) async fn update_node_data(
     executor: &WorkflowExecutor,
