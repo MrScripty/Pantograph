@@ -1638,6 +1638,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     self.event_sink.as_ref(),
                     exec_id,
                     resolved_model_ref,
+                    extensions,
                 )
                 .await
             }
@@ -1825,6 +1826,7 @@ async fn execute_llamacpp_inference(
     event_sink: Option<&Arc<dyn EventSink>>,
     execution_id: &str,
     resolved_model_ref: Option<ModelRefV2>,
+    extensions: &ExecutorExtensions,
 ) -> Result<HashMap<String, serde_json::Value>> {
     use futures_util::StreamExt;
 
@@ -1912,14 +1914,19 @@ async fn execute_llamacpp_inference(
         prompt.to_string()
     };
 
+    let restored_kv_slot = kv_cache::restore_llamacpp_input_handle(inputs, gw, extensions).await?;
     let streaming = event_sink.is_some();
-    let request_body = serde_json::json!({
+    let mut request_body = serde_json::json!({
         "prompt": full_prompt,
         "n_predict": max_tokens,
         "temperature": temperature,
         "stop": ["</s>", "<|im_end|>", "<|end|>"],
         "stream": streaming
     });
+    if restored_kv_slot {
+        request_body["id_slot"] = serde_json::json!(0);
+        request_body["cache_prompt"] = serde_json::json!(true);
+    }
 
     let client = reqwest::Client::new();
     let url = format!("{}/completion", base_url);
@@ -2024,6 +2031,19 @@ async fn execute_llamacpp_inference(
             })
         }),
     );
+    let kv_cache_output =
+        match kv_cache::capture_llamacpp_output_handle(task_id, gw, extensions).await {
+            Ok(value) => value,
+            Err(error) => {
+                log::warn!(
+                    "LlamaCppInference: failed to capture KV cache output for '{}': {}",
+                    task_id,
+                    error
+                );
+                serde_json::Value::Null
+            }
+        };
+    outputs.insert("kv_cache_out".to_string(), kv_cache_output);
     Ok(outputs)
 }
 

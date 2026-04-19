@@ -72,6 +72,9 @@ generic JSON. Milestone 4 is now in progress in the inference layer: the
 backend/gateway boundary exposes backend-owned KV runtime fingerprints, model
 fingerprints, and live llama.cpp slot save/restore hooks so node execution can
 compose through one runtime adapter instead of inventing host-side KV logic.
+`node-engine` now consumes that adapter for `llamacpp-inference`, restoring an
+incoming typed KV handle into the live runtime slot before generation and
+capturing a fresh typed handle back into the KV store after generation.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -546,6 +549,8 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - The inference layer now exposes backend-owned KV runtime hooks, and the first
   concrete runtime adapter is llama.cpp slot persistence plus runtime/model
   fingerprint derivation through the gateway/backend boundary
+- `llamacpp-inference` now uses that runtime adapter to restore compatible KV
+  handles before generation and capture a fresh reusable handle afterward
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

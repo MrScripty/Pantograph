@@ -14,7 +14,7 @@ logic into frontend, transport, or descriptor crates.
 
 | File | Responsibility |
 | --- | --- |
-| `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes. |
+| `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp KV restore/capture helpers used by `CoreTaskExecutor`. |
 
 ## Ownership Rules
 

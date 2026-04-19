@@ -1,13 +1,19 @@
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use inference::kv_cache::{
-    CacheMarker, KvCacheEntry, KvCacheMetadata, KvCacheStore, ModelFingerprint, StoragePolicy,
+    CacheMarker, KvCacheEntry, KvCacheHandle, KvCacheMetadata, KvCacheStore, ModelFingerprint,
+    StoragePolicy,
 };
+use inference::InferenceGateway;
+use uuid::Uuid;
 
 use crate::error::{NodeEngineError, Result};
 use crate::extensions::ExecutorExtensions;
+
+const LLAMACPP_SLOT_ID: u32 = 0;
 
 pub(super) async fn execute_save(
     inputs: &HashMap<String, serde_json::Value>,
@@ -78,6 +84,157 @@ pub(super) async fn execute_save(
     outputs.insert("cache_id".to_string(), serde_json::json!(cache_id));
     outputs.insert("metadata".to_string(), serde_json::to_value(&metadata)?);
     Ok(outputs)
+}
+
+pub(super) async fn restore_llamacpp_input_handle(
+    inputs: &HashMap<String, serde_json::Value>,
+    gateway: &Arc<InferenceGateway>,
+    extensions: &ExecutorExtensions,
+) -> Result<bool> {
+    let Some(handle_value) = inputs.get("kv_cache_in").filter(|value| !value.is_null()) else {
+        return Ok(false);
+    };
+
+    let handle: KvCacheHandle = serde_json::from_value(handle_value.clone())?;
+    let store = require_store(extensions)?;
+    let runtime_fingerprint = gateway
+        .kv_cache_runtime_fingerprint()
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "KV cache runtime fingerprint lookup failed: {}",
+                error
+            ))
+        })?;
+    let model_fingerprint = gateway
+        .kv_cache_model_fingerprint()
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "KV cache model fingerprint lookup failed: {}",
+                error
+            ))
+        })?;
+
+    if !handle.is_compatible_with(&model_fingerprint, &runtime_fingerprint) {
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "KV cache handle '{}' is incompatible with the active llama.cpp runtime",
+            handle.cache_id
+        )));
+    }
+
+    let entry = store
+        .load(&handle.cache_id, &model_fingerprint)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache load failed: {error}"))
+        })?;
+    let slot_path = kv_slot_temp_path("restore", handle.cache_id.as_str());
+    fs::write(&slot_path, &entry.data).map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!(
+            "Failed to write temporary KV cache slot file '{}': {}",
+            slot_path.display(),
+            error
+        ))
+    })?;
+
+    let restore_result = gateway
+        .restore_kv_cache_slot(LLAMACPP_SLOT_ID, &slot_path)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache slot restore failed: {}", error))
+        });
+    let _ = fs::remove_file(&slot_path);
+    restore_result?;
+
+    Ok(true)
+}
+
+pub(super) async fn capture_llamacpp_output_handle(
+    task_id: &str,
+    gateway: &Arc<InferenceGateway>,
+    extensions: &ExecutorExtensions,
+) -> Result<serde_json::Value> {
+    let Some(store) = extensions.get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
+    else {
+        return Ok(serde_json::Value::Null);
+    };
+
+    let runtime_fingerprint = gateway
+        .kv_cache_runtime_fingerprint()
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "KV cache runtime fingerprint lookup failed: {}",
+                error
+            ))
+        })?;
+    let model_fingerprint = gateway
+        .kv_cache_model_fingerprint()
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!(
+                "KV cache model fingerprint lookup failed: {}",
+                error
+            ))
+        })?;
+
+    let slot_path = kv_slot_temp_path("capture", task_id);
+    let save_result = gateway
+        .save_kv_cache_slot(LLAMACPP_SLOT_ID, &slot_path)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache slot save failed: {}", error))
+        });
+    if let Err(error) = save_result {
+        let _ = fs::remove_file(&slot_path);
+        return Err(error);
+    }
+
+    let data = fs::read(&slot_path).map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!(
+            "Failed to read temporary KV cache slot file '{}': {}",
+            slot_path.display(),
+            error
+        ))
+    })?;
+    let _ = fs::remove_file(&slot_path);
+
+    let entry = KvCacheEntry {
+        metadata: KvCacheMetadata {
+            cache_id: String::new(),
+            label: Some(format!("{} KV Cache", task_id)),
+            model_fingerprint,
+            runtime_fingerprint: Some(runtime_fingerprint.clone()),
+            backend_hint: runtime_fingerprint.backend_key.clone(),
+            token_count: 0,
+            markers: Vec::new(),
+            created_at: 0,
+            updated_at: 0,
+            compressed: false,
+            extra: serde_json::json!({
+                "source": "llamacpp_slot",
+                "slotId": LLAMACPP_SLOT_ID,
+            }),
+        },
+        data,
+    };
+    let cache_id = store
+        .save(entry, Some(StoragePolicy::MemoryOnly))
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache save failed: {error}"))
+        })?;
+    let metadata = store.get_metadata(&cache_id).await.map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!("Failed to read KV metadata: {error}"))
+    })?;
+
+    let handle = metadata.executable_handle().ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "Saved KV metadata did not produce an executable handle".to_string(),
+        )
+    })?;
+    serde_json::to_value(&handle).map_err(Into::into)
 }
 
 pub(super) async fn execute_load(
@@ -183,9 +340,31 @@ fn parse_markers(inputs: &HashMap<String, serde_json::Value>) -> Result<Vec<Cach
     }
 }
 
+fn kv_slot_temp_path(stage: &str, discriminator: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "pantograph-llamacpp-kv-{}-{}-{}.bin",
+        stage,
+        discriminator,
+        Uuid::new_v4()
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
+    use std::pin::Pin;
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+    use futures_util::{stream, Stream};
+    use inference::backend::{
+        BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+        EmbeddingResult, InferenceBackend,
+    };
+    use inference::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
+    use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use inference::{InferenceGateway, RerankRequest, RerankResponse};
 
     #[test]
     fn parse_storage_policy_defaults_to_memory() {
@@ -236,5 +415,273 @@ mod tests {
         assert_eq!(markers.len(), 1);
         assert_eq!(markers[0].name, "system");
         assert_eq!(markers[0].token_position, 12);
+    }
+
+    struct MockKvProcessHandle;
+
+    impl ProcessHandle for MockKvProcessHandle {
+        fn pid(&self) -> u32 {
+            1
+        }
+
+        fn kill(&self) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct MockKvProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for MockKvProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> std::result::Result<
+            (
+                tokio::sync::mpsc::Receiver<ProcessEvent>,
+                Box<dyn ProcessHandle>,
+            ),
+            String,
+        > {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok((rx, Box::new(MockKvProcessHandle)))
+        }
+
+        fn app_data_dir(&self) -> std::result::Result<PathBuf, String> {
+            Ok(std::env::temp_dir())
+        }
+
+        fn binaries_dir(&self) -> std::result::Result<PathBuf, String> {
+            Ok(std::env::temp_dir())
+        }
+    }
+
+    struct MockKvBackend {
+        bytes: Vec<u8>,
+        restored: Arc<Mutex<Vec<Vec<u8>>>>,
+    }
+
+    #[async_trait]
+    impl InferenceBackend for MockKvBackend {
+        fn name(&self) -> &'static str {
+            "MockKv"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock backend with KV slot support"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> std::result::Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome::default())
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            Some("http://127.0.0.1:11434".to_string())
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> std::result::Result<
+            Pin<Box<dyn Stream<Item = std::result::Result<ChatChunk, BackendError>> + Send>>,
+            BackendError,
+        > {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(
+            &self,
+            _request: RerankRequest,
+        ) -> std::result::Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+
+        async fn kv_cache_runtime_fingerprint(
+            &self,
+            _active_config: Option<&BackendConfig>,
+        ) -> std::result::Result<KvCacheRuntimeFingerprint, BackendError> {
+            Ok(KvCacheRuntimeFingerprint {
+                runtime_id: "mock".to_string(),
+                backend_key: "mock".to_string(),
+                tokenizer_fingerprint: "tok".to_string(),
+                prompt_format_fingerprint: Some("prompt".to_string()),
+                runtime_build_fingerprint: Some("build".to_string()),
+            })
+        }
+
+        async fn kv_cache_model_fingerprint(
+            &self,
+            _active_config: Option<&BackendConfig>,
+        ) -> std::result::Result<ModelFingerprint, BackendError> {
+            Ok(ModelFingerprint {
+                model_id: "model".to_string(),
+                config_hash: "cfg".to_string(),
+            })
+        }
+
+        async fn save_kv_cache_slot(
+            &self,
+            _slot_id: u32,
+            path: &Path,
+        ) -> std::result::Result<(), BackendError> {
+            fs::write(path, &self.bytes)
+                .map_err(|error| BackendError::Inference(format!("mock save failed: {}", error)))
+        }
+
+        async fn restore_kv_cache_slot(
+            &self,
+            _slot_id: u32,
+            path: &Path,
+        ) -> std::result::Result<(), BackendError> {
+            let bytes = fs::read(path).map_err(|error| {
+                BackendError::Inference(format!("mock restore failed: {}", error))
+            })?;
+            self.restored
+                .lock()
+                .expect("lock should succeed")
+                .push(bytes);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_llamacpp_output_handle_saves_slot_into_store() {
+        let restored = Arc::new(Mutex::new(Vec::new()));
+        let gateway = Arc::new(InferenceGateway::with_backend(
+            Box::new(MockKvBackend {
+                bytes: vec![1, 2, 3, 4],
+                restored: restored.clone(),
+            }),
+            "mock-kv",
+        ));
+        gateway.set_spawner(Arc::new(MockKvProcessSpawner)).await;
+
+        let mut extensions = ExecutorExtensions::new();
+        let store = Arc::new(KvCacheStore::memory_only());
+        extensions.set(crate::extension_keys::KV_CACHE_STORE, store.clone());
+
+        let handle_value = capture_llamacpp_output_handle("task-a", &gateway, &extensions)
+            .await
+            .expect("capture should succeed");
+        let handle: KvCacheHandle =
+            serde_json::from_value(handle_value).expect("capture should return a typed handle");
+        let entry = store
+            .load(
+                &handle.cache_id,
+                &ModelFingerprint {
+                    model_id: "model".to_string(),
+                    config_hash: "cfg".to_string(),
+                },
+            )
+            .await
+            .expect("captured handle should resolve through the store");
+
+        assert_eq!(entry.data, vec![1, 2, 3, 4]);
+        assert_eq!(
+            entry
+                .metadata
+                .runtime_fingerprint
+                .as_ref()
+                .map(|fp| fp.runtime_id.as_str()),
+            Some("mock")
+        );
+    }
+
+    #[tokio::test]
+    async fn restore_llamacpp_input_handle_restores_saved_slot_bytes() {
+        let restored = Arc::new(Mutex::new(Vec::new()));
+        let gateway = Arc::new(InferenceGateway::with_backend(
+            Box::new(MockKvBackend {
+                bytes: vec![9, 9, 9],
+                restored: restored.clone(),
+            }),
+            "mock-kv",
+        ));
+        gateway.set_spawner(Arc::new(MockKvProcessSpawner)).await;
+
+        let mut extensions = ExecutorExtensions::new();
+        let store = Arc::new(KvCacheStore::memory_only());
+        let entry = KvCacheEntry {
+            metadata: KvCacheMetadata {
+                cache_id: String::new(),
+                label: Some("saved".to_string()),
+                model_fingerprint: ModelFingerprint {
+                    model_id: "model".to_string(),
+                    config_hash: "cfg".to_string(),
+                },
+                runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                    runtime_id: "mock".to_string(),
+                    backend_key: "mock".to_string(),
+                    tokenizer_fingerprint: "tok".to_string(),
+                    prompt_format_fingerprint: Some("prompt".to_string()),
+                    runtime_build_fingerprint: Some("build".to_string()),
+                }),
+                backend_hint: "mock".to_string(),
+                token_count: 0,
+                markers: Vec::new(),
+                created_at: 0,
+                updated_at: 0,
+                compressed: false,
+                extra: serde_json::json!({}),
+            },
+            data: vec![7, 8, 9],
+        };
+        let cache_id = store
+            .save(entry, Some(StoragePolicy::MemoryOnly))
+            .await
+            .expect("fixture save should succeed");
+        let metadata = store
+            .get_metadata(&cache_id)
+            .await
+            .expect("metadata should be available");
+        let handle = metadata
+            .executable_handle()
+            .expect("metadata should produce an executable handle");
+        extensions.set(crate::extension_keys::KV_CACHE_STORE, store);
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "kv_cache_in".to_string(),
+            serde_json::to_value(handle).expect("handle should serialize"),
+        );
+
+        let restored_slot = restore_llamacpp_input_handle(&inputs, &gateway, &extensions)
+            .await
+            .expect("restore should succeed");
+        assert!(restored_slot);
+        assert_eq!(
+            restored.lock().expect("lock should succeed").as_slice(),
+            [vec![7, 8, 9]]
+        );
     }
 }

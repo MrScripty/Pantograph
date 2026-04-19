@@ -318,7 +318,7 @@ end-to-end KV behavior.
 **Goal:** Turn the store into a real inference-runtime reuse primitive.
 
 **Tasks:**
-- [ ] Implement concrete runtime adapter and codec support for at least one
+- [x] Implement concrete runtime adapter and codec support for at least one
       supported backend that can genuinely capture and restore KV state.
 - [ ] Route `kv-cache-save`, `kv-cache-load`, and `kv-cache-truncate` through
       the real backend-owned execution path rather than placeholder task logic.
