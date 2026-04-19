@@ -733,8 +733,11 @@ pub trait WorkflowHost: Send + Sync {
         required_backends.sort();
         required_backends.dedup();
 
-        let required_extensions =
-            capabilities::extract_required_extensions(stored.nodes(), !required_models.is_empty());
+        let required_extensions = capabilities::extract_required_extensions(
+            stored.nodes(),
+            stored.edges(),
+            !required_models.is_empty(),
+        );
         let mut model_metadata = HashMap::new();
         for model_id in &required_models {
             if let Some(metadata) = self.model_metadata(model_id).await? {

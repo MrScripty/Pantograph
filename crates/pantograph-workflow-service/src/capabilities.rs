@@ -120,6 +120,8 @@ pub(crate) struct StoredGraphEdge {
 
 const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV64_PRIME: u64 = 0x100000001b3;
+const KV_CACHE_PORT_IDS: [&str; 2] = ["kv_cache_in", "kv_cache_out"];
+const KV_CACHE_NODE_TYPES: [&str; 3] = ["kv-cache-save", "kv-cache-load", "kv-cache-truncate"];
 
 pub fn default_workflow_roots(manifest_dir: &Path) -> Vec<PathBuf> {
     let mut roots = Vec::new();
@@ -233,7 +235,25 @@ pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     backends
 }
 
-pub fn extract_required_extensions(nodes: &[StoredGraphNode], has_models: bool) -> Vec<String> {
+fn workflow_uses_kv_cache(nodes: &[StoredGraphNode], edges: &[StoredGraphEdge]) -> bool {
+    if nodes
+        .iter()
+        .any(|node| KV_CACHE_NODE_TYPES.contains(&node.node_type.as_str()))
+    {
+        return true;
+    }
+
+    edges.iter().any(|edge| {
+        KV_CACHE_PORT_IDS.contains(&edge.source_handle.as_str())
+            || KV_CACHE_PORT_IDS.contains(&edge.target_handle.as_str())
+    })
+}
+
+pub(crate) fn extract_required_extensions(
+    nodes: &[StoredGraphNode],
+    edges: &[StoredGraphEdge],
+    has_models: bool,
+) -> Vec<String> {
     let mut out = vec!["inference_gateway".to_string()];
     if has_models {
         out.push("pumas_api".to_string());
@@ -243,6 +263,9 @@ pub fn extract_required_extensions(nodes: &[StoredGraphNode], has_models: bool) 
         .any(|n| n.node_type == "dependency-environment")
     {
         out.push("model_dependency_resolver".to_string());
+    }
+    if workflow_uses_kv_cache(nodes, edges) {
+        out.push("kv_cache".to_string());
     }
     out.sort();
     out.dedup();
@@ -597,6 +620,51 @@ mod tests {
                 "pytorch".to_string(),
                 "stable_audio".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn extract_required_extensions_adds_kv_cache_for_storage_nodes() {
+        let nodes = vec![StoredGraphNode {
+            id: "kv-save".to_string(),
+            node_type: "kv-cache-save".to_string(),
+            data: serde_json::json!({}),
+            position: StoredPosition::default(),
+        }];
+
+        assert_eq!(
+            extract_required_extensions(&nodes, &[], false),
+            vec!["inference_gateway".to_string(), "kv_cache".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_required_extensions_adds_kv_cache_for_connected_kv_ports() {
+        let nodes = vec![
+            StoredGraphNode {
+                id: "llm-a".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                data: serde_json::json!({}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "llm-b".to_string(),
+                node_type: "pytorch-inference".to_string(),
+                data: serde_json::json!({}),
+                position: StoredPosition::default(),
+            },
+        ];
+        let edges = vec![StoredGraphEdge {
+            id: "edge-kv".to_string(),
+            source: "llm-a".to_string(),
+            source_handle: "kv_cache_out".to_string(),
+            target: "llm-b".to_string(),
+            target_handle: "kv_cache_in".to_string(),
+        }];
+
+        assert_eq!(
+            extract_required_extensions(&nodes, &edges, false),
+            vec!["inference_gateway".to_string(), "kv_cache".to_string()]
         );
     }
 }

@@ -570,6 +570,10 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   `pytorch-inference` restore/capture flow for `dllm`, so compatible runs can
   consume typed `kv_cache_in` handles and emit fresh `kv_cache_out` handles
   through the same store contract
+- Workflow capability extraction now also declares the `kv_cache` runtime
+  extension whenever a graph uses explicit KV storage nodes or KV port wiring,
+  so preflight/runtime selection can see the requirement without adapter-local
+  inference
 - KV save/load now follow the typed-handle contract in `node-engine`, and KV
   truncation now fails with an explicit backend-specific unsupported reason
 - Implement a real KV cache store with memory and disk policies

@@ -387,7 +387,7 @@ phase documentation.
 **Tasks:**
 - [ ] Surface backend-owned diagnostics for cache hit, miss, invalidation,
       unsupported-runtime fallback, truncation outcome, and reuse source.
-- [ ] Update runtime requirement extraction so workflows that explicitly enable
+- [x] Update runtime requirement extraction so workflows that explicitly enable
       KV usage declare the `kv_cache` extension requirement.
 - [ ] Ensure diagnostics and preflight consumers use the same canonical
       extension and compatibility contract.
@@ -400,7 +400,7 @@ phase documentation.
 - Preflight/runtime-requirement tests for `kv_cache` extension shaping
 - Source-of-truth review for roadmap, plan, and touched READMEs
 
-**Status:** Not started
+**Status:** In progress
 
 ## Re-Plan Triggers
 
