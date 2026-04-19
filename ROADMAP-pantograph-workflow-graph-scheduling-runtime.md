@@ -566,6 +566,10 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   fingerprint derivation through the gateway/backend boundary
 - `llamacpp-inference` now uses that runtime adapter to restore compatible KV
   handles before generation and capture a fresh reusable handle afterward
+- PyTorch backend-owned worker snapshot primitives are now also wired into
+  `pytorch-inference` output capture, so compatible runs can emit typed
+  `kv_cache_out` handles through the same store contract even though input-side
+  restore/reuse is still pending
 - KV save/load now follow the typed-handle contract in `node-engine`, and KV
   truncation now fails with an explicit backend-specific unsupported reason
 - Implement a real KV cache store with memory and disk policies

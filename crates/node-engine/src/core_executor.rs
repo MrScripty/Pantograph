@@ -1685,6 +1685,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     self.event_sink.as_ref(),
                     exec_id,
                     resolved_model_ref,
+                    extensions,
                 )
                 .await
             }
@@ -2763,6 +2764,7 @@ async fn execute_pytorch_inference(
     event_sink: Option<&Arc<dyn EventSink>>,
     execution_id: &str,
     resolved_model_ref: Option<ModelRefV2>,
+    extensions: &ExecutorExtensions,
 ) -> Result<HashMap<String, serde_json::Value>> {
     // Detect if the prompt input is a masked prompt JSON object
     let masked_prompt_json = inputs
@@ -3100,6 +3102,18 @@ async fn execute_pytorch_inference(
             })
         }),
     );
+    let kv_cache_output = match kv_cache::capture_pytorch_output_handle(task_id, extensions).await {
+        Ok(value) => value,
+        Err(error) => {
+            log::warn!(
+                "PyTorchInference: failed to capture KV cache output for '{}': {}",
+                task_id,
+                error
+            );
+            serde_json::Value::Null
+        }
+    };
+    outputs.insert("kv_cache_out".to_string(), kv_cache_output);
     Ok(outputs)
 }
 

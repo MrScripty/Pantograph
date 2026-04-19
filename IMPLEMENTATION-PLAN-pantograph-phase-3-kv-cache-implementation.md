@@ -339,9 +339,12 @@ end-to-end KV behavior.
 - llama.cpp now owns the first real capture/restore path and explicit
   unsupported truncation reporting.
 - PyTorch now has backend-owned KV runtime/model identity plus worker snapshot
-  save/restore/clear/truncate primitives for `dllm`-style live caches, but the
-  workflow execution path has not yet been wired to emit or consume those
-  artifacts.
+  save/restore/clear/truncate primitives for `dllm`-style live caches, and
+  `pytorch-inference` now emits `kv_cache_out` handles through the shared KV
+  store contract.
+- PyTorch KV reuse is still only partially integrated: execution now captures
+  reusable artifacts, but compatible `kv_cache_in` restore-and-reuse semantics
+  during generation are still pending.
 - Cross-layer acceptance path from inference execution to saved KV handle to
   later compatible reuse
 - Re-run affected suites to detect durable cache-state leakage

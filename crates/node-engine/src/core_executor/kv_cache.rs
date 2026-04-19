@@ -255,6 +255,74 @@ pub(super) async fn capture_llamacpp_output_handle(
     serde_json::to_value(&handle).map_err(Into::into)
 }
 
+#[cfg(feature = "pytorch-nodes")]
+pub(super) async fn capture_pytorch_output_handle(
+    task_id: &str,
+    extensions: &ExecutorExtensions,
+) -> Result<serde_json::Value> {
+    let Some(store) = extensions.get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
+    else {
+        return Ok(serde_json::Value::Null);
+    };
+
+    let snapshot_path = kv_slot_temp_path("pytorch-capture", task_id);
+    let save_info = inference::backend::pytorch::save_live_kv_snapshot(&snapshot_path)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("PyTorch KV snapshot save failed: {}", error))
+        })?;
+    let data = fs::read(&snapshot_path).map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!(
+            "Failed to read temporary PyTorch KV snapshot file '{}': {}",
+            snapshot_path.display(),
+            error
+        ))
+    })?;
+    let _ = fs::remove_file(&snapshot_path);
+
+    let runtime_fingerprint =
+        inference::backend::pytorch::kv_cache_runtime_fingerprint_for_live_kv(&save_info);
+    let model_fingerprint =
+        inference::backend::pytorch::kv_cache_model_fingerprint_for_live_kv(&save_info);
+    let entry = KvCacheEntry {
+        metadata: KvCacheMetadata {
+            cache_id: String::new(),
+            label: Some(format!("{} KV Cache", task_id)),
+            model_fingerprint,
+            runtime_fingerprint: Some(runtime_fingerprint.clone()),
+            backend_hint: runtime_fingerprint.backend_key.clone(),
+            token_count: save_info.token_count,
+            markers: Vec::new(),
+            created_at: 0,
+            updated_at: 0,
+            compressed: false,
+            extra: serde_json::json!({
+                "source": "pytorch_live_kv_snapshot",
+                "modelPath": save_info.model_path,
+                "modelType": save_info.model_type,
+                "device": save_info.device,
+            }),
+        },
+        data,
+    };
+    let cache_id = store
+        .save(entry, Some(StoragePolicy::MemoryOnly))
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache save failed: {error}"))
+        })?;
+    let metadata = store.get_metadata(&cache_id).await.map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!("Failed to read KV metadata: {error}"))
+    })?;
+
+    let handle = metadata.executable_handle().ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "Saved PyTorch KV metadata did not produce an executable handle".to_string(),
+        )
+    })?;
+    serde_json::to_value(&handle).map_err(Into::into)
+}
+
 pub(super) async fn execute_load(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
