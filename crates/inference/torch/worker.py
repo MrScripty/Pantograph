@@ -52,6 +52,7 @@ _tokenizer = None
 _device = None
 _model_path = None
 _model_type = None
+_live_kv_state = None
 
 _diffusion_pipeline = None
 _diffusion_device = None
@@ -78,9 +79,17 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
     which can terminate immediately and decode to an empty string. Retry with a
     single EOS and a small min_new_tokens floor when that happens.
     """
-    text = _generate_sdar_cached(
+    global _live_kv_state
+    text, token_ids, cache = _generate_sdar_cached(
         _model, _tokenizer, _device, formatted_prompt, max_tokens, temperature, top_p, top_k=top_k,
     )
+    _live_kv_state = {
+        "token_ids": token_ids,
+        "cache": cache,
+        "model_path": str(_model_path) if _model_path else None,
+        "model_type": _model_type,
+        "device": str(_device) if _device is not None else None,
+    }
     if text and text.strip():
         return text
 
@@ -106,6 +115,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
 
     input_len = inputs["input_ids"].shape[1]
     generated = outputs[0][input_len:]
+    _live_kv_state = None
     decoded = _tokenizer.decode(generated, skip_special_tokens=True)
     if decoded and decoded.strip():
         return decoded
@@ -128,6 +138,18 @@ def get_loaded_info():
         "model_path": str(_model_path) if _model_path else None,
         "model_type": _model_type,
         "device": str(_device),
+    }
+
+
+def get_live_kv_info():
+    """Return metadata about the current live KV snapshot, or None."""
+    if _live_kv_state is None:
+        return None
+    return {
+        "token_count": int(len(_live_kv_state.get("token_ids", []))),
+        "model_path": _live_kv_state.get("model_path"),
+        "model_type": _live_kv_state.get("model_type"),
+        "device": _live_kv_state.get("device"),
     }
 
 
@@ -378,7 +400,7 @@ def load_model(model_path, device="auto", model_type=None):
 
 def unload_model():
     """Unload the current model and free GPU memory."""
-    global _model, _tokenizer, _device, _model_path, _model_type
+    global _model, _tokenizer, _device, _model_path, _model_type, _live_kv_state
 
     if _model is not None:
         name = _model_path.name if _model_path else "unknown"
@@ -389,6 +411,7 @@ def unload_model():
         _device = None
         _model_path = None
         _model_type = None
+        _live_kv_state = None
 
         try:
             if torch.cuda.is_available():
@@ -397,6 +420,70 @@ def unload_model():
             pass
 
         logger.info("Model unloaded: %s", name)
+
+
+def clear_live_kv_cache():
+    """Drop any live KV snapshot held by the worker."""
+    global _live_kv_state
+    _live_kv_state = None
+    return {"cleared": True}
+
+
+def _require_live_kv_state():
+    if _live_kv_state is None:
+        raise RuntimeError("No live KV cache captured. Run a KV-capable generation first.")
+    return _live_kv_state
+
+
+def _truncate_kv_payload(payload, token_position):
+    token_ids = payload.get("token_ids")
+    cache = payload.get("cache")
+    if not isinstance(token_ids, list):
+        raise RuntimeError("KV payload is missing token_ids")
+    if cache is None:
+        raise RuntimeError("KV payload is missing cache data")
+    if token_position < 0:
+        raise RuntimeError("token_position must be non-negative")
+    if token_position > len(token_ids):
+        raise RuntimeError(
+            f"token_position {token_position} exceeds cache token_count {len(token_ids)}"
+        )
+    if not hasattr(cache, "crop"):
+        raise RuntimeError(
+            "transformers DynamicCache.crop is unavailable; KV truncation is not supported"
+        )
+    cache.crop(token_position)
+    payload["token_ids"] = token_ids[:token_position]
+    return payload
+
+
+def save_live_kv_cache(path):
+    """Persist the current live KV snapshot to disk."""
+    payload = _require_live_kv_state()
+    torch.save(payload, path)
+    return get_live_kv_info()
+
+
+def restore_live_kv_cache(path):
+    """Restore a live KV snapshot from disk."""
+    global _live_kv_state
+    payload = torch.load(path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise RuntimeError("KV payload must deserialize to a dict")
+    _live_kv_state = payload
+    return get_live_kv_info()
+
+
+def truncate_kv_cache_file(path, token_position):
+    """Truncate a persisted KV snapshot in place."""
+    payload = torch.load(path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise RuntimeError("KV payload must deserialize to a dict")
+    truncated = _truncate_kv_payload(payload, int(token_position))
+    torch.save(truncated, path)
+    return {
+        "token_count": int(len(truncated.get("token_ids", []))),
+    }
 
 
 def unload_diffusion_model():

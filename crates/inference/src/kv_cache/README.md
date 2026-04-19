@@ -49,6 +49,10 @@ artifacts, but the inference KV store remains the single cache owner.
   compose through that adapter instead of duplicating HTTP slot logic. Its slot
   snapshots still do not provide a truncation codec, so truncate requests fail
   from the backend boundary with an explicit unsupported reason.
+- PyTorch now exposes backend-owned KV runtime/model identity and worker
+  snapshot primitives for `dllm`-style live caches. Those hooks are the
+  backend-side foundation for a real codec-backed path, even though workflow
+  execution has not started emitting or consuming PyTorch KV artifacts yet.
 - `node-engine` owns execution-path behavior for KV save/load/truncate nodes.
 - Workflow-node descriptor code may describe KV ports, but it must not become a
   parallel KV execution owner.

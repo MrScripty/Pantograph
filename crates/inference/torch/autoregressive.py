@@ -102,9 +102,13 @@ def _generate_sdar_cached(model, tokenizer, device, formatted_prompt,
             logits = outputs.logits[:, -1, :]
         cur_pos += 1
 
+    full_sequence = torch.cat(
+        [input_ids[0].detach().cpu(), torch.tensor(generated_ids, dtype=input_ids.dtype)],
+        dim=0,
+    ).tolist()
     if not generated_ids:
-        return ""
-    return tokenizer.decode(generated_ids, skip_special_tokens=True)
+        return "", full_sequence, past_key_values
+    return tokenizer.decode(generated_ids, skip_special_tokens=True), full_sequence, past_key_values
 
 
 def _generate_autoregressive(model, tokenizer, device, formatted_prompt,

@@ -85,7 +85,11 @@ behavior instead of leaving cache pruning implicit. `kv-cache-truncate` now
 also validates against the active runtime and delegates truncation through the
 backend/gateway boundary, so unsupported runtimes fail from the backend-owned
 path instead of a node-engine placeholder. llama.cpp remains capture/restore
-only until a real slot-snapshot truncation codec exists.
+only until a real slot-snapshot truncation codec exists. PyTorch now also has
+backend-owned KV runtime/model identity plus worker snapshot save/restore and
+file-truncate primitives for `dllm`-style live caches, which makes it the
+first in-tree candidate for a real non-llama KV codec path once the workflow
+executor starts emitting and consuming those artifacts.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI

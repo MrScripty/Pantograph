@@ -7,6 +7,7 @@
 //! The Python worker module (`torch/worker.py`) is embedded at compile time
 //! via `include_str!` and loaded into `sys.modules` on first use.
 
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -20,8 +21,10 @@ use super::{
     BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
     EmbeddingResult, InferenceBackend,
 };
+use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
+use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
 /// The Python worker source, embedded at compile time.
 const WORKER_PY: &str = include_str!("../../torch/worker.py");
@@ -148,6 +151,42 @@ impl PyTorchBackend {
                 && loaded.device == device
                 && model_type.is_none_or(|requested| loaded.model_type == requested)
         })
+    }
+
+    fn active_loaded_model(&self) -> Result<&LoadedModelInfo, BackendError> {
+        self.loaded_model.as_ref().ok_or_else(|| {
+            BackendError::Inference(
+                "KV cache operations require an active loaded PyTorch model".to_string(),
+            )
+        })
+    }
+
+    fn kv_cache_runtime_fingerprint_for_loaded_model(
+        loaded: &LoadedModelInfo,
+    ) -> KvCacheRuntimeFingerprint {
+        KvCacheRuntimeFingerprint {
+            runtime_id: canonical_runtime_id("pytorch"),
+            backend_key: canonical_runtime_backend_key("pytorch"),
+            tokenizer_fingerprint: format!("pytorch:{}:{}", loaded.model_path, loaded.model_type),
+            prompt_format_fingerprint: Some(format!("pytorch_{}", loaded.model_type)),
+            runtime_build_fingerprint: Some(loaded.device.clone()),
+        }
+    }
+
+    fn kv_cache_model_fingerprint_for_loaded_model(loaded: &LoadedModelInfo) -> ModelFingerprint {
+        ModelFingerprint {
+            model_id: loaded.model_path.clone(),
+            config_hash: format!("pytorch:{}", loaded.model_type),
+        }
+    }
+
+    fn require_live_kv_slot(slot_id: u32) -> Result<(), BackendError> {
+        if slot_id == 0 {
+            return Ok(());
+        }
+        Err(BackendError::Config(
+            "PyTorch backend exposes only a single live KV slot at slot_id 0".to_string(),
+        ))
     }
 
     /// Load a model into the embedded Python runtime.
@@ -546,6 +585,124 @@ impl InferenceBackend for PyTorchBackend {
             "Reranking not supported by PyTorch backend".to_string(),
         ))
     }
+
+    async fn kv_cache_runtime_fingerprint(
+        &self,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
+        Ok(Self::kv_cache_runtime_fingerprint_for_loaded_model(
+            self.active_loaded_model()?,
+        ))
+    }
+
+    async fn kv_cache_model_fingerprint(
+        &self,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<ModelFingerprint, BackendError> {
+        Ok(Self::kv_cache_model_fingerprint_for_loaded_model(
+            self.active_loaded_model()?,
+        ))
+    }
+
+    async fn save_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
+        Self::require_live_kv_slot(slot_id)?;
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<(), BackendError> {
+                let worker = worker_module(py).map_err(|e| {
+                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                })?;
+                worker
+                    .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
+                    .map_err(|e| {
+                        BackendError::Inference(format!("PyTorch KV save failed: {}", e))
+                    })?;
+                Ok(())
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    }
+
+    async fn restore_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
+        Self::require_live_kv_slot(slot_id)?;
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<(), BackendError> {
+                let worker = worker_module(py).map_err(|e| {
+                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                })?;
+                worker
+                    .call_method1(
+                        "restore_live_kv_cache",
+                        (path.to_string_lossy().to_string(),),
+                    )
+                    .map_err(|e| {
+                        BackendError::Inference(format!("PyTorch KV restore failed: {}", e))
+                    })?;
+                Ok(())
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    }
+
+    async fn clear_kv_cache_slot(&self, slot_id: u32) -> Result<(), BackendError> {
+        Self::require_live_kv_slot(slot_id)?;
+        tokio::task::spawn_blocking(move || {
+            Python::with_gil(|py| -> Result<(), BackendError> {
+                let worker = worker_module(py).map_err(|e| {
+                    BackendError::Inference(format!("Failed to get worker module: {}", e))
+                })?;
+                worker.call_method0("clear_live_kv_cache").map_err(|e| {
+                    BackendError::Inference(format!("PyTorch KV clear failed: {}", e))
+                })?;
+                Ok(())
+            })
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?
+    }
+
+    async fn truncate_kv_cache_data(
+        &self,
+        data: &[u8],
+        token_position: usize,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<Vec<u8>, BackendError> {
+        let temp_path = std::env::temp_dir().join(format!(
+            "pantograph-pytorch-kv-truncate-{}.bin",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&temp_path, data)
+            .map_err(|e| BackendError::Inference(format!("Failed to write KV temp file: {}", e)))?;
+        let truncate_result = tokio::task::spawn_blocking({
+            let temp_path = temp_path.clone();
+            move || {
+                Python::with_gil(|py| -> Result<(), BackendError> {
+                    let worker = worker_module(py).map_err(|e| {
+                        BackendError::Inference(format!("Failed to get worker module: {}", e))
+                    })?;
+                    worker
+                        .call_method1(
+                            "truncate_kv_cache_file",
+                            (temp_path.to_string_lossy().to_string(), token_position),
+                        )
+                        .map_err(|e| {
+                            BackendError::Inference(format!("PyTorch KV truncate failed: {}", e))
+                        })?;
+                    Ok(())
+                })
+            }
+        })
+        .await
+        .map_err(|e| BackendError::Inference(format!("Task join error: {}", e)))?;
+        let read_result = std::fs::read(&temp_path)
+            .map_err(|e| BackendError::Inference(format!("Failed to read KV temp file: {}", e)));
+        let _ = std::fs::remove_file(&temp_path);
+        truncate_result?;
+        read_result
+    }
 }
 
 /// Extract the last user message from OpenAI-format messages array.
@@ -625,6 +782,52 @@ mod tests {
         assert!(!backend.can_reuse_loaded_model("/models/other", "cuda", None));
         assert!(!backend.can_reuse_loaded_model("/models/demo", "cpu", None));
         assert!(!backend.can_reuse_loaded_model("/models/demo", "cuda", Some("dllm")));
+    }
+
+    #[test]
+    fn test_kv_runtime_fingerprint_for_loaded_model_is_stable() {
+        let loaded = LoadedModelInfo {
+            model_path: "/models/demo".to_string(),
+            model_type: "dllm".to_string(),
+            device: "cuda".to_string(),
+        };
+
+        let fingerprint = PyTorchBackend::kv_cache_runtime_fingerprint_for_loaded_model(&loaded);
+        assert_eq!(fingerprint.backend_key, "pytorch");
+        assert_eq!(fingerprint.runtime_id, "pytorch");
+        assert!(fingerprint.tokenizer_fingerprint.contains("/models/demo"));
+        assert_eq!(
+            fingerprint.prompt_format_fingerprint.as_deref(),
+            Some("pytorch_dllm")
+        );
+        assert_eq!(
+            fingerprint.runtime_build_fingerprint.as_deref(),
+            Some("cuda")
+        );
+    }
+
+    #[test]
+    fn test_kv_model_fingerprint_for_loaded_model_tracks_model_identity() {
+        let loaded = LoadedModelInfo {
+            model_path: "/models/demo".to_string(),
+            model_type: "dllm".to_string(),
+            device: "cuda".to_string(),
+        };
+
+        let fingerprint = PyTorchBackend::kv_cache_model_fingerprint_for_loaded_model(&loaded);
+        assert_eq!(fingerprint.model_id, "/models/demo");
+        assert_eq!(fingerprint.config_hash, "pytorch:dllm");
+    }
+
+    #[test]
+    fn test_require_live_kv_slot_rejects_nonzero_slots() {
+        assert!(PyTorchBackend::require_live_kv_slot(0).is_ok());
+        match PyTorchBackend::require_live_kv_slot(1) {
+            Err(BackendError::Config(message)) => {
+                assert!(message.contains("slot_id 0"));
+            }
+            other => panic!("expected Config error, got {other:?}"),
+        }
     }
 
     #[test]
