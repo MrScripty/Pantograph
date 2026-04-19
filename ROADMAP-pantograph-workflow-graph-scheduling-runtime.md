@@ -909,6 +909,13 @@ the affected downstream closure.
   checkpoint marker and original timestamp, returns the session to
   checkpointed-but-unloaded residency, and clears the checkpoint only after a
   later resumed run succeeds.
+- Scheduler reclaim pressure now also has focused multi-session coverage:
+  keep-alive sessions can repeatedly unload and resume each other under a
+  single loaded-runtime slot without cross-wiring carried inputs, checkpoint
+  state, or executor ownership.
+- Milestone 5 checkpoint/reclaim/restore implementation is now landed; later
+  durability expansion stays in later phases instead of silently stretching
+  this milestone.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
   diagnostics can inspect the most recent compatibility decision after node-

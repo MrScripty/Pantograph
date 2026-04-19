@@ -634,7 +634,7 @@ affected downstream closure.
   input injection then downstream-only rerun,
   undo/redo memory reconciliation
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 5: Integrate Keep-Alive, Scheduler Unload, And Restore
 
@@ -649,7 +649,7 @@ affected downstream closure.
       checkpoint restoration cannot race or replay inconsistently.
 - [x] Ensure persistent workflow sessions can resume without recomputing the
       entire graph when compatible checkpoint state exists.
-- [ ] Define how parallel workflow sessions and temporarily unloaded sessions
+- [x] Define how parallel workflow sessions and temporarily unloaded sessions
       retain isolated logical memory while runtime residency is reclaimed and
       later restored.
 - [x] Update touched scheduler/runtime READMEs where the new checkpoint
@@ -661,7 +661,7 @@ affected downstream closure.
   modules
 - Recovery/idempotency checks per testing standards
 
-**Status:** In progress
+**Status:** Complete
 
 **Completed so far:**
 - Keep-alive workflow sessions now retain backend-owned checkpoint state across
@@ -681,12 +681,16 @@ affected downstream closure.
   its original timestamp, returns the session to checkpoint-backed residency,
   and allows the next successful retry to clear the checkpoint only after the
   resumed run completes.
+- Scheduler reclaim pressure is now pinned with a focused multi-session
+  regression: two keep-alive sessions can unload and resume each other under a
+  one-runtime capacity limit without cross-wiring carried inputs, checkpoint
+  state, or executor identity.
 
 **Remaining focus:**
-- Finish multi-session isolation semantics so reclaim, restore, and parallel
-  workflow pressure cannot race or cross-wire logical node memory.
+- Milestone 5 implementation is landed; only later-phase durability and
+  broader non-focused verification remain outside this milestone.
 
-#### Milestone 5 Detailed Remaining Plan
+#### Milestone 5 Detailed Plan Record
 
 **Objective:** Finish the scheduler-driven reclaim and restore path without
 creating a second owner for checkpoint semantics or letting runtime-registry
@@ -1117,6 +1121,11 @@ Update during implementation:
   workflow-session residency to `checkpointed_but_unloaded`, and the next
   successful retry transitions through `restored` to `warm` while clearing the
   checkpoint only after the resumed run completes.
+- 2026-04-18: Milestone 5 Slice 5C landed. Scheduler reclaim pressure is now
+  pinned with a multi-session isolation regression proving that two keep-alive
+  workflow sessions can repeatedly unload and resume each other under a single
+  loaded-runtime slot without cross-wiring carried inputs, checkpoint
+  timestamps, or executor ownership.
   helper.
 
 ## Commit Cadence Notes

@@ -150,6 +150,10 @@ embedded-runtime crate.
   and timestamp by returning the session to checkpoint-backed residency, while
   only a successful resumed run may clear the checkpoint and advance the
   session to warm residency.
+- Multi-session keep-alive checkpoint isolation must stay keyed by workflow
+  session id in backend Rust so reclaim pressure cannot cross-wire one
+  session's carried inputs, checkpoint summary, or executor ownership into
+  another session's resumed run.
 - Scheduler-driven reclaim for keep-alive workflow sessions must route through
   the same backend session-execution unload transition as direct
   `CapacityRebalance` unload so the runtime-registry boundary does not become a
