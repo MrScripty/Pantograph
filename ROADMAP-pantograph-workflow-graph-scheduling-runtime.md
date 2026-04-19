@@ -170,8 +170,7 @@ reconciled as the final source of truth.
   enforcement that already protected normal session runs.
 - Embedded-runtime host-side session loads now also reuse the
   workflow-service runtime-preflight helpers before reservation/warmup, so
-  direct load callers cannot bypass redistributable readiness enforcement
-  while Milestone 4 restore/recovery follow-up remains in progress.
+  direct load callers cannot bypass redistributable readiness enforcement.
 - Producer stop composition now also invalidates backend workflow-session
   runtime residency before teardown across embedded-runtime shutdown, Tauri
   recovery stop, and Tauri window-close stop paths, so keep-alive sessions do
@@ -181,6 +180,12 @@ reconciled as the final source of truth.
   coverage for runtime-readiness failure and retry, proving a missing
   redistributable blocks restore without discarding the checkpointed session
   state needed for a later successful resume.
+- Managed-runtime snapshot projection now also preserves persisted failed
+  selected-version state and startup-reconciled interrupted install jobs at
+  the top-level readiness boundary, and conservative technical-fit fallback
+  stays anchored to the workflow's required backend instead of selecting an
+  unrelated ready runtime such as `candle`. Workflow preflight and workflow
+  run now both block on those restart-time redistributable failures.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

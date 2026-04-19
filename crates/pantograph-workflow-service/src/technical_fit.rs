@@ -2,9 +2,9 @@ use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
-    evaluate_runtime_preflight, validate_workflow_id, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowRuntimeCapability, WorkflowRuntimeIssue, WorkflowRuntimeRequirements, WorkflowService,
-    WorkflowServiceError,
+    evaluate_runtime_preflight, runtime_issue_for_capability, validate_workflow_id, WorkflowHost,
+    WorkflowHostCapabilities, WorkflowRuntimeCapability, WorkflowRuntimeIssue,
+    WorkflowRuntimeRequirements, WorkflowService, WorkflowServiceError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -371,6 +371,19 @@ fn workflow_runtime_preflight_from_decision(
 
     let mut runtime_warnings = Vec::new();
     let mut blocking_runtime_issues = Vec::new();
+
+    if let Some(runtime) = runtime.as_ref() {
+        if !(runtime.available && runtime.configured) {
+            let issue = runtime_issue_for_capability(runtime, &required_backend_key);
+            runtime_warnings.push(issue.clone());
+            blocking_runtime_issues.push(issue);
+            return WorkflowRuntimePreflightAssessment {
+                technical_fit_decision: Some(decision),
+                runtime_warnings,
+                blocking_runtime_issues,
+            };
+        }
+    }
 
     if decision.selected_runtime_id.is_some() {
         if decision.selection_mode == WorkflowTechnicalFitSelectionMode::ConservativeFallback

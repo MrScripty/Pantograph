@@ -34,6 +34,7 @@ mod runtime_preflight;
 mod session_runtime;
 
 use self::runtime_preflight::collect_preflight_warnings;
+pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 
 #[cfg(test)]
@@ -4550,6 +4551,84 @@ mod tests {
                 .message
                 .contains("selected 'llama_cpp' conservatively")
         }));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capability_is_not_ready()
+    {
+        let host = PreflightHost::with_technical_fit_decision(
+            WorkflowHostCapabilities {
+                max_input_bindings: 16,
+                max_output_targets: 16,
+                max_value_bytes: 4096,
+                runtime_requirements: WorkflowRuntimeRequirements {
+                    estimated_peak_vram_mb: None,
+                    estimated_peak_ram_mb: None,
+                    estimated_min_vram_mb: None,
+                    estimated_min_ram_mb: None,
+                    estimation_confidence: "estimated".to_string(),
+                    required_models: Vec::new(),
+                    required_backends: vec!["llama_cpp".to_string()],
+                    required_extensions: Vec::new(),
+                },
+                models: Vec::new(),
+                runtime_capabilities: vec![WorkflowRuntimeCapability {
+                    runtime_id: "llama_cpp".to_string(),
+                    display_name: "llama.cpp".to_string(),
+                    install_state: WorkflowRuntimeInstallState::Installed,
+                    available: false,
+                    configured: false,
+                    can_install: false,
+                    can_remove: true,
+                    source_kind: WorkflowRuntimeSourceKind::Managed,
+                    selected: true,
+                    readiness_state: Some(WorkflowRuntimeReadinessState::Failed),
+                    selected_version: Some("b8248".to_string()),
+                    supports_external_connection: true,
+                    backend_keys: vec!["llama_cpp".to_string()],
+                    missing_files: Vec::new(),
+                    unavailable_reason: Some("validation failed".to_string()),
+                }],
+            },
+            WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selected_candidate_id: Some("llama_cpp".to_string()),
+                selected_runtime_id: Some("llama_cpp".to_string()),
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![WorkflowTechnicalFitReason::new(
+                    WorkflowTechnicalFitReasonCode::ConservativeFallback,
+                    Some("llama_cpp"),
+                )],
+            },
+        );
+        let service = WorkflowService::new();
+
+        let response = service
+            .workflow_preflight(
+                &host,
+                WorkflowPreflightRequest {
+                    workflow_id: "wf-1".to_string(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-input-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                    override_selection: None,
+                },
+            )
+            .await
+            .expect("preflight response");
+
+        assert!(!response.can_run);
+        assert_eq!(response.blocking_runtime_issues.len(), 1);
+        assert!(response.blocking_runtime_issues[0]
+            .message
+            .contains("validation failed"));
     }
 
     #[tokio::test]

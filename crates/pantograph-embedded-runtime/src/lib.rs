@@ -2220,6 +2220,57 @@ mod tests {
         }
     }
 
+    fn persist_failed_selected_runtime_version(app_data_dir: &Path, version: &str, error: &str) {
+        let install_root = app_data_dir.join("runtimes").join("llama-cpp");
+        let state = inference::ManagedRuntimePersistedState {
+            schema_version: 1,
+            runtimes: vec![inference::ManagedRuntimePersistedRuntime {
+                id: inference::ManagedBinaryId::LlamaCpp,
+                versions: vec![inference::ManagedRuntimePersistedVersion {
+                    version: version.to_string(),
+                    runtime_key: Some(inference::ManagedBinaryId::LlamaCpp.key().to_string()),
+                    platform_key: Some("linux-x86_64".to_string()),
+                    readiness_state: inference::ManagedRuntimeReadinessState::Failed,
+                    install_root: Some(install_root.display().to_string()),
+                    last_ready_at_ms: None,
+                    last_error: Some(error.to_string()),
+                }],
+                selection: inference::ManagedRuntimeSelectionState {
+                    selected_version: Some(version.to_string()),
+                    active_version: None,
+                    default_version: Some(version.to_string()),
+                },
+                active_job: None,
+                install_history: Vec::new(),
+            }],
+        };
+        inference::save_managed_runtime_state(app_data_dir, &state)
+            .expect("persist failed selected runtime state");
+    }
+
+    fn persist_interrupted_runtime_job(app_data_dir: &Path) {
+        let state = inference::ManagedRuntimePersistedState {
+            schema_version: 1,
+            runtimes: vec![inference::ManagedRuntimePersistedRuntime {
+                id: inference::ManagedBinaryId::LlamaCpp,
+                versions: Vec::new(),
+                selection: inference::ManagedRuntimeSelectionState::default(),
+                active_job: Some(inference::ManagedRuntimeJobStatus {
+                    state: inference::ManagedRuntimeJobState::Downloading,
+                    status: "Downloading".to_string(),
+                    current: 5,
+                    total: 10,
+                    resumable: true,
+                    cancellable: true,
+                    error: None,
+                }),
+                install_history: Vec::new(),
+            }],
+        };
+        inference::save_managed_runtime_state(app_data_dir, &state)
+            .expect("persist interrupted runtime job");
+    }
+
     fn write_test_workflow(root: &Path, workflow_id: &str) {
         let workflows_dir = root.join(".pantograph").join("workflows");
         std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
@@ -2332,6 +2383,22 @@ mod tests {
             serde_json::from_slice(&std::fs::read(&workflow_path).expect("read workflow"))
                 .expect("parse workflow");
         workflow_json["graph"]["nodes"][0]["data"]["description"] = serde_json::json!(description);
+        std::fs::write(
+            workflow_path,
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("rewrite workflow");
+    }
+
+    fn rewrite_test_workflow_required_backend(root: &Path, workflow_id: &str, backend_key: &str) {
+        let workflow_path = root
+            .join(".pantograph")
+            .join("workflows")
+            .join(format!("{workflow_id}.json"));
+        let mut workflow_json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&workflow_path).expect("read workflow"))
+                .expect("parse workflow");
+        workflow_json["graph"]["nodes"][0]["data"]["backend_key"] = serde_json::json!(backend_key);
         std::fs::write(
             workflow_path,
             serde_json::to_vec(&workflow_json).expect("serialize workflow"),
@@ -5409,6 +5476,170 @@ mod tests {
             .expect("candle capability");
         assert_eq!(candle.source_kind, WorkflowRuntimeSourceKind::Host);
         assert!(candle.selected);
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+        rewrite_test_workflow_required_backend(temp.path(), "runtime-text", "llama_cpp");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+        persist_failed_selected_runtime_version(&app_data_dir, "b8248", "validation failed");
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let capabilities = runtime
+            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                workflow_id: "runtime-text".to_string(),
+            })
+            .await
+            .expect("workflow capabilities");
+        assert_eq!(
+            capabilities.runtime_requirements.required_backends,
+            vec!["llama_cpp".to_string()]
+        );
+        let runtime_capability = capabilities
+            .runtime_capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "llama_cpp")
+            .expect("llama.cpp capability");
+        assert_eq!(
+            runtime_capability.readiness_state,
+            Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Failed)
+        );
+        assert!(!runtime_capability.configured);
+        assert_eq!(
+            runtime_capability.unavailable_reason.as_deref(),
+            Some("validation failed")
+        );
+
+        let preflight = runtime
+            .workflow_preflight(WorkflowPreflightRequest {
+                workflow_id: "runtime-text".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+            })
+            .await
+            .expect("workflow preflight");
+        assert!(!preflight.can_run);
+        assert!(preflight
+            .blocking_runtime_issues
+            .iter()
+            .any(|issue| issue.message.contains("validation failed")));
+
+        let error = runtime
+            .workflow_run(WorkflowRunRequest {
+                workflow_id: "runtime-text".to_string(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                run_id: Some("failed-selected-runtime".to_string()),
+            })
+            .await
+            .expect_err("workflow run should fail when selected runtime failed validation");
+        assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+        rewrite_test_workflow_required_backend(temp.path(), "runtime-text", "llama_cpp");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+        persist_interrupted_runtime_job(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let capabilities = runtime
+            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                workflow_id: "runtime-text".to_string(),
+            })
+            .await
+            .expect("workflow capabilities");
+        assert_eq!(
+            capabilities.runtime_requirements.required_backends,
+            vec!["llama_cpp".to_string()]
+        );
+        let runtime_capability = capabilities
+            .runtime_capabilities
+            .iter()
+            .find(|capability| capability.runtime_id == "llama_cpp")
+            .expect("llama.cpp capability");
+        assert_eq!(
+            runtime_capability.readiness_state,
+            Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Failed)
+        );
+        assert!(!runtime_capability.configured);
+        assert!(runtime_capability
+            .unavailable_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("reconciled during startup")));
+
+        let preflight = runtime
+            .workflow_preflight(WorkflowPreflightRequest {
+                workflow_id: "runtime-text".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+            })
+            .await
+            .expect("workflow preflight");
+        assert!(!preflight.can_run);
+        assert!(preflight
+            .blocking_runtime_issues
+            .iter()
+            .any(|issue| issue.message.contains("reconciled during startup")));
+
+        let error = runtime
+            .workflow_run(WorkflowRunRequest {
+                workflow_id: "runtime-text".to_string(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                run_id: Some("interrupted-runtime-job".to_string()),
+            })
+            .await
+            .expect_err(
+                "workflow run should fail when restart reconciles an interrupted runtime job",
+            );
+        assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
     }
 
     #[tokio::test]

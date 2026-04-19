@@ -388,9 +388,22 @@ pub fn select_runtime_technical_fit(
         );
     }
 
-    let fallback_candidate = candidates
+    let scoped_fallback_candidates = candidates
         .iter()
-        .min_by(|left, right| compare_candidate_ids(left, right));
+        .filter(|candidate| {
+            let runtime_snapshot = candidate_runtime_snapshot(candidate, &normalized);
+            candidate_matches_required_models(candidate, runtime_snapshot, &normalized)
+                && candidate_matches_required_backends(candidate, runtime_snapshot, &normalized)
+        })
+        .collect::<Vec<_>>();
+    let fallback_candidate = scoped_fallback_candidates
+        .into_iter()
+        .min_by(|left, right| compare_candidate_ids(left, right))
+        .or_else(|| {
+            candidates
+                .iter()
+                .min_by(|left, right| compare_candidate_ids(left, right))
+        });
     if fallback_candidate.is_none() {
         reasons.push(RuntimeTechnicalFitReason::new(
             RuntimeTechnicalFitReasonCode::MissingCandidateData,
@@ -1151,6 +1164,57 @@ mod tests {
         assert!(decision.reasons.iter().any(|reason| {
             reason.code == RuntimeTechnicalFitReasonCode::ConservativeFallback
                 && reason.candidate_id.as_deref() == Some("runtime-a")
+        }));
+    }
+
+    #[test]
+    fn selector_conservative_fallback_stays_with_required_backend_candidate() {
+        let decision = select_runtime_technical_fit(&RuntimeTechnicalFitRequest {
+            runtime_snapshot: empty_snapshot(),
+            workflow_id: Some("workflow-a".to_string()),
+            required_model_ids: Vec::new(),
+            required_backend_keys: vec!["llama_cpp".to_string()],
+            required_extensions: Vec::new(),
+            required_context_window_tokens: None,
+            override_selection: None,
+            legal_factors: RuntimeTechnicalFitFactor::all().to_vec(),
+            candidates: vec![
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "candle".to_string(),
+                    runtime_id: Some("candle".to_string()),
+                    backend_key: Some("candle".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
+                    warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
+                    supports_runtime_requirements: true,
+                },
+                RuntimeTechnicalFitCandidate {
+                    candidate_id: "llama_cpp".to_string(),
+                    runtime_id: Some("llama_cpp".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    model_id: None,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::RuntimeCapabilityFallback,
+                    context_window_tokens: Some(8192),
+                    residency_state: Some(RuntimeTechnicalFitResidencyState::Unloaded),
+                    warmup_state: None,
+                    supports_runtime_requirements: false,
+                },
+            ],
+            resource_pressure: None,
+        });
+
+        assert_eq!(
+            decision.selection_mode,
+            RuntimeTechnicalFitSelectionMode::ConservativeFallback
+        );
+        assert_eq!(decision.selected_candidate_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(decision.selected_runtime_id.as_deref(), Some("llama_cpp"));
+        assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
+        assert!(decision.reasons.iter().any(|reason| {
+            reason.code == RuntimeTechnicalFitReasonCode::ConservativeFallback
+                && reason.candidate_id.as_deref() == Some("llama_cpp")
         }));
     }
 

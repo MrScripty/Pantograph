@@ -504,20 +504,96 @@ fn snapshot_from_capability(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_else(|| vec![version_status_for_capability(app_data_dir, capability)]);
+    let readiness_state = projected_snapshot_readiness_state(capability, persisted_runtime);
+    let available = projected_snapshot_available(capability, readiness_state);
+    let unavailable_reason = projected_snapshot_unavailable_reason(capability, persisted_runtime);
 
     ManagedRuntimeSnapshot {
         id: capability.id,
         display_name: capability.display_name.clone(),
         install_state: capability.install_state,
-        readiness_state: readiness_state_for_capability(capability),
-        available: capability.available,
+        readiness_state,
+        available,
         can_install: capability.can_install,
         can_remove: capability.can_remove,
         missing_files: capability.missing_files.clone(),
-        unavailable_reason: capability.unavailable_reason.clone(),
+        unavailable_reason,
         versions,
         selection,
         active_job,
+    }
+}
+
+fn projected_snapshot_readiness_state(
+    capability: &ManagedBinaryCapability,
+    persisted_runtime: Option<&ManagedRuntimePersistedRuntime>,
+) -> ManagedRuntimeReadinessState {
+    let Some(runtime) = persisted_runtime else {
+        return readiness_state_for_capability(capability);
+    };
+
+    if let Some(selected_version) = runtime.selection.selected_version.as_deref() {
+        if let Some(version) = runtime
+            .versions
+            .iter()
+            .find(|version| version.version == selected_version)
+        {
+            return version.readiness_state;
+        }
+
+        return match capability.install_state {
+            ManagedBinaryInstallState::Unsupported => ManagedRuntimeReadinessState::Unsupported,
+            _ => ManagedRuntimeReadinessState::Missing,
+        };
+    }
+
+    runtime
+        .active_job
+        .as_ref()
+        .map(|job| job_readiness_state(job.state))
+        .unwrap_or_else(|| readiness_state_for_capability(capability))
+}
+
+fn projected_snapshot_available(
+    capability: &ManagedBinaryCapability,
+    readiness_state: ManagedRuntimeReadinessState,
+) -> bool {
+    capability.available && readiness_state == ManagedRuntimeReadinessState::Ready
+}
+
+fn projected_snapshot_unavailable_reason(
+    capability: &ManagedBinaryCapability,
+    persisted_runtime: Option<&ManagedRuntimePersistedRuntime>,
+) -> Option<String> {
+    if let Some(reason) = capability
+        .unavailable_reason
+        .as_ref()
+        .filter(|reason| !reason.trim().is_empty())
+    {
+        return Some(reason.clone());
+    }
+
+    let runtime = persisted_runtime?;
+    let selected_version = runtime.selection.selected_version.as_deref()?;
+    runtime
+        .versions
+        .iter()
+        .find(|version| version.version == selected_version)
+        .and_then(|version| version.last_error.clone())
+        .filter(|reason| !reason.trim().is_empty())
+}
+
+fn job_readiness_state(state: ManagedRuntimeJobState) -> ManagedRuntimeReadinessState {
+    match state {
+        ManagedRuntimeJobState::Queued | ManagedRuntimeJobState::Downloading => {
+            ManagedRuntimeReadinessState::Downloading
+        }
+        ManagedRuntimeJobState::Extracting => ManagedRuntimeReadinessState::Extracting,
+        ManagedRuntimeJobState::Validating => ManagedRuntimeReadinessState::Validating,
+        ManagedRuntimeJobState::Ready => ManagedRuntimeReadinessState::Ready,
+        ManagedRuntimeJobState::Failed
+        | ManagedRuntimeJobState::Paused
+        | ManagedRuntimeJobState::Cancelled => ManagedRuntimeReadinessState::Failed,
     }
 }
 
@@ -849,15 +925,17 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        binary_capability, ensure_runtime_state_entry, persist_install_success,
+        binary_capability, definition, ensure_runtime_state_entry, persist_install_success,
         persist_remove_success, readiness_state_for_capability, resolve_runtime_install_dir,
         runtime_install_dir_for_projection, select_managed_runtime_version,
         set_default_managed_runtime_version, snapshot_from_capability, ManagedBinaryCapability,
-        ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeReadinessState,
+        ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
+        ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
     };
     use crate::managed_runtime::{
         load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimePersistedVersion,
     };
+    use std::path::Path;
 
     fn capability(install_state: ManagedBinaryInstallState) -> ManagedBinaryCapability {
         ManagedBinaryCapability {
@@ -873,6 +951,18 @@ mod tests {
             missing_files: Vec::new(),
             unavailable_reason: None,
         }
+    }
+
+    fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {
+        std::fs::create_dir_all(dir).expect("create runtime dir");
+        for file_name in definition(id).validate_installation(dir) {
+            std::fs::write(dir.join(&file_name), [])
+                .unwrap_or_else(|_| panic!("write fake runtime file {file_name}"));
+        }
+        assert!(
+            definition(id).validate_installation(dir).is_empty(),
+            "fake runtime files should satisfy install validation"
+        );
     }
 
     #[test]
@@ -1168,5 +1258,78 @@ mod tests {
             binary_capability(temp_dir.path(), ManagedBinaryId::LlamaCpp).expect("read capability");
 
         assert_eq!(capability.install_state, ManagedBinaryInstallState::Missing);
+    }
+
+    #[test]
+    fn managed_runtime_snapshot_uses_selected_version_failed_readiness() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+        install_fake_runtime_files(&install_dir, ManagedBinaryId::LlamaCpp);
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.selection.selected_version = Some("b8248".to_string());
+        runtime.selection.default_version = Some("b8248".to_string());
+        runtime.versions.push(ManagedRuntimePersistedVersion {
+            version: "b8248".to_string(),
+            runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+            platform_key: Some("linux-x86_64".to_string()),
+            readiness_state: ManagedRuntimeReadinessState::Failed,
+            install_root: Some(install_dir.display().to_string()),
+            last_ready_at_ms: None,
+            last_error: Some("validation failed".to_string()),
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let snapshot = crate::managed_runtime::managed_runtime_snapshot(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+        )
+        .expect("managed runtime snapshot");
+
+        assert_eq!(
+            snapshot.readiness_state,
+            ManagedRuntimeReadinessState::Failed
+        );
+        assert!(!snapshot.available);
+        assert_eq!(
+            snapshot.unavailable_reason.as_deref(),
+            Some("validation failed")
+        );
+    }
+
+    #[test]
+    fn managed_runtime_snapshot_uses_reconciled_interrupted_job_readiness() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp");
+        install_fake_runtime_files(&install_dir, ManagedBinaryId::LlamaCpp);
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Downloading,
+            status: "Downloading b8248".to_string(),
+            current: 5,
+            total: 10,
+            resumable: true,
+            cancellable: true,
+            error: None,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let snapshot = crate::managed_runtime::managed_runtime_snapshot(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+        )
+        .expect("managed runtime snapshot");
+
+        assert_eq!(
+            snapshot.readiness_state,
+            ManagedRuntimeReadinessState::Failed
+        );
+        assert!(!snapshot.available);
+        let active_job = snapshot.active_job.expect("reconciled active job");
+        assert_eq!(active_job.state, ManagedRuntimeJobState::Failed);
+        assert_eq!(active_job.status, "Interrupted before completion");
     }
 }

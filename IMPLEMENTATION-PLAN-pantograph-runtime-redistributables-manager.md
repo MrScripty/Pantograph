@@ -382,13 +382,13 @@ not only displayed in the GUI.
   substantial new redistributable policy there
 - [x] Extend workflow runtime capability and preflight projection to expose
   selected version, readiness phase, and actionable failure reasons
-- [ ] Block workflow start, resume, and restore paths when required
+- [x] Block workflow start, resume, and restore paths when required
   redistributables are missing, paused, failed, or not ready
-- [ ] Ensure scheduler/runtime restore paths observe the same backend
+- [x] Ensure scheduler/runtime restore paths observe the same backend
   redistributable readiness contract instead of bypassing it
-- [ ] Add replay/recovery coverage for workflows encountering interrupted
+- [x] Add replay/recovery coverage for workflows encountering interrupted
   runtime installs or post-restart validation failures
-- [ ] Refactor immediate touched workflow-service or embedded-runtime modules
+- [x] Refactor immediate touched workflow-service or embedded-runtime modules
   to keep state-machine ownership single-owner and backend-owned
 
 **Verification:**
@@ -397,7 +397,7 @@ not only displayed in the GUI.
 - Replay/recovery/idempotency tests for restart and interrupted install cases
 - `cargo check --workspace`
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 5: Thin Tauri Commands And Runtime Manager View Contract
 
@@ -545,6 +545,12 @@ Update during implementation:
   `runtime_loaded` session state before teardown so the next keep-alive run
   re-enters the shared backend preflight/load boundary instead of trusting
   stale residency state after a stop or restart.
+- 2026-04-19: Milestone 4 slice 7 now projects persisted selected-version
+  failure state and startup-reconciled interrupted install jobs into the
+  backend managed-runtime snapshot, keeps conservative technical-fit fallback
+  anchored to the workflow's required backend, and adds restart-path coverage
+  proving preflight and workflow run block when `llama.cpp` is failed after
+  restart instead of silently falling back to an unrelated ready runtime.
 
 ## Commit Cadence Notes
 

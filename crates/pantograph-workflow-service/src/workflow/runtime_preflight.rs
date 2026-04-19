@@ -71,12 +71,7 @@ pub fn evaluate_runtime_preflight(
             continue;
         }
 
-        let issue = WorkflowRuntimeIssue {
-            runtime_id: runtime.runtime_id.clone(),
-            display_name: runtime.display_name.clone(),
-            required_backend_key: required_backend_key.to_string(),
-            message: describe_runtime_issue(runtime, required_backend_key),
-        };
+        let issue = runtime_issue_for_capability(runtime, required_backend_key);
         runtime_warnings.push(issue.clone());
         blocking_runtime_issues.push(issue);
     }
@@ -92,6 +87,18 @@ pub fn format_runtime_not_ready_message(issues: &[WorkflowRuntimeIssue]) -> Stri
         .map(|issue| issue.message.as_str())
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+pub(crate) fn runtime_issue_for_capability(
+    runtime: &WorkflowRuntimeCapability,
+    required_backend_key: &str,
+) -> WorkflowRuntimeIssue {
+    WorkflowRuntimeIssue {
+        runtime_id: runtime.runtime_id.clone(),
+        display_name: runtime.display_name.clone(),
+        required_backend_key: required_backend_key.to_string(),
+        message: describe_runtime_issue(runtime, required_backend_key),
+    }
 }
 
 fn dedup_runtime_issues(issues: &mut Vec<WorkflowRuntimeIssue>) {
