@@ -13,6 +13,7 @@ transport details.
 | `diagnostics/` | Diagnostics-domain service boundary for workflow trace accumulation and inspection snapshots. |
 | `agent/` | Agent-facing orchestration helpers that keep prompt/tool flows out of the component tree. |
 | `architecture/` | Services that translate architecture data into app-facing graph behavior. |
+| `managedRuntime/` | Thin app-facing service boundary for backend-owned managed-runtime manager contracts and progress events. |
 | `LLMService.ts` | App-facing service for model/runtime interactions that do not belong in UI components. |
 
 ## Problem

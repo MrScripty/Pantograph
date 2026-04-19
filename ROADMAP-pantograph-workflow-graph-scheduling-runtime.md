@@ -191,6 +191,10 @@ reconciled as the final source of truth.
   `pantograph-embedded-runtime`, so Tauri no longer reaches directly into
   `inference` install/remove/list helpers for the current list/install/remove/
   select/default/inspect command surface.
+- The GUI now consumes that managed-runtime contract through a dedicated
+  `src/services/managedRuntime` service boundary instead of redefining partial
+  redistributable payloads inside Svelte components, keeping frontend runtime
+  state projection thin and aligned to the backend-owned manager view.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

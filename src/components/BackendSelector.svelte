@@ -1,9 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { invoke, Channel } from '@tauri-apps/api/core';
+  import { invoke } from '@tauri-apps/api/core';
   import Modal from '../templates/Modal.svelte';
   import { ConfigService, type ServerModeInfo } from '../services/ConfigService';
   import { LLMService } from '../services/LLMService';
+  import {
+    managedRuntimeService,
+    type ManagedRuntimeManagerRuntimeView,
+    type ManagedRuntimeProgress
+  } from '../services/managedRuntime';
 
   interface BackendCapabilities {
     vision: boolean;
@@ -27,25 +32,6 @@
     runtime_binary_id: 'llama_cpp' | 'ollama' | null;
   }
 
-  interface ManagedRuntimeCapability {
-    id: 'llama_cpp' | 'ollama';
-    display_name: string;
-    install_state: 'installed' | 'system_provided' | 'missing' | 'unsupported';
-    available: boolean;
-    can_install: boolean;
-    can_remove: boolean;
-    missing_files: string[];
-    unavailable_reason: string | null;
-  }
-
-  interface DownloadProgress {
-    status: string;
-    current: number;
-    total: number;
-    done: boolean;
-    error: string | null;
-  }
-
   // Download sizes for confirmation dialog
   const DOWNLOAD_SIZES: Record<string, string> = {
     llama_cpp: '~60 MB',
@@ -53,7 +39,7 @@
   };
 
   let backends: BackendInfo[] = $state([]);
-  let runtimes: ManagedRuntimeCapability[] = $state([]);
+  let runtimes: ManagedRuntimeManagerRuntimeView[] = $state([]);
   let currentBackendKey: string = $state('');
   let isLoading = $state(false);
   let isSwitching = $state(false);
@@ -62,7 +48,7 @@
 
   // Download state
   let downloadingBackend: string | null = $state(null);
-  let downloadProgress: DownloadProgress | null = $state(null);
+  let downloadProgress: ManagedRuntimeProgress | null = $state(null);
 
   // LLM status subscription
   let unsubscribe: (() => void) | null = null;
@@ -75,7 +61,7 @@
     error = null;
     try {
       backends = await invoke<BackendInfo[]>('list_backends');
-      runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
+      runtimes = await managedRuntimeService.listRuntimes();
       const status = await LLMService.refreshStatus();
       currentBackendKey = status.backend_key || '';
     } catch (e) {
@@ -151,8 +137,11 @@
     error = null;
 
     try {
-      const channel = new Channel<DownloadProgress>();
-      channel.onmessage = (event: DownloadProgress) => {
+      if (!runtime) {
+        throw new Error(`No managed runtime is associated with ${name}`);
+      }
+
+      await managedRuntimeService.installRuntime(runtime.id, (event) => {
         downloadProgress = event;
         if (event.error) {
           error = event.error;
@@ -162,18 +151,8 @@
         if (event.done && !event.error) {
           downloadingBackend = null;
           downloadProgress = null;
-          // Reload backends to update availability
-          loadBackends();
+          void loadBackends();
         }
-      };
-
-      if (!runtime) {
-        throw new Error(`No managed runtime is associated with ${name}`);
-      }
-
-      await invoke('install_managed_runtime', {
-        binaryId: runtime.id,
-        channel
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -189,7 +168,7 @@
     isSwitching = true;
     error = null;
     try {
-      await invoke('remove_managed_runtime', { binaryId: runtime.id });
+      await managedRuntimeService.removeRuntime(runtime.id);
       await loadBackends();
     } catch (e) {
       error = String(e);
@@ -229,7 +208,7 @@
     if (unsubscribe) unsubscribe();
   });
 
-  const runtimeForBackend = (backend: BackendInfo): ManagedRuntimeCapability | undefined => {
+  const runtimeForBackend = (backend: BackendInfo): ManagedRuntimeManagerRuntimeView | undefined => {
     if (!backend.runtime_binary_id) return undefined;
     return runtimes.find((runtime) => runtime.id === backend.runtime_binary_id);
   };

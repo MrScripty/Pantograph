@@ -408,7 +408,7 @@ core logic into Tauri.
 - [ ] Replace command-level binary-specific logic with thin transport commands
   that call backend-owned services for list, install, pause, resume, cancel,
   remove, select-version, and inspect-history
-- [ ] Define a GUI view contract for available versions, installed versions,
+- [x] Define a GUI view contract for available versions, installed versions,
   selected/default/active status, job progress, readiness, and error state
 - [ ] Ensure the GUI can render resumable/pausable download progress and
   install history without becoming the state owner
@@ -417,7 +417,7 @@ core logic into Tauri.
   document why an event-driven path was not feasible
 - [ ] Ensure workflows surface readiness failures and install progress through
   existing diagnostics/event boundaries rather than ad hoc GUI polling rules
-- [ ] Replace the non-compliant placeholder content in
+- [x] Replace the non-compliant placeholder content in
   `src-tauri/src/llm/commands/README.md` and update any touched
   frontend-adjacent README files so their adapter-only role remains explicit
 
@@ -558,6 +558,11 @@ Update during implementation:
   `src-tauri/src/llm/commands/README.md` text with an explicit adapter-boundary
   description. Pause/resume/cancel and event-driven progress follow-up remain
   open inside Milestone 5.
+- 2026-04-19: Milestone 5 slice 2 added a dedicated
+  `src/services/managedRuntime` frontend service boundary that mirrors the
+  backend-owned managed-runtime manager contract, moved current Svelte callers
+  off duplicated local runtime DTOs, and documented that the GUI consumes
+  backend snapshots/progress without becoming the policy owner.
 
 ## Commit Cadence Notes
 

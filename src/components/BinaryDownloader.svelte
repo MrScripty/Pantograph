@@ -1,44 +1,44 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoke, Channel } from '@tauri-apps/api/core';
+  import {
+    managedRuntimeService,
+    type ManagedRuntimeManagerRuntimeView,
+    type ManagedRuntimeProgress
+  } from '../services/managedRuntime';
 
-  interface ManagedRuntimeCapability {
-    id: 'llama_cpp' | 'ollama';
-    display_name: string;
-    install_state: 'installed' | 'system_provided' | 'missing' | 'unsupported';
-    available: boolean;
-    can_install: boolean;
-    can_remove: boolean;
-    missing_files: string[];
-    unavailable_reason: string | null;
-  }
-
-  interface DownloadProgress {
-    status: string;
-    current: number;
-    total: number;
-    done: boolean;
-    error: string | null;
-  }
-
-  let status: ManagedRuntimeCapability = $state({
+  let status: ManagedRuntimeManagerRuntimeView = $state({
     id: 'llama_cpp',
     display_name: 'llama.cpp',
     install_state: 'installed',
+    readiness_state: 'ready',
     available: true,
     can_install: false,
     can_remove: false,
     missing_files: [],
-    unavailable_reason: null
+    unavailable_reason: null,
+    versions: [],
+    selection: {
+      selected_version: null,
+      active_version: null,
+      default_version: null
+    },
+    active_job: null,
+    install_history: []
   });
   let downloading = $state(false);
-  let progress: DownloadProgress = $state({ status: '', current: 0, total: 0, done: false, error: null });
+  let progress: ManagedRuntimeProgress = $state({
+    runtime_id: 'llama_cpp',
+    status: '',
+    current: 0,
+    total: 0,
+    done: false,
+    error: null
+  });
   let error: string | null = $state(null);
 
   onMount(async () => {
     try {
-      const runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
-      status = runtimes.find((runtime) => runtime.id === 'llama_cpp') ?? status;
+      status = await managedRuntimeService.inspectRuntime('llama_cpp');
     } catch (e) {
       console.error('Failed to check binary status:', e);
     }
@@ -47,11 +47,17 @@
   async function download() {
     downloading = true;
     error = null;
-    progress = { status: 'Starting download...', current: 0, total: 0, done: false, error: null };
+    progress = {
+      runtime_id: 'llama_cpp',
+      status: 'Starting download...',
+      current: 0,
+      total: 0,
+      done: false,
+      error: null
+    };
 
     try {
-      const channel = new Channel<DownloadProgress>();
-      channel.onmessage = (event: DownloadProgress) => {
+      await managedRuntimeService.installRuntime('llama_cpp', async (event) => {
         progress = event;
         if (event.error) {
           error = event.error;
@@ -59,12 +65,9 @@
         }
         if (event.done && !event.error) {
           downloading = false;
-          const runtimes = await invoke<ManagedRuntimeCapability[]>('list_managed_runtimes');
-          status = runtimes.find((runtime) => runtime.id === 'llama_cpp') ?? status;
+          status = await managedRuntimeService.inspectRuntime('llama_cpp');
         }
-      };
-
-      await invoke('install_managed_runtime', { binaryId: 'llama_cpp', channel });
+      });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       downloading = false;
