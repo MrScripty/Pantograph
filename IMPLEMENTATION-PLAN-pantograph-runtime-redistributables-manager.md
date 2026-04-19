@@ -523,6 +523,10 @@ Update during implementation:
   selected-version fields, and updated workflow preflight/runtime issue
   shaping to consume that contract directly so diagnostics and execution see
   the same selected-version readiness context.
+- 2026-04-19: Milestone 4 slice 3 routed keep-alive session creation and
+  keep-alive re-enable through the same backend session preflight contract
+  before runtime load, so those session-residency entry points no longer
+  bypass runtime-readiness enforcement.
 
 ## Commit Cadence Notes
 

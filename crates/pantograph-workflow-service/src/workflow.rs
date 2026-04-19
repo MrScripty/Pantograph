@@ -1016,15 +1016,9 @@ impl WorkflowService {
 
         if request.keep_alive {
             if let Err(error) = self
-                .refresh_session_runtime_affinity_basis(host, &session_id, &request.workflow_id)
+                .ensure_keep_alive_session_runtime_ready(host, &session_id, &request.workflow_id)
                 .await
             {
-                if let Ok(mut rollback_store) = self.session_store.lock() {
-                    let _ = rollback_store.close_session(&session_id);
-                }
-                return Err(error);
-            }
-            if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
                 if let Ok(mut rollback_store) = self.session_store.lock() {
                     let _ = rollback_store.close_session(&session_id);
                 }
@@ -1468,10 +1462,15 @@ impl WorkflowService {
                 })?;
                 store.session_summary(&session_id)?.workflow_id
             };
-            self.refresh_session_runtime_affinity_basis(host, &session_id, &workflow_id)
-                .await?;
-            self.ensure_session_runtime_loaded(host, &session_id)
-                .await?;
+            if let Err(error) = self
+                .ensure_keep_alive_session_runtime_ready(host, &session_id, &workflow_id)
+                .await
+            {
+                if let Ok(mut rollback_store) = self.session_store.lock() {
+                    let _ = rollback_store.set_keep_alive(&session_id, false);
+                }
+                return Err(error);
+            }
         }
 
         let state = {
@@ -5783,6 +5782,102 @@ mod tests {
             "override changes should invalidate cached preflight"
         );
         assert_eq!(runtime_capabilities_calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn keep_alive_session_create_blocks_when_runtime_preflight_fails() {
+        let host = MockWorkflowHost::with_technical_fit_decision(
+            8,
+            1024,
+            WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selected_candidate_id: None,
+                selected_runtime_id: None,
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![WorkflowTechnicalFitReason::new(
+                    WorkflowTechnicalFitReasonCode::MissingRuntimeState,
+                    None,
+                )],
+            },
+        );
+        let service = WorkflowService::with_max_sessions(1);
+
+        let err = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect_err("keep-alive session create should fail when runtime preflight blocks");
+
+        assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+        assert_eq!(
+            service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned")
+                .active
+                .len(),
+            0,
+            "failed keep-alive create should roll back session creation"
+        );
+    }
+
+    #[tokio::test]
+    async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
+        let host = MockWorkflowHost::with_technical_fit_decision(
+            8,
+            1024,
+            WorkflowTechnicalFitDecision {
+                selection_mode: WorkflowTechnicalFitSelectionMode::ConservativeFallback,
+                selected_candidate_id: None,
+                selected_runtime_id: None,
+                selected_backend_key: Some("llama_cpp".to_string()),
+                selected_model_id: None,
+                reasons: vec![WorkflowTechnicalFitReason::new(
+                    WorkflowTechnicalFitReasonCode::MissingRuntimeState,
+                    None,
+                )],
+            },
+        );
+        let service = WorkflowService::with_max_sessions(1);
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create unloaded session");
+
+        let err = service
+            .workflow_set_session_keep_alive(
+                &host,
+                WorkflowSessionKeepAliveRequest {
+                    session_id: created.session_id.clone(),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect_err("keep-alive enable should fail when runtime preflight blocks");
+
+        assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+        let summary = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned")
+            .session_summary(&created.session_id)
+            .expect("session summary after failed keep-alive enable");
+        assert_eq!(summary.state, WorkflowSessionState::IdleUnloaded);
+        assert!(!summary.keep_alive);
     }
 
     #[tokio::test]

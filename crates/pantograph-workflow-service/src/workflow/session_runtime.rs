@@ -169,6 +169,25 @@ impl WorkflowService {
         Ok(cache)
     }
 
+    pub(super) async fn ensure_keep_alive_session_runtime_ready<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session_id: &str,
+        workflow_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        self.refresh_session_runtime_affinity_basis(host, session_id, workflow_id)
+            .await?;
+        let cache = self
+            .ensure_session_runtime_preflight(host, session_id, workflow_id, None)
+            .await?;
+        if !cache.blocking_runtime_issues.is_empty() {
+            return Err(WorkflowServiceError::RuntimeNotReady(
+                super::format_runtime_not_ready_message(&cache.blocking_runtime_issues),
+            ));
+        }
+        self.ensure_session_runtime_loaded(host, session_id).await
+    }
+
     pub(super) async fn refresh_session_runtime_affinity_basis<H: WorkflowHost>(
         &self,
         host: &H,

@@ -164,6 +164,10 @@ reconciled as the final source of truth.
   focused backend modules under `crates/pantograph-workflow-service/src/workflow/`,
   reducing redistributable policy drift inside the large `workflow.rs`
   service file.
+- Keep-alive session creation and keep-alive re-enable now route through the
+  same backend session preflight contract before runtime load, closing an
+  earlier gap where those session-residency paths could bypass readiness
+  enforcement that already protected normal session runs.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.
