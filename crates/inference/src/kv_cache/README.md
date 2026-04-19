@@ -55,12 +55,18 @@ artifacts, but the inference KV store remains the single cache owner.
   fresh `kv_cache_out` artifacts through the shared KV store contract. Broader
   workflow-session and partial-rerun reuse still belongs to later roadmap
   slices.
+- Structured KV execution diagnostics are emitted from backend execution paths
+  and flow through workflow trace plus diagnostics transport as additive facts.
+  This directory still owns only artifact/compatibility contracts; it does not
+  own adapter-local formatting or reuse-policy decisions.
 - `node-engine` owns execution-path behavior for KV save/load/truncate nodes.
 - Workflow-node descriptor code may describe KV ports, but it must not become a
   parallel KV execution owner.
 - `KvCacheStore::load_for_execution` and `KvCacheStore::load_handle` are the
   backend-owned executable-reuse gates. They enforce the same model/runtime
   compatibility rules used by both load-time validation and live restore.
+- Runtime-requirement and diagnostics consumers should refer to the canonical
+  `kv_cache` extension name when describing this capability.
 - `KvCacheStore::prune_to_max_entries` provides explicit oldest-first bounded
   retention semantics for the real store. Workflow/session layers may request
   pruning, but they must not reimplement their own cache-eviction policy.

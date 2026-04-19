@@ -14,13 +14,16 @@ logic into frontend, transport, or descriptor crates.
 
 | File | Responsibility |
 | --- | --- |
-| `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp KV restore/capture helpers used by `CoreTaskExecutor`. |
+| `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 
 ## Ownership Rules
 
 - Keep node execution behavior in `node-engine`.
 - Descriptor crates such as `workflow-nodes` may declare metadata and ports, but
   they must not become a second execution owner.
+- Structured execution diagnostics emitted here are backend facts. Tauri and
+  frontend layers may forward them, but they must not reinterpret them into a
+  second reuse-policy owner.
 - Grow the `CoreTaskExecutor` facade additively by extracting focused helper
   modules when a handler family becomes large enough to warrant its own local
   boundary.

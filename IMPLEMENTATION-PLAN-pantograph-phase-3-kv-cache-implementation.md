@@ -391,16 +391,16 @@ phase documentation.
       KV usage declare the `kv_cache` extension requirement.
 - [x] Ensure diagnostics and preflight consumers use the same canonical
       extension and compatibility contract.
-- [ ] Reconcile the roadmap so Phase 3 status and milestone wording match the
+- [x] Reconcile the roadmap so Phase 3 status and milestone wording match the
       landed implementation.
-- [ ] Close the plan with a completion summary and touched README updates.
+- [x] Close the plan with a completion summary and touched README updates.
 
 **Verification:**
 - Focused diagnostics tests for stable machine-consumable KV fields
 - Preflight/runtime-requirement tests for `kv_cache` extension shaping
 - Source-of-truth review for roadmap, plan, and touched READMEs
 
-**Status:** In progress
+**Status:** Complete
 
 Latest landed slice:
 - `node-engine` now emits backend-owned structured KV execution diagnostics for
@@ -526,29 +526,54 @@ Re-plan before implementation if:
 
 ### Completed
 
-- None yet.
-- Reason: This document is the initial dedicated Phase 3 implementation plan.
-- Revisit trigger: Phase 3 implementation begins.
+- Backend-owned KV artifact, handle, compatibility, and usage-mode contracts
+  are frozen in `crates/inference/src/kv_cache`.
+- KV execution ownership lives in `node-engine` through
+  `core_executor::kv_cache`, while `workflow-nodes` stays descriptor-only.
+- Workflow graphs now expose a first-class `kv_cache` port type with matching
+  validation and metadata across backend and Tauri transport surfaces.
+- llama.cpp and PyTorch `dllm` execution paths now support backend-owned KV
+  capture/restore through typed handles, with truncation delegated through
+  backend-compatible paths and explicit unsupported behavior where codecs do
+  not yet exist.
+- Workflow capability extraction and immediate diagnostics/preflight fixtures
+  now use the canonical `kv_cache` extension contract.
+- Structured KV execution diagnostics now flow from backend execution through
+  workflow trace and Tauri diagnostics without shifting reuse-policy ownership
+  into adapters.
+- The roadmap and touched module READMEs are reconciled with the landed Phase 3
+  implementation state.
+- Revisit trigger: Phase 5/Phase 6 session-memory and partial-rerun work
+  begins, because broader kept-alive reuse still belongs there.
 
 ### Deviations
 
-- None yet.
-- Reason: No implementation has started under this plan.
-- Revisit trigger: Any milestone or sequencing change during execution.
+- Milestone 5 remains intentionally open.
+- Reason: workflow-session KV reuse, partial reruns, and checkpoint ownership
+  depend on the broader Phase 6 incremental-execution/session-memory design and
+  were not folded prematurely into the per-node KV execution slice.
+- Revisit trigger: when the next Phase 6 memory/persistence slice lands.
 
 ### Follow-Ups
 
-- Reconcile the roadmap summary/status wording to match this plan before or in
-  the first implementation slice.
+- Implement Phase 6 workflow-session/node-memory semantics so kept-alive runs,
+  graph edits, and selective input reinjection can reuse compatible KV
+  artifacts without turning the frontend into a lifecycle owner.
+- Return to Phase 3 Milestone 5 once those Phase 6 ownership boundaries are
+  concrete.
 
 ### Verification Summary
 
-- Planning pass only: source inspection plus standards review across planning,
-  architecture, coding, concurrency, testing, documentation, dependency,
-  frontend, and interop standards.
+- `cargo test -p node-engine events::tests -- --nocapture`
+- `cargo test -p pantograph-workflow-service trace::tests -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml translated_task_progress_detail_updates_backend_diagnostics_projection -- --nocapture`
+- `cargo test --manifest-path src-tauri/Cargo.toml node_progress_detail_is_exposed_in_diagnostics_snapshot -- --nocapture`
 
 ### Traceability Links
 
-- Module README updated: N/A yet
-- ADR added/updated: N/A yet
-- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A yet
+- Module README updated:
+  `crates/inference/src/kv_cache/README.md`,
+  `crates/node-engine/src/core_executor/README.md`
+- ADR added/updated: none
+- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: not applicable in
+  local repository history
