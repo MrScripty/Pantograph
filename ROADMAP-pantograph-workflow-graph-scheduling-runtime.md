@@ -233,10 +233,12 @@ reconciled as the final source of truth.
   through the same backend event boundary instead of a GUI-only redistributable
   polling contract. The frontend-managed-runtime service now also owns a
   shared app-local snapshot cache that fans backend progress and post-action
-  runtime views out to multiple GUI surfaces, so the remaining Milestone 5
-  work is limited to auditing/documenting residual `list_backends`
-  capability-refresh polling or replacing that final narrow path with an
-  event-driven projection later.
+  runtime views out to multiple GUI surfaces, and the backend selector now
+  projects managed-runtime availability/installability directly from that
+  shared snapshot instead of reloading backend capability state after each
+  runtime transition. Milestone 5 is therefore functionally down to closeout
+  and any optional broader reuse follow-ons rather than unresolved GUI polling
+  gaps in the current redistributable surfaces.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

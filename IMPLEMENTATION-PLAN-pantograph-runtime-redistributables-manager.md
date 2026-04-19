@@ -412,7 +412,7 @@ core logic into Tauri.
   selected/default/active status, job progress, readiness, and error state
 - [x] Ensure the GUI can render resumable/pausable download progress,
   retained-artifact state, and install history without becoming the state owner
-- [ ] Prefer backend event/subscription projection for job progress and state
+- [x] Prefer backend event/subscription projection for job progress and state
   changes; if polling remains necessary anywhere, scope it narrowly and
   document why an event-driven path was not feasible
 - [x] Ensure workflows surface readiness failures and install progress through
@@ -621,6 +621,13 @@ Update during implementation:
   The remaining Milestone 5 gap is narrower still: only backend capability
   refresh paths that still rely on `list_backends` need audit/documentation or
   a later event-driven replacement.
+- 2026-04-19: Milestone 5 slice 12 removes the remaining post-action
+  `list_backends` refresh dependency from the current backend selector by
+  projecting backend-owned managed-runtime availability/installability fields
+  from the shared runtime snapshot cache. Initial catalog load still reads the
+  backend list once, but subsequent managed-runtime transitions no longer need
+  a GUI-triggered capability polling loop, so the Milestone 5 event-driven
+  projection task is now complete for the current redistributable surfaces.
 
 ## Commit Cadence Notes
 

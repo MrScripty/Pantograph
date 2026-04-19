@@ -58,12 +58,37 @@
   // Confirmation dialog state
   let confirmDownload: BackendInfo | null = $state(null);
 
+  const projectManagedRuntimeBackends = (
+    nextBackends: BackendInfo[],
+    runtimeViews: ManagedRuntimeManagerRuntimeView[]
+  ): BackendInfo[] =>
+    nextBackends.map((backend) => {
+      if (!backend.runtime_binary_id) {
+        return backend;
+      }
+
+      const runtime = runtimeViews.find(
+        (candidate) => candidate.id === backend.runtime_binary_id
+      );
+      if (!runtime) {
+        return backend;
+      }
+
+      return {
+        ...backend,
+        available: runtime.available,
+        can_install: runtime.can_install,
+        unavailable_reason: runtime.unavailable_reason
+      };
+    });
+
   const loadBackends = async () => {
     isLoading = true;
     error = null;
     try {
-      backends = await invoke<BackendInfo[]>('list_backends');
-      await managedRuntimeService.listRuntimes();
+      const runtimeViews = await managedRuntimeService.listRuntimes();
+      const backendViews = await invoke<BackendInfo[]>('list_backends');
+      backends = projectManagedRuntimeBackends(backendViews, runtimeViews);
       const status = await LLMService.refreshStatus();
       currentBackendKey = status.backend_key || '';
     } catch (e) {
@@ -95,9 +120,6 @@
         error = `Auto-start failed: ${String(e)}`;
         console.warn('Auto-start failed:', e);
       }
-
-      // Reload backends to update active status
-      await loadBackends();
     } catch (e) {
       error = String(e);
       console.error('Failed to switch backend:', e);
@@ -155,7 +177,6 @@
           downloadingBackend = null;
           downloadProgress = null;
           cancellingBackend = null;
-          void loadBackends();
         }
       });
     } catch (e) {
@@ -174,7 +195,6 @@
     error = null;
     try {
       await managedRuntimeService.removeRuntime(runtime.id);
-      await loadBackends();
     } catch (e) {
       error = String(e);
     } finally {
@@ -245,6 +265,7 @@
   onMount(() => {
     managedRuntimeUnsubscribe = managedRuntimeService.subscribe((nextRuntimes) => {
       runtimes = nextRuntimes;
+      backends = projectManagedRuntimeBackends(backends, nextRuntimes);
     });
     void loadBackends();
     // Subscribe to LLM status to track when server is actually running
