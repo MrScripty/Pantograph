@@ -31,6 +31,8 @@ static TRANSITION_LOCKS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<tokio::sync::Mu
     Lazy::new(|| Mutex::new(HashMap::new()));
 static CANCELLATION_REQUESTS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<AtomicBool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+static PAUSE_REQUESTS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<AtomicBool>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ManagedRuntimeDownloadArtifact {
@@ -65,12 +67,32 @@ fn clear_cancellation_request(id: ManagedBinaryId) {
     cancellation_request(id).store(false, Ordering::SeqCst);
 }
 
+fn pause_request(id: ManagedBinaryId) -> Arc<AtomicBool> {
+    let mut requests = PAUSE_REQUESTS.lock();
+    requests
+        .entry(id)
+        .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+        .clone()
+}
+
+fn clear_pause_request(id: ManagedBinaryId) {
+    pause_request(id).store(false, Ordering::SeqCst);
+}
+
 fn request_cancellation(id: ManagedBinaryId) {
     cancellation_request(id).store(true, Ordering::SeqCst);
 }
 
+fn request_pause(id: ManagedBinaryId) {
+    pause_request(id).store(true, Ordering::SeqCst);
+}
+
 fn take_cancellation_request(id: ManagedBinaryId) -> bool {
     cancellation_request(id).swap(false, Ordering::SeqCst)
+}
+
+fn take_pause_request(id: ManagedBinaryId) -> bool {
+    pause_request(id).swap(false, Ordering::SeqCst)
 }
 
 pub async fn check_binary_status(
@@ -209,6 +231,10 @@ pub fn cancel_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Resul
             id.display_name()
         ));
     };
+    if active_job.state == ManagedRuntimeJobState::Paused && runtime.active_job_artifact.is_some() {
+        discard_retained_job_artifact(app_data_dir, id, runtime)?;
+        return Ok(());
+    }
     if !active_job.cancellable {
         return Err(format!(
             "{} does not have a cancellable managed runtime job",
@@ -217,6 +243,31 @@ pub fn cancel_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Resul
     }
 
     request_cancellation(id);
+    Ok(())
+}
+
+pub fn pause_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    let state = load_managed_runtime_state(app_data_dir)?;
+    let Some(runtime) = runtime_state_entry(&state, id) else {
+        return Err(format!(
+            "{} does not have an active managed runtime job",
+            id.display_name()
+        ));
+    };
+    let Some(active_job) = runtime.active_job.as_ref() else {
+        return Err(format!(
+            "{} does not have an active managed runtime job",
+            id.display_name()
+        ));
+    };
+    if !active_job.cancellable {
+        return Err(format!(
+            "{} does not have a pausable managed runtime job",
+            id.display_name()
+        ));
+    }
+
+    request_pause(id);
     Ok(())
 }
 
@@ -231,6 +282,7 @@ where
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
     clear_cancellation_request(id);
+    clear_pause_request(id);
     let definition = definition(id);
     let runtime_version = definition.release_version().to_string();
     if definition.system_command().is_some() {
@@ -415,11 +467,31 @@ where
                 &runtime_version,
                 downloaded,
                 total_size,
-                Some(job_artifact),
+                None,
+            )? {
+                drop(file);
+                let _ = fs::remove_file(&temp_path);
+                on_progress(DownloadProgress {
+                    status: "Cancelled".to_string(),
+                    current: downloaded,
+                    total: total_size,
+                    done: true,
+                    error: None,
+                });
+                return Ok(());
+            }
+
+            if finish_requested_pause(
+                app_data_dir,
+                id,
+                &runtime_version,
+                downloaded,
+                total_size,
+                job_artifact,
             )? {
                 drop(file);
                 on_progress(DownloadProgress {
-                    status: "Cancelled".to_string(),
+                    status: "Paused".to_string(),
                     current: downloaded,
                     total: total_size,
                     done: true,
@@ -456,10 +528,29 @@ where
         &runtime_version,
         downloaded,
         total_size,
-        Some(download_artifact.clone()),
+        None,
     )? {
+        let _ = fs::remove_file(&temp_path);
         on_progress(DownloadProgress {
             status: "Cancelled".to_string(),
+            current: downloaded,
+            total: total_size,
+            done: true,
+            error: None,
+        });
+        return Ok(());
+    }
+
+    if finish_requested_pause(
+        app_data_dir,
+        id,
+        &runtime_version,
+        downloaded,
+        total_size,
+        download_artifact.clone(),
+    )? {
+        on_progress(DownloadProgress {
+            status: "Paused".to_string(),
             current: downloaded,
             total: total_size,
             done: true,
@@ -1008,6 +1099,37 @@ fn persist_failed_job(
     save_managed_runtime_state(app_data_dir, &state)
 }
 
+fn persist_paused_job(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+    current: u64,
+    total: u64,
+    job_artifact: ManagedRuntimePersistedJobArtifact,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+    runtime.active_job = Some(ManagedRuntimeJobStatus {
+        state: ManagedRuntimeJobState::Paused,
+        status: "Paused".to_string(),
+        current,
+        total,
+        resumable: true,
+        cancellable: false,
+        error: None,
+    });
+    runtime.active_job_artifact = Some(job_artifact);
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::Paused,
+            version: Some(version.to_string()),
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some("Managed runtime install paused with retained download artifact".to_string()),
+        });
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
 fn persist_cancelled_job(
     app_data_dir: &Path,
     id: ManagedBinaryId,
@@ -1041,6 +1163,27 @@ fn persist_cancelled_job(
             }),
         });
     save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn discard_retained_job_artifact(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    runtime: &ManagedRuntimePersistedRuntime,
+) -> Result<(), String> {
+    let Some(artifact) = runtime.active_job_artifact.as_ref() else {
+        return Err(format!(
+            "{} does not have a retained managed runtime artifact",
+            id.display_name()
+        ));
+    };
+    let artifact_path = PathBuf::from(&artifact.archive_path);
+    if artifact_path.exists() {
+        let _ = fs::remove_file(&artifact_path);
+    }
+    let version = artifact.version.clone();
+    let current = artifact.downloaded_bytes;
+    let total = artifact.total_bytes;
+    persist_cancelled_job(app_data_dir, id, &version, current, total, None)
 }
 
 fn persist_install_success(
@@ -1138,6 +1281,22 @@ fn finish_requested_cancellation(
     }
 
     persist_cancelled_job(app_data_dir, id, version, current, total, job_artifact)?;
+    Ok(true)
+}
+
+fn finish_requested_pause(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+    current: u64,
+    total: u64,
+    job_artifact: ManagedRuntimePersistedJobArtifact,
+) -> Result<bool, String> {
+    if !take_pause_request(id) {
+        return Ok(false);
+    }
+
+    persist_paused_job(app_data_dir, id, version, current, total, job_artifact)?;
     Ok(true)
 }
 
@@ -1299,12 +1458,12 @@ mod tests {
     use super::{
         binary_capability, cancel_binary_download, definition, ensure_runtime_state_entry,
         download_response_mode, existing_download_artifact, finish_requested_cancellation,
-        persist_install_success, persist_remove_success, readiness_state_for_capability,
-        resolve_runtime_install_dir, runtime_install_dir_for_projection,
-        select_managed_runtime_version, set_default_managed_runtime_version,
-        snapshot_from_capability, DownloadResponseMode, ManagedBinaryCapability, ManagedBinaryId,
-        ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-        ManagedRuntimeReadinessState,
+        finish_requested_pause, pause_binary_download, persist_install_success,
+        persist_remove_success, readiness_state_for_capability, resolve_runtime_install_dir,
+        runtime_install_dir_for_projection, select_managed_runtime_version,
+        set_default_managed_runtime_version, snapshot_from_capability, DownloadResponseMode,
+        ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState,
+        ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
     };
     use crate::managed_runtime::{
         load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
@@ -1784,6 +1943,28 @@ mod tests {
     }
 
     #[test]
+    fn pause_binary_download_rejects_non_cancellable_jobs() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Extracting,
+            status: "Extracting".to_string(),
+            current: 10,
+            total: 10,
+            resumable: false,
+            cancellable: false,
+            error: None,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let error = pause_binary_download(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+            .expect_err("non-cancellable job should fail");
+
+        assert!(error.contains("does not have a pausable managed runtime job"));
+    }
+
+    #[test]
     fn finish_requested_cancellation_persists_cancelled_job_and_history() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
@@ -1824,6 +2005,114 @@ mod tests {
         assert_eq!(active_job.current, 32);
         assert_eq!(active_job.total, 64);
         assert!(runtime.active_job_artifact.is_none());
+        assert_eq!(
+            runtime
+                .install_history
+                .last()
+                .map(|entry| entry.event.clone()),
+            Some(ManagedRuntimeHistoryEventKind::Cancelled)
+        );
+    }
+
+    #[test]
+    fn finish_requested_pause_persists_paused_job_and_history() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let artifact_path = temp_dir.path().join("partial-llama.tar.gz");
+        std::fs::write(&artifact_path, vec![1_u8; 32]).expect("write retained artifact");
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Downloading,
+            status: "Downloading".to_string(),
+            current: 32,
+            total: 64,
+            resumable: true,
+            cancellable: true,
+            error: None,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        pause_binary_download(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+            .expect("request pause");
+        let paused = finish_requested_pause(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            32,
+            64,
+            ManagedRuntimePersistedJobArtifact {
+                version: "b8248".to_string(),
+                archive_name: "llama-b8248.tar.gz".to_string(),
+                archive_path: artifact_path.display().to_string(),
+                downloaded_bytes: 32,
+                total_bytes: 64,
+            },
+        )
+        .expect("finish pause");
+
+        assert!(paused);
+        let state = load_managed_runtime_state(temp_dir.path()).expect("reload runtime state");
+        let runtime = state
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+        let active_job = runtime.active_job.as_ref().expect("paused job");
+        assert_eq!(active_job.state, ManagedRuntimeJobState::Paused);
+        assert_eq!(active_job.status, "Paused");
+        assert_eq!(active_job.current, 32);
+        assert_eq!(active_job.total, 64);
+        assert!(active_job.resumable);
+        assert!(runtime.active_job_artifact.is_some());
+        assert_eq!(
+            runtime
+                .install_history
+                .last()
+                .map(|entry| entry.event.clone()),
+            Some(ManagedRuntimeHistoryEventKind::Paused)
+        );
+    }
+
+    #[test]
+    fn cancel_binary_download_discards_paused_artifact() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let artifact_path = temp_dir.path().join("partial-llama.tar.gz");
+        std::fs::write(&artifact_path, vec![1_u8; 32]).expect("write retained artifact");
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Paused,
+            status: "Paused".to_string(),
+            current: 32,
+            total: 64,
+            resumable: true,
+            cancellable: false,
+            error: None,
+        });
+        runtime.active_job_artifact = Some(ManagedRuntimePersistedJobArtifact {
+            version: "b8248".to_string(),
+            archive_name: "llama-b8248.tar.gz".to_string(),
+            archive_path: artifact_path.display().to_string(),
+            downloaded_bytes: 32,
+            total_bytes: 64,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        cancel_binary_download(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+            .expect("discard paused artifact");
+
+        let state = load_managed_runtime_state(temp_dir.path()).expect("reload runtime state");
+        let runtime = state
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+        let active_job = runtime.active_job.as_ref().expect("cancelled job");
+        assert_eq!(active_job.state, ManagedRuntimeJobState::Cancelled);
+        assert!(runtime.active_job_artifact.is_none());
+        assert!(!artifact_path.exists());
         assert_eq!(
             runtime
                 .install_history

@@ -50,6 +50,9 @@ and forward requests onto backend-owned Rust contracts.
 - Managed-runtime redistributable commands should expose backend-owned view
   payloads, lifecycle mutations, and progress events rather than leaking
   `inference` implementation details into Tauri-specific branching.
+- Managed-runtime pause, resume, and destructive cancel semantics must remain
+  backend-owned. Tauri forwards those requests onto the backend manager and
+  must not reinterpret retained-artifact state locally.
 
 ## Dependencies
 **Internal:** `src-tauri/src/main.rs`, neighboring command modules, shared

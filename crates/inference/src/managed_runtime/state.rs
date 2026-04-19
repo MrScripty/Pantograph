@@ -18,6 +18,7 @@ pub enum ManagedRuntimeHistoryEventKind {
     SelectionUpdated,
     RecoveryReconciled,
     ValidationFailed,
+    Paused,
     Cancelled,
 }
 

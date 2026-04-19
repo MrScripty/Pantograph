@@ -72,9 +72,9 @@ pub use host_runtime::HostRuntimeModeSnapshot;
 pub use managed_runtime_manager::{
     cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
     install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
-    remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
-    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
-    ManagedRuntimeManagerRuntimeView,
+    pause_managed_runtime_manager_job, remove_managed_runtime_manager_runtime,
+    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
+    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
 };
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use python_runtime::{

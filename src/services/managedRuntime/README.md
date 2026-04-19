@@ -9,6 +9,7 @@ components.
 - List managed runtimes.
 - Inspect a single managed runtime.
 - Start or resume managed runtime installation with progress callbacks.
+- Request pause for an active managed runtime install job.
 - Request cancellation for an active managed runtime install job.
 - Remove a managed runtime.
 - Update selected and default runtime versions.
@@ -34,3 +35,5 @@ components.
   service already owns the app-facing contract.
 - Retained artifact, resumability, and readiness facts remain backend-owned;
   this service only projects them into the GUI contract.
+- Pause preserves retained-artifact state while cancel may discard it; the
+  frontend only invokes those backend-owned operations and renders the results.

@@ -18,7 +18,7 @@ pub use contracts::{
 pub use operations::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,
     list_binary_capabilities, list_managed_runtime_snapshots, managed_runtime_snapshot,
-    remove_binary, resolve_binary_command, select_managed_runtime_version,
+    pause_binary_download, remove_binary, resolve_binary_command, select_managed_runtime_version,
     set_default_managed_runtime_version,
 };
 pub use paths::managed_runtime_dir;

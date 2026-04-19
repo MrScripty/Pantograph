@@ -27,6 +27,7 @@
     install_history: []
   });
   let downloading = $state(false);
+  let pausing = $state(false);
   let cancelling = $state(false);
   let selectionUpdating = $state(false);
   let progress: ManagedRuntimeProgress = $state({
@@ -72,17 +73,36 @@
         if (event.error) {
           error = event.error;
           downloading = false;
+          pausing = false;
           cancelling = false;
         }
         if (event.done && !event.error) {
           downloading = false;
+          pausing = false;
           cancelling = false;
         }
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       downloading = false;
+      pausing = false;
       cancelling = false;
+    }
+  }
+
+  async function pauseDownload() {
+    pausing = true;
+    error = null;
+
+    try {
+      await managedRuntimeService.pauseRuntimeJob('llama_cpp');
+      progress = {
+        ...progress,
+        status: 'Pause requested...'
+      };
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+      pausing = false;
     }
   }
 
@@ -160,6 +180,12 @@
   let canResumeDownload = $derived(
     Boolean(status.job_artifact?.retained && status.active_job?.resumable)
   );
+  let canPauseDownload = $derived(
+    Boolean(status.active_job?.cancellable && status.active_job?.state === 'downloading')
+  );
+  let canDiscardRetainedDownload = $derived(
+    Boolean(status.active_job?.state === 'paused' && status.job_artifact?.retained)
+  );
 </script>
 
 {#if !status.available}
@@ -192,14 +218,24 @@
           style="width: {progressPercent}%"
         />
       </div>
-      <button
-        type="button"
-        onclick={cancelDownload}
-        class="mt-3 w-full py-2 px-3 border border-amber-700 text-amber-300 hover:bg-amber-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
-        disabled={cancelling}
-      >
-        {cancelling ? 'Requesting cancel...' : 'Cancel download'}
-      </button>
+      <div class="mt-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onclick={pauseDownload}
+          class="w-full py-2 px-3 border border-amber-700 text-amber-300 hover:bg-amber-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
+          disabled={pausing || cancelling}
+        >
+          {pausing ? 'Requesting pause...' : 'Pause download'}
+        </button>
+        <button
+          type="button"
+          onclick={cancelDownload}
+          class="w-full py-2 px-3 border border-red-800 text-red-300 hover:bg-red-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
+          disabled={cancelling || pausing}
+        >
+          {cancelling ? 'Requesting cancel...' : 'Cancel download'}
+        </button>
+      </div>
     {:else}
       <p class="text-sm text-neutral-400 mb-3">
         llama.cpp is required for local inference.
@@ -234,15 +270,33 @@
             </div>
           </div>
         {/if}
-        {#if status.active_job.cancellable}
-          <button
-            type="button"
-            onclick={cancelDownload}
-            class="mb-3 w-full py-2 px-3 border border-amber-700 text-amber-300 hover:bg-amber-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
-            disabled={cancelling}
-          >
-            {cancelling ? 'Requesting cancel...' : 'Cancel download'}
-          </button>
+        {#if canPauseDownload || canDiscardRetainedDownload}
+          <div class="mb-3 grid grid-cols-2 gap-2">
+            {#if canPauseDownload}
+              <button
+                type="button"
+                onclick={pauseDownload}
+                class="w-full py-2 px-3 border border-amber-700 text-amber-300 hover:bg-amber-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
+                disabled={pausing || cancelling}
+              >
+                {pausing ? 'Requesting pause...' : 'Pause download'}
+              </button>
+            {/if}
+            {#if canDiscardRetainedDownload || status.active_job.cancellable}
+              <button
+                type="button"
+                onclick={cancelDownload}
+                class="w-full py-2 px-3 border border-red-800 text-red-300 hover:bg-red-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
+                disabled={cancelling || pausing}
+              >
+                {#if canDiscardRetainedDownload}
+                  {cancelling ? 'Discarding...' : 'Discard retained download'}
+                {:else}
+                  {cancelling ? 'Requesting cancel...' : 'Cancel download'}
+                {/if}
+              </button>
+            {/if}
+          </div>
         {/if}
       {/if}
       {#if latestHistoryEntry}

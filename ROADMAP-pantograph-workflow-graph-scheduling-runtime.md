@@ -197,24 +197,22 @@ reconciled as the final source of truth.
   state projection thin and aligned to the backend-owned manager view.
 - Current redistributable GUI surfaces also now render backend-owned runtime
   readiness, selected/default version, active-job summary, and recent install
-  history from that shared service boundary, narrowing the remaining Milestone
-  5 GUI gap to explicit pause/resume/cancel controls and broader event-driven
-  progress wiring.
+  history from that shared service boundary, and the GUI now also exposes the
+  backend-owned pause/resume/cancel flow on top of the same contract.
 - The binary-management GUI now also exposes backend-owned selected/default
   version updates through the shared managed-runtime service contract, so
   version policy no longer requires direct command calls or frontend-owned
   runtime-selection shaping.
 - Managed-runtime installs can now also be cancelled through a backend-owned
   request path that flows through the manager facade, Tauri transport, and the
-  shared GUI service boundary. The remaining Milestone 5 job-control gap is
-  now narrowed to pause/resume semantics and broader event-driven state
-  projection.
+  shared GUI service boundary. That stop path is now split into backend-owned
+  pause versus destructive cancel semantics instead of one overloaded
+  resumable-cancel action.
 - Managed-runtime durable state now also preserves retained download-artifact
   metadata for cancelled/interrupted install jobs, and that backend-owned
   artifact summary is projected through the manager/service GUI contract as
-  read-only status. The remaining Milestone 5 gap is therefore no longer basic
-  retained-download visibility; it is true pause/resume orchestration plus
-  broader event-driven progress/state delivery.
+  read-only status. That retained state now also backs true resume behavior
+  and paused-job inspection rather than remaining passive status only.
 - Managed-runtime install progress now also carries the backend-owned runtime
   manager snapshot through the Tauri/service boundary, so the GUI can update
   active-job, readiness, retained-artifact, and history state from the same
@@ -224,8 +222,13 @@ reconciled as the final source of truth.
   artifact, attempts an HTTP range resume against the upstream release source,
   and falls back to a fresh full download when the source ignores the range
   request. The current GUI surfaces that retained state as an explicit resume
-  action label, leaving pause semantics as the remaining Milestone 5
-  job-control gap.
+  action label.
+- Managed-runtime job control now also has a true backend-owned pause versus
+  destructive cancel split. Active downloads can be paused while keeping the
+  retained artifact, resumed through the existing install path, or cancelled
+  destructively, including discarding a previously paused retained artifact.
+  The remaining Milestone 5 work is now the broader event/diagnostics lane
+  rather than missing pause/resume/cancel controls.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

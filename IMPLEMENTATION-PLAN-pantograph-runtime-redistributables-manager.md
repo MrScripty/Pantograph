@@ -405,12 +405,12 @@ not only displayed in the GUI.
 core logic into Tauri.
 
 **Tasks:**
-- [ ] Replace command-level binary-specific logic with thin transport commands
+- [x] Replace command-level binary-specific logic with thin transport commands
   that call backend-owned services for list, install, pause, resume, cancel,
   remove, select-version, and inspect-history
 - [x] Define a GUI view contract for available versions, installed versions,
   selected/default/active status, job progress, readiness, and error state
-- [ ] Ensure the GUI can render resumable/pausable download progress,
+- [x] Ensure the GUI can render resumable/pausable download progress,
   retained-artifact state, and install history without becoming the state owner
 - [ ] Prefer backend event/subscription projection for job progress and state
   changes; if polling remains necessary anywhere, scope it narrowly and
@@ -599,6 +599,13 @@ Update during implementation:
   remote server does not honor the range request. The current GUI also now
   surfaces that retained state as an explicit resume action label while pause
   behavior remains the remaining open job-control gap.
+- 2026-04-19: Milestone 5 slice 9 splits the stop path into backend-owned
+  pause versus destructive cancel semantics. Active downloads can now be
+  paused with retained artifacts, resumed through the existing install path,
+  or cancelled destructively, including discarding a previously paused
+  retained artifact without reintroducing lifecycle policy into Tauri or the
+  GUI. The remaining Milestone 5 work is the broader event/diagnostics lane,
+  not basic pause/resume/cancel controls.
 
 ## Commit Cadence Notes
 

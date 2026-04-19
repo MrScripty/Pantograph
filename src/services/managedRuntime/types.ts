@@ -32,6 +32,7 @@ export type ManagedRuntimeHistoryEventKind =
   | 'selection_updated'
   | 'recovery_reconciled'
   | 'validation_failed'
+  | 'paused'
   | 'cancelled';
 
 export interface ManagedRuntimeSelectionState {
