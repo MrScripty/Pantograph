@@ -589,6 +589,10 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - Keep-alive checkpoint and scheduler-driven reclaim coverage now explicitly
   proves those preserved KV references remain owned by the workflow session and
   do not cross-wire across resumed executors
+- KV-capable graph-edit memory-impact analysis now classifies model,
+  runtime/backend, tokenizer-or-config, upstream-prefix, and prefix-breaking
+  topology changes with explicit backend invalidation reasons for later rerun
+  policy and diagnostics
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

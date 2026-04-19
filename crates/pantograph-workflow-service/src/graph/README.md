@@ -74,6 +74,11 @@ when the node type matches.
   from backend-owned graph-diff compatibility analysis when that richer
   context is available; generic event-only fallbacks remain a compatibility
   backstop rather than the primary source of truth.
+- KV-capable inference nodes should emit explicit backend-owned memory-impact
+  reasons for model changes, runtime/backend changes, tokenizer-or-config
+  changes, upstream prefix changes, and prefix-breaking topology edits so
+  transports and later rerun policy do not infer invalidation heuristics
+  locally.
 - Graph edit-session snapshot reads should retain the most recent backend-owned
   memory-impact decision for inspection until a later non-invalidating edit
   explicitly clears that persisted compatibility state.

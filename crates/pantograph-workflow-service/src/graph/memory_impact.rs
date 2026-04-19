@@ -112,6 +112,8 @@ fn compatibility_snapshot_for_node(
     node_change_kinds: &HashMap<String, NodeGraphChangeKind>,
     node_id: &str,
 ) -> NodeMemoryCompatibilitySnapshot {
+    let before_node = before.find_node(node_id);
+    let after_node = after.find_node(node_id);
     let (compatibility, reason) = match node_change_kinds
         .get(node_id)
         .copied()
@@ -133,20 +135,27 @@ fn compatibility_snapshot_for_node(
             NodeMemoryCompatibility::DropOnSchemaIncompatibility,
             "schema_version_changed".to_string(),
         ),
-        NodeGraphChangeKind::DataChanged => (
-            NodeMemoryCompatibility::PreserveWithInputRefresh,
-            "node_data_changed".to_string(),
-        ),
-        NodeGraphChangeKind::TopologyChanged => (
-            NodeMemoryCompatibility::PreserveWithInputRefresh,
-            "edge_topology_changed".to_string(),
-        ),
+        NodeGraphChangeKind::DataChanged => {
+            let reason = kv_capable_node_data_change_reason(before_node, after_node)
+                .unwrap_or_else(|| "node_data_changed".to_string());
+            (NodeMemoryCompatibility::PreserveWithInputRefresh, reason)
+        }
+        NodeGraphChangeKind::TopologyChanged => {
+            let reason = if kv_capable_node(before_node.or(after_node)) {
+                "graph_edit_breaks_prefix_compatibility".to_string()
+            } else {
+                "edge_topology_changed".to_string()
+            };
+            (NodeMemoryCompatibility::PreserveWithInputRefresh, reason)
+        }
         NodeGraphChangeKind::Unchanged => {
             if node_has_changed_dependency(after, node_id, node_change_kinds) {
-                (
-                    NodeMemoryCompatibility::PreserveWithInputRefresh,
-                    "upstream_dependency_changed".to_string(),
-                )
+                let reason = if kv_capable_node(before_node.or(after_node)) {
+                    "upstream_prefix_changed".to_string()
+                } else {
+                    "upstream_dependency_changed".to_string()
+                };
+                (NodeMemoryCompatibility::PreserveWithInputRefresh, reason)
             } else if before.find_node(node_id).is_some() || after.find_node(node_id).is_some() {
                 (
                     NodeMemoryCompatibility::PreserveAsIs,
@@ -166,6 +175,54 @@ fn compatibility_snapshot_for_node(
         compatibility,
         reason: Some(reason),
     }
+}
+
+fn kv_capable_node(node: Option<&GraphNode>) -> bool {
+    matches!(
+        node.map(|node| node.node_type.as_str()),
+        Some("llamacpp-inference" | "pytorch-inference" | "llm-inference")
+    )
+}
+
+fn kv_capable_node_data_change_reason(
+    before_node: Option<&GraphNode>,
+    after_node: Option<&GraphNode>,
+) -> Option<String> {
+    if !kv_capable_node(before_node.or(after_node)) {
+        return None;
+    }
+
+    if tracked_value_changed(before_node, after_node, &["model_path"])
+        || tracked_value_changed(before_node, after_node, &["model"])
+        || tracked_value_changed(before_node, after_node, &["model_id"])
+    {
+        return Some("model_changed".to_string());
+    }
+
+    if tracked_value_changed(before_node, after_node, &["backend_key"])
+        || tracked_value_changed(before_node, after_node, &["environment_ref"])
+        || tracked_value_changed(before_node, after_node, &["device"])
+    {
+        return Some("runtime_backend_changed".to_string());
+    }
+
+    Some("tokenizer_or_config_changed".to_string())
+}
+
+fn tracked_value_changed(
+    before_node: Option<&GraphNode>,
+    after_node: Option<&GraphNode>,
+    path: &[&str],
+) -> bool {
+    read_data_path(before_node, path) != read_data_path(after_node, path)
+}
+
+fn read_data_path(node: Option<&GraphNode>, path: &[&str]) -> Option<serde_json::Value> {
+    let mut current = node.map(|node| &node.data)?;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current.clone())
 }
 
 fn node_has_changed_dependency(
@@ -291,6 +348,58 @@ mod tests {
                 target: "output".to_string(),
                 target_handle: "text".to_string(),
             }],
+            derived_graph: None,
+        }
+    }
+
+    fn sample_kv_graph() -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "input".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "text": "hello",
+                        "definition": { "schema_version": "v1" }
+                    }),
+                },
+                GraphNode {
+                    id: "llm".to_string(),
+                    node_type: "llamacpp-inference".to_string(),
+                    position: Position { x: 120.0, y: 0.0 },
+                    data: serde_json::json!({
+                        "model_path": "/models/a.gguf",
+                        "backend_key": "llamacpp",
+                        "inference_settings": {
+                            "temperature": 0.2
+                        },
+                        "definition": { "schema_version": "v1" }
+                    }),
+                },
+                GraphNode {
+                    id: "output".to_string(),
+                    node_type: "text-output".to_string(),
+                    position: Position { x: 240.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: "edge-input".to_string(),
+                    source: "input".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "llm".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+                GraphEdge {
+                    id: "edge-output".to_string(),
+                    source: "llm".to_string(),
+                    source_handle: "response".to_string(),
+                    target: "output".to_string(),
+                    target_handle: "text".to_string(),
+                },
+            ],
             derived_graph: None,
         }
     }
@@ -486,5 +595,104 @@ mod tests {
             }
         );
         assert!(!impact.fallback_to_full_invalidation);
+    }
+
+    #[test]
+    fn kv_capable_model_change_uses_model_changed_reason() {
+        let before = sample_kv_graph();
+        let mut after = sample_kv_graph();
+        after.find_node_mut("llm").expect("llm").data["model_path"] =
+            serde_json::json!("/models/b.gguf");
+
+        let impact = graph_memory_impact_from_graph_change(
+            &before,
+            &after,
+            &["llm".to_string(), "output".to_string()],
+        )
+        .expect("impact");
+
+        assert_eq!(
+            impact.node_decisions[0].compatibility,
+            NodeMemoryCompatibility::PreserveWithInputRefresh
+        );
+        assert_eq!(
+            impact.node_decisions[0].reason.as_deref(),
+            Some("model_changed")
+        );
+        assert_eq!(
+            impact.node_decisions[1].reason.as_deref(),
+            Some("upstream_dependency_changed")
+        );
+    }
+
+    #[test]
+    fn kv_capable_backend_change_uses_runtime_backend_changed_reason() {
+        let before = sample_kv_graph();
+        let mut after = sample_kv_graph();
+        after.find_node_mut("llm").expect("llm").data["backend_key"] = serde_json::json!("pytorch");
+
+        let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])
+            .expect("impact");
+
+        assert_eq!(
+            impact.node_decisions[0].reason.as_deref(),
+            Some("runtime_backend_changed")
+        );
+    }
+
+    #[test]
+    fn kv_capable_config_change_uses_tokenizer_or_config_changed_reason() {
+        let before = sample_kv_graph();
+        let mut after = sample_kv_graph();
+        after.find_node_mut("llm").expect("llm").data["inference_settings"]["temperature"] =
+            serde_json::json!(0.8);
+
+        let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])
+            .expect("impact");
+
+        assert_eq!(
+            impact.node_decisions[0].reason.as_deref(),
+            Some("tokenizer_or_config_changed")
+        );
+    }
+
+    #[test]
+    fn kv_capable_upstream_change_uses_upstream_prefix_changed_reason() {
+        let before = sample_kv_graph();
+        let mut after = sample_kv_graph();
+        after.find_node_mut("input").expect("input").data["text"] = serde_json::json!("updated");
+
+        let impact = graph_memory_impact_from_graph_change(
+            &before,
+            &after,
+            &["input".to_string(), "llm".to_string()],
+        )
+        .expect("impact");
+
+        assert_eq!(
+            impact.node_decisions[1].reason.as_deref(),
+            Some("upstream_prefix_changed")
+        );
+    }
+
+    #[test]
+    fn kv_capable_topology_change_uses_prefix_compatibility_reason() {
+        let before = sample_kv_graph();
+        let mut after = sample_kv_graph();
+        after.edges.push(GraphEdge {
+            id: "edge-alt".to_string(),
+            source: "input".to_string(),
+            source_handle: "text".to_string(),
+            target: "llm".to_string(),
+            target_handle: "system_prompt".to_string(),
+        });
+
+        let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])
+            .expect("impact");
+
+        assert_eq!(
+            impact.node_decisions[0].reason.as_deref(),
+            Some("graph_edit_breaks_prefix_compatibility")
+        );
     }
 }

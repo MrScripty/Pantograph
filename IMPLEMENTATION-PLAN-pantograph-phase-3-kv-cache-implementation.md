@@ -360,7 +360,7 @@ end-to-end KV behavior.
       for compatible inference nodes.
 - [ ] Define how repeated kept-alive invocations reuse compatible KV when only
       downstream suffix inputs change.
-- [ ] Define invalidation rules for:
+- [x] Define invalidation rules for:
       model change,
       runtime/backend change,
       tokenizer/config change,
@@ -393,6 +393,11 @@ Latest landed slice:
   that workflow-session-owned KV references survive backend restore paths and
   remain isolated per session instead of cross-wiring across retained
   executors.
+- Graph memory-impact analysis for KV-capable inference nodes now emits
+  explicit backend-owned invalidation reasons for model, runtime/backend,
+  tokenizer-or-config, upstream-prefix, and graph-topology compatibility
+  breaks instead of leaving later rerun policy to infer them from generic
+  change tags.
 - Phase 6 node-memory remains the lifecycle owner for those references; reuse
   policy for suffix-only reruns is still deferred to later Milestone 5 slices.
 
