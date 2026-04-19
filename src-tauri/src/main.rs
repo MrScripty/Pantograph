@@ -130,16 +130,17 @@ fn main() {
             let model_dependency_resolver = model_dependency_resolver.clone();
             let workflow_service = workflow_service.clone();
             move |app| {
+                let workflow_service_for_cleanup = workflow_service.clone();
                 let workflow_session_cleanup_worker: workflow::commands::SharedWorkflowSessionStaleCleanupWorker =
-                    Arc::new(
-                        workflow_service
+                    Arc::new(tauri::async_runtime::block_on(async move {
+                        workflow_service_for_cleanup
                             .clone()
                             .spawn_workflow_session_stale_cleanup_worker(
                                 pantograph_workflow_service::WorkflowSessionStaleCleanupWorkerConfig::default(
                                 ),
                             )
-                            .expect("failed to start workflow-session stale cleanup worker"),
-                    );
+                            .expect("failed to start workflow-session stale cleanup worker")
+                    }));
                 app.manage(workflow_session_cleanup_worker);
 
                 let app_data_dir = app

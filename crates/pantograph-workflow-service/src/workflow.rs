@@ -1334,8 +1334,14 @@ impl WorkflowService {
         let idle_timeout_ms = config.idle_timeout.as_millis().min(u128::from(u64::MAX)) as u64;
         let interval = config.interval;
         let service = Arc::clone(self);
+        let runtime_handle = tokio::runtime::Handle::try_current().map_err(|_| {
+            WorkflowServiceError::Internal(
+                "workflow-session stale cleanup worker requires an active Tokio runtime"
+                    .to_string(),
+            )
+        })?;
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
-        let join_handle = tokio::spawn(async move {
+        let join_handle = runtime_handle.spawn(async move {
             loop {
                 tokio::select! {
                     changed = shutdown_rx.changed() => {
@@ -6511,6 +6517,22 @@ mod tests {
             .await
             .expect("shutdown worker should not remove stale sessions");
         assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
+    }
+
+    #[test]
+    fn workflow_stale_cleanup_worker_requires_active_tokio_runtime() {
+        let service = Arc::new(WorkflowService::new());
+        let err = match service.spawn_workflow_session_stale_cleanup_worker(
+            WorkflowSessionStaleCleanupWorkerConfig::default(),
+        ) {
+            Ok(_) => panic!("spawn should fail without an active tokio runtime"),
+            Err(err) => err,
+        };
+        assert!(matches!(
+            err,
+            WorkflowServiceError::Internal(ref message)
+                if message.contains("requires an active Tokio runtime")
+        ));
     }
 
     #[tokio::test]
