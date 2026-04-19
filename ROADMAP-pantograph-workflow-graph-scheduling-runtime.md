@@ -795,7 +795,7 @@ incremental runs.
 
 ### Phase 6: Incremental Graph Execution
 
-**Status:** In progress
+**Status:** Complete
 
 **Goal:** Add a backend-owned node-memory and session-checkpoint substrate so
 graph edits, input reinjection, keep-alive sessions, and temporary
