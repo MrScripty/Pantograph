@@ -122,7 +122,7 @@ fn copy_relevant_entries(
 
         let destination = if file_name == "llama-server" || file_name == "llama-server.exe" {
             if is_cuda_entry {
-                binaries_dir.join("cuda").join(file_name.as_ref())
+                binaries_dir.join("cuda").join(file_name.as_ref().to_string())
             } else {
                 *installed_server = true;
                 binaries_dir.join(platform.installed_server_name())
@@ -133,7 +133,7 @@ fn copy_relevant_entries(
             } else {
                 binaries_dir.to_path_buf()
             };
-            dest_dir.join(file_name.as_ref())
+            dest_dir.join(file_name.as_ref().to_string())
         } else {
             continue;
         };

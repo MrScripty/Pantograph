@@ -48,8 +48,8 @@ and forward requests onto backend-owned Rust contracts.
   shared host-side RAG sync helper instead of caching embedding endpoints with
   command-local logic.
 - Managed-runtime redistributable commands should expose backend-owned view
-  payloads and progress events rather than leaking `inference` implementation
-  details into Tauri-specific branching.
+  payloads, lifecycle mutations, and progress events rather than leaking
+  `inference` implementation details into Tauri-specific branching.
 
 ## Dependencies
 **Internal:** `src-tauri/src/main.rs`, neighboring command modules, shared

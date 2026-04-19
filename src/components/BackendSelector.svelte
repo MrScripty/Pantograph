@@ -49,6 +49,7 @@
   // Download state
   let downloadingBackend: string | null = $state(null);
   let downloadProgress: ManagedRuntimeProgress | null = $state(null);
+  let cancellingBackend: string | null = $state(null);
 
   // LLM status subscription
   let unsubscribe: (() => void) | null = null;
@@ -147,10 +148,12 @@
           error = event.error;
           downloadingBackend = null;
           downloadProgress = null;
+          cancellingBackend = null;
         }
         if (event.done && !event.error) {
           downloadingBackend = null;
           downloadProgress = null;
+          cancellingBackend = null;
           void loadBackends();
         }
       });
@@ -158,6 +161,7 @@
       error = e instanceof Error ? e.message : String(e);
       downloadingBackend = null;
       downloadProgress = null;
+      cancellingBackend = null;
     }
   };
 
@@ -174,6 +178,27 @@
       error = String(e);
     } finally {
       isSwitching = false;
+    }
+  };
+
+  const cancelRuntimeJob = async (backend: BackendInfo) => {
+    const runtime = runtimeForBackend(backend);
+    if (!runtime || downloadingBackend !== backend.name) return;
+
+    cancellingBackend = backend.name;
+    error = null;
+
+    try {
+      await managedRuntimeService.cancelRuntimeJob(runtime.id);
+      if (downloadProgress) {
+        downloadProgress = {
+          ...downloadProgress,
+          status: 'Cancellation requested...'
+        };
+      }
+    } catch (e) {
+      error = String(e);
+      cancellingBackend = null;
     }
   };
 
@@ -357,6 +382,14 @@
                       {formatBytes(downloadProgress.current)} / {formatBytes(downloadProgress.total)}
                     </div>
                   {/if}
+                  <button
+                    type="button"
+                    class="text-[9px] text-amber-400 hover:text-amber-300 disabled:text-neutral-600"
+                    onclick={() => cancelRuntimeJob(backend)}
+                    disabled={cancellingBackend === backend.name}
+                  >
+                    {cancellingBackend === backend.name ? 'Requesting cancel...' : 'Cancel download'}
+                  </button>
                 </div>
               {:else if !backend.available && backend.unavailable_reason}
                 <span class="text-[9px] text-amber-400 mt-0.5 max-w-[120px] leading-tight">

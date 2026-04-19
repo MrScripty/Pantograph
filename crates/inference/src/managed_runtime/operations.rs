@@ -21,9 +21,12 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 static TRANSITION_LOCKS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<tokio::sync::Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+static CANCELLATION_REQUESTS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<AtomicBool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
@@ -32,6 +35,26 @@ fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
         .entry(id)
         .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
         .clone()
+}
+
+fn cancellation_request(id: ManagedBinaryId) -> Arc<AtomicBool> {
+    let mut requests = CANCELLATION_REQUESTS.lock();
+    requests
+        .entry(id)
+        .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+        .clone()
+}
+
+fn clear_cancellation_request(id: ManagedBinaryId) {
+    cancellation_request(id).store(false, Ordering::SeqCst);
+}
+
+fn request_cancellation(id: ManagedBinaryId) {
+    cancellation_request(id).store(true, Ordering::SeqCst);
+}
+
+fn take_cancellation_request(id: ManagedBinaryId) -> bool {
+    cancellation_request(id).swap(false, Ordering::SeqCst)
 }
 
 pub async fn check_binary_status(
@@ -156,6 +179,31 @@ pub fn set_default_managed_runtime_version(
     update_runtime_selection(app_data_dir, id, version, SelectionTarget::Default)
 }
 
+pub fn cancel_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    let state = load_managed_runtime_state(app_data_dir)?;
+    let Some(runtime) = runtime_state_entry(&state, id) else {
+        return Err(format!(
+            "{} does not have an active managed runtime job",
+            id.display_name()
+        ));
+    };
+    let Some(active_job) = runtime.active_job.as_ref() else {
+        return Err(format!(
+            "{} does not have an active managed runtime job",
+            id.display_name()
+        ));
+    };
+    if !active_job.cancellable {
+        return Err(format!(
+            "{} does not have a cancellable managed runtime job",
+            id.display_name()
+        ));
+    }
+
+    request_cancellation(id);
+    Ok(())
+}
+
 pub async fn download_binary<F>(
     app_data_dir: &Path,
     id: ManagedBinaryId,
@@ -166,6 +214,7 @@ where
 {
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
+    clear_cancellation_request(id);
     let definition = definition(id);
     let runtime_version = definition.release_version().to_string();
     if definition.system_command().is_some() {
@@ -191,7 +240,7 @@ where
             current: 0,
             total: 0,
             resumable: false,
-            cancellable: false,
+            cancellable: true,
             error: None,
         },
     )?;
@@ -213,7 +262,7 @@ where
             current: 0,
             total: 0,
             resumable: false,
-            cancellable: false,
+            cancellable: true,
             error: None,
         },
     )?;
@@ -260,6 +309,25 @@ where
             .map_err(|e| format!("Failed to write chunk: {}", e))?;
         downloaded += chunk.len() as u64;
 
+        if finish_requested_cancellation(
+            app_data_dir,
+            id,
+            &runtime_version,
+            downloaded,
+            total_size,
+        )? {
+            drop(file);
+            let _ = fs::remove_file(&temp_path);
+            on_progress(DownloadProgress {
+                status: "Cancelled".to_string(),
+                current: downloaded,
+                total: total_size,
+                done: true,
+                error: None,
+            });
+            return Ok(());
+        }
+
         on_progress(DownloadProgress {
             status: "Downloading...".to_string(),
             current: downloaded,
@@ -277,12 +345,24 @@ where
                 current: downloaded,
                 total: total_size,
                 resumable: false,
-                cancellable: false,
+                cancellable: true,
                 error: None,
             },
         )?;
     }
     drop(file);
+
+    if finish_requested_cancellation(app_data_dir, id, &runtime_version, downloaded, total_size)? {
+        let _ = fs::remove_file(&temp_path);
+        on_progress(DownloadProgress {
+            status: "Cancelled".to_string(),
+            current: downloaded,
+            total: total_size,
+            done: true,
+            error: None,
+        });
+        return Ok(());
+    }
 
     on_progress(DownloadProgress {
         status: "Extracting...".to_string(),
@@ -339,6 +419,18 @@ where
         return Err(error);
     }
 
+    if finish_requested_cancellation(app_data_dir, id, &runtime_version, total_size, total_size)? {
+        let _ = fs::remove_dir_all(&staging_dir);
+        on_progress(DownloadProgress {
+            status: "Cancelled".to_string(),
+            current: total_size,
+            total: total_size,
+            done: true,
+            error: None,
+        });
+        return Ok(());
+    }
+
     persist_active_job(
         app_data_dir,
         id,
@@ -371,6 +463,18 @@ where
         return Err(error);
     }
 
+    if finish_requested_cancellation(app_data_dir, id, &runtime_version, total_size, total_size)? {
+        let _ = fs::remove_dir_all(&staging_dir);
+        on_progress(DownloadProgress {
+            status: "Cancelled".to_string(),
+            current: total_size,
+            total: total_size,
+            done: true,
+            error: None,
+        });
+        return Ok(());
+    }
+
     if install_dir.exists() {
         fs::remove_dir_all(&install_dir)
             .map_err(|e| format!("Failed to replace existing install: {}", e))?;
@@ -396,6 +500,7 @@ where
     );
 
     persist_install_success(app_data_dir, id, &runtime_version, &install_dir)?;
+    clear_cancellation_request(id);
     Ok(())
 }
 
@@ -689,6 +794,35 @@ fn persist_failed_job(
     save_managed_runtime_state(app_data_dir, &state)
 }
 
+fn persist_cancelled_job(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+    current: u64,
+    total: u64,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+    runtime.active_job = Some(ManagedRuntimeJobStatus {
+        state: ManagedRuntimeJobState::Cancelled,
+        status: "Cancelled".to_string(),
+        current,
+        total,
+        resumable: false,
+        cancellable: false,
+        error: None,
+    });
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::Cancelled,
+            version: Some(version.to_string()),
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some("Managed runtime install cancelled".to_string()),
+        });
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
 fn persist_install_success(
     app_data_dir: &Path,
     id: ManagedBinaryId,
@@ -767,6 +901,21 @@ fn persist_remove_success(app_data_dir: &Path, id: ManagedBinaryId) -> Result<()
             detail: Some("Managed install removed".to_string()),
         });
     save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn finish_requested_cancellation(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+    current: u64,
+    total: u64,
+) -> Result<bool, String> {
+    if !take_cancellation_request(id) {
+        return Ok(false);
+    }
+
+    persist_cancelled_job(app_data_dir, id, version, current, total)?;
+    Ok(true)
 }
 
 fn upsert_persisted_version(
@@ -925,15 +1074,17 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        binary_capability, definition, ensure_runtime_state_entry, persist_install_success,
-        persist_remove_success, readiness_state_for_capability, resolve_runtime_install_dir,
+        binary_capability, cancel_binary_download, definition, ensure_runtime_state_entry,
+        finish_requested_cancellation, persist_install_success, persist_remove_success,
+        readiness_state_for_capability, resolve_runtime_install_dir,
         runtime_install_dir_for_projection, select_managed_runtime_version,
         set_default_managed_runtime_version, snapshot_from_capability, ManagedBinaryCapability,
         ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
         ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
     };
     use crate::managed_runtime::{
-        load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimePersistedVersion,
+        load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
+        ManagedRuntimePersistedVersion,
     };
     use std::path::Path;
 
@@ -1331,5 +1482,75 @@ mod tests {
         let active_job = snapshot.active_job.expect("reconciled active job");
         assert_eq!(active_job.state, ManagedRuntimeJobState::Failed);
         assert_eq!(active_job.status, "Interrupted before completion");
+    }
+
+    #[test]
+    fn cancel_binary_download_rejects_non_cancellable_jobs() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Extracting,
+            status: "Extracting".to_string(),
+            current: 10,
+            total: 10,
+            resumable: false,
+            cancellable: false,
+            error: None,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let error = cancel_binary_download(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+            .expect_err("non-cancellable job should fail");
+
+        assert!(error.contains("does not have a cancellable managed runtime job"));
+    }
+
+    #[test]
+    fn finish_requested_cancellation_persists_cancelled_job_and_history() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job = Some(ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Downloading,
+            status: "Downloading".to_string(),
+            current: 32,
+            total: 64,
+            resumable: false,
+            cancellable: true,
+            error: None,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        cancel_binary_download(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+            .expect("request cancellation");
+        let cancelled = finish_requested_cancellation(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            32,
+            64,
+        )
+        .expect("finish cancellation");
+
+        assert!(cancelled);
+        let state = load_managed_runtime_state(temp_dir.path()).expect("reload runtime state");
+        let runtime = state
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+        let active_job = runtime.active_job.as_ref().expect("cancelled job");
+        assert_eq!(active_job.state, ManagedRuntimeJobState::Cancelled);
+        assert_eq!(active_job.status, "Cancelled");
+        assert_eq!(active_job.current, 32);
+        assert_eq!(active_job.total, 64);
+        assert_eq!(
+            runtime
+                .install_history
+                .last()
+                .map(|entry| entry.event.clone()),
+            Some(ManagedRuntimeHistoryEventKind::Cancelled)
+        );
     }
 }

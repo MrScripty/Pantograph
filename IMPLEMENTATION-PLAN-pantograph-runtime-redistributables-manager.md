@@ -573,6 +573,12 @@ Update during implementation:
   selected/default version commands into the managed-runtime GUI, so runtime
   version policy can now be updated through the shared frontend service
   boundary without reintroducing version-selection logic into Tauri or Svelte.
+- 2026-04-19: Milestone 5 slice 5 added backend-owned managed-runtime install
+  cancellation in `inference`, routed the cancel request through
+  `pantograph-embedded-runtime`, Tauri command transport, and the shared
+  `managedRuntime` frontend service, and surfaced cancel controls in the
+  current GUI while leaving pause/resume and broader event-stream behavior as
+  the remaining open job-control work.
 
 ## Commit Cadence Notes
 

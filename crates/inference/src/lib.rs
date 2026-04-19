@@ -62,11 +62,12 @@ pub use gateway::{
     InferenceStartRequest, SharedGateway,
 };
 pub use managed_runtime::{
-    binary_capability, check_binary_status, download_binary, list_binary_capabilities,
-    list_managed_runtime_snapshots, load_managed_runtime_state, managed_runtime_dir,
-    managed_runtime_snapshot, remove_binary, resolve_binary_command, save_managed_runtime_state,
-    select_managed_runtime_version, set_default_managed_runtime_version, BinaryStatus,
-    DownloadProgress, ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState,
+    binary_capability, cancel_binary_download, check_binary_status, download_binary,
+    list_binary_capabilities, list_managed_runtime_snapshots, load_managed_runtime_state,
+    managed_runtime_dir, managed_runtime_snapshot, remove_binary, resolve_binary_command,
+    save_managed_runtime_state, select_managed_runtime_version,
+    set_default_managed_runtime_version, BinaryStatus, DownloadProgress,
+    ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState,
     ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobState,
     ManagedRuntimeJobStatus, ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState,
     ManagedRuntimePersistedVersion, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,

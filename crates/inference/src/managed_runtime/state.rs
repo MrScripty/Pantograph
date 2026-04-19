@@ -18,6 +18,7 @@ pub enum ManagedRuntimeHistoryEventKind {
     SelectionUpdated,
     RecoveryReconciled,
     ValidationFailed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

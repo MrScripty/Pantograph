@@ -204,6 +204,11 @@ reconciled as the final source of truth.
   version updates through the shared managed-runtime service contract, so
   version policy no longer requires direct command calls or frontend-owned
   runtime-selection shaping.
+- Managed-runtime installs can now also be cancelled through a backend-owned
+  request path that flows through the manager facade, Tauri transport, and the
+  shared GUI service boundary. The remaining Milestone 5 job-control gap is
+  now narrowed to pause/resume semantics and broader event-driven state
+  projection.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

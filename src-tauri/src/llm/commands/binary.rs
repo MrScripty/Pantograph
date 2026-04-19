@@ -1,10 +1,11 @@
 //! Thin Tauri transport for the backend-owned managed-runtime manager.
 
 use pantograph_embedded_runtime::{
-    inspect_managed_runtime_manager_runtime, install_managed_runtime_manager_runtime,
-    list_managed_runtime_manager_runtimes, remove_managed_runtime_manager_runtime,
-    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
-    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
+    cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
+    install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
+    remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
+    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
+    ManagedRuntimeManagerRuntimeView,
 };
 use tauri::{command, ipc::Channel, AppHandle, Manager};
 
@@ -57,6 +58,16 @@ pub async fn remove_managed_runtime(
 ) -> Result<(), String> {
     let app_data_dir = app_data_dir(&app)?;
     remove_managed_runtime_manager_runtime(&app_data_dir, binary_id).await
+}
+
+/// Request cancellation for the active managed runtime install job.
+#[command]
+pub async fn cancel_managed_runtime_job(
+    app: AppHandle,
+    binary_id: ManagedBinaryId,
+) -> Result<(), String> {
+    let app_data_dir = app_data_dir(&app)?;
+    cancel_managed_runtime_manager_job(&app_data_dir, binary_id)
 }
 
 /// Update the selected runtime version for launch-time command resolution.

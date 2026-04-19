@@ -26,6 +26,7 @@
     install_history: []
   });
   let downloading = $state(false);
+  let cancelling = $state(false);
   let selectionUpdating = $state(false);
   let progress: ManagedRuntimeProgress = $state({
     runtime_id: 'llama_cpp',
@@ -67,15 +68,35 @@
         if (event.error) {
           error = event.error;
           downloading = false;
+          cancelling = false;
         }
         if (event.done && !event.error) {
           downloading = false;
+          cancelling = false;
           await loadStatus();
         }
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       downloading = false;
+      cancelling = false;
+    }
+  }
+
+  async function cancelDownload() {
+    cancelling = true;
+    error = null;
+
+    try {
+      await managedRuntimeService.cancelRuntimeJob('llama_cpp');
+      progress = {
+        ...progress,
+        status: 'Cancellation requested...'
+      };
+      await loadStatus();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+      cancelling = false;
     }
   }
 
@@ -166,6 +187,14 @@
           style="width: {progressPercent}%"
         />
       </div>
+      <button
+        type="button"
+        onclick={cancelDownload}
+        class="mt-3 w-full py-2 px-3 border border-amber-700 text-amber-300 hover:bg-amber-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
+        disabled={cancelling}
+      >
+        {cancelling ? 'Requesting cancel...' : 'Cancel download'}
+      </button>
     {:else}
       <p class="text-sm text-neutral-400 mb-3">
         llama.cpp is required for local inference.
@@ -192,6 +221,16 @@
         <div class="text-xs text-neutral-500 mb-3">
           Active job: {status.active_job.status}
         </div>
+        {#if status.active_job.cancellable}
+          <button
+            type="button"
+            onclick={cancelDownload}
+            class="mb-3 w-full py-2 px-3 border border-amber-700 text-amber-300 hover:bg-amber-950/40 rounded text-sm font-medium transition-colors disabled:text-neutral-600 disabled:border-neutral-800"
+            disabled={cancelling}
+          >
+            {cancelling ? 'Requesting cancel...' : 'Cancel download'}
+          </button>
+        {/if}
       {/if}
       {#if latestHistoryEntry}
         <div class="text-xs text-neutral-500 mb-3">

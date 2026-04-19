@@ -15,8 +15,9 @@ use agent::create_rag_manager;
 use config::AppConfig;
 use constants::paths::DATA_DIR;
 use llm::{
-    check_embedding_server, check_health_now, check_port_status, checkout_commit, clear_rag_cache,
-    connect_to_server, create_vector_database, find_alternate_port, get_app_config,
+    cancel_managed_runtime_job, check_embedding_server, check_health_now, check_port_status,
+    checkout_commit, clear_rag_cache, connect_to_server, create_vector_database,
+    find_alternate_port, get_app_config,
     get_backend_capabilities, get_component_history, get_current_backend, get_current_commit_info,
     get_default_port, get_device_config, get_embedding_memory_mode,
     get_embedding_runtime_lifecycle_snapshot, get_embedding_server_url, get_health_status,
@@ -300,6 +301,7 @@ fn main() {
             list_managed_runtimes,
             inspect_managed_runtime,
             install_managed_runtime,
+            cancel_managed_runtime_job,
             remove_managed_runtime,
             select_managed_runtime_version,
             set_default_managed_runtime_version,

@@ -51,6 +51,10 @@ class ManagedRuntimeServiceClass {
     await invoke('remove_managed_runtime', { binaryId: runtimeId });
   }
 
+  public async cancelRuntimeJob(runtimeId: ManagedRuntimeId): Promise<void> {
+    await invoke('cancel_managed_runtime_job', { binaryId: runtimeId });
+  }
+
   public async selectRuntimeVersion(
     runtimeId: ManagedRuntimeId,
     version: string | null

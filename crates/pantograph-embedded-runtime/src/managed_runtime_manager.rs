@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use inference::{
-    download_binary, list_managed_runtime_snapshots, load_managed_runtime_state, remove_binary,
-    select_managed_runtime_version, set_default_managed_runtime_version, DownloadProgress,
-    ManagedBinaryId, ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobStatus,
-    ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    cancel_binary_download, download_binary, list_managed_runtime_snapshots,
+    load_managed_runtime_state, remove_binary, select_managed_runtime_version,
+    set_default_managed_runtime_version, DownloadProgress, ManagedBinaryId,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobStatus, ManagedRuntimeSelectionState,
+    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -80,6 +81,13 @@ pub async fn remove_managed_runtime_manager_runtime(
     runtime_id: ManagedBinaryId,
 ) -> Result<(), String> {
     remove_binary(app_data_dir, runtime_id).await
+}
+
+pub fn cancel_managed_runtime_manager_job(
+    app_data_dir: &Path,
+    runtime_id: ManagedBinaryId,
+) -> Result<(), String> {
+    cancel_binary_download(app_data_dir, runtime_id)
 }
 
 pub fn select_managed_runtime_manager_version(
