@@ -1,8 +1,8 @@
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 use crate::workflow::{
     WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem,
     WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
 };
-use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 pub(super) fn apply_scheduler_snapshot(
     trace: &mut super::store::WorkflowTraceRunState,

@@ -10,8 +10,8 @@ mod sinks;
 #[cfg(test)]
 mod tests;
 
-pub use contract::WorkflowEvent;
 pub(crate) use contract::unix_timestamp_ms;
+pub use contract::WorkflowEvent;
 pub use sinks::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,
     NullEventSink, VecEventSink,

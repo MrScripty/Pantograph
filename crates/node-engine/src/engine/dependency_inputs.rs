@@ -91,8 +91,7 @@ mod tests {
             HashMap::from([("text".to_string(), serde_json::json!("hello"))]),
         )]);
 
-        let inputs =
-            resolve_dependency_inputs(&graph, &"target".to_string(), &dependency_outputs);
+        let inputs = resolve_dependency_inputs(&graph, &"target".to_string(), &dependency_outputs);
 
         assert_eq!(inputs.get("input"), Some(&serde_json::json!("hello")));
     }
@@ -129,14 +128,16 @@ mod tests {
         let dependency_outputs = HashMap::from([(
             "puma-lib".to_string(),
             HashMap::from([
-                ("model_path".to_string(), serde_json::json!("/tmp/model.gguf")),
+                (
+                    "model_path".to_string(),
+                    serde_json::json!("/tmp/model.gguf"),
+                ),
                 ("model_id".to_string(), serde_json::json!("family/model")),
                 ("backend_key".to_string(), serde_json::json!("llamacpp")),
             ]),
         )]);
 
-        let inputs =
-            resolve_dependency_inputs(&graph, &"runtime".to_string(), &dependency_outputs);
+        let inputs = resolve_dependency_inputs(&graph, &"runtime".to_string(), &dependency_outputs);
 
         assert_eq!(
             inputs.get("model_path"),

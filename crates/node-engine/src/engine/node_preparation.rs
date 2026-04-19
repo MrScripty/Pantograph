@@ -63,7 +63,10 @@ mod tests {
         let wait_prompt = prepare_node_inputs(&graph, &"text".to_string(), &mut inputs);
 
         assert_eq!(wait_prompt, None);
-        assert_eq!(inputs.get("_data"), Some(&serde_json::json!({"label": "Prompt"})));
+        assert_eq!(
+            inputs.get("_data"),
+            Some(&serde_json::json!({"label": "Prompt"}))
+        );
     }
 
     #[test]
@@ -106,10 +109,8 @@ mod tests {
             edges: Vec::new(),
             groups: Vec::new(),
         };
-        let mut inputs = HashMap::from([(
-            "user_response".to_string(),
-            serde_json::json!("approved"),
-        )]);
+        let mut inputs =
+            HashMap::from([("user_response".to_string(), serde_json::json!("approved"))]);
 
         let wait_prompt = prepare_node_inputs(&graph, &"approval".to_string(), &mut inputs);
 

@@ -1,14 +1,10 @@
 use std::collections::HashMap;
 
 use crate::error::Result;
-use crate::events::{unix_timestamp_ms, EventSink, WorkflowEvent};
+use crate::events::{EventSink, WorkflowEvent, unix_timestamp_ms};
 use crate::types::NodeId;
 
-pub(super) fn emit_task_started(
-    event_sink: &dyn EventSink,
-    task_id: NodeId,
-    execution_id: String,
-) {
+pub(super) fn emit_task_started(event_sink: &dyn EventSink, task_id: NodeId, execution_id: String) {
     let _ = event_sink.send(WorkflowEvent::TaskStarted {
         task_id,
         execution_id,

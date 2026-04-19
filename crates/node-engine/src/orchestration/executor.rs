@@ -157,7 +157,10 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
 
                 // Find the current node
                 let node = graph.find_node(&current_node_id).ok_or_else(|| {
-                    NodeEngineError::failed(format!("Node '{}' not found in graph", current_node_id))
+                    NodeEngineError::failed(format!(
+                        "Node '{}' not found in graph",
+                        current_node_id
+                    ))
                 })?;
 
                 // Emit node started event
@@ -371,12 +374,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         });
     }
 
-    fn emit_workflow_cancelled(
-        &self,
-        event_sink: &dyn EventSink,
-        workflow_id: &str,
-        error: &str,
-    ) {
+    fn emit_workflow_cancelled(&self, event_sink: &dyn EventSink, workflow_id: &str, error: &str) {
         let _ = event_sink.send(WorkflowEvent::WorkflowCancelled {
             workflow_id: workflow_id.to_string(),
             execution_id: self.execution_id.clone(),
@@ -736,7 +734,8 @@ mod tests {
                 emit_event: true,
             },
         );
-        let executor = OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
+        let executor =
+            OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
         let event_sink = VecEventSink::new();
 
         let mut graph = OrchestrationGraph::new("test", "Test");
@@ -777,17 +776,17 @@ mod tests {
         ));
 
         let events = event_sink.events();
-        assert!(events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WaitingForInput { task_id, prompt, .. }
+        assert!(events.iter().any(
+            |event| matches!(event, WorkflowEvent::WaitingForInput { task_id, prompt, .. }
                 if task_id == "human-input-1"
-                    && prompt.as_deref() == Some("Approve deployment?"))));
+                    && prompt.as_deref() == Some("Approve deployment?"))
+        ));
         assert!(!events
             .iter()
             .any(|event| matches!(event, WorkflowEvent::TaskCompleted { task_id, .. } if task_id == "data")));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")));
+        assert!(!events.iter().any(
+            |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
+        ));
         assert!(!events
             .iter()
             .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
@@ -801,9 +800,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_data_graph_cancelled_propagates_without_task_failure() {
-        let mock_executor = MockDataGraphExecutor::new()
-            .with_error("test_graph", MockDataGraphError::Cancelled);
-        let executor = OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
+        let mock_executor =
+            MockDataGraphExecutor::new().with_error("test_graph", MockDataGraphError::Cancelled);
+        let executor =
+            OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
         let event_sink = VecEventSink::new();
 
         let mut graph = OrchestrationGraph::new("test", "Test");
@@ -848,9 +848,9 @@ mod tests {
         assert!(!events
             .iter()
             .any(|event| matches!(event, WorkflowEvent::TaskCompleted { task_id, .. } if task_id == "data")));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")));
+        assert!(!events.iter().any(
+            |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
+        ));
         assert!(!events
             .iter()
             .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
@@ -892,11 +892,7 @@ mod tests {
             .with_execution_id("orch-exec-test");
         let event_sink = VecEventSink::new();
 
-        executor.emit_terminal_workflow_error(
-            &event_sink,
-            "test",
-            &NodeEngineError::Cancelled,
-        );
+        executor.emit_terminal_workflow_error(&event_sink, "test", &NodeEngineError::Cancelled);
 
         let events = event_sink.events();
         assert_eq!(events.len(), 1);

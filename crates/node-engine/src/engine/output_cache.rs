@@ -23,7 +23,11 @@ pub(super) fn resolve_fresh_cached_output(
         return Ok(None);
     }
 
-    log::debug!("Cache hit for node '{}' (version {})", node_id, input_version);
+    log::debug!(
+        "Cache hit for node '{}' (version {})",
+        node_id,
+        input_version
+    );
     let outputs = serde_json::from_value(cached.value.clone())?;
     Ok(Some(outputs))
 }
