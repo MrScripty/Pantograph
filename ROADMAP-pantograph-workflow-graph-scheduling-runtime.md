@@ -369,7 +369,8 @@ reconciled as the final source of truth.
   and the accepted redistributables-manager boundary now frozen in
   `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`; reuse for
   future managed runtimes is captured as an additive backend-extension path
-  rather than as a new Tauri-owned transport lane
+  rather than as a new Tauri-owned transport lane, and the current residual
+  platform limits are now documented explicitly instead of being left implicit
 - Binding platform planning and verification expansion for C#, Python, and
   BEAM host lanes
 - Parallel demand execution planning and `node-engine` decomposition prep

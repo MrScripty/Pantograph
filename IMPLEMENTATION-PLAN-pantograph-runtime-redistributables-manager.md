@@ -442,7 +442,7 @@ additional runtimes and referenced as the canonical runtime-manager design.
   failures are visible in bounded verification flows
 - [x] Update ADR/README traceability for the final backend-owned runtime
   manager boundary
-- [ ] Record residual best-effort platform limits explicitly instead of leaving
+- [x] Record residual best-effort platform limits explicitly instead of leaving
   them implicit
 
 **Verification:**
@@ -641,6 +641,12 @@ Update during implementation:
   state and Pantograph-facing view projection next, and only then host
   transport reuse. This keeps future `Ollama` or other runtime work from
   reopening binary-specific Tauri or GUI ownership patterns.
+- 2026-04-19: Milestone 6 slice 3 records the remaining managed-runtime
+  platform limits explicitly in the backend README. Required confidence remains
+  Linux x86_64 plus Windows x86_64, macOS remains best-effort, `llama.cpp`
+  unsupported targets must fail as unsupported instead of partially
+  installing, and `Ollama` continues to prefer a host-provided system command
+  when present.
 
 ## Commit Cadence Notes
 

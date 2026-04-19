@@ -40,6 +40,24 @@ rebuild runtime state independently.
 - Managed runtime contracts must stay additive because multiple hosts consume
   them.
 
+## Residual Platform Limits
+
+- Linux x86_64 and Windows x86_64 remain the required managed-runtime targets
+  for verification and release confidence.
+- macOS x86_64 and arm64 adapters exist for current managed runtimes, but they
+  remain best-effort until Pantograph adds explicit bounded verification for
+  those lanes.
+- `llama.cpp` managed installs depend on vendor release artifacts matching the
+  current platform key; unsupported targets should surface an unsupported
+  runtime state instead of attempting a partial install flow.
+- `Ollama` keeps system-command precedence when `ollama` is already available
+  on the host. Managed install support is additive, not a promise that
+  Pantograph always replaces a host-provided `Ollama` binary.
+- Runtime-family-specific packaging differences still belong in backend
+  definition/platform modules; if a future runtime needs materially different
+  packaging or validation, document that as a new bounded limit rather than
+  silently extending host adapters.
+
 ## Decision
 
 Use a small managed-runtime module tree with explicit responsibility splits:
