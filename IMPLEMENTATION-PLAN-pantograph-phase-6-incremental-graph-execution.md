@@ -641,18 +641,18 @@ affected downstream closure.
 **Goal:** Ensure logical workflow state survives runtime churn.
 
 **Tasks:**
-- [ ] Add bounded backend-owned session checkpoint retention for keep-alive
+- [x] Add bounded backend-owned session checkpoint retention for keep-alive
       workflow sessions.
 - [ ] Integrate scheduler/runtime reclaim and restore paths with the checkpoint
       contract so temporary unload does not discard node memory.
 - [ ] Define restore ordering and idempotency rules so runtime restoration and
       checkpoint restoration cannot race or replay inconsistently.
-- [ ] Ensure persistent workflow sessions can resume without recomputing the
+- [x] Ensure persistent workflow sessions can resume without recomputing the
       entire graph when compatible checkpoint state exists.
 - [ ] Define how parallel workflow sessions and temporarily unloaded sessions
       retain isolated logical memory while runtime residency is reclaimed and
       later restored.
-- [ ] Update touched scheduler/runtime READMEs where the new checkpoint
+- [x] Update touched scheduler/runtime READMEs where the new checkpoint
       semantics cross existing lifecycle boundaries.
 
 **Verification:**
@@ -661,7 +661,25 @@ affected downstream closure.
   modules
 - Recovery/idempotency checks per testing standards
 
-**Status:** Not started
+**Status:** In progress
+
+**Completed so far:**
+- Keep-alive workflow sessions now retain backend-owned checkpoint state across
+  `CapacityRebalance` unload instead of dropping the logical executor state.
+- Resumed keep-alive runs now restore checkpointed logical session state and
+  continue from the preserved backend executor path instead of rebuilding the
+  session from scratch.
+- Repeated checkpoint marks and repeated capacity unloads now preserve the
+  original checkpoint timestamp, and explicit keep-alive disable still tears
+  the retained executor down.
+
+**Remaining focus:**
+- Integrate scheduler-driven reclaim and restore flows with the same
+  checkpointed workflow-session contract already used by the direct
+  keep-alive unload path.
+- Finish broader restore ordering and multi-session isolation semantics so
+  reclaim, restore, and parallel workflow pressure cannot race or cross-wire
+  logical node memory.
 
 ### Milestone 6: Add Inspection And Diagnostics Surfaces
 

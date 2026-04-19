@@ -895,6 +895,10 @@ the affected downstream closure.
   now preserves the original backend checkpoint timestamp instead of rewriting
   checkpoint identity on every unload pass, while explicit keep-alive disable
   after a checkpointed unload still tears the retained executor down.
+- Milestone 5 is now in progress rather than merely planned: the direct
+  keep-alive checkpoint path is landed, but scheduler-driven reclaim/restore
+  integration, broader restore ordering, and multi-session isolation semantics
+  remain open before the milestone can be closed.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
   diagnostics can inspect the most recent compatibility decision after node-
