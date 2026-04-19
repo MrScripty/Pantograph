@@ -590,7 +590,7 @@ execution.
       payload; represent them through indirect references and restore rules.
 - [x] Preserve strict separation between output cache reuse and explicit node
       memory reuse.
-- [ ] Add backend-owned tests proving memory isolation across concurrent
+- [x] Add backend-owned tests proving memory isolation across concurrent
       workflow sessions and repeated runs against the same session.
 
 **Verification:**
@@ -814,6 +814,11 @@ Update during implementation:
   execution, and focused `node-engine` coverage now pins that both executor
   demand paths record backend-owned node-memory snapshots without moving
   ownership into adapters.
+- 2026-04-18: Milestone 3 continued. Focused `node-engine` coverage now also
+  proves node-memory isolation across workflow sessions and replacement
+  semantics across repeated runs against the same bound session, closing the
+  Milestone 3 state-isolation test slice without claiming memory-consumption or
+  restore behavior that has not landed yet.
 
 ## Commit Cadence Notes
 

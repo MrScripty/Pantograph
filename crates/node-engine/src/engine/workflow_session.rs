@@ -136,6 +136,7 @@ fn node_schema_version(node_data: &serde_json::Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
 
@@ -165,6 +166,38 @@ mod tests {
             Ok(std::collections::HashMap::from([(
                 "value".to_string(),
                 serde_json::json!(task_id),
+            )]))
+        }
+    }
+
+    struct SequencedSnapshotTaskExecutor {
+        execution_counter: AtomicUsize,
+    }
+
+    impl SequencedSnapshotTaskExecutor {
+        fn new() -> Self {
+            Self {
+                execution_counter: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for SequencedSnapshotTaskExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            _inputs: std::collections::HashMap<String, serde_json::Value>,
+            _context: &graph_flow::Context,
+            _extensions: &crate::extensions::ExecutorExtensions,
+        ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
+            let sequence = self.execution_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            Ok(std::collections::HashMap::from([(
+                "value".to_string(),
+                serde_json::json!({
+                    "task": task_id,
+                    "sequence": sequence,
+                }),
             )]))
         }
     }
@@ -317,6 +350,54 @@ mod tests {
         assert_eq!(
             snapshots[2].output_snapshot,
             Some(serde_json::json!({ "value": "c" }))
+        );
+    }
+
+    #[tokio::test]
+    async fn repeated_runs_replace_node_memory_for_the_same_workflow_session() {
+        let executor = WorkflowExecutor::new("exec-1", linear_graph(), Arc::new(NullEventSink));
+        let task_executor = SequencedSnapshotTaskExecutor::new();
+        bind_workflow_session(&executor, "session-1").await;
+
+        executor
+            .demand(&"c".to_string(), &task_executor)
+            .await
+            .expect("run first demand");
+        let first_snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+        assert_eq!(first_snapshots.len(), 3);
+        assert_eq!(
+            first_snapshots[2].output_snapshot,
+            Some(serde_json::json!({
+                "value": {
+                    "task": "c",
+                    "sequence": 3,
+                }
+            }))
+        );
+
+        executor.mark_modified(&"a".to_string()).await;
+        executor
+            .demand(&"c".to_string(), &task_executor)
+            .await
+            .expect("run second demand");
+
+        let second_snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+        assert_eq!(second_snapshots.len(), 3);
+        assert_eq!(
+            second_snapshots
+                .iter()
+                .map(|snapshot| snapshot.identity.node_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b", "c"]
+        );
+        assert_eq!(
+            second_snapshots[2].output_snapshot,
+            Some(serde_json::json!({
+                "value": {
+                    "task": "c",
+                    "sequence": 6,
+                }
+            }))
         );
     }
 }

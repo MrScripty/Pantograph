@@ -849,6 +849,10 @@ the affected downstream closure.
   execution, giving Milestone 3 a backend-owned execution-time write path
   across both demand facades while leaving later memory-consumption and
   restore/reconciliation behavior explicitly open.
+- Focused backend coverage now also proves node-memory isolation across
+  workflow sessions and replacement semantics across repeated runs against the
+  same bound session, which closes the current Milestone 3 state-isolation
+  testing gap without overstating later restore or memory-consumption support.
 
 **Milestones:**
 
