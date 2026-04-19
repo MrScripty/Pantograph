@@ -4,6 +4,8 @@
 //! cache format. The generic KV cache store delegates format-specific
 //! operations (truncation, fingerprinting) through this trait.
 
+use async_trait::async_trait;
+
 use super::error::KvCacheError;
 use super::types::ModelFingerprint;
 
@@ -11,9 +13,10 @@ use super::types::ModelFingerprint;
 ///
 /// Backends implement this to handle their native cache format while
 /// keeping the store decoupled from backend internals.
+#[async_trait]
 pub trait KvCacheCodec: Send + Sync {
     /// Truncate cache data to keep only tokens up to `token_position`.
-    fn truncate(&self, data: &[u8], token_position: usize) -> Result<Vec<u8>, KvCacheError>;
+    async fn truncate(&self, data: &[u8], token_position: usize) -> Result<Vec<u8>, KvCacheError>;
 
     /// Compute fingerprint for the currently loaded model.
     fn model_fingerprint(&self) -> Result<ModelFingerprint, KvCacheError>;

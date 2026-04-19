@@ -328,7 +328,7 @@ end-to-end KV behavior.
       same fingerprint rules.
 - [x] Add bounded retention and eviction policy semantics to the real store,
       including explicit failure behavior when entries are missing or invalid.
-- [ ] Keep dependency growth minimal and justify any runtime-specific codec
+- [x] Keep dependency growth minimal and justify any runtime-specific codec
       dependency additions per dependency standards.
 
 **Verification:**

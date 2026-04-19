@@ -373,7 +373,7 @@ impl KvCacheStore {
         let mut metadata = self.get_metadata(cache_id).await?;
 
         // Truncate via codec
-        let truncated_data = codec.truncate(&data, token_pos)?;
+        let truncated_data = codec.truncate(&data, token_pos).await?;
 
         // Remove markers beyond the truncation point
         metadata.markers.retain(|m| m.token_position <= token_pos);
@@ -527,8 +527,13 @@ mod tests {
     /// A mock codec that truncates a byte slice to the first `token_position` bytes.
     struct MockCodec;
 
+    #[async_trait::async_trait]
     impl KvCacheCodec for MockCodec {
-        fn truncate(&self, data: &[u8], token_position: usize) -> Result<Vec<u8>, KvCacheError> {
+        async fn truncate(
+            &self,
+            data: &[u8],
+            token_position: usize,
+        ) -> Result<Vec<u8>, KvCacheError> {
             let end = token_position.min(data.len());
             Ok(data[..end].to_vec())
         }

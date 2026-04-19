@@ -312,4 +312,16 @@ pub trait InferenceBackend: Send + Sync {
             "KV cache slot clear not supported by this backend".to_string(),
         ))
     }
+
+    /// Truncate a backend-owned KV artifact to the requested token position.
+    async fn truncate_kv_cache_data(
+        &self,
+        _data: &[u8],
+        _token_position: usize,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<Vec<u8>, BackendError> {
+        Err(BackendError::Inference(
+            "KV cache truncation not supported by this backend".to_string(),
+        ))
+    }
 }

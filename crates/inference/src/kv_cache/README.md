@@ -40,9 +40,15 @@ artifacts, but the inference KV store remains the single cache owner.
 - The inference backend and gateway layers expose backend-owned runtime
   fingerprint, model fingerprint, and live slot persistence hooks before
   `node-engine` consumes them.
+- Backend-owned truncation now also routes through the inference gateway. The
+  executor validates the cache against the active runtime, then delegates byte
+  truncation to the backend instead of baking truncation rules into
+  `node-engine`.
 - The first concrete runtime adapter is llama.cpp slot persistence. It owns the
   live-runtime save/restore boundary; later workflow execution slices should
-  compose through that adapter instead of duplicating HTTP slot logic.
+  compose through that adapter instead of duplicating HTTP slot logic. Its slot
+  snapshots still do not provide a truncation codec, so truncate requests fail
+  from the backend boundary with an explicit unsupported reason.
 - `node-engine` owns execution-path behavior for KV save/load/truncate nodes.
 - Workflow-node descriptor code may describe KV ports, but it must not become a
   parallel KV execution owner.

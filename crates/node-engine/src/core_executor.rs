@@ -1669,7 +1669,9 @@ impl TaskExecutor for CoreTaskExecutor {
                 kv_cache::execute_load(&inputs, extensions, self.gateway.as_ref()).await
             }
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-truncate" => kv_cache::execute_truncate(&inputs, extensions).await,
+            "kv-cache-truncate" => {
+                kv_cache::execute_truncate(&inputs, extensions, self.gateway.as_ref()).await
+            }
 
             // PyTorch inference (in-process via PyO3)
             #[cfg(feature = "pytorch-nodes")]

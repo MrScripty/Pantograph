@@ -81,7 +81,11 @@ compatibility checks pass, and truncate now reports an explicit unsupported
 reason until a backend codec lands. The inference KV store now also owns the
 shared executable-compatibility checks used by both load-time and consume-time
 validation, and it exposes explicit oldest-first bounded retention/eviction
-behavior instead of leaving cache pruning implicit.
+behavior instead of leaving cache pruning implicit. `kv-cache-truncate` now
+also validates against the active runtime and delegates truncation through the
+backend/gateway boundary, so unsupported runtimes fail from the backend-owned
+path instead of a node-engine placeholder. llama.cpp remains capture/restore
+only until a real slot-snapshot truncation codec exists.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI

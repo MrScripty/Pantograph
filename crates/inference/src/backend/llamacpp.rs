@@ -676,6 +676,17 @@ impl InferenceBackend for LlamaCppBackend {
             .await
             .map_err(BackendError::Inference)
     }
+
+    async fn truncate_kv_cache_data(
+        &self,
+        _data: &[u8],
+        _token_position: usize,
+        _active_config: Option<&BackendConfig>,
+    ) -> Result<Vec<u8>, BackendError> {
+        Err(BackendError::Inference(
+            "KV cache truncation is not supported for llama.cpp slot snapshots".to_string(),
+        ))
+    }
 }
 
 #[cfg(test)]

@@ -238,6 +238,20 @@ impl InferenceGateway {
             .map_err(GatewayError::Backend)
     }
 
+    pub async fn truncate_kv_cache_data(
+        &self,
+        data: &[u8],
+        token_position: usize,
+    ) -> Result<Vec<u8>, GatewayError> {
+        let active_config = self.current_runtime_config.read().await.clone();
+        self.backend
+            .read()
+            .await
+            .truncate_kv_cache_data(data, token_position, active_config.as_ref())
+            .await
+            .map_err(GatewayError::Backend)
+    }
+
     /// Build backend-owned startup config for inference mode using the active backend.
     pub async fn build_inference_start_config(
         &self,
@@ -1307,6 +1321,15 @@ mod tests {
         async fn clear_kv_cache_slot(&self, _slot_id: u32) -> Result<(), BackendError> {
             Ok(())
         }
+
+        async fn truncate_kv_cache_data(
+            &self,
+            data: &[u8],
+            token_position: usize,
+            _active_config: Option<&BackendConfig>,
+        ) -> Result<Vec<u8>, BackendError> {
+            Ok(data[..token_position.min(data.len())].to_vec())
+        }
     }
 
     #[cfg(feature = "backend-llamacpp")]
@@ -1596,6 +1619,11 @@ mod tests {
             .clear_kv_cache_slot(0)
             .await
             .expect("clear should delegate to backend");
+        let truncated = gateway
+            .truncate_kv_cache_data(&[1, 2, 3, 4], 2)
+            .await
+            .expect("truncate should delegate to backend");
+        assert_eq!(truncated, vec![1, 2]);
     }
 
     #[tokio::test]
