@@ -1,11 +1,14 @@
 use super::archive::extract_archive;
 use super::contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
-    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus, ResolvedCommand,
+    ManagedBinaryInstallState, ManagedRuntimeReadinessState, ManagedRuntimeSnapshot,
+    ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 use super::definitions::definition;
 use super::paths::{extract_pid_file, managed_install_dir, managed_runtime_dir};
+use super::state::{
+    load_managed_runtime_state, runtime_state_entry, ManagedRuntimePersistedRuntime,
+};
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -105,16 +108,23 @@ pub fn managed_runtime_snapshot(
     id: ManagedBinaryId,
 ) -> Result<ManagedRuntimeSnapshot, String> {
     let capability = binary_capability(app_data_dir, id)?;
-    Ok(snapshot_from_capability(&capability))
+    let state = load_managed_runtime_state(app_data_dir)?;
+    Ok(snapshot_from_capability(
+        &capability,
+        runtime_state_entry(&state, id),
+    ))
 }
 
 pub fn list_managed_runtime_snapshots(
     app_data_dir: &Path,
 ) -> Result<Vec<ManagedRuntimeSnapshot>, String> {
+    let state = load_managed_runtime_state(app_data_dir)?;
     list_binary_capabilities(app_data_dir).map(|capabilities| {
         capabilities
             .iter()
-            .map(snapshot_from_capability)
+            .map(|capability| {
+                snapshot_from_capability(capability, runtime_state_entry(&state, capability.id))
+            })
             .collect::<Vec<_>>()
     })
 }
@@ -329,7 +339,33 @@ pub fn resolve_binary_command(
     definition.resolve_command(&install_dir, args)
 }
 
-fn snapshot_from_capability(capability: &ManagedBinaryCapability) -> ManagedRuntimeSnapshot {
+fn snapshot_from_capability(
+    capability: &ManagedBinaryCapability,
+    persisted_runtime: Option<&ManagedRuntimePersistedRuntime>,
+) -> ManagedRuntimeSnapshot {
+    let selection = persisted_runtime
+        .map(|runtime| runtime.selection.clone())
+        .unwrap_or_default();
+    let active_job = persisted_runtime.and_then(|runtime| runtime.active_job.clone());
+    let versions = persisted_runtime
+        .filter(|runtime| !runtime.versions.is_empty())
+        .map(|runtime| {
+            runtime
+                .versions
+                .iter()
+                .map(|version| ManagedRuntimeVersionStatus {
+                    version: Some(version.version.clone()),
+                    display_label: version.version.clone(),
+                    install_state: capability.install_state,
+                    readiness_state: version.readiness_state,
+                    selected: selection.selected_version.as_deref()
+                        == Some(version.version.as_str()),
+                    active: selection.active_version.as_deref() == Some(version.version.as_str()),
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![version_status_for_capability(capability)]);
+
     ManagedRuntimeSnapshot {
         id: capability.id,
         display_name: capability.display_name.clone(),
@@ -340,9 +376,9 @@ fn snapshot_from_capability(capability: &ManagedBinaryCapability) -> ManagedRunt
         can_remove: capability.can_remove,
         missing_files: capability.missing_files.clone(),
         unavailable_reason: capability.unavailable_reason.clone(),
-        versions: vec![version_status_for_capability(capability)],
-        selection: ManagedRuntimeSelectionState::default(),
-        active_job: None,
+        versions,
+        selection,
+        active_job,
     }
 }
 
@@ -415,7 +451,8 @@ mod tests {
 
     #[test]
     fn snapshot_carries_additive_versions_and_selection_contracts() {
-        let snapshot = snapshot_from_capability(&capability(ManagedBinaryInstallState::Installed));
+        let snapshot =
+            snapshot_from_capability(&capability(ManagedBinaryInstallState::Installed), None);
 
         assert_eq!(snapshot.versions.len(), 1);
         assert_eq!(snapshot.selection.selected_version, None);

@@ -16,6 +16,7 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 | `definitions.rs` | Binary-definition registry that maps managed runtime ids onto runtime-specific release, validation, and command-resolution behavior. |
 | `operations.rs` | Backend-owned orchestration for status reads, install/remove transitions, and command resolution. |
 | `paths.rs` | Managed runtime root/path helpers plus shared argument and environment helpers used by platform adapters. |
+| `state.rs` | Durable managed runtime catalog, selection, and interrupted-job reconciliation helpers for restart-safe state projection. |
 | `llama_cpp_platform/` | Thin per-platform `llama.cpp` install/finalization/launch adapters kept behind the managed runtime boundary. |
 | `ollama_platform/` | Thin per-platform `Ollama` install and command-resolution adapters behind the same backend contracts. |
 
@@ -34,7 +35,8 @@ rebuild runtime state independently.
 - Platform differences must stay behind thin adapter files rather than leaking
   inline platform checks into orchestration logic.
 - Install/remove transitions can overlap with workflow launch requests, so the
-  backend must coordinate state safely.
+  backend must coordinate state safely and reconcile interrupted work on
+  restart.
 - Managed runtime contracts must stay additive because multiple hosts consume
   them.
 
@@ -127,13 +129,17 @@ fn inspect_runtime(app_data_dir: &Path) {
   runtime availability, install state, and user-action affordances.
 - `ManagedRuntimeSnapshot` is the additive broader runtime-manager contract for
   readiness, version, selection, and job-state projection. Current
-  implementations may leave version ids and active-job details unset until the
-  later runtime redistributables milestones land.
+  implementations may still leave some version metadata sparse, but the
+  contract is now backed by a durable state file rather than only ephemeral
+  process memory.
 - `ManagedBinaryInstallState` values are authoritative backend facts and remain
   append-only unless a coordinated breaking change is approved.
 - `DownloadProgress` is the backend-owned progress payload surfaced to adapters;
   `done=true` only means the current transfer/install operation finished, not
   that higher-level workflow readiness policy has been evaluated.
+- `state.json` under the managed runtime root is the persisted runtime-manager
+  artifact for versions, selection state, interrupted-job reconciliation, and
+  install history. Unknown or missing files default to an empty state.
 - `ResolvedCommand` is the backend-produced launch contract for host adapters.
 - `ArchiveKind` and `ReleaseAsset` are internal producer contracts used by
   runtime definitions and platform adapters; changes here must keep the adapter

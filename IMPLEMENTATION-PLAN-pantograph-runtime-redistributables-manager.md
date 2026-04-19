@@ -474,6 +474,10 @@ Update during implementation:
   contracts for readiness, versions, selection, and job-state projection, and
   introduced snapshot helpers that project the existing managed binary state
   into those contracts without changing current runtime behavior.
+- 2026-04-19: Milestone 2 started with a durable backend state store for
+  managed runtime selection, versions, interrupted-job reconciliation, and
+  install history, and runtime snapshots now merge that persisted state instead
+  of remaining purely ephemeral projections.
 
 ## Commit Cadence Notes
 

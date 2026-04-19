@@ -6,6 +6,7 @@ mod contracts;
 mod definitions;
 mod operations;
 mod paths;
+mod state;
 
 pub use contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
@@ -19,6 +20,11 @@ pub use operations::{
     resolve_binary_command,
 };
 pub use paths::managed_runtime_dir;
+pub use state::{
+    load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedRuntime,
+    ManagedRuntimePersistedState, ManagedRuntimePersistedVersion,
+};
 
 pub(crate) use contracts::{ArchiveKind, ReleaseAsset};
 pub(crate) use paths::{extract_pid_file, prepend_env_path};

@@ -63,11 +63,14 @@ pub use gateway::{
 };
 pub use managed_runtime::{
     binary_capability, check_binary_status, download_binary, list_binary_capabilities,
-    list_managed_runtime_snapshots, managed_runtime_dir, managed_runtime_snapshot, remove_binary,
-    resolve_binary_command, BinaryStatus, DownloadProgress, ManagedBinaryCapability,
-    ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeReadinessState, ManagedRuntimeSelectionState, ManagedRuntimeSnapshot,
-    ManagedRuntimeVersionStatus, ResolvedCommand,
+    list_managed_runtime_snapshots, load_managed_runtime_state, managed_runtime_dir,
+    managed_runtime_snapshot, remove_binary, resolve_binary_command, save_managed_runtime_state,
+    BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
+    ManagedBinaryInstallState, ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry,
+    ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimePersistedRuntime,
+    ManagedRuntimePersistedState, ManagedRuntimePersistedVersion, ManagedRuntimeReadinessState,
+    ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    ResolvedCommand,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
