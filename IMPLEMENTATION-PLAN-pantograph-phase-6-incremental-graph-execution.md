@@ -857,8 +857,8 @@ Update during implementation:
 - 2026-04-18: Milestone 4 continued. Graph edit-session inspection now keeps
   the last backend-owned memory-impact decision alive across later
   `get_session_graph` reads, so diagnostics can inspect the most recent
-  compatibility result after a mutation until a subsequent non-invalidating
-  edit clears that state.
+  compatibility result after node-data, connection, or node-insertion
+  mutations until a subsequent non-invalidating edit clears that state.
 
 ## Commit Cadence Notes
 

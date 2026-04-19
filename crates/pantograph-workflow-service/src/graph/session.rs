@@ -40,9 +40,9 @@ use super::session_types::{
     WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind,
 };
 use super::types::{
-    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
-    GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, Position,
-    WorkflowGraph,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
+    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
+    InsertNodeOnEdgeResponse, Position, WorkflowGraph,
 };
 const DEFAULT_MAX_UNDO_SNAPSHOTS: usize = 64;
 
@@ -187,6 +187,16 @@ impl GraphEditSession {
 
     fn finish_run(&mut self) {
         self.runtime.finish_run();
+    }
+
+    fn remember_memory_impact_for_seed_nodes(
+        &mut self,
+        before_graph: &WorkflowGraph,
+        seed_node_ids: &[String],
+    ) {
+        let dirty_tasks = dirty_tasks_from_seed_nodes(&self.graph, seed_node_ids);
+        self.last_memory_impact =
+            graph_memory_impact_from_graph_change(before_graph, &self.graph, &dirty_tasks);
     }
 }
 
@@ -599,6 +609,7 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         let registry = NodeRegistry::new();
         if let Err(rejection) = commit_connection(
             &state.graph,
@@ -611,6 +622,7 @@ impl GraphSessionStore {
         }
 
         state.push_undo_snapshot();
+        let target_node_id = request.target_anchor.node_id.clone();
         state.graph.edges.push(GraphEdge {
             id: format!(
                 "{}-{}-{}-{}",
@@ -626,6 +638,10 @@ impl GraphSessionStore {
         });
         sync_embedding_emit_metadata_flags(&mut state.graph);
         state.canonicalize_graph();
+        state.remember_memory_impact_for_seed_nodes(
+            &before_graph,
+            std::slice::from_ref(&target_node_id),
+        );
         Ok(ConnectionCommitResponse {
             accepted: true,
             graph_revision: state.graph.compute_fingerprint(),
@@ -641,6 +657,7 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         let registry = NodeRegistry::new();
         let (inserted_node, inserted_edge) = match insert_node_and_connect(
             &state.graph,
@@ -660,6 +677,10 @@ impl GraphSessionStore {
         state.graph.edges.push(inserted_edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         state.canonicalize_graph();
+        state.remember_memory_impact_for_seed_nodes(
+            &before_graph,
+            std::slice::from_ref(&inserted_node.id),
+        );
 
         Ok(InsertNodeConnectionResponse {
             accepted: true,
@@ -706,6 +727,7 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         let registry = NodeRegistry::new();
 
         let (inserted_node, incoming_edge, outgoing_edge, bridge) = match insert_node_on_edge(
@@ -727,6 +749,10 @@ impl GraphSessionStore {
         state.graph.edges.push(outgoing_edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         state.canonicalize_graph();
+        state.remember_memory_impact_for_seed_nodes(
+            &before_graph,
+            std::slice::from_ref(&inserted_node.id),
+        );
 
         Ok(InsertNodeOnEdgeResponse {
             accepted: true,
@@ -801,6 +827,12 @@ mod tests {
             }],
             derived_graph: None,
         }
+    }
+
+    fn disconnected_graph() -> WorkflowGraph {
+        let mut graph = sample_graph();
+        graph.edges.clear();
+        graph
     }
 
     #[tokio::test]
@@ -1052,10 +1084,11 @@ mod tests {
     async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         let store = GraphSessionStore::new();
         let session = store.create_session(sample_graph()).await;
+        let session_id = session.session_id.clone();
 
         let response = store
             .insert_node_on_edge(WorkflowGraphInsertNodeOnEdgeRequest {
-                session_id: session.session_id,
+                session_id,
                 edge_id: "text-input-text-text-output-text".to_string(),
                 node_type: "llm-inference".to_string(),
                 graph_revision: session.graph_revision,
@@ -1077,5 +1110,65 @@ mod tests {
         );
         let inserted_node_id = response.inserted_node_id.expect("inserted node id");
         assert!(graph.find_node(&inserted_node_id).is_some());
+
+        let snapshot = store
+            .get_session_graph(&session.session_id)
+            .await
+            .expect("get session graph after insert");
+        let memory_impact = snapshot
+            .workflow_session_state
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert!(!memory_impact.node_decisions.is_empty());
+        assert!(
+            memory_impact
+                .node_decisions
+                .iter()
+                .any(|decision| decision.node_id == inserted_node_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_persists_memory_impact_for_later_session_snapshot() {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(disconnected_graph()).await;
+
+        let response = store
+            .connect(WorkflowGraphConnectRequest {
+                session_id: session.session_id.clone(),
+                graph_revision: session.graph_revision,
+                source_anchor: ConnectionAnchor {
+                    node_id: "text-input".to_string(),
+                    port_id: "text".to_string(),
+                },
+                target_anchor: ConnectionAnchor {
+                    node_id: "text-output".to_string(),
+                    port_id: "text".to_string(),
+                },
+            })
+            .await
+            .expect("connect nodes");
+        assert!(response.accepted);
+
+        let snapshot = store
+            .get_session_graph(&session.session_id)
+            .await
+            .expect("get session graph after connect");
+        let memory_impact = snapshot
+            .workflow_session_state
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert_eq!(memory_impact.node_decisions.len(), 1);
+        assert_eq!(memory_impact.node_decisions[0].node_id, "text-output");
+        assert_eq!(
+            memory_impact.node_decisions[0].compatibility,
+            node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh
+        );
+        assert_eq!(
+            memory_impact.node_decisions[0].reason.as_deref(),
+            Some("edge_topology_changed")
+        );
     }
 }

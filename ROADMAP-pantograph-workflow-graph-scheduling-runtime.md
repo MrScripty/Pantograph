@@ -889,8 +889,9 @@ the affected downstream closure.
   checkpoint/restore work lands.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
-  diagnostics can inspect the most recent compatibility decision until a later
-  non-invalidating edit replaces or clears that state.
+  diagnostics can inspect the most recent compatibility decision after node-
+  data, connection, or node-insertion edits until a later non-invalidating
+  edit replaces or clears that state.
 
 **Milestones:**
 
