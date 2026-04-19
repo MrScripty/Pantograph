@@ -10,8 +10,15 @@
     getNodeMemoryStatusCounts,
   } from './presenters';
 
-  export let state: WorkflowDiagnosticsState;
-  export let selectedRun: DiagnosticsRunTrace | null = null;
+  type Props = {
+    state: WorkflowDiagnosticsState;
+    selectedRun?: DiagnosticsRunTrace | null;
+  };
+
+  let {
+    state,
+    selectedRun = null,
+  }: Props = $props();
 
   let graphEvents = $derived.by(() => {
     if (!selectedRun) {

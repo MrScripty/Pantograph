@@ -11,10 +11,19 @@
     getRunNodeStatusCounts,
   } from './presenters';
 
-  export let run: DiagnosticsRunTrace;
-  export let selectedNode: DiagnosticsNodeTrace | null = null;
-  export let selectedNodeId: string | null = null;
-  export let onSelectNode: (nodeId: string | null) => void;
+  type Props = {
+    run: DiagnosticsRunTrace;
+    selectedNode?: DiagnosticsNodeTrace | null;
+    selectedNodeId?: string | null;
+    onSelectNode: (nodeId: string | null) => void;
+  };
+
+  let {
+    run,
+    selectedNode = null,
+    selectedNodeId = null,
+    onSelectNode,
+  }: Props = $props();
 
   let nodeRows = $derived.by(() => {
     return Object.values(run.nodes).sort((left, right) => {

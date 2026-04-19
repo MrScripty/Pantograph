@@ -10,7 +10,11 @@
     getRuntimeInstallStateClasses,
   } from './presenters';
 
-  export let runtime: DiagnosticsRuntimeSnapshot;
+  type Props = {
+    runtime: DiagnosticsRuntimeSnapshot;
+  };
+
+  let { runtime }: Props = $props();
 
   function lifecycleStateLabel(snapshot: DiagnosticsRuntimeLifecycleSnapshot | null): string {
     if (!snapshot) {

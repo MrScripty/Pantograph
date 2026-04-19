@@ -5,7 +5,11 @@
     getSchedulerStateClasses,
   } from './presenters';
 
-  export let scheduler: DiagnosticsSchedulerSnapshot;
+  type Props = {
+    scheduler: DiagnosticsSchedulerSnapshot;
+  };
+
+  let { scheduler }: Props = $props();
 </script>
 
 <div class="h-full overflow-auto px-4 py-4">

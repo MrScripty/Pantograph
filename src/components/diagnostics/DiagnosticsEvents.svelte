@@ -5,9 +5,17 @@
     getDiagnosticsStatusClasses,
   } from './presenters';
 
-  export let run: DiagnosticsRunTrace;
-  export let selectedNodeId: string | null = null;
-  export let onSelectNode: (nodeId: string | null) => void;
+  type Props = {
+    run: DiagnosticsRunTrace;
+    selectedNodeId?: string | null;
+    onSelectNode: (nodeId: string | null) => void;
+  };
+
+  let {
+    run,
+    selectedNodeId = null,
+    onSelectNode,
+  }: Props = $props();
 
   let eventRows = $derived.by(() => [...run.events].reverse());
 </script>
