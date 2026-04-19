@@ -376,11 +376,11 @@ version policy, and install/download jobs.
 not only displayed in the GUI.
 
 **Tasks:**
-- [ ] Extract runtime-readiness/preflight helpers from
+- [x] Extract runtime-readiness/preflight helpers from
   `crates/pantograph-workflow-service/src/workflow.rs` into focused modules
   under `crates/pantograph-workflow-service/src/workflow/` before adding
   substantial new redistributable policy there
-- [ ] Extend workflow runtime capability and preflight projection to expose
+- [x] Extend workflow runtime capability and preflight projection to expose
   selected version, readiness phase, and actionable failure reasons
 - [ ] Block workflow start, resume, and restore paths when required
   redistributables are missing, paused, failed, or not ready
@@ -397,7 +397,7 @@ not only displayed in the GUI.
 - Replay/recovery/idempotency tests for restart and interrupted install cases
 - `cargo check --workspace`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Thin Tauri Commands And Runtime Manager View Contract
 

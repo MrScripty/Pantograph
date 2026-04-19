@@ -160,6 +160,10 @@ reconciled as the final source of truth.
 - Workflow runtime capability contracts now also carry explicit readiness
   phase and selected-version context, so preflight, diagnostics, and
   execution consume one backend-owned runtime-readiness contract.
+- Runtime-readiness and preflight helper ownership is now extracted into
+  focused backend modules under `crates/pantograph-workflow-service/src/workflow/`,
+  reducing redistributable policy drift inside the large `workflow.rs`
+  service file.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.
