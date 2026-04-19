@@ -385,11 +385,11 @@ end-to-end KV behavior.
 phase documentation.
 
 **Tasks:**
-- [ ] Surface backend-owned diagnostics for cache hit, miss, invalidation,
+- [x] Surface backend-owned diagnostics for cache hit, miss, invalidation,
       unsupported-runtime fallback, truncation outcome, and reuse source.
 - [x] Update runtime requirement extraction so workflows that explicitly enable
       KV usage declare the `kv_cache` extension requirement.
-- [ ] Ensure diagnostics and preflight consumers use the same canonical
+- [x] Ensure diagnostics and preflight consumers use the same canonical
       extension and compatibility contract.
 - [ ] Reconcile the roadmap so Phase 3 status and milestone wording match the
       landed implementation.
@@ -401,6 +401,15 @@ phase documentation.
 - Source-of-truth review for roadmap, plan, and touched READMEs
 
 **Status:** In progress
+
+Latest landed slice:
+- `node-engine` now emits backend-owned structured KV execution diagnostics for
+  restore hit/miss/invalidation, capture saved/unsupported, and truncate
+  outcomes, and those facts now flow through workflow trace plus Tauri
+  diagnostics without moving reuse decisions into adapter code.
+- Immediate preflight/diagnostics fixtures now use the canonical `kv_cache`
+  extension name so runtime requirement shaping and diagnostics examples no
+  longer drift across underscore versus hyphen spellings.
 
 ## Re-Plan Triggers
 

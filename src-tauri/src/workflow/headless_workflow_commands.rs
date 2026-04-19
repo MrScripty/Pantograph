@@ -325,7 +325,7 @@ mod tests {
                 estimation_confidence: "high".to_string(),
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
-                required_extensions: vec!["kv-cache".to_string()],
+                required_extensions: vec!["kv_cache".to_string()],
             },
             models: vec![WorkflowCapabilityModel {
                 model_id: "model-a".to_string(),

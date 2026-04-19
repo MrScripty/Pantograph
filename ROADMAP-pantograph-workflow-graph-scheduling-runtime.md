@@ -61,33 +61,33 @@ implementation slice freezes backend-owned KV artifact, handle, compatibility,
 and usage-mode contracts in `crates/inference/src/kv_cache`, treats workflow-
 session memory as an indirect-reference consumer instead of a second cache
 owner, and replaces placeholder directory READMEs with explicit ownership
-boundaries before broader execution behavior lands. The second slice now moves
-KV save/load/truncate executor logic behind a focused `node-engine`
+boundaries before broader execution behavior lands. The second slice moves KV
+save/load/truncate executor logic behind a focused `node-engine`
 `core_executor::kv_cache` module and turns the `workflow-nodes` KV files into
 descriptor-only stubs that direct execution to `CoreTaskExecutor`. The third
-slice now gives the workflow graph a first-class `kv_cache` port type across
+slice gives the workflow graph a first-class `kv_cache` port type across
 backend, transport, and Svelte graph mirrors, and compatible inference/storage
 descriptors now expose explicit KV ports instead of hiding reuse behind
-generic JSON. Milestone 4 is now in progress in the inference layer: the
+generic JSON. Milestones 4 and 5 are now landed in the inference layer: the
 backend/gateway boundary exposes backend-owned KV runtime fingerprints, model
-fingerprints, and live llama.cpp slot save/restore hooks so node execution can
-compose through one runtime adapter instead of inventing host-side KV logic.
-`node-engine` now consumes that adapter for `llamacpp-inference`, restoring an
-incoming typed KV handle into the live runtime slot before generation and
-capturing a fresh typed handle back into the KV store after generation. The KV
-storage nodes now operate on typed handles as well: save clones handle-backed
-entries into the chosen store policy, load returns a handle only when runtime
-compatibility checks pass, and truncate now reports an explicit unsupported
-reason until a backend codec lands. The inference KV store now also owns the
+fingerprints, live llama.cpp slot save/restore hooks, and PyTorch `dllm`
+snapshot save/restore/truncate primitives so node execution composes through
+runtime adapters instead of inventing host-side KV logic. `node-engine` now
+consumes those adapters for both `llamacpp-inference` and
+`pytorch-inference`, restoring compatible typed KV handles before generation
+and capturing fresh reusable handles afterward. The KV storage nodes also
+operate on typed handles: save clones handle-backed entries into the chosen
+store policy, load returns a handle only when runtime compatibility checks
+pass, and truncate delegates compatibility/truncation through the backend-owned
+path instead of a node-engine placeholder. The inference KV store owns the
 shared executable-compatibility checks used by both load-time and consume-time
-validation, and it exposes explicit oldest-first bounded retention/eviction
-behavior instead of leaving cache pruning implicit. `kv-cache-truncate` now
-also validates against the active runtime and delegates truncation through the
-backend/gateway boundary, so unsupported runtimes fail from the backend-owned
-path instead of a node-engine placeholder. llama.cpp remains capture/restore
-only until a real slot-snapshot truncation codec exists. PyTorch now also has
-backend-owned KV runtime/model identity plus worker snapshot save/restore and
-file-truncate primitives for `dllm`-style live caches, and
+validation and exposes explicit oldest-first bounded retention/eviction
+behavior instead of leaving cache pruning implicit. Milestone 6 is now in
+progress: backend-owned structured KV execution diagnostics for restore
+hit/miss/invalidation, capture saved/unsupported, and truncate outcomes now
+flow through workflow trace and Tauri diagnostics, and immediate
+preflight/diagnostics fixtures now use the canonical `kv_cache` extension
+contract. Remaining Phase 3 close-out work is roadmap/README reconciliation.
 `pytorch-inference` now restores compatible `kv_cache_in` handles and emits
 fresh `kv_cache_out` handles through the same shared store contract.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
@@ -576,6 +576,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   inference
 - KV save/load now follow the typed-handle contract in `node-engine`, and KV
   truncation now fails with an explicit backend-specific unsupported reason
+- KV execution now emits backend-owned structured diagnostics for restore,
+  capture, and truncate outcomes, and those facts flow through workflow trace
+  plus Tauri diagnostics using the canonical `kv_cache` extension contract
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

@@ -412,7 +412,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
                 estimation_confidence: "high".to_string(),
                 required_models: vec!["model-a".to_string()],
                 required_backends: vec!["llama-cpp".to_string()],
-                required_extensions: vec!["kv-cache".to_string()],
+                required_extensions: vec!["kv_cache".to_string()],
             },
             models: vec![pantograph_workflow_service::WorkflowCapabilityModel {
                 model_id: "model-a".to_string(),
