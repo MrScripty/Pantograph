@@ -527,6 +527,12 @@ Update during implementation:
   keep-alive re-enable through the same backend session preflight contract
   before runtime load, so those session-residency entry points no longer
   bypass runtime-readiness enforcement.
+- 2026-04-19: Milestone 4 slice 4 exported the workflow-service preflight
+  helpers as backend utilities and applied them to embedded-runtime
+  host-side `load_session_runtime`, so direct session-load callers now fail
+  before reservation/warmup when the selected redistributable is missing or
+  not ready. The remaining Milestone 4 restore work is now narrowed to
+  replay/recovery-specific paths instead of the generic host load boundary.
 
 ## Commit Cadence Notes
 

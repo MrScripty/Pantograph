@@ -168,6 +168,10 @@ reconciled as the final source of truth.
   same backend session preflight contract before runtime load, closing an
   earlier gap where those session-residency paths could bypass readiness
   enforcement that already protected normal session runs.
+- Embedded-runtime host-side session loads now also reuse the
+  workflow-service runtime-preflight helpers before reservation/warmup, so
+  direct load callers cannot bypass redistributable readiness enforcement
+  while Milestone 4 restore/recovery follow-up remains in progress.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

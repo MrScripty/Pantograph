@@ -1232,6 +1232,25 @@ impl EmbeddedWorkflowHost {
         }
     }
 
+    async fn ensure_workflow_runtime_ready_for_session_load(
+        &self,
+        workflow_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let capabilities = WorkflowHost::workflow_capabilities(self, workflow_id).await?;
+        let (_, blocking_runtime_issues) = pantograph_workflow_service::evaluate_runtime_preflight(
+            &capabilities.runtime_requirements.required_backends,
+            &capabilities.runtime_capabilities,
+        );
+
+        if blocking_runtime_issues.is_empty() {
+            return Ok(());
+        }
+
+        Err(WorkflowServiceError::RuntimeNotReady(
+            pantograph_workflow_service::format_runtime_not_ready_message(&blocking_runtime_issues),
+        ))
+    }
+
     fn record_session_runtime_reservation(
         &self,
         session_id: &str,
@@ -1730,6 +1749,8 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         usage_profile: Option<&str>,
         retention_hint: WorkflowSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
+        self.ensure_workflow_runtime_ready_for_session_load(workflow_id)
+            .await?;
         self.reserve_loaded_session_runtime(session_id, workflow_id, usage_profile, retention_hint)
             .await
     }
@@ -3719,6 +3740,50 @@ mod tests {
             snapshot.runtimes[0].runtime_instance_id.as_deref(),
             Some("llama-1")
         );
+    }
+
+    #[tokio::test]
+    async fn test_session_runtime_load_blocks_when_runtime_preflight_reports_not_ready() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        )
+        .with_runtime_registry(runtime_registry.clone());
+
+        let error = runtime
+            .host()
+            .load_session_runtime(
+                "session-not-ready",
+                "runtime-text",
+                None,
+                WorkflowSessionRetentionHint::KeepAlive,
+            )
+            .await
+            .expect_err("load should fail when required runtime is not ready");
+
+        assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+        assert!(
+            error.to_string().contains("llama.cpp"),
+            "expected readiness error to mention llama.cpp, got: {error}"
+        );
+
+        let snapshot = runtime_registry.snapshot();
+        assert!(snapshot.reservations.is_empty());
     }
 
     #[tokio::test]

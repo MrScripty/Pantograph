@@ -38,7 +38,7 @@ pub(super) fn collect_preflight_warnings(
     warnings
 }
 
-pub(crate) fn evaluate_runtime_preflight(
+pub fn evaluate_runtime_preflight(
     required_backends: &[String],
     runtime_capabilities: &[WorkflowRuntimeCapability],
 ) -> (Vec<WorkflowRuntimeIssue>, Vec<WorkflowRuntimeIssue>) {
@@ -86,7 +86,7 @@ pub(crate) fn evaluate_runtime_preflight(
     (runtime_warnings, blocking_runtime_issues)
 }
 
-pub(super) fn format_runtime_not_ready_message(issues: &[WorkflowRuntimeIssue]) -> String {
+pub fn format_runtime_not_ready_message(issues: &[WorkflowRuntimeIssue]) -> String {
     issues
         .iter()
         .map(|issue| issue.message.as_str())

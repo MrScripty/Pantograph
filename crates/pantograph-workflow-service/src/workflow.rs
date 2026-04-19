@@ -33,8 +33,8 @@ use crate::technical_fit::{
 mod runtime_preflight;
 mod session_runtime;
 
-pub(crate) use self::runtime_preflight::evaluate_runtime_preflight;
-use self::runtime_preflight::{collect_preflight_warnings, format_runtime_not_ready_message};
+use self::runtime_preflight::collect_preflight_warnings;
+pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 
 #[cfg(test)]
 use crate::graph::WorkflowSessionKind;
@@ -4669,7 +4669,7 @@ mod tests {
         assert_eq!(blocking_runtime_issues[0].runtime_id, "remote-llama");
         assert!(blocking_runtime_issues[0]
             .message
-            .contains("Remote llama.cpp is not configured"));
+            .contains("workflow requires backend 'llama_cpp' but Remote llama.cpp: remote host is not configured"));
     }
 
     #[test]
