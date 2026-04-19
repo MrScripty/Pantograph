@@ -44,6 +44,28 @@ pub struct NodeMemoryIdentity {
     pub schema_version: Option<String>,
 }
 
+/// Restore strategy for non-serializable runtime/process state referenced by a
+/// node-memory snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeMemoryRestoreStrategy {
+    RehydrateBeforeResume,
+    RebindHostResource,
+    DropIfUnavailable,
+}
+
+/// Indirect reference to non-serializable runtime/process state associated with
+/// one node-memory snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct NodeMemoryIndirectStateReference {
+    pub reference_kind: String,
+    pub reference_id: String,
+    pub restore_strategy: NodeMemoryRestoreStrategy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspection_metadata: Option<serde_json::Value>,
+}
+
 /// Read-only backend-owned node-memory snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -56,6 +78,8 @@ pub struct NodeMemorySnapshot {
     pub output_snapshot: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub private_state: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub indirect_state_reference: Option<NodeMemoryIndirectStateReference>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inspection_metadata: Option<serde_json::Value>,
 }
@@ -223,7 +247,8 @@ impl WorkflowExecutorSessionState {
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryIdentity, NodeMemorySnapshot,
+        GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryIdentity,
+        NodeMemoryIndirectStateReference, NodeMemoryRestoreStrategy, NodeMemorySnapshot,
         NodeMemoryStatus, WorkflowExecutorSessionState, WorkflowSessionCheckpointSummary,
         WorkflowSessionResidencyState,
     };
@@ -260,6 +285,52 @@ mod tests {
         assert!(!summary.checkpoint_available);
         assert_eq!(summary.preserved_node_count, 0);
         assert_eq!(summary.checkpointed_at_ms, None);
+    }
+
+    #[test]
+    fn indirect_state_reference_serializes_restore_rule() {
+        let snapshot = NodeMemorySnapshot {
+            identity: NodeMemoryIdentity {
+                session_id: "session-1".to_string(),
+                node_id: "node-a".to_string(),
+                node_type: "stream".to_string(),
+                schema_version: Some("v1".to_string()),
+            },
+            status: NodeMemoryStatus::Ready,
+            input_fingerprint: Some("fp-a".to_string()),
+            output_snapshot: None,
+            private_state: Some(serde_json::json!({ "cursor": 12 })),
+            indirect_state_reference: Some(NodeMemoryIndirectStateReference {
+                reference_kind: "kv-cache-segment".to_string(),
+                reference_id: "cache-segment-1".to_string(),
+                restore_strategy: NodeMemoryRestoreStrategy::RehydrateBeforeResume,
+                inspection_metadata: Some(serde_json::json!({ "host": "gateway-1" })),
+            }),
+            inspection_metadata: Some(serde_json::json!({ "label": "Stream" })),
+        };
+
+        let serialized = serde_json::to_value(&snapshot).expect("serialize snapshot");
+        assert_eq!(
+            serialized,
+            serde_json::json!({
+                "identity": {
+                    "session_id": "session-1",
+                    "node_id": "node-a",
+                    "node_type": "stream",
+                    "schema_version": "v1"
+                },
+                "status": "ready",
+                "input_fingerprint": "fp-a",
+                "private_state": { "cursor": 12 },
+                "indirect_state_reference": {
+                    "reference_kind": "kv-cache-segment",
+                    "reference_id": "cache-segment-1",
+                    "restore_strategy": "rehydrate_before_resume",
+                    "inspection_metadata": { "host": "gateway-1" }
+                },
+                "inspection_metadata": { "label": "Stream" }
+            })
+        );
     }
 
     #[tokio::test]
@@ -319,6 +390,12 @@ mod tests {
                 input_fingerprint: Some("fp-a".to_string()),
                 output_snapshot: Some(serde_json::json!({ "text": "alpha" })),
                 private_state: Some(serde_json::json!({ "cursor": 1 })),
+                indirect_state_reference: Some(NodeMemoryIndirectStateReference {
+                    reference_kind: "runtime-slot".to_string(),
+                    reference_id: "slot-a".to_string(),
+                    restore_strategy: NodeMemoryRestoreStrategy::RebindHostResource,
+                    inspection_metadata: None,
+                }),
                 inspection_metadata: Some(serde_json::json!({ "label": "Alpha" })),
             })
             .await;
@@ -334,6 +411,7 @@ mod tests {
                 input_fingerprint: Some("fp-b".to_string()),
                 output_snapshot: Some(serde_json::json!({ "text": "beta" })),
                 private_state: None,
+                indirect_state_reference: None,
                 inspection_metadata: None,
             })
             .await;
@@ -369,6 +447,7 @@ mod tests {
                 input_fingerprint: None,
                 output_snapshot: None,
                 private_state: None,
+                indirect_state_reference: None,
                 inspection_metadata: None,
             })
             .await;
@@ -384,6 +463,7 @@ mod tests {
                 input_fingerprint: None,
                 output_snapshot: None,
                 private_state: None,
+                indirect_state_reference: None,
                 inspection_metadata: None,
             })
             .await;

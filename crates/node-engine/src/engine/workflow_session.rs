@@ -149,6 +149,7 @@ fn node_memory_snapshot_from_cache_entry(
         input_fingerprint: input_snapshot.map(canonical_json_fingerprint),
         output_snapshot: Some(cached.value.clone()),
         private_state: None,
+        indirect_state_reference: None,
         inspection_metadata: Some(cache_projection_metadata(input_snapshot, cached.version)),
     })
 }
@@ -437,6 +438,7 @@ mod tests {
                 input_fingerprint: Some("fp-a".to_string()),
                 output_snapshot: Some(serde_json::json!({ "text": "alpha" })),
                 private_state: None,
+                indirect_state_reference: None,
                 inspection_metadata: Some(serde_json::json!({ "label": "Alpha" })),
             },
         )

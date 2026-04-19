@@ -57,7 +57,8 @@ mod workflow_session;
 
 pub use session_state::{
     GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot,
-    NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus, WorkflowSessionCheckpointSummary,
+    NodeMemoryIdentity, NodeMemoryIndirectStateReference, NodeMemoryRestoreStrategy,
+    NodeMemorySnapshot, NodeMemoryStatus, WorkflowSessionCheckpointSummary,
     WorkflowSessionResidencyState,
 };
 

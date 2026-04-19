@@ -203,6 +203,7 @@ mod tests {
                 input_fingerprint: Some("fp-a".to_string()),
                 output_snapshot: Some(serde_json::json!({ "text": "alpha" })),
                 private_state: Some(serde_json::json!({ "cursor": 1 })),
+                indirect_state_reference: None,
                 inspection_metadata: Some(serde_json::json!({ "label": "Alpha" })),
             }],
             memory_impact: None,

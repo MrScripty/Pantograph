@@ -586,7 +586,7 @@ execution.
       backend-owned node memory through workflow-session contracts.
 - [x] Integrate execution-time reads/writes so nodes can consume and update
       their memory through backend-owned contracts.
-- [ ] Keep runtime handles and non-serializable process state out of the memory
+- [x] Keep runtime handles and non-serializable process state out of the memory
       payload; represent them through indirect references and restore rules.
 - [x] Preserve strict separation between output cache reuse and explicit node
       memory reuse.
@@ -598,7 +598,7 @@ execution.
 - Focused `cargo test -p pantograph-workflow-service` coverage for graph-memory
   store ownership and state isolation
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 4: Add Graph-Edit Reconciliation And Incremental Reinjection
 
@@ -828,6 +828,11 @@ Update during implementation:
   serializable node-memory snapshots into task inputs under a reserved
   `_node_memory` contract for bound workflow sessions, so reruns can consume
   backend-owned prior memory without moving that state into adapters or Tauri.
+- 2026-04-18: Milestone 3 completed. `session_state.rs` now defines an
+  explicit indirect runtime/process-state reference contract plus restore
+  strategy enum for non-serializable state, cache-derived node-memory
+  projection keeps those references empty by default, and the Phase 6 source of
+  truth now treats Milestone 3 as complete.
 
 ## Commit Cadence Notes
 

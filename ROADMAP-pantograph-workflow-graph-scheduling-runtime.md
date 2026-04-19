@@ -861,6 +861,10 @@ the affected downstream closure.
   node-memory snapshots into task inputs under a backend-owned `_node_memory`
   contract, giving reruns an initial memory-consumption seam while keeping
   non-serializable runtime/process handles out of the current payload.
+- Milestone 3 is now complete: node-memory snapshots have backend-owned write
+  projection, rerun-time read injection, state-isolation coverage, canonical
+  input provenance, and an explicit indirect reference plus restore-strategy
+  contract for non-serializable runtime/process state.
 
 **Milestones:**
 

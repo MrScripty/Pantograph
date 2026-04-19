@@ -106,6 +106,9 @@ changing the public executor surface.
   into task inputs through a reserved backend-owned `_node_memory` key so
   memory consumption remains owned by Rust execution paths instead of
   transport adapters.
+- Non-serializable runtime/process state should stay out of `private_state`
+  and instead use the explicit indirect reference plus restore-strategy
+  contract defined in `session_state.rs`.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under
