@@ -20,7 +20,7 @@
           "label": "Puma-Lib",
           "selectionMode": "library",
           "modelName": "tiny-sd-turbo",
-          "modelPath": "/media/jeremy/OrangeCream/Linux Software/Pumas-Library/shared-resources/models/diffusion/cc-nms/tiny-sd-turbo",
+          "modelPath": "/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/shared-resources/models/diffusion/cc-nms/tiny-sd-turbo",
           "model_id": "diffusion/cc-nms/tiny-sd-turbo",
           "model_type": "diffusion",
           "task_type_primary": "text-to-image",
