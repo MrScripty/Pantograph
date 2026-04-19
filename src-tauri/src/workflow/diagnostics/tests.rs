@@ -1400,10 +1400,12 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
             execution_id: "exec-1".to_string(),
             graph: None,
             dirty_tasks: vec!["llm-1".to_string()],
-            memory_impact: Some(node_engine::GraphMemoryImpactSummary::fallback_full_invalidation(
-                ["llm-1"],
-                "graph_changed",
-            )),
+            memory_impact: Some(
+                node_engine::GraphMemoryImpactSummary::fallback_full_invalidation(
+                    ["llm-1"],
+                    "graph_changed",
+                ),
+            ),
         },
         1_020,
     );
