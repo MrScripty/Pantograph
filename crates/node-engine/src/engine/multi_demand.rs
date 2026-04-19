@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::future::{poll_fn, Future};
+use std::future::{Future, poll_fn};
 use std::pin::Pin;
 use std::task::Poll;
 
@@ -191,18 +191,17 @@ fn has_requested_dependent(
         return false;
     }
 
-    graph.get_dependents(node_id).into_iter().any(|dependent_id| {
-        requested_target_set.contains(&dependent_id)
-            || has_requested_dependent(graph, &dependent_id, requested_target_set, visited)
-    })
+    graph
+        .get_dependents(node_id)
+        .into_iter()
+        .any(|dependent_id| {
+            requested_target_set.contains(&dependent_id)
+                || has_requested_dependent(graph, &dependent_id, requested_target_set, visited)
+        })
 }
 
 impl DemandMultipleResults {
-    fn record_success(
-        &mut self,
-        node_id: &NodeId,
-        outputs: HashMap<String, serde_json::Value>,
-    ) {
+    fn record_success(&mut self, node_id: &NodeId, outputs: HashMap<String, serde_json::Value>) {
         self.outputs.insert(node_id.clone(), outputs);
     }
 
@@ -317,12 +316,7 @@ impl<'a> DemandMultipleCoordinator<'a> {
             budget,
             plan,
             window_runner: DemandWindowRunner::new(
-                engine,
-                graph,
-                executor,
-                context,
-                event_sink,
-                extensions,
+                engine, graph, executor, context, event_sink, extensions,
             ),
             results: DemandMultipleResults::default(),
         }
@@ -476,13 +470,7 @@ impl<'a> DemandWindowRunner<'a> {
         let engine = &mut *self.engine;
 
         Self::demand_target_with_engine(
-            engine,
-            node_id,
-            graph,
-            executor,
-            context,
-            event_sink,
-            extensions,
+            engine, node_id, graph, executor, context, event_sink, extensions,
         )
         .await
     }
@@ -556,14 +544,7 @@ impl<'a> DemandWindowRunner<'a> {
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<String, serde_json::Value>> {
         engine
-            .demand(
-                node_id,
-                graph,
-                executor,
-                context,
-                event_sink,
-                extensions,
-            )
+            .demand(node_id, graph, executor, context, event_sink, extensions)
             .await
     }
 
@@ -640,7 +621,7 @@ async fn demand_multiple_with_budget(
         .emit_incremental_execution_started(graph.id.clone(), plan.requested_targets().to_vec());
     let mut demand_engine = workflow_executor.demand_engine.write().await;
 
-    execute_plan_with_budget(
+    let outputs = execute_plan_with_budget(
         &mut demand_engine,
         &plan,
         budget,
@@ -650,7 +631,12 @@ async fn demand_multiple_with_budget(
         workflow_executor.event_sink.as_ref(),
         &workflow_executor.extensions,
     )
-    .await
+    .await?;
+    drop(demand_engine);
+    drop(graph);
+
+    super::workflow_session::sync_bound_session_node_memory_from_cache(workflow_executor).await;
+    Ok(outputs)
 }
 
 pub(super) async fn demand_multiple_with_default_budget(
@@ -688,14 +674,7 @@ async fn demand_multiple_with_explicit_budget(
     let plan = DemandMultiplePlan::from_requested_targets(node_ids, graph);
 
     execute_plan_with_budget(
-        engine,
-        &plan,
-        budget,
-        graph,
-        executor,
-        context,
-        event_sink,
-        extensions,
+        engine, &plan, budget, graph, executor, context, event_sink, extensions,
     )
     .await
 }
@@ -711,14 +690,7 @@ async fn execute_plan_with_budget(
     extensions: &ExecutorExtensions,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     DemandMultipleCoordinator::new(
-        engine,
-        plan,
-        budget,
-        graph,
-        executor,
-        context,
-        event_sink,
-        extensions,
+        engine, plan, budget, graph, executor, context, event_sink, extensions,
     )
     .run()
     .await
@@ -728,24 +700,25 @@ async fn execute_plan_with_budget(
 mod tests {
     use std::collections::HashMap;
     use std::future::Future;
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     use async_trait::async_trait;
     use graph_flow::Context;
 
+    use crate::engine::WorkflowExecutor;
     use crate::error::NodeEngineError;
     use crate::events::NullEventSink;
     use crate::extensions::ExecutorExtensions;
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
-        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
         DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
-        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome,
-        DemandDispatchWindowPlan, DemandDispatchWindowResult, DemandEngine,
-        DemandExecutionBudget, DemandMultiplePlan, DemandMultipleResults, DemandWindowRunner,
-        TaskExecutor,
+        DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome, DemandDispatchWindowPlan,
+        DemandDispatchWindowResult, DemandEngine, DemandExecutionBudget, DemandMultiplePlan,
+        DemandMultipleResults, DemandWindowRunner, TaskExecutor,
+        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
     };
 
     fn make_linear_graph() -> WorkflowGraph {
@@ -789,6 +762,24 @@ mod tests {
                 },
             ],
             groups: Vec::new(),
+        }
+    }
+
+    struct SnapshotTaskExecutor;
+
+    #[async_trait]
+    impl TaskExecutor for SnapshotTaskExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            _inputs: HashMap<String, serde_json::Value>,
+            _context: &Context,
+            _extensions: &ExecutorExtensions,
+        ) -> crate::error::Result<HashMap<String, serde_json::Value>> {
+            Ok(HashMap::from([(
+                "value".to_string(),
+                serde_json::json!(task_id),
+            )]))
         }
     }
 
@@ -1071,11 +1062,14 @@ mod tests {
     #[test]
     fn plan_preserves_requested_target_order_for_event_payloads() {
         let graph = make_linear_graph();
-        let plan = DemandMultiplePlan::from_requested_targets(&[
-            "node_b".to_string(),
-            "node_a".to_string(),
-            "node_c".to_string(),
-        ], &graph);
+        let plan = DemandMultiplePlan::from_requested_targets(
+            &[
+                "node_b".to_string(),
+                "node_a".to_string(),
+                "node_c".to_string(),
+            ],
+            &graph,
+        );
 
         assert_eq!(
             plan.requested_targets(),
@@ -1132,7 +1126,10 @@ mod tests {
         let plan =
             DemandMultiplePlan::from_requested_targets(&["b".to_string(), "c".to_string()], &graph);
 
-        assert_eq!(plan.requested_targets(), &["b".to_string(), "c".to_string()]);
+        assert_eq!(
+            plan.requested_targets(),
+            &["b".to_string(), "c".to_string()]
+        );
         assert_eq!(plan.execution_batches(), &[vec!["c".to_string()]]);
     }
 
@@ -1142,7 +1139,10 @@ mod tests {
         let plan =
             DemandMultiplePlan::from_requested_targets(&["c".to_string(), "c".to_string()], &graph);
 
-        assert_eq!(plan.requested_targets(), &["c".to_string(), "c".to_string()]);
+        assert_eq!(
+            plan.requested_targets(),
+            &["c".to_string(), "c".to_string()]
+        );
         assert_eq!(plan.execution_batches(), &[vec!["c".to_string()]]);
     }
 
@@ -1152,10 +1152,7 @@ mod tests {
         let plan =
             DemandMultiplePlan::from_requested_targets(&["a".to_string(), "c".to_string()], &graph);
 
-        assert_eq!(
-            plan.execution_batches(),
-            &[vec!["c".to_string()]]
-        );
+        assert_eq!(plan.execution_batches(), &[vec!["c".to_string()]]);
     }
 
     #[test]
@@ -1336,7 +1333,10 @@ mod tests {
             DemandDispatchWindowExecutionMode::BoundedParallel,
         );
 
-        assert_eq!(window.targets(), &["node_a".to_string(), "node_b".to_string()]);
+        assert_eq!(
+            window.targets(),
+            &["node_a".to_string(), "node_b".to_string()]
+        );
         assert_eq!(
             window.execution_mode(),
             DemandDispatchWindowExecutionMode::BoundedParallel
@@ -1415,6 +1415,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workflow_executor_multi_demand_records_bound_session_node_memory_from_cache() {
+        let workflow_executor =
+            WorkflowExecutor::new("exec-1", make_linear_graph(), Arc::new(NullEventSink));
+        workflow_executor.bind_workflow_session("session-1").await;
+
+        workflow_executor
+            .demand_multiple(&["b".to_string(), "c".to_string()], &SnapshotTaskExecutor)
+            .await
+            .expect("multi-demand graph");
+
+        let snapshots = workflow_executor
+            .workflow_session_node_memory_snapshots("session-1")
+            .await;
+        assert_eq!(snapshots.len(), 3);
+        assert_eq!(
+            snapshots
+                .iter()
+                .map(|snapshot| snapshot.identity.node_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b", "c"]
+        );
+        assert_eq!(
+            snapshots[2].output_snapshot,
+            Some(serde_json::json!({ "value": "c" }))
+        );
+    }
+
+    #[tokio::test]
     #[ignore = "benchmark-like harness for comparing sequential and bounded parallel demand"]
     async fn demand_harness_compares_sequential_and_parallel_baselines() {
         let sequential = run_parallel_demand_harness(1).await;
@@ -1434,14 +1462,8 @@ mod tests {
     #[test]
     fn results_keep_distinct_targets() {
         let mut results = DemandMultipleResults::default();
-        let output_a = HashMap::from([(
-            "value".to_string(),
-            serde_json::json!("first"),
-        )]);
-        let output_b = HashMap::from([(
-            "value".to_string(),
-            serde_json::json!("second"),
-        )]);
+        let output_a = HashMap::from([("value".to_string(), serde_json::json!("first"))]);
+        let output_b = HashMap::from([("value".to_string(), serde_json::json!("second"))]);
 
         results.record_success(&"node_a".to_string(), output_a);
         results.record_success(&"node_b".to_string(), output_b);
@@ -1455,14 +1477,8 @@ mod tests {
     #[test]
     fn results_use_last_write_for_duplicate_targets() {
         let mut results = DemandMultipleResults::default();
-        let first_output = HashMap::from([(
-            "value".to_string(),
-            serde_json::json!("first"),
-        )]);
-        let second_output = HashMap::from([(
-            "value".to_string(),
-            serde_json::json!("second"),
-        )]);
+        let first_output = HashMap::from([("value".to_string(), serde_json::json!("first"))]);
+        let second_output = HashMap::from([("value".to_string(), serde_json::json!("second"))]);
 
         results.record_success(&"node_a".to_string(), first_output);
         results.record_success(&"node_a".to_string(), second_output);

@@ -844,10 +844,11 @@ the affected downstream closure.
   `WorkflowExecutor`, so the remaining execution-path integration can key node
   memory off a backend-owned logical session identity instead of guessing from
   run/execution ids.
-- The single-demand executor path now also records bound-session node-memory
-  snapshots from backend cache state after successful execution, which gives
-  Milestone 3 its first real execution-time write path while the still-dirty
-  multi-demand coordinator remains deferred to a follow-on slice.
+- The single-demand and multi-demand executor paths now both record bound-
+  session node-memory snapshots from backend cache state after successful
+  execution, giving Milestone 3 a backend-owned execution-time write path
+  across both demand facades while leaving later memory-consumption and
+  restore/reconciliation behavior explicitly open.
 
 **Milestones:**
 

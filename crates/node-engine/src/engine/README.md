@@ -15,7 +15,7 @@ entrypoint while preserving the current public API.
 | `graph_state.rs` | Workflow graph mutation, snapshot, and restore helpers behind the public executor facade. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
-| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, and the future insertion point for bounded parallel coordination. |
+| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, bounded-parallel coordination, and bound-session node-memory projection after successful runs. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `session_state.rs` | Phase 6 workflow-session residency, bound workflow-session identity, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned per-session node-memory store and checkpoint-summary helper. |
@@ -95,6 +95,10 @@ changing the public executor surface.
   continue to project from backend cache state through `workflow_session.rs`
   rather than reintroducing Phase 6 memory persistence logic into `engine.rs`
   or transport adapters.
+- Bound workflow-session node-memory writes for the multi-demand path should
+  also project from backend cache state through `workflow_session.rs` after
+  successful execution rather than reintroducing Phase 6 memory persistence
+  logic into `engine.rs` or transport adapters.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under

@@ -577,16 +577,18 @@ execution.
 
 **Tasks:**
 - [x] Add workflow-session memory records keyed by session id and node id.
-- [ ] Define memory record fields for identity, last input fingerprint, last
+- [x] Define memory record fields for identity, last input fingerprint, last
       output snapshot, private node state, status, and inspection metadata.
-- [ ] Make the per-node memory contract explicit enough that a node's logical
+- [x] Make the per-node memory contract explicit enough that a node's logical
       memory can be inspected after execution without depending on live runtime
       process state.
+- [x] Integrate execution-time writes so successful demand paths update
+      backend-owned node memory through workflow-session contracts.
 - [ ] Integrate execution-time reads/writes so nodes can consume and update
       their memory through backend-owned contracts.
 - [ ] Keep runtime handles and non-serializable process state out of the memory
       payload; represent them through indirect references and restore rules.
-- [ ] Preserve strict separation between output cache reuse and explicit node
+- [x] Preserve strict separation between output cache reuse and explicit node
       memory reuse.
 - [ ] Add backend-owned tests proving memory isolation across concurrent
       workflow sessions and repeated runs against the same session.
@@ -807,6 +809,11 @@ Update during implementation:
   projects bound-session node memory from backend cache state after successful
   execution, which records real output snapshots for every cached node reached
   by the run without reopening the already-dirty multi-demand coordinator yet.
+- 2026-04-18: Milestone 3 continued. The multi-demand executor path now also
+  projects bound-session node memory from backend cache state after successful
+  execution, and focused `node-engine` coverage now pins that both executor
+  demand paths record backend-owned node-memory snapshots without moving
+  ownership into adapters.
 
 ## Commit Cadence Notes
 
