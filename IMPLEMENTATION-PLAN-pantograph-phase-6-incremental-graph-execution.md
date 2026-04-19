@@ -548,19 +548,19 @@ layers.
 the new system safely.
 
 **Tasks:**
-- [ ] Extract node-memory and checkpoint helpers out of
+- [x] Extract node-memory and checkpoint helpers out of
       `crates/pantograph-workflow-service/src/graph/session.rs`.
-- [ ] Extract execution-memory and checkpoint-adapter helpers out of the
+- [x] Extract execution-memory and checkpoint-adapter helpers out of the
       immediate `node-engine` insertion area as needed.
-- [ ] Extract or isolate any runtime-residency/checkpoint coordination helpers
+- [x] Extract or isolate any runtime-residency/checkpoint coordination helpers
       from adjacent workflow-service or runtime-boundary modules before more
       phase logic lands there.
-- [ ] Refactor `src-tauri/src/workflow/execution_manager.rs` so execution handle
+- [x] Refactor `src-tauri/src/workflow/execution_manager.rs` so execution handle
       ownership, undo/redo, and checkpoint lifecycle do not remain collapsed in
       one module if this file is touched.
-- [ ] Keep `workflow.rs` facade-first and avoid re-owning graph memory policy
+- [x] Keep `workflow.rs` facade-first and avoid re-owning graph memory policy
       there.
-- [ ] Update README files for any new source directories/modules created by the
+- [x] Update README files for any new source directories/modules created by the
       extraction.
 
 **Verification:**
@@ -568,7 +568,7 @@ the new system safely.
 - `cargo test -p node-engine --lib`
 - README review for touched backend source directories
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 3: Implement Workflow-Session Node Memory
 

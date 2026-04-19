@@ -795,7 +795,7 @@ incremental runs.
 
 ### Phase 6: Incremental Graph Execution
 
-**Status:** Not started
+**Status:** In progress
 
 **Goal:** Add a backend-owned node-memory and session-checkpoint substrate so
 graph edits, input reinjection, keep-alive sessions, and temporary
@@ -823,6 +823,13 @@ the affected downstream closure.
   impact as fallback full invalidation for dirty tasks, making the current
   conservative behavior machine-consumable until later milestones implement
   compatibility-preserving graph reconciliation.
+- Milestone 2 backend-boundary decomposition is now complete across the Phase 6
+  insertion areas: graph-session response/state/runtime/type helpers now live
+  behind focused `graph/` modules, `node-engine` workflow-session facade wiring
+  now lives behind `engine/workflow_session.rs`, workflow-service session
+  runtime coordination now lives behind `workflow/session_runtime.rs`, and the
+  Tauri execution manager no longer keeps execution lifecycle and per-handle
+  state collapsed in one file.
 
 **Milestones:**
 
