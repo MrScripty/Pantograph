@@ -105,8 +105,7 @@ def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature
                     "model_type": _model_type,
                     "device": str(_device) if _device is not None else None,
                 }
-                if text and text.strip():
-                    return text
+                return text
             except Exception as exc:
                 logger.warning("Live KV reuse failed; falling back to fresh decode: %s", exc)
                 _live_kv_state = None
