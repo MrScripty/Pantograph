@@ -116,6 +116,10 @@ changing the public executor surface.
   indirect reference when execution did not receive an explicit override, but
   only while the backend-owned node-memory status remains `ready`, so
   invalidated prefix state does not silently leak into suffix reruns.
+- Explicit graph wiring from `kv_cache_out` to downstream `kv_cache_in`
+  remains the primary suffix-reuse path for kept-alive reruns: if only the
+  downstream suffix inputs change, the demand engine should keep the upstream
+  KV-producing prefix node cached and rerun only the suffix consumer.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under

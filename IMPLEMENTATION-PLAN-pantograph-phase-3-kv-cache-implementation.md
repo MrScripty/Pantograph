@@ -358,7 +358,7 @@ end-to-end KV behavior.
 **Tasks:**
 - [x] Extend Phase 6 workflow-session memory to carry indirect KV references
       for compatible inference nodes.
-- [ ] Define how repeated kept-alive invocations reuse compatible KV when only
+- [x] Define how repeated kept-alive invocations reuse compatible KV when only
       downstream suffix inputs change.
 - [x] Define invalidation rules for:
       model change,
@@ -398,6 +398,10 @@ Latest landed slice:
   tokenizer-or-config, upstream-prefix, and graph-topology compatibility
   breaks instead of leaving later rerun policy to infer them from generic
   change tags.
+- Bound-session acceptance coverage now freezes the suffix-only reuse rule:
+  explicit graph wiring from upstream `kv_cache_out` to downstream
+  `kv_cache_in` lets the demand engine keep the prefix node cached while only
+  rerunning the downstream suffix consumer after suffix-input edits.
 - Phase 6 node-memory remains the lifecycle owner for those references; reuse
   policy for suffix-only reruns is still deferred to later Milestone 5 slices.
 

@@ -450,6 +450,63 @@ mod tests {
         graph
     }
 
+    fn kv_suffix_reuse_graph() -> crate::types::WorkflowGraph {
+        crate::types::WorkflowGraph {
+            id: "graph-1".to_string(),
+            name: "Graph".to_string(),
+            nodes: vec![
+                crate::types::GraphNode {
+                    id: "prefix-input".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({ "text": "prefix-alpha" }),
+                    position: (0.0, 0.0),
+                },
+                crate::types::GraphNode {
+                    id: "suffix-input".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({ "text": "suffix-alpha" }),
+                    position: (0.0, 160.0),
+                },
+                crate::types::GraphNode {
+                    id: "prefix-llm".to_string(),
+                    node_type: "llamacpp-inference".to_string(),
+                    data: serde_json::json!({}),
+                    position: (220.0, 0.0),
+                },
+                crate::types::GraphNode {
+                    id: "suffix-llm".to_string(),
+                    node_type: "llamacpp-inference".to_string(),
+                    data: serde_json::json!({}),
+                    position: (460.0, 80.0),
+                },
+            ],
+            edges: vec![
+                crate::types::GraphEdge {
+                    id: "edge-prefix".to_string(),
+                    source: "prefix-input".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "prefix-llm".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+                crate::types::GraphEdge {
+                    id: "edge-suffix".to_string(),
+                    source: "suffix-input".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "suffix-llm".to_string(),
+                    target_handle: "prompt".to_string(),
+                },
+                crate::types::GraphEdge {
+                    id: "edge-kv".to_string(),
+                    source: "prefix-llm".to_string(),
+                    source_handle: "kv_cache_out".to_string(),
+                    target: "suffix-llm".to_string(),
+                    target_handle: "kv_cache_in".to_string(),
+                },
+            ],
+            groups: Vec::new(),
+        }
+    }
+
     #[tokio::test]
     async fn executor_workflow_session_helpers_preserve_graph_revision_and_residency() {
         let executor = WorkflowExecutor::new(
@@ -745,6 +802,102 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct KvSuffixReuseTaskExecutor {
+        run_counts: std::sync::Mutex<std::collections::HashMap<String, usize>>,
+    }
+
+    impl KvSuffixReuseTaskExecutor {
+        fn run_count(&self, node_id: &str) -> usize {
+            self.run_counts
+                .lock()
+                .expect("run counts lock")
+                .get(node_id)
+                .copied()
+                .unwrap_or(0)
+        }
+    }
+
+    #[async_trait]
+    impl TaskExecutor for KvSuffixReuseTaskExecutor {
+        async fn execute_task(
+            &self,
+            task_id: &str,
+            inputs: std::collections::HashMap<String, serde_json::Value>,
+            _context: &graph_flow::Context,
+            _extensions: &crate::extensions::ExecutorExtensions,
+        ) -> crate::error::Result<std::collections::HashMap<String, serde_json::Value>> {
+            let run_number = {
+                let mut counts = self.run_counts.lock().expect("run counts lock");
+                let count = counts.entry(task_id.to_string()).or_insert(0);
+                *count += 1;
+                *count
+            };
+
+            match task_id {
+                "prefix-input" | "suffix-input" => Ok(std::collections::HashMap::from([(
+                    "text".to_string(),
+                    inputs
+                        .get("_data")
+                        .and_then(|data| data.get("text"))
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null),
+                )])),
+                "prefix-llm" => Ok(std::collections::HashMap::from([
+                    (
+                        "response".to_string(),
+                        serde_json::json!({
+                            "prompt": inputs.get("prompt").cloned().unwrap_or(serde_json::Value::Null),
+                            "run_number": run_number,
+                        }),
+                    ),
+                    (
+                        "kv_cache_out".to_string(),
+                        serde_json::json!({
+                            "cache_id": format!("prefix-cache-run-{run_number}"),
+                            "compatibility": {
+                                "model_fingerprint": {
+                                    "model_id": "model-1",
+                                    "config_hash": "cfg-1",
+                                },
+                                "runtime_fingerprint": {
+                                    "runtime_id": "runtime-1",
+                                    "backend_key": "llamacpp",
+                                    "tokenizer_fingerprint": "tok-1",
+                                    "prompt_format_fingerprint": "prompt-1",
+                                    "runtime_build_fingerprint": "build-1",
+                                }
+                            }
+                        }),
+                    ),
+                ])),
+                "suffix-llm" => Ok(std::collections::HashMap::from([
+                    (
+                        "observed_prompt".to_string(),
+                        inputs
+                            .get("prompt")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null),
+                    ),
+                    (
+                        "observed_kv_cache_in".to_string(),
+                        inputs
+                            .get("kv_cache_in")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null),
+                    ),
+                    (
+                        "response".to_string(),
+                        serde_json::json!({
+                            "run_number": run_number,
+                        }),
+                    ),
+                ])),
+                other => panic!("unexpected task id: {other}"),
+            }
+        }
+    }
+
     #[async_trait]
     impl TaskExecutor for KvCacheReusingTaskExecutor {
         async fn execute_task(
@@ -865,6 +1018,83 @@ mod tests {
             second_outputs.get("observed_kv_cache_in"),
             Some(&serde_json::Value::Null)
         );
+    }
+
+    #[tokio::test]
+    async fn suffix_only_rerun_reuses_graph_wired_kv_without_rerunning_prefix() {
+        let executor =
+            WorkflowExecutor::new("exec-1", kv_suffix_reuse_graph(), Arc::new(NullEventSink));
+        let task_executor = KvSuffixReuseTaskExecutor::default();
+        bind_workflow_session(&executor, "session-1").await;
+
+        let first_outputs = executor
+            .demand(&"suffix-llm".to_string(), &task_executor)
+            .await
+            .expect("first run should succeed");
+        assert_eq!(
+            first_outputs.get("observed_prompt"),
+            Some(&serde_json::json!("suffix-alpha"))
+        );
+        assert_eq!(
+            first_outputs.get("observed_kv_cache_in"),
+            Some(&serde_json::json!({
+                "cache_id": "prefix-cache-run-1",
+                "compatibility": {
+                    "model_fingerprint": {
+                        "model_id": "model-1",
+                        "config_hash": "cfg-1",
+                    },
+                    "runtime_fingerprint": {
+                        "runtime_id": "runtime-1",
+                        "backend_key": "llamacpp",
+                        "tokenizer_fingerprint": "tok-1",
+                        "prompt_format_fingerprint": "prompt-1",
+                        "runtime_build_fingerprint": "build-1",
+                    }
+                }
+            }))
+        );
+        assert_eq!(task_executor.run_count("prefix-input"), 1);
+        assert_eq!(task_executor.run_count("prefix-llm"), 1);
+        assert_eq!(task_executor.run_count("suffix-input"), 1);
+        assert_eq!(task_executor.run_count("suffix-llm"), 1);
+
+        let suffix_input_node_id = "suffix-input".to_string();
+        executor
+            .update_node_data(&suffix_input_node_id, serde_json::json!({ "text": "suffix-beta" }))
+            .await
+            .expect("update suffix input");
+        let second_outputs = executor
+            .demand(&"suffix-llm".to_string(), &task_executor)
+            .await
+            .expect("second run should succeed");
+        assert_eq!(
+            second_outputs.get("observed_prompt"),
+            Some(&serde_json::json!("suffix-beta"))
+        );
+        assert_eq!(
+            second_outputs.get("observed_kv_cache_in"),
+            Some(&serde_json::json!({
+                "cache_id": "prefix-cache-run-1",
+                "compatibility": {
+                    "model_fingerprint": {
+                        "model_id": "model-1",
+                        "config_hash": "cfg-1",
+                    },
+                    "runtime_fingerprint": {
+                        "runtime_id": "runtime-1",
+                        "backend_key": "llamacpp",
+                        "tokenizer_fingerprint": "tok-1",
+                        "prompt_format_fingerprint": "prompt-1",
+                        "runtime_build_fingerprint": "build-1",
+                    }
+                }
+            }))
+        );
+        assert_eq!(task_executor.run_count("prefix-input"), 1);
+        assert_eq!(task_executor.run_count("prefix-llm"), 1);
+        assert_eq!(task_executor.run_count("suffix-input"), 2);
+        assert_eq!(task_executor.run_count("suffix-llm"), 2);
     }
 
     #[tokio::test]

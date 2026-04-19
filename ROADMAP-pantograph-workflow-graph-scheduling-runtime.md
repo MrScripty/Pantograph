@@ -593,6 +593,10 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   runtime/backend, tokenizer-or-config, upstream-prefix, and prefix-breaking
   topology changes with explicit backend invalidation reasons for later rerun
   policy and diagnostics
+- Bound-session suffix-rerun coverage now proves the primary reuse path stays
+  backend-owned: explicit graph wiring from upstream `kv_cache_out` to
+  downstream `kv_cache_in` keeps the prefix node cached while only the
+  suffix consumer reruns after suffix-input edits
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse
