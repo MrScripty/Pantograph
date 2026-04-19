@@ -119,6 +119,34 @@ pub fn save_managed_runtime_state(
     Ok(())
 }
 
+pub(crate) fn runtime_state_entry_mut(
+    state: &mut ManagedRuntimePersistedState,
+    id: ManagedBinaryId,
+) -> Option<&mut ManagedRuntimePersistedRuntime> {
+    state.runtimes.iter_mut().find(|runtime| runtime.id == id)
+}
+
+pub(crate) fn ensure_runtime_state_entry(
+    state: &mut ManagedRuntimePersistedState,
+    id: ManagedBinaryId,
+) -> &mut ManagedRuntimePersistedRuntime {
+    if let Some(index) = state.runtimes.iter().position(|runtime| runtime.id == id) {
+        return &mut state.runtimes[index];
+    }
+
+    state.runtimes.push(ManagedRuntimePersistedRuntime {
+        id,
+        versions: Vec::new(),
+        selection: ManagedRuntimeSelectionState::default(),
+        active_job: None,
+        install_history: Vec::new(),
+    });
+    state
+        .runtimes
+        .last_mut()
+        .expect("managed runtime state entry should exist after push")
+}
+
 pub(crate) fn runtime_state_entry(
     state: &ManagedRuntimePersistedState,
     id: ManagedBinaryId,

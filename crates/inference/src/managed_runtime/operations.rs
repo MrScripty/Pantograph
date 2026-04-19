@@ -1,13 +1,17 @@
 use super::archive::extract_archive;
 use super::contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ManagedRuntimeReadinessState, ManagedRuntimeSnapshot,
-    ManagedRuntimeVersionStatus, ResolvedCommand,
+    ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
+    ManagedRuntimeReadinessState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    ResolvedCommand,
 };
 use super::definitions::definition;
 use super::paths::{extract_pid_file, managed_install_dir, managed_runtime_dir};
 use super::state::{
-    load_managed_runtime_state, runtime_state_entry, ManagedRuntimePersistedRuntime,
+    ensure_runtime_state_entry, load_managed_runtime_state, runtime_state_entry,
+    runtime_state_entry_mut, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedRuntime,
+    ManagedRuntimePersistedVersion,
 };
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
@@ -140,6 +144,7 @@ where
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
     let definition = definition(id);
+    let runtime_version = definition.release_version().to_string();
     if definition.system_command().is_some() {
         return Err(format!(
             "{} is already available from the system PATH",
@@ -154,6 +159,20 @@ where
     fs::create_dir_all(&runtime_root)
         .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
 
+    persist_active_job(
+        app_data_dir,
+        id,
+        ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Queued,
+            status: format!("Queued {} install", definition.display_name()),
+            current: 0,
+            total: 0,
+            resumable: false,
+            cancellable: false,
+            error: None,
+        },
+    )?;
+
     on_progress(DownloadProgress {
         status: format!("Downloading {} binaries...", definition.display_name()),
         current: 0,
@@ -161,6 +180,20 @@ where
         done: false,
         error: None,
     });
+
+    persist_active_job(
+        app_data_dir,
+        id,
+        ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Downloading,
+            status: format!("Downloading {}", definition.display_name()),
+            current: 0,
+            total: 0,
+            resumable: false,
+            cancellable: false,
+            error: None,
+        },
+    )?;
 
     log::info!(
         "Downloading {} from: {}",
@@ -211,6 +244,20 @@ where
             done: false,
             error: None,
         });
+
+        persist_active_job(
+            app_data_dir,
+            id,
+            ManagedRuntimeJobStatus {
+                state: ManagedRuntimeJobState::Downloading,
+                status: "Downloading".to_string(),
+                current: downloaded,
+                total: total_size,
+                resumable: false,
+                cancellable: false,
+                error: None,
+            },
+        )?;
     }
     drop(file);
 
@@ -221,6 +268,20 @@ where
         done: false,
         error: None,
     });
+
+    persist_active_job(
+        app_data_dir,
+        id,
+        ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Extracting,
+            status: "Extracting".to_string(),
+            current: total_size,
+            total: total_size,
+            resumable: false,
+            cancellable: false,
+            error: None,
+        },
+    )?;
 
     let extract_dir = runtime_root.join(format!(
         ".{}-extract-{}",
@@ -245,17 +306,46 @@ where
 
     if let Err(error) = extraction_result {
         let _ = fs::remove_dir_all(&staging_dir);
+        persist_failed_job(
+            app_data_dir,
+            id,
+            &runtime_version,
+            "Install failed".to_string(),
+            error.clone(),
+        )?;
         return Err(error);
     }
+
+    persist_active_job(
+        app_data_dir,
+        id,
+        ManagedRuntimeJobStatus {
+            state: ManagedRuntimeJobState::Validating,
+            status: "Validating".to_string(),
+            current: total_size,
+            total: total_size,
+            resumable: false,
+            cancellable: false,
+            error: None,
+        },
+    )?;
 
     let missing = definition.validate_installation(&staging_dir);
     if let Some(first_missing) = missing.first() {
         let _ = fs::remove_dir_all(&staging_dir);
-        return Err(format!(
+        let error = format!(
             "{} extraction completed but runtime file is still missing: {}",
             definition.display_name(),
             first_missing
-        ));
+        );
+        persist_failed_job(
+            app_data_dir,
+            id,
+            &runtime_version,
+            "Validation failed".to_string(),
+            error.clone(),
+        )?;
+        return Err(error);
     }
 
     if install_dir.exists() {
@@ -281,6 +371,8 @@ where
         "{} binaries downloaded and extracted successfully",
         definition.display_name()
     );
+
+    persist_install_success(app_data_dir, id, &runtime_version, &install_dir)?;
     Ok(())
 }
 
@@ -300,7 +392,10 @@ pub async fn remove_binary(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(
             install_dir,
             e
         )
-    })
+    })?;
+
+    persist_remove_success(app_data_dir, id)?;
+    Ok(())
 }
 
 pub fn resolve_binary_command(
@@ -412,12 +507,168 @@ fn version_status_for_capability(
     }
 }
 
+fn persist_active_job(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    job: ManagedRuntimeJobStatus,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+    runtime.active_job = Some(job);
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn persist_failed_job(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+    status: String,
+    error: String,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+    runtime.active_job = Some(ManagedRuntimeJobStatus {
+        state: ManagedRuntimeJobState::Failed,
+        status,
+        current: 0,
+        total: 0,
+        resumable: false,
+        cancellable: false,
+        error: Some(error.clone()),
+    });
+    upsert_persisted_version(
+        runtime,
+        ManagedRuntimePersistedVersion {
+            version: version.to_string(),
+            readiness_state: ManagedRuntimeReadinessState::Failed,
+            install_root: None,
+            last_ready_at_ms: None,
+            last_error: Some(error.clone()),
+        },
+    );
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::ValidationFailed,
+            version: Some(version.to_string()),
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some(error),
+        });
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn persist_install_success(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+    install_dir: &Path,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+    runtime.active_job = None;
+    upsert_persisted_version(
+        runtime,
+        ManagedRuntimePersistedVersion {
+            version: version.to_string(),
+            readiness_state: ManagedRuntimeReadinessState::Ready,
+            install_root: Some(install_dir.display().to_string()),
+            last_ready_at_ms: Some(current_unix_timestamp_ms()),
+            last_error: None,
+        },
+    );
+    if runtime.selection.selected_version.is_none() {
+        runtime.selection.selected_version = Some(version.to_string());
+    }
+    if runtime.selection.default_version.is_none() {
+        runtime.selection.default_version = Some(version.to_string());
+    }
+    runtime.selection.active_version = Some(version.to_string());
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::Installed,
+            version: Some(version.to_string()),
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some(format!("Installed into {}", install_dir.display())),
+        });
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn persist_remove_success(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let Some(runtime) = runtime_state_entry_mut(&mut state, id) else {
+        return Ok(());
+    };
+
+    let removed_versions = runtime
+        .versions
+        .iter()
+        .map(|version| version.version.clone())
+        .collect::<Vec<_>>();
+    runtime.versions.clear();
+    runtime.active_job = None;
+    if runtime
+        .selection
+        .selected_version
+        .as_ref()
+        .is_some_and(|selected| removed_versions.contains(selected))
+    {
+        runtime.selection.selected_version = None;
+    }
+    if runtime
+        .selection
+        .default_version
+        .as_ref()
+        .is_some_and(|default| removed_versions.contains(default))
+    {
+        runtime.selection.default_version = None;
+    }
+    runtime.selection.active_version = None;
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::Removed,
+            version: removed_versions.first().cloned(),
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some("Managed install removed".to_string()),
+        });
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn upsert_persisted_version(
+    runtime: &mut ManagedRuntimePersistedRuntime,
+    version: ManagedRuntimePersistedVersion,
+) {
+    if let Some(existing) = runtime
+        .versions
+        .iter_mut()
+        .find(|existing| existing.version == version.version)
+    {
+        *existing = version;
+        return;
+    }
+
+    runtime.versions.push(version);
+}
+
+fn current_unix_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        readiness_state_for_capability, snapshot_from_capability, ManagedBinaryCapability,
-        ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeReadinessState,
+        persist_install_success, persist_remove_success, readiness_state_for_capability,
+        snapshot_from_capability, ManagedBinaryCapability, ManagedBinaryId,
+        ManagedBinaryInstallState, ManagedRuntimeReadinessState,
     };
+    use crate::managed_runtime::load_managed_runtime_state;
+    use std::path::Path;
 
     fn capability(install_state: ManagedBinaryInstallState) -> ManagedBinaryCapability {
         ManagedBinaryCapability {
@@ -461,5 +712,58 @@ mod tests {
             ManagedRuntimeReadinessState::Ready
         );
         assert!(snapshot.active_job.is_none());
+    }
+
+    #[test]
+    fn persist_install_success_records_ready_version_and_selection() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp");
+
+        persist_install_success(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            &install_dir,
+        )
+        .expect("persist install success");
+
+        let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = state
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+
+        assert_eq!(runtime.versions.len(), 1);
+        assert_eq!(runtime.versions[0].version, "b8248");
+        assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
+        assert_eq!(runtime.selection.active_version.as_deref(), Some("b8248"));
+    }
+
+    #[test]
+    fn persist_remove_success_clears_versions_and_selection() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp");
+
+        persist_install_success(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            &install_dir,
+        )
+        .expect("persist install success");
+        persist_remove_success(temp_dir.path(), ManagedBinaryId::LlamaCpp)
+            .expect("persist remove success");
+
+        let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = state
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+
+        assert!(runtime.versions.is_empty());
+        assert_eq!(runtime.selection.selected_version, None);
+        assert_eq!(runtime.selection.active_version, None);
     }
 }

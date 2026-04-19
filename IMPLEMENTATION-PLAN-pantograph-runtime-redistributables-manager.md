@@ -482,6 +482,10 @@ Update during implementation:
   validation in the backend managed runtime archive helpers so zip and tar
   installs share one root-containment check instead of relying on scattered
   archive-specific assumptions.
+- 2026-04-19: Milestone 2 slice 3 wired successful and failed install/remove
+  transitions into the durable runtime state file so backend snapshots now
+  record concrete version, selection, job-failure, and install-history changes
+  instead of only exposing additive DTOs.
 
 ## Commit Cadence Notes
 

@@ -118,7 +118,8 @@ fn inspect_runtime(app_data_dir: &Path) {
 - `list_binary_capabilities()` and `binary_capability()` expose current managed
   availability plus allowed install/remove actions.
 - `download_binary()` and `remove_binary()` serialize per-runtime filesystem
-  mutations and surface progress/errors through backend-owned contracts.
+  mutations, persist backend-owned job/version/selection state, and surface
+  progress/errors through backend-owned contracts.
 - `resolve_binary_command()` returns the executable path, working directory,
   sanitized arguments, environment overrides, and optional pid-file path needed
   for host launchers.
@@ -141,7 +142,9 @@ fn inspect_runtime(app_data_dir: &Path) {
   that higher-level workflow readiness policy has been evaluated.
 - `state.json` under the managed runtime root is the persisted runtime-manager
   artifact for versions, selection state, interrupted-job reconciliation, and
-  install history. Unknown or missing files default to an empty state.
+  install history. Install/remove transitions mutate this file as part of the
+  backend lifecycle flow, and unknown or missing files default to an empty
+  state.
 - `ResolvedCommand` is the backend-produced launch contract for host adapters.
 - `ArchiveKind` and `ReleaseAsset` are internal producer contracts used by
   runtime definitions and platform adapters; changes here must keep the adapter

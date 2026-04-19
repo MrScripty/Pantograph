@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 pub(crate) trait ManagedBinaryDefinition: Sync {
     fn display_name(&self) -> &'static str;
+    fn release_version(&self) -> &'static str;
     fn release_asset(&self) -> Result<ReleaseAsset, String>;
     fn download_url(&self, release_asset: &ReleaseAsset) -> String;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
@@ -29,6 +30,10 @@ struct OllamaBinary;
 impl ManagedBinaryDefinition for LlamaCppBinary {
     fn display_name(&self) -> &'static str {
         ManagedBinaryId::LlamaCpp.display_name()
+    }
+
+    fn release_version(&self) -> &'static str {
+        crate::managed_runtime::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG
     }
 
     fn release_asset(&self) -> Result<ReleaseAsset, String> {
@@ -63,6 +68,10 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
 impl ManagedBinaryDefinition for OllamaBinary {
     fn display_name(&self) -> &'static str {
         ManagedBinaryId::Ollama.display_name()
+    }
+
+    fn release_version(&self) -> &'static str {
+        crate::managed_runtime::ollama_platform::OLLAMA_RELEASE_TAG
     }
 
     fn release_asset(&self) -> Result<ReleaseAsset, String> {
