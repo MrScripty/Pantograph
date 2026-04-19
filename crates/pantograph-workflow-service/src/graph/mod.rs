@@ -6,6 +6,7 @@ mod registry;
 mod session;
 mod session_contract;
 mod session_event;
+mod session_graph;
 mod session_runtime;
 mod session_types;
 mod types;
@@ -21,8 +22,9 @@ pub use persistence::{
     WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
 pub use registry::{NodeRegistry, validate_workflow_connection};
-pub use session::{GraphSessionStore, convert_graph_to_node_engine};
+pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
+pub use session_graph::convert_graph_to_node_engine;
 pub use session_types::{
     UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
     WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,

@@ -775,6 +775,10 @@ Update during implementation:
   and local undo/session-kind types now live behind `graph/session_types.rs`
   instead of keeping those contract declarations inline at the top of
   `graph/session.rs`.
+- 2026-04-18: Milestone 2 continued. Graph embedding-metadata sync, graph-to-
+  engine conversion, and node-data merge helpers now live behind
+  `graph/session_graph.rs` instead of keeping those shared utility paths inline
+  at the bottom of `graph/session.rs`.
 
 ## Commit Cadence Notes
 
