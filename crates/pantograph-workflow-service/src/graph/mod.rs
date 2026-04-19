@@ -1,6 +1,7 @@
 mod canonicalization;
 mod connection_intent;
 mod effective_definition;
+mod memory_impact;
 mod persistence;
 mod registry;
 mod session;

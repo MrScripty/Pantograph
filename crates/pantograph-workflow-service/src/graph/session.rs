@@ -16,9 +16,10 @@ use super::connection_intent::{
     preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
     rejected_insert_on_edge_response, rejected_insert_response,
 };
+use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
-    WorkflowGraphEditSessionGraphResponse, build_graph_session_response,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
 };
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
@@ -88,23 +89,30 @@ impl GraphEditSession {
     }
 
     fn snapshot_response(&mut self, session_id: &str) -> WorkflowGraphEditSessionGraphResponse {
-        self.snapshot_response_with_event(session_id, None)
+        self.snapshot_response_with_state(session_id, None, None)
     }
 
-    fn snapshot_response_with_event(
+    fn snapshot_response_with_state(
         &mut self,
         session_id: &str,
         workflow_event: Option<node_engine::WorkflowEvent>,
+        projection: Option<WorkflowGraphSessionStateProjection>,
     ) -> WorkflowGraphEditSessionGraphResponse {
         self.touch();
         self.canonicalize_graph();
-        build_graph_session_response(session_id, &self.graph, workflow_event)
+        build_graph_session_response_with_projection(
+            session_id,
+            &self.graph,
+            workflow_event,
+            projection,
+        )
     }
 
     fn undo(
         &mut self,
         session_id: &str,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let before_graph = self.graph.clone();
         let previous = self
             .undo_stack
             .pop()
@@ -113,13 +121,19 @@ impl GraphEditSession {
         self.graph = previous;
         let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
         let workflow_event = graph_modified_event(session_id, session_id, dirty_tasks);
-        Ok(self.snapshot_response_with_event(session_id, Some(workflow_event)))
+        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+            &before_graph,
+            &self.graph,
+            &dirty_tasks_for_full_snapshot(&self.graph),
+        ));
+        Ok(self.snapshot_response_with_state(session_id, Some(workflow_event), projection))
     }
 
     fn redo(
         &mut self,
         session_id: &str,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let before_graph = self.graph.clone();
         let next = self
             .redo_stack
             .pop()
@@ -128,7 +142,12 @@ impl GraphEditSession {
         self.graph = next;
         let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
         let workflow_event = graph_modified_event(session_id, session_id, dirty_tasks);
-        Ok(self.snapshot_response_with_event(session_id, Some(workflow_event)))
+        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+            &before_graph,
+            &self.graph,
+            &dirty_tasks_for_full_snapshot(&self.graph),
+        ));
+        Ok(self.snapshot_response_with_state(session_id, Some(workflow_event), projection))
     }
 
     fn undo_redo_state(&self) -> UndoRedoState {
@@ -157,6 +176,29 @@ impl GraphEditSession {
 }
 
 type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
+
+fn build_graph_session_response_with_projection(
+    session_id: &str,
+    graph: &WorkflowGraph,
+    workflow_event: Option<node_engine::WorkflowEvent>,
+    projection: Option<WorkflowGraphSessionStateProjection>,
+) -> WorkflowGraphEditSessionGraphResponse {
+    super::session_contract::build_graph_session_response_with_state(
+        session_id,
+        graph,
+        workflow_event,
+        projection.as_ref(),
+    )
+}
+
+fn phase6_memory_impact_projection(
+    memory_impact: Option<node_engine::GraphMemoryImpactSummary>,
+) -> Option<WorkflowGraphSessionStateProjection> {
+    memory_impact.map(|memory_impact| WorkflowGraphSessionStateProjection {
+        memory_impact: Some(memory_impact),
+        ..WorkflowGraphSessionStateProjection::default()
+    })
+}
 
 #[derive(Debug)]
 pub struct GraphSessionStore {
@@ -297,6 +339,7 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         if state.graph.find_node(&request.node_id).is_none() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
                 "node '{}' was not found",
@@ -316,7 +359,16 @@ impl GraphSessionStore {
             dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id));
         let workflow_event =
             graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
+        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+            &before_graph,
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id)),
+        ));
+        Ok(state.snapshot_response_with_state(
+            &request.session_id,
+            Some(workflow_event),
+            projection,
+        ))
     }
 
     pub async fn update_node_position(
@@ -343,7 +395,7 @@ impl GraphSessionStore {
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let workflow_event =
             graph_modified_event(&request.session_id, &request.session_id, Vec::new());
-        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
+        Ok(state.snapshot_response_with_state(&request.session_id, Some(workflow_event), None))
     }
 
     pub async fn add_node(
@@ -353,14 +405,24 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         state.push_undo_snapshot();
         let node_id = request.node.id.clone();
         state.graph.nodes.push(request.node);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, &[node_id]);
+        let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id));
         let workflow_event =
             graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
+        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+            &before_graph,
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id)),
+        ));
+        Ok(state.snapshot_response_with_state(
+            &request.session_id,
+            Some(workflow_event),
+            projection,
+        ))
     }
 
     pub async fn remove_node(
@@ -370,6 +432,7 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         if state.graph.find_node(&request.node_id).is_none() {
             return Err(WorkflowServiceError::InvalidRequest(format!(
                 "node '{}' was not found",
@@ -387,7 +450,16 @@ impl GraphSessionStore {
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let workflow_event =
             graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
+        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+            &before_graph,
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&before_graph, std::slice::from_ref(&request.node_id)),
+        ));
+        Ok(state.snapshot_response_with_state(
+            &request.session_id,
+            Some(workflow_event),
+            projection,
+        ))
     }
 
     pub async fn add_edge(
@@ -397,14 +469,25 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         state.push_undo_snapshot();
         let target_node_id = request.edge.target.clone();
         state.graph.edges.push(request.edge);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, &[target_node_id]);
+        let dirty_tasks =
+            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id));
         let workflow_event =
             graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
+        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+            &before_graph,
+            &state.graph,
+            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id)),
+        ));
+        Ok(state.snapshot_response_with_state(
+            &request.session_id,
+            Some(workflow_event),
+            projection,
+        ))
     }
 
     pub async fn remove_edge(
@@ -414,6 +497,7 @@ impl GraphSessionStore {
         let handle = self.get_session_handle(&request.session_id).await?;
         let mut state = handle.lock().await;
         state.touch();
+        let before_graph = state.graph.clone();
         state.push_undo_snapshot();
         let target_node_id = state
             .graph
@@ -424,11 +508,24 @@ impl GraphSessionStore {
         state.graph.edges.retain(|edge| edge.id != request.edge_id);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let dirty_tasks = target_node_id
-            .map(|node_id| dirty_tasks_from_seed_nodes(&state.graph, &[node_id]))
+            .as_ref()
+            .map(|node_id| dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)))
             .unwrap_or_default();
         let workflow_event =
             graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        Ok(state.snapshot_response_with_event(&request.session_id, Some(workflow_event)))
+        let projection =
+            phase6_memory_impact_projection(target_node_id.as_ref().and_then(|node_id| {
+                graph_memory_impact_from_graph_change(
+                    &before_graph,
+                    &state.graph,
+                    &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)),
+                )
+            }));
+        Ok(state.snapshot_response_with_state(
+            &request.session_id,
+            Some(workflow_event),
+            projection,
+        ))
     }
 
     pub async fn undo(
@@ -724,6 +821,34 @@ mod tests {
                 && execution_id == session.session_id
                 && dirty_tasks == vec!["text-input".to_string(), "text-output".to_string()]
         ));
+        let memory_impact = response
+            .workflow_session_state
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert!(!memory_impact.fallback_to_full_invalidation);
+        assert_eq!(memory_impact.node_decisions.len(), 2);
+        assert!(matches!(
+            memory_impact.node_decisions.as_slice(),
+            [
+                node_engine::NodeMemoryCompatibilitySnapshot {
+                    node_id,
+                    compatibility,
+                    reason: Some(reason),
+                },
+                node_engine::NodeMemoryCompatibilitySnapshot {
+                    node_id: dependent_node_id,
+                    compatibility: dependent_compatibility,
+                    reason: Some(dependent_reason),
+                }
+            ] if node_id == "text-input"
+                && *compatibility == node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh
+                && reason == "node_data_changed"
+                && dependent_node_id == "text-output"
+                && *dependent_compatibility
+                    == node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh
+                && dependent_reason == "upstream_dependency_changed"
+        ));
     }
 
     #[tokio::test]
@@ -756,6 +881,13 @@ mod tests {
                 && execution_id == session.session_id
                 && dirty_tasks.is_empty()
         ));
+        assert_eq!(
+            response
+                .workflow_session_state
+                .expect("workflow session state")
+                .memory_impact,
+            None
+        );
     }
 
     #[tokio::test]
@@ -784,6 +916,20 @@ mod tests {
                 && execution_id == session.session_id
                 && dirty_tasks == vec!["text-output".to_string()]
         ));
+        let memory_impact = response
+            .workflow_session_state
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert_eq!(memory_impact.node_decisions.len(), 1);
+        assert_eq!(
+            memory_impact.node_decisions[0].compatibility,
+            node_engine::NodeMemoryCompatibility::DropOnIdentityChange
+        );
+        assert_eq!(
+            memory_impact.node_decisions[0].reason.as_deref(),
+            Some("node_removed")
+        );
     }
 
     #[tokio::test]

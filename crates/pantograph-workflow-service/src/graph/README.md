@@ -66,9 +66,10 @@ when the node type matches.
   id for both `workflow_id` and `execution_id` inside that additive event
   contract because the session-scoped graph DTO does not yet carry a separate
   persisted workflow identity.
-- Current graph-edit mutation responses conservatively project Phase 6 memory
-  impact as fallback full invalidation for dirty tasks until explicit graph-
-  edit compatibility preservation lands in a later milestone.
+- Graph edit-session mutation responses should project Phase 6 memory impact
+  from backend-owned graph-diff compatibility analysis when that richer
+  context is available; generic event-only fallbacks remain a compatibility
+  backstop rather than the primary source of truth.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Dynamic `node.data.definition` overlays may add ports for a specific node

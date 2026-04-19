@@ -865,6 +865,11 @@ the affected downstream closure.
   projection, rerun-time read injection, state-isolation coverage, canonical
   input provenance, and an explicit indirect reference plus restore-strategy
   contract for non-serializable runtime/process state.
+- Milestone 4 is now started in the graph edit-session boundary: mutation
+  responses, undo, and redo can project backend-owned compatibility decisions
+  from before/after graph diffs, reducing the current reliance on generic
+  fallback invalidation when the graph service already knows the specific
+  change shape.
 
 **Milestones:**
 

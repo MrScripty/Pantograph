@@ -634,7 +634,7 @@ affected downstream closure.
   input injection then downstream-only rerun,
   undo/redo memory reconciliation
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 5: Integrate Keep-Alive, Scheduler Unload, And Restore
 
@@ -833,6 +833,10 @@ Update during implementation:
   strategy enum for non-serializable state, cache-derived node-memory
   projection keeps those references empty by default, and the Phase 6 source of
   truth now treats Milestone 3 as complete.
+- 2026-04-18: Milestone 4 started. Edit-session graph mutations, undo, and
+  redo now project backend-owned node-memory compatibility decisions from
+  before/after graph diffs instead of defaulting every mutation response to
+  fallback full invalidation when the richer graph context is already known.
 
 ## Commit Cadence Notes
 
