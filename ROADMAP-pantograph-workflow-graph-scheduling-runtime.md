@@ -870,6 +870,12 @@ the affected downstream closure.
   from before/after graph diffs, reducing the current reliance on generic
   fallback invalidation when the graph service already knows the specific
   change shape.
+- Milestone 4 also now has backend session-run executor reuse for logical
+  workflow sessions: repeated `run_workflow_session` calls carry the logical
+  session id through backend run options, reuse a backend-owned executor inside
+  the embedded runtime, and let omitted inputs carry forward while changed
+  inputs invalidate the affected suffix. That reused state is still dropped on
+  runtime unload until Milestone 5 checkpoint and restore work is completed.
 
 **Milestones:**
 

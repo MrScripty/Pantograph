@@ -837,6 +837,12 @@ Update during implementation:
   redo now project backend-owned node-memory compatibility decisions from
   before/after graph diffs instead of defaulting every mutation response to
   fallback full invalidation when the richer graph context is already known.
+- 2026-04-18: Keep-alive and queued workflow-session runs now carry the logical
+  `workflow_session_id` through backend run options, and the embedded runtime
+  reuses a backend-owned session executor for repeated session runs so
+  unchanged inputs can carry forward while selectively updated inputs only
+  invalidate the affected suffix. Runtime unload still clears that executor
+  until Milestone 5 checkpoint/restore work lands.
 
 ## Commit Cadence Notes
 

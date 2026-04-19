@@ -614,11 +614,13 @@ impl WorkflowServiceError {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRunOptions {
     #[serde(default)]
     pub timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1111,6 +1113,7 @@ impl WorkflowService {
                     run_id: queued_run.queued.run_id,
                 },
                 Some(preflight_cache),
+                Some(session_id.clone()),
             )
             .await;
 
@@ -1450,7 +1453,7 @@ impl WorkflowService {
         host: &H,
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_run_internal(host, request, None).await
+        self.workflow_run_internal(host, request, None, None).await
     }
 
     async fn workflow_run_internal<H: WorkflowHost>(
@@ -1458,6 +1461,7 @@ impl WorkflowService {
         host: &H,
         request: WorkflowRunRequest,
         cached_preflight: Option<WorkflowSessionPreflightCache>,
+        workflow_session_id: Option<String>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         validate_timeout_ms(request.timeout_ms)?;
@@ -1525,6 +1529,7 @@ impl WorkflowService {
         let started = Instant::now();
         let run_options = WorkflowRunOptions {
             timeout_ms: request.timeout_ms,
+            workflow_session_id,
         };
         let run_handle = WorkflowRunHandle::new();
         let mut run_future = Box::pin(host.run_workflow(
@@ -2574,6 +2579,7 @@ mod tests {
         omit_requested_target_output: bool,
         emit_invalid_output_binding: bool,
         technical_fit_decision: Option<WorkflowTechnicalFitDecision>,
+        recorded_run_options: Arc<Mutex<Vec<WorkflowRunOptions>>>,
     }
 
     impl MockWorkflowHost {
@@ -2605,6 +2611,7 @@ mod tests {
                 omit_requested_target_output: false,
                 emit_invalid_output_binding: false,
                 technical_fit_decision: None,
+                recorded_run_options: Arc::new(Mutex::new(Vec::new())),
             }
         }
 
@@ -3442,9 +3449,14 @@ mod tests {
             _workflow_id: &str,
             inputs: &[WorkflowPortBinding],
             output_targets: Option<&[WorkflowOutputTarget]>,
-            _run_options: WorkflowRunOptions,
+            run_options: WorkflowRunOptions,
             _run_handle: WorkflowRunHandle,
         ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+            self.recorded_run_options
+                .lock()
+                .expect("run options lock poisoned")
+                .push(run_options);
+
             if inputs.iter().any(|binding| {
                 binding
                     .value
@@ -4955,6 +4967,58 @@ mod tests {
             .await
             .expect_err("closed session should not run");
         assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn workflow_session_run_passes_logical_session_id_in_run_options() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::with_max_sessions(2);
+
+        let created = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: None,
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create keep-alive session");
+
+        service
+            .run_workflow_session(
+                &host,
+                WorkflowSessionRunRequest {
+                    session_id: created.session_id.clone(),
+                    inputs: vec![WorkflowPortBinding {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                        value: serde_json::json!("hello session"),
+                    }],
+                    output_targets: Some(vec![WorkflowOutputTarget {
+                        node_id: "text-output-1".to_string(),
+                        port_id: "text".to_string(),
+                    }]),
+                    override_selection: None,
+                    timeout_ms: None,
+                    run_id: Some("session-run-options".to_string()),
+                    priority: None,
+                },
+            )
+            .await
+            .expect("run keep-alive session");
+
+        let recorded = host
+            .recorded_run_options
+            .lock()
+            .expect("run options lock poisoned");
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(
+            recorded[0].workflow_session_id.as_deref(),
+            Some(created.session_id.as_str())
+        );
+        assert_eq!(recorded[0].timeout_ms, None);
     }
 
     #[tokio::test]
