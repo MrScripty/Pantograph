@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
+use node_engine::GraphMemoryImpactSummary;
 use pantograph_workflow_service::{
     WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics,
@@ -98,6 +99,8 @@ pub struct DiagnosticsRunTrace {
     pub stream_event_count: usize,
     pub last_dirty_tasks: Vec<String>,
     pub last_incremental_task_ids: Vec<String>,
+    #[serde(default)]
+    pub last_graph_memory_impact: Option<GraphMemoryImpactSummary>,
     pub nodes: BTreeMap<String, DiagnosticsNodeTrace>,
     pub events: Vec<DiagnosticsEventRecord>,
 }

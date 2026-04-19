@@ -59,6 +59,10 @@ when the node type matches.
 - Graph edit-session mutation responses may also carry an additive canonical
   backend-owned `workflow_event` so bindings and adapters can forward
   `GraphModified` semantics without synthesizing them locally.
+- When backend graph-diff compatibility analysis is available, that additive
+  `GraphModified` event should also carry `memory_impact` so transports can
+  forward preserved vs invalidated node-memory facts without reconstructing
+  backend policy.
 - Graph edit-session snapshot responses may also carry an additive backend-
   owned `workflow_session_state` view so transports can forward Phase 6 node-
   memory, checkpoint, and mutation-impact contracts without owning them.

@@ -127,6 +127,8 @@ pub enum WorkflowEvent {
         graph: Option<super::types::WorkflowGraph>,
         /// Nodes invalidated by the graph change
         dirty_tasks: Vec<String>,
+        /// Backend-owned mutation impact for preserved vs invalidated node memory
+        memory_impact: Option<node_engine::GraphMemoryImpactSummary>,
     },
 
     /// Workflow execution is waiting for input before it can continue

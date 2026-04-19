@@ -294,6 +294,7 @@ pub(crate) fn diagnostics_run_trace(
         last_updated_at_ms,
         last_dirty_tasks,
         last_incremental_task_ids,
+        last_graph_memory_impact,
         nodes_by_id,
         events,
     } = overlay.unwrap_or_else(|| DiagnosticsRunOverlay::new(trace.started_at_ms));
@@ -318,6 +319,7 @@ pub(crate) fn diagnostics_run_trace(
         stream_event_count: trace.stream_event_count,
         last_dirty_tasks,
         last_incremental_task_ids,
+        last_graph_memory_impact,
         nodes: trace
             .nodes
             .iter()

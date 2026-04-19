@@ -30,7 +30,7 @@ pub(super) async fn add_node(executor: &WorkflowExecutor, node: GraphNode) {
     graph.nodes.push(node);
     let workflow_id = graph.id.clone();
     drop(graph);
-    executor.emit_graph_modified(workflow_id, vec![node_id]);
+    executor.emit_graph_modified(workflow_id, vec![node_id], None);
 }
 
 pub(super) async fn add_edge(executor: &WorkflowExecutor, edge: GraphEdge) {
@@ -73,5 +73,5 @@ pub(super) async fn restore_graph_snapshot(executor: &WorkflowExecutor, graph: W
     let mut engine = executor.demand_engine.write().await;
     engine.clear_cache();
     drop(engine);
-    executor.emit_graph_modified(workflow_id, dirty_tasks);
+    executor.emit_graph_modified(workflow_id, dirty_tasks, None);
 }

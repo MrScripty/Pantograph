@@ -1400,6 +1400,10 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
             execution_id: "exec-1".to_string(),
             graph: None,
             dirty_tasks: vec!["llm-1".to_string()],
+            memory_impact: Some(node_engine::GraphMemoryImpactSummary::fallback_full_invalidation(
+                ["llm-1"],
+                "graph_changed",
+            )),
         },
         1_020,
     );
@@ -1438,6 +1442,7 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
     assert!(run.nodes.is_empty());
     assert!(run.last_dirty_tasks.is_empty());
     assert!(run.last_incremental_task_ids.is_empty());
+    assert_eq!(run.last_graph_memory_impact, None);
 }
 
 #[test]

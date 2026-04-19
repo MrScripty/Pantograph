@@ -41,9 +41,8 @@ use super::session_types::{
     WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind,
 };
 use super::types::{
-    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, Position, WorkflowGraph,
+    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
+    GraphEdge, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowGraph,
 };
 const DEFAULT_MAX_UNDO_SNAPSHOTS: usize = 64;
 
@@ -136,12 +135,14 @@ impl GraphEditSession {
         self.redo_stack.push(self.graph.clone());
         self.graph = previous;
         let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
-        let workflow_event = graph_modified_event(session_id, session_id, dirty_tasks);
-        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &self.graph,
             &dirty_tasks_for_full_snapshot(&self.graph),
-        ));
+        );
+        let workflow_event =
+            graph_modified_event(session_id, session_id, dirty_tasks, memory_impact.clone());
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(self.snapshot_response_with_state(session_id, Some(workflow_event), projection))
     }
 
@@ -157,12 +158,14 @@ impl GraphEditSession {
         self.undo_stack.push(self.graph.clone());
         self.graph = next;
         let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
-        let workflow_event = graph_modified_event(session_id, session_id, dirty_tasks);
-        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &self.graph,
             &dirty_tasks_for_full_snapshot(&self.graph),
-        ));
+        );
+        let workflow_event =
+            graph_modified_event(session_id, session_id, dirty_tasks, memory_impact.clone());
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(self.snapshot_response_with_state(session_id, Some(workflow_event), projection))
     }
 
@@ -406,13 +409,18 @@ impl GraphSessionStore {
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let dirty_tasks =
             dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id));
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(state.snapshot_response_with_state(
             &request.session_id,
             Some(workflow_event),
@@ -443,7 +451,7 @@ impl GraphSessionStore {
         node.position = request.position;
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, Vec::new());
+            graph_modified_event(&request.session_id, &request.session_id, Vec::new(), None);
         Ok(state.snapshot_response_with_state(&request.session_id, Some(workflow_event), None))
     }
 
@@ -460,13 +468,18 @@ impl GraphSessionStore {
         state.graph.nodes.push(request.node);
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id));
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(state.snapshot_response_with_state(
             &request.session_id,
             Some(workflow_event),
@@ -497,13 +510,18 @@ impl GraphSessionStore {
             .edges
             .retain(|edge| edge.source != request.node_id && edge.target != request.node_id);
         sync_embedding_emit_metadata_flags(&mut state.graph);
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&before_graph, std::slice::from_ref(&request.node_id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(state.snapshot_response_with_state(
             &request.session_id,
             Some(workflow_event),
@@ -525,13 +543,18 @@ impl GraphSessionStore {
         sync_embedding_emit_metadata_flags(&mut state.graph);
         let dirty_tasks =
             dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id));
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let projection = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(state.snapshot_response_with_state(
             &request.session_id,
             Some(workflow_event),
@@ -560,16 +583,20 @@ impl GraphSessionStore {
             .as_ref()
             .map(|node_id| dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)))
             .unwrap_or_default();
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let projection =
-            phase6_memory_impact_projection(target_node_id.as_ref().and_then(|node_id| {
-                graph_memory_impact_from_graph_change(
-                    &before_graph,
-                    &state.graph,
-                    &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)),
-                )
-            }));
+        let memory_impact = target_node_id.as_ref().and_then(|node_id| {
+            graph_memory_impact_from_graph_change(
+                &before_graph,
+                &state.graph,
+                &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)),
+            )
+        });
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let projection = phase6_memory_impact_projection(memory_impact);
         Ok(state.snapshot_response_with_state(
             &request.session_id,
             Some(workflow_event),
@@ -650,13 +677,18 @@ impl GraphSessionStore {
         state.canonicalize_graph();
         let dirty_tasks =
             dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id));
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let memory_impact = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&target_node_id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let memory_impact = phase6_memory_impact_projection(memory_impact);
         let workflow_session_state = state.mutation_session_state_view(
             &request.session_id,
             Some(&workflow_event),
@@ -701,13 +733,18 @@ impl GraphSessionStore {
         state.canonicalize_graph();
         let dirty_tasks =
             dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id));
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let memory_impact = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let memory_impact = phase6_memory_impact_projection(memory_impact);
         let workflow_session_state = state.mutation_session_state_view(
             &request.session_id,
             Some(&workflow_event),
@@ -785,13 +822,18 @@ impl GraphSessionStore {
         state.canonicalize_graph();
         let dirty_tasks =
             dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id));
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, dirty_tasks);
-        let memory_impact = phase6_memory_impact_projection(graph_memory_impact_from_graph_change(
+        let memory_impact = graph_memory_impact_from_graph_change(
             &before_graph,
             &state.graph,
             &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&inserted_node.id)),
-        ));
+        );
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let memory_impact = phase6_memory_impact_projection(memory_impact);
         let workflow_session_state = state.mutation_session_state_view(
             &request.session_id,
             Some(&workflow_event),
@@ -839,6 +881,7 @@ impl GraphSessionStore {
 mod tests {
     use super::super::types::InsertNodePositionHint;
     use super::*;
+    use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
 
     fn sample_graph() -> WorkflowGraph {
         WorkflowGraph {
@@ -918,15 +961,15 @@ mod tests {
         assert_eq!(node.data["label"], "Text Input");
         assert!(node.data.get("definition").is_some());
         assert!(matches!(
-            response.workflow_event,
+            response.workflow_event.as_ref(),
             Some(node_engine::WorkflowEvent::GraphModified {
                 workflow_id,
                 execution_id,
                 dirty_tasks,
                 ..
-            }) if workflow_id == session.session_id
-                && execution_id == session.session_id
-                && dirty_tasks == vec!["text-input".to_string(), "text-output".to_string()]
+            }) if workflow_id == &session.session_id
+                && execution_id == &session.session_id
+                && dirty_tasks == &vec!["text-input".to_string(), "text-output".to_string()]
         ));
         let memory_impact = response
             .workflow_session_state
@@ -955,6 +998,13 @@ mod tests {
                 && *dependent_compatibility
                     == node_engine::NodeMemoryCompatibility::PreserveWithInputRefresh
                 && dependent_reason == "upstream_dependency_changed"
+        ));
+        assert!(matches!(
+            response.workflow_event.as_ref(),
+            Some(node_engine::WorkflowEvent::GraphModified {
+                memory_impact: Some(memory_impact),
+                ..
+            }) if memory_impact.node_decisions.len() == 2
         ));
     }
 
@@ -1013,15 +1063,15 @@ mod tests {
         assert!(response.graph.find_node("text-output").is_none());
         assert!(response.graph.edges.is_empty());
         assert!(matches!(
-            response.workflow_event,
+            response.workflow_event.as_ref(),
             Some(node_engine::WorkflowEvent::GraphModified {
                 workflow_id,
                 execution_id,
                 dirty_tasks,
                 ..
-            }) if workflow_id == session.session_id
-                && execution_id == session.session_id
-                && dirty_tasks == vec!["text-output".to_string()]
+            }) if workflow_id == &session.session_id
+                && execution_id == &session.session_id
+                && dirty_tasks == &vec!["text-output".to_string()]
         ));
         let memory_impact = response
             .workflow_session_state
@@ -1217,15 +1267,22 @@ mod tests {
             .expect("connect nodes");
         assert!(response.accepted);
         assert!(matches!(
-            response.workflow_event,
+            response.workflow_event.as_ref(),
             Some(node_engine::WorkflowEvent::GraphModified {
                 workflow_id,
                 execution_id,
                 dirty_tasks,
                 ..
-            }) if workflow_id == session.session_id
-                && execution_id == session.session_id
-                && dirty_tasks == vec!["text-output".to_string()]
+            }) if workflow_id == &session.session_id
+                && execution_id == &session.session_id
+                && dirty_tasks == &vec!["text-output".to_string()]
+        ));
+        assert!(matches!(
+            response.workflow_event.as_ref(),
+            Some(node_engine::WorkflowEvent::GraphModified {
+                memory_impact: Some(memory_impact),
+                ..
+            }) if !memory_impact.node_decisions.is_empty()
         ));
         let response_memory_impact = response
             .workflow_session_state

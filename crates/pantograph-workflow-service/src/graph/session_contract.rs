@@ -121,6 +121,10 @@ fn graph_memory_impact_from_event(
     workflow_event: Option<&WorkflowEvent>,
 ) -> Option<GraphMemoryImpactSummary> {
     match workflow_event {
+        Some(WorkflowEvent::GraphModified {
+            memory_impact: Some(memory_impact),
+            ..
+        }) => Some(memory_impact.clone()),
         Some(WorkflowEvent::GraphModified { dirty_tasks, .. }) if !dirty_tasks.is_empty() => {
             Some(GraphMemoryImpactSummary::fallback_full_invalidation(
                 dirty_tasks.iter().cloned(),
@@ -171,6 +175,7 @@ mod tests {
             workflow_id: "session-1".to_string(),
             execution_id: "session-1".to_string(),
             dirty_tasks: vec!["input".to_string(), "output".to_string()],
+            memory_impact: None,
             occurred_at_ms: Some(123),
         };
 

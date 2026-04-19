@@ -268,6 +268,10 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-graph".to_string(),
             dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            memory_impact: Some(node_engine::GraphMemoryImpactSummary::fallback_full_invalidation(
+                ["node-a", "node-b"],
+                "graph_changed",
+            )),
             occurred_at_ms: Some(44),
         },
     );
@@ -277,6 +281,7 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
             workflow_id,
             execution_id,
             dirty_tasks,
+            memory_impact,
             ..
         } => {
             assert_eq!(workflow_id, "wf-1");
@@ -284,6 +289,13 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
             assert_eq!(
                 dirty_tasks,
                 &vec!["node-a".to_string(), "node-b".to_string()]
+            );
+            assert_eq!(
+                memory_impact,
+                &Some(node_engine::GraphMemoryImpactSummary::fallback_full_invalidation(
+                    ["node-a", "node-b"],
+                    "graph_changed",
+                ))
             );
         }
         other => panic!("unexpected event: {other:?}"),

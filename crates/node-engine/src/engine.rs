@@ -573,10 +573,18 @@ impl WorkflowExecutor {
         self.event_sink = event_sink;
     }
 
-    fn emit_graph_modified(&self, workflow_id: String, dirty_tasks: Vec<NodeId>) {
-        if let Some(event) =
-            graph_events::graph_modified_event(workflow_id, &self.execution_id, dirty_tasks)
-        {
+    fn emit_graph_modified(
+        &self,
+        workflow_id: String,
+        dirty_tasks: Vec<NodeId>,
+        memory_impact: Option<GraphMemoryImpactSummary>,
+    ) {
+        if let Some(event) = graph_events::graph_modified_event(
+            workflow_id,
+            &self.execution_id,
+            dirty_tasks,
+            memory_impact,
+        ) {
             let _ = self.send_event(event);
         }
     }
@@ -627,7 +635,7 @@ impl WorkflowExecutor {
         let mut engine = self.demand_engine.write().await;
         engine.mark_modified(node_id);
         drop(engine);
-        self.emit_graph_modified(workflow_id, dirty_tasks);
+        self.emit_graph_modified(workflow_id, dirty_tasks, None);
     }
 
     /// Update a node's data and mark it as modified

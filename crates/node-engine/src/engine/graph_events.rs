@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::events::WorkflowEvent;
 use crate::types::{NodeId, WorkflowGraph};
+use crate::GraphMemoryImpactSummary;
 
 pub(super) fn collect_dirty_tasks(graph: &WorkflowGraph, root_node_id: &NodeId) -> Vec<NodeId> {
     let mut visited = HashSet::new();
@@ -30,6 +31,7 @@ pub(super) fn graph_modified_event(
     workflow_id: String,
     execution_id: &str,
     dirty_tasks: Vec<NodeId>,
+    memory_impact: Option<GraphMemoryImpactSummary>,
 ) -> Option<WorkflowEvent> {
     if dirty_tasks.is_empty() {
         return None;
@@ -39,6 +41,7 @@ pub(super) fn graph_modified_event(
         workflow_id,
         execution_id: execution_id.to_string(),
         dirty_tasks,
+        memory_impact,
         occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
     })
 }

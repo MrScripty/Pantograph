@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 
+use node_engine::GraphMemoryImpactSummary;
 use pantograph_workflow_service::WorkflowTraceSnapshotResponse;
 
 use super::trace::diagnostics_run_trace;
@@ -20,6 +21,7 @@ pub(crate) struct DiagnosticsRunOverlay {
     pub(crate) last_updated_at_ms: u64,
     pub(crate) last_dirty_tasks: Vec<String>,
     pub(crate) last_incremental_task_ids: Vec<String>,
+    pub(crate) last_graph_memory_impact: Option<GraphMemoryImpactSummary>,
     pub(crate) nodes_by_id: BTreeMap<String, DiagnosticsNodeOverlay>,
     pub(crate) events: Vec<DiagnosticsEventRecord>,
 }
@@ -30,6 +32,7 @@ impl DiagnosticsRunOverlay {
             last_updated_at_ms: timestamp_ms,
             last_dirty_tasks: Vec::new(),
             last_incremental_task_ids: Vec::new(),
+            last_graph_memory_impact: None,
             nodes_by_id: BTreeMap::new(),
             events: Vec::new(),
         }
@@ -147,8 +150,13 @@ pub(crate) fn record_diagnostics_overlay(
     }
 
     match event {
-        WorkflowEvent::GraphModified { dirty_tasks, .. } => {
+        WorkflowEvent::GraphModified {
+            dirty_tasks,
+            memory_impact,
+            ..
+        } => {
             overlay.last_dirty_tasks = dirty_tasks.clone();
+            overlay.last_graph_memory_impact = memory_impact.clone();
         }
         WorkflowEvent::IncrementalExecutionStarted { task_ids, .. } => {
             overlay.last_incremental_task_ids = task_ids.clone();

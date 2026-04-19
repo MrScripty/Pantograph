@@ -2,6 +2,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::GraphMemoryImpactSummary;
+
 /// Events emitted during workflow execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -112,6 +114,8 @@ pub enum WorkflowEvent {
         workflow_id: String,
         execution_id: String,
         dirty_tasks: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        memory_impact: Option<GraphMemoryImpactSummary>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         occurred_at_ms: Option<u64>,
     },

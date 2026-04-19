@@ -5,7 +5,7 @@ use crate::task_executor;
 use crate::{
     EmbeddedWorkflowHost, RuntimeExtensionsSnapshot, apply_runtime_extensions_for_execution,
 };
-use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowExecutor};
+use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
     WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowServiceError, graph_memory_impact_from_node_engine_graph_change,
@@ -306,6 +306,19 @@ async fn reconcile_session_graph_change(
         executor
             .reconcile_workflow_session_node_memory(workflow_session_id, &memory_impact)
             .await;
+        let dirty_tasks = memory_impact.dirty_task_ids();
+        if !dirty_tasks.is_empty() {
+            let _ = executor.send_event(
+                WorkflowEvent::GraphModified {
+                    workflow_id: graph.id.clone(),
+                    execution_id: workflow_session_id.to_string(),
+                    dirty_tasks,
+                    memory_impact: Some(memory_impact),
+                    occurred_at_ms: None,
+                }
+                .now(),
+            );
+        }
     }
     Ok(())
 }

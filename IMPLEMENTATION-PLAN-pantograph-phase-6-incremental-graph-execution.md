@@ -864,6 +864,12 @@ Update during implementation:
   owned `workflow_event` and `workflow_session_state` contract as snapshot
   mutations, so adapters and GUI flows no longer need a separate follow-up
   snapshot read to observe mutation impact facts.
+- 2026-04-18: Milestone 4 continued. The additive backend-owned
+  `GraphModified` event now also carries `memory_impact` when backend graph-
+  diff compatibility analysis is available, and Tauri diagnostics now retain
+  the latest graph-memory impact beside dirty-task and incremental-task
+  overlays so restart/reset behavior clears the full mutation-inspection fact
+  set rather than only the older task-id subsets.
 
 ## Commit Cadence Notes
 

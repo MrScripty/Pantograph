@@ -354,6 +354,7 @@ export interface WorkflowEventData {
     execution_id?: string;
     graph?: WorkflowGraph | null;
     dirty_tasks?: string[];
+    memory_impact?: GraphMemoryImpactSummary | null;
   };
   WaitingForInput: {
     workflow_id?: string;

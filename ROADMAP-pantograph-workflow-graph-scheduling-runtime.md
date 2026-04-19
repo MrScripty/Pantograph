@@ -897,6 +897,10 @@ the affected downstream closure.
   mutation callers can consume compatibility impact immediately instead of
   requiring a separate session snapshot fetch to observe the same Phase 6
   state.
+- The additive backend-owned `GraphModified` contract now also carries
+  `memory_impact` when graph-diff compatibility analysis is available, and the
+  Tauri diagnostics overlay retains the latest graph-memory impact alongside
+  dirty-task and incremental-task facts for restarted-run reset behavior.
 
 **Milestones:**
 

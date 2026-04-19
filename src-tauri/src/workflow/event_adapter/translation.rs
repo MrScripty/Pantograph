@@ -151,12 +151,14 @@ pub(super) fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWo
             workflow_id,
             execution_id,
             dirty_tasks,
+            memory_impact,
             ..
         } => TauriWorkflowEvent::GraphModified {
             workflow_id,
             execution_id,
             graph: None,
             dirty_tasks,
+            memory_impact,
         },
 
         node_engine::WorkflowEvent::IncrementalExecutionStarted {

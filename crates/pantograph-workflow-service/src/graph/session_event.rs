@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use node_engine::WorkflowEvent;
+use node_engine::{GraphMemoryImpactSummary, WorkflowEvent};
 
 use super::types::WorkflowGraph;
 
@@ -8,11 +8,13 @@ pub(crate) fn graph_modified_event(
     workflow_id: &str,
     execution_id: &str,
     dirty_tasks: Vec<String>,
+    memory_impact: Option<GraphMemoryImpactSummary>,
 ) -> WorkflowEvent {
     WorkflowEvent::GraphModified {
         workflow_id: workflow_id.to_string(),
         execution_id: execution_id.to_string(),
         dirty_tasks,
+        memory_impact,
         occurred_at_ms: None,
     }
     .now()

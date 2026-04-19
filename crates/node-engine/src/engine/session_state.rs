@@ -130,6 +130,20 @@ impl GraphMemoryImpactSummary {
             fallback_to_full_invalidation: true,
         }
     }
+
+    pub fn dirty_task_ids(&self) -> Vec<String> {
+        let mut node_ids = self
+            .node_decisions
+            .iter()
+            .filter(|decision| {
+                decision.compatibility != NodeMemoryCompatibility::PreserveAsIs
+            })
+            .map(|decision| decision.node_id.clone())
+            .collect::<Vec<_>>();
+        node_ids.sort();
+        node_ids.dedup();
+        node_ids
+    }
 }
 
 /// Bounded session-checkpoint summary for workflow-session continuity.
@@ -304,6 +318,40 @@ mod tests {
                 .iter()
                 .all(|decision| decision.compatibility
                     == NodeMemoryCompatibility::FallbackFullInvalidation)
+        );
+    }
+
+    #[test]
+    fn dirty_task_ids_only_reports_non_preserved_nodes() {
+        let impact = GraphMemoryImpactSummary {
+            node_decisions: vec![
+                NodeMemoryCompatibilitySnapshot {
+                    node_id: "input".to_string(),
+                    compatibility: NodeMemoryCompatibility::PreserveAsIs,
+                    reason: None,
+                },
+                NodeMemoryCompatibilitySnapshot {
+                    node_id: "merge".to_string(),
+                    compatibility: NodeMemoryCompatibility::PreserveWithInputRefresh,
+                    reason: Some("input_changed".to_string()),
+                },
+                NodeMemoryCompatibilitySnapshot {
+                    node_id: "output".to_string(),
+                    compatibility: NodeMemoryCompatibility::DropOnSchemaIncompatibility,
+                    reason: Some("schema_changed".to_string()),
+                },
+                NodeMemoryCompatibilitySnapshot {
+                    node_id: "merge".to_string(),
+                    compatibility: NodeMemoryCompatibility::FallbackFullInvalidation,
+                    reason: Some("fallback".to_string()),
+                },
+            ],
+            fallback_to_full_invalidation: true,
+        };
+
+        assert_eq!(
+            impact.dirty_task_ids(),
+            vec!["merge".to_string(), "output".to_string()]
         );
     }
 
