@@ -901,6 +901,10 @@ the affected downstream closure.
   `memory_impact` when graph-diff compatibility analysis is available, and the
   Tauri diagnostics overlay retains the latest graph-memory impact alongside
   dirty-task and incremental-task facts for restarted-run reset behavior.
+- The existing GUI graph diagnostics tab now also renders the latest backend-
+  owned graph-memory impact summary from diagnostics state, showing read-only
+  compatibility counts and per-node reasons without rebuilding reconciliation
+  policy at the app layer.
 
 **Milestones:**
 

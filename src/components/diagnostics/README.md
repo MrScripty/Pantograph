@@ -15,8 +15,8 @@ logic.
 | `DiagnosticsEvents.svelte` | Events tab that shows retained workflow events and raw payload details. |
 | `DiagnosticsScheduler.svelte` | Scheduler tab that renders session state and queue ordering from workflow service diagnostics snapshots. |
 | `DiagnosticsRuntime.svelte` | Runtime tab that renders workflow capabilities, runtime requirements, and runtime install state. |
-| `DiagnosticsGraph.svelte` | Graph tab that renders current graph metadata and graph-related diagnostics events. |
-| `presenters.ts` | Presentation helpers for durations, timestamps, status badges, and overview counts. |
+| `DiagnosticsGraph.svelte` | Graph tab that renders current graph metadata, graph-related diagnostics events, and the latest backend-owned graph-memory impact summary. |
+| `presenters.ts` | Presentation helpers for durations, timestamps, status badges, overview counts, and read-only graph-memory impact summaries. |
 
 ## Problem
 Pantograph needs a developer-facing diagnostics surface inside the workflow GUI,

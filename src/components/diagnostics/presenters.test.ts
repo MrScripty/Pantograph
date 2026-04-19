@@ -5,6 +5,8 @@ import {
   formatDiagnosticsBytes,
   formatDiagnosticsDuration,
   formatDiagnosticsPercent,
+  formatNodeMemoryCompatibilityLabel,
+  getGraphMemoryImpactCounts,
   getDiagnosticsStatusClasses,
   getRuntimeInstallStateClasses,
   getRunNodeStatusCounts,
@@ -41,6 +43,7 @@ function createRunTrace(): DiagnosticsRunTrace {
     streamEventCount: 1,
     lastDirtyTasks: [],
     lastIncrementalTaskIds: [],
+    lastGraphMemoryImpact: null,
     nodes: {
       a: {
         nodeId: 'a',
@@ -130,4 +133,44 @@ test('getRunNodeStatusCounts groups node states for overview summaries', () => {
     cancelled: 0,
     failed: 1,
   });
+});
+
+test('graph memory impact helpers summarize compatibility decisions for the UI', () => {
+  const counts = getGraphMemoryImpactCounts({
+    fallback_to_full_invalidation: true,
+    node_decisions: [
+      {
+        node_id: 'input',
+        compatibility: 'preserve_as_is',
+        reason: null,
+      },
+      {
+        node_id: 'prompt',
+        compatibility: 'preserve_with_input_refresh',
+        reason: 'input_changed',
+      },
+      {
+        node_id: 'llm',
+        compatibility: 'drop_on_identity_change',
+        reason: 'node_removed',
+      },
+      {
+        node_id: 'output',
+        compatibility: 'fallback_full_invalidation',
+        reason: 'graph_changed',
+      },
+    ],
+  });
+
+  assert.deepEqual(counts, {
+    preserved: 1,
+    refreshed: 1,
+    dropped: 1,
+    fallback: 1,
+  });
+  assert.equal(formatNodeMemoryCompatibilityLabel('preserve_as_is'), 'Preserved');
+  assert.equal(
+    formatNodeMemoryCompatibilityLabel('drop_on_schema_incompatibility'),
+    'Dropped Schema',
+  );
 });

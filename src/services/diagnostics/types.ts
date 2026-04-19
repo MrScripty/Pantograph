@@ -1,4 +1,5 @@
 import type {
+  GraphMemoryImpactSummary,
   WorkflowCapabilityModel,
   WorkflowRuntimeCapability,
   WorkflowRuntimeRequirements,
@@ -75,6 +76,7 @@ export interface DiagnosticsRunTrace {
   streamEventCount: number;
   lastDirtyTasks: string[];
   lastIncrementalTaskIds: string[];
+  lastGraphMemoryImpact: GraphMemoryImpactSummary | null;
   nodes: Record<string, DiagnosticsNodeTrace>;
   events: DiagnosticsEventRecord[];
 }

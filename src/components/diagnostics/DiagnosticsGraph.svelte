@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { DiagnosticsRunTrace, WorkflowDiagnosticsState } from '../../services/diagnostics/types';
   import {
+    formatNodeMemoryCompatibilityLabel,
     formatDiagnosticsTimestamp,
+    getGraphMemoryImpactCounts,
   } from './presenters';
 
   export let state: WorkflowDiagnosticsState;
@@ -17,6 +19,9 @@
       .slice()
       .reverse();
   });
+
+  let graphMemoryImpact = $derived(selectedRun?.lastGraphMemoryImpact ?? null);
+  let graphMemoryImpactCounts = $derived(getGraphMemoryImpactCounts(graphMemoryImpact));
 </script>
 
 <div class="h-full overflow-auto px-4 py-4">
@@ -51,6 +56,16 @@
       </div>
       <div class="mt-2 text-xs text-neutral-500">
         Latest observed incremental execution subset.
+      </div>
+    </article>
+
+    <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+      <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Memory Impact</div>
+      <div class="mt-3 text-2xl font-semibold text-neutral-100">
+        {graphMemoryImpact?.node_decisions?.length ?? 0}
+      </div>
+      <div class="mt-2 text-xs text-neutral-500">
+        Latest backend-owned compatibility decisions for the selected run.
       </div>
     </article>
   </div>
@@ -111,6 +126,60 @@
           </div>
         {:else}
           <div class="mt-3 text-sm text-neutral-500">No incremental task set has been observed yet.</div>
+        {/if}
+      </article>
+
+      <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm font-medium text-neutral-100">Latest Memory Impact</div>
+          {#if graphMemoryImpact?.fallback_to_full_invalidation}
+            <span class="rounded-full border border-rose-800 bg-rose-950/40 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-rose-200">
+              Fallback
+            </span>
+          {/if}
+        </div>
+
+        {#if graphMemoryImpact}
+          <div class="mt-3 grid gap-2 text-sm text-neutral-300 sm:grid-cols-2">
+            <div class="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <div class="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Preserved</div>
+              <div class="mt-1 text-lg font-medium text-emerald-200">{graphMemoryImpactCounts.preserved}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <div class="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Refresh Inputs</div>
+              <div class="mt-1 text-lg font-medium text-cyan-200">{graphMemoryImpactCounts.refreshed}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <div class="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Dropped</div>
+              <div class="mt-1 text-lg font-medium text-amber-200">{graphMemoryImpactCounts.dropped}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <div class="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Fallback</div>
+              <div class="mt-1 text-lg font-medium text-rose-200">{graphMemoryImpactCounts.fallback}</div>
+            </div>
+          </div>
+
+          {#if graphMemoryImpact.node_decisions?.length}
+            <div class="mt-4 space-y-2">
+              {#each graphMemoryImpact.node_decisions ?? [] as decision (`${decision.node_id}:${decision.compatibility}:${decision.reason ?? ''}`)}
+                <div class="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-sm font-medium text-neutral-100">{decision.node_id}</div>
+                    <div class="text-[11px] uppercase tracking-[0.18em] text-neutral-400">
+                      {formatNodeMemoryCompatibilityLabel(decision.compatibility)}
+                    </div>
+                  </div>
+                  {#if decision.reason}
+                    <div class="mt-2 text-xs text-neutral-500">{decision.reason}</div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <div class="mt-3 text-sm text-neutral-500">
+            No backend memory-impact summary has been observed yet for the selected run.
+          </div>
         {/if}
       </article>
 

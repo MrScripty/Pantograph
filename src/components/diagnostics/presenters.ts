@@ -4,6 +4,8 @@ import type {
   DiagnosticsRunStatus,
 } from '../../services/diagnostics/types';
 import type {
+  GraphMemoryImpactSummary,
+  NodeMemoryCompatibility,
   WorkflowRuntimeInstallState,
   WorkflowSessionQueueItemStatus,
   WorkflowSessionState,
@@ -94,6 +96,65 @@ export function getRunNodeStatusCounts(
   });
 
   return counts;
+}
+
+export interface GraphMemoryImpactCounts {
+  preserved: number;
+  refreshed: number;
+  dropped: number;
+  fallback: number;
+}
+
+export function getGraphMemoryImpactCounts(
+  impact: GraphMemoryImpactSummary | null,
+): GraphMemoryImpactCounts {
+  const counts: GraphMemoryImpactCounts = {
+    preserved: 0,
+    refreshed: 0,
+    dropped: 0,
+    fallback: 0,
+  };
+
+  if (!impact) {
+    return counts;
+  }
+
+  for (const decision of impact.node_decisions ?? []) {
+    switch (decision.compatibility) {
+      case 'preserve_as_is':
+        counts.preserved += 1;
+        break;
+      case 'preserve_with_input_refresh':
+        counts.refreshed += 1;
+        break;
+      case 'drop_on_identity_change':
+      case 'drop_on_schema_incompatibility':
+        counts.dropped += 1;
+        break;
+      case 'fallback_full_invalidation':
+        counts.fallback += 1;
+        break;
+    }
+  }
+
+  return counts;
+}
+
+export function formatNodeMemoryCompatibilityLabel(
+  compatibility: NodeMemoryCompatibility,
+): string {
+  switch (compatibility) {
+    case 'preserve_as_is':
+      return 'Preserved';
+    case 'preserve_with_input_refresh':
+      return 'Refresh Inputs';
+    case 'drop_on_identity_change':
+      return 'Dropped Identity';
+    case 'drop_on_schema_incompatibility':
+      return 'Dropped Schema';
+    case 'fallback_full_invalidation':
+      return 'Fallback Invalidation';
+  }
 }
 
 export function getSchedulerStateClasses(

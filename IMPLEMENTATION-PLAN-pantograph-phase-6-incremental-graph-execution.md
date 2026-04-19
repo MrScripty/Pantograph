@@ -691,7 +691,7 @@ out of the backend.
 - Cross-layer acceptance check from backend node-memory snapshot to UI-facing
   diagnostics projection
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 7: Close Out Source Of Truth And Rollout Safety
 
@@ -870,6 +870,11 @@ Update during implementation:
   the latest graph-memory impact beside dirty-task and incremental-task
   overlays so restart/reset behavior clears the full mutation-inspection fact
   set rather than only the older task-id subsets.
+- 2026-04-18: Milestone 6 started. The existing GUI graph diagnostics tab now
+  consumes the backend-owned latest graph-memory impact summary through the
+  app diagnostics state, using focused read-only presenters for compatibility
+  counts and labels so the frontend remains a renderer over backend-owned
+  mutation diagnostics rather than a second owner of reconciliation policy.
 
 ## Commit Cadence Notes
 
