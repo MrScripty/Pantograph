@@ -76,9 +76,8 @@ instead of becoming the owner of install or launch policy.
 
 ## Revisit Triggers
 
-- Runtime redistributable work adds version catalogs, durable job state, or
-  selected-version policy that no longer fits the current `operations.rs`
-  boundary.
+- The backend-owned runtime redistributables manager boundary moves out of
+  `crates/inference` or stops using `operations.rs` as the orchestration seam.
 - A third managed runtime family needs materially different install or launch
   behavior that stresses the current definition registry.
 - Archive validation or extraction needs stricter root-safe guarantees than the
@@ -93,8 +92,10 @@ instead of becoming the owner of install or launch policy.
 ## Related ADRs
 
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`
 - Reason: managed runtime capability and launch facts here feed higher
-  backend-owned runtime-registry and workflow policy layers.
+  backend-owned runtime-registry, workflow policy, and redistributables
+  manager layers.
 - Revisit trigger: a future ADR moves managed runtime ownership out of the
   inference crate.
 

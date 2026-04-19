@@ -434,13 +434,13 @@ core logic into Tauri.
 additional runtimes and referenced as the canonical runtime-manager design.
 
 **Tasks:**
-- [ ] Reconcile existing managed-binary plans/roadmap wording so the new plan
+- [x] Reconcile existing managed-binary plans/roadmap wording so the new plan
   is the source of truth and stale narrower wording is removed or superseded
 - [ ] Capture the reuse path for additional redistributables such as Ollama or
   other managed runtime hosts without implementing all of them immediately
 - [ ] Add launcher/release-smoke integration where required so install/readiness
   failures are visible in bounded verification flows
-- [ ] Update ADR/README traceability for the final backend-owned runtime
+- [x] Update ADR/README traceability for the final backend-owned runtime
   manager boundary
 - [ ] Record residual best-effort platform limits explicitly instead of leaving
   them implicit
@@ -628,6 +628,12 @@ Update during implementation:
   backend list once, but subsequent managed-runtime transitions no longer need
   a GUI-triggered capability polling loop, so the Milestone 5 event-driven
   projection task is now complete for the current redistributable surfaces.
+- 2026-04-19: Milestone 6 slice 1 finishes the source-of-truth and
+  traceability closeout for the current redistributables boundary. The older
+  managed-binary plan and roadmap wording now clearly defer to this plan, and
+  ADR/README links now point to an accepted redistributables-manager boundary
+  record instead of forcing later work to reconstruct the architecture from
+  plan prose alone.
 
 ## Commit Cadence Notes
 

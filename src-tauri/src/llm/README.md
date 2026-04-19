@@ -103,9 +103,11 @@ capabilities required by managed runtimes.
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
-- Reason: ADR-001 freezes the service/adapter split, and ADR-002 freezes this
+- `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`
+- Reason: ADR-001 freezes the service/adapter split, ADR-002 freezes this
   directory as a host adapter/composition layer rather than the owner of the
-  planned runtime-policy layer.
+  planned runtime-policy layer, and ADR-003 freezes redistributable lifecycle
+  ownership in backend Rust rather than in Tauri transport.
 - Revisit trigger: the desktop host no longer owns the composition root for
   runtime services.
 

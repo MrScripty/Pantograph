@@ -11,6 +11,7 @@ developers to reconstruct intent from commit history.
 | ----------- | ----------- |
 | `ADR-001-headless-embedding-service-boundary.md` | Freezes the host-agnostic workflow service boundary and the separation between service logic and adapters. |
 | `ADR-002-runtime-registry-ownership-and-lifecycle.md` | Freezes ownership, lifecycle, facade, and observability boundaries for the `RuntimeRegistry` layer. |
+| `ADR-003-runtime-redistributables-manager-boundary.md` | Freezes the backend-owned runtime redistributables manager boundary across inference, Pantograph-facing runtime views, workflow readiness, and Tauri/GUI adapters. |
 
 ## Problem
 Pantograph is actively deepening its backend/runtime architecture. Without an
@@ -62,6 +63,7 @@ link to these decisions.
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`
 ```
 
 ## API Consumer Contract
