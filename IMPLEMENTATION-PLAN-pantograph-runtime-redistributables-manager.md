@@ -613,6 +613,14 @@ Update during implementation:
   redistributable readiness/install-progress state without inventing a second
   GUI-only polling contract, and targeted diagnostics/adapter tests now pin
   that projection end to end.
+- 2026-04-19: Milestone 5 slice 11 promotes the frontend-managed-runtime
+  service into a shared snapshot owner that fans backend progress and
+  post-action runtime views out to subscribers. The current redistributable
+  GUI surfaces now reconcile managed-runtime status through that shared
+  service state instead of each maintaining their own install-state updates.
+  The remaining Milestone 5 gap is narrower still: only backend capability
+  refresh paths that still rely on `list_backends` need audit/documentation or
+  a later event-driven replacement.
 
 ## Commit Cadence Notes
 

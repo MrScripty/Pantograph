@@ -9,6 +9,8 @@ components.
 - List managed runtimes.
 - Inspect a single managed runtime.
 - Start or resume managed runtime installation with progress callbacks.
+- Subscribe GUI callers to the shared backend-owned managed-runtime snapshot
+  cache maintained by this service.
 - Request pause for an active managed runtime install job.
 - Request cancellation for an active managed runtime install job.
 - Remove a managed runtime.
@@ -31,6 +33,9 @@ components.
 - Progress callbacks also carry the backend-owned runtime snapshot used by the
   GUI, so components do not need separate ad hoc refresh logic to reconcile
   install-state transitions during managed-runtime jobs.
+- The service owns the app-local synchronized runtime snapshot cache and fans
+  backend progress/update results out to subscribers, so multiple components
+  can stay aligned without introducing GUI polling loops.
 - UI callers should not call redistributable Tauri commands directly when this
   service already owns the app-facing contract.
 - Retained artifact, resumability, and readiness facts remain backend-owned;

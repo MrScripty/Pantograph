@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     managedRuntimeService,
     type ManagedRuntimeManagerRuntimeView,
@@ -40,6 +40,7 @@
     runtime: status
   });
   let error: string | null = $state(null);
+  let managedRuntimeUnsubscribe: (() => void) | null = null;
 
   async function loadStatus() {
     try {
@@ -50,7 +51,17 @@
   }
 
   onMount(async () => {
+    managedRuntimeUnsubscribe = managedRuntimeService.subscribe((runtimes) => {
+      const runtime = runtimes.find((candidate) => candidate.id === 'llama_cpp');
+      if (runtime) {
+        status = runtime;
+      }
+    });
     await loadStatus();
+  });
+
+  onDestroy(() => {
+    managedRuntimeUnsubscribe?.();
   });
 
   async function download() {
@@ -69,7 +80,6 @@
     try {
       await managedRuntimeService.installRuntime('llama_cpp', async (event) => {
         progress = event;
-        status = event.runtime;
         if (event.error) {
           error = event.error;
           downloading = false;

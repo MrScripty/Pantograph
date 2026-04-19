@@ -53,6 +53,7 @@
 
   // LLM status subscription
   let unsubscribe: (() => void) | null = null;
+  let managedRuntimeUnsubscribe: (() => void) | null = null;
 
   // Confirmation dialog state
   let confirmDownload: BackendInfo | null = $state(null);
@@ -62,7 +63,7 @@
     error = null;
     try {
       backends = await invoke<BackendInfo[]>('list_backends');
-      runtimes = await managedRuntimeService.listRuntimes();
+      await managedRuntimeService.listRuntimes();
       const status = await LLMService.refreshStatus();
       currentBackendKey = status.backend_key || '';
     } catch (e) {
@@ -242,7 +243,10 @@
   };
 
   onMount(() => {
-    loadBackends();
+    managedRuntimeUnsubscribe = managedRuntimeService.subscribe((nextRuntimes) => {
+      runtimes = nextRuntimes;
+    });
+    void loadBackends();
     // Subscribe to LLM status to track when server is actually running
     unsubscribe = LLMService.subscribe((state) => {
       serverRunning = state.status.ready;
@@ -251,6 +255,7 @@
 
   onDestroy(() => {
     if (unsubscribe) unsubscribe();
+    if (managedRuntimeUnsubscribe) managedRuntimeUnsubscribe();
   });
 
   const runtimeForBackend = (backend: BackendInfo): ManagedRuntimeManagerRuntimeView | undefined => {

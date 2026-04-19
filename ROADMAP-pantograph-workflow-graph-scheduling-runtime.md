@@ -231,9 +231,12 @@ reconciled as the final source of truth.
   manager views through the existing runtime-snapshot and diagnostics-store
   path, so workflow readiness failures and install progress are visible
   through the same backend event boundary instead of a GUI-only redistributable
-  polling contract. The remaining Milestone 5 work is now limited to auditing
-  and documenting any residual narrow polling paths rather than missing
-  workflow diagnostics coverage or basic pause/resume/cancel controls.
+  polling contract. The frontend-managed-runtime service now also owns a
+  shared app-local snapshot cache that fans backend progress and post-action
+  runtime views out to multiple GUI surfaces, so the remaining Milestone 5
+  work is limited to auditing/documenting residual `list_backends`
+  capability-refresh polling or replacing that final narrow path with an
+  event-driven projection later.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.
