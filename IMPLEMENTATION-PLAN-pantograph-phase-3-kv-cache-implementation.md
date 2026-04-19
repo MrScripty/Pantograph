@@ -322,7 +322,7 @@ end-to-end KV behavior.
       supported backend that can genuinely capture and restore KV state.
 - [x] Route `kv-cache-save`, `kv-cache-load`, and `kv-cache-truncate` through
       the real backend-owned execution path rather than placeholder task logic.
-- [ ] Implement real marker/token truncation through backend codecs where
+- [x] Implement real marker/token truncation through backend codecs where
       supported; unsupported runtimes must return explicit unsupported reasons.
 - [x] Ensure both load-time validation and consume-time validation enforce the
       same fingerprint rules.
@@ -349,7 +349,7 @@ end-to-end KV behavior.
   later compatible reuse
 - Re-run affected suites to detect durable cache-state leakage
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 5: Integrate KV With Workflow Sessions And Partial Reruns
 
