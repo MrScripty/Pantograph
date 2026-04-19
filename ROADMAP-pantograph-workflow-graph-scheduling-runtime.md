@@ -583,6 +583,9 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   `kv_cache_out` handles as backend-owned indirect node-memory references,
   starting the Milestone 5 workflow-session reuse lane without moving reuse
   policy into Tauri or the frontend
+- Bound rerun preparation now only rehydrates those preserved KV handles while
+  the node-memory snapshot remains `ready`, so graph-edit or upstream-prefix
+  invalidation does not silently reuse stale KV state
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

@@ -386,6 +386,9 @@ Latest landed slice:
 - Backend node preparation now projects a preserved KV handle reference back
   into typed `kv_cache_in` inputs when rerunning a bound session without an
   explicit override, so reuse handoff stays in Rust execution paths.
+- Backend rerun preparation now also refuses to project preserved KV handles
+  from node-memory snapshots whose status is already `invalidated`, so
+  upstream-prefix or graph-edit invalidation does not silently reuse stale KV.
 - Phase 6 node-memory remains the lifecycle owner for those references; reuse
   policy for suffix-only reruns is still deferred to later Milestone 5 slices.
 

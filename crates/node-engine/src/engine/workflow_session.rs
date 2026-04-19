@@ -831,6 +831,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalidated_node_memory_does_not_project_preserved_kv_cache_back_into_inputs() {
+        let executor =
+            WorkflowExecutor::new("exec-1", single_node_graph(), Arc::new(NullEventSink));
+        let task_executor = KvCacheReusingTaskExecutor::new();
+        bind_workflow_session(&executor, "session-1").await;
+
+        executor
+            .demand(&"memory".to_string(), &task_executor)
+            .await
+            .expect("first run should succeed");
+
+        reconcile_workflow_session_node_memory(
+            &executor,
+            "session-1",
+            &GraphMemoryImpactSummary {
+                node_decisions: vec![NodeMemoryCompatibilitySnapshot {
+                    node_id: "memory".to_string(),
+                    compatibility: NodeMemoryCompatibility::PreserveWithInputRefresh,
+                    reason: Some("upstream_prefix_changed".to_string()),
+                }],
+                fallback_to_full_invalidation: false,
+            },
+        )
+        .await;
+
+        executor.mark_modified(&"memory".to_string()).await;
+        let second_outputs = executor
+            .demand(&"memory".to_string(), &task_executor)
+            .await
+            .expect("second run should succeed");
+        assert_eq!(
+            second_outputs.get("observed_kv_cache_in"),
+            Some(&serde_json::Value::Null)
+        );
+    }
+
+    #[tokio::test]
     async fn rerun_can_consume_prior_node_memory_from_the_bound_workflow_session() {
         let executor =
             WorkflowExecutor::new("exec-1", single_node_graph(), Arc::new(NullEventSink));

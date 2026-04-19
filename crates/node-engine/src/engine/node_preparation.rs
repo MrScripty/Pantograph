@@ -30,6 +30,12 @@ fn inject_kv_cache_input_from_node_memory(inputs: &mut HashMap<String, serde_jso
     let Some(node_memory) = inputs.get("_node_memory") else {
         return;
     };
+    let Some(status) = node_memory.get("status").and_then(|value| value.as_str()) else {
+        return;
+    };
+    if status != "ready" {
+        return;
+    }
     let Some(indirect_reference) = node_memory.get("indirect_state_reference") else {
         return;
     };
@@ -185,6 +191,7 @@ mod tests {
         let mut inputs = HashMap::from([(
             "_node_memory".to_string(),
             serde_json::json!({
+                "status": "ready",
                 "indirect_state_reference": {
                     "reference_kind": "kv_cache_handle",
                     "reference_id": "cache-1",
@@ -293,5 +300,50 @@ mod tests {
 
         assert_eq!(wait_prompt, None);
         assert_eq!(inputs.get("kv_cache_in"), Some(&explicit_handle));
+    }
+
+    #[test]
+    fn prepare_node_inputs_skips_invalidated_node_memory_kv_reference() {
+        let graph = WorkflowGraph {
+            id: "workflow".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![GraphNode {
+                id: "llm".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                data: serde_json::json!({}),
+                position: (0.0, 0.0),
+            }],
+            edges: Vec::new(),
+            groups: Vec::new(),
+        };
+        let mut inputs = HashMap::from([(
+            "_node_memory".to_string(),
+            serde_json::json!({
+                "status": "invalidated",
+                "indirect_state_reference": {
+                    "reference_kind": "kv_cache_handle",
+                    "reference_id": "cache-1",
+                    "restore_strategy": "rehydrate_before_resume",
+                    "inspection_metadata": {
+                        "model_fingerprint": {
+                            "model_id": "model-1",
+                            "config_hash": "cfg-1",
+                        },
+                        "runtime_fingerprint": {
+                            "runtime_id": "runtime-1",
+                            "backend_key": "llamacpp",
+                            "tokenizer_fingerprint": "tok-1",
+                            "prompt_format_fingerprint": "prompt-1",
+                            "runtime_build_fingerprint": "build-1",
+                        }
+                    }
+                }
+            }),
+        )]);
+
+        let wait_prompt = prepare_node_inputs(&graph, &"llm".to_string(), &mut inputs);
+
+        assert_eq!(wait_prompt, None);
+        assert!(!inputs.contains_key("kv_cache_in"));
     }
 }

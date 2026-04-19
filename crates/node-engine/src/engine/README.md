@@ -113,8 +113,9 @@ changing the public executor surface.
   handle into node-memory indirect references rather than embedding runtime
   reuse policy into cached outputs or Tauri-side session state.
 - Node preparation may synthesize `kv_cache_in` from a preserved node-memory
-  indirect reference when execution did not receive an explicit override, so
-  suffix reruns remain backend-owned and transport-neutral.
+  indirect reference when execution did not receive an explicit override, but
+  only while the backend-owned node-memory status remains `ready`, so
+  invalidated prefix state does not silently leak into suffix reruns.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under
