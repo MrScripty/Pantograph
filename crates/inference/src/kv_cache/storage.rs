@@ -287,6 +287,7 @@ mod tests {
                     model_id: "test-model".to_string(),
                     config_hash: "hash123".to_string(),
                 },
+                runtime_fingerprint: None,
                 backend_hint: "test".to_string(),
                 token_count: 256,
                 markers: vec![],

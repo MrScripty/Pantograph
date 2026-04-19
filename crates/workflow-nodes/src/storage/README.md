@@ -1,29 +1,43 @@
-# crates/workflow-nodes/src/storage
+# `crates/workflow-nodes/src/storage`
 
-## Purpose
-Submodule source for this crate, grouped by responsibility.
+## Responsibility
 
-## Contents
-| File/Folder | Description |
-| ----------- | ----------- |
-| kv_cache_load.rs | Source file used by modules in this directory. |
-| kv_cache_save.rs | Source file used by modules in this directory. |
-| kv_cache_truncate.rs | Source file used by modules in this directory. |
-| mod.rs | Source file used by modules in this directory. |
-| read_file.rs | Source file used by modules in this directory. |
-| write_file.rs | Source file used by modules in this directory. |
+This directory defines storage-oriented workflow-node descriptors and their
+local task wrappers. It owns node metadata such as names, ports, categories,
+and lightweight task wiring for file and KV-cache nodes.
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+It does not own the authoritative backend execution path for KV-cache behavior.
+At the current roadmap stage, the real KV save/load/truncate execution logic is
+owned by backend executor code in `node-engine`. The KV task bodies in this
+directory remain descriptor-oriented and will be reconciled during Phase 3
+Milestone 2 so Pantograph keeps one execution owner.
 
-## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+## Module Boundaries
 
-## Usage Examples
-```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
-```
+| File | Responsibility |
+| --- | --- |
+| `mod.rs` | Public facade for storage-node descriptors. |
+| `read_file.rs` | File-read node descriptor and local task wrapper. |
+| `write_file.rs` | File-write node descriptor and local task wrapper. |
+| `kv_cache_save.rs` | KV-save node descriptor and transitional task wrapper. |
+| `kv_cache_load.rs` | KV-load node descriptor and transitional task wrapper. |
+| `kv_cache_truncate.rs` | KV-truncate node descriptor and transitional task wrapper. |
+
+## Ownership Rules
+
+- Keep storage-node descriptors aligned with backend-owned contracts exported by
+  the execution/runtime crates.
+- Do not introduce backend KV business logic here. If KV behavior grows, move
+  or reuse backend executor helpers instead of duplicating runtime ownership in
+  this crate.
+- Treat the current KV task wrappers as transitional until the single-owner
+  execution refactor is complete.
+
+## Standards Notes
+
+- Port contracts should stay explicit and typed so future workflow graph
+  validation can distinguish KV artifacts from generic JSON.
+- Frontend and Tauri layers should consume backend-declared contracts rather
+  than re-deriving storage semantics locally.
+- Update this README whenever a storage-node boundary changes or a transitional
+  ownership assumption is removed.

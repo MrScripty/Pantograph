@@ -3,7 +3,7 @@
 ## Status
 In progress
 
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## Current Implementation Snapshot
 
@@ -13,7 +13,7 @@ layers.
 
 1. Metrics/trace spine: Complete
 2. Parallel demand execution: Complete
-3. KV cache implementation: Not started
+3. KV cache implementation: In progress
 4. Scheduler V2: Complete
 5. Real workflow event contract: Complete
 6. Incremental graph execution: In progress
@@ -55,6 +55,13 @@ Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,
 and the C#, Python, and BEAM language lanes.
+KV cache implementation now also has a dedicated standards-reviewed plan in
+`IMPLEMENTATION-PLAN-pantograph-phase-3-kv-cache-implementation.md`. The first
+implementation slice freezes backend-owned KV artifact, handle, compatibility,
+and usage-mode contracts in `crates/inference/src/kv_cache`, treats workflow-
+session memory as an indirect-reference consumer instead of a second cache
+owner, and replaces placeholder directory READMEs with explicit ownership
+boundaries before broader execution behavior lands.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -501,13 +508,24 @@ prepare the engine for metric-informed scheduling.
 
 ### Phase 3: KV Cache Implementation
 
-**Status:** Complete
+**Status:** In progress
+
+**Detailed source of truth:**
+
+- `IMPLEMENTATION-PLAN-pantograph-phase-3-kv-cache-implementation.md`
 
 **Goal:** Convert the existing KV cache scaffolding into a real workflow
 primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 
 **Milestones:**
 
+- Backend-owned KV handle, compatibility, runtime-fingerprint, and usage-mode
+  contracts are now frozen in `crates/inference/src/kv_cache/types.rs`, and
+  legacy metadata without runtime fingerprints is intentionally not reusable
+  through executable handles
+- KV cache module and workflow-storage README boundaries now explicitly state
+  that the inference KV store owns artifacts while workflow-session memory only
+  carries indirect references
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

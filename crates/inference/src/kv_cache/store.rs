@@ -388,6 +388,7 @@ mod tests {
                     model_id: model_id.to_string(),
                     config_hash: config_hash.to_string(),
                 },
+                runtime_fingerprint: None,
                 backend_hint: "test".to_string(),
                 token_count: 100,
                 markers: vec![],

@@ -2,6 +2,23 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Fingerprint identifying the runtime and tokenizer semantics that produced a
+/// KV artifact.
+///
+/// KV reuse is valid only when both the model fingerprint and this runtime
+/// fingerprint remain compatible.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheRuntimeFingerprint {
+    pub runtime_id: String,
+    pub backend_key: String,
+    pub tokenizer_fingerprint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_format_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_build_fingerprint: Option<String>,
+}
+
 /// Fingerprint identifying a specific model configuration.
 ///
 /// Used to validate that a cached KV state is compatible with the
@@ -17,12 +34,60 @@ pub struct ModelFingerprint {
 ///
 /// Markers let users save and restore to meaningful points
 /// (e.g. "end of system prompt", "after few-shot examples").
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheMarker {
     pub name: String,
     pub token_position: usize,
     pub description: Option<String>,
+}
+
+/// Workflow-level intent for how one inference node should interact with KV
+/// artifacts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum KvCacheUsageMode {
+    #[default]
+    Disabled,
+    ProduceOnly,
+    ConsumeOnly,
+    ConsumeAndProduce,
+}
+
+/// Read-only compatibility key for one reusable KV artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheCompatibility {
+    pub model_fingerprint: ModelFingerprint,
+    pub runtime_fingerprint: KvCacheRuntimeFingerprint,
+}
+
+/// Executable boundary contract passed through workflow graphs and session
+/// state when a node wants to consume or retain a reusable KV artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheHandle {
+    pub cache_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub compatibility: KvCacheCompatibility,
+    pub backend_hint: String,
+    pub token_count: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<CacheMarker>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl KvCacheHandle {
+    pub fn is_compatible_with(
+        &self,
+        model_fingerprint: &ModelFingerprint,
+        runtime_fingerprint: &KvCacheRuntimeFingerprint,
+    ) -> bool {
+        self.compatibility.model_fingerprint == *model_fingerprint
+            && self.compatibility.runtime_fingerprint == *runtime_fingerprint
+    }
 }
 
 /// Metadata describing a stored KV cache entry.
@@ -32,6 +97,8 @@ pub struct KvCacheMetadata {
     pub cache_id: String,
     pub label: Option<String>,
     pub model_fingerprint: ModelFingerprint,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_fingerprint: Option<KvCacheRuntimeFingerprint>,
     pub backend_hint: String,
     pub token_count: usize,
     pub markers: Vec<CacheMarker>,
@@ -61,6 +128,25 @@ pub struct KvCacheEntry {
     pub metadata: KvCacheMetadata,
     #[serde(with = "serde_bytes_base64")]
     pub data: Vec<u8>,
+}
+
+impl KvCacheMetadata {
+    pub fn executable_handle(&self) -> Option<KvCacheHandle> {
+        let runtime_fingerprint = self.runtime_fingerprint.clone()?;
+        Some(KvCacheHandle {
+            cache_id: self.cache_id.clone(),
+            label: self.label.clone(),
+            compatibility: KvCacheCompatibility {
+                model_fingerprint: self.model_fingerprint.clone(),
+                runtime_fingerprint,
+            },
+            backend_hint: self.backend_hint.clone(),
+            token_count: self.token_count,
+            markers: self.markers.clone(),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        })
+    }
 }
 
 /// Custom serde module for Vec<u8> as base64 in JSON.
@@ -97,6 +183,13 @@ mod tests {
                 model_id: "llama-7b".to_string(),
                 config_hash: "abc123".to_string(),
             },
+            runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                runtime_id: "runtime-a".to_string(),
+                backend_key: "llamacpp".to_string(),
+                tokenizer_fingerprint: "tok-123".to_string(),
+                prompt_format_fingerprint: Some("chatml-v1".to_string()),
+                runtime_build_fingerprint: Some("build-1".to_string()),
+            }),
             backend_hint: "pytorch".to_string(),
             token_count: 512,
             markers: vec![CacheMarker {
@@ -117,6 +210,10 @@ mod tests {
         assert!(
             json.contains("modelFingerprint"),
             "expected modelFingerprint, got: {json}"
+        );
+        assert!(
+            json.contains("runtimeFingerprint"),
+            "expected runtimeFingerprint, got: {json}"
         );
         assert!(
             json.contains("backendHint"),
@@ -191,5 +288,81 @@ mod tests {
         assert_eq!(fp1, fp2, "identical fingerprints should be equal");
         assert_ne!(fp1, fp3, "different model_id should not be equal");
         assert_ne!(fp1, fp4, "different config_hash should not be equal");
+    }
+
+    #[test]
+    fn test_executable_handle_requires_runtime_fingerprint() {
+        let metadata = KvCacheMetadata {
+            cache_id: "cache-1".to_string(),
+            label: None,
+            model_fingerprint: ModelFingerprint {
+                model_id: "llama-7b".to_string(),
+                config_hash: "abc123".to_string(),
+            },
+            runtime_fingerprint: None,
+            backend_hint: "llamacpp".to_string(),
+            token_count: 42,
+            markers: Vec::new(),
+            created_at: 1,
+            updated_at: 2,
+            compressed: false,
+            extra: serde_json::json!({}),
+        };
+
+        assert!(
+            metadata.executable_handle().is_none(),
+            "legacy metadata without runtime fingerprint should not become a reusable handle"
+        );
+    }
+
+    #[test]
+    fn test_executable_handle_preserves_compatibility_contract() {
+        let runtime_fingerprint = KvCacheRuntimeFingerprint {
+            runtime_id: "runtime-a".to_string(),
+            backend_key: "llamacpp".to_string(),
+            tokenizer_fingerprint: "tok-123".to_string(),
+            prompt_format_fingerprint: Some("chatml-v1".to_string()),
+            runtime_build_fingerprint: Some("build-1".to_string()),
+        };
+        let model_fingerprint = ModelFingerprint {
+            model_id: "llama-7b".to_string(),
+            config_hash: "abc123".to_string(),
+        };
+        let metadata = KvCacheMetadata {
+            cache_id: "cache-1".to_string(),
+            label: Some("Warm Prefix".to_string()),
+            model_fingerprint: model_fingerprint.clone(),
+            runtime_fingerprint: Some(runtime_fingerprint.clone()),
+            backend_hint: "llamacpp".to_string(),
+            token_count: 42,
+            markers: vec![CacheMarker {
+                name: "system".to_string(),
+                token_position: 16,
+                description: None,
+            }],
+            created_at: 1,
+            updated_at: 2,
+            compressed: false,
+            extra: serde_json::json!({}),
+        };
+
+        let handle = metadata
+            .executable_handle()
+            .expect("runtime fingerprint should produce executable handle");
+        assert_eq!(handle.cache_id, "cache-1");
+        assert!(handle.is_compatible_with(&model_fingerprint, &runtime_fingerprint));
+        assert!(
+            !handle.is_compatible_with(
+                &model_fingerprint,
+                &KvCacheRuntimeFingerprint {
+                    runtime_id: "runtime-a".to_string(),
+                    backend_key: "llamacpp".to_string(),
+                    tokenizer_fingerprint: "tok-999".to_string(),
+                    prompt_format_fingerprint: Some("chatml-v1".to_string()),
+                    runtime_build_fingerprint: Some("build-1".to_string()),
+                }
+            ),
+            "tokenizer or runtime drift must invalidate reuse"
+        );
     }
 }

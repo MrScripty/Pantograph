@@ -14,4 +14,7 @@ pub use codec::KvCacheCodec;
 pub use error::KvCacheError;
 pub use storage::{DiskStorage, MemoryStorage, StorageBackend};
 pub use store::KvCacheStore;
-pub use types::{CacheMarker, KvCacheEntry, KvCacheMetadata, ModelFingerprint, StoragePolicy};
+pub use types::{
+    CacheMarker, KvCacheCompatibility, KvCacheEntry, KvCacheHandle, KvCacheMetadata,
+    KvCacheRuntimeFingerprint, KvCacheUsageMode, ModelFingerprint, StoragePolicy,
+};

@@ -1,29 +1,50 @@
-# crates/inference/src/kv_cache
+# `crates/inference/src/kv_cache`
 
-## Purpose
-Submodule source for this crate, grouped by responsibility.
+## Responsibility
 
-## Contents
-| File/Folder | Description |
-| ----------- | ----------- |
-| codec.rs | Source file used by modules in this directory. |
-| error.rs | Source file used by modules in this directory. |
-| mod.rs | Source file used by modules in this directory. |
-| storage.rs | Source file used by modules in this directory. |
-| store.rs | Source file used by modules in this directory. |
-| types.rs | Source file used by modules in this directory. |
+This directory owns Pantograph's backend KV-cache primitive. It defines the
+persisted artifact format, the executable handle that workflows and session
+memory may reference, the compatibility contract used to validate reuse, and
+the storage/codec abstractions used by inference runtimes.
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+The directory does not own workflow scheduling, workflow-session memory, or
+frontend transport behavior. Those systems may hold indirect references to KV
+artifacts, but the inference KV store remains the single cache owner.
 
-## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+## Module Boundaries
 
-## Usage Examples
-```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
-```
+| File | Responsibility |
+| --- | --- |
+| `mod.rs` | Public facade for the KV-cache subsystem. |
+| `types.rs` | Backend-owned DTOs for persisted KV metadata, executable handles, compatibility fingerprints, usage modes, and truncation markers. |
+| `codec.rs` | Runtime-specific codec trait for capture, restore, and truncation of opaque KV bytes. |
+| `error.rs` | Typed KV-cache errors. |
+| `storage.rs` | Low-level storage backends for in-memory and disk persistence. |
+| `store.rs` | Store orchestration, retention, and metadata lookup over the storage backends. |
+
+## Ownership Rules
+
+- `KvCacheHandle` is the workflow-facing contract. It is the artifact that
+  graph execution, workflow-session memory, and diagnostics may pass around.
+- Compatibility is strict. Reuse must match the same model fingerprint and the
+  same runtime/tokenizer fingerprint.
+- Missing runtime fingerprints in legacy metadata are treated as not reusable
+  through executable KV handles.
+- Session memory may store indirect references to KV artifacts, but it must not
+  become a second cache implementation.
+
+## Integration Expectations
+
+- Runtime implementations provide the actual capture, restore, and truncation
+  behavior through `KvCacheCodec`.
+- `node-engine` owns execution-path behavior for KV save/load/truncate nodes.
+- Workflow-node descriptor code may describe KV ports, but it must not become a
+  parallel KV execution owner.
+
+## Standards Notes
+
+- Keep backend business logic in Rust backend crates.
+- Grow the facade additively where possible; prefer extracting focused helper
+  modules over widening already-oversized insertion points.
+- When this directory changes, keep the executable contract and README aligned
+  with the roadmap and the Phase 3 implementation plan.
