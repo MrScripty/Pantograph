@@ -16,8 +16,7 @@ pub mod trace;
 pub mod workflow;
 
 pub use graph::{
-    convert_graph_to_node_engine, validate_workflow_connection, ConnectionAnchor,
-    ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
+    ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
     ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,
     EdgeInsertionBridge, EdgeInsertionPreviewResponse, ExecutionMode, FileSystemWorkflowGraphStore,
     GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
@@ -34,16 +33,18 @@ pub use graph::{
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    convert_graph_to_node_engine, graph_memory_impact_from_node_engine_graph_change,
+    validate_workflow_connection,
 };
 pub use scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerRuntimeCapacityPressure,
-    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
-    WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
+    WorkflowSchedulerRuntimeCapacityPressure, WorkflowSchedulerRuntimeRegistryDiagnostics,
+    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
+    WorkflowSchedulerSnapshotDiagnostics, select_runtime_unload_candidate_by_affinity,
 };
 pub use technical_fit::{
-    build_workflow_technical_fit_request, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure, WorkflowTechnicalFitReason,
-    WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
+    WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride, WorkflowTechnicalFitQueuePressure,
+    WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode, WorkflowTechnicalFitRequest,
+    WorkflowTechnicalFitSelectionMode, build_workflow_technical_fit_request,
 };
 pub use trace::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,

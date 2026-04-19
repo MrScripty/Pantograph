@@ -880,6 +880,13 @@ the affected downstream closure.
   for stored workflow-session node memory, so later graph-change integration
   can reuse one backend reconciliation rule set instead of duplicating drop vs.
   invalidate semantics in host-specific runtime code.
+- Milestone 4 now also preserves kept-alive workflow-session executors across
+  compatible workflow graph fingerprint changes: the embedded runtime restores
+  the updated graph into the existing backend executor, applies the shared
+  graph-diff memory-impact contract to stored node memory, and replays carried
+  input bindings that still target valid nodes before demand execution
+  continues. Runtime unload still clears executor residency until Milestone 5
+  checkpoint/restore work lands.
 
 **Milestones:**
 

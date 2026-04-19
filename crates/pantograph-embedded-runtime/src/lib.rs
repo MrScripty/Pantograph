@@ -2245,6 +2245,22 @@ mod tests {
         .expect("write workflow");
     }
 
+    fn rewrite_test_workflow_input_description(root: &Path, workflow_id: &str, description: &str) {
+        let workflow_path = root
+            .join(".pantograph")
+            .join("workflows")
+            .join(format!("{workflow_id}.json"));
+        let mut workflow_json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&workflow_path).expect("read workflow"))
+                .expect("parse workflow");
+        workflow_json["graph"]["nodes"][0]["data"]["description"] = serde_json::json!(description);
+        std::fs::write(
+            workflow_path,
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("rewrite workflow");
+    }
+
     fn write_human_input_workflow(root: &Path, workflow_id: &str) {
         let workflows_dir = root.join(".pantograph").join("workflows");
         std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
@@ -3907,6 +3923,109 @@ mod tests {
                 .handle(&session_id)
                 .expect("session execution lookup should succeed")
                 .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let created = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: None,
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+        let session_id = created.session_id.clone();
+
+        let first_run = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("alpha"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-before-edit".to_string()),
+            })
+            .await
+            .expect("run before workflow edit");
+        assert_eq!(first_run.outputs[0].value, serde_json::json!("alpha"));
+
+        let first_executor = runtime
+            .session_executions
+            .handle(&session_id)
+            .expect("session execution lookup should succeed")
+            .expect("keep-alive session executor should exist");
+
+        rewrite_test_workflow_input_description(
+            temp.path(),
+            "runtime-text",
+            "Prompt updated after session creation",
+        );
+
+        let second_run = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-after-edit".to_string()),
+            })
+            .await
+            .expect("run after workflow edit");
+        assert_eq!(second_run.outputs[0].value, serde_json::json!("alpha"));
+
+        let second_executor = runtime
+            .session_executions
+            .handle(&session_id)
+            .expect("session execution lookup should succeed")
+            .expect("keep-alive session executor should still exist");
+        assert!(Arc::ptr_eq(&first_executor, &second_executor));
+
+        let snapshots = {
+            let executor = second_executor.lock().await;
+            executor
+                .workflow_session_node_memory_snapshots(&session_id)
+                .await
+        };
+        assert_eq!(snapshots.len(), 2);
+        assert!(
+            snapshots
+                .iter()
+                .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready)
         );
     }
 

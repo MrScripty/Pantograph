@@ -18,6 +18,7 @@ pub use connection_intent::{
     preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,
     rejected_insert_on_edge_response, rejected_insert_response,
 };
+pub use memory_impact::graph_memory_impact_from_node_engine_graph_change;
 pub use persistence::{
     FileSystemWorkflowGraphStore, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,

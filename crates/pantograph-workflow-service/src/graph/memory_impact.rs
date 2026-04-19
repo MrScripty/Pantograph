@@ -5,6 +5,7 @@ use node_engine::{
 };
 
 use super::types::WorkflowGraph;
+use super::{GraphEdge, GraphNode, Position};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum NodeGraphChangeKind {
@@ -55,6 +56,54 @@ pub(crate) fn graph_memory_impact_from_graph_change(
         }),
         node_decisions,
     })
+}
+
+pub fn graph_memory_impact_from_node_engine_graph_change(
+    before: &node_engine::WorkflowGraph,
+    after: &node_engine::WorkflowGraph,
+) -> Option<GraphMemoryImpactSummary> {
+    let before_graph = workflow_graph_from_node_engine(before);
+    let after_graph = workflow_graph_from_node_engine(after);
+    let mut candidate_node_ids = before
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .chain(after.nodes.iter().map(|node| node.id.clone()))
+        .collect::<Vec<_>>();
+    candidate_node_ids.sort();
+    candidate_node_ids.dedup();
+
+    graph_memory_impact_from_graph_change(&before_graph, &after_graph, &candidate_node_ids)
+}
+
+fn workflow_graph_from_node_engine(graph: &node_engine::WorkflowGraph) -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: graph
+            .nodes
+            .iter()
+            .map(|node| GraphNode {
+                id: node.id.clone(),
+                node_type: node.node_type.clone(),
+                position: Position {
+                    x: node.position.0,
+                    y: node.position.1,
+                },
+                data: node.data.clone(),
+            })
+            .collect(),
+        edges: graph
+            .edges
+            .iter()
+            .map(|edge| GraphEdge {
+                id: edge.id.clone(),
+                source: edge.source.clone(),
+                source_handle: edge.source_handle.clone(),
+                target: edge.target.clone(),
+                target_handle: edge.target_handle.clone(),
+            })
+            .collect(),
+        derived_graph: None,
+    }
 }
 
 fn compatibility_snapshot_for_node(
@@ -349,5 +398,93 @@ mod tests {
             impact.node_decisions[0].reason.as_deref(),
             Some("edge_topology_changed")
         );
+    }
+
+    #[test]
+    fn node_engine_graph_change_reuses_the_same_compatibility_rules() {
+        let before = node_engine::WorkflowGraph {
+            id: "wf".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![
+                node_engine::GraphNode {
+                    id: "input".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({
+                        "text": "alpha",
+                        "definition": { "schema_version": "v1" }
+                    }),
+                    position: (0.0, 0.0),
+                },
+                node_engine::GraphNode {
+                    id: "output".to_string(),
+                    node_type: "text-output".to_string(),
+                    data: serde_json::json!({
+                        "definition": { "schema_version": "v1" }
+                    }),
+                    position: (1.0, 0.0),
+                },
+            ],
+            edges: vec![node_engine::GraphEdge {
+                id: "edge".to_string(),
+                source: "input".to_string(),
+                source_handle: "text".to_string(),
+                target: "output".to_string(),
+                target_handle: "text".to_string(),
+            }],
+            groups: Vec::new(),
+        };
+        let after = node_engine::WorkflowGraph {
+            id: "wf".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![
+                node_engine::GraphNode {
+                    id: "input".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({
+                        "text": "beta",
+                        "definition": { "schema_version": "v1" }
+                    }),
+                    position: (0.0, 0.0),
+                },
+                node_engine::GraphNode {
+                    id: "output".to_string(),
+                    node_type: "text-output".to_string(),
+                    data: serde_json::json!({
+                        "definition": { "schema_version": "v1" }
+                    }),
+                    position: (1.0, 0.0),
+                },
+            ],
+            edges: vec![node_engine::GraphEdge {
+                id: "edge".to_string(),
+                source: "input".to_string(),
+                source_handle: "text".to_string(),
+                target: "output".to_string(),
+                target_handle: "text".to_string(),
+            }],
+            groups: Vec::new(),
+        };
+
+        let impact = graph_memory_impact_from_node_engine_graph_change(&before, &after)
+            .expect("memory impact");
+
+        assert_eq!(impact.node_decisions.len(), 2);
+        assert_eq!(
+            impact.node_decisions[0],
+            NodeMemoryCompatibilitySnapshot {
+                node_id: "input".to_string(),
+                compatibility: NodeMemoryCompatibility::PreserveWithInputRefresh,
+                reason: Some("node_data_changed".to_string()),
+            }
+        );
+        assert_eq!(
+            impact.node_decisions[1],
+            NodeMemoryCompatibilitySnapshot {
+                node_id: "output".to_string(),
+                compatibility: NodeMemoryCompatibility::PreserveWithInputRefresh,
+                reason: Some("upstream_dependency_changed".to_string()),
+            }
+        );
+        assert!(!impact.fallback_to_full_invalidation);
     }
 }

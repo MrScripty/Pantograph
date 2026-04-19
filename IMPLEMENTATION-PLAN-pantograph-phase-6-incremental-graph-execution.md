@@ -848,6 +848,12 @@ Update during implementation:
   recorded workflow-session node memory by preserving compatible entries,
   invalidating refresh-required entries, and dropping incompatible entries so
   later graph-change wiring can reuse one backend source of truth.
+- 2026-04-18: Milestone 4 continued. Compatible workflow graph edits during
+  kept-alive session runs now preserve the same backend executor instead of
+  replacing it wholesale: the embedded runtime restores the updated graph into
+  that executor, reuses workflow-service graph-diff compatibility rules to
+  reconcile stored node memory, and replays carried input bindings that still
+  target live nodes before the rerun proceeds.
 
 ## Commit Cadence Notes
 
