@@ -157,6 +157,9 @@ reconciled as the final source of truth.
   host adapters.
 - Workflow runtime capability contracts now publish canonical runtime ids and
   canonical `required_backends` values rather than drifting alias forms.
+- Workflow runtime capability contracts now also carry explicit readiness
+  phase and selected-version context, so preflight, diagnostics, and
+  execution consume one backend-owned runtime-readiness contract.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

@@ -5991,6 +5991,10 @@ mod tests {
             can_remove: false,
             source_kind: WorkflowRuntimeSourceKind::Host,
             selected: false,
+            readiness_state: Some(
+                pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+            ),
+            selected_version: None,
             supports_external_connection: false,
             backend_keys: vec!["llama_cpp".to_string(), "llamacpp".to_string()],
             missing_files: Vec::new(),

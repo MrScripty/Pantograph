@@ -179,6 +179,19 @@ pub enum WorkflowRuntimeSourceKind {
     Host,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRuntimeReadinessState {
+    Unknown,
+    Missing,
+    Downloading,
+    Extracting,
+    Validating,
+    Ready,
+    Failed,
+    Unsupported,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRuntimeCapability {
@@ -193,6 +206,10 @@ pub struct WorkflowRuntimeCapability {
     pub source_kind: WorkflowRuntimeSourceKind,
     #[serde(default)]
     pub selected: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readiness_state: Option<WorkflowRuntimeReadinessState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_version: Option<String>,
     #[serde(default)]
     pub supports_external_connection: bool,
     #[serde(default)]
@@ -2270,6 +2287,36 @@ fn describe_runtime_issue(
     required_backend_key: &str,
 ) -> String {
     if !runtime.configured {
+        if let Some(reason) = runtime
+            .unavailable_reason
+            .as_ref()
+            .filter(|reason| !reason.trim().is_empty())
+        {
+            return format_runtime_issue_message(runtime, required_backend_key, reason);
+        }
+
+        if let Some(readiness_state) = runtime.readiness_state {
+            let readiness_detail = runtime
+                .selected_version
+                .as_ref()
+                .map(|version| {
+                    format!(
+                        "{} selected version '{}' is {}",
+                        runtime.display_name,
+                        version,
+                        runtime_readiness_label(readiness_state)
+                    )
+                })
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} is {}",
+                        runtime.display_name,
+                        runtime_readiness_label(readiness_state)
+                    )
+                });
+            return format_runtime_issue_message(runtime, required_backend_key, &readiness_detail);
+        }
+
         return format!(
             "workflow requires backend '{}' but {} is not configured",
             required_backend_key, runtime.display_name
@@ -2295,6 +2342,45 @@ fn describe_runtime_issue(
                 )
             })
         }
+    }
+}
+
+fn format_runtime_issue_message(
+    runtime: &WorkflowRuntimeCapability,
+    required_backend_key: &str,
+    detail: &str,
+) -> String {
+    let trimmed_detail = detail.trim();
+    if trimmed_detail.is_empty() {
+        return format!(
+            "workflow requires backend '{}' but {} is not ready",
+            required_backend_key, runtime.display_name
+        );
+    }
+
+    if trimmed_detail.contains(&runtime.display_name) {
+        return format!(
+            "workflow requires backend '{}' but {}",
+            required_backend_key, trimmed_detail
+        );
+    }
+
+    format!(
+        "workflow requires backend '{}' but {}: {}",
+        required_backend_key, runtime.display_name, trimmed_detail
+    )
+}
+
+fn runtime_readiness_label(state: WorkflowRuntimeReadinessState) -> &'static str {
+    match state {
+        WorkflowRuntimeReadinessState::Unknown => "unknown",
+        WorkflowRuntimeReadinessState::Missing => "missing",
+        WorkflowRuntimeReadinessState::Downloading => "downloading",
+        WorkflowRuntimeReadinessState::Extracting => "extracting",
+        WorkflowRuntimeReadinessState::Validating => "validating",
+        WorkflowRuntimeReadinessState::Ready => "ready",
+        WorkflowRuntimeReadinessState::Failed => "failed",
+        WorkflowRuntimeReadinessState::Unsupported => "unsupported on this platform",
     }
 }
 
@@ -2734,6 +2820,8 @@ mod tests {
             can_remove: true,
             source_kind: WorkflowRuntimeSourceKind::Managed,
             selected: true,
+            readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+            selected_version: Some("b8248".to_string()),
             supports_external_connection: true,
             backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
             missing_files: Vec::new(),
@@ -4801,6 +4889,8 @@ mod tests {
                     can_remove: true,
                     source_kind: WorkflowRuntimeSourceKind::Managed,
                     selected: false,
+                    readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+                    selected_version: Some("b8248".to_string()),
                     supports_external_connection: true,
                     backend_keys: vec!["llama_cpp".to_string(), "llama.cpp".to_string()],
                     missing_files: Vec::new(),
@@ -4816,6 +4906,8 @@ mod tests {
                     can_remove: false,
                     source_kind: WorkflowRuntimeSourceKind::Host,
                     selected: true,
+                    readiness_state: Some(WorkflowRuntimeReadinessState::Unknown),
+                    selected_version: None,
                     supports_external_connection: false,
                     backend_keys: vec!["llama_cpp".to_string()],
                     missing_files: Vec::new(),
@@ -4847,6 +4939,8 @@ mod tests {
                     can_remove: false,
                     source_kind: WorkflowRuntimeSourceKind::Managed,
                     selected: false,
+                    readiness_state: Some(WorkflowRuntimeReadinessState::Missing),
+                    selected_version: None,
                     supports_external_connection: true,
                     backend_keys: vec!["llama_cpp".to_string()],
                     missing_files: vec!["llama-server".to_string()],
@@ -4875,6 +4969,8 @@ mod tests {
                     can_remove: true,
                     source_kind: WorkflowRuntimeSourceKind::Managed,
                     selected: true,
+                    readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+                    selected_version: Some("b8248".to_string()),
                     supports_external_connection: true,
                     backend_keys: vec!["llama_cpp".to_string()],
                     missing_files: Vec::new(),
@@ -4890,6 +4986,8 @@ mod tests {
                     can_remove: true,
                     source_kind: WorkflowRuntimeSourceKind::Managed,
                     selected: true,
+                    readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+                    selected_version: None,
                     supports_external_connection: true,
                     backend_keys: vec!["torch".to_string()],
                     missing_files: Vec::new(),
@@ -4900,6 +4998,36 @@ mod tests {
 
         assert!(runtime_warnings.is_empty());
         assert!(blocking_runtime_issues.is_empty());
+    }
+
+    #[test]
+    fn runtime_preflight_reports_selected_version_readiness_context() {
+        let (runtime_warnings, blocking_runtime_issues) = evaluate_runtime_preflight(
+            &["llama_cpp".to_string()],
+            &[WorkflowRuntimeCapability {
+                runtime_id: "llama_cpp".to_string(),
+                display_name: "llama.cpp".to_string(),
+                install_state: WorkflowRuntimeInstallState::Installed,
+                available: false,
+                configured: false,
+                can_install: false,
+                can_remove: true,
+                source_kind: WorkflowRuntimeSourceKind::Managed,
+                selected: true,
+                readiness_state: Some(WorkflowRuntimeReadinessState::Validating),
+                selected_version: Some("b8248".to_string()),
+                supports_external_connection: true,
+                backend_keys: vec!["llama_cpp".to_string()],
+                missing_files: Vec::new(),
+                unavailable_reason: None,
+            }],
+        );
+
+        assert_eq!(runtime_warnings.len(), 1);
+        assert_eq!(blocking_runtime_issues.len(), 1);
+        assert!(blocking_runtime_issues[0]
+            .message
+            .contains("selected version 'b8248' is validating"));
     }
 
     #[test]

@@ -55,6 +55,10 @@ impl WorkflowHost for ContractHost {
                 can_remove: true,
                 source_kind: WorkflowRuntimeSourceKind::Managed,
                 selected: true,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: true,
                 backend_keys: vec!["llamacpp".to_string(), "llama.cpp".to_string()],
                 missing_files: Vec::new(),

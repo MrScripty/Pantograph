@@ -593,6 +593,10 @@ fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent()
                 can_remove: false,
                 source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
                 selected: true,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: false,
                 backend_keys: vec!["pytorch".to_string(), "torch".to_string()],
                 missing_files: Vec::new(),
@@ -665,6 +669,10 @@ fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_abse
                 can_remove: false,
                 source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
                 selected: false,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: false,
                 backend_keys: vec!["ONNX Runtime".to_string(), "onnx-runtime".to_string()],
                 missing_files: Vec::new(),
@@ -728,6 +736,10 @@ fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_
                 can_remove: false,
                 source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
                 selected: true,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: false,
                 backend_keys: vec!["pytorch".to_string(), "torch".to_string()],
                 missing_files: Vec::new(),

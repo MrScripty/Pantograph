@@ -251,7 +251,8 @@ fn empty_runtime_snapshot() -> RuntimeRegistrySnapshot {
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        build_workflow_technical_fit_request, WorkflowRuntimeRequirements,
+        build_workflow_technical_fit_request, WorkflowRuntimeReadinessState,
+        WorkflowRuntimeRequirements,
     };
 
     fn runtime_capability() -> WorkflowRuntimeCapability {
@@ -265,6 +266,8 @@ mod tests {
             can_remove: false,
             source_kind: WorkflowRuntimeSourceKind::Managed,
             selected: true,
+            readiness_state: Some(WorkflowRuntimeReadinessState::Ready),
+            selected_version: None,
             supports_external_connection: false,
             backend_keys: vec!["llama_cpp".to_string(), "llama.cpp".to_string()],
             missing_files: Vec::new(),

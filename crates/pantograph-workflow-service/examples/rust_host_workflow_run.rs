@@ -54,6 +54,10 @@ impl WorkflowHost for ExampleHost {
                 can_remove: false,
                 source_kind: WorkflowRuntimeSourceKind::Host,
                 selected: true,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: false,
                 backend_keys: vec!["example-backend".to_string()],
                 missing_files: Vec::new(),

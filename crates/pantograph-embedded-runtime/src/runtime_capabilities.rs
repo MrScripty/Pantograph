@@ -11,7 +11,7 @@ use pantograph_runtime_identity::{
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind,
+    WorkflowRuntimeReadinessState, WorkflowRuntimeSourceKind,
 };
 
 pub fn managed_runtime_capabilities(
@@ -34,6 +34,8 @@ pub fn managed_runtime_capabilities(
                 can_remove: runtime.can_remove,
                 source_kind: WorkflowRuntimeSourceKind::Managed,
                 selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+                readiness_state: Some(managed_runtime_readiness_state(runtime.readiness_state)),
+                selected_version: runtime.selection.selected_version.clone(),
                 supports_external_connection: runtime_supports_external_connection(
                     available_backends,
                     &backend_keys,
@@ -80,6 +82,12 @@ pub fn dedicated_embedding_runtime_capabilities(
         can_remove: false,
         source_kind: WorkflowRuntimeSourceKind::Host,
         selected: false,
+        readiness_state: Some(if snapshot.active {
+            WorkflowRuntimeReadinessState::Ready
+        } else {
+            WorkflowRuntimeReadinessState::Unknown
+        }),
+        selected_version: None,
         supports_external_connection: false,
         backend_keys: backend_key_aliases("llama.cpp", "llama_cpp"),
         missing_files: Vec::new(),
@@ -140,6 +148,12 @@ pub fn python_runtime_capabilities(
             can_remove: false,
             source_kind: WorkflowRuntimeSourceKind::System,
             selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+            readiness_state: Some(if available {
+                WorkflowRuntimeReadinessState::Ready
+            } else {
+                WorkflowRuntimeReadinessState::Missing
+            }),
+            selected_version: None,
             supports_external_connection: false,
             backend_keys,
             missing_files: Vec::new(),
@@ -267,6 +281,12 @@ fn host_runtime_capability(
         can_remove: false,
         source_kind: WorkflowRuntimeSourceKind::Host,
         selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+        readiness_state: Some(if backend.available {
+            WorkflowRuntimeReadinessState::Ready
+        } else {
+            WorkflowRuntimeReadinessState::Missing
+        }),
+        selected_version: None,
         supports_external_connection: backend.capabilities.external_connection,
         backend_keys,
         missing_files: Vec::new(),
@@ -285,6 +305,29 @@ fn managed_runtime_install_state(
         inference::ManagedBinaryInstallState::Missing => WorkflowRuntimeInstallState::Missing,
         inference::ManagedBinaryInstallState::Unsupported => {
             WorkflowRuntimeInstallState::Unsupported
+        }
+    }
+}
+
+fn managed_runtime_readiness_state(
+    state: inference::ManagedRuntimeReadinessState,
+) -> WorkflowRuntimeReadinessState {
+    match state {
+        inference::ManagedRuntimeReadinessState::Unknown => WorkflowRuntimeReadinessState::Unknown,
+        inference::ManagedRuntimeReadinessState::Missing => WorkflowRuntimeReadinessState::Missing,
+        inference::ManagedRuntimeReadinessState::Downloading => {
+            WorkflowRuntimeReadinessState::Downloading
+        }
+        inference::ManagedRuntimeReadinessState::Extracting => {
+            WorkflowRuntimeReadinessState::Extracting
+        }
+        inference::ManagedRuntimeReadinessState::Validating => {
+            WorkflowRuntimeReadinessState::Validating
+        }
+        inference::ManagedRuntimeReadinessState::Ready => WorkflowRuntimeReadinessState::Ready,
+        inference::ManagedRuntimeReadinessState::Failed => WorkflowRuntimeReadinessState::Failed,
+        inference::ManagedRuntimeReadinessState::Unsupported => {
+            WorkflowRuntimeReadinessState::Unsupported
         }
     }
 }
@@ -773,6 +816,10 @@ mod tests {
                 can_remove: false,
                 source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
                 selected: true,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: false,
                 backend_keys: vec!["torch".to_string()],
                 missing_files: Vec::new(),
@@ -817,6 +864,10 @@ mod tests {
                 can_remove: false,
                 source_kind: pantograph_workflow_service::WorkflowRuntimeSourceKind::System,
                 selected: false,
+                readiness_state: Some(
+                    pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+                ),
+                selected_version: None,
                 supports_external_connection: false,
                 backend_keys: vec!["ONNX Runtime".to_string()],
                 missing_files: Vec::new(),

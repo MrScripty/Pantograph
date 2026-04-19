@@ -143,6 +143,9 @@ Primary contract types:
   backend-owned technical-fit decision here so hosts surface one selector
   result instead of drifting between preflight and execution-time runtime
   readiness semantics.
+- Workflow runtime capability contracts owned here must carry explicit runtime
+  readiness phase and selected-version context so diagnostics, preflight, and
+  execution all consume one backend-owned readiness contract.
 - Graph edit sessions, graph persistence contracts, revision-aware connection
   intent, and undo/redo semantics are backend-owned in this crate.
 - Workflow trace and metrics contract ownership is backend-owned in this crate;

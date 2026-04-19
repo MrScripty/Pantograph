@@ -164,6 +164,10 @@ impl WorkflowHost for FrontendHttpWorkflowHost {
             can_remove: false,
             source_kind: WorkflowRuntimeSourceKind::Host,
             selected: true,
+            readiness_state: Some(
+                pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready,
+            ),
+            selected_version: None,
             supports_external_connection: true,
             backend_keys: self.backend_keys.clone(),
             missing_files: Vec::new(),

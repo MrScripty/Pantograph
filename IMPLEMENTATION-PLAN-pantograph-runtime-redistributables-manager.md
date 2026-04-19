@@ -518,6 +518,11 @@ Update during implementation:
   readiness-phase and selected-version context through `configured` and
   `unavailable_reason` instead of rebuilding that context in workflow or Tauri
   layers.
+- 2026-04-19: Milestone 4 slice 2 extended the backend-owned
+  `WorkflowRuntimeCapability` contract with explicit readiness-phase and
+  selected-version fields, and updated workflow preflight/runtime issue
+  shaping to consume that contract directly so diagnostics and execution see
+  the same selected-version readiness context.
 
 ## Commit Cadence Notes
 
