@@ -840,6 +840,10 @@ the affected downstream closure.
   placeholder view, which creates the standards-compliant workflow-service seam
   needed for later node-memory wiring without moving that ownership into
   adapters.
+- `node-engine` now also exposes explicit workflow-session binding on
+  `WorkflowExecutor`, so the remaining execution-path integration can key node
+  memory off a backend-owned logical session identity instead of guessing from
+  run/execution ids.
 
 **Milestones:**
 

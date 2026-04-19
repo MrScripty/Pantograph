@@ -432,6 +432,23 @@ impl WorkflowExecutor {
         workflow_session::workflow_session_residency(self).await
     }
 
+    /// Bind this executor to one logical workflow session so later Phase 6
+    /// node-memory reads and writes do not infer session identity from
+    /// transport-local execution ids.
+    pub async fn bind_workflow_session(&self, workflow_session_id: impl Into<String>) {
+        workflow_session::bind_workflow_session(self, workflow_session_id).await;
+    }
+
+    /// Return the currently bound logical workflow session id, if any.
+    pub async fn bound_workflow_session_id(&self) -> Option<String> {
+        workflow_session::bound_workflow_session_id(self).await
+    }
+
+    /// Clear the current logical workflow session binding from this executor.
+    pub async fn clear_bound_workflow_session(&self) {
+        workflow_session::clear_bound_workflow_session(self).await;
+    }
+
     /// Update the workflow-session residency state used by the Phase 6
     /// checkpoint scaffold.
     pub async fn set_workflow_session_residency(&self, state: WorkflowSessionResidencyState) {

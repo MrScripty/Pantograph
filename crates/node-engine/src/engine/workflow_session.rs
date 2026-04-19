@@ -9,6 +9,24 @@ pub(super) async fn workflow_session_residency(
     executor.session_state.residency().await
 }
 
+pub(super) async fn bind_workflow_session(
+    executor: &WorkflowExecutor,
+    workflow_session_id: impl Into<String>,
+) {
+    executor
+        .session_state
+        .bind_workflow_session(workflow_session_id.into())
+        .await;
+}
+
+pub(super) async fn bound_workflow_session_id(executor: &WorkflowExecutor) -> Option<String> {
+    executor.session_state.bound_workflow_session_id().await
+}
+
+pub(super) async fn clear_bound_workflow_session(executor: &WorkflowExecutor) {
+    executor.session_state.clear_bound_workflow_session().await;
+}
+
 pub(super) async fn set_workflow_session_residency(
     executor: &WorkflowExecutor,
     state: WorkflowSessionResidencyState,
@@ -61,7 +79,8 @@ mod tests {
     use crate::events::NullEventSink;
 
     use super::{
-        NodeMemorySnapshot, WorkflowExecutor, WorkflowSessionResidencyState,
+        NodeMemorySnapshot, WorkflowExecutor, WorkflowSessionResidencyState, bind_workflow_session,
+        bound_workflow_session_id, clear_bound_workflow_session,
         clear_workflow_session_node_memory, record_workflow_session_node_memory,
         set_workflow_session_residency, workflow_session_checkpoint_summary,
         workflow_session_node_memory_snapshots, workflow_session_residency,
@@ -132,5 +151,23 @@ mod tests {
                 .await
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn executor_workflow_session_helpers_bind_and_clear_workflow_session_identity() {
+        let executor = WorkflowExecutor::new(
+            "exec-1",
+            crate::types::WorkflowGraph::new("graph-1", "Graph"),
+            Arc::new(NullEventSink),
+        );
+
+        assert_eq!(bound_workflow_session_id(&executor).await, None);
+        bind_workflow_session(&executor, "session-1").await;
+        assert_eq!(
+            bound_workflow_session_id(&executor).await,
+            Some("session-1".to_string())
+        );
+        clear_bound_workflow_session(&executor).await;
+        assert_eq!(bound_workflow_session_id(&executor).await, None);
     }
 }

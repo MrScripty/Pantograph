@@ -142,6 +142,7 @@ impl WorkflowSessionCheckpointSummary {
 #[derive(Debug)]
 pub(crate) struct WorkflowExecutorSessionState {
     residency: RwLock<WorkflowSessionResidencyState>,
+    bound_workflow_session_id: RwLock<Option<String>>,
     node_memories: RwLock<HashMap<String, HashMap<String, NodeMemorySnapshot>>>,
 }
 
@@ -149,6 +150,7 @@ impl WorkflowExecutorSessionState {
     pub(crate) fn new() -> Self {
         Self {
             residency: RwLock::new(WorkflowSessionResidencyState::Active),
+            bound_workflow_session_id: RwLock::new(None),
             node_memories: RwLock::new(HashMap::new()),
         }
     }
@@ -159,6 +161,18 @@ impl WorkflowExecutorSessionState {
 
     pub(crate) async fn set_residency(&self, state: WorkflowSessionResidencyState) {
         *self.residency.write().await = state;
+    }
+
+    pub(crate) async fn bind_workflow_session(&self, workflow_session_id: String) {
+        *self.bound_workflow_session_id.write().await = Some(workflow_session_id);
+    }
+
+    pub(crate) async fn bound_workflow_session_id(&self) -> Option<String> {
+        self.bound_workflow_session_id.read().await.clone()
+    }
+
+    pub(crate) async fn clear_bound_workflow_session(&self) {
+        *self.bound_workflow_session_id.write().await = None;
     }
 
     pub(crate) async fn record_node_memory(&self, snapshot: NodeMemorySnapshot) {
@@ -263,6 +277,20 @@ mod tests {
             state.residency().await,
             WorkflowSessionResidencyState::CheckpointedButUnloaded
         );
+    }
+
+    #[tokio::test]
+    async fn executor_session_state_tracks_bound_workflow_session_identity() {
+        let state = WorkflowExecutorSessionState::new();
+
+        assert_eq!(state.bound_workflow_session_id().await, None);
+        state.bind_workflow_session("session-1".to_string()).await;
+        assert_eq!(
+            state.bound_workflow_session_id().await,
+            Some("session-1".to_string())
+        );
+        state.clear_bound_workflow_session().await;
+        assert_eq!(state.bound_workflow_session_id().await, None);
     }
 
     #[tokio::test]

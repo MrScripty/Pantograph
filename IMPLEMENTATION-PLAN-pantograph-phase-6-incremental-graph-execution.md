@@ -798,6 +798,11 @@ Update during implementation:
   responses can surface real node-memory snapshots and checkpoint summaries
   when wiring reaches that boundary, while current callers still preserve the
   fallback active/empty behavior.
+- 2026-04-18: Milestone 3 continued. `WorkflowExecutor` now supports explicit
+  binding to a logical workflow session id through `engine/workflow_session.rs`
+  and `engine/session_state.rs`, creating the backend-owned identity seam that
+  later execution-path node-memory reads/writes can use without inferring
+  session identity from transport-local execution ids.
 
 ## Commit Cadence Notes
 
