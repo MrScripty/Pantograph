@@ -1,5 +1,6 @@
 import type {
   GraphMemoryImpactSummary,
+  WorkflowGraphSessionStateView,
   WorkflowCapabilityModel,
   WorkflowRuntimeCapability,
   WorkflowRuntimeRequirements,
@@ -135,6 +136,7 @@ export interface WorkflowDiagnosticsProjection {
   runOrder: string[];
   runtime: DiagnosticsRuntimeSnapshot;
   scheduler: DiagnosticsSchedulerSnapshot;
+  currentSessionState: WorkflowGraphSessionStateView | null;
   retainedEventLimit: number;
 }
 

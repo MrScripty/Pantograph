@@ -9,7 +9,6 @@ import type {
   WorkflowCapabilitiesResponse,
   WorkflowEvent,
   WorkflowGraph,
-  WorkflowGraphMutationResponse,
   WorkflowFile,
   WorkflowSessionHandle,
   WorkflowSchedulerSnapshotResponse,
@@ -387,6 +386,7 @@ export class WorkflowService {
           items: [],
           lastError: null,
         },
+        currentSessionState: null,
         retainedEventLimit: 200,
       };
     }

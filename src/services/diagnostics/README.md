@@ -11,7 +11,7 @@ transport adapters.
 | ----------- | ----------- |
 | `DiagnosticsService.ts` | Framework-agnostic owner for diagnostics state, selection, trace recording, and listener notifications. |
 | `traceAccumulator.ts` | Trace accumulation helpers that normalize workflow events and graph context into diagnostics snapshots. |
-| `types.ts` | Stable diagnostics DTOs shared by the diagnostics service and frontend store/view layers, including backend-owned trace snapshot mirrors. |
+| `types.ts` | Stable diagnostics DTOs shared by the diagnostics service and frontend store/view layers, including backend-owned trace snapshot mirrors and additive workflow-session inspection state. |
 
 ## Problem
 Pantograph needs an internal diagnostics surface for workflow execution, but the
@@ -64,6 +64,10 @@ does not splice stale run events into the current workflow view.
 - Per-run retained event history is bounded by the configured limit.
 - Runtime and scheduler snapshots may refresh independently, but they must land
   in the same diagnostics state owner as run traces.
+- Additive workflow-session inspection state may arrive through direct
+  diagnostics fetches before equivalent event-driven projections, so consumers
+  must tolerate partial producer coverage without discarding the last known
+  backend snapshot.
 - Synthetic scheduler fallback must clear when authoritative scheduler snapshot
   data for the same session arrives.
 - Edit-session diagnostics consumers must ignore workflow events whose
@@ -126,6 +130,9 @@ service.recordWorkflowEvent({
   first observed; later graph changes do not rewrite that field.
 - Runtime and scheduler snapshots are last-write-wins views over workflow
   service responses keyed by current workflow and current session identity.
+- `WorkflowDiagnosticsProjection.currentSessionState` is an additive,
+  backend-owned session inspection mirror; producer paths may omit it until the
+  backend explicitly forwards the inspection snapshot.
 - Scheduler state may also be synthesized from execution lifecycle events for
   edit-session GUI runs; that fallback remains additive and is superseded by
   streamed or fetched workflow-service snapshots when available.

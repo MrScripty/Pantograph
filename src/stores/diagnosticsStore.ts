@@ -8,18 +8,18 @@ import type {
   DiagnosticsSnapshot,
   DiagnosticsTab,
   WorkflowDiagnosticsProjection,
-  WorkflowDiagnosticsState,
 } from '../services/diagnostics/types';
 import type { WorkflowGraph, WorkflowEvent } from '../services/workflow/types';
 import { workflowGraph } from './workflowStore';
 import { currentGraphId, currentGraphName } from './graphSessionStore';
 import { workflowService } from '../services/workflow/WorkflowService';
 import { sessionStores } from './storeInstances';
-
-type DiagnosticsUiState = Pick<
-  WorkflowDiagnosticsState,
-  'panelOpen' | 'activeTab' | 'selectedRunId' | 'selectedNodeId'
->;
+import {
+  type DiagnosticsUiState,
+  createDiagnosticsSnapshot,
+  createEmptyDiagnosticsProjection,
+  normalizeDiagnosticsProjection,
+} from './diagnosticsProjection';
 
 const DEFAULT_UI_STATE: DiagnosticsUiState = {
   panelOpen: false,
@@ -28,39 +28,7 @@ const DEFAULT_UI_STATE: DiagnosticsUiState = {
   selectedNodeId: null,
 };
 
-function createEmptyProjection(): WorkflowDiagnosticsProjection {
-  return {
-    runsById: {},
-    runOrder: [],
-    runtime: {
-      workflowId: null,
-      capturedAtMs: null,
-      maxInputBindings: null,
-      maxOutputTargets: null,
-      maxValueBytes: null,
-      runtimeRequirements: null,
-      runtimeCapabilities: [],
-      models: [],
-      lastError: null,
-      activeModelTarget: null,
-      embeddingModelTarget: null,
-      activeRuntime: null,
-      embeddingRuntime: null,
-    },
-    scheduler: {
-      workflowId: null,
-      sessionId: null,
-      traceExecutionId: null,
-      capturedAtMs: null,
-      session: null,
-      items: [],
-      lastError: null,
-    },
-    retainedEventLimit: 200,
-  };
-}
-
-let latestProjection: WorkflowDiagnosticsProjection = createEmptyProjection();
+let latestProjection: WorkflowDiagnosticsProjection = createEmptyDiagnosticsProjection();
 let latestWorkflowId: string | null = null;
 let latestWorkflowName: string | null = null;
 let latestWorkflowGraph: WorkflowGraph | null = null;
@@ -68,28 +36,14 @@ let latestSessionId: string | null = null;
 let uiState: DiagnosticsUiState = { ...DEFAULT_UI_STATE };
 
 function createSnapshot(): DiagnosticsSnapshot {
-  const selectedRunId = uiState.selectedRunId;
-  const selectedRun = selectedRunId
-    ? latestProjection.runsById[selectedRunId] ?? null
-    : null;
-  const selectedNode = selectedRun && uiState.selectedNodeId
-    ? selectedRun.nodes[uiState.selectedNodeId] ?? null
-    : null;
-
-  return {
-    state: {
-      ...latestProjection,
-      ...uiState,
-      currentSessionId: latestSessionId,
-      currentWorkflowId: latestWorkflowId,
-      currentWorkflowName: latestWorkflowName,
-      currentGraphFingerprint: latestWorkflowGraph?.derived_graph?.graph_fingerprint ?? null,
-      currentGraphNodeCount: latestWorkflowGraph?.nodes.length ?? 0,
-      currentGraphEdgeCount: latestWorkflowGraph?.edges.length ?? 0,
-    },
-    selectedRun,
-    selectedNode,
-  };
+  return createDiagnosticsSnapshot({
+    projection: latestProjection,
+    uiState,
+    workflowId: latestWorkflowId,
+    workflowName: latestWorkflowName,
+    workflowGraph: latestWorkflowGraph,
+    sessionId: latestSessionId,
+  });
 }
 
 function normalizeUiSelections(): void {
@@ -122,7 +76,7 @@ function normalizeUiSelections(): void {
 }
 
 function applyProjection(projection: WorkflowDiagnosticsProjection): void {
-  latestProjection = projection;
+  latestProjection = normalizeDiagnosticsProjection(projection, latestProjection);
   normalizeUiSelections();
   diagnosticsSnapshotStore.set(createSnapshot());
 }

@@ -15,8 +15,8 @@ logic.
 | `DiagnosticsEvents.svelte` | Events tab that shows retained workflow events and raw payload details. |
 | `DiagnosticsScheduler.svelte` | Scheduler tab that renders session state and queue ordering from workflow service diagnostics snapshots. |
 | `DiagnosticsRuntime.svelte` | Runtime tab that renders workflow capabilities, runtime requirements, and runtime install state. |
-| `DiagnosticsGraph.svelte` | Graph tab that renders current graph metadata, graph-related diagnostics events, and the latest backend-owned graph-memory impact summary. |
-| `presenters.ts` | Presentation helpers for durations, timestamps, status badges, overview counts, and read-only graph-memory impact summaries. |
+| `DiagnosticsGraph.svelte` | Graph tab that renders current graph metadata, graph-related diagnostics events, the latest backend-owned graph-memory impact summary, and additive workflow-session inspection state. |
+| `presenters.ts` | Presentation helpers for durations, timestamps, status badges, overview counts, graph-memory summaries, and workflow-session inspection labels. |
 
 ## Problem
 Pantograph needs a developer-facing diagnostics surface inside the workflow GUI,
@@ -35,6 +35,9 @@ second owner of workflow transport state.
   diagnostics store.
 - Components may format diagnostics data for readability, but they must not
   mutate trace state directly.
+- Graph diagnostics may display backend-owned workflow-session inspection facts
+  such as residency, checkpoint summary, and per-node memory snapshots, but
+  they must not infer or repair those facts locally.
 
 ## Decision
 Render the diagnostics surface as a bottom panel under the workflow graph.
@@ -54,11 +57,13 @@ files mostly express layout and interaction.
 - Components render diagnostics state supplied by the store and do not subscribe
   to workflow events directly.
 - Tab switching and node/run selection use exported diagnostics store commands.
-- Runtime and scheduler rendering should stay read-only over store snapshots,
-  not call workflow commands directly from the component tree.
+- Runtime, scheduler, and graph inspection rendering should stay read-only over
+  store snapshots, not call workflow commands directly from the component tree.
 - Scheduler copy and layout should remain valid when queue ordering is
   synthesized for single-run edit sessions rather than backed by a real
   workflow-service queue.
+- Session-inspection cards and node-memory lists render additive backend
+  snapshots and must degrade cleanly when `currentSessionState` is `null`.
 
 ## Revisit Triggers
 - Diagnostics needs detached windows or a second layout mode.

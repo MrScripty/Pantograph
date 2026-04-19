@@ -12,6 +12,7 @@ components observe the same graph state.
 | `storeInstances.ts` | Creates the shared backend, registry, and package-derived store singletons used across the app. |
 | `workflowStore.ts` | Thin compatibility layer that re-exports workflow store instances and actions for app components. |
 | `diagnosticsStore.ts` | Single app-level owner for diagnostics subscriptions, trace snapshots, and diagnostics panel state. |
+| `diagnosticsProjection.ts` | Pure helper module that normalizes diagnostics projections and builds immutable UI snapshots without subscribing to workflow events itself. |
 | `graphSessionStore.ts` | Tracks the active graph/session identity at the app layer. |
 | `viewStore.ts` | App navigation and zoom wrappers built around the package view stores. |
 | `architectureStore.ts` | Converts architecture data into workflow-like graph structures for the shared canvas. |
@@ -45,7 +46,10 @@ history and workflow-service-backed runtime or scheduler views. When the active
 session id is a graph edit session instead of a workflow-service session,
 `diagnosticsStore.ts` now keeps a synthetic scheduler session summary in sync
 with execution lifecycle events and suppresses expected `session_not_found`
-noise from the scheduler panel.
+noise from the scheduler panel. `diagnosticsProjection.ts` now owns the pure
+projection-normalization step so additive fields like backend-owned
+`currentSessionState` can be preserved across mixed producer paths without
+pushing merge policy into Svelte components.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -65,6 +69,9 @@ noise from the scheduler panel.
 - Workflow-service refreshes for runtime capabilities and session queue state
   should be triggered from this store boundary, not from diagnostics
   components.
+- Projection merge policy for additive diagnostics fields belongs in the pure
+  helper module at this boundary rather than in view code or workflow-service
+  adapters.
 - Expected edit-session scheduler misses must degrade to synthetic scheduler
   state here instead of surfacing as persistent user-facing errors.
 
@@ -130,3 +137,6 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   the revision token used for connection-intent commits.
 - Diagnostics snapshots are in-memory, session-scoped views over workflow
   events; they are not durable artifacts in v1.
+- `currentSessionState` is an additive backend-owned inspection snapshot and
+  may be absent from event-driven projections even when a direct diagnostics
+  fetch has already populated it.

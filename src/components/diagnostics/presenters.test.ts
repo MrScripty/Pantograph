@@ -5,9 +5,13 @@ import {
   formatDiagnosticsBytes,
   formatDiagnosticsDuration,
   formatDiagnosticsPercent,
+  formatCheckpointSummary,
   formatNodeMemoryCompatibilityLabel,
+  formatNodeMemoryStatusLabel,
+  formatSessionResidencyLabel,
   getGraphMemoryImpactCounts,
   getDiagnosticsStatusClasses,
+  getNodeMemoryStatusCounts,
   getRuntimeInstallStateClasses,
   getRunNodeStatusCounts,
   getSchedulerStateClasses,
@@ -172,5 +176,58 @@ test('graph memory impact helpers summarize compatibility decisions for the UI',
   assert.equal(
     formatNodeMemoryCompatibilityLabel('drop_on_schema_incompatibility'),
     'Dropped Schema',
+  );
+});
+
+test('session inspection helpers summarize residency, checkpoint, and node-memory status', () => {
+  assert.equal(formatSessionResidencyLabel('checkpointed_but_unloaded'), 'Checkpointed');
+  assert.equal(formatSessionResidencyLabel(null), 'Unavailable');
+  assert.equal(formatNodeMemoryStatusLabel('invalidated'), 'Invalidated');
+  assert.equal(
+    formatCheckpointSummary({
+      session_id: 'session-1',
+      graph_revision: 'graph-1',
+      residency: 'warm',
+      checkpoint_available: true,
+      preserved_node_count: 3,
+      checkpointed_at_ms: 2_000,
+    }),
+    '3 preserved nodes',
+  );
+  assert.deepEqual(
+    getNodeMemoryStatusCounts([
+      {
+        identity: {
+          session_id: 'session-1',
+          node_id: 'input',
+          node_type: 'input',
+          schema_version: null,
+        },
+        status: 'ready',
+      },
+      {
+        identity: {
+          session_id: 'session-1',
+          node_id: 'llm',
+          node_type: 'llm',
+          schema_version: null,
+        },
+        status: 'invalidated',
+      },
+      {
+        identity: {
+          session_id: 'session-1',
+          node_id: 'output',
+          node_type: 'output',
+          schema_version: null,
+        },
+        status: 'empty',
+      },
+    ]),
+    {
+      ready: 1,
+      empty: 1,
+      invalidated: 1,
+    },
   );
 });

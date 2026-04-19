@@ -1,9 +1,13 @@
 <script lang="ts">
   import type { DiagnosticsRunTrace, WorkflowDiagnosticsState } from '../../services/diagnostics/types';
   import {
+    formatCheckpointSummary,
     formatNodeMemoryCompatibilityLabel,
+    formatNodeMemoryStatusLabel,
+    formatSessionResidencyLabel,
     formatDiagnosticsTimestamp,
     getGraphMemoryImpactCounts,
+    getNodeMemoryStatusCounts,
   } from './presenters';
 
   export let state: WorkflowDiagnosticsState;
@@ -22,6 +26,10 @@
 
   let graphMemoryImpact = $derived(selectedRun?.lastGraphMemoryImpact ?? null);
   let graphMemoryImpactCounts = $derived(getGraphMemoryImpactCounts(graphMemoryImpact));
+  let currentSessionState = $derived(state.currentSessionState ?? null);
+  let nodeMemoryStatusCounts = $derived(
+    getNodeMemoryStatusCounts(currentSessionState?.node_memory ?? null),
+  );
 </script>
 
 <div class="h-full overflow-auto px-4 py-4">
@@ -68,6 +76,40 @@
         Latest backend-owned compatibility decisions for the selected run.
       </div>
     </article>
+
+    <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+      <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Session Residency</div>
+      <div class="mt-3 text-2xl font-semibold text-neutral-100">
+        {formatSessionResidencyLabel(currentSessionState?.residency)}
+      </div>
+      <div class="mt-2 text-xs text-neutral-500">
+        Current backend-owned workflow-session residency for this diagnostics scope.
+      </div>
+    </article>
+
+    <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+      <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Checkpoint</div>
+      <div class="mt-3 text-lg font-semibold text-neutral-100">
+        {formatCheckpointSummary(currentSessionState?.checkpoint)}
+      </div>
+      <div class="mt-2 text-xs text-neutral-500">
+        {#if currentSessionState?.checkpoint?.checkpointed_at_ms}
+          Updated {formatDiagnosticsTimestamp(currentSessionState.checkpoint.checkpointed_at_ms)}
+        {:else}
+          Latest checkpoint summary forwarded from backend diagnostics inspection.
+        {/if}
+      </div>
+    </article>
+
+    <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+      <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Node Memory</div>
+      <div class="mt-3 text-2xl font-semibold text-neutral-100">
+        {currentSessionState?.node_memory?.length ?? 0}
+      </div>
+      <div class="mt-2 text-xs text-neutral-500">
+        Ready {nodeMemoryStatusCounts.ready} • Empty {nodeMemoryStatusCounts.empty} • Invalidated {nodeMemoryStatusCounts.invalidated}
+      </div>
+    </article>
   </div>
 
   <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
@@ -103,6 +145,36 @@
     </section>
 
     <section class="space-y-4">
+      <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
+        <div class="text-sm font-medium text-neutral-100">Current Session Memory</div>
+        {#if currentSessionState?.node_memory?.length}
+          <div class="mt-3 space-y-2">
+            {#each currentSessionState.node_memory as snapshot (`${snapshot.identity.node_id}:${snapshot.status}`)}
+              <div class="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-sm font-medium text-neutral-100">{snapshot.identity.node_id}</div>
+                    <div class="mt-1 text-xs text-neutral-500">{snapshot.identity.node_type}</div>
+                  </div>
+                  <div class="text-[11px] uppercase tracking-[0.18em] text-neutral-400">
+                    {formatNodeMemoryStatusLabel(snapshot.status)}
+                  </div>
+                </div>
+                {#if snapshot.input_fingerprint}
+                  <div class="mt-2 text-xs text-neutral-500">
+                    Input fingerprint: {snapshot.input_fingerprint}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="mt-3 text-sm text-neutral-500">
+            No backend-owned node-memory snapshot is currently available for this session.
+          </div>
+        {/if}
+      </article>
+
       <article class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
         <div class="text-sm font-medium text-neutral-100">Latest Dirty Tasks</div>
         {#if selectedRun?.lastDirtyTasks.length}

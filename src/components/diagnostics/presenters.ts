@@ -6,7 +6,11 @@ import type {
 import type {
   GraphMemoryImpactSummary,
   NodeMemoryCompatibility,
+  NodeMemorySnapshot,
+  NodeMemoryStatus,
   WorkflowRuntimeInstallState,
+  WorkflowSessionCheckpointSummary,
+  WorkflowSessionResidencyState,
   WorkflowSessionQueueItemStatus,
   WorkflowSessionState,
 } from '../../services/workflow/types';
@@ -105,6 +109,12 @@ export interface GraphMemoryImpactCounts {
   fallback: number;
 }
 
+export interface NodeMemoryStatusCounts {
+  ready: number;
+  empty: number;
+  invalidated: number;
+}
+
 export function getGraphMemoryImpactCounts(
   impact: GraphMemoryImpactSummary | null,
 ): GraphMemoryImpactCounts {
@@ -140,6 +150,32 @@ export function getGraphMemoryImpactCounts(
   return counts;
 }
 
+export function getNodeMemoryStatusCounts(
+  nodeMemory: NodeMemorySnapshot[] | null | undefined,
+): NodeMemoryStatusCounts {
+  const counts: NodeMemoryStatusCounts = {
+    ready: 0,
+    empty: 0,
+    invalidated: 0,
+  };
+
+  for (const snapshot of nodeMemory ?? []) {
+    switch (snapshot.status) {
+      case 'ready':
+        counts.ready += 1;
+        break;
+      case 'empty':
+        counts.empty += 1;
+        break;
+      case 'invalidated':
+        counts.invalidated += 1;
+        break;
+    }
+  }
+
+  return counts;
+}
+
 export function formatNodeMemoryCompatibilityLabel(
   compatibility: NodeMemoryCompatibility,
 ): string {
@@ -155,6 +191,46 @@ export function formatNodeMemoryCompatibilityLabel(
     case 'fallback_full_invalidation':
       return 'Fallback Invalidation';
   }
+}
+
+export function formatNodeMemoryStatusLabel(status: NodeMemoryStatus): string {
+  switch (status) {
+    case 'ready':
+      return 'Ready';
+    case 'empty':
+      return 'Empty';
+    case 'invalidated':
+      return 'Invalidated';
+  }
+}
+
+export function formatSessionResidencyLabel(
+  residency: WorkflowSessionResidencyState | null | undefined,
+): string {
+  switch (residency) {
+    case 'active':
+      return 'Active';
+    case 'warm':
+      return 'Warm';
+    case 'checkpointed_but_unloaded':
+      return 'Checkpointed';
+    case 'restored':
+      return 'Restored';
+    default:
+      return 'Unavailable';
+  }
+}
+
+export function formatCheckpointSummary(
+  checkpoint: WorkflowSessionCheckpointSummary | null | undefined,
+): string {
+  if (!checkpoint) {
+    return 'Unavailable';
+  }
+  if (!checkpoint.checkpoint_available) {
+    return 'Not available';
+  }
+  return `${checkpoint.preserved_node_count} preserved nodes`;
 }
 
 export function getSchedulerStateClasses(
