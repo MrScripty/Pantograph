@@ -768,6 +768,9 @@ Update during implementation:
   undo/redo projection now live behind `src-tauri/src/workflow/execution_manager/`
   instead of keeping manager and per-execution state concerns collapsed inside
   `execution_manager.rs`.
+- 2026-04-18: Milestone 2 continued. `node-engine` graph mutation, snapshot,
+  and restore helpers now live behind `engine/graph_state.rs` instead of
+  keeping those Phase 6 insertion points inline inside `engine.rs`.
 
 ## Commit Cadence Notes
 

@@ -46,6 +46,7 @@ mod dependency_inputs;
 mod execution_core;
 mod execution_events;
 mod graph_events;
+mod graph_state;
 mod inflight_tracking;
 mod multi_demand;
 mod node_preparation;
@@ -532,84 +533,38 @@ impl WorkflowExecutor {
 
     /// Update a node's data and mark it as modified
     pub async fn update_node_data(&self, node_id: &NodeId, data: serde_json::Value) -> Result<()> {
-        {
-            let mut graph = self.graph.write().await;
-            if let Some(node) = graph.find_node_mut(node_id) {
-                node.data = data;
-            } else {
-                return Err(NodeEngineError::ExecutionFailed(format!(
-                    "Node '{}' not found",
-                    node_id
-                )));
-            }
-        }
-
-        self.mark_modified(node_id).await;
-        Ok(())
+        graph_state::update_node_data(self, node_id, data).await
     }
 
     /// Add a new node to the graph
     pub async fn add_node(&self, node: crate::types::GraphNode) {
-        let node_id = node.id.clone();
-        let mut graph = self.graph.write().await;
-        graph.nodes.push(node);
-        let workflow_id = graph.id.clone();
-        drop(graph);
-        self.emit_graph_modified(workflow_id, vec![node_id]);
+        graph_state::add_node(self, node).await;
     }
 
     /// Add a new edge to the graph
     ///
     /// This marks the target node as modified since its inputs changed.
     pub async fn add_edge(&self, edge: crate::types::GraphEdge) {
-        let target = edge.target.clone();
-        {
-            let mut graph = self.graph.write().await;
-            graph.edges.push(edge);
-        }
-        self.mark_modified(&target).await;
+        graph_state::add_edge(self, edge).await;
     }
 
     /// Remove an edge from the graph
     ///
     /// This marks the target node as modified since its inputs changed.
     pub async fn remove_edge(&self, edge_id: &str) {
-        let target = {
-            let mut graph = self.graph.write().await;
-            if let Some(idx) = graph.edges.iter().position(|e| e.id == edge_id) {
-                let edge = graph.edges.remove(idx);
-                Some(edge.target)
-            } else {
-                None
-            }
-        };
-
-        if let Some(target) = target {
-            self.mark_modified(&target).await;
-        }
+        graph_state::remove_edge(self, edge_id).await;
     }
 
     /// Get the current graph state (for undo snapshots)
     pub async fn get_graph_snapshot(&self) -> WorkflowGraph {
-        self.graph.read().await.clone()
+        graph_state::get_graph_snapshot(self).await
     }
 
     /// Restore graph from a snapshot (for undo/redo)
     ///
     /// This clears all caches since the graph structure may have changed.
     pub async fn restore_graph_snapshot(&self, graph: WorkflowGraph) {
-        let workflow_id = graph.id.clone();
-        let dirty_tasks = graph_events::snapshot_dirty_tasks(&graph);
-        {
-            let mut current_graph = self.graph.write().await;
-            *current_graph = graph;
-        }
-
-        // Clear all caches since we don't know what changed
-        let mut engine = self.demand_engine.write().await;
-        engine.clear_cache();
-        drop(engine);
-        self.emit_graph_modified(workflow_id, dirty_tasks);
+        graph_state::restore_graph_snapshot(self, graph).await;
     }
 
     /// Get cache statistics

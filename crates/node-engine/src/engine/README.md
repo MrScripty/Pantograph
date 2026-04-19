@@ -12,6 +12,7 @@ entrypoint while preserving the current public API.
 | `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path context propagation. |
 | `execution_core.rs` | Private recursive demand-orchestration owner that coordinates dependency recursion, cache reuse, node preparation, event emission, and completed-output finalization. |
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
+| `graph_state.rs` | Workflow graph mutation, snapshot, and restore helpers behind the public executor facade. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, and the future insertion point for bounded parallel coordination. |
@@ -124,6 +125,9 @@ planning split, plus the private execution-batch schedule derived from it.
   state rather than by adapter-local interpretation.
 - Cache freshness and version bump semantics remain derived from backend-owned
   version tracking rather than adapter-local memoization.
+- Graph mutation, snapshot capture, and graph restore helpers remain backend-
+  owned in Rust and should stay behind focused engine helpers rather than
+  growing back into `engine.rs`.
 - Workflow-session residency, node-memory compatibility classes, and bounded
   checkpoint summaries remain backend-owned contracts in Rust rather than host-
   local transport state.
