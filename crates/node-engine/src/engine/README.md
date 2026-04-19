@@ -91,6 +91,10 @@ changing the public executor surface.
 - `WorkflowExecutor::demand_multiple` should delegate into `multi_demand.rs`
   so later bounded-parallel coordination does not have to be inserted back
   into `engine.rs`.
+- Bound workflow-session node-memory writes for the single-demand path should
+  continue to project from backend cache state through `workflow_session.rs`
+  rather than reintroducing Phase 6 memory persistence logic into `engine.rs`
+  or transport adapters.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under

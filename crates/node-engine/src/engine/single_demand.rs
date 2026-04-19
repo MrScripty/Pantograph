@@ -12,7 +12,7 @@ pub(super) async fn demand_with_executor(
     let graph = workflow_executor.graph.read().await;
     let mut demand_engine = workflow_executor.demand_engine.write().await;
 
-    demand_engine
+    let outputs = demand_engine
         .demand(
             node_id,
             &graph,
@@ -21,5 +21,10 @@ pub(super) async fn demand_with_executor(
             workflow_executor.event_sink.as_ref(),
             &workflow_executor.extensions,
         )
-        .await
+        .await?;
+    drop(demand_engine);
+    drop(graph);
+
+    super::workflow_session::sync_bound_session_node_memory_from_cache(workflow_executor).await;
+    Ok(outputs)
 }

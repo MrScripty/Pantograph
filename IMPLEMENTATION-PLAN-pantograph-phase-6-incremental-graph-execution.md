@@ -803,6 +803,10 @@ Update during implementation:
   and `engine/session_state.rs`, creating the backend-owned identity seam that
   later execution-path node-memory reads/writes can use without inferring
   session identity from transport-local execution ids.
+- 2026-04-18: Milestone 3 continued. The single-demand executor path now
+  projects bound-session node memory from backend cache state after successful
+  execution, which records real output snapshots for every cached node reached
+  by the run without reopening the already-dirty multi-demand coordinator yet.
 
 ## Commit Cadence Notes
 
