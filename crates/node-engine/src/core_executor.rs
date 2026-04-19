@@ -19,11 +19,12 @@ use inference::InferenceGateway;
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
-use crate::extensions::{extension_keys, ExecutorExtensions};
-use crate::model_dependencies::{
-    DependencyState, ModelDependencyBinding, ModelDependencyRequest, ModelDependencyResolver,
-    ModelRefV2,
-};
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use crate::extensions::extension_keys;
+use crate::extensions::ExecutorExtensions;
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use crate::model_dependencies::{DependencyState, ModelDependencyRequest, ModelDependencyResolver};
+use crate::model_dependencies::{ModelDependencyBinding, ModelRefV2};
 
 #[cfg(feature = "inference-nodes")]
 mod kv_cache;
@@ -1097,6 +1098,7 @@ fn read_optional_input_value(
         .or_else(|| inputs.get("_data").and_then(|d| d.get(key)).cloned())
 }
 
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn read_optional_input_string_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
@@ -1106,6 +1108,7 @@ fn read_optional_input_string_aliases(
         .find_map(|key| read_optional_input_string(inputs, key))
 }
 
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn read_optional_input_value_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
@@ -1115,6 +1118,7 @@ fn read_optional_input_value_aliases(
         .find_map(|key| read_optional_input_value(inputs, key))
 }
 
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn read_optional_input_bool(
     inputs: &HashMap<String, serde_json::Value>,
     key: &str,
@@ -1132,6 +1136,7 @@ fn read_optional_input_bool(
         })
 }
 
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn read_optional_input_bool_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
@@ -1153,6 +1158,7 @@ fn read_input_dependency_bindings(
     serde_json::from_value(raw).unwrap_or_default()
 }
 
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn read_input_selected_binding_ids(inputs: &HashMap<String, serde_json::Value>) -> Vec<String> {
     let Some(raw) =
         read_optional_input_value_aliases(inputs, &["selected_binding_ids", "selectedBindingIds"])

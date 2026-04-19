@@ -61,7 +61,10 @@ implementation slice freezes backend-owned KV artifact, handle, compatibility,
 and usage-mode contracts in `crates/inference/src/kv_cache`, treats workflow-
 session memory as an indirect-reference consumer instead of a second cache
 owner, and replaces placeholder directory READMEs with explicit ownership
-boundaries before broader execution behavior lands.
+boundaries before broader execution behavior lands. The second slice now moves
+KV save/load/truncate executor logic behind a focused `node-engine`
+`core_executor::kv_cache` module and turns the `workflow-nodes` KV files into
+descriptor-only stubs that direct execution to `CoreTaskExecutor`.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -526,6 +529,10 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
 - KV cache module and workflow-storage README boundaries now explicitly state
   that the inference KV store owns artifacts while workflow-session memory only
   carries indirect references
+- Backend KV execution ownership now lives behind
+  `crates/node-engine/src/core_executor/kv_cache.rs`, and the
+  `workflow-nodes` KV save/load/truncate tasks now fail fast unless executed
+  through `CoreTaskExecutor`
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

@@ -267,18 +267,18 @@ added.
 end-to-end KV behavior.
 
 **Tasks:**
-- [ ] Extract KV executor handlers out of `crates/node-engine/src/core_executor.rs`
+- [x] Extract KV executor handlers out of `crates/node-engine/src/core_executor.rs`
       into focused KV modules before adding more Phase 3 logic there.
-- [ ] Extract runtime KV orchestration helpers out of
-      `crates/pantograph-embedded-runtime/src/lib.rs` if Phase 3 requires new
-      runtime-side state or branching.
-- [ ] Extract or isolate KV requirement/capability normalization from
-      `crates/pantograph-workflow-service/src/technical_fit.rs` and
-      `capabilities.rs` before adding more KV-specific policy.
-- [ ] Eliminate split execution ownership between the placeholder
+- [x] Runtime-side extraction in `crates/pantograph-embedded-runtime/src/lib.rs`
+      was not required for this milestone because no new KV runtime-state or
+      branching behavior was added in the embedded runtime layer.
+- [x] Capability/requirement extraction from `technical_fit.rs` and
+      `capabilities.rs` was not required for this milestone because no new
+      KV-specific runtime-policy shaping landed yet.
+- [x] Eliminate split execution ownership between the placeholder
       `workflow-nodes` storage task runtime bodies and the real backend
       `node-engine` executor path. One owner must remain.
-- [ ] Update or add READMEs for any new extracted source directories/modules.
+- [x] Update or add READMEs for any new extracted source directories/modules.
 
 **Verification:**
 - `cargo check` or focused crate tests for touched backend packages
@@ -286,7 +286,7 @@ end-to-end KV behavior.
 - Decomposition review for touched files that exceed size/responsibility
   thresholds
 
-**Status:** Not started
+**Status:** Complete
 
 ### Milestone 3: Add Explicit Workflow-Graph KV Ports And Validation
 
