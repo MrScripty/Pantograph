@@ -196,6 +196,26 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  const runtimeSummary = (runtime: ManagedRuntimeManagerRuntimeView): string | null => {
+    if (runtime.active_job) {
+      return runtime.active_job.status;
+    }
+
+    if (runtime.selection.selected_version) {
+      return `Selected ${runtime.selection.selected_version}`;
+    }
+
+    if (runtime.install_state === 'system_provided') {
+      return 'Using system runtime';
+    }
+
+    if (runtime.unavailable_reason) {
+      return runtime.unavailable_reason;
+    }
+
+    return null;
+  };
+
   onMount(() => {
     loadBackends();
     // Subscribe to LLM status to track when server is actually running
@@ -259,6 +279,7 @@
         <div class="flex flex-wrap gap-2">
           {#each backends as backend (backend.name)}
             {@const runtime = runtimeForBackend(backend)}
+            {@const runtimeStatus = runtime ? runtimeSummary(runtime) : null}
             <div class="flex flex-col">
               <div class="flex items-center gap-1.5">
                 <button type="button"
@@ -345,9 +366,9 @@
                     {backend.unavailable_reason}
                   {/if}
                 </span>
-              {:else if runtime?.install_state === 'system_provided'}
+              {:else if runtimeStatus}
                 <span class="text-[9px] text-neutral-500 mt-0.5 max-w-[140px] leading-tight">
-                  Using system runtime
+                  {runtimeStatus}
                 </span>
               {/if}
             </div>

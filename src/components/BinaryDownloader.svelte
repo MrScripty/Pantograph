@@ -82,7 +82,24 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
+  function formatHistoryEvent(event: string): string {
+    return event
+      .split('_')
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(' ');
+  }
+
+  function formatHistoryTime(atMs: number): string {
+    return new Date(atMs).toLocaleString();
+  }
+
   let progressPercent = $derived(progress.total > 0 ? (progress.current / progress.total) * 100 : 0);
+  let installedVersions = $derived(
+    status.versions.filter(
+      (version) => version.install_state === 'installed' || version.install_state === 'system_provided'
+    )
+  );
+  let latestHistoryEntry = $derived(status.install_history.at(-1) ?? null);
 </script>
 
 {#if !status.available}
@@ -119,6 +136,43 @@
       <p class="text-sm text-neutral-400 mb-3">
         llama.cpp is required for local inference.
       </p>
+      <div class="grid grid-cols-2 gap-2 text-xs text-neutral-400 mb-3">
+        <div>
+          <span class="text-neutral-500">Readiness</span>
+          <div class="text-neutral-300">{status.readiness_state}</div>
+        </div>
+        <div>
+          <span class="text-neutral-500">Selected</span>
+          <div class="text-neutral-300">{status.selection.selected_version ?? 'None'}</div>
+        </div>
+        <div>
+          <span class="text-neutral-500">Default</span>
+          <div class="text-neutral-300">{status.selection.default_version ?? 'None'}</div>
+        </div>
+        <div>
+          <span class="text-neutral-500">Installed</span>
+          <div class="text-neutral-300">{installedVersions.length}</div>
+        </div>
+      </div>
+      {#if status.active_job}
+        <div class="text-xs text-neutral-500 mb-3">
+          Active job: {status.active_job.status}
+        </div>
+      {/if}
+      {#if latestHistoryEntry}
+        <div class="text-xs text-neutral-500 mb-3">
+          Last event: {formatHistoryEvent(latestHistoryEntry.event)}
+          {#if latestHistoryEntry.version}
+            ({latestHistoryEntry.version})
+          {/if}
+          <div class="text-[11px] text-neutral-600">
+            {formatHistoryTime(latestHistoryEntry.at_ms)}
+          </div>
+          {#if latestHistoryEntry.detail}
+            <div class="text-[11px] text-neutral-500">{latestHistoryEntry.detail}</div>
+          {/if}
+        </div>
+      {/if}
       {#if status.missing_files.length > 0}
         <details class="text-xs text-neutral-500 mb-3">
           <summary class="cursor-pointer hover:text-neutral-400">

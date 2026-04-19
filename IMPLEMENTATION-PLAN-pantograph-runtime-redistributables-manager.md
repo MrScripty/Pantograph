@@ -563,6 +563,12 @@ Update during implementation:
   backend-owned managed-runtime manager contract, moved current Svelte callers
   off duplicated local runtime DTOs, and documented that the GUI consumes
   backend snapshots/progress without becoming the policy owner.
+- 2026-04-19: Milestone 5 slice 3 expanded the current redistributable GUI
+  projection to render backend-owned readiness, selected/default version,
+  active-job summary, and recent install-history state from the shared
+  managed-runtime service. Pause/resume/cancel controls still remain open, but
+  the frontend now consumes the richer backend snapshot instead of hiding that
+  state behind binary-present/missing booleans.
 
 ## Commit Cadence Notes
 

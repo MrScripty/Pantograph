@@ -195,6 +195,11 @@ reconciled as the final source of truth.
   `src/services/managedRuntime` service boundary instead of redefining partial
   redistributable payloads inside Svelte components, keeping frontend runtime
   state projection thin and aligned to the backend-owned manager view.
+- Current redistributable GUI surfaces also now render backend-owned runtime
+  readiness, selected/default version, active-job summary, and recent install
+  history from that shared service boundary, narrowing the remaining Milestone
+  5 GUI gap to explicit pause/resume/cancel controls and broader event-driven
+  progress wiring.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.
