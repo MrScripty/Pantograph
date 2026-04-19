@@ -226,6 +226,20 @@ impl WorkflowSessionStore {
         Ok(())
     }
 
+    pub(crate) fn invalidate_all_loaded_session_runtimes(&mut self) -> Vec<String> {
+        let session_ids = self
+            .active
+            .iter()
+            .filter_map(|(session_id, state)| state.runtime_loaded.then_some(session_id.clone()))
+            .collect::<Vec<_>>();
+
+        for session_id in &session_ids {
+            let _ = self.mark_runtime_loaded(session_id, false);
+        }
+
+        session_ids
+    }
+
     pub(crate) fn touch_session(&mut self, session_id: &str) -> Result<(), WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {

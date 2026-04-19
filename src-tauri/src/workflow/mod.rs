@@ -40,6 +40,7 @@ pub mod orchestration;
 pub mod puma_lib_commands;
 pub mod python_runtime;
 pub mod registry;
+pub mod runtime_shutdown;
 pub mod types;
 pub mod validation;
 pub mod workflow_definition_commands;

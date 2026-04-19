@@ -538,6 +538,13 @@ Update during implementation:
   unavailable between unload and restore. The resume path now has regression
   coverage proving it returns `RuntimeNotReady`, preserves the checkpoint for
   retry, and resumes successfully after the runtime becomes ready again.
+- 2026-04-19: Milestone 4 slice 6 added a backend-owned
+  `invalidate_all_session_runtimes` contract in `pantograph-workflow-service`
+  and routed embedded-runtime shutdown plus Tauri recovery/window-close stop
+  composition through it. Producer stop paths now clear stale
+  `runtime_loaded` session state before teardown so the next keep-alive run
+  re-enters the shared backend preflight/load boundary instead of trusting
+  stale residency state after a stop or restart.
 
 ## Commit Cadence Notes
 

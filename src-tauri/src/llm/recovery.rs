@@ -18,6 +18,7 @@ use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
 use crate::llm::startup::validate_external_server_url;
 use crate::llm::sync_rag_embedding_url_from_gateway;
 use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
+use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use pantograph_embedded_runtime::runtime_recovery::{
     build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
@@ -330,6 +331,8 @@ impl RecoveryManager {
 }
 
 async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) {
+    invalidate_loaded_session_runtimes(app);
+
     let Some(runtime_registry) = app
         .try_state::<SharedRuntimeRegistry>()
         .map(|runtime_registry| runtime_registry.clone())

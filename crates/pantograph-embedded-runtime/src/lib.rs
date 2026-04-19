@@ -502,6 +502,12 @@ impl EmbeddedRuntime {
     }
 
     pub async fn shutdown(&self) {
+        if let Err(error) = self.workflow_service.invalidate_all_session_runtimes() {
+            log::warn!(
+                "failed to invalidate workflow session runtimes before shutdown: {}",
+                error
+            );
+        }
         if let Some(runtime_registry) = self.runtime_registry.as_ref() {
             runtime_registry::stop_all_runtime_producers_and_reconcile_runtime_registry(
                 self.gateway.as_ref(),
@@ -5557,6 +5563,60 @@ mod tests {
             .find(|runtime| runtime.runtime_id == "llama_cpp")
             .expect("active runtime should remain observable after shutdown");
         assert_eq!(stopped_runtime.status, RuntimeRegistryStatus::Stopped);
+    }
+
+    #[tokio::test]
+    async fn embedded_runtime_shutdown_marks_loaded_sessions_unloaded() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime_registry = Arc::new(RuntimeRegistry::new());
+        let runtime = EmbeddedRuntime::hosted_with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: None,
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+            Some(runtime_registry),
+            None,
+        )
+        .await;
+
+        let session = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create workflow session");
+
+        let status = runtime
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: session.session_id.clone(),
+            })
+            .await
+            .expect("session status before shutdown");
+        assert_eq!(status.session.state, WorkflowSessionState::IdleLoaded);
+
+        runtime.shutdown().await;
+
+        let status = runtime
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: session.session_id,
+            })
+            .await
+            .expect("session status after shutdown");
+        assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
     }
 
     #[tokio::test]

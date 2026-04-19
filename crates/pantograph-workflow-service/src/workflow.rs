@@ -1964,6 +1964,13 @@ impl WorkflowService {
     ) -> Result<(), WorkflowServiceError> {
         self.graph_session_store.finish_run(session_id).await
     }
+
+    pub fn invalidate_all_session_runtimes(&self) -> Result<Vec<String>, WorkflowServiceError> {
+        let mut store = self.session_store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("session store lock poisoned".to_string())
+        })?;
+        Ok(store.invalidate_all_loaded_session_runtimes())
+    }
 }
 
 fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), WorkflowServiceError> {
@@ -7246,6 +7253,99 @@ mod tests {
         assert_eq!(
             running_items[0].scheduler_decision_reason,
             Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
+        );
+    }
+
+    #[tokio::test]
+    async fn invalidate_all_session_runtimes_clears_loaded_state_for_active_sessions() {
+        let host = MockWorkflowHost::new(8, 1024);
+        let service = WorkflowService::new();
+        let first = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-1".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create first session");
+        let second = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-2".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                },
+            )
+            .await
+            .expect("create second session");
+        let third = service
+            .create_workflow_session(
+                &host,
+                WorkflowSessionCreateRequest {
+                    workflow_id: "wf-3".to_string(),
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                },
+            )
+            .await
+            .expect("create third session");
+
+        {
+            let mut store = service
+                .session_store
+                .lock()
+                .expect("session store lock poisoned");
+            store
+                .mark_runtime_loaded(&first.session_id, true)
+                .expect("mark first runtime loaded");
+            store
+                .mark_runtime_loaded(&second.session_id, true)
+                .expect("mark second runtime loaded");
+        }
+
+        let mut invalidated = service
+            .invalidate_all_session_runtimes()
+            .expect("invalidate session runtimes");
+        invalidated.sort();
+
+        let mut expected = vec![first.session_id.clone(), second.session_id.clone()];
+        expected.sort();
+        assert_eq!(invalidated, expected);
+
+        let first_status = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: first.session_id,
+            })
+            .await
+            .expect("first session status");
+        let second_status = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: second.session_id,
+            })
+            .await
+            .expect("second session status");
+        let third_status = service
+            .workflow_get_session_status(WorkflowSessionStatusRequest {
+                session_id: third.session_id,
+            })
+            .await
+            .expect("third session status");
+
+        assert_eq!(
+            first_status.session.state,
+            WorkflowSessionState::IdleUnloaded
+        );
+        assert_eq!(
+            second_status.session.state,
+            WorkflowSessionState::IdleUnloaded
+        );
+        assert_eq!(
+            third_status.session.state,
+            WorkflowSessionState::IdleUnloaded
         );
     }
 

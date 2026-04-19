@@ -43,6 +43,7 @@ use tokio::sync::RwLock;
 use workflow::{ExecutionManager, SharedModelDependencyResolver};
 
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
+use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
 
 fn main() {
     // Initialize logging - shows logs in terminal when running in dev mode
@@ -443,6 +444,7 @@ fn main() {
                         workflow_session_cleanup_worker.shutdown().await;
                     }
                     if let Some(gateway) = gateway {
+                        invalidate_loaded_session_runtimes(&app);
                         // Stop both main server and embedding server
                         if let Some(runtime_registry) = runtime_registry {
                             stop_all_and_sync_runtime_registry(

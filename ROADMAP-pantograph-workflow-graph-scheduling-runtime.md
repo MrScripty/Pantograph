@@ -172,6 +172,11 @@ reconciled as the final source of truth.
   workflow-service runtime-preflight helpers before reservation/warmup, so
   direct load callers cannot bypass redistributable readiness enforcement
   while Milestone 4 restore/recovery follow-up remains in progress.
+- Producer stop composition now also invalidates backend workflow-session
+  runtime residency before teardown across embedded-runtime shutdown, Tauri
+  recovery stop, and Tauri window-close stop paths, so keep-alive sessions do
+  not retain stale `runtime_loaded` state after producers are torn down and
+  the next run is forced back through the shared preflight/load contract.
 - Checkpointed keep-alive session resumes now also have backend regression
   coverage for runtime-readiness failure and retry, proving a missing
   redistributable blocks restore without discarding the checkpointed session
