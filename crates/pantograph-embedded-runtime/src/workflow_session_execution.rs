@@ -281,17 +281,19 @@ pub(crate) async fn run_session_workflow(
     );
 
     let mut executor = session_executor.lock().await;
+    let checkpoint_summary = executor
+        .workflow_session_checkpoint_summary(workflow_session_id)
+        .await;
+    let restored_from_checkpoint = checkpoint_summary.checkpoint_available;
     match executor.workflow_session_residency().await {
         node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded => {
-            executor
-                .clear_workflow_session_checkpoint(workflow_session_id)
-                .await;
             executor
                 .set_workflow_session_residency(
                     node_engine::WorkflowSessionResidencyState::Restored,
                 )
                 .await;
         }
+        node_engine::WorkflowSessionResidencyState::Restored if restored_from_checkpoint => {}
         _ => {
             executor
                 .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Active)
@@ -305,27 +307,51 @@ pub(crate) async fn run_session_workflow(
         Some(workflow_session_id.to_string()),
         Some(python_runtime_execution_recorder.clone()),
     );
-    if replayed_inputs {
-        let carried_inputs = replay_carried_inputs(&executor, workflow_session_id, host).await?;
-        host.session_executions
-            .set_carried_inputs(workflow_session_id, carried_inputs)?;
-    }
-    apply_incremental_input_bindings(&executor, inputs).await?;
-    host.session_executions
-        .remember_explicit_inputs(workflow_session_id, inputs)?;
-
     let mut node_outputs = HashMap::new();
-    for node_id in &output_node_ids {
-        if run_handle.is_cancelled() {
-            return Err(WorkflowServiceError::Cancelled(
-                "workflow run cancelled during execution".to_string(),
-            ));
+    let run_result = async {
+        if replayed_inputs {
+            let carried_inputs = replay_carried_inputs(&executor, workflow_session_id, host).await?;
+            host.session_executions
+                .set_carried_inputs(workflow_session_id, carried_inputs)?;
         }
-        let outputs = executor
-            .demand(node_id, &task_executor)
-            .await
-            .map_err(node_engine_error_to_workflow_service_error)?;
-        node_outputs.insert(node_id.clone(), outputs);
+        apply_incremental_input_bindings(&executor, inputs).await?;
+        host.session_executions
+            .remember_explicit_inputs(workflow_session_id, inputs)?;
+
+        for node_id in &output_node_ids {
+            if run_handle.is_cancelled() {
+                return Err(WorkflowServiceError::Cancelled(
+                    "workflow run cancelled during execution".to_string(),
+                ));
+            }
+            let outputs = executor
+                .demand(node_id, &task_executor)
+                .await
+                .map_err(node_engine_error_to_workflow_service_error)?;
+            node_outputs.insert(node_id.clone(), outputs);
+        }
+        Ok::<(), WorkflowServiceError>(())
+    }
+    .await;
+    if let Err(error) = run_result {
+        if restored_from_checkpoint {
+            executor
+                .set_workflow_session_residency(
+                    node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded,
+                )
+                .await;
+        }
+        return Err(error);
+    }
+    if restored_from_checkpoint {
+        executor
+            .set_workflow_session_residency(
+                node_engine::WorkflowSessionResidencyState::Restored,
+            )
+            .await;
+        executor
+            .clear_workflow_session_checkpoint(workflow_session_id)
+            .await;
     }
     executor
         .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Warm)

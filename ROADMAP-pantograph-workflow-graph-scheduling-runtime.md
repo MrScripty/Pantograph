@@ -905,6 +905,10 @@ the affected downstream closure.
   through the same backend session-execution unload transition used by direct
   `CapacityRebalance` unload instead of relying on a separate reclaim-local
   checkpoint path.
+- Failed resumed keep-alive execution now preserves the existing backend
+  checkpoint marker and original timestamp, returns the session to
+  checkpointed-but-unloaded residency, and clears the checkpoint only after a
+  later resumed run succeeds.
 - Graph edit-session inspection now also retains the last backend-owned
   memory-impact result across later session snapshot reads, so mutation
   diagnostics can inspect the most recent compatibility decision after node-

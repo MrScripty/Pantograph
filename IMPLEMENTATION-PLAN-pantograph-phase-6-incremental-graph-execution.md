@@ -643,9 +643,9 @@ affected downstream closure.
 **Tasks:**
 - [x] Add bounded backend-owned session checkpoint retention for keep-alive
       workflow sessions.
-- [ ] Integrate scheduler/runtime reclaim and restore paths with the checkpoint
+- [x] Integrate scheduler/runtime reclaim and restore paths with the checkpoint
       contract so temporary unload does not discard node memory.
-- [ ] Define restore ordering and idempotency rules so runtime restoration and
+- [x] Define restore ordering and idempotency rules so runtime restoration and
       checkpoint restoration cannot race or replay inconsistently.
 - [x] Ensure persistent workflow sessions can resume without recomputing the
       entire graph when compatible checkpoint state exists.
@@ -677,14 +677,14 @@ affected downstream closure.
   rebalance now routes reclaim-selected keep-alive sessions through the same
   backend session-execution unload transition used by direct
   `CapacityRebalance` unload.
+- Failed resumed execution now preserves the existing backend checkpoint and
+  its original timestamp, returns the session to checkpoint-backed residency,
+  and allows the next successful retry to clear the checkpoint only after the
+  resumed run completes.
 
 **Remaining focus:**
-- Integrate scheduler-driven reclaim and restore flows with the same
-  checkpointed workflow-session contract already used by the direct
-  keep-alive unload path.
-- Finish broader restore ordering and multi-session isolation semantics so
-  reclaim, restore, and parallel workflow pressure cannot race or cross-wire
-  logical node memory.
+- Finish multi-session isolation semantics so reclaim, restore, and parallel
+  workflow pressure cannot race or cross-wire logical node memory.
 
 #### Milestone 5 Detailed Remaining Plan
 
@@ -765,8 +765,9 @@ behavior.
   runtime readiness,
   executor reattachment,
   checkpoint-backed session reuse,
+  failed-resume rollback to checkpoint-backed residency,
   checkpoint clear on success,
-  residency transition to `restored` then `warm`.
+  residency transition through `restored` to `warm`.
 - Preserve checkpoint state on failed restore so retries do not discard
   recoverable logical node memory.
 - Make repeated restore attempts idempotent and safe if the runtime is already
@@ -1110,6 +1111,12 @@ Update during implementation:
   selected keep-alive session is forwarded as `CapacityRebalance`, and the
   embedded-runtime unload boundary now routes both scheduler-driven rebalance
   and direct capacity unload through one backend session-execution transition
+- 2026-04-18: Milestone 5 Slice 5B landed. Failed resumed execution now keeps
+  the existing backend checkpoint marker and original timestamp instead of
+  clearing it before demand succeeds, the failed resume path reverts the
+  workflow-session residency to `checkpointed_but_unloaded`, and the next
+  successful retry transitions through `restored` to `warm` while clearing the
+  checkpoint only after the resumed run completes.
   helper.
 
 ## Commit Cadence Notes

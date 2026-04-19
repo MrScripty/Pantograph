@@ -2270,6 +2270,43 @@ mod tests {
         .expect("rewrite workflow");
     }
 
+    fn rewrite_test_workflow_output_node_to_human_input(root: &Path, workflow_id: &str) {
+        let workflow_path = root
+            .join(".pantograph")
+            .join("workflows")
+            .join(format!("{workflow_id}.json"));
+        let mut workflow_json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&workflow_path).expect("read workflow"))
+                .expect("parse workflow");
+        workflow_json["graph"]["nodes"][1] = serde_json::json!({
+            "id": "text-output-1",
+            "node_type": "human-input",
+            "data": {
+                "prompt": "Approve the resumed output?",
+                "definition": {
+                    "category": "input",
+                    "io_binding_origin": "client_session",
+                    "label": "Human Input",
+                    "description": "Forces resumed execution to wait for interactive input",
+                    "inputs": [
+                        workflow_port_definition("prompt", "Prompt", "string"),
+                        workflow_port_definition("default", "Default Value", "string"),
+                        workflow_port_definition("auto_accept", "Auto Accept", "boolean"),
+                        workflow_port_definition("user_response", "User Response", "string")
+                    ],
+                    "outputs": [workflow_port_definition("value", "Value", "string")]
+                }
+            },
+            "position": { "x": 200.0, "y": 0.0 }
+        });
+        workflow_json["graph"]["edges"] = serde_json::json!([]);
+        std::fs::write(
+            workflow_path,
+            serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+        )
+        .expect("rewrite workflow");
+    }
+
     fn write_human_input_workflow(root: &Path, workflow_id: &str) {
         let workflows_dir = root.join(".pantograph").join("workflows");
         std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
@@ -4413,6 +4450,162 @@ mod tests {
             .handle(&session.session_id)
             .expect("session execution lookup should succeed")
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
+        let temp = TempDir::new().expect("temp dir");
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let app_data_dir = temp.path().join("app-data");
+        std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+        install_fake_default_runtime(&app_data_dir);
+
+        let runtime = EmbeddedRuntime::with_default_python_runtime(
+            EmbeddedRuntimeConfig {
+                app_data_dir,
+                project_root: temp.path().to_path_buf(),
+                workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+                max_loaded_sessions: Some(1),
+            },
+            Arc::new(inference::InferenceGateway::new()),
+            Arc::new(RwLock::new(ExecutorExtensions::new())),
+            Arc::new(WorkflowService::new()),
+            None,
+        );
+
+        let session = runtime
+            .create_workflow_session(WorkflowSessionCreateRequest {
+                workflow_id: "runtime-text".to_string(),
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+            })
+            .await
+            .expect("create keep-alive session");
+
+        runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("alpha"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-first".to_string()),
+            })
+            .await
+            .expect("run keep-alive session");
+
+        let executor = runtime
+            .session_executions
+            .handle(&session.session_id)
+            .expect("session execution lookup should succeed")
+            .expect("keep-alive executor should exist");
+
+        WorkflowHost::unload_session_runtime(
+            &runtime.host(),
+            &session.session_id,
+            "runtime-text",
+            pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        )
+        .await
+        .expect("checkpoint keep-alive session");
+
+        let checkpointed_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+        assert!(checkpointed_summary.checkpoint_available);
+
+        rewrite_test_workflow_output_node_to_human_input(temp.path(), "runtime-text");
+
+        let error = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "value".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-resume-fail".to_string()),
+            })
+            .await
+            .expect_err("resume should fail when the output node now requires interactive input");
+        match error {
+            WorkflowServiceError::InvalidRequest(message) => {
+                assert!(
+                    message.contains("text-output-1"),
+                    "unexpected invalid-request message: {message}"
+                );
+            }
+            other => panic!("expected invalid request error, got {other:?}"),
+        }
+
+        let failed_restore_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+        assert!(failed_restore_summary.checkpoint_available);
+        assert_eq!(
+            failed_restore_summary.checkpointed_at_ms,
+            checkpointed_summary.checkpointed_at_ms
+        );
+        assert_eq!(
+            failed_restore_summary.residency,
+            node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        );
+
+        write_test_workflow(temp.path(), "runtime-text");
+
+        let resumed_output = runtime
+            .run_workflow_session(WorkflowSessionRunRequest {
+                session_id: session.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+                run_id: Some("run-resume-success".to_string()),
+            })
+            .await
+            .expect("resume should succeed after restoring a runnable graph");
+        assert_eq!(resumed_output.outputs[0].value, serde_json::json!("alpha"));
+
+        let resumed_summary = {
+            let executor = executor.lock().await;
+            executor
+                .workflow_session_checkpoint_summary(&session.session_id)
+                .await
+        };
+        assert!(!resumed_summary.checkpoint_available);
+        assert_eq!(
+            resumed_summary.residency,
+            node_engine::WorkflowSessionResidencyState::Warm
+        );
+
+        runtime
+            .close_workflow_session(WorkflowSessionCloseRequest {
+                session_id: session.session_id.clone(),
+            })
+            .await
+            .expect("close resumed keep-alive session");
     }
 
     #[tokio::test]

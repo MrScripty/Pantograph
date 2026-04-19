@@ -145,6 +145,11 @@ embedded-runtime crate.
   repeated capacity-rebalance unload must preserve the original checkpoint
   identity for that retained session state, and explicit keep-alive disable and
   session close may tear that state down.
+- Checkpoint-backed session restore semantics must also stay backend-owned in
+  Rust: failed resumed execution must preserve the existing checkpoint marker
+  and timestamp by returning the session to checkpoint-backed residency, while
+  only a successful resumed run may clear the checkpoint and advance the
+  session to warm residency.
 - Scheduler-driven reclaim for keep-alive workflow sessions must route through
   the same backend session-execution unload transition as direct
   `CapacityRebalance` unload so the runtime-registry boundary does not become a
