@@ -1,7 +1,8 @@
 use super::archive::extract_archive;
 use super::contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ResolvedCommand,
+    ManagedBinaryInstallState, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
+    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 use super::definitions::definition;
 use super::paths::{extract_pid_file, managed_install_dir, managed_runtime_dir};
@@ -97,6 +98,25 @@ pub fn list_binary_capabilities(
         .copied()
         .map(|id| binary_capability(app_data_dir, id))
         .collect()
+}
+
+pub fn managed_runtime_snapshot(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+) -> Result<ManagedRuntimeSnapshot, String> {
+    let capability = binary_capability(app_data_dir, id)?;
+    Ok(snapshot_from_capability(&capability))
+}
+
+pub fn list_managed_runtime_snapshots(
+    app_data_dir: &Path,
+) -> Result<Vec<ManagedRuntimeSnapshot>, String> {
+    list_binary_capabilities(app_data_dir).map(|capabilities| {
+        capabilities
+            .iter()
+            .map(snapshot_from_capability)
+            .collect::<Vec<_>>()
+    })
 }
 
 pub async fn download_binary<F>(
@@ -307,4 +327,102 @@ pub fn resolve_binary_command(
     }
 
     definition.resolve_command(&install_dir, args)
+}
+
+fn snapshot_from_capability(capability: &ManagedBinaryCapability) -> ManagedRuntimeSnapshot {
+    ManagedRuntimeSnapshot {
+        id: capability.id,
+        display_name: capability.display_name.clone(),
+        install_state: capability.install_state,
+        readiness_state: readiness_state_for_capability(capability),
+        available: capability.available,
+        can_install: capability.can_install,
+        can_remove: capability.can_remove,
+        missing_files: capability.missing_files.clone(),
+        unavailable_reason: capability.unavailable_reason.clone(),
+        versions: vec![version_status_for_capability(capability)],
+        selection: ManagedRuntimeSelectionState::default(),
+        active_job: None,
+    }
+}
+
+fn readiness_state_for_capability(
+    capability: &ManagedBinaryCapability,
+) -> ManagedRuntimeReadinessState {
+    match capability.install_state {
+        ManagedBinaryInstallState::Installed | ManagedBinaryInstallState::SystemProvided => {
+            ManagedRuntimeReadinessState::Ready
+        }
+        ManagedBinaryInstallState::Missing => ManagedRuntimeReadinessState::Missing,
+        ManagedBinaryInstallState::Unsupported => ManagedRuntimeReadinessState::Unsupported,
+    }
+}
+
+fn version_status_for_capability(
+    capability: &ManagedBinaryCapability,
+) -> ManagedRuntimeVersionStatus {
+    ManagedRuntimeVersionStatus {
+        version: None,
+        display_label: match capability.install_state {
+            ManagedBinaryInstallState::SystemProvided => "System provided".to_string(),
+            ManagedBinaryInstallState::Installed => "Managed install".to_string(),
+            ManagedBinaryInstallState::Missing => "No managed install".to_string(),
+            ManagedBinaryInstallState::Unsupported => "Unsupported platform".to_string(),
+        },
+        install_state: capability.install_state,
+        readiness_state: readiness_state_for_capability(capability),
+        selected: false,
+        active: capability.available,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        readiness_state_for_capability, snapshot_from_capability, ManagedBinaryCapability,
+        ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeReadinessState,
+    };
+
+    fn capability(install_state: ManagedBinaryInstallState) -> ManagedBinaryCapability {
+        ManagedBinaryCapability {
+            id: ManagedBinaryId::LlamaCpp,
+            display_name: "llama.cpp".to_string(),
+            install_state,
+            available: matches!(
+                install_state,
+                ManagedBinaryInstallState::Installed | ManagedBinaryInstallState::SystemProvided
+            ),
+            can_install: install_state == ManagedBinaryInstallState::Missing,
+            can_remove: install_state != ManagedBinaryInstallState::Unsupported,
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+        }
+    }
+
+    #[test]
+    fn readiness_state_maps_installed_runtime_to_ready() {
+        let readiness =
+            readiness_state_for_capability(&capability(ManagedBinaryInstallState::Installed));
+        assert_eq!(readiness, ManagedRuntimeReadinessState::Ready);
+    }
+
+    #[test]
+    fn readiness_state_maps_missing_runtime_to_missing() {
+        let readiness =
+            readiness_state_for_capability(&capability(ManagedBinaryInstallState::Missing));
+        assert_eq!(readiness, ManagedRuntimeReadinessState::Missing);
+    }
+
+    #[test]
+    fn snapshot_carries_additive_versions_and_selection_contracts() {
+        let snapshot = snapshot_from_capability(&capability(ManagedBinaryInstallState::Installed));
+
+        assert_eq!(snapshot.versions.len(), 1);
+        assert_eq!(snapshot.selection.selected_version, None);
+        assert_eq!(
+            snapshot.readiness_state,
+            ManagedRuntimeReadinessState::Ready
+        );
+        assert!(snapshot.active_job.is_none());
+    }
 }

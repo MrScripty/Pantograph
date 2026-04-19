@@ -470,6 +470,10 @@ Update during implementation:
   `crates/inference/src/managed_runtime`, a new directory README, and workspace
   dependency alignment for `parking_lot` so the synchronous transition-lock map
   can move off poison-based `std::sync::Mutex`.
+- 2026-04-19: Milestone 1 slice 2 froze additive backend runtime-manager
+  contracts for readiness, versions, selection, and job-state projection, and
+  introduced snapshot helpers that project the existing managed binary state
+  into those contracts without changing current runtime behavior.
 
 ## Commit Cadence Notes
 

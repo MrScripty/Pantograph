@@ -4937,6 +4937,7 @@ dependencies = [
  "log",
  "once_cell",
  "pantograph-runtime-identity",
+ "parking_lot",
  "pyo3",
  "reqwest",
  "serde",

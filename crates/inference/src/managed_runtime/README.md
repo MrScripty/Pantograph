@@ -12,7 +12,7 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 
 | File/Folder | Description |
 | ----------- | ----------- |
-| `contracts.rs` | Stable managed-runtime DTOs and low-level archive/command contracts shared across backend and host boundaries. |
+| `contracts.rs` | Stable managed-runtime DTOs for capability, snapshot, version, selection, job, and low-level archive/command contracts shared across backend and host boundaries. |
 | `definitions.rs` | Binary-definition registry that maps managed runtime ids onto runtime-specific release, validation, and command-resolution behavior. |
 | `operations.rs` | Backend-owned orchestration for status reads, install/remove transitions, and command resolution. |
 | `paths.rs` | Managed runtime root/path helpers plus shared argument and environment helpers used by platform adapters. |
@@ -125,6 +125,10 @@ fn inspect_runtime(app_data_dir: &Path) {
 
 - `ManagedBinaryCapability` is the stable machine-consumed payload for managed
   runtime availability, install state, and user-action affordances.
+- `ManagedRuntimeSnapshot` is the additive broader runtime-manager contract for
+  readiness, version, selection, and job-state projection. Current
+  implementations may leave version ids and active-job details unset until the
+  later runtime redistributables milestones land.
 - `ManagedBinaryInstallState` values are authoritative backend facts and remain
   append-only unless a coordinated breaking change is approved.
 - `DownloadProgress` is the backend-owned progress payload surfaced to adapters;
