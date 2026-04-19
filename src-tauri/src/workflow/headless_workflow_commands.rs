@@ -849,6 +849,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 observed_runtime_ids: vec!["llama_cpp".to_string()],
@@ -939,6 +940,7 @@ mod tests {
                 }),
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 observed_runtime_ids: vec!["llama_cpp".to_string()],
@@ -993,6 +995,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama.cpp.embedding".to_string()),
                 observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
@@ -1043,6 +1046,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("onnx-runtime".to_string()),
                 observed_runtime_ids: vec!["onnx-runtime".to_string()],
@@ -1110,6 +1114,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 observed_runtime_ids: vec!["llama_cpp".to_string()],
@@ -1169,6 +1174,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("onnx-runtime".to_string()),
                 observed_runtime_ids: vec!["onnx-runtime".to_string()],
@@ -1228,6 +1234,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("onnx-runtime".to_string()),
                 observed_runtime_ids: vec!["pytorch".to_string(), "onnx-runtime".to_string()],
@@ -1280,6 +1287,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics::default(),
             None,
             None,
@@ -1290,6 +1298,7 @@ mod tests {
 
         let projection = workflow_diagnostics_snapshot_projection(
             &diagnostics_store,
+            None,
             None,
             None,
             None,
@@ -1337,6 +1346,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 observed_runtime_ids: vec!["llama_cpp".to_string()],

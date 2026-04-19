@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
+use node_engine::GraphMemoryImpactSummary;
 use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
-use node_engine::GraphMemoryImpactSummary;
 use pantograph_workflow_service::{
-    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionSummary, WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceStatus,
+    graph::WorkflowGraphSessionStateView, WorkflowSchedulerSnapshotDiagnostics,
+    WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionSummary,
+    WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -299,6 +299,8 @@ pub struct WorkflowDiagnosticsProjection {
     pub run_order: Vec<String>,
     pub runtime: DiagnosticsRuntimeSnapshot,
     pub scheduler: DiagnosticsSchedulerSnapshot,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_session_state: Option<WorkflowGraphSessionStateView>,
     pub retained_event_limit: usize,
 }
 

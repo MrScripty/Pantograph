@@ -94,6 +94,9 @@ one file.
 trace snapshot, and clear-history responses so runtime debug commands and
 workflow command wrappers do not depend on the broader headless workflow
 session adapter.
+That diagnostics snapshot path may forward additive backend-owned
+workflow-session inspection state, but it must not reconstruct node-memory or
+checkpoint policy inside the Tauri adapter.
 When the planned `RuntimeRegistry` is introduced, this directory should request
 registry-backed runtime operations through injected host state while keeping
 policy ownership outside the Tauri adapter boundary. Execution-path runtime

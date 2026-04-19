@@ -9,8 +9,8 @@ use pantograph_embedded_runtime::{
     HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowSchedulerSnapshotRequest, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse,
+    WorkflowCapabilitiesRequest, WorkflowSchedulerSnapshotRequest,
+    WorkflowSessionInspectionRequest, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 use tauri::{AppHandle, State};
 
@@ -62,6 +62,21 @@ pub async fn workflow_diagnostics_snapshot_response(
     let session_id = request.session_id;
     let workflow_id = request.workflow_id;
     let workflow_name = request.workflow_name;
+    let runtime = if workflow_id.is_some() || session_id.is_some() {
+        Some(
+            build_runtime(
+                app,
+                gateway,
+                runtime_registry,
+                extensions,
+                workflow_service,
+                None,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let scheduler_snapshot_result = if let Some(session_id) = session_id.as_deref() {
         Some(
             workflow_service
@@ -73,18 +88,24 @@ pub async fn workflow_diagnostics_snapshot_response(
     } else {
         None
     };
-    let capabilities_result = if let Some(workflow_id) = workflow_id.as_ref() {
-        let runtime = build_runtime(
-            app,
-            gateway,
-            runtime_registry,
-            extensions,
-            workflow_service,
-            None,
-        )
-        .await?;
+    let session_inspection_result = if let Some(session_id) = session_id.as_deref() {
         Some(
             runtime
+                .as_ref()
+                .expect("runtime is constructed when session inspection is requested")
+                .workflow_get_session_inspection(WorkflowSessionInspectionRequest {
+                    session_id: session_id.to_string(),
+                })
+                .await,
+        )
+    } else {
+        None
+    };
+    let capabilities_result = if let Some(workflow_id) = workflow_id.as_ref() {
+        Some(
+            runtime
+                .as_ref()
+                .expect("runtime is constructed when workflow capabilities are requested")
                 .workflow_get_capabilities(WorkflowCapabilitiesRequest {
                     workflow_id: workflow_id.clone(),
                 })
@@ -135,6 +156,9 @@ pub async fn workflow_diagnostics_snapshot_response(
         workflow_name,
         scheduler_snapshot_result,
         capabilities_result,
+        session_inspection_result
+            .and_then(Result::ok)
+            .and_then(|response| response.workflow_session_state),
         runtime_projection.trace_runtime_metrics,
         runtime_projection.active_model_target,
         runtime_projection.embedding_model_target,

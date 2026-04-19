@@ -97,7 +97,8 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   this directory, but they must treat the returned run/runtime/scheduler facts
   as projections over backend-owned trace and runtime data.
 - `WorkflowDiagnosticsProjection` returns `runs_by_id`, `run_order`, `runtime`,
-  `scheduler`, and `retained_event_limit` with stable field names.
+  `scheduler`, additive `current_session_state`, and `retained_event_limit`
+  with stable field names.
 - `trace_snapshot()` validates backend-owned trace filters through
   `WorkflowTraceSnapshotRequest` instead of accepting arbitrary adapter-local
   filtering rules.

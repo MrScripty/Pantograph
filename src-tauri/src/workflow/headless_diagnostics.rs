@@ -7,9 +7,9 @@
 use super::commands::{SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsStore};
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 
 pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
@@ -243,6 +243,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
         Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
     >,
     capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
+    current_session_state: Option<WorkflowGraphSessionStateView>,
     runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
     active_model_target: Option<String>,
     embedding_model_target: Option<String>,
@@ -307,7 +308,9 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
         );
     }
 
-    diagnostics_store.snapshot()
+    let mut projection = diagnostics_store.snapshot();
+    projection.current_session_state = current_session_state;
+    projection
 }
 
 #[cfg(test)]
@@ -315,7 +318,8 @@ mod tests {
     use std::sync::Arc;
 
     use pantograph_workflow_service::{
-        graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowRuntimeRequirements,
+        graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
+        WorkflowCapabilitiesResponse, WorkflowRuntimeRequirements,
         WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
         WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
         WorkflowTraceRuntimeMetrics,
@@ -376,6 +380,7 @@ mod tests {
                 diagnostics: None,
             })),
             Some(Ok(capability_response())),
+            None,
             WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama_cpp".to_string()),
                 observed_runtime_ids: vec!["llama_cpp".to_string()],
@@ -404,6 +409,45 @@ mod tests {
         assert!(
             stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1"))
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn workflow_diagnostics_snapshot_projection_preserves_current_session_state() {
+        let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+        let current_session_state = WorkflowGraphSessionStateView::new(
+            node_engine::WorkflowSessionResidencyState::Warm,
+            Vec::new(),
+            None,
+            None,
+        );
+
+        let projection = workflow_diagnostics_snapshot_projection(
+            &diagnostics_store,
+            Some("session-1".to_string()),
+            Some("wf-1".to_string()),
+            Some("Workflow 1".to_string()),
+            Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                trace_execution_id: None,
+                session: running_session_summary(),
+                items: Vec::new(),
+                diagnostics: None,
+            })),
+            Some(Ok(capability_response())),
+            Some(current_session_state.clone()),
+            WorkflowTraceRuntimeMetrics::default(),
+            None,
+            None,
+            None,
+            None,
+            120,
+        );
+
+        assert_eq!(
+            projection.current_session_state,
+            Some(current_session_state)
         );
     }
 
@@ -439,6 +483,7 @@ mod tests {
                     diagnostics: None,
                 })),
                 Some(Ok(capability_response())),
+                None,
                 WorkflowTraceRuntimeMetrics {
                     runtime_id: Some(runtime_id.to_string()),
                     observed_runtime_ids: vec![runtime_id.to_string()],
