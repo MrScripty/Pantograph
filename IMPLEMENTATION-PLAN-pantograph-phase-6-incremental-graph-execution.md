@@ -517,22 +517,22 @@ implementation spreads across graph, execution, scheduler, and diagnostics
 layers.
 
 **Tasks:**
-- [ ] Define explicit backend-owned concepts for `output cache`, `node memory`,
+- [x] Define explicit backend-owned concepts for `output cache`, `node memory`,
       and `session checkpoint` and record their invariants.
-- [ ] Define additive DTOs for node-memory snapshots, memory compatibility, and
+- [x] Define additive DTOs for node-memory snapshots, memory compatibility, and
       session checkpoint summaries.
-- [ ] Decide and document the authoritative identity model:
+- [x] Decide and document the authoritative identity model:
       session id,
       node id,
       node type,
       schema/version compatibility markers.
-- [ ] Define the backend-owned workflow-session residency states and record
+- [x] Define the backend-owned workflow-session residency states and record
       which state transitions do and do not require checkpoint reconciliation.
-- [ ] Define the minimum compatibility classes used by graph edit, undo/redo,
+- [x] Define the minimum compatibility classes used by graph edit, undo/redo,
       explicit input reinjection, and resumed invocation paths.
-- [ ] Extract any minimum scaffolding needed so the new contracts do not land
+- [x] Extract any minimum scaffolding needed so the new contracts do not land
       directly into already oversized files.
-- [ ] Update the roadmap and touched READMEs to record this broadened Phase 6
+- [x] Update the roadmap and touched READMEs to record this broadened Phase 6
       ownership boundary.
 
 **Verification:**
@@ -606,23 +606,23 @@ execution.
 affected downstream closure.
 
 **Tasks:**
-- [ ] Implement graph-edit reconciliation rules for:
+- [x] Implement graph-edit reconciliation rules for:
       same node compatible,
       node removed,
       node type changed,
       incompatible schema changed,
       edge/input topology changed.
-- [ ] Make input injection mark the downstream closure dirty and implicitly
+- [x] Make input injection mark the downstream closure dirty and implicitly
       rerun from those injection points.
-- [ ] Support repeated invocations against a kept-alive session where callers
+- [x] Support repeated invocations against a kept-alive session where callers
       selectively update inputs and expect only the affected suffix to rerun.
-- [ ] Allow explicit fallback to full invalidation for mutation paths whose
+- [x] Allow explicit fallback to full invalidation for mutation paths whose
       compatibility cannot be proven exactly.
-- [ ] Align `GraphModified` and `IncrementalExecutionStarted` payloads with the
+- [x] Align `GraphModified` and `IncrementalExecutionStarted` payloads with the
       new mutation-impact and memory-reuse semantics.
-- [ ] Ensure undo/redo restores graph state and reconciles node memory rather
+- [x] Ensure undo/redo restores graph state and reconciles node memory rather
       than only clearing cache.
-- [ ] Add backend-owned diagnostics facts that explain which nodes were
+- [x] Add backend-owned diagnostics facts that explain which nodes were
       preserved, invalidated, or rerun after graph mutation or input
       reinjection.
 
