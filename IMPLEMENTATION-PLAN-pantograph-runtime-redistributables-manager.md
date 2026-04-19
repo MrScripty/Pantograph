@@ -503,6 +503,11 @@ Update during implementation:
   resolution from projection-time fallback resolution, so stale selected
   version state now degrades cleanly for capability/snapshot reads without
   weakening launch-time validation.
+- 2026-04-19: Milestone 3 slice 4 added explicit backend compatibility
+  metadata for runtime key, platform key, install root, executable name, and
+  executable readiness across persisted versions and runtime snapshots, so
+  later execution and host layers can consume one backend-owned compatibility
+  contract instead of re-deriving those facts.
 
 ## Commit Cadence Notes
 

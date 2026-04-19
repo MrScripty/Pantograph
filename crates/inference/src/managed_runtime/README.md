@@ -142,6 +142,10 @@ fn inspect_runtime(app_data_dir: &Path) {
   implementations may still leave some version metadata sparse, but the
   contract is now backed by a durable state file rather than only ephemeral
   process memory.
+- `ManagedRuntimeVersionStatus` now carries backend-owned compatibility facts
+  for runtime key, platform key, install root, executable name, and executable
+  readiness so execution-adjacent consumers do not infer those fields from
+  host-local assumptions.
 - `ManagedBinaryInstallState` values are authoritative backend facts and remain
   append-only unless a coordinated breaking change is approved.
 - `DownloadProgress` is the backend-owned progress payload surfaced to adapters;

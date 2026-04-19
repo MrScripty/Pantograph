@@ -34,6 +34,25 @@ pub(crate) fn current_platform() -> &'static dyn OllamaPlatform {
     &CURRENT_PLATFORM
 }
 
+pub(crate) fn current_platform_key() -> &'static str {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        "linux-x86_64"
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        "macos-arm64"
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        "macos-x86_64"
+    }
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    {
+        "windows-x86_64"
+    }
+}
+
 pub(crate) fn install_distribution(extracted_dir: &Path, install_dir: &Path) -> Result<(), String> {
     fs::create_dir_all(install_dir)
         .map_err(|e| format!("Failed to create binaries directory: {}", e))?;

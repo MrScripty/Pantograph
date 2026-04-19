@@ -33,6 +33,10 @@ pub struct ManagedRuntimeInstallHistoryEntry {
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimePersistedVersion {
     pub version: String,
+    #[serde(default)]
+    pub runtime_key: Option<String>,
+    #[serde(default)]
+    pub platform_key: Option<String>,
     pub readiness_state: ManagedRuntimeReadinessState,
     pub install_root: Option<String>,
     pub last_ready_at_ms: Option<u64>,

@@ -116,6 +116,7 @@ pub fn managed_runtime_snapshot(
     let capability = binary_capability(app_data_dir, id)?;
     let state = load_managed_runtime_state(app_data_dir)?;
     Ok(snapshot_from_capability(
+        app_data_dir,
         &capability,
         runtime_state_entry(&state, id),
     ))
@@ -129,7 +130,11 @@ pub fn list_managed_runtime_snapshots(
         capabilities
             .iter()
             .map(|capability| {
-                snapshot_from_capability(capability, runtime_state_entry(&state, capability.id))
+                snapshot_from_capability(
+                    app_data_dir,
+                    capability,
+                    runtime_state_entry(&state, capability.id),
+                )
             })
             .collect::<Vec<_>>()
     })
@@ -453,9 +458,11 @@ pub fn resolve_binary_command(
 }
 
 fn snapshot_from_capability(
+    app_data_dir: &Path,
     capability: &ManagedBinaryCapability,
     persisted_runtime: Option<&ManagedRuntimePersistedRuntime>,
 ) -> ManagedRuntimeSnapshot {
+    let definition = definition(capability.id);
     let selection = persisted_runtime
         .map(|runtime| runtime.selection.clone())
         .unwrap_or_default();
@@ -469,6 +476,25 @@ fn snapshot_from_capability(
                 .map(|version| ManagedRuntimeVersionStatus {
                     version: Some(version.version.clone()),
                     display_label: version.version.clone(),
+                    runtime_key: version
+                        .runtime_key
+                        .clone()
+                        .unwrap_or_else(|| capability.id.key().to_string()),
+                    platform_key: version
+                        .platform_key
+                        .clone()
+                        .unwrap_or_else(|| definition.platform_key().to_string()),
+                    install_root: version.install_root.clone(),
+                    executable_name: definition.executable_name().to_string(),
+                    executable_ready: version
+                        .install_root
+                        .as_deref()
+                        .map(|install_root| {
+                            definition
+                                .validate_installation(Path::new(install_root))
+                                .is_empty()
+                        })
+                        .unwrap_or(false),
                     install_state: capability.install_state,
                     readiness_state: version.readiness_state,
                     selected: selection.selected_version.as_deref()
@@ -477,7 +503,7 @@ fn snapshot_from_capability(
                 })
                 .collect::<Vec<_>>()
         })
-        .unwrap_or_else(|| vec![version_status_for_capability(capability)]);
+        .unwrap_or_else(|| vec![version_status_for_capability(app_data_dir, capability)]);
 
     ManagedRuntimeSnapshot {
         id: capability.id,
@@ -508,8 +534,11 @@ fn readiness_state_for_capability(
 }
 
 fn version_status_for_capability(
+    app_data_dir: &Path,
     capability: &ManagedBinaryCapability,
 ) -> ManagedRuntimeVersionStatus {
+    let definition = definition(capability.id);
+    let install_root = managed_install_dir(app_data_dir, capability.id);
     ManagedRuntimeVersionStatus {
         version: None,
         display_label: match capability.install_state {
@@ -518,6 +547,13 @@ fn version_status_for_capability(
             ManagedBinaryInstallState::Missing => "No managed install".to_string(),
             ManagedBinaryInstallState::Unsupported => "Unsupported platform".to_string(),
         },
+        runtime_key: capability.id.key().to_string(),
+        platform_key: definition.platform_key().to_string(),
+        install_root: install_root
+            .exists()
+            .then(|| install_root.display().to_string()),
+        executable_name: definition.executable_name().to_string(),
+        executable_ready: capability.available,
         install_state: capability.install_state,
         readiness_state: readiness_state_for_capability(capability),
         selected: false,
@@ -558,6 +594,8 @@ fn persist_failed_job(
         runtime,
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
+            runtime_key: Some(id.key().to_string()),
+            platform_key: Some(definition(id).platform_key().to_string()),
             readiness_state: ManagedRuntimeReadinessState::Failed,
             install_root: None,
             last_ready_at_ms: None,
@@ -588,6 +626,8 @@ fn persist_install_success(
         runtime,
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
+            runtime_key: Some(id.key().to_string()),
+            platform_key: Some(definition(id).platform_key().to_string()),
             readiness_state: ManagedRuntimeReadinessState::Ready,
             install_root: Some(install_dir.display().to_string()),
             last_ready_at_ms: Some(current_unix_timestamp_ms()),
@@ -843,8 +883,12 @@ mod tests {
 
     #[test]
     fn snapshot_carries_additive_versions_and_selection_contracts() {
-        let snapshot =
-            snapshot_from_capability(&capability(ManagedBinaryInstallState::Installed), None);
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let snapshot = snapshot_from_capability(
+            temp_dir.path(),
+            &capability(ManagedBinaryInstallState::Installed),
+            None,
+        );
 
         assert_eq!(snapshot.versions.len(), 1);
         assert_eq!(snapshot.selection.selected_version, None);
@@ -852,6 +896,12 @@ mod tests {
             snapshot.readiness_state,
             ManagedRuntimeReadinessState::Ready
         );
+        assert_eq!(
+            snapshot.versions[0].runtime_key,
+            ManagedBinaryId::LlamaCpp.key()
+        );
+        assert!(!snapshot.versions[0].platform_key.is_empty());
+        assert!(!snapshot.versions[0].executable_name.is_empty());
         assert!(snapshot.active_job.is_none());
     }
 
@@ -877,6 +927,11 @@ mod tests {
 
         assert_eq!(runtime.versions.len(), 1);
         assert_eq!(runtime.versions[0].version, "b8248");
+        assert_eq!(
+            runtime.versions[0].runtime_key.as_deref(),
+            Some(ManagedBinaryId::LlamaCpp.key())
+        );
+        assert!(runtime.versions[0].platform_key.is_some());
         assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
         assert_eq!(runtime.selection.active_version.as_deref(), Some("b8248"));
     }
@@ -1006,6 +1061,8 @@ mod tests {
         runtime.selection.selected_version = Some("other".to_string());
         runtime.versions = vec![ManagedRuntimePersistedVersion {
             version: "b8248".to_string(),
+            runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+            platform_key: Some("linux-x86_64".to_string()),
             readiness_state: ManagedRuntimeReadinessState::Ready,
             install_root: Some(install_dir.display().to_string()),
             last_ready_at_ms: None,

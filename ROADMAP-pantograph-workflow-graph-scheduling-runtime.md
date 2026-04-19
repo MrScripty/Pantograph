@@ -69,7 +69,9 @@ consumes that persisted backend selection/install-root state, so future host
 adapters do not need to guess which installed runtime path execution should
 launch. Managed runtime installs now land under version-scoped runtime roots,
 with legacy single-directory fallback preserved for older already-installed
-artifacts.
+artifacts. Runtime snapshots now also carry backend-owned runtime/platform/
+install-root/executable compatibility metadata so later host and execution
+layers do not need to reconstruct those facts locally.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,

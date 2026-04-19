@@ -103,6 +103,11 @@ pub struct ManagedRuntimeSelectionState {
 pub struct ManagedRuntimeVersionStatus {
     pub version: Option<String>,
     pub display_label: String,
+    pub runtime_key: String,
+    pub platform_key: String,
+    pub install_root: Option<String>,
+    pub executable_name: String,
+    pub executable_ready: bool,
     pub install_state: ManagedBinaryInstallState,
     pub readiness_state: ManagedRuntimeReadinessState,
     pub selected: bool,

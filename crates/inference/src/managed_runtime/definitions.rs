@@ -1,8 +1,10 @@
 use crate::managed_runtime::llama_cpp_platform::{
-    current_platform as current_llama_platform, install_distribution as install_llama_distribution,
+    current_platform as current_llama_platform, current_platform_key as current_llama_platform_key,
+    install_distribution as install_llama_distribution,
 };
 use crate::managed_runtime::ollama_platform::{
     current_platform as current_ollama_platform,
+    current_platform_key as current_ollama_platform_key,
     install_distribution as install_ollama_distribution,
 };
 
@@ -14,6 +16,8 @@ pub(crate) trait ManagedBinaryDefinition: Sync {
     fn release_version(&self) -> &'static str;
     fn release_asset(&self) -> Result<ReleaseAsset, String>;
     fn download_url(&self, release_asset: &ReleaseAsset) -> String;
+    fn platform_key(&self) -> &'static str;
+    fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
     fn install_distribution(&self, extracted_dir: &Path, install_dir: &Path) -> Result<(), String>;
     fn resolve_command(&self, install_dir: &Path, args: &[&str])
@@ -46,6 +50,14 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
             crate::managed_runtime::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG,
             release_asset.archive_name
         )
+    }
+
+    fn platform_key(&self) -> &'static str {
+        current_llama_platform_key()
+    }
+
+    fn executable_name(&self) -> &'static str {
+        current_llama_platform().installed_server_name()
     }
 
     fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
@@ -84,6 +96,14 @@ impl ManagedBinaryDefinition for OllamaBinary {
             crate::managed_runtime::ollama_platform::OLLAMA_RELEASE_TAG,
             release_asset.archive_name
         )
+    }
+
+    fn platform_key(&self) -> &'static str {
+        current_ollama_platform_key()
+    }
+
+    fn executable_name(&self) -> &'static str {
+        current_ollama_platform().executable_name()
     }
 
     fn validate_installation(&self, install_dir: &Path) -> Vec<String> {
