@@ -74,7 +74,11 @@ fingerprints, and live llama.cpp slot save/restore hooks so node execution can
 compose through one runtime adapter instead of inventing host-side KV logic.
 `node-engine` now consumes that adapter for `llamacpp-inference`, restoring an
 incoming typed KV handle into the live runtime slot before generation and
-capturing a fresh typed handle back into the KV store after generation.
+capturing a fresh typed handle back into the KV store after generation. The KV
+storage nodes now operate on typed handles as well: save clones handle-backed
+entries into the chosen store policy, load returns a handle only when runtime
+compatibility checks pass, and truncate now reports an explicit unsupported
+reason until a backend codec lands.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
 Tauri workflow adapter, and the shared Svelte graph package, so the remaining
 Phase 5 work can land against focused backend, adapter, and read-only GUI
@@ -551,6 +555,8 @@ primitive that improves reruns, prompt-prefix reuse, and iterative local work.
   fingerprint derivation through the gateway/backend boundary
 - `llamacpp-inference` now uses that runtime adapter to restore compatible KV
   handles before generation and capture a fresh reusable handle afterward
+- KV save/load now follow the typed-handle contract in `node-engine`, and KV
+  truncation now fails with an explicit backend-specific unsupported reason
 - Implement a real KV cache store with memory and disk policies
 - Validate cache compatibility against model fingerprints
 - Support markers and truncation for partial reuse

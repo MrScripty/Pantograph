@@ -1665,7 +1665,9 @@ impl TaskExecutor for CoreTaskExecutor {
             #[cfg(feature = "inference-nodes")]
             "kv-cache-save" => kv_cache::execute_save(&inputs, extensions).await,
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-load" => kv_cache::execute_load(&inputs, extensions).await,
+            "kv-cache-load" => {
+                kv_cache::execute_load(&inputs, extensions, self.gateway.as_ref()).await
+            }
             #[cfg(feature = "inference-nodes")]
             "kv-cache-truncate" => kv_cache::execute_truncate(&inputs, extensions).await,
 

@@ -21,53 +21,69 @@ pub(super) async fn execute_save(
 ) -> Result<HashMap<String, serde_json::Value>> {
     let store = require_store(extensions)?;
 
-    let cache_data_val = inputs
+    let cache_handle_val = inputs
         .get("cache_data")
         .ok_or_else(|| NodeEngineError::MissingInput("cache_data".to_string()))?;
-    let data_bytes: Vec<u8> = serde_json::from_value(cache_data_val.clone())?;
+    let cache_handle: KvCacheHandle = serde_json::from_value(cache_handle_val.clone())?;
+    let model_fingerprint = read_legacy_model_fingerprint(inputs)?
+        .unwrap_or_else(|| cache_handle.compatibility.model_fingerprint.clone());
+    if model_fingerprint != cache_handle.compatibility.model_fingerprint {
+        return Err(NodeEngineError::ExecutionFailed(
+            "Legacy model_fingerprint input does not match the KV cache handle".to_string(),
+        ));
+    }
 
-    let fingerprint_val = inputs
-        .get("model_fingerprint")
-        .ok_or_else(|| NodeEngineError::MissingInput("model_fingerprint".to_string()))?;
-    let model_fingerprint: ModelFingerprint = serde_json::from_value(fingerprint_val.clone())?;
+    let source_entry = store
+        .load(&cache_handle.cache_id, &model_fingerprint)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("KV cache load failed: {error}"))
+        })?;
 
     let label = inputs
         .get("label")
         .and_then(|value| value.as_str())
-        .map(String::from);
+        .map(String::from)
+        .or_else(|| source_entry.metadata.label.clone());
     let compressed = inputs
         .get("compressed")
         .and_then(|value| value.as_bool())
-        .unwrap_or(false);
+        .unwrap_or(source_entry.metadata.compressed);
     let backend_hint = inputs
         .get("_data")
         .and_then(|data| data.get("backend_hint"))
         .and_then(|backend| backend.as_str())
-        .unwrap_or("unknown")
-        .to_string();
+        .map(str::to_string)
+        .unwrap_or_else(|| source_entry.metadata.backend_hint.clone());
     let storage_policy = parse_storage_policy(inputs);
     let cache_dir = inputs
         .get("cache_dir")
         .and_then(|value| value.as_str())
         .map(PathBuf::from);
-    let markers = parse_markers(inputs)?;
-    let token_count = data_bytes.len();
+    let markers = match inputs.get("markers") {
+        Some(_) => parse_markers(inputs)?,
+        None => source_entry.metadata.markers.clone(),
+    };
 
     let entry = KvCacheEntry {
         metadata: KvCacheMetadata {
             cache_id: String::new(),
             label,
             model_fingerprint,
-            runtime_fingerprint: None,
+            runtime_fingerprint: source_entry
+                .metadata
+                .runtime_fingerprint
+                .clone()
+                .or_else(|| Some(cache_handle.compatibility.runtime_fingerprint.clone())),
             backend_hint,
-            token_count,
+            token_count: source_entry.metadata.token_count,
             markers,
             created_at: 0,
             updated_at: 0,
             compressed,
-            extra: serde_json::json!({}),
+            extra: source_entry.metadata.extra.clone(),
         },
-        data: data_bytes,
+        data: source_entry.data,
     };
 
     let cache_id = match cache_dir {
@@ -240,6 +256,7 @@ pub(super) async fn capture_llamacpp_output_handle(
 pub(super) async fn execute_load(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
+    gateway: Option<&Arc<InferenceGateway>>,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let store = require_store(extensions)?;
 
@@ -256,12 +273,43 @@ pub(super) async fn execute_load(
     let mut outputs = HashMap::new();
     match store.load(cache_id, &fingerprint).await {
         Ok(entry) => {
-            outputs.insert("cache_data".to_string(), serde_json::to_value(&entry.data)?);
+            let valid = if let Some(handle) = entry.metadata.executable_handle() {
+                if let Some(gateway) = gateway {
+                    match gateway.kv_cache_runtime_fingerprint().await {
+                        Ok(runtime_fingerprint)
+                            if handle.is_compatible_with(&fingerprint, &runtime_fingerprint) =>
+                        {
+                            outputs
+                                .insert("cache_data".to_string(), serde_json::to_value(&handle)?);
+                            true
+                        }
+                        Ok(_) => {
+                            outputs.insert("cache_data".to_string(), serde_json::Value::Null);
+                            false
+                        }
+                        Err(error) => {
+                            log::warn!(
+                                "KV cache load runtime fingerprint lookup failed for '{}': {}",
+                                cache_id,
+                                error
+                            );
+                            outputs.insert("cache_data".to_string(), serde_json::Value::Null);
+                            false
+                        }
+                    }
+                } else {
+                    outputs.insert("cache_data".to_string(), serde_json::Value::Null);
+                    false
+                }
+            } else {
+                outputs.insert("cache_data".to_string(), serde_json::Value::Null);
+                false
+            };
             outputs.insert(
                 "metadata".to_string(),
                 serde_json::to_value(&entry.metadata)?,
             );
-            outputs.insert("valid".to_string(), serde_json::json!(true));
+            outputs.insert("valid".to_string(), serde_json::json!(valid));
         }
         Err(error) => {
             log::warn!("KV cache load failed for '{}': {}", cache_id, error);
@@ -294,11 +342,20 @@ pub(super) async fn execute_truncate(
         .and_then(|value| value.as_f64());
 
     if marker_name.is_some() || token_position.is_some() {
-        return Err(NodeEngineError::ExecutionFailed(
-            "KV cache truncation requires a backend-specific KvCacheCodec. \
-             No codec is currently available. Connect an inference backend first."
-                .to_string(),
-        ));
+        let metadata = store.get_metadata(cache_id).await.map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Failed to load metadata: {error}"))
+        })?;
+        let backend_key = metadata
+            .runtime_fingerprint
+            .as_ref()
+            .map(|fingerprint| fingerprint.backend_key.as_str())
+            .unwrap_or(metadata.backend_hint.as_str());
+
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "KV cache truncation is not implemented for backend '{}'. \
+                 The current rollout supports capture and restore before codec-backed truncation.",
+            backend_key
+        )));
     }
 
     let metadata = store.get_metadata(cache_id).await.map_err(|error| {
@@ -337,6 +394,15 @@ fn parse_markers(inputs: &HashMap<String, serde_json::Value>) -> Result<Vec<Cach
     match inputs.get("markers") {
         Some(value) => Ok(serde_json::from_value(value.clone())?),
         None => Ok(Vec::new()),
+    }
+}
+
+fn read_legacy_model_fingerprint(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<Option<ModelFingerprint>> {
+    match inputs.get("model_fingerprint") {
+        Some(value) => Ok(Some(serde_json::from_value(value.clone())?)),
+        None => Ok(None),
     }
 }
 
@@ -615,6 +681,145 @@ mod tests {
                 .map(|fp| fp.runtime_id.as_str()),
             Some("mock")
         );
+    }
+
+    #[tokio::test]
+    async fn execute_save_clones_handle_backed_entry() {
+        let mut extensions = ExecutorExtensions::new();
+        let store = Arc::new(KvCacheStore::memory_only());
+        let entry = KvCacheEntry {
+            metadata: KvCacheMetadata {
+                cache_id: String::new(),
+                label: Some("source".to_string()),
+                model_fingerprint: ModelFingerprint {
+                    model_id: "model".to_string(),
+                    config_hash: "cfg".to_string(),
+                },
+                runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                    runtime_id: "mock".to_string(),
+                    backend_key: "mock".to_string(),
+                    tokenizer_fingerprint: "tok".to_string(),
+                    prompt_format_fingerprint: Some("prompt".to_string()),
+                    runtime_build_fingerprint: Some("build".to_string()),
+                }),
+                backend_hint: "mock".to_string(),
+                token_count: 0,
+                markers: Vec::new(),
+                created_at: 0,
+                updated_at: 0,
+                compressed: false,
+                extra: serde_json::json!({}),
+            },
+            data: vec![4, 5, 6],
+        };
+        let source_cache_id = store
+            .save(entry, Some(StoragePolicy::MemoryOnly))
+            .await
+            .expect("fixture save should succeed");
+        let source_handle = store
+            .get_metadata(&source_cache_id)
+            .await
+            .expect("metadata should exist")
+            .executable_handle()
+            .expect("metadata should produce a handle");
+        extensions.set(crate::extension_keys::KV_CACHE_STORE, store.clone());
+
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "cache_data".to_string(),
+            serde_json::to_value(source_handle).expect("handle should serialize"),
+        );
+        inputs.insert("label".to_string(), serde_json::json!("saved-copy"));
+
+        let outputs = execute_save(&inputs, &extensions)
+            .await
+            .expect("save should clone the handle-backed entry");
+        let saved_cache_id = outputs
+            .get("cache_id")
+            .and_then(|value| value.as_str())
+            .expect("save should return a cache id");
+        assert_ne!(saved_cache_id, source_cache_id);
+
+        let saved_entry = store
+            .load(
+                saved_cache_id,
+                &ModelFingerprint {
+                    model_id: "model".to_string(),
+                    config_hash: "cfg".to_string(),
+                },
+            )
+            .await
+            .expect("saved entry should be readable");
+        assert_eq!(saved_entry.data, vec![4, 5, 6]);
+        assert_eq!(saved_entry.metadata.label.as_deref(), Some("saved-copy"));
+    }
+
+    #[tokio::test]
+    async fn execute_load_returns_typed_handle_when_runtime_matches() {
+        let mut extensions = ExecutorExtensions::new();
+        let store = Arc::new(KvCacheStore::memory_only());
+        let entry = KvCacheEntry {
+            metadata: KvCacheMetadata {
+                cache_id: String::new(),
+                label: Some("saved".to_string()),
+                model_fingerprint: ModelFingerprint {
+                    model_id: "model".to_string(),
+                    config_hash: "cfg".to_string(),
+                },
+                runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                    runtime_id: "mock".to_string(),
+                    backend_key: "mock".to_string(),
+                    tokenizer_fingerprint: "tok".to_string(),
+                    prompt_format_fingerprint: Some("prompt".to_string()),
+                    runtime_build_fingerprint: Some("build".to_string()),
+                }),
+                backend_hint: "mock".to_string(),
+                token_count: 0,
+                markers: Vec::new(),
+                created_at: 0,
+                updated_at: 0,
+                compressed: false,
+                extra: serde_json::json!({}),
+            },
+            data: vec![1, 2, 3],
+        };
+        let cache_id = store
+            .save(entry, Some(StoragePolicy::MemoryOnly))
+            .await
+            .expect("fixture save should succeed");
+        extensions.set(crate::extension_keys::KV_CACHE_STORE, store);
+
+        let gateway = Arc::new(InferenceGateway::with_backend(
+            Box::new(MockKvBackend {
+                bytes: vec![9, 9, 9],
+                restored: Arc::new(Mutex::new(Vec::new())),
+            }),
+            "mock-kv",
+        ));
+        gateway.set_spawner(Arc::new(MockKvProcessSpawner)).await;
+
+        let mut inputs = HashMap::new();
+        inputs.insert("cache_id".to_string(), serde_json::json!(cache_id));
+        inputs.insert(
+            "model_fingerprint".to_string(),
+            serde_json::json!({
+                "modelId": "model",
+                "configHash": "cfg",
+            }),
+        );
+
+        let outputs = execute_load(&inputs, &extensions, Some(&gateway))
+            .await
+            .expect("load should succeed");
+        assert_eq!(outputs.get("valid"), Some(&serde_json::json!(true)));
+        let handle: KvCacheHandle = serde_json::from_value(
+            outputs
+                .get("cache_data")
+                .cloned()
+                .expect("load should return cache_data"),
+        )
+        .expect("load should return a typed handle");
+        assert_eq!(handle.compatibility.runtime_fingerprint.runtime_id, "mock");
     }
 
     #[tokio::test]

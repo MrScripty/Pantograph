@@ -320,7 +320,7 @@ end-to-end KV behavior.
 **Tasks:**
 - [x] Implement concrete runtime adapter and codec support for at least one
       supported backend that can genuinely capture and restore KV state.
-- [ ] Route `kv-cache-save`, `kv-cache-load`, and `kv-cache-truncate` through
+- [x] Route `kv-cache-save`, `kv-cache-load`, and `kv-cache-truncate` through
       the real backend-owned execution path rather than placeholder task logic.
 - [ ] Implement real marker/token truncation through backend codecs where
       supported; unsupported runtimes must return explicit unsupported reasons.

@@ -37,6 +37,12 @@ unless they are run through `CoreTaskExecutor`.
 
 - Port contracts should stay explicit and typed so future workflow graph
   validation can distinguish KV artifacts from generic JSON.
+- The KV save node operates on typed KV handles and may accept a legacy model
+  fingerprint only for backward-compatible validation during the migration away
+  from raw KV byte payloads.
+- The KV load node should only emit a reusable handle when the backend-owned
+  runtime compatibility checks succeed; otherwise it must surface an invalid
+  result instead of pretending the handle is reusable.
 - Frontend and Tauri layers should consume backend-declared contracts rather
   than re-deriving storage semantics locally.
 - Update this README whenever a storage-node boundary changes.
