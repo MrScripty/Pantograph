@@ -887,6 +887,10 @@ the affected downstream closure.
   input bindings that still target valid nodes before demand execution
   continues. Runtime unload still clears executor residency until Milestone 5
   checkpoint/restore work lands.
+- Graph edit-session inspection now also retains the last backend-owned
+  memory-impact result across later session snapshot reads, so mutation
+  diagnostics can inspect the most recent compatibility decision until a later
+  non-invalidating edit replaces or clears that state.
 
 **Milestones:**
 

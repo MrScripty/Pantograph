@@ -92,13 +92,12 @@ pub(crate) fn build_workflow_session_state_view(
     projection: Option<&WorkflowGraphSessionStateProjection>,
 ) -> WorkflowGraphSessionStateView {
     let projection = projection.cloned().unwrap_or_default();
+    let memory_impact = resolve_workflow_session_memory_impact(workflow_event, Some(&projection));
     WorkflowGraphSessionStateView {
         contract_version: PHASE6_SESSION_STATE_CONTRACT_VERSION,
         residency: projection.residency.clone(),
         node_memory: projection.node_memory,
-        memory_impact: projection
-            .memory_impact
-            .or_else(|| graph_memory_impact_from_event(workflow_event)),
+        memory_impact,
         checkpoint: projection.checkpoint.or_else(|| {
             Some(WorkflowSessionCheckpointSummary::unavailable(
                 session_id,
@@ -107,6 +106,15 @@ pub(crate) fn build_workflow_session_state_view(
             ))
         }),
     }
+}
+
+pub(crate) fn resolve_workflow_session_memory_impact(
+    workflow_event: Option<&WorkflowEvent>,
+    projection: Option<&WorkflowGraphSessionStateProjection>,
+) -> Option<GraphMemoryImpactSummary> {
+    projection
+        .and_then(|projection| projection.memory_impact.clone())
+        .or_else(|| graph_memory_impact_from_event(workflow_event))
 }
 
 fn graph_memory_impact_from_event(

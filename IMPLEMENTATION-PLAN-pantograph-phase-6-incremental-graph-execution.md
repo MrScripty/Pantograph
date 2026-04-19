@@ -854,6 +854,11 @@ Update during implementation:
   that executor, reuses workflow-service graph-diff compatibility rules to
   reconcile stored node memory, and replays carried input bindings that still
   target live nodes before the rerun proceeds.
+- 2026-04-18: Milestone 4 continued. Graph edit-session inspection now keeps
+  the last backend-owned memory-impact decision alive across later
+  `get_session_graph` reads, so diagnostics can inspect the most recent
+  compatibility result after a mutation until a subsequent non-invalidating
+  edit clears that state.
 
 ## Commit Cadence Notes
 

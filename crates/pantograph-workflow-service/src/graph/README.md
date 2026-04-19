@@ -70,6 +70,9 @@ when the node type matches.
   from backend-owned graph-diff compatibility analysis when that richer
   context is available; generic event-only fallbacks remain a compatibility
   backstop rather than the primary source of truth.
+- Graph edit-session snapshot reads should retain the most recent backend-owned
+  memory-impact decision for inspection until a later non-invalidating edit
+  explicitly clears that persisted compatibility state.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Dynamic `node.data.definition` overlays may add ports for a specific node

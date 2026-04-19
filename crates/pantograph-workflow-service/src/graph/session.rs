@@ -20,6 +20,7 @@ use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
+    resolve_workflow_session_memory_impact,
 };
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
@@ -50,6 +51,7 @@ struct GraphEditSession {
     graph: WorkflowGraph,
     undo_stack: Vec<WorkflowGraph>,
     redo_stack: Vec<WorkflowGraph>,
+    last_memory_impact: Option<node_engine::GraphMemoryImpactSummary>,
     runtime: GraphEditSessionRuntime,
 }
 
@@ -60,6 +62,7 @@ impl GraphEditSession {
             graph,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            last_memory_impact: None,
             runtime: GraphEditSessionRuntime::new(),
         };
         session.canonicalize_graph();
@@ -89,7 +92,14 @@ impl GraphEditSession {
     }
 
     fn snapshot_response(&mut self, session_id: &str) -> WorkflowGraphEditSessionGraphResponse {
-        self.snapshot_response_with_state(session_id, None, None)
+        self.touch();
+        self.canonicalize_graph();
+        build_graph_session_response_with_projection(
+            session_id,
+            &self.graph,
+            None,
+            phase6_memory_impact_projection(self.last_memory_impact.clone()),
+        )
     }
 
     fn snapshot_response_with_state(
@@ -100,6 +110,11 @@ impl GraphEditSession {
     ) -> WorkflowGraphEditSessionGraphResponse {
         self.touch();
         self.canonicalize_graph();
+        let projection =
+            resolved_phase6_memory_impact_projection(workflow_event.as_ref(), projection.as_ref());
+        self.last_memory_impact = projection.as_ref().and_then(|projection| {
+            resolve_workflow_session_memory_impact(workflow_event.as_ref(), Some(projection))
+        });
         build_graph_session_response_with_projection(
             session_id,
             &self.graph,
@@ -198,6 +213,20 @@ fn phase6_memory_impact_projection(
         memory_impact: Some(memory_impact),
         ..WorkflowGraphSessionStateProjection::default()
     })
+}
+
+fn resolved_phase6_memory_impact_projection(
+    workflow_event: Option<&node_engine::WorkflowEvent>,
+    projection: Option<&WorkflowGraphSessionStateProjection>,
+) -> Option<WorkflowGraphSessionStateProjection> {
+    let resolved_memory_impact = resolve_workflow_session_memory_impact(workflow_event, projection);
+    match projection.cloned() {
+        Some(mut projection) => {
+            projection.memory_impact = resolved_memory_impact;
+            Some(projection)
+        }
+        None => phase6_memory_impact_projection(resolved_memory_impact),
+    }
 }
 
 #[derive(Debug)]
@@ -966,6 +995,57 @@ mod tests {
                 && execution_id == session.session_id
                 && dirty_tasks == vec!["text-input".to_string(), "text-output".to_string()]
         ));
+    }
+
+    #[tokio::test]
+    async fn get_session_graph_replays_last_memory_impact_until_a_non_invalidating_edit_clears_it()
+    {
+        let store = GraphSessionStore::new();
+        let session = store.create_session(sample_graph()).await;
+
+        store
+            .update_node_data(WorkflowGraphUpdateNodeDataRequest {
+                session_id: session.session_id.clone(),
+                node_id: "text-input".to_string(),
+                data: serde_json::json!({
+                    "text": "updated"
+                }),
+            })
+            .await
+            .expect("update node data");
+
+        let after_data_edit = store
+            .get_session_graph(&session.session_id)
+            .await
+            .expect("get session graph after data edit");
+        let memory_impact = after_data_edit
+            .workflow_session_state
+            .expect("workflow session state")
+            .memory_impact
+            .expect("memory impact");
+        assert_eq!(memory_impact.node_decisions.len(), 2);
+        assert!(!memory_impact.fallback_to_full_invalidation);
+
+        store
+            .update_node_position(WorkflowGraphUpdateNodePositionRequest {
+                session_id: session.session_id.clone(),
+                node_id: "text-output".to_string(),
+                position: Position { x: 240.0, y: 32.0 },
+            })
+            .await
+            .expect("update node position");
+
+        let after_position_edit = store
+            .get_session_graph(&session.session_id)
+            .await
+            .expect("get session graph after position edit");
+        assert_eq!(
+            after_position_edit
+                .workflow_session_state
+                .expect("workflow session state")
+                .memory_impact,
+            None
+        );
     }
 
     #[tokio::test]
