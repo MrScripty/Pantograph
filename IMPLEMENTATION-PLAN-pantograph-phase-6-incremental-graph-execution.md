@@ -883,21 +883,21 @@ behavior.
 out of the backend.
 
 **Tasks:**
-- [ ] Extend backend trace/diagnostics contracts with additive workflow-session
+- [x] Extend backend trace/diagnostics contracts with additive workflow-session
       inspection facts for node memory, reconciliation, and checkpoint state.
-- [ ] Add thin Tauri transport forwarding for those backend-owned inspection
+- [x] Add thin Tauri transport forwarding for those backend-owned inspection
       facts without introducing adapter-local policy.
-- [ ] Refactor touched frontend/Tauri files so they remain read-only
+- [x] Refactor touched frontend/Tauri files so they remain read-only
       presenters and transport facades for backend-owned memory and mutation
       diagnostics.
-- [ ] Expose enough inspection data for debugger/system-builder tooling to see
+- [x] Expose enough inspection data for debugger/system-builder tooling to see
       the pre-edit preserved node state, the post-edit reconciliation result,
       the current checkpoint summary, and the post-rerun node-memory state
       without reconstructing backend policy in the GUI.
-- [ ] Keep `WorkflowGraph.svelte`, `storeInstances.ts`, `diagnosticsStore.ts`,
+- [x] Keep `WorkflowGraph.svelte`, `storeInstances.ts`, `diagnosticsStore.ts`,
       and `WorkflowService.ts` healthy by extracting any touched helper logic
       before more diagnostics behavior lands there.
-- [ ] Add README updates documenting the inspection contract and the "backend
+- [x] Add README updates documenting the inspection contract and the "backend
       is source of truth" rule for node memory.
 
 **Verification:**
@@ -907,7 +907,7 @@ out of the backend.
 - Cross-layer acceptance check from backend node-memory snapshot to UI-facing
   diagnostics projection
 
-**Status:** In progress
+**Status:** Complete
 
 **Completed so far:**
 - The backend-owned graph-session state contract already exists in
@@ -1217,17 +1217,33 @@ checkpoint semantics.
 **Goal:** Leave the roadmap, plan, and touched systems in a reconciled state.
 
 **Tasks:**
-- [ ] Reconcile this plan and the roadmap status after each landed slice.
-- [ ] Record any residual work that belongs to Phase 3 KV cache or a later
+- [x] Reconcile this plan and the roadmap status after each landed slice.
+- [x] Record any residual work that belongs to Phase 3 KV cache or a later
       persistence-focused phase instead of leaving it ambiguous inside Phase 6.
-- [ ] Finalize touched READMEs and any needed ADR links.
-- [ ] Close the plan with a completion summary that points to the final
+- [x] Finalize touched READMEs and any needed ADR links.
+- [x] Close the plan with a completion summary that points to the final
       backend-owned node-memory and checkpoint boundaries.
 
 **Verification:**
 - Source-of-truth review for roadmap, plan, and touched READMEs
 - Final repo checks appropriate to the touched files per testing/tooling
   standards
+
+**Completion summary:**
+- Milestone 6 now ships one backend-owned inspection contract centered on
+  `WorkflowGraphSessionStateView`, with run-history facts remaining in trace
+  summaries and current logical session-state facts flowing through direct
+  diagnostics inspection.
+- Tauri remains a thin transport/projection boundary: it forwards
+  `current_session_state` without owning checkpoint, residency, or node-memory
+  policy.
+- The frontend diagnostics surface now renders backend-owned graph-memory
+  impact alongside current session residency, checkpoint summary, and node-
+  memory snapshots through the existing diagnostics panel and one store owner.
+- Residual work for later phases remains explicitly out of Milestone 6:
+  durable checkpoint persistence, unbounded historical inspection playback,
+  and any KV-cache-backed execution-state substrate stay in later persistence
+  or cache-focused roadmap work.
 
 **Status:** Not started
 
@@ -1401,6 +1417,16 @@ Update during implementation:
   facts as the primary source of truth so restarted attempts clear graph-
   reconciliation state in one backend reset path instead of relying on a
   transport-local overlay to own mutation history.
+- 2026-04-18: Milestone 6 continued. `pantograph-workflow-service` now exposes
+  `workflow_get_session_inspection`, the embedded runtime implements that
+  backend-owned read path from retained workflow-session executors, and Tauri
+  diagnostics forward the additive `current_session_state` snapshot without
+  introducing adapter-owned checkpoint or node-memory policy.
+- 2026-04-18: Milestone 6 completed. The existing GUI diagnostics graph tab
+  now renders backend-owned workflow-session residency, checkpoint summary,
+  and node-memory snapshots beside graph-memory impact, while the frontend
+  keeps one diagnostics-store owner and one pure projection helper instead of
+  spreading merge policy across view components or transport facades.
 - 2026-04-18: Milestone 5 started. `node-engine` session state now tracks
   backend-owned checkpoint availability and timestamp metadata alongside
   preserved node memory, and the embedded runtime now treats

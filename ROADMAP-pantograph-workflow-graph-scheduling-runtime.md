@@ -939,6 +939,23 @@ the affected downstream closure.
   owned graph-memory impact summary from diagnostics state, showing read-only
   compatibility counts and per-node reasons without rebuilding reconciliation
   policy at the app layer.
+- `pantograph-workflow-service` now also exposes a backend-owned
+  `workflow_get_session_inspection` read path that returns
+  `WorkflowGraphSessionStateView` from retained workflow-session executors, so
+  current node-memory, residency, and checkpoint facts no longer need a
+  diagnostics-only DTO or adapter-local reconstruction path.
+- Headless diagnostics snapshot transport now also forwards additive
+  `current_session_state` facts from that backend inspection read into the
+  shared diagnostics projection without adding checkpoint or node-memory policy
+  to Tauri.
+- The frontend diagnostics surface now also renders backend-owned workflow-
+  session residency, checkpoint summary, and current node-memory snapshots in
+  the existing graph diagnostics tab, and the diagnostics store keeps that
+  additive field stable across mixed direct-fetch and event-driven producer
+  paths through one extracted projection helper.
+- Milestone 6 inspection and diagnostics rollout is now complete; later
+  Phase 6 work stays focused on deeper incremental execution semantics rather
+  than reopening the backend-owned diagnostics contract.
 
 **Milestones:**
 
