@@ -494,6 +494,11 @@ Update during implementation:
   resolution through persisted selected/default/active version policy and
   recorded install roots, so execution no longer ignores backend-owned version
   selection state once it exists.
+- 2026-04-19: Milestone 3 slice 2 moved managed runtime installs onto a
+  version-scoped filesystem layout under the runtime root while keeping legacy
+  fallback resolution for preexisting single-directory installs, so future
+  runtime versions can coexist without collapsing back to one shared install
+  path.
 
 ## Commit Cadence Notes
 

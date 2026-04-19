@@ -10,6 +10,16 @@ pub(crate) fn managed_install_dir(app_data_dir: &Path, id: ManagedBinaryId) -> P
     managed_runtime_dir(app_data_dir).join(id.install_dir_name())
 }
 
+pub(crate) fn managed_version_install_dir(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+) -> PathBuf {
+    managed_install_dir(app_data_dir, id)
+        .join("versions")
+        .join(version)
+}
+
 pub(crate) fn extract_pid_file(args: &[&str]) -> (Vec<OsString>, Option<PathBuf>) {
     let mut sanitized = Vec::with_capacity(args.len());
     let mut pid_file = None;
@@ -53,7 +63,8 @@ pub(crate) fn prepend_env_path(key: &str, prefix: &Path, separator: &str) -> (Os
 
 #[cfg(test)]
 mod tests {
-    use super::extract_pid_file;
+    use super::{extract_pid_file, managed_install_dir, managed_version_install_dir};
+    use crate::managed_runtime::ManagedBinaryId;
 
     #[test]
     fn extract_pid_file_strips_split_flag() {
@@ -78,5 +89,16 @@ mod tests {
 
         assert_eq!(sanitized, vec!["--port", "8080"]);
         assert_eq!(pid_file.as_deref(), Some(std::path::Path::new("/tmp/pid")));
+    }
+
+    #[test]
+    fn managed_version_install_dir_nests_version_under_runtime_root() {
+        let app_data_dir = std::path::Path::new("/tmp/pantograph");
+        let runtime_root = managed_install_dir(app_data_dir, ManagedBinaryId::LlamaCpp);
+
+        let version_dir =
+            managed_version_install_dir(app_data_dir, ManagedBinaryId::LlamaCpp, "b8248");
+
+        assert_eq!(version_dir, runtime_root.join("versions").join("b8248"));
     }
 }

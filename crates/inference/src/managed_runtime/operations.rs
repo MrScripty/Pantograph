@@ -6,7 +6,9 @@ use super::contracts::{
     ResolvedCommand,
 };
 use super::definitions::definition;
-use super::paths::{extract_pid_file, managed_install_dir, managed_runtime_dir};
+use super::paths::{
+    extract_pid_file, managed_install_dir, managed_runtime_dir, managed_version_install_dir,
+};
 use super::state::{
     ensure_runtime_state_entry, load_managed_runtime_state, runtime_state_entry,
     runtime_state_entry_mut, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
@@ -48,7 +50,7 @@ pub fn binary_capability(
     id: ManagedBinaryId,
 ) -> Result<ManagedBinaryCapability, String> {
     let definition = definition(id);
-    let install_dir = managed_install_dir(app_data_dir, id);
+    let install_dir = resolve_runtime_install_dir(app_data_dir, id)?;
     let has_managed_install = install_dir.exists();
 
     if definition.system_command().is_some() {
@@ -168,7 +170,7 @@ where
         ));
     }
     let runtime_root = managed_runtime_dir(app_data_dir);
-    let install_dir = managed_install_dir(app_data_dir, id);
+    let install_dir = managed_version_install_dir(app_data_dir, id, &runtime_version);
     let release_asset = definition.release_asset()?;
     let download_url = definition.download_url(&release_asset);
 

@@ -67,7 +67,9 @@ future Tauri/runtime-manager slices can update version policy without writing
 the durable state file directly. Managed runtime command resolution now also
 consumes that persisted backend selection/install-root state, so future host
 adapters do not need to guess which installed runtime path execution should
-launch.
+launch. Managed runtime installs now land under version-scoped runtime roots,
+with legacy single-directory fallback preserved for older already-installed
+artifacts.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,

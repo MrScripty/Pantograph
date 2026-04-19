@@ -152,6 +152,9 @@ fn inspect_runtime(app_data_dir: &Path) {
   install history. Install/remove transitions mutate this file as part of the
   backend lifecycle flow, and unknown or missing files default to an empty
   state.
+- Managed runtime installs are version-scoped under the runtime root, while
+  command resolution keeps a legacy fallback path for older single-directory
+  installs that predate versioned layout support.
 - Selection changes only become durable through the exported backend mutation
   functions, which validate installed versions before persisting new
   selected/default version state and append an install-history event for audit
