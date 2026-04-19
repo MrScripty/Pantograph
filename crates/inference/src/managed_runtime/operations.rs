@@ -18,8 +18,11 @@ use super::state::{
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use reqwest::header::{CONTENT_RANGE, RANGE};
+use reqwest::StatusCode;
 use std::collections::HashMap;
 use std::fs;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -28,6 +31,19 @@ static TRANSITION_LOCKS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<tokio::sync::Mu
     Lazy::new(|| Mutex::new(HashMap::new()));
 static CANCELLATION_REQUESTS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<AtomicBool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ManagedRuntimeDownloadArtifact {
+    temp_path: PathBuf,
+    downloaded_bytes: u64,
+    total_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DownloadResponseMode {
+    Fresh { total_size: u64 },
+    Resume { total_size: u64 },
+}
 
 fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
     let mut locks = TRANSITION_LOCKS.lock();
@@ -231,40 +247,82 @@ where
     fs::create_dir_all(&runtime_root)
         .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
 
-    persist_active_job(
+    let retained_artifact = existing_download_artifact(
+        app_data_dir,
+        id,
+        &runtime_version,
+        &release_asset.archive_name,
+    )?;
+    let temp_path = retained_artifact
+        .as_ref()
+        .map(|artifact| artifact.temp_path.clone())
+        .unwrap_or_else(|| {
+            runtime_root.join(format!(
+                ".{}-{}",
+                uuid::Uuid::new_v4(),
+                release_asset.archive_name
+            ))
+        });
+    let mut downloaded = retained_artifact
+        .as_ref()
+        .map(|artifact| artifact.downloaded_bytes)
+        .unwrap_or(0);
+    let mut total_size = retained_artifact
+        .as_ref()
+        .map(|artifact| artifact.total_bytes)
+        .unwrap_or(0);
+    let initial_artifact = retained_artifact.as_ref().map(|artifact| ManagedRuntimePersistedJobArtifact {
+        version: runtime_version.clone(),
+        archive_name: release_asset.archive_name.clone(),
+        archive_path: artifact.temp_path.display().to_string(),
+        downloaded_bytes: artifact.downloaded_bytes,
+        total_bytes: artifact.total_bytes,
+    });
+
+    persist_active_job_with_artifact(
         app_data_dir,
         id,
         ManagedRuntimeJobStatus {
             state: ManagedRuntimeJobState::Queued,
             status: format!("Queued {} install", definition.display_name()),
-            current: 0,
-            total: 0,
-            resumable: false,
+            current: downloaded,
+            total: total_size,
+            resumable: downloaded > 0,
             cancellable: true,
             error: None,
         },
+        initial_artifact.clone(),
     )?;
 
     on_progress(DownloadProgress {
-        status: format!("Downloading {} binaries...", definition.display_name()),
-        current: 0,
-        total: 0,
+        status: if downloaded > 0 {
+            format!("Resuming {} download...", definition.display_name())
+        } else {
+            format!("Downloading {} binaries...", definition.display_name())
+        },
+        current: downloaded,
+        total: total_size,
         done: false,
         error: None,
     });
 
-    persist_active_job(
+    persist_active_job_with_artifact(
         app_data_dir,
         id,
         ManagedRuntimeJobStatus {
             state: ManagedRuntimeJobState::Downloading,
-            status: format!("Downloading {}", definition.display_name()),
-            current: 0,
-            total: 0,
-            resumable: false,
+            status: if downloaded > 0 {
+                format!("Resuming {}", definition.display_name())
+            } else {
+                format!("Downloading {}", definition.display_name())
+            },
+            current: downloaded,
+            total: total_size,
+            resumable: downloaded > 0,
             cancellable: true,
             error: None,
         },
+        initial_artifact,
     )?;
 
     log::info!(
@@ -273,93 +331,116 @@ where
         download_url
     );
 
-    let client = reqwest::Client::new();
-    let response = client
-        .get(&download_url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to start download: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "Download failed with status: {}",
-            response.status()
-        ));
-    }
-
-    let total_size = response.content_length().unwrap_or(0);
-    let temp_path = runtime_root.join(format!(
-        ".{}-{}",
-        uuid::Uuid::new_v4(),
-        release_asset.archive_name
-    ));
-    let mut file =
-        fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
-
-    let mut downloaded = 0_u64;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream
-        .try_next()
-        .await
-        .map_err(|e| format!("Download error: {}", e))?
-    {
-        use std::io::Write;
-
-        file.write_all(&chunk)
-            .map_err(|e| format!("Failed to write chunk: {}", e))?;
-        downloaded += chunk.len() as u64;
-
-        let job_artifact = ManagedRuntimePersistedJobArtifact {
-            version: runtime_version.clone(),
-            archive_name: release_asset.archive_name.clone(),
-            archive_path: temp_path.display().to_string(),
-            downloaded_bytes: downloaded,
-            total_bytes: total_size,
-        };
-
-        persist_active_job_with_artifact(
-            app_data_dir,
-            id,
-            ManagedRuntimeJobStatus {
-                state: ManagedRuntimeJobState::Downloading,
-                status: "Downloading".to_string(),
-                current: downloaded,
-                total: total_size,
-                resumable: downloaded > 0,
-                cancellable: true,
-                error: None,
-            },
-            Some(job_artifact.clone()),
-        )?;
-
-        if finish_requested_cancellation(
-            app_data_dir,
-            id,
-            &runtime_version,
-            downloaded,
-            total_size,
-            Some(job_artifact),
-        )? {
-            drop(file);
-            on_progress(DownloadProgress {
-                status: "Cancelled".to_string(),
-                current: downloaded,
-                total: total_size,
-                done: true,
-                error: None,
-            });
-            return Ok(());
+    if total_size == 0 || downloaded < total_size {
+        let client = reqwest::Client::new();
+        let requested_resume_from = downloaded;
+        let mut request = client.get(&download_url);
+        if requested_resume_from > 0 {
+            request = request.header(RANGE, format!("bytes={requested_resume_from}-"));
         }
 
-        on_progress(DownloadProgress {
-            status: "Downloading...".to_string(),
-            current: downloaded,
-            total: total_size,
-            done: false,
-            error: None,
-        });
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("Failed to start download: {}", e))?;
+        let response_mode = download_response_mode(
+            requested_resume_from,
+            response.status(),
+            response.content_length(),
+            response
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok()),
+        )?;
+
+        let mut file = match response_mode {
+            DownloadResponseMode::Fresh { total_size: response_total } => {
+                total_size = response_total;
+                downloaded = 0;
+                fs::File::create(&temp_path)
+                    .map_err(|e| format!("Failed to create temp file: {}", e))?
+            }
+            DownloadResponseMode::Resume { total_size: response_total } => {
+                total_size = response_total;
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&temp_path)
+                    .map_err(|e| format!("Failed to open resumable temp file: {}", e))?
+            }
+        };
+
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream
+            .try_next()
+            .await
+            .map_err(|e| format!("Download error: {}", e))?
+        {
+            use std::io::Write;
+
+            file.write_all(&chunk)
+                .map_err(|e| format!("Failed to write chunk: {}", e))?;
+            downloaded += chunk.len() as u64;
+
+            let job_artifact = ManagedRuntimePersistedJobArtifact {
+                version: runtime_version.clone(),
+                archive_name: release_asset.archive_name.clone(),
+                archive_path: temp_path.display().to_string(),
+                downloaded_bytes: downloaded,
+                total_bytes: total_size,
+            };
+
+            persist_active_job_with_artifact(
+                app_data_dir,
+                id,
+                ManagedRuntimeJobStatus {
+                    state: ManagedRuntimeJobState::Downloading,
+                    status: if requested_resume_from > 0 {
+                        "Resuming".to_string()
+                    } else {
+                        "Downloading".to_string()
+                    },
+                    current: downloaded,
+                    total: total_size,
+                    resumable: downloaded > 0,
+                    cancellable: true,
+                    error: None,
+                },
+                Some(job_artifact.clone()),
+            )?;
+
+            if finish_requested_cancellation(
+                app_data_dir,
+                id,
+                &runtime_version,
+                downloaded,
+                total_size,
+                Some(job_artifact),
+            )? {
+                drop(file);
+                on_progress(DownloadProgress {
+                    status: "Cancelled".to_string(),
+                    current: downloaded,
+                    total: total_size,
+                    done: true,
+                    error: None,
+                });
+                return Ok(());
+            }
+
+            on_progress(DownloadProgress {
+                status: if requested_resume_from > 0 {
+                    "Resuming...".to_string()
+                } else {
+                    "Downloading...".to_string()
+                },
+                current: downloaded,
+                total: total_size,
+                done: false,
+                error: None,
+            });
+        }
     }
-    drop(file);
 
     let download_artifact = ManagedRuntimePersistedJobArtifact {
         version: runtime_version.clone(),
@@ -682,6 +763,75 @@ fn projected_job_artifact_status(
     })
 }
 
+fn existing_download_artifact(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    runtime_version: &str,
+    archive_name: &str,
+) -> Result<Option<ManagedRuntimeDownloadArtifact>, String> {
+    let state = load_managed_runtime_state(app_data_dir)?;
+    let Some(runtime) = runtime_state_entry(&state, id) else {
+        return Ok(None);
+    };
+    let artifact = runtime.active_job_artifact.as_ref();
+    let Some(artifact) = artifact else {
+        return Ok(None);
+    };
+    if artifact.version != runtime_version || artifact.archive_name != archive_name {
+        return Ok(None);
+    }
+
+    let temp_path = PathBuf::from(&artifact.archive_path);
+    let metadata = match fs::metadata(&temp_path) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(None),
+    };
+    let downloaded_bytes = metadata.len();
+    if downloaded_bytes == 0 {
+        return Ok(None);
+    }
+
+    Ok(Some(ManagedRuntimeDownloadArtifact {
+        temp_path,
+        downloaded_bytes,
+        total_bytes: artifact.total_bytes.max(downloaded_bytes),
+    }))
+}
+
+fn parse_content_range_total(content_range: Option<&str>) -> Option<u64> {
+    let content_range = content_range?;
+    let (_, total) = content_range.split_once('/')?;
+    total.parse::<u64>().ok()
+}
+
+fn download_response_mode(
+    requested_resume_from: u64,
+    status: StatusCode,
+    content_length: Option<u64>,
+    content_range: Option<&str>,
+) -> Result<DownloadResponseMode, String> {
+    if requested_resume_from == 0 {
+        if !status.is_success() {
+            return Err(format!("Download failed with status: {status}"));
+        }
+        return Ok(DownloadResponseMode::Fresh {
+            total_size: content_length.unwrap_or(0),
+        });
+    }
+
+    match status {
+        StatusCode::PARTIAL_CONTENT => Ok(DownloadResponseMode::Resume {
+            total_size: parse_content_range_total(content_range)
+                .or_else(|| content_length.map(|length| requested_resume_from + length))
+                .unwrap_or(requested_resume_from),
+        }),
+        StatusCode::OK => Ok(DownloadResponseMode::Fresh {
+            total_size: content_length.unwrap_or(0),
+        }),
+        _ => Err(format!("Download failed with status: {status}")),
+    }
+}
+
 fn projected_snapshot_readiness_state(
     capability: &ManagedBinaryCapability,
     persisted_runtime: Option<&ManagedRuntimePersistedRuntime>,
@@ -812,9 +962,7 @@ fn persist_active_job_with_artifact(
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
     runtime.active_job = Some(job);
-    if let Some(job_artifact) = job_artifact {
-        runtime.active_job_artifact = Some(job_artifact);
-    }
+    runtime.active_job_artifact = job_artifact;
     save_managed_runtime_state(app_data_dir, &state)
 }
 
@@ -1150,17 +1298,19 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
 mod tests {
     use super::{
         binary_capability, cancel_binary_download, definition, ensure_runtime_state_entry,
-        finish_requested_cancellation, persist_install_success, persist_remove_success,
-        readiness_state_for_capability, resolve_runtime_install_dir,
-        runtime_install_dir_for_projection, select_managed_runtime_version,
-        set_default_managed_runtime_version, snapshot_from_capability, ManagedBinaryCapability,
-        ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
-        ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
+        download_response_mode, existing_download_artifact, finish_requested_cancellation,
+        persist_install_success, persist_remove_success, readiness_state_for_capability,
+        resolve_runtime_install_dir, runtime_install_dir_for_projection,
+        select_managed_runtime_version, set_default_managed_runtime_version,
+        snapshot_from_capability, DownloadResponseMode, ManagedBinaryCapability, ManagedBinaryId,
+        ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
+        ManagedRuntimeReadinessState,
     };
     use crate::managed_runtime::{
         load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
         ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedVersion,
     };
+    use reqwest::StatusCode;
     use std::path::Path;
 
     fn capability(install_state: ManagedBinaryInstallState) -> ManagedBinaryCapability {
@@ -1189,6 +1339,58 @@ mod tests {
             definition(id).validate_installation(dir).is_empty(),
             "fake runtime files should satisfy install validation"
         );
+    }
+
+    #[test]
+    fn download_response_mode_supports_partial_content_resume() {
+        let mode = download_response_mode(
+            64,
+            StatusCode::PARTIAL_CONTENT,
+            Some(64),
+            Some("bytes 64-127/128"),
+        )
+        .expect("resume mode");
+
+        assert_eq!(mode, DownloadResponseMode::Resume { total_size: 128 });
+    }
+
+    #[test]
+    fn download_response_mode_restarts_when_server_ignores_range() {
+        let mode = download_response_mode(64, StatusCode::OK, Some(128), None)
+            .expect("fresh mode");
+
+        assert_eq!(mode, DownloadResponseMode::Fresh { total_size: 128 });
+    }
+
+    #[test]
+    fn existing_download_artifact_uses_current_file_length() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let artifact_path = temp_dir.path().join("partial-llama.tar.gz");
+        std::fs::write(&artifact_path, vec![1_u8; 16]).expect("write retained artifact");
+
+        let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+        runtime.active_job_artifact = Some(ManagedRuntimePersistedJobArtifact {
+            version: "b8248".to_string(),
+            archive_name: "llama-b8248.tar.gz".to_string(),
+            archive_path: artifact_path.display().to_string(),
+            downloaded_bytes: 8,
+            total_bytes: 32,
+        });
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+        let artifact = existing_download_artifact(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            "llama-b8248.tar.gz",
+        )
+        .expect("load retained artifact")
+        .expect("retained artifact");
+
+        assert_eq!(artifact.temp_path, artifact_path);
+        assert_eq!(artifact.downloaded_bytes, 16);
+        assert_eq!(artifact.total_bytes, 32);
     }
 
     #[test]

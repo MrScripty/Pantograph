@@ -8,7 +8,7 @@ components.
 ## Scope
 - List managed runtimes.
 - Inspect a single managed runtime.
-- Start managed runtime installation with progress callbacks.
+- Start or resume managed runtime installation with progress callbacks.
 - Request cancellation for an active managed runtime install job.
 - Remove a managed runtime.
 - Update selected and default runtime versions.

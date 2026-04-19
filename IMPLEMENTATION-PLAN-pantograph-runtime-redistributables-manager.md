@@ -592,6 +592,13 @@ Update during implementation:
   and install-history changes directly from the manager stream without falling
   back to ad hoc refresh calls during install/cancel flow. True pause/resume
   orchestration remains open.
+- 2026-04-19: Milestone 5 slice 8 adds backend-owned download resume behavior
+  for retained managed-runtime artifacts. Reinstall attempts now reuse a
+  matching retained archive when present, attempt HTTP range resume against the
+  upstream release source, and fall back to a fresh full download when the
+  remote server does not honor the range request. The current GUI also now
+  surfaces that retained state as an explicit resume action label while pause
+  behavior remains the remaining open job-control gap.
 
 ## Commit Cadence Notes
 

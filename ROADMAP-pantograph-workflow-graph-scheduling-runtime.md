@@ -220,6 +220,12 @@ reconciled as the final source of truth.
   active-job, readiness, retained-artifact, and history state from the same
   manager stream instead of mixing raw progress counters with separate refresh
   calls during install/cancel flow.
+- Managed-runtime reinstall now also reuses a matching retained download
+  artifact, attempts an HTTP range resume against the upstream release source,
+  and falls back to a fresh full download when the source ignores the range
+  request. The current GUI surfaces that retained state as an explicit resume
+  action label, leaving pause semantics as the remaining Milestone 5
+  job-control gap.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.
