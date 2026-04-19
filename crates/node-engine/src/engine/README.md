@@ -20,6 +20,7 @@ entrypoint while preserving the current public API.
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `session_state.rs` | Phase 6 workflow-session residency, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned session-state scaffold and checkpoint-summary helper. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
+| `workflow_session.rs` | Executor-facing workflow-session residency and checkpoint-summary helpers that keep the Phase 6 facade wiring out of `engine.rs`. |
 
 ## Problem
 `engine.rs` owns both workflow execution and graph-mutation orchestration, and

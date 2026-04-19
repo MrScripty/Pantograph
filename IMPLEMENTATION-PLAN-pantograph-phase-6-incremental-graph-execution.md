@@ -779,6 +779,10 @@ Update during implementation:
   engine conversion, and node-data merge helpers now live behind
   `graph/session_graph.rs` instead of keeping those shared utility paths inline
   at the bottom of `graph/session.rs`.
+- 2026-04-18: Milestone 2 continued. `node-engine` workflow-session residency
+  and checkpoint-summary facade wiring now lives behind
+  `engine/workflow_session.rs` instead of keeping those Phase 6 executor
+  helpers inline inside `engine.rs`.
 
 ## Commit Cadence Notes
 

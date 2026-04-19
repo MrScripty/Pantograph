@@ -37,7 +37,7 @@ use async_trait::async_trait;
 use graph_flow::Context;
 use tokio::sync::RwLock;
 
-use crate::error::{NodeEngineError, Result};
+use crate::error::Result;
 use crate::events::{EventSink, WorkflowEvent};
 use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
@@ -53,6 +53,7 @@ mod node_preparation;
 mod output_cache;
 mod session_state;
 mod single_demand;
+mod workflow_session;
 
 pub use session_state::{
     GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot,
@@ -428,13 +429,13 @@ impl WorkflowExecutor {
     /// Return the current workflow-session residency state used by the Phase 6
     /// checkpoint scaffold.
     pub async fn workflow_session_residency(&self) -> WorkflowSessionResidencyState {
-        self.session_state.residency().await
+        workflow_session::workflow_session_residency(self).await
     }
 
     /// Update the workflow-session residency state used by the Phase 6
     /// checkpoint scaffold.
     pub async fn set_workflow_session_residency(&self, state: WorkflowSessionResidencyState) {
-        self.session_state.set_residency(state).await;
+        workflow_session::set_workflow_session_residency(self, state).await;
     }
 
     /// Return the current bounded checkpoint summary for a workflow session.
@@ -442,10 +443,7 @@ impl WorkflowExecutor {
         &self,
         workflow_session_id: &str,
     ) -> WorkflowSessionCheckpointSummary {
-        let graph_revision = self.graph.read().await.id.clone();
-        self.session_state
-            .checkpoint_summary(workflow_session_id, &graph_revision)
-            .await
+        workflow_session::workflow_session_checkpoint_summary(self, workflow_session_id).await
     }
 
     /// Set a value in the context
@@ -577,6 +575,7 @@ impl WorkflowExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::NodeEngineError;
     use crate::events::{NullEventSink, VecEventSink};
     use crate::types::{GraphEdge, GraphNode};
     use std::sync::Mutex;
