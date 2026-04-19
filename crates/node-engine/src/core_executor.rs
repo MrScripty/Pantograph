@@ -25,6 +25,9 @@ use crate::model_dependencies::{
     ModelRefV2,
 };
 
+#[cfg(feature = "inference-nodes")]
+mod kv_cache;
+
 /// Extract the node type from task inputs or infer from the task ID.
 ///
 /// Checks `_data.node_type` first (injected by the graph converter),
@@ -1641,11 +1644,11 @@ impl TaskExecutor for CoreTaskExecutor {
 
             // KV cache operations (require inference-nodes feature)
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-save" => execute_kv_cache_save(&inputs, extensions).await,
+            "kv-cache-save" => kv_cache::execute_save(&inputs, extensions).await,
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-load" => execute_kv_cache_load(&inputs, extensions).await,
+            "kv-cache-load" => kv_cache::execute_load(&inputs, extensions).await,
             #[cfg(feature = "inference-nodes")]
-            "kv-cache-truncate" => execute_kv_cache_truncate(&inputs, extensions).await,
+            "kv-cache-truncate" => kv_cache::execute_truncate(&inputs, extensions).await,
 
             // PyTorch inference (in-process via PyO3)
             #[cfg(feature = "pytorch-nodes")]
@@ -3231,200 +3234,6 @@ async fn execute_audio_generation(
 // ---------------------------------------------------------------------------
 // KV Cache handlers (behind inference-nodes feature)
 // ---------------------------------------------------------------------------
-
-#[cfg(feature = "inference-nodes")]
-async fn execute_kv_cache_save(
-    inputs: &HashMap<String, serde_json::Value>,
-    extensions: &ExecutorExtensions,
-) -> Result<HashMap<String, serde_json::Value>> {
-    use inference::kv_cache::{
-        KvCacheEntry, KvCacheMetadata, KvCacheStore, ModelFingerprint, StoragePolicy,
-    };
-
-    let store = extensions
-        .get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "KvCacheStore not configured in executor extensions".to_string(),
-            )
-        })?;
-
-    // Parse required inputs
-    let cache_data_val = inputs
-        .get("cache_data")
-        .ok_or_else(|| NodeEngineError::MissingInput("cache_data".to_string()))?;
-    let data_bytes: Vec<u8> = serde_json::from_value(cache_data_val.clone())?;
-
-    let fingerprint_val = inputs
-        .get("model_fingerprint")
-        .ok_or_else(|| NodeEngineError::MissingInput("model_fingerprint".to_string()))?;
-    let model_fingerprint: ModelFingerprint = serde_json::from_value(fingerprint_val.clone())?;
-
-    // Parse optional inputs
-    let label = inputs
-        .get("label")
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let compressed = inputs
-        .get("compressed")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let backend_hint = inputs
-        .get("_data")
-        .and_then(|d| d.get("backend_hint"))
-        .and_then(|b| b.as_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    let policy_str = inputs
-        .get("storage_policy")
-        .and_then(|v| v.as_str())
-        .unwrap_or("memory");
-    let policy = match policy_str {
-        "disk" => StoragePolicy::DiskOnly,
-        "both" => StoragePolicy::MemoryAndDisk,
-        _ => StoragePolicy::MemoryOnly,
-    };
-
-    let cache_dir = inputs.get("cache_dir").and_then(|v| v.as_str());
-
-    // Parse optional markers
-    let markers: Vec<inference::kv_cache::CacheMarker> = inputs
-        .get("markers")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    let token_count = data_bytes.len(); // approximate: actual token count depends on backend
-
-    let entry = KvCacheEntry {
-        metadata: KvCacheMetadata {
-            cache_id: String::new(),
-            label,
-            model_fingerprint,
-            backend_hint,
-            token_count,
-            markers,
-            created_at: 0,
-            updated_at: 0,
-            compressed,
-            extra: serde_json::json!({}),
-        },
-        data: data_bytes,
-    };
-
-    let cache_id = if let Some(dir) = cache_dir {
-        store
-            .save_to(entry, std::path::PathBuf::from(dir), Some(policy))
-            .await
-    } else {
-        store.save(entry, Some(policy)).await
-    }
-    .map_err(|e| NodeEngineError::ExecutionFailed(format!("KV cache save failed: {e}")))?;
-
-    let metadata = store
-        .get_metadata(&cache_id)
-        .await
-        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Failed to read metadata: {e}")))?;
-    let metadata_json = serde_json::to_value(&metadata)?;
-
-    let mut outputs = HashMap::new();
-    outputs.insert("cache_id".to_string(), serde_json::json!(cache_id));
-    outputs.insert("metadata".to_string(), metadata_json);
-    Ok(outputs)
-}
-
-#[cfg(feature = "inference-nodes")]
-async fn execute_kv_cache_load(
-    inputs: &HashMap<String, serde_json::Value>,
-    extensions: &ExecutorExtensions,
-) -> Result<HashMap<String, serde_json::Value>> {
-    use inference::kv_cache::{KvCacheStore, ModelFingerprint};
-
-    let store = extensions
-        .get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "KvCacheStore not configured in executor extensions".to_string(),
-            )
-        })?;
-
-    let cache_id = inputs
-        .get("cache_id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| NodeEngineError::MissingInput("cache_id".to_string()))?;
-
-    let fingerprint_val = inputs
-        .get("model_fingerprint")
-        .ok_or_else(|| NodeEngineError::MissingInput("model_fingerprint".to_string()))?;
-    let fingerprint: ModelFingerprint = serde_json::from_value(fingerprint_val.clone())?;
-
-    let mut outputs = HashMap::new();
-    match store.load(cache_id, &fingerprint).await {
-        Ok(entry) => {
-            let metadata_json = serde_json::to_value(&entry.metadata)?;
-            let data_json = serde_json::to_value(&entry.data)?;
-            outputs.insert("cache_data".to_string(), data_json);
-            outputs.insert("metadata".to_string(), metadata_json);
-            outputs.insert("valid".to_string(), serde_json::json!(true));
-        }
-        Err(e) => {
-            log::warn!("KV cache load failed for '{}': {}", cache_id, e);
-            outputs.insert("cache_data".to_string(), serde_json::Value::Null);
-            outputs.insert(
-                "metadata".to_string(),
-                serde_json::json!({"cache_id": cache_id}),
-            );
-            outputs.insert("valid".to_string(), serde_json::json!(false));
-        }
-    }
-    Ok(outputs)
-}
-
-#[cfg(feature = "inference-nodes")]
-async fn execute_kv_cache_truncate(
-    inputs: &HashMap<String, serde_json::Value>,
-    extensions: &ExecutorExtensions,
-) -> Result<HashMap<String, serde_json::Value>> {
-    use inference::kv_cache::KvCacheStore;
-
-    let store = extensions
-        .get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "KvCacheStore not configured in executor extensions".to_string(),
-            )
-        })?;
-
-    let cache_id = inputs
-        .get("cache_id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| NodeEngineError::MissingInput("cache_id".to_string()))?;
-
-    let marker_name = inputs.get("marker_name").and_then(|v| v.as_str());
-    let token_position = inputs.get("token_position").and_then(|v| v.as_f64());
-
-    // Truncation requires a backend-specific KvCacheCodec.
-    // Until concrete codec implementations exist, return an error.
-    if marker_name.is_some() || token_position.is_some() {
-        return Err(NodeEngineError::ExecutionFailed(
-            "KV cache truncation requires a backend-specific KvCacheCodec. \
-             No codec is currently available. Connect an inference backend first."
-                .to_string(),
-        ));
-    }
-
-    // No truncation target — pass through with current metadata
-    let metadata = store
-        .get_metadata(cache_id)
-        .await
-        .map_err(|e| NodeEngineError::ExecutionFailed(format!("Failed to load metadata: {e}")))?;
-    let metadata_json = serde_json::to_value(&metadata)?;
-
-    let mut outputs = HashMap::new();
-    outputs.insert("cache_id".to_string(), serde_json::json!(cache_id));
-    outputs.insert("metadata".to_string(), metadata_json);
-    Ok(outputs)
-}
 
 // ---------------------------------------------------------------------------
 // Tests
