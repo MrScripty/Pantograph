@@ -14,6 +14,8 @@ components.
 - Update selected and default runtime versions.
 - Surface backend-owned retained download-artifact facts for read-only GUI
   status rendering.
+- Surface backend-owned runtime-view snapshots alongside install progress so
+  GUI progress updates remain synchronized to backend state transitions.
 
 ## Constraints
 - This layer stays transport-only.
@@ -25,6 +27,9 @@ components.
 ## Invariants
 - `ManagedRuntimeManagerRuntimeView` mirrors the backend manager snapshot.
 - Progress callbacks surface backend download state unchanged.
+- Progress callbacks also carry the backend-owned runtime snapshot used by the
+  GUI, so components do not need separate ad hoc refresh logic to reconcile
+  install-state transitions during managed-runtime jobs.
 - UI callers should not call redistributable Tauri commands directly when this
   service already owns the app-facing contract.
 - Retained artifact, resumability, and readiness facts remain backend-owned;

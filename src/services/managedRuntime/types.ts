@@ -103,4 +103,5 @@ export interface ManagedRuntimeProgress {
   total: number;
   done: boolean;
   error: string | null;
+  runtime: ManagedRuntimeManagerRuntimeView;
 }

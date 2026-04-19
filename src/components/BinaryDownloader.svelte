@@ -35,7 +35,8 @@
     current: 0,
     total: 0,
     done: false,
-    error: null
+    error: null,
+    runtime: status
   });
   let error: string | null = $state(null);
 
@@ -60,12 +61,14 @@
       current: 0,
       total: 0,
       done: false,
-      error: null
+      error: null,
+      runtime: status
     };
 
     try {
       await managedRuntimeService.installRuntime('llama_cpp', async (event) => {
         progress = event;
+        status = event.runtime;
         if (event.error) {
           error = event.error;
           downloading = false;
@@ -74,7 +77,6 @@
         if (event.done && !event.error) {
           downloading = false;
           cancelling = false;
-          await loadStatus();
         }
       });
     } catch (e) {
@@ -94,7 +96,6 @@
         ...progress,
         status: 'Cancellation requested...'
       };
-      await loadStatus();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       cancelling = false;

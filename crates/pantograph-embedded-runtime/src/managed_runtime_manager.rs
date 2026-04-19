@@ -40,6 +40,7 @@ pub struct ManagedRuntimeManagerProgress {
     pub total: u64,
     pub done: bool,
     pub error: Option<String>,
+    pub runtime: ManagedRuntimeManagerRuntimeView,
 }
 
 pub fn list_managed_runtime_manager_runtimes(
@@ -71,8 +72,12 @@ pub async fn install_managed_runtime_manager_runtime<F>(
 where
     F: FnMut(ManagedRuntimeManagerProgress),
 {
+    let mut last_runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)?;
     download_binary(app_data_dir, runtime_id, |progress| {
-        on_progress(project_progress(runtime_id, progress));
+        let runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)
+            .unwrap_or_else(|_| last_runtime.clone());
+        last_runtime = runtime.clone();
+        on_progress(project_progress(runtime_id, progress, runtime));
     })
     .await
 }
@@ -141,6 +146,7 @@ fn runtime_view_from_snapshot(
 fn project_progress(
     runtime_id: ManagedBinaryId,
     progress: DownloadProgress,
+    runtime: ManagedRuntimeManagerRuntimeView,
 ) -> ManagedRuntimeManagerProgress {
     ManagedRuntimeManagerProgress {
         runtime_id,
@@ -149,6 +155,7 @@ fn project_progress(
         total: progress.total,
         done: progress.done,
         error: progress.error,
+        runtime,
     }
 }
 
@@ -157,6 +164,7 @@ mod tests {
     use super::{
         inspect_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
         project_progress, select_managed_runtime_manager_version, ManagedRuntimeManagerProgress,
+        ManagedRuntimeManagerRuntimeView,
     };
     use inference::{
         load_managed_runtime_state, save_managed_runtime_state, DownloadProgress, ManagedBinaryId,
@@ -262,6 +270,22 @@ mod tests {
 
     #[test]
     fn progress_projection_preserves_download_fields_and_runtime_id() {
+        let runtime = ManagedRuntimeManagerRuntimeView {
+            id: ManagedBinaryId::LlamaCpp,
+            display_name: "llama.cpp".to_string(),
+            install_state: inference::ManagedBinaryInstallState::Missing,
+            readiness_state: ManagedRuntimeReadinessState::Downloading,
+            available: true,
+            can_install: true,
+            can_remove: false,
+            missing_files: Vec::new(),
+            unavailable_reason: None,
+            versions: Vec::new(),
+            selection: ManagedRuntimeSelectionState::default(),
+            active_job: None,
+            job_artifact: None,
+            install_history: Vec::new(),
+        };
         let progress = project_progress(
             ManagedBinaryId::LlamaCpp,
             DownloadProgress {
@@ -271,6 +295,7 @@ mod tests {
                 done: false,
                 error: None,
             },
+            runtime.clone(),
         );
 
         assert_eq!(
@@ -282,6 +307,7 @@ mod tests {
                 total: 128,
                 done: false,
                 error: None,
+                runtime,
             }
         );
     }

@@ -215,6 +215,11 @@ reconciled as the final source of truth.
   read-only status. The remaining Milestone 5 gap is therefore no longer basic
   retained-download visibility; it is true pause/resume orchestration plus
   broader event-driven progress/state delivery.
+- Managed-runtime install progress now also carries the backend-owned runtime
+  manager snapshot through the Tauri/service boundary, so the GUI can update
+  active-job, readiness, retained-artifact, and history state from the same
+  manager stream instead of mixing raw progress counters with separate refresh
+  calls during install/cancel flow.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

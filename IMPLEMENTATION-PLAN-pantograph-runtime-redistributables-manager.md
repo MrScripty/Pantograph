@@ -586,6 +586,12 @@ Update during implementation:
   the current GUI. This narrows the remaining Milestone 5 gap to true
   pause/resume orchestration and broader event-driven state delivery rather
   than basic retained-download visibility.
+- 2026-04-19: Milestone 5 slice 7 extends the managed-runtime progress stream
+  to carry the backend-owned runtime-manager view snapshot alongside byte-level
+  progress, so the GUI can reconcile active-job, readiness, retained-artifact,
+  and install-history changes directly from the manager stream without falling
+  back to ad hoc refresh calls during install/cancel flow. True pause/resume
+  orchestration remains open.
 
 ## Commit Cadence Notes
 
