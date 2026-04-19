@@ -5,6 +5,7 @@
 //! command adapter.
 
 use pantograph_embedded_runtime::{
+    list_managed_runtime_manager_runtimes,
     workflow_runtime::{build_runtime_event_projection_with_registry_sync, unix_timestamp_ms},
     HostRuntimeModeSnapshot,
 };
@@ -12,7 +13,7 @@ use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowSchedulerSnapshotRequest,
     WorkflowSessionInspectionRequest, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
@@ -25,6 +26,15 @@ use super::headless_diagnostics::{
     workflow_error_json,
 };
 use super::headless_runtime::build_runtime;
+
+fn managed_runtime_diagnostics_views(
+    app: &AppHandle,
+) -> Vec<pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView> {
+    let Ok(app_data_dir) = app.path().app_data_dir() else {
+        return Vec::new();
+    };
+    list_managed_runtime_manager_runtimes(&app_data_dir).unwrap_or_default()
+}
 
 pub async fn workflow_get_diagnostics_snapshot(
     request: WorkflowDiagnosticsSnapshotRequest,
@@ -148,6 +158,7 @@ pub async fn workflow_diagnostics_snapshot_response(
         None,
     )
     .await;
+    let managed_runtimes = managed_runtime_diagnostics_views(app);
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store,
@@ -164,6 +175,7 @@ pub async fn workflow_diagnostics_snapshot_response(
         runtime_projection.embedding_model_target,
         Some(runtime_projection.active_runtime_snapshot),
         runtime_projection.embedding_runtime_snapshot,
+        managed_runtimes,
         captured_at_ms,
     ))
 }

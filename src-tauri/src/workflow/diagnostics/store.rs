@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceRuntimeMetrics,
@@ -104,6 +105,7 @@ impl WorkflowDiagnosticsStore {
         embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
         error: Option<String>,
     ) -> WorkflowDiagnosticsProjection {
         let event = WorkflowEvent::runtime_snapshot(
@@ -116,6 +118,7 @@ impl WorkflowDiagnosticsStore {
             embedding_model_target,
             active_runtime_snapshot,
             embedding_runtime_snapshot,
+            managed_runtimes,
             error,
         );
         self.record_workflow_event(&event, captured_at_ms)
@@ -154,6 +157,7 @@ impl WorkflowDiagnosticsStore {
         embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
         captured_at_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
         let mut state = self.state.lock();
@@ -170,6 +174,7 @@ impl WorkflowDiagnosticsStore {
                 embedding_runtime_snapshot
                     .as_ref()
                     .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                managed_runtimes,
                 captured_at_ms,
             ),
             None => DiagnosticsRuntimeSnapshot::default(),

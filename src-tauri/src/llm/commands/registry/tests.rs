@@ -211,6 +211,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
             last_error: None,
         }),
         None,
+        Vec::new(),
         None,
     );
     let scheduler_projection = workflow_diagnostics.record_scheduler_snapshot(
@@ -365,6 +366,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
             last_error: None,
         }),
         None,
+        Vec::new(),
         None,
     );
     workflow_diagnostics.record_scheduler_snapshot(
@@ -549,6 +551,7 @@ fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
         None,
         None,
         None,
+        Vec::new(),
         None,
     );
 
@@ -598,6 +601,7 @@ fn resolve_runtime_debug_trace_scope_marks_multi_run_scope_ambiguous() {
             None,
             None,
             None,
+            Vec::new(),
             None,
         );
     }

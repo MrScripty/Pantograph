@@ -448,6 +448,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             active: true,
             last_error: None,
         }),
+        Vec::new(),
         5_000,
     );
     let snapshot = store.update_scheduler_snapshot(
@@ -563,6 +564,67 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
 }
 
 #[test]
+fn runtime_snapshot_preserves_managed_runtime_views() {
+    let store = WorkflowDiagnosticsStore::default();
+    let managed_runtime = pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView {
+        id: inference::ManagedBinaryId::LlamaCpp,
+        display_name: "llama.cpp".to_string(),
+        install_state: inference::ManagedBinaryInstallState::Missing,
+        readiness_state: inference::ManagedRuntimeReadinessState::Downloading,
+        available: false,
+        can_install: true,
+        can_remove: false,
+        missing_files: vec!["llama-server-x86_64-unknown-linux-gnu".to_string()],
+        unavailable_reason: Some("binary download still in progress".to_string()),
+        versions: Vec::new(),
+        selection: inference::ManagedRuntimeSelectionState {
+            selected_version: Some("b8248".to_string()),
+            active_version: None,
+            default_version: Some("b8248".to_string()),
+        },
+        active_job: Some(inference::ManagedRuntimeJobStatus {
+            state: inference::ManagedRuntimeJobState::Downloading,
+            status: "downloading".to_string(),
+            current: 128,
+            total: 512,
+            resumable: true,
+            cancellable: true,
+            error: None,
+        }),
+        job_artifact: None,
+        install_history: Vec::new(),
+    };
+
+    let snapshot = store.update_runtime_snapshot(
+        Some("wf-runtime".to_string()),
+        None,
+        Some("runtime not ready".to_string()),
+        Some("/models/main.gguf".to_string()),
+        None,
+        None,
+        None,
+        vec![managed_runtime],
+        5_000,
+    );
+
+    assert_eq!(snapshot.runtime.managed_runtimes.len(), 1);
+    let runtime = &snapshot.runtime.managed_runtimes[0];
+    assert_eq!(runtime.id, inference::ManagedBinaryId::LlamaCpp);
+    assert_eq!(
+        runtime.readiness_state,
+        inference::ManagedRuntimeReadinessState::Downloading
+    );
+    assert_eq!(
+        runtime.active_job.as_ref().map(|job| job.state),
+        Some(inference::ManagedRuntimeJobState::Downloading)
+    );
+    assert_eq!(
+        runtime.missing_files,
+        vec!["llama-server-x86_64-unknown-linux-gnu".to_string()]
+    );
+}
+
+#[test]
 fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent() {
     let store = WorkflowDiagnosticsStore::default();
     let snapshot = store.update_runtime_snapshot(
@@ -608,6 +670,7 @@ fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent()
         None,
         None,
         None,
+        Vec::new(),
         5_000,
     );
 
@@ -684,6 +747,7 @@ fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_abse
         None,
         None,
         None,
+        Vec::new(),
         5_000,
     );
 
@@ -751,6 +815,7 @@ fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_
         None,
         None,
         None,
+        Vec::new(),
         5_000,
     );
 
@@ -807,6 +872,7 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             active: true,
             last_error: None,
         }),
+        Vec::new(),
         None,
     );
 
@@ -1132,6 +1198,7 @@ fn clear_history_preserves_runtime_and_scheduler_snapshots() {
         None,
         None,
         None,
+        Vec::new(),
         2_000,
     );
     store.update_scheduler_snapshot(
@@ -1231,6 +1298,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             last_error: None,
         }),
         None,
+        Vec::new(),
         2_010,
     );
 
@@ -1576,6 +1644,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             last_error: None,
         }),
         None,
+        Vec::new(),
         None,
     );
 
@@ -1639,6 +1708,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             last_error: None,
         }),
         None,
+        Vec::new(),
         None,
     );
 

@@ -6,6 +6,7 @@
 use serde::Serialize;
 use std::collections::HashMap;
 
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotDiagnostics, WorkflowSessionQueueItem,
     WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
@@ -175,6 +176,8 @@ pub enum WorkflowEvent {
         active_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
         /// Backend-owned lifecycle snapshot for the dedicated embedding runtime when available
         embedding_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+        /// Backend-owned managed-runtime manager views captured alongside workflow runtime diagnostics
+        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
         /// Error encountered while collecting the runtime snapshot
         error: Option<String>,
     },
@@ -342,6 +345,7 @@ impl WorkflowEvent {
         embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
         error: Option<String>,
     ) -> Self {
         Self::RuntimeSnapshot {
@@ -358,6 +362,7 @@ impl WorkflowEvent {
             embedding_runtime_snapshot: embedding_runtime_snapshot
                 .as_ref()
                 .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+            managed_runtimes,
             error,
         }
     }
@@ -437,6 +442,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             Some("capability unavailable".to_string()),
         );
         let json = serde_json::to_string(&event).unwrap();

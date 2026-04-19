@@ -443,6 +443,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -495,6 +496,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -571,6 +573,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             130,
         );
 
@@ -865,6 +868,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -956,6 +960,7 @@ mod tests {
             None,
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -1011,6 +1016,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -1074,6 +1080,7 @@ mod tests {
                 },
             )),
             None,
+            Vec::new(),
             120,
         );
 
@@ -1142,6 +1149,7 @@ mod tests {
                 },
             )),
             None,
+            Vec::new(),
             120,
         );
 
@@ -1202,6 +1210,7 @@ mod tests {
                 },
             )),
             None,
+            Vec::new(),
             120,
         );
 
@@ -1250,6 +1259,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -1293,6 +1303,7 @@ mod tests {
             None,
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -1309,6 +1320,7 @@ mod tests {
             None,
             None,
             None,
+            Vec::new(),
             130,
         );
 
@@ -1362,6 +1374,7 @@ mod tests {
             Some("/models/embed.gguf".to_string()),
             None,
             None,
+            Vec::new(),
             120,
         );
 

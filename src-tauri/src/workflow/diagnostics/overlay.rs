@@ -224,6 +224,7 @@ fn apply_runtime_event(
         embedding_model_target,
         active_runtime_snapshot,
         embedding_runtime_snapshot,
+        managed_runtimes,
         error,
         ..
     } = event
@@ -236,6 +237,7 @@ fn apply_runtime_event(
             embedding_model_target.clone(),
             active_runtime_snapshot.clone(),
             embedding_runtime_snapshot.clone(),
+            managed_runtimes.clone(),
             timestamp_ms,
         );
     }

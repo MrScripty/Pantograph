@@ -415,7 +415,7 @@ core logic into Tauri.
 - [ ] Prefer backend event/subscription projection for job progress and state
   changes; if polling remains necessary anywhere, scope it narrowly and
   document why an event-driven path was not feasible
-- [ ] Ensure workflows surface readiness failures and install progress through
+- [x] Ensure workflows surface readiness failures and install progress through
   existing diagnostics/event boundaries rather than ad hoc GUI polling rules
 - [x] Replace the non-compliant placeholder content in
   `src-tauri/src/llm/commands/README.md` and update any touched
@@ -604,8 +604,15 @@ Update during implementation:
   paused with retained artifacts, resumed through the existing install path,
   or cancelled destructively, including discarding a previously paused
   retained artifact without reintroducing lifecycle policy into Tauri or the
-  GUI. The remaining Milestone 5 work is the broader event/diagnostics lane,
+  GUI. The remaining Milestone 5 work was the broader event/diagnostics lane,
   not basic pause/resume/cancel controls.
+- 2026-04-19: Milestone 5 slice 10 extends workflow diagnostics/runtime
+  snapshot projection to carry backend-owned managed-runtime manager views
+  through the existing workflow event and diagnostics store path. Headless
+  diagnostics reads and execution-time runtime snapshot emission now publish
+  redistributable readiness/install-progress state without inventing a second
+  GUI-only polling contract, and targeted diagnostics/adapter tests now pin
+  that projection end to end.
 
 ## Commit Cadence Notes
 

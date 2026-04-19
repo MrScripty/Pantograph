@@ -6,6 +6,7 @@
 
 use super::commands::{SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsStore};
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
     graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
@@ -90,6 +91,7 @@ pub(crate) fn record_headless_runtime_snapshot(
     embedding_model_target: Option<String>,
     active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
     captured_at_ms: u64,
 ) {
     match (trace_execution_id, capabilities_result) {
@@ -104,6 +106,7 @@ pub(crate) fn record_headless_runtime_snapshot(
                 embedding_model_target.clone(),
                 active_runtime_snapshot.clone(),
                 embedding_runtime_snapshot.clone(),
+                managed_runtimes.clone(),
                 None,
             );
         }
@@ -118,6 +121,7 @@ pub(crate) fn record_headless_runtime_snapshot(
                 embedding_model_target.clone(),
                 active_runtime_snapshot.clone(),
                 embedding_runtime_snapshot.clone(),
+                managed_runtimes.clone(),
                 Some(error.to_envelope_json()),
             );
         }
@@ -130,6 +134,7 @@ pub(crate) fn record_headless_runtime_snapshot(
                 embedding_model_target,
                 active_runtime_snapshot,
                 embedding_runtime_snapshot,
+                managed_runtimes,
                 captured_at_ms,
             );
         }
@@ -142,6 +147,7 @@ pub(crate) fn record_headless_runtime_snapshot(
                 embedding_model_target,
                 active_runtime_snapshot,
                 embedding_runtime_snapshot,
+                managed_runtimes,
                 captured_at_ms,
             );
         }
@@ -249,6 +255,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
     embedding_model_target: Option<String>,
     active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
     embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
     captured_at_ms: u64,
 ) -> WorkflowDiagnosticsProjection {
     let mut trace_execution_id = None;
@@ -293,6 +300,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             embedding_model_target,
             active_runtime_snapshot,
             embedding_runtime_snapshot,
+            managed_runtimes,
             captured_at_ms,
         );
     } else {
@@ -304,6 +312,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             None,
             None,
             None,
+            Vec::new(),
             captured_at_ms,
         );
     }
@@ -396,6 +405,7 @@ mod tests {
             None,
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -442,6 +452,7 @@ mod tests {
             None,
             None,
             None,
+            Vec::new(),
             120,
         );
 
@@ -499,6 +510,7 @@ mod tests {
                 None,
                 None,
                 None,
+                Vec::new(),
                 captured_at_ms,
             );
         }

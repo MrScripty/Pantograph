@@ -4,6 +4,7 @@ use node_engine::GraphMemoryImpactSummary;
 use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
     graph::WorkflowGraphSessionStateView, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionSummary,
@@ -232,6 +233,8 @@ pub struct DiagnosticsRuntimeSnapshot {
     pub active_runtime: Option<DiagnosticsRuntimeLifecycleSnapshot>,
     #[serde(default)]
     pub embedding_runtime: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+    #[serde(default)]
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
 }
 
 impl DiagnosticsRuntimeSnapshot {
@@ -243,6 +246,7 @@ impl DiagnosticsRuntimeSnapshot {
         embedding_model_target: Option<String>,
         active_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
         embedding_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
         captured_at_ms: u64,
     ) -> Self {
         Self {
@@ -270,6 +274,7 @@ impl DiagnosticsRuntimeSnapshot {
                     .map(|snapshot| DiagnosticsRuntimeLifecycleSnapshot::from(&snapshot))
             }),
             embedding_runtime: embedding_runtime_snapshot,
+            managed_runtimes,
         }
     }
 }

@@ -227,8 +227,13 @@ reconciled as the final source of truth.
   destructive cancel split. Active downloads can be paused while keeping the
   retained artifact, resumed through the existing install path, or cancelled
   destructively, including discarding a previously paused retained artifact.
-  The remaining Milestone 5 work is now the broader event/diagnostics lane
-  rather than missing pause/resume/cancel controls.
+  Workflow/runtime diagnostics now also carry backend-owned managed-runtime
+  manager views through the existing runtime-snapshot and diagnostics-store
+  path, so workflow readiness failures and install progress are visible
+  through the same backend event boundary instead of a GUI-only redistributable
+  polling contract. The remaining Milestone 5 work is now limited to auditing
+  and documenting any residual narrow polling paths rather than missing
+  workflow diagnostics coverage or basic pause/resume/cancel controls.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.

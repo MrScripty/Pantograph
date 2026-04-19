@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::startup::build_resolved_embedding_request;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use node_engine::EventSink;
-use pantograph_embedded_runtime::workflow_runtime::build_workflow_execution_diagnostics_snapshot_with_registry_sync;
 pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
+use pantograph_embedded_runtime::{
+    list_managed_runtime_manager_runtimes,
+    workflow_runtime::build_workflow_execution_diagnostics_snapshot_with_registry_sync,
+};
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
 };
@@ -16,6 +19,15 @@ use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
 use super::event_adapter::TauriEventAdapter;
 use super::events::WorkflowEvent;
+
+fn managed_runtime_diagnostics_views(
+    app: &AppHandle,
+) -> Vec<pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView> {
+    let Ok(app_data_dir) = app.path().app_data_dir() else {
+        return Vec::new();
+    };
+    list_managed_runtime_manager_runtimes(&app_data_dir).unwrap_or_default()
+}
 
 fn send_diagnostics_projection(
     channel: &Channel<WorkflowEvent>,
@@ -123,6 +135,7 @@ async fn emit_diagnostics_snapshots(
         runtime_model_target_override.as_deref(),
     )
     .await;
+    let managed_runtimes = managed_runtime_diagnostics_views(app);
 
     let scheduler_event = WorkflowEvent::scheduler_snapshot(
         snapshot.scheduler.workflow_id,
@@ -152,6 +165,7 @@ async fn emit_diagnostics_snapshots(
         snapshot.runtime.embedding_model_target,
         Some(snapshot.runtime.active_runtime_snapshot),
         snapshot.runtime.embedding_runtime_snapshot,
+        managed_runtimes,
         snapshot.runtime.error,
     );
     diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);
