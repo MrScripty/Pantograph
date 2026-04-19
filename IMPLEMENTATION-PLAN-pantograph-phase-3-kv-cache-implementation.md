@@ -324,9 +324,9 @@ end-to-end KV behavior.
       the real backend-owned execution path rather than placeholder task logic.
 - [ ] Implement real marker/token truncation through backend codecs where
       supported; unsupported runtimes must return explicit unsupported reasons.
-- [ ] Ensure both load-time validation and consume-time validation enforce the
+- [x] Ensure both load-time validation and consume-time validation enforce the
       same fingerprint rules.
-- [ ] Add bounded retention and eviction policy semantics to the real store,
+- [x] Add bounded retention and eviction policy semantics to the real store,
       including explicit failure behavior when entries are missing or invalid.
 - [ ] Keep dependency growth minimal and justify any runtime-specific codec
       dependency additions per dependency standards.

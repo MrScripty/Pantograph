@@ -12,6 +12,15 @@ pub enum KvCacheError {
         requested_model: String,
     },
 
+    #[error("runtime mismatch: cache is for '{cache_runtime}', requested '{requested_runtime}'")]
+    RuntimeMismatch {
+        cache_runtime: String,
+        requested_runtime: String,
+    },
+
+    #[error("cache '{cache_id}' is missing a runtime fingerprint and cannot be reused as an executable handle")]
+    MissingRuntimeFingerprint { cache_id: String },
+
     #[error("marker not found: {marker_name}")]
     MarkerNotFound { marker_name: String },
 

@@ -9,7 +9,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::codec::KvCacheCodec;
 use super::error::KvCacheError;
 use super::storage::{DiskStorage, MemoryStorage, StorageBackend};
-use super::types::{CacheMarker, KvCacheEntry, KvCacheMetadata, ModelFingerprint, StoragePolicy};
+use super::types::{
+    CacheMarker, KvCacheEntry, KvCacheHandle, KvCacheMetadata, KvCacheRuntimeFingerprint,
+    ModelFingerprint, StoragePolicy,
+};
 
 /// High-level KV cache manager combining memory and disk storage.
 ///
@@ -173,15 +176,46 @@ impl KvCacheStore {
             Err(e) => return Err(e),
         };
 
-        // Validate model fingerprint
-        if entry.metadata.model_fingerprint != *fingerprint {
-            return Err(KvCacheError::ModelMismatch {
-                cache_model: entry.metadata.model_fingerprint.model_id.clone(),
-                requested_model: fingerprint.model_id.clone(),
-            });
-        }
+        self.validate_model_fingerprint(&entry.metadata, fingerprint)?;
 
         Ok(entry)
+    }
+
+    /// Load a cache entry for executable reuse.
+    ///
+    /// This path enforces the same model/runtime compatibility checks used when
+    /// restoring a live runtime slot or returning a typed executable handle.
+    pub async fn load_for_execution(
+        &self,
+        cache_id: &str,
+        model_fingerprint: &ModelFingerprint,
+        runtime_fingerprint: &KvCacheRuntimeFingerprint,
+    ) -> Result<KvCacheEntry, KvCacheError> {
+        let entry = self.load(cache_id, model_fingerprint).await?;
+        self.validate_execution_compatibility(
+            &entry.metadata,
+            model_fingerprint,
+            runtime_fingerprint,
+        )?;
+        Ok(entry)
+    }
+
+    /// Load a typed executable handle after enforcing full compatibility.
+    pub async fn load_handle(
+        &self,
+        cache_id: &str,
+        model_fingerprint: &ModelFingerprint,
+        runtime_fingerprint: &KvCacheRuntimeFingerprint,
+    ) -> Result<KvCacheHandle, KvCacheError> {
+        let entry = self
+            .load_for_execution(cache_id, model_fingerprint, runtime_fingerprint)
+            .await?;
+        entry
+            .metadata
+            .executable_handle()
+            .ok_or_else(|| KvCacheError::MissingRuntimeFingerprint {
+                cache_id: cache_id.to_string(),
+            })
     }
 
     /// Delete a cache entry from all storage layers.
@@ -212,6 +246,42 @@ impl KvCacheStore {
         }
 
         Ok(seen.into_values().collect())
+    }
+
+    /// Remove the oldest cache entries until the store is bounded by
+    /// `max_entries`.
+    ///
+    /// Entries are evicted in ascending `updated_at`, then `created_at`, then
+    /// `cache_id` order so the behavior is stable and easy to reason about in
+    /// tests and operational tooling.
+    pub async fn prune_to_max_entries(
+        &self,
+        max_entries: usize,
+    ) -> Result<Vec<String>, KvCacheError> {
+        let mut metadata = self.list().await?;
+        if metadata.len() <= max_entries {
+            return Ok(Vec::new());
+        }
+
+        metadata.sort_by(|left, right| {
+            left.updated_at
+                .cmp(&right.updated_at)
+                .then_with(|| left.created_at.cmp(&right.created_at))
+                .then_with(|| left.cache_id.cmp(&right.cache_id))
+        });
+
+        let remove_count = metadata.len() - max_entries;
+        let evicted_ids: Vec<String> = metadata
+            .into_iter()
+            .take(remove_count)
+            .map(|entry| entry.cache_id)
+            .collect();
+
+        for cache_id in &evicted_ids {
+            self.delete(cache_id).await?;
+        }
+
+        Ok(evicted_ids)
     }
 
     /// Get metadata for a specific cache entry (no data loaded).
@@ -372,6 +442,45 @@ impl KvCacheStore {
             }
         }
         Ok(())
+    }
+
+    fn validate_model_fingerprint(
+        &self,
+        metadata: &KvCacheMetadata,
+        fingerprint: &ModelFingerprint,
+    ) -> Result<(), KvCacheError> {
+        if metadata.matches_model_fingerprint(fingerprint) {
+            return Ok(());
+        }
+
+        Err(KvCacheError::ModelMismatch {
+            cache_model: metadata.model_fingerprint.model_id.clone(),
+            requested_model: fingerprint.model_id.clone(),
+        })
+    }
+
+    fn validate_execution_compatibility(
+        &self,
+        metadata: &KvCacheMetadata,
+        model_fingerprint: &ModelFingerprint,
+        runtime_fingerprint: &KvCacheRuntimeFingerprint,
+    ) -> Result<(), KvCacheError> {
+        self.validate_model_fingerprint(metadata, model_fingerprint)?;
+
+        let Some(cache_runtime_fingerprint) = metadata.runtime_fingerprint.as_ref() else {
+            return Err(KvCacheError::MissingRuntimeFingerprint {
+                cache_id: metadata.cache_id.clone(),
+            });
+        };
+
+        if metadata.is_executable_compatible_with(model_fingerprint, runtime_fingerprint) {
+            return Ok(());
+        }
+
+        Err(KvCacheError::RuntimeMismatch {
+            cache_runtime: cache_runtime_fingerprint.runtime_id.clone(),
+            requested_runtime: runtime_fingerprint.runtime_id.clone(),
+        })
     }
 }
 
@@ -621,5 +730,180 @@ mod tests {
 
         let meta = store.get_metadata(&cache_id).await.unwrap();
         assert!(meta.label.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_load_handle_requires_matching_runtime_fingerprint() {
+        let store = KvCacheStore::memory_only();
+        let mut entry = make_entry("llama-7b", "abc");
+        entry.metadata.runtime_fingerprint = Some(KvCacheRuntimeFingerprint {
+            runtime_id: "runtime-a".to_string(),
+            backend_key: "llamacpp".to_string(),
+            tokenizer_fingerprint: "tok-a".to_string(),
+            prompt_format_fingerprint: Some("chatml".to_string()),
+            runtime_build_fingerprint: Some("build-a".to_string()),
+        });
+
+        let cache_id = store.save(entry, None).await.expect("save should succeed");
+
+        let error = store
+            .load_handle(
+                &cache_id,
+                &matching_fingerprint(),
+                &KvCacheRuntimeFingerprint {
+                    runtime_id: "runtime-b".to_string(),
+                    backend_key: "llamacpp".to_string(),
+                    tokenizer_fingerprint: "tok-a".to_string(),
+                    prompt_format_fingerprint: Some("chatml".to_string()),
+                    runtime_build_fingerprint: Some("build-a".to_string()),
+                },
+            )
+            .await
+            .expect_err("mismatched runtime should fail");
+
+        match error {
+            KvCacheError::RuntimeMismatch {
+                cache_runtime,
+                requested_runtime,
+            } => {
+                assert_eq!(cache_runtime, "runtime-a");
+                assert_eq!(requested_runtime, "runtime-b");
+            }
+            other => panic!("expected RuntimeMismatch, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_for_execution_requires_runtime_fingerprint() {
+        let store = KvCacheStore::memory_only();
+        let cache_id = store
+            .save(make_entry("llama-7b", "abc"), None)
+            .await
+            .expect("save should succeed");
+
+        let error = store
+            .load_for_execution(
+                &cache_id,
+                &matching_fingerprint(),
+                &KvCacheRuntimeFingerprint {
+                    runtime_id: "runtime-a".to_string(),
+                    backend_key: "llamacpp".to_string(),
+                    tokenizer_fingerprint: "tok-a".to_string(),
+                    prompt_format_fingerprint: Some("chatml".to_string()),
+                    runtime_build_fingerprint: Some("build-a".to_string()),
+                },
+            )
+            .await
+            .expect_err("legacy metadata without runtime fingerprint should fail");
+
+        match error {
+            KvCacheError::MissingRuntimeFingerprint { cache_id } => {
+                assert!(!cache_id.is_empty());
+            }
+            other => panic!("expected MissingRuntimeFingerprint, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prune_to_max_entries_evicts_oldest_entries() {
+        let store = KvCacheStore::memory_only();
+        let oldest = KvCacheEntry {
+            metadata: KvCacheMetadata {
+                cache_id: "oldest".to_string(),
+                label: Some("oldest".to_string()),
+                model_fingerprint: matching_fingerprint(),
+                runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                    runtime_id: "runtime-a".to_string(),
+                    backend_key: "llamacpp".to_string(),
+                    tokenizer_fingerprint: "tok-a".to_string(),
+                    prompt_format_fingerprint: Some("chatml".to_string()),
+                    runtime_build_fingerprint: Some("build-a".to_string()),
+                }),
+                backend_hint: "llamacpp".to_string(),
+                token_count: 10,
+                markers: Vec::new(),
+                created_at: 1,
+                updated_at: 1,
+                compressed: false,
+                extra: serde_json::json!({}),
+            },
+            data: vec![1],
+        };
+        let middle = KvCacheEntry {
+            metadata: KvCacheMetadata {
+                cache_id: "middle".to_string(),
+                label: Some("middle".to_string()),
+                model_fingerprint: matching_fingerprint(),
+                runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                    runtime_id: "runtime-a".to_string(),
+                    backend_key: "llamacpp".to_string(),
+                    tokenizer_fingerprint: "tok-a".to_string(),
+                    prompt_format_fingerprint: Some("chatml".to_string()),
+                    runtime_build_fingerprint: Some("build-a".to_string()),
+                }),
+                backend_hint: "llamacpp".to_string(),
+                token_count: 20,
+                markers: Vec::new(),
+                created_at: 2,
+                updated_at: 2,
+                compressed: false,
+                extra: serde_json::json!({}),
+            },
+            data: vec![2],
+        };
+        let newest = KvCacheEntry {
+            metadata: KvCacheMetadata {
+                cache_id: "newest".to_string(),
+                label: Some("newest".to_string()),
+                model_fingerprint: matching_fingerprint(),
+                runtime_fingerprint: Some(KvCacheRuntimeFingerprint {
+                    runtime_id: "runtime-a".to_string(),
+                    backend_key: "llamacpp".to_string(),
+                    tokenizer_fingerprint: "tok-a".to_string(),
+                    prompt_format_fingerprint: Some("chatml".to_string()),
+                    runtime_build_fingerprint: Some("build-a".to_string()),
+                }),
+                backend_hint: "llamacpp".to_string(),
+                token_count: 30,
+                markers: Vec::new(),
+                created_at: 3,
+                updated_at: 3,
+                compressed: false,
+                extra: serde_json::json!({}),
+            },
+            data: vec![3],
+        };
+
+        store
+            .memory
+            .save(&oldest)
+            .await
+            .expect("save should succeed");
+        store
+            .memory
+            .save(&middle)
+            .await
+            .expect("save should succeed");
+        store
+            .memory
+            .save(&newest)
+            .await
+            .expect("save should succeed");
+
+        let evicted = store
+            .prune_to_max_entries(2)
+            .await
+            .expect("prune should succeed");
+
+        assert_eq!(evicted, vec!["oldest".to_string()]);
+        assert!(
+            matches!(
+                store.get_metadata("oldest").await,
+                Err(KvCacheError::NotFound { .. })
+            ),
+            "oldest entry should have been evicted"
+        );
+        assert!(store.get_metadata("middle").await.is_ok());
+        assert!(store.get_metadata("newest").await.is_ok());
     }
 }

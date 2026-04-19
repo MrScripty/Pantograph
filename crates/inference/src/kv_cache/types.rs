@@ -62,6 +62,17 @@ pub struct KvCacheCompatibility {
     pub runtime_fingerprint: KvCacheRuntimeFingerprint,
 }
 
+impl KvCacheCompatibility {
+    pub fn matches(
+        &self,
+        model_fingerprint: &ModelFingerprint,
+        runtime_fingerprint: &KvCacheRuntimeFingerprint,
+    ) -> bool {
+        self.model_fingerprint == *model_fingerprint
+            && self.runtime_fingerprint == *runtime_fingerprint
+    }
+}
+
 /// Executable boundary contract passed through workflow graphs and session
 /// state when a node wants to consume or retain a reusable KV artifact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,8 +96,8 @@ impl KvCacheHandle {
         model_fingerprint: &ModelFingerprint,
         runtime_fingerprint: &KvCacheRuntimeFingerprint,
     ) -> bool {
-        self.compatibility.model_fingerprint == *model_fingerprint
-            && self.compatibility.runtime_fingerprint == *runtime_fingerprint
+        self.compatibility
+            .matches(model_fingerprint, runtime_fingerprint)
     }
 }
 
@@ -131,6 +142,22 @@ pub struct KvCacheEntry {
 }
 
 impl KvCacheMetadata {
+    pub fn matches_model_fingerprint(&self, model_fingerprint: &ModelFingerprint) -> bool {
+        self.model_fingerprint == *model_fingerprint
+    }
+
+    pub fn is_executable_compatible_with(
+        &self,
+        model_fingerprint: &ModelFingerprint,
+        runtime_fingerprint: &KvCacheRuntimeFingerprint,
+    ) -> bool {
+        self.matches_model_fingerprint(model_fingerprint)
+            && self
+                .runtime_fingerprint
+                .as_ref()
+                .is_some_and(|fingerprint| fingerprint == runtime_fingerprint)
+    }
+
     pub fn executable_handle(&self) -> Option<KvCacheHandle> {
         let runtime_fingerprint = self.runtime_fingerprint.clone()?;
         Some(KvCacheHandle {
@@ -364,5 +391,52 @@ mod tests {
             ),
             "tokenizer or runtime drift must invalidate reuse"
         );
+    }
+
+    #[test]
+    fn metadata_runtime_compatibility_requires_matching_runtime_and_model() {
+        let model_fingerprint = ModelFingerprint {
+            model_id: "llama-7b".to_string(),
+            config_hash: "abc123".to_string(),
+        };
+        let runtime_fingerprint = KvCacheRuntimeFingerprint {
+            runtime_id: "runtime-a".to_string(),
+            backend_key: "llamacpp".to_string(),
+            tokenizer_fingerprint: "tok-123".to_string(),
+            prompt_format_fingerprint: Some("chatml-v1".to_string()),
+            runtime_build_fingerprint: Some("build-1".to_string()),
+        };
+        let metadata = KvCacheMetadata {
+            cache_id: "test-id".to_string(),
+            label: Some("Test Label".to_string()),
+            model_fingerprint: model_fingerprint.clone(),
+            runtime_fingerprint: Some(runtime_fingerprint.clone()),
+            backend_hint: "llamacpp".to_string(),
+            token_count: 512,
+            markers: vec![],
+            created_at: 1700000000,
+            updated_at: 1700000001,
+            compressed: false,
+            extra: serde_json::json!({}),
+        };
+
+        assert!(metadata.is_executable_compatible_with(&model_fingerprint, &runtime_fingerprint));
+        assert!(!metadata.is_executable_compatible_with(
+            &ModelFingerprint {
+                model_id: "mistral-7b".to_string(),
+                config_hash: "abc123".to_string(),
+            },
+            &runtime_fingerprint,
+        ));
+        assert!(!metadata.is_executable_compatible_with(
+            &model_fingerprint,
+            &KvCacheRuntimeFingerprint {
+                runtime_id: "runtime-b".to_string(),
+                backend_key: "llamacpp".to_string(),
+                tokenizer_fingerprint: "tok-123".to_string(),
+                prompt_format_fingerprint: Some("chatml-v1".to_string()),
+                runtime_build_fingerprint: Some("build-1".to_string()),
+            },
+        ));
     }
 }

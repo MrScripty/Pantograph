@@ -140,7 +140,7 @@ pub(super) async fn restore_llamacpp_input_handle(
     }
 
     let entry = store
-        .load(&handle.cache_id, &model_fingerprint)
+        .load_for_execution(&handle.cache_id, &model_fingerprint, &runtime_fingerprint)
         .await
         .map_err(|error| {
             NodeEngineError::ExecutionFailed(format!("KV cache load failed: {error}"))
@@ -273,20 +273,30 @@ pub(super) async fn execute_load(
     let mut outputs = HashMap::new();
     match store.load(cache_id, &fingerprint).await {
         Ok(entry) => {
-            let valid = if let Some(handle) = entry.metadata.executable_handle() {
+            let valid = if entry.metadata.executable_handle().is_some() {
                 if let Some(gateway) = gateway {
                     match gateway.kv_cache_runtime_fingerprint().await {
-                        Ok(runtime_fingerprint)
-                            if handle.is_compatible_with(&fingerprint, &runtime_fingerprint) =>
+                        Ok(runtime_fingerprint) => match store
+                            .load_handle(cache_id, &fingerprint, &runtime_fingerprint)
+                            .await
                         {
-                            outputs
-                                .insert("cache_data".to_string(), serde_json::to_value(&handle)?);
-                            true
-                        }
-                        Ok(_) => {
-                            outputs.insert("cache_data".to_string(), serde_json::Value::Null);
-                            false
-                        }
+                            Ok(handle) => {
+                                outputs.insert(
+                                    "cache_data".to_string(),
+                                    serde_json::to_value(&handle)?,
+                                );
+                                true
+                            }
+                            Err(error) => {
+                                log::warn!(
+                                    "KV cache '{}' is not reusable in the active runtime: {}",
+                                    cache_id,
+                                    error
+                                );
+                                outputs.insert("cache_data".to_string(), serde_json::Value::Null);
+                                false
+                            }
+                        },
                         Err(error) => {
                             log::warn!(
                                 "KV cache load runtime fingerprint lookup failed for '{}': {}",

@@ -46,6 +46,12 @@ artifacts, but the inference KV store remains the single cache owner.
 - `node-engine` owns execution-path behavior for KV save/load/truncate nodes.
 - Workflow-node descriptor code may describe KV ports, but it must not become a
   parallel KV execution owner.
+- `KvCacheStore::load_for_execution` and `KvCacheStore::load_handle` are the
+  backend-owned executable-reuse gates. They enforce the same model/runtime
+  compatibility rules used by both load-time validation and live restore.
+- `KvCacheStore::prune_to_max_entries` provides explicit oldest-first bounded
+  retention semantics for the real store. Workflow/session layers may request
+  pruning, but they must not reimplement their own cache-eviction policy.
 
 ## Standards Notes
 
