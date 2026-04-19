@@ -134,6 +134,47 @@ fn inspect_runtime(app_data_dir: &Path) {
 - System-provided runtimes take precedence when a definition explicitly supports
   them, as `Ollama` currently does.
 
+## Adding Another Managed Runtime
+
+When Pantograph adds another managed runtime family, extend this boundary in the
+following order:
+
+1. Add the backend identifier and contract hooks first.
+- Extend `ManagedBinaryId` and any additive managed-runtime contract fields
+  needed for the new runtime family.
+- Keep new fields additive so existing hosts and GUI views do not break.
+
+2. Add a runtime definition before adding transport.
+- Implement a new definition in `definitions.rs` that owns release-source,
+  validation, version, and command-resolution behavior.
+- Do not branch on runtime ids in Tauri or workflow code to recreate those
+  rules.
+
+3. Keep platform behavior behind a dedicated adapter directory.
+- Add per-platform install/finalization/launch helpers under a runtime-specific
+  platform module such as `foo_platform/`.
+- Inline platform checks in orchestration code are not an acceptable shortcut.
+
+4. Reuse durable state and selection policy.
+- Persist versions, selected/default version state, retained artifacts, and
+  install history through `state.rs` rather than inventing a runtime-local side
+  file or Tauri cache.
+- New runtimes must participate in the same restart reconciliation and
+  selected-version validation flow used by existing managed runtimes.
+
+5. Project Pantograph-facing views through backend-owned adapters.
+- If Pantograph-specific GUI/workflow views are needed, extend the
+  `pantograph-embedded-runtime` managed-runtime manager projection rather than
+  creating a second host-local DTO path.
+- Workflow readiness, diagnostics, and restore/reuse paths must consume that
+  shared projection instead of resolving binaries independently.
+
+6. Add host transport only after the backend contract exists.
+- Tauri commands may expose list/install/remove/select/inspect operations for
+  the new runtime family only after this backend boundary can answer them.
+- Frontend services should keep using the shared managed-runtime service
+  boundary instead of introducing runtime-specific GUI transport.
+
 ## Structured Producer Contract
 
 - `ManagedBinaryCapability` is the stable machine-consumed payload for managed

@@ -66,6 +66,10 @@ does not own runtime policy.
   backend-owned manager/view contract exposed by `pantograph-embedded-runtime`
   rather than branching directly on `inference` install-state helpers inside
   Tauri.
+- New managed runtime families must extend the existing managed-runtime
+  transport surfaces and shared frontend service boundary; do not add
+  runtime-specific Tauri command modules or GUI-only state ownership just
+  because one runtime needs a new install or selection flow.
 - Health and recovery flows must operate through shared gateway-backed state,
   not independent adapter-local state machines.
 - Recovery retry loops may gather host facts such as port availability, but

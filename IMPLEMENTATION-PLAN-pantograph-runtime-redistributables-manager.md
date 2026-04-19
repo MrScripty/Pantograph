@@ -436,7 +436,7 @@ additional runtimes and referenced as the canonical runtime-manager design.
 **Tasks:**
 - [x] Reconcile existing managed-binary plans/roadmap wording so the new plan
   is the source of truth and stale narrower wording is removed or superseded
-- [ ] Capture the reuse path for additional redistributables such as Ollama or
+- [x] Capture the reuse path for additional redistributables such as Ollama or
   other managed runtime hosts without implementing all of them immediately
 - [ ] Add launcher/release-smoke integration where required so install/readiness
   failures are visible in bounded verification flows
@@ -634,6 +634,13 @@ Update during implementation:
   ADR/README links now point to an accepted redistributables-manager boundary
   record instead of forcing later work to reconstruct the architecture from
   plan prose alone.
+- 2026-04-19: Milestone 6 slice 2 records the additive reuse path for future
+  managed runtimes in the backend managed-runtime README and Tauri host README.
+  New runtime families now have an explicit extension order: backend id and
+  contracts first, runtime definition second, platform adapters third, durable
+  state and Pantograph-facing view projection next, and only then host
+  transport reuse. This keeps future `Ollama` or other runtime work from
+  reopening binary-specific Tauri or GUI ownership patterns.
 
 ## Commit Cadence Notes
 
