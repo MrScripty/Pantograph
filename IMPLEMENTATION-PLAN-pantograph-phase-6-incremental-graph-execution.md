@@ -793,6 +793,11 @@ Update during implementation:
   facades through `engine/workflow_session.rs`, and checkpoint summaries now
   report preserved-node counts from that store without implying full
   checkpoint/restore support yet.
+- 2026-04-18: Milestone 3 continued. `graph/session_contract.rs` now accepts
+  explicit backend-owned workflow-session state projections so graph-session
+  responses can surface real node-memory snapshots and checkpoint summaries
+  when wiring reaches that boundary, while current callers still preserve the
+  fallback active/empty behavior.
 
 ## Commit Cadence Notes
 

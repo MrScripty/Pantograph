@@ -7,6 +7,27 @@ const PHASE6_SESSION_STATE_CONTRACT_VERSION: u32 = 1;
 const PHASE6_FALLBACK_INVALIDATION_REASON: &str =
     "phase_6_graph_reconciliation_not_implemented_yet";
 
+/// Backend-owned workflow-session state inputs that can be projected onto the
+/// additive graph-session response contract.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct WorkflowGraphSessionStateProjection {
+    pub residency: WorkflowSessionResidencyState,
+    pub node_memory: Vec<NodeMemorySnapshot>,
+    pub memory_impact: Option<GraphMemoryImpactSummary>,
+    pub checkpoint: Option<WorkflowSessionCheckpointSummary>,
+}
+
+impl Default for WorkflowGraphSessionStateProjection {
+    fn default() -> Self {
+        Self {
+            residency: WorkflowSessionResidencyState::Active,
+            node_memory: Vec::new(),
+            memory_impact: None,
+            checkpoint: None,
+        }
+    }
+}
+
 /// Additive Phase 6 workflow-session state view carried on graph edit-session
 /// snapshots.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -40,6 +61,15 @@ pub(crate) fn build_graph_session_response(
     graph: &super::types::WorkflowGraph,
     workflow_event: Option<WorkflowEvent>,
 ) -> WorkflowGraphEditSessionGraphResponse {
+    build_graph_session_response_with_state(session_id, graph, workflow_event, None)
+}
+
+pub(crate) fn build_graph_session_response_with_state(
+    session_id: &str,
+    graph: &super::types::WorkflowGraph,
+    workflow_event: Option<WorkflowEvent>,
+    projection: Option<&WorkflowGraphSessionStateProjection>,
+) -> WorkflowGraphEditSessionGraphResponse {
     let graph_revision = graph.compute_fingerprint();
     WorkflowGraphEditSessionGraphResponse {
         session_id: session_id.to_string(),
@@ -50,6 +80,7 @@ pub(crate) fn build_graph_session_response(
             session_id,
             &graph_revision,
             workflow_event.as_ref(),
+            projection,
         )),
     }
 }
@@ -58,17 +89,23 @@ pub(crate) fn build_workflow_session_state_view(
     session_id: &str,
     graph_revision: &str,
     workflow_event: Option<&WorkflowEvent>,
+    projection: Option<&WorkflowGraphSessionStateProjection>,
 ) -> WorkflowGraphSessionStateView {
+    let projection = projection.cloned().unwrap_or_default();
     WorkflowGraphSessionStateView {
         contract_version: PHASE6_SESSION_STATE_CONTRACT_VERSION,
-        residency: WorkflowSessionResidencyState::Active,
-        node_memory: Vec::new(),
-        memory_impact: graph_memory_impact_from_event(workflow_event),
-        checkpoint: Some(WorkflowSessionCheckpointSummary::unavailable(
-            session_id,
-            graph_revision,
-            WorkflowSessionResidencyState::Active,
-        )),
+        residency: projection.residency.clone(),
+        node_memory: projection.node_memory,
+        memory_impact: projection
+            .memory_impact
+            .or_else(|| graph_memory_impact_from_event(workflow_event)),
+        checkpoint: projection.checkpoint.or_else(|| {
+            Some(WorkflowSessionCheckpointSummary::unavailable(
+                session_id,
+                graph_revision,
+                projection.residency,
+            ))
+        }),
     }
 }
 
@@ -91,14 +128,18 @@ mod tests {
     use super::super::types::WorkflowGraph;
     use super::{
         PHASE6_FALLBACK_INVALIDATION_REASON, PHASE6_SESSION_STATE_CONTRACT_VERSION,
-        WorkflowGraphSessionStateView, build_graph_session_response,
+        WorkflowGraphSessionStateProjection, WorkflowGraphSessionStateView,
+        build_graph_session_response, build_graph_session_response_with_state,
         build_workflow_session_state_view,
     };
-    use node_engine::{NodeMemoryCompatibility, WorkflowEvent, WorkflowSessionResidencyState};
+    use node_engine::{
+        NodeMemoryCompatibility, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,
+        WorkflowEvent, WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
+    };
 
     #[test]
     fn state_view_defaults_to_active_without_memory() {
-        let view = build_workflow_session_state_view("session-1", "graph-rev-1", None);
+        let view = build_workflow_session_state_view("session-1", "graph-rev-1", None, None);
 
         assert_eq!(
             view,
@@ -125,7 +166,8 @@ mod tests {
             occurred_at_ms: Some(123),
         };
 
-        let view = build_workflow_session_state_view("session-1", "graph-rev-1", Some(&event));
+        let view =
+            build_workflow_session_state_view("session-1", "graph-rev-1", Some(&event), None);
         let impact = view.memory_impact.expect("memory impact");
 
         assert!(impact.fallback_to_full_invalidation);
@@ -144,5 +186,46 @@ mod tests {
         assert_eq!(response.session_id, "session-1");
         assert_eq!(response.graph, graph);
         assert!(response.workflow_session_state.is_some());
+    }
+
+    #[test]
+    fn state_view_projects_explicit_backend_node_memory_and_checkpoint() {
+        let projection = WorkflowGraphSessionStateProjection {
+            residency: WorkflowSessionResidencyState::Warm,
+            node_memory: vec![NodeMemorySnapshot {
+                identity: NodeMemoryIdentity {
+                    session_id: "session-1".to_string(),
+                    node_id: "node-a".to_string(),
+                    node_type: "text-input".to_string(),
+                    schema_version: Some("v1".to_string()),
+                },
+                status: NodeMemoryStatus::Ready,
+                input_fingerprint: Some("fp-a".to_string()),
+                output_snapshot: Some(serde_json::json!({ "text": "alpha" })),
+                private_state: Some(serde_json::json!({ "cursor": 1 })),
+                inspection_metadata: Some(serde_json::json!({ "label": "Alpha" })),
+            }],
+            memory_impact: None,
+            checkpoint: Some(WorkflowSessionCheckpointSummary {
+                session_id: "session-1".to_string(),
+                graph_revision: "graph-rev-1".to_string(),
+                residency: WorkflowSessionResidencyState::Warm,
+                checkpoint_available: false,
+                preserved_node_count: 1,
+                checkpointed_at_ms: None,
+            }),
+        };
+
+        let graph = WorkflowGraph::new();
+        let response =
+            build_graph_session_response_with_state("session-1", &graph, None, Some(&projection));
+        let view = response
+            .workflow_session_state
+            .expect("workflow session state");
+
+        assert_eq!(view.residency, WorkflowSessionResidencyState::Warm);
+        assert_eq!(view.node_memory.len(), 1);
+        assert_eq!(view.node_memory[0].identity.node_id, "node-a");
+        assert_eq!(view.checkpoint, projection.checkpoint);
     }
 }

@@ -835,6 +835,11 @@ the affected downstream closure.
   and node id, executor facades can now inspect and update that store, and
   bounded checkpoint summaries now report preserved-node counts from recorded
   node memory without claiming restore semantics that have not landed yet.
+- The graph-session response contract can now also project explicit backend-
+  owned node-memory and checkpoint state instead of only synthesizing an empty
+  placeholder view, which creates the standards-compliant workflow-service seam
+  needed for later node-memory wiring without moving that ownership into
+  adapters.
 
 **Milestones:**
 
