@@ -61,7 +61,10 @@ durable install job state, selected-version policy, workflow/scheduler
 readiness enforcement, and thin Tauri runtime-manager transport. The older
 `IMPLEMENTATION-PLAN-managed-binary-cross-platform.md` document remains in the
 repo only as a historical precursor and must not be used as the active
-implementation plan.
+implementation plan. Managed runtime selection/default-version policy is now
+also exposed as an explicit backend mutation API in `crates/inference`, so
+future Tauri/runtime-manager slices can update version policy without writing
+the durable state file directly.
 Binding platform planning now also has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,

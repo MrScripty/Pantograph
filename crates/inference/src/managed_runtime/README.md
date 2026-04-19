@@ -120,6 +120,10 @@ fn inspect_runtime(app_data_dir: &Path) {
 - `download_binary()` and `remove_binary()` serialize per-runtime filesystem
   mutations, persist backend-owned job/version/selection state, and surface
   progress/errors through backend-owned contracts.
+- `select_managed_runtime_version()` and
+  `set_default_managed_runtime_version()` are the backend-owned mutation path
+  for version selection policy; host adapters must call them instead of
+  mutating `state.json` or rebuilding selection rules locally.
 - `resolve_binary_command()` returns the executable path, working directory,
   sanitized arguments, environment overrides, and optional pid-file path needed
   for host launchers.
@@ -145,6 +149,10 @@ fn inspect_runtime(app_data_dir: &Path) {
   install history. Install/remove transitions mutate this file as part of the
   backend lifecycle flow, and unknown or missing files default to an empty
   state.
+- Selection changes only become durable through the exported backend mutation
+  functions, which validate installed versions before persisting new
+  selected/default version state and append an install-history event for audit
+  visibility.
 - `ResolvedCommand` is the backend-produced launch contract for host adapters.
 - `ArchiveKind` and `ReleaseAsset` are internal producer contracts used by
   runtime definitions and platform adapters; changes here must keep the adapter

@@ -133,6 +133,22 @@ pub fn list_managed_runtime_snapshots(
     })
 }
 
+pub fn select_managed_runtime_version(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: Option<&str>,
+) -> Result<(), String> {
+    update_runtime_selection(app_data_dir, id, version, SelectionTarget::Selected)
+}
+
+pub fn set_default_managed_runtime_version(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: Option<&str>,
+) -> Result<(), String> {
+    update_runtime_selection(app_data_dir, id, version, SelectionTarget::Default)
+}
+
 pub async fn download_binary<F>(
     app_data_dir: &Path,
     id: ManagedBinaryId,
@@ -660,15 +676,72 @@ fn current_unix_timestamp_ms() -> u64 {
         .as_millis() as u64
 }
 
+enum SelectionTarget {
+    Selected,
+    Default,
+}
+
+fn update_runtime_selection(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: Option<&str>,
+    target: SelectionTarget,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+
+    if let Some(version) = version {
+        if !runtime
+            .versions
+            .iter()
+            .any(|entry| entry.version == version)
+        {
+            return Err(format!(
+                "{} version '{}' is not installed",
+                id.display_name(),
+                version
+            ));
+        }
+    }
+
+    let version = version.map(str::to_string);
+    match target {
+        SelectionTarget::Selected => {
+            runtime.selection.selected_version = version.clone();
+        }
+        SelectionTarget::Default => {
+            runtime.selection.default_version = version.clone();
+        }
+    }
+
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::SelectionUpdated,
+            version,
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some(selection_target_label(target).to_string()),
+        });
+
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
+fn selection_target_label(target: SelectionTarget) -> &'static str {
+    match target {
+        SelectionTarget::Selected => "selected_version_updated",
+        SelectionTarget::Default => "default_version_updated",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         persist_install_success, persist_remove_success, readiness_state_for_capability,
+        select_managed_runtime_version, set_default_managed_runtime_version,
         snapshot_from_capability, ManagedBinaryCapability, ManagedBinaryId,
         ManagedBinaryInstallState, ManagedRuntimeReadinessState,
     };
     use crate::managed_runtime::load_managed_runtime_state;
-    use std::path::Path;
 
     fn capability(install_state: ManagedBinaryInstallState) -> ManagedBinaryCapability {
         ManagedBinaryCapability {
@@ -765,5 +838,59 @@ mod tests {
         assert!(runtime.versions.is_empty());
         assert_eq!(runtime.selection.selected_version, None);
         assert_eq!(runtime.selection.active_version, None);
+    }
+
+    #[test]
+    fn select_managed_runtime_version_updates_persisted_selection() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp");
+
+        persist_install_success(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            &install_dir,
+        )
+        .expect("persist install success");
+        select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
+            .expect("select runtime version");
+        set_default_managed_runtime_version(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            Some("b8248"),
+        )
+        .expect("set default runtime version");
+
+        let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime = state
+            .runtimes
+            .iter()
+            .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+            .expect("llama runtime state");
+
+        assert_eq!(runtime.selection.selected_version.as_deref(), Some("b8248"));
+        assert_eq!(runtime.selection.default_version.as_deref(), Some("b8248"));
+    }
+
+    #[test]
+    fn select_managed_runtime_version_rejects_unknown_version() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let install_dir = temp_dir.path().join("runtimes/llama-cpp");
+
+        persist_install_success(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            "b8248",
+            &install_dir,
+        )
+        .expect("persist install success");
+        let error = select_managed_runtime_version(
+            temp_dir.path(),
+            ManagedBinaryId::LlamaCpp,
+            Some("other"),
+        )
+        .expect_err("unknown version should fail");
+
+        assert!(error.contains("is not installed"));
     }
 }

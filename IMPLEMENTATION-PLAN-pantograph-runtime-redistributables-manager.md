@@ -313,7 +313,7 @@ behavior expands.
 - Review against `ARCHITECTURE-PATTERNS.md`, `CODING-STANDARDS.md`, and
   `CONCURRENCY-STANDARDS.md`
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 2: Persistent Catalog, Selection, And Job State
 
@@ -341,7 +341,7 @@ version policy, and install/download jobs.
   leakage
 - `cargo check --workspace`
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 3: `llama.cpp` Versioned Install And Readiness Pipeline
 
@@ -486,6 +486,10 @@ Update during implementation:
   transitions into the durable runtime state file so backend snapshots now
   record concrete version, selection, job-failure, and install-history changes
   instead of only exposing additive DTOs.
+- 2026-04-19: Milestone 2 slice 4 added explicit backend selection-mutation
+  APIs for selected/default version policy, exported them through the public
+  inference surface, and covered installed-versus-unknown version behavior so
+  host adapters no longer need to mutate durable state directly.
 
 ## Commit Cadence Notes
 
