@@ -201,7 +201,7 @@
 
   async function hydrateNodeState(resolveRequirements: boolean, nextModelPath?: string) {
     const response = await invoke<PumaLibHydrationResult>('hydrate_puma_lib_node', {
-      modelPath: nextModelPath ?? modelPath || undefined,
+      modelPath: (nextModelPath ?? modelPath) || undefined,
       modelId: modelId ?? undefined,
       selectedBindingIds,
       resolveRequirements,

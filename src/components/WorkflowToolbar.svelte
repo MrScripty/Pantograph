@@ -41,7 +41,7 @@
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
   let activeExecutionId: string | null = null;
-  let waitingForInput = false;
+  let waitingForInput = $state(false);
 
   function normalizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim().length > 0) {
