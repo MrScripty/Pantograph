@@ -11,7 +11,10 @@ mod sinks;
 mod tests;
 
 pub(crate) use contract::unix_timestamp_ms;
-pub use contract::WorkflowEvent;
+pub use contract::{
+    KvCacheEventAction, KvCacheEventOutcome, KvCacheExecutionDiagnostics, TaskProgressDetail,
+    WorkflowEvent,
+};
 pub use sinks::{
     BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventError, EventSink,
     NullEventSink, VecEventSink,

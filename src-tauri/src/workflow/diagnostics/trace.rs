@@ -107,10 +107,12 @@ pub(crate) fn node_engine_workflow_trace_event(
         node_engine::WorkflowEvent::TaskProgress {
             task_id,
             execution_id,
+            detail,
             ..
         } => WorkflowTraceEvent::NodeProgress {
             execution_id: execution_id.clone(),
             node_id: task_id.clone(),
+            detail: detail.clone(),
         },
         node_engine::WorkflowEvent::TaskStream {
             task_id,
@@ -170,10 +172,12 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
         WorkflowEvent::NodeProgress {
             node_id,
             execution_id,
+            detail,
             ..
         } => Some(WorkflowTraceEvent::NodeProgress {
             execution_id: execution_id.clone(),
             node_id: node_id.clone(),
+            detail: detail.clone(),
         }),
         WorkflowEvent::NodeStream {
             node_id,
@@ -371,6 +375,9 @@ fn diagnostics_node_trace(
         duration_ms: node.duration_ms,
         last_progress: overlay.last_progress,
         last_message: overlay.last_message,
+        last_progress_detail: overlay
+            .last_progress_detail
+            .or_else(|| node.last_progress_detail.clone()),
         stream_event_count: node.stream_event_count,
         event_count: node.event_count,
         error: node.last_error.clone(),

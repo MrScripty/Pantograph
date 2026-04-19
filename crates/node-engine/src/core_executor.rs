@@ -1670,7 +1670,16 @@ impl TaskExecutor for CoreTaskExecutor {
             }
             #[cfg(feature = "inference-nodes")]
             "kv-cache-truncate" => {
-                kv_cache::execute_truncate(&inputs, extensions, self.gateway.as_ref()).await
+                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
+                kv_cache::execute_truncate(
+                    &inputs,
+                    extensions,
+                    self.gateway.as_ref(),
+                    task_id,
+                    exec_id,
+                    self.event_sink.as_ref(),
+                )
+                .await
             }
 
             // PyTorch inference (in-process via PyO3)
@@ -1919,7 +1928,15 @@ async fn execute_llamacpp_inference(
         prompt.to_string()
     };
 
-    let restored_kv_slot = kv_cache::restore_llamacpp_input_handle(inputs, gw, extensions).await?;
+    let restored_kv_slot = kv_cache::restore_llamacpp_input_handle(
+        inputs,
+        gw,
+        extensions,
+        task_id,
+        execution_id,
+        event_sink,
+    )
+    .await?;
     let streaming = event_sink.is_some();
     let mut request_body = serde_json::json!({
         "prompt": full_prompt,
@@ -2036,18 +2053,25 @@ async fn execute_llamacpp_inference(
             })
         }),
     );
-    let kv_cache_output =
-        match kv_cache::capture_llamacpp_output_handle(task_id, gw, extensions).await {
-            Ok(value) => value,
-            Err(error) => {
-                log::warn!(
-                    "LlamaCppInference: failed to capture KV cache output for '{}': {}",
-                    task_id,
-                    error
-                );
-                serde_json::Value::Null
-            }
-        };
+    let kv_cache_output = match kv_cache::capture_llamacpp_output_handle(
+        task_id,
+        execution_id,
+        gw,
+        extensions,
+        event_sink,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            log::warn!(
+                "LlamaCppInference: failed to capture KV cache output for '{}': {}",
+                task_id,
+                error
+            );
+            serde_json::Value::Null
+        }
+    };
     outputs.insert("kv_cache_out".to_string(), kv_cache_output);
     Ok(outputs)
 }
@@ -2885,7 +2909,14 @@ async fn execute_pytorch_inference(
         .map_err(|e| NodeEngineError::ExecutionFailed(e))?;
     }
 
-    let _restored_kv_cache = kv_cache::restore_pytorch_input_handle(inputs, extensions).await?;
+    let _restored_kv_cache = kv_cache::restore_pytorch_input_handle(
+        inputs,
+        extensions,
+        task_id,
+        execution_id,
+        event_sink,
+    )
+    .await?;
 
     // Read model-specific inference settings to forward as Python kwargs
     let extra_settings = build_extra_settings(inputs);
@@ -3104,7 +3135,14 @@ async fn execute_pytorch_inference(
             })
         }),
     );
-    let kv_cache_output = match kv_cache::capture_pytorch_output_handle(task_id, extensions).await {
+    let kv_cache_output = match kv_cache::capture_pytorch_output_handle(
+        task_id,
+        execution_id,
+        extensions,
+        event_sink,
+    )
+    .await
+    {
         Ok(value) => value,
         Err(error) => {
             log::warn!(

@@ -100,6 +100,7 @@ fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
         node_engine::PortDataType::Vector => PortDataType::Embedding,
         node_engine::PortDataType::Tensor => PortDataType::Json,
         node_engine::PortDataType::AudioSamples => PortDataType::Audio,
+        node_engine::PortDataType::KvCache => PortDataType::KvCache,
     }
 }
 

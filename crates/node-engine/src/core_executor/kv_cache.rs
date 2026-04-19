@@ -13,9 +13,42 @@ use uuid::Uuid;
 
 use crate::core_executor::require_gateway;
 use crate::error::{NodeEngineError, Result};
+use crate::events::{
+    EventSink, KvCacheEventAction, KvCacheEventOutcome, KvCacheExecutionDiagnostics,
+    TaskProgressDetail, WorkflowEvent,
+};
 use crate::extensions::ExecutorExtensions;
 
 const LLAMACPP_SLOT_ID: u32 = 0;
+
+fn kv_reuse_source(metadata: &KvCacheMetadata) -> Option<String> {
+    metadata
+        .extra
+        .get("source")
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn emit_kv_cache_detail(
+    event_sink: Option<&Arc<dyn EventSink>>,
+    task_id: &str,
+    execution_id: &str,
+    progress: f32,
+    message: impl Into<String>,
+    detail: KvCacheExecutionDiagnostics,
+) {
+    let Some(event_sink) = event_sink else {
+        return;
+    };
+
+    let _ = event_sink.send(WorkflowEvent::task_progress_with_detail(
+        task_id,
+        execution_id,
+        progress,
+        Some(message.into()),
+        TaskProgressDetail::KvCache(detail),
+    ));
+}
 
 pub(super) async fn execute_save(
     inputs: &HashMap<String, serde_json::Value>,
@@ -108,8 +141,27 @@ pub(super) async fn restore_llamacpp_input_handle(
     inputs: &HashMap<String, serde_json::Value>,
     gateway: &Arc<InferenceGateway>,
     extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+    event_sink: Option<&Arc<dyn EventSink>>,
 ) -> Result<bool> {
     let Some(handle_value) = inputs.get("kv_cache_in").filter(|value| !value.is_null()) else {
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            0.0,
+            "KV cache input not provided",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::RestoreInput,
+                outcome: KvCacheEventOutcome::Miss,
+                cache_id: None,
+                backend_key: None,
+                reuse_source: None,
+                token_count: None,
+                reason: Some("no_input_handle".to_string()),
+            },
+        );
         return Ok(false);
     };
 
@@ -135,18 +187,51 @@ pub(super) async fn restore_llamacpp_input_handle(
         })?;
 
     if !handle.is_compatible_with(&model_fingerprint, &runtime_fingerprint) {
-        return Err(NodeEngineError::ExecutionFailed(format!(
-            "KV cache handle '{}' is incompatible with the active llama.cpp runtime",
-            handle.cache_id
-        )));
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            0.0,
+            "KV cache input invalidated for active llama.cpp runtime",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::RestoreInput,
+                outcome: KvCacheEventOutcome::Invalidated,
+                cache_id: Some(handle.cache_id.clone()),
+                backend_key: Some(handle.compatibility.runtime_fingerprint.backend_key.clone()),
+                reuse_source: None,
+                token_count: None,
+                reason: Some("incompatible_runtime_or_model".to_string()),
+            },
+        );
+        return Ok(false);
     }
 
-    let entry = store
+    let entry = match store
         .load_for_execution(&handle.cache_id, &model_fingerprint, &runtime_fingerprint)
         .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("KV cache load failed: {error}"))
-        })?;
+    {
+        Ok(entry) => entry,
+        Err(error) => {
+            log::warn!("KV cache load failed for '{}': {}", handle.cache_id, error);
+            emit_kv_cache_detail(
+                event_sink,
+                task_id,
+                execution_id,
+                0.0,
+                "KV cache input invalidated after load failure",
+                KvCacheExecutionDiagnostics {
+                    action: KvCacheEventAction::RestoreInput,
+                    outcome: KvCacheEventOutcome::Invalidated,
+                    cache_id: Some(handle.cache_id.clone()),
+                    backend_key: Some(handle.compatibility.runtime_fingerprint.backend_key.clone()),
+                    reuse_source: None,
+                    token_count: None,
+                    reason: Some("load_failed".to_string()),
+                },
+            );
+            return Ok(false);
+        }
+    };
     let slot_path = kv_slot_temp_path("restore", handle.cache_id.as_str());
     fs::write(&slot_path, &entry.data).map_err(|error| {
         NodeEngineError::ExecutionFailed(format!(
@@ -158,20 +243,61 @@ pub(super) async fn restore_llamacpp_input_handle(
 
     let restore_result = gateway
         .restore_kv_cache_slot(LLAMACPP_SLOT_ID, &slot_path)
-        .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("KV cache slot restore failed: {}", error))
-        });
+        .await;
     let _ = fs::remove_file(&slot_path);
-    restore_result?;
-
-    Ok(true)
+    match restore_result {
+        Ok(()) => {
+            emit_kv_cache_detail(
+                event_sink,
+                task_id,
+                execution_id,
+                0.0,
+                "KV cache input restored",
+                KvCacheExecutionDiagnostics {
+                    action: KvCacheEventAction::RestoreInput,
+                    outcome: KvCacheEventOutcome::Hit,
+                    cache_id: Some(handle.cache_id),
+                    backend_key: Some(entry.metadata.backend_hint.clone()),
+                    reuse_source: kv_reuse_source(&entry.metadata),
+                    token_count: Some(entry.metadata.token_count),
+                    reason: Some("restored_input_handle".to_string()),
+                },
+            );
+            Ok(true)
+        }
+        Err(error) => {
+            log::warn!(
+                "KV cache slot restore failed for '{}': {}",
+                handle.cache_id,
+                error
+            );
+            emit_kv_cache_detail(
+                event_sink,
+                task_id,
+                execution_id,
+                0.0,
+                "KV cache input invalidated after restore failure",
+                KvCacheExecutionDiagnostics {
+                    action: KvCacheEventAction::RestoreInput,
+                    outcome: KvCacheEventOutcome::Invalidated,
+                    cache_id: Some(handle.cache_id),
+                    backend_key: Some(runtime_fingerprint.backend_key),
+                    reuse_source: kv_reuse_source(&entry.metadata),
+                    token_count: Some(entry.metadata.token_count),
+                    reason: Some("restore_failed".to_string()),
+                },
+            );
+            Ok(false)
+        }
+    }
 }
 
 pub(super) async fn capture_llamacpp_output_handle(
     task_id: &str,
+    execution_id: &str,
     gateway: &Arc<InferenceGateway>,
     extensions: &ExecutorExtensions,
+    event_sink: Option<&Arc<dyn EventSink>>,
 ) -> Result<serde_json::Value> {
     let Some(store) = extensions.get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
     else {
@@ -252,6 +378,22 @@ pub(super) async fn capture_llamacpp_output_handle(
             "Saved KV metadata did not produce an executable handle".to_string(),
         )
     })?;
+    emit_kv_cache_detail(
+        event_sink,
+        task_id,
+        execution_id,
+        1.0,
+        "KV cache output captured",
+        KvCacheExecutionDiagnostics {
+            action: KvCacheEventAction::CaptureOutput,
+            outcome: KvCacheEventOutcome::Saved,
+            cache_id: Some(metadata.cache_id.clone()),
+            backend_key: Some(metadata.backend_hint.clone()),
+            reuse_source: kv_reuse_source(&metadata),
+            token_count: Some(metadata.token_count),
+            reason: Some("captured_output_handle".to_string()),
+        },
+    );
     serde_json::to_value(&handle).map_err(Into::into)
 }
 
@@ -259,6 +401,9 @@ pub(super) async fn capture_llamacpp_output_handle(
 pub(super) async fn restore_pytorch_input_handle(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+    event_sink: Option<&Arc<dyn EventSink>>,
 ) -> Result<bool> {
     let active_model = inference::backend::pytorch::active_loaded_model_info()
         .await
@@ -275,14 +420,48 @@ pub(super) async fn restore_pytorch_input_handle(
             .map_err(|error| {
                 NodeEngineError::ExecutionFailed(format!("PyTorch live KV clear failed: {}", error))
             })?;
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            0.0,
+            "KV cache input not provided",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::RestoreInput,
+                outcome: KvCacheEventOutcome::Miss,
+                cache_id: None,
+                backend_key: None,
+                reuse_source: None,
+                token_count: None,
+                reason: Some("no_input_handle".to_string()),
+            },
+        );
         return Ok(false);
     };
 
     if !inference::backend::pytorch::supports_live_kv_reuse(&active_model.model_type) {
-        return Err(NodeEngineError::ExecutionFailed(format!(
-            "PyTorch KV reuse currently supports only dllm models, but '{}' is active",
-            active_model.model_type
-        )));
+        inference::backend::pytorch::clear_live_kv_snapshot()
+            .await
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch live KV clear failed: {}", error))
+            })?;
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            0.0,
+            "PyTorch runtime does not support live KV reuse for this model",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::RestoreInput,
+                outcome: KvCacheEventOutcome::Unsupported,
+                cache_id: None,
+                backend_key: Some("pytorch".to_string()),
+                reuse_source: None,
+                token_count: None,
+                reason: Some("live_reuse_unsupported_for_model_type".to_string()),
+            },
+        );
+        return Ok(false);
     }
 
     let handle: KvCacheHandle = serde_json::from_value(handle_value.clone())?;
@@ -293,18 +472,64 @@ pub(super) async fn restore_pytorch_input_handle(
         inference::backend::pytorch::kv_cache_model_fingerprint_for_loaded_model(&active_model);
 
     if !handle.is_compatible_with(&model_fingerprint, &runtime_fingerprint) {
-        return Err(NodeEngineError::ExecutionFailed(format!(
-            "KV cache handle '{}' is incompatible with the active PyTorch runtime",
-            handle.cache_id
-        )));
+        inference::backend::pytorch::clear_live_kv_snapshot()
+            .await
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch live KV clear failed: {}", error))
+            })?;
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            0.0,
+            "KV cache input invalidated for active PyTorch runtime",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::RestoreInput,
+                outcome: KvCacheEventOutcome::Invalidated,
+                cache_id: Some(handle.cache_id.clone()),
+                backend_key: Some(handle.compatibility.runtime_fingerprint.backend_key.clone()),
+                reuse_source: None,
+                token_count: None,
+                reason: Some("incompatible_runtime_or_model".to_string()),
+            },
+        );
+        return Ok(false);
     }
 
-    let entry = store
+    let entry = match store
         .load_for_execution(&handle.cache_id, &model_fingerprint, &runtime_fingerprint)
         .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("KV cache load failed: {error}"))
-        })?;
+    {
+        Ok(entry) => entry,
+        Err(error) => {
+            log::warn!("KV cache load failed for '{}': {}", handle.cache_id, error);
+            inference::backend::pytorch::clear_live_kv_snapshot()
+                .await
+                .map_err(|clear_error| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "PyTorch live KV clear failed: {}",
+                        clear_error
+                    ))
+                })?;
+            emit_kv_cache_detail(
+                event_sink,
+                task_id,
+                execution_id,
+                0.0,
+                "KV cache input invalidated after load failure",
+                KvCacheExecutionDiagnostics {
+                    action: KvCacheEventAction::RestoreInput,
+                    outcome: KvCacheEventOutcome::Invalidated,
+                    cache_id: Some(handle.cache_id.clone()),
+                    backend_key: Some(handle.compatibility.runtime_fingerprint.backend_key.clone()),
+                    reuse_source: None,
+                    token_count: None,
+                    reason: Some("load_failed".to_string()),
+                },
+            );
+            return Ok(false);
+        }
+    };
     let snapshot_path = kv_slot_temp_path("pytorch-restore", handle.cache_id.as_str());
     fs::write(&snapshot_path, &entry.data).map_err(|error| {
         NodeEngineError::ExecutionFailed(format!(
@@ -314,34 +539,99 @@ pub(super) async fn restore_pytorch_input_handle(
         ))
     })?;
 
-    let restore_result = inference::backend::pytorch::restore_live_kv_snapshot(&snapshot_path)
-        .await
-        .map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!(
-                "PyTorch KV snapshot restore failed: {}",
-                error
-            ))
-        });
+    let restore_result =
+        inference::backend::pytorch::restore_live_kv_snapshot(&snapshot_path).await;
     let _ = fs::remove_file(&snapshot_path);
-    let restored_info = restore_result?;
+    let restored_info = match restore_result {
+        Ok(restored_info) => restored_info,
+        Err(error) => {
+            log::warn!(
+                "PyTorch KV snapshot restore failed for '{}': {}",
+                handle.cache_id,
+                error
+            );
+            inference::backend::pytorch::clear_live_kv_snapshot()
+                .await
+                .map_err(|clear_error| {
+                    NodeEngineError::ExecutionFailed(format!(
+                        "PyTorch live KV clear failed: {}",
+                        clear_error
+                    ))
+                })?;
+            emit_kv_cache_detail(
+                event_sink,
+                task_id,
+                execution_id,
+                0.0,
+                "KV cache input invalidated after restore failure",
+                KvCacheExecutionDiagnostics {
+                    action: KvCacheEventAction::RestoreInput,
+                    outcome: KvCacheEventOutcome::Invalidated,
+                    cache_id: Some(handle.cache_id.clone()),
+                    backend_key: Some(runtime_fingerprint.backend_key.clone()),
+                    reuse_source: kv_reuse_source(&entry.metadata),
+                    token_count: Some(entry.metadata.token_count),
+                    reason: Some("restore_failed".to_string()),
+                },
+            );
+            return Ok(false);
+        }
+    };
 
     let restored_runtime =
         inference::backend::pytorch::kv_cache_runtime_fingerprint_for_live_kv(&restored_info);
     let restored_model =
         inference::backend::pytorch::kv_cache_model_fingerprint_for_live_kv(&restored_info);
     if restored_runtime != runtime_fingerprint || restored_model != model_fingerprint {
-        return Err(NodeEngineError::ExecutionFailed(
-            "Restored PyTorch KV snapshot did not match the active model/runtime".to_string(),
-        ));
+        inference::backend::pytorch::clear_live_kv_snapshot()
+            .await
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("PyTorch live KV clear failed: {}", error))
+            })?;
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            0.0,
+            "KV cache input invalidated after restored snapshot mismatch",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::RestoreInput,
+                outcome: KvCacheEventOutcome::Invalidated,
+                cache_id: Some(handle.cache_id),
+                backend_key: Some(runtime_fingerprint.backend_key),
+                reuse_source: kv_reuse_source(&entry.metadata),
+                token_count: Some(entry.metadata.token_count),
+                reason: Some("restored_snapshot_mismatch".to_string()),
+            },
+        );
+        return Ok(false);
     }
 
+    emit_kv_cache_detail(
+        event_sink,
+        task_id,
+        execution_id,
+        0.0,
+        "KV cache input restored",
+        KvCacheExecutionDiagnostics {
+            action: KvCacheEventAction::RestoreInput,
+            outcome: KvCacheEventOutcome::Hit,
+            cache_id: Some(handle.cache_id),
+            backend_key: Some(entry.metadata.backend_hint.clone()),
+            reuse_source: kv_reuse_source(&entry.metadata),
+            token_count: Some(entry.metadata.token_count),
+            reason: Some("restored_input_handle".to_string()),
+        },
+    );
     Ok(true)
 }
 
 #[cfg(feature = "pytorch-nodes")]
 pub(super) async fn capture_pytorch_output_handle(
     task_id: &str,
+    execution_id: &str,
     extensions: &ExecutorExtensions,
+    event_sink: Option<&Arc<dyn EventSink>>,
 ) -> Result<serde_json::Value> {
     let Some(store) = extensions.get::<Arc<KvCacheStore>>(crate::extension_keys::KV_CACHE_STORE)
     else {
@@ -357,6 +647,22 @@ pub(super) async fn capture_pytorch_output_handle(
             ))
         })?;
     if !inference::backend::pytorch::supports_live_kv_reuse(&active_model.model_type) {
+        emit_kv_cache_detail(
+            event_sink,
+            task_id,
+            execution_id,
+            1.0,
+            "PyTorch runtime does not support live KV reuse for this model",
+            KvCacheExecutionDiagnostics {
+                action: KvCacheEventAction::CaptureOutput,
+                outcome: KvCacheEventOutcome::Unsupported,
+                cache_id: None,
+                backend_key: Some("pytorch".to_string()),
+                reuse_source: None,
+                token_count: None,
+                reason: Some("live_reuse_unsupported_for_model_type".to_string()),
+            },
+        );
         return Ok(serde_json::Value::Null);
     }
 
@@ -415,6 +721,22 @@ pub(super) async fn capture_pytorch_output_handle(
             "Saved PyTorch KV metadata did not produce an executable handle".to_string(),
         )
     })?;
+    emit_kv_cache_detail(
+        event_sink,
+        task_id,
+        execution_id,
+        1.0,
+        "KV cache output captured",
+        KvCacheExecutionDiagnostics {
+            action: KvCacheEventAction::CaptureOutput,
+            outcome: KvCacheEventOutcome::Saved,
+            cache_id: Some(metadata.cache_id.clone()),
+            backend_key: Some(metadata.backend_hint.clone()),
+            reuse_source: kv_reuse_source(&metadata),
+            token_count: Some(metadata.token_count),
+            reason: Some("captured_output_handle".to_string()),
+        },
+    );
     serde_json::to_value(&handle).map_err(Into::into)
 }
 
@@ -504,6 +826,9 @@ pub(super) async fn execute_truncate(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
     gateway: Option<&Arc<InferenceGateway>>,
+    task_id: &str,
+    execution_id: &str,
+    event_sink: Option<&Arc<dyn EventSink>>,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let store = require_store(extensions)?;
 
@@ -573,6 +898,22 @@ pub(super) async fn execute_truncate(
     let metadata = store.get_metadata(cache_id).await.map_err(|error| {
         NodeEngineError::ExecutionFailed(format!("Failed to load metadata: {error}"))
     })?;
+    emit_kv_cache_detail(
+        event_sink,
+        task_id,
+        execution_id,
+        1.0,
+        "KV cache truncated",
+        KvCacheExecutionDiagnostics {
+            action: KvCacheEventAction::Truncate,
+            outcome: KvCacheEventOutcome::Truncated,
+            cache_id: Some(metadata.cache_id.clone()),
+            backend_key: Some(metadata.backend_hint.clone()),
+            reuse_source: kv_reuse_source(&metadata),
+            token_count: Some(metadata.token_count),
+            reason: Some("truncated_cache".to_string()),
+        },
+    );
 
     let mut outputs = HashMap::new();
     outputs.insert("cache_id".to_string(), serde_json::json!(cache_id));
@@ -922,9 +1263,10 @@ mod tests {
         let store = Arc::new(KvCacheStore::memory_only());
         extensions.set(crate::extension_keys::KV_CACHE_STORE, store.clone());
 
-        let handle_value = capture_llamacpp_output_handle("task-a", &gateway, &extensions)
-            .await
-            .expect("capture should succeed");
+        let handle_value =
+            capture_llamacpp_output_handle("task-a", "exec-a", &gateway, &extensions, None)
+                .await
+                .expect("capture should succeed");
         let handle: KvCacheHandle =
             serde_json::from_value(handle_value).expect("capture should return a typed handle");
         let entry = store
@@ -1146,9 +1488,10 @@ mod tests {
             serde_json::to_value(handle).expect("handle should serialize"),
         );
 
-        let restored_slot = restore_llamacpp_input_handle(&inputs, &gateway, &extensions)
-            .await
-            .expect("restore should succeed");
+        let restored_slot =
+            restore_llamacpp_input_handle(&inputs, &gateway, &extensions, "task-a", "exec-a", None)
+                .await
+                .expect("restore should succeed");
         assert!(restored_slot);
         assert_eq!(
             restored.lock().expect("lock should succeed").as_slice(),
@@ -1208,9 +1551,16 @@ mod tests {
         inputs.insert("cache_id".to_string(), serde_json::json!(cache_id.clone()));
         inputs.insert("token_position".to_string(), serde_json::json!(2));
 
-        let outputs = execute_truncate(&inputs, &extensions, Some(&gateway))
-            .await
-            .expect("truncate should succeed");
+        let outputs = execute_truncate(
+            &inputs,
+            &extensions,
+            Some(&gateway),
+            "task-a",
+            "exec-a",
+            None,
+        )
+        .await
+        .expect("truncate should succeed");
         let metadata: KvCacheMetadata = serde_json::from_value(
             outputs
                 .get("metadata")

@@ -51,6 +51,8 @@ pub enum WorkflowEvent {
         progress: f32,
         /// Optional status message
         message: Option<String>,
+        /// Optional backend-owned structured progress detail
+        detail: Option<node_engine::TaskProgressDetail>,
         /// Unique identifier for this execution
         execution_id: String,
     },
@@ -244,6 +246,7 @@ impl WorkflowEvent {
             node_id: node_id.into(),
             progress,
             message,
+            detail: None,
             execution_id: execution_id.into(),
         }
     }

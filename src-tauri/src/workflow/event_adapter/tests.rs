@@ -168,6 +168,7 @@ fn translated_task_progress_event_updates_backend_diagnostics_projection() {
             execution_id: "exec-1".to_string(),
             progress: 0.5,
             message: Some("working".to_string()),
+            detail: None,
             occurred_at_ms: Some(25),
         },
     );
@@ -178,6 +179,57 @@ fn translated_task_progress_event_updates_backend_diagnostics_projection() {
             let node = trace.nodes.get("node-a").expect("node overlay");
             assert_eq!(node.last_progress, Some(0.5));
             assert_eq!(node.last_message.as_deref(), Some("working"));
+        }
+        other => panic!("unexpected diagnostics event: {other:?}"),
+    }
+}
+
+#[test]
+fn translated_task_progress_detail_updates_backend_diagnostics_projection() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    let _ = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::WorkflowStarted {
+            workflow_id: "wf-1".to_string(),
+            execution_id: "exec-1".to_string(),
+            occurred_at_ms: Some(10),
+        },
+    );
+
+    let (_, diagnostics_event) = translate_node_event_with_diagnostics(
+        &diagnostics_store,
+        node_engine::WorkflowEvent::TaskProgress {
+            task_id: "node-a".to_string(),
+            execution_id: "exec-1".to_string(),
+            progress: 0.0,
+            message: Some("kv cache restored".to_string()),
+            detail: Some(node_engine::TaskProgressDetail::KvCache(
+                node_engine::KvCacheExecutionDiagnostics {
+                    action: node_engine::KvCacheEventAction::RestoreInput,
+                    outcome: node_engine::KvCacheEventOutcome::Hit,
+                    cache_id: Some("cache-1".to_string()),
+                    backend_key: Some("llamacpp".to_string()),
+                    reuse_source: Some("llamacpp_slot".to_string()),
+                    token_count: Some(32),
+                    reason: Some("restored_input_handle".to_string()),
+                },
+            )),
+            occurred_at_ms: Some(25),
+        },
+    );
+
+    match diagnostics_event {
+        super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
+            let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
+            let node = trace.nodes.get("node-a").expect("node overlay");
+            match node.last_progress_detail.as_ref() {
+                Some(node_engine::TaskProgressDetail::KvCache(detail)) => {
+                    assert_eq!(detail.outcome, node_engine::KvCacheEventOutcome::Hit);
+                    assert_eq!(detail.cache_id.as_deref(), Some("cache-1"));
+                }
+                other => panic!("unexpected progress detail: {other:?}"),
+            }
+            assert_eq!(node.last_progress, None);
         }
         other => panic!("unexpected diagnostics event: {other:?}"),
     }
@@ -661,6 +713,7 @@ fn translated_restarted_execution_resets_diagnostics_overlay_state() {
             execution_id: "exec-1".to_string(),
             progress: 0.5,
             message: Some("halfway".to_string()),
+            detail: None,
             occurred_at_ms: Some(120),
         },
     );
@@ -717,6 +770,7 @@ fn translated_cancelled_then_restarted_execution_resets_diagnostics_overlay_stat
             execution_id: "exec-1".to_string(),
             progress: 0.5,
             message: Some("halfway".to_string()),
+            detail: None,
             occurred_at_ms: Some(120),
         },
     );

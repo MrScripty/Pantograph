@@ -116,6 +116,7 @@ mod tests {
                 event_count: 2,
                 stream_event_count: 1,
                 last_error: None,
+                last_progress_detail: None,
             }],
         })
         .expect("serialize trace summary");

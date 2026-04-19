@@ -1,6 +1,6 @@
 use super::{
-    BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventSink, NullEventSink,
-    VecEventSink, WorkflowEvent,
+    BroadcastEventSink, CallbackEventSink, CompositeEventSink, EventSink, KvCacheEventAction,
+    KvCacheEventOutcome, NullEventSink, TaskProgressDetail, VecEventSink, WorkflowEvent,
 };
 
 #[test]
@@ -125,5 +125,35 @@ fn test_workflow_cancelled_now_sets_timestamp() {
             assert!(occurred_at_ms.is_some());
         }
         other => panic!("expected WorkflowCancelled event, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_task_progress_with_detail_sets_structured_detail() {
+    let event = WorkflowEvent::task_progress_with_detail(
+        "task1",
+        "exec1",
+        0.0,
+        Some("cache restored".to_string()),
+        TaskProgressDetail::KvCache(super::KvCacheExecutionDiagnostics {
+            action: KvCacheEventAction::RestoreInput,
+            outcome: KvCacheEventOutcome::Hit,
+            cache_id: Some("cache-1".to_string()),
+            backend_key: Some("llamacpp".to_string()),
+            reuse_source: Some("llamacpp_slot".to_string()),
+            token_count: Some(64),
+            reason: Some("restored_input_handle".to_string()),
+        }),
+    );
+
+    match event {
+        WorkflowEvent::TaskProgress {
+            detail: Some(TaskProgressDetail::KvCache(detail)),
+            ..
+        } => {
+            assert_eq!(detail.outcome, KvCacheEventOutcome::Hit);
+            assert_eq!(detail.cache_id.as_deref(), Some("cache-1"));
+        }
+        other => panic!("expected task progress with kv detail, got {other:?}"),
     }
 }

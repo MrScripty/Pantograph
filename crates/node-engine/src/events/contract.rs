@@ -4,6 +4,48 @@ use serde::{Deserialize, Serialize};
 
 use crate::GraphMemoryImpactSummary;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KvCacheEventAction {
+    RestoreInput,
+    CaptureOutput,
+    Truncate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KvCacheEventOutcome {
+    Hit,
+    Miss,
+    Saved,
+    Invalidated,
+    Unsupported,
+    Truncated,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheExecutionDiagnostics {
+    pub action: KvCacheEventAction,
+    pub outcome: KvCacheEventOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TaskProgressDetail {
+    KvCache(KvCacheExecutionDiagnostics),
+}
+
 /// Events emitted during workflow execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -94,6 +136,8 @@ pub enum WorkflowEvent {
         progress: f32,
         message: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<TaskProgressDetail>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         occurred_at_ms: Option<u64>,
     },
 
@@ -144,6 +188,25 @@ impl WorkflowEvent {
             execution_id: execution_id.to_string(),
             progress,
             message,
+            detail: None,
+            occurred_at_ms: Some(unix_timestamp_ms()),
+        }
+    }
+
+    /// Create a task progress event with structured detail.
+    pub fn task_progress_with_detail(
+        task_id: &str,
+        execution_id: &str,
+        progress: f32,
+        message: Option<String>,
+        detail: TaskProgressDetail,
+    ) -> Self {
+        Self::TaskProgress {
+            task_id: task_id.to_string(),
+            execution_id: execution_id.to_string(),
+            progress,
+            message,
+            detail: Some(detail),
             occurred_at_ms: Some(unix_timestamp_ms()),
         }
     }

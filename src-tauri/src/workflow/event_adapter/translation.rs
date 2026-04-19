@@ -113,11 +113,13 @@ pub(super) fn translate_node_event(event: node_engine::WorkflowEvent) -> TauriWo
             execution_id,
             progress,
             message,
+            detail,
             ..
         } => TauriWorkflowEvent::NodeProgress {
             node_id: task_id,
             progress,
             message,
+            detail,
             execution_id,
         },
 

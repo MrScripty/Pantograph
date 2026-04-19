@@ -90,6 +90,8 @@ pub struct WorkflowTraceNodeRecord {
     pub stream_event_count: usize,
     #[serde(default)]
     pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_progress_detail: Option<node_engine::TaskProgressDetail>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,6 +158,7 @@ pub enum WorkflowTraceEvent {
     NodeProgress {
         execution_id: String,
         node_id: String,
+        detail: Option<node_engine::TaskProgressDetail>,
     },
     NodeStream {
         execution_id: String,

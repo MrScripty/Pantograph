@@ -443,6 +443,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             execution_id: self.execution_id.clone(),
             progress,
             message,
+            detail: None,
             occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }

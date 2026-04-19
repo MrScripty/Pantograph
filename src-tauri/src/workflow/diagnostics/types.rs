@@ -69,6 +69,8 @@ pub struct DiagnosticsNodeTrace {
     pub event_count: usize,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_progress_detail: Option<node_engine::TaskProgressDetail>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

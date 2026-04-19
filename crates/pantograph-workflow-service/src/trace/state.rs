@@ -184,8 +184,9 @@ pub(super) fn apply_trace_event(
             node.duration_ms = None;
             node.last_error = None;
         }
-        WorkflowTraceEvent::NodeProgress { .. } => {
+        WorkflowTraceEvent::NodeProgress { detail, .. } => {
             node.status = WorkflowTraceNodeStatus::Running;
+            node.last_progress_detail = detail.clone();
         }
         WorkflowTraceEvent::NodeStream { .. } => {
             node.status = WorkflowTraceNodeStatus::Running;
@@ -323,5 +324,6 @@ fn create_trace_node_record(node_id: &str, node_type: Option<String>) -> Workflo
         event_count: 0,
         stream_event_count: 0,
         last_error: None,
+        last_progress_detail: None,
     }
 }

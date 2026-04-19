@@ -14,6 +14,7 @@ use crate::workflow::events::WorkflowEvent;
 pub(crate) struct DiagnosticsNodeOverlay {
     pub(crate) last_progress: Option<f32>,
     pub(crate) last_message: Option<String>,
+    pub(crate) last_progress_detail: Option<node_engine::TaskProgressDetail>,
 }
 
 #[derive(Debug, Clone)]
@@ -134,12 +135,20 @@ pub(crate) fn record_diagnostics_overlay(
             WorkflowEvent::NodeStarted { .. } => {
                 node_overlay.last_progress = None;
                 node_overlay.last_message = None;
+                node_overlay.last_progress_detail = None;
             }
             WorkflowEvent::NodeProgress {
-                progress, message, ..
+                progress,
+                message,
+                detail,
+                ..
             } => {
-                node_overlay.last_progress = Some(*progress);
-                node_overlay.last_message = message.clone();
+                if let Some(detail) = detail.clone() {
+                    node_overlay.last_progress_detail = Some(detail);
+                } else {
+                    node_overlay.last_progress = Some(*progress);
+                    node_overlay.last_message = message.clone();
+                }
             }
             WorkflowEvent::WaitingForInput { message, .. } => {
                 node_overlay.last_message = message
