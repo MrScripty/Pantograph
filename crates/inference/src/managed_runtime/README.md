@@ -68,6 +68,8 @@ instead of becoming the owner of install or launch policy.
   hosts do not drift from execution reality.
 - Managed runtime transitions are serialized per runtime id before install or
   removal mutates the filesystem.
+- Archive extraction path validation is centralized in `archive.rs` so runtime
+  install flows do not each reinvent root-containment checks.
 - This directory owns binary-management facts, not higher-level workflow
   readiness policy; workflow-service and runtime-registry layers may consume the
   facts but must not be bypassed by host-local rebuilds.

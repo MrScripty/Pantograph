@@ -478,6 +478,10 @@ Update during implementation:
   managed runtime selection, versions, interrupted-job reconciliation, and
   install history, and runtime snapshots now merge that persisted state instead
   of remaining purely ephemeral projections.
+- 2026-04-19: Milestone 2 slice 2 centralized archive extraction path
+  validation in the backend managed runtime archive helpers so zip and tar
+  installs share one root-containment check instead of relying on scattered
+  archive-specific assumptions.
 
 ## Commit Cadence Notes
 
