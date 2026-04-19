@@ -5,89 +5,15 @@
 //! - Managing undo/redo stacks per execution
 //! - Cleaning up stale executions
 
+mod state;
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use node_engine::{EventSink, UndoStack, WorkflowExecutor, WorkflowGraph};
+use node_engine::{EventSink, WorkflowExecutor, WorkflowGraph};
+pub use state::{ExecutionHandle, ExecutionState, UndoRedoState};
 use tokio::sync::{Mutex, RwLock};
-
-/// State for a single workflow execution
-pub struct ExecutionState {
-    /// The workflow executor (contains DemandEngine, graph, context)
-    pub executor: WorkflowExecutor,
-    /// Undo/redo stack for this execution
-    pub undo_stack: UndoStack,
-    /// When this execution was created
-    pub created_at: Instant,
-    /// When this execution was last accessed
-    pub last_accessed: Instant,
-}
-
-pub type ExecutionHandle = Arc<Mutex<ExecutionState>>;
-
-impl ExecutionState {
-    /// Create a new execution state
-    pub fn new(executor: WorkflowExecutor) -> Self {
-        let now = Instant::now();
-        Self {
-            executor,
-            undo_stack: UndoStack::default(),
-            created_at: now,
-            last_accessed: now,
-        }
-    }
-
-    /// Update the last accessed time
-    pub fn touch(&mut self) {
-        self.last_accessed = Instant::now();
-    }
-
-    /// Check if this execution is stale (hasn't been accessed recently)
-    pub fn is_stale(&self, timeout: Duration) -> bool {
-        self.last_accessed.elapsed() > timeout
-    }
-
-    /// Push the current graph state to the undo stack
-    pub async fn push_undo_snapshot(&mut self) -> node_engine::Result<()> {
-        let graph = self.executor.get_graph_snapshot().await;
-        self.undo_stack.push(&graph)
-    }
-
-    /// Undo to the previous graph state
-    pub async fn undo(&mut self) -> Option<node_engine::Result<WorkflowGraph>> {
-        match self.undo_stack.undo() {
-            Some(Ok(graph)) => {
-                self.executor.restore_graph_snapshot(graph.clone()).await;
-                Some(Ok(graph))
-            }
-            Some(Err(e)) => Some(Err(e)),
-            None => None,
-        }
-    }
-
-    /// Redo to the next graph state
-    pub async fn redo(&mut self) -> Option<node_engine::Result<WorkflowGraph>> {
-        match self.undo_stack.redo() {
-            Some(Ok(graph)) => {
-                self.executor.restore_graph_snapshot(graph.clone()).await;
-                Some(Ok(graph))
-            }
-            Some(Err(e)) => Some(Err(e)),
-            None => None,
-        }
-    }
-
-    /// Check if undo is available
-    pub fn can_undo(&self) -> bool {
-        self.undo_stack.can_undo()
-    }
-
-    /// Check if redo is available
-    pub fn can_redo(&self) -> bool {
-        self.undo_stack.can_redo()
-    }
-}
 
 /// Manager for all workflow executions
 pub struct ExecutionManager {
@@ -205,11 +131,7 @@ impl ExecutionManager {
     pub async fn get_undo_redo_state(&self, execution_id: &str) -> Option<UndoRedoState> {
         let handle = self.get_execution_handle(execution_id).await?;
         let state = handle.lock().await;
-        Some(UndoRedoState {
-            can_undo: state.can_undo(),
-            can_redo: state.can_redo(),
-            undo_count: state.undo_stack.len(),
-        })
+        Some(state.undo_redo_state())
     }
 }
 
@@ -217,15 +139,6 @@ impl Default for ExecutionManager {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// State of undo/redo for an execution
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UndoRedoState {
-    pub can_undo: bool,
-    pub can_redo: bool,
-    pub undo_count: usize,
 }
 
 /// Shared execution manager type for Tauri state

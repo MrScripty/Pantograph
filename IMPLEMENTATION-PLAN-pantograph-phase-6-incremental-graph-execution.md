@@ -764,6 +764,10 @@ Update during implementation:
   now lives behind `graph/session_runtime.rs` instead of keeping active
   execution metadata, queue projection, and run counters inside
   `graph/session.rs`.
+- 2026-04-18: Milestone 2 continued. Tauri execution-state lifecycle and
+  undo/redo projection now live behind `src-tauri/src/workflow/execution_manager/`
+  instead of keeping manager and per-execution state concerns collapsed inside
+  `execution_manager.rs`.
 
 ## Commit Cadence Notes
 

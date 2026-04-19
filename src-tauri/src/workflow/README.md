@@ -16,6 +16,8 @@ owner of that policy itself.
 | `workflow_execution_tauri_commands.rs` | Tauri execution/edit-session command entrypoints that forward to focused execution and graph-session helpers. |
 | `workflow_execution_commands.rs` | Thin execution command-group facade that reuses focused runtime and edit-session helpers. |
 | `workflow_execution_runtime.rs` | Desktop execution orchestration and diagnostics-emission helpers for edit-session workflow runs. |
+| `execution_manager.rs` | Tauri execution-manager facade for host-local execution handles and stale-cleanup ownership. |
+| `execution_manager/` | Focused execution-state lifecycle helpers behind the public execution-manager facade. |
 | `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
 | `event_adapter/` | Focused translation and diagnostics-bridge helpers behind the stable event-adapter facade. |
 | `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
@@ -45,6 +47,9 @@ while still handling desktop runtime execution concerns.
   the migration.
 - Runtime admission, reservation, retention, and eviction policy must not be
   implemented directly in Tauri workflow command handlers.
+- Tauri execution-handle lifecycle and undo/redo projection must stay thin
+  wrappers around backend-owned `node-engine` behavior rather than becoming a
+  second owner of workflow-session policy.
 - Persisted graphs may contain additive `node.data.definition` port overlays for
   dynamic inference settings; the legacy Tauri path must interpret those the
   same way as core during the migration window.
@@ -81,6 +86,10 @@ entrypoints, while `workflow_execution_commands.rs` remains a thin command-
 group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`
 so edit-session graph operations and runtime execution sequencing stop growing
 inside the general command root.
+`execution_manager/` now splits per-execution lifecycle and undo/redo state
+helpers away from the public execution-manager facade so later Phase 6
+checkpoint transport work does not re-collapse manager and state ownership into
+one file.
 `headless_diagnostics_transport.rs` owns the host-facing diagnostics snapshot,
 trace snapshot, and clear-history responses so runtime debug commands and
 workflow command wrappers do not depend on the broader headless workflow
