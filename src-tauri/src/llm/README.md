@@ -10,7 +10,7 @@ runtime contracts exposed by `crates/inference`.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `gateway.rs` | Tauri-facing wrapper around `inference::InferenceGateway` that adapts app-state wiring and startup helpers without replacing the backend facade. |
-| `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, and runtime-status queries. |
+| `commands/` | Tauri command handlers for backend selection, server lifecycle, config reads/writes, runtime-status queries, and thin redistributable-manager transport over backend-owned contracts. |
 | `runtime_registry.rs` | Tauri adapter that translates backend lifecycle facts into the backend-owned runtime-registry crate. |
 | `rag_sync.rs` | Host-only helper that keeps the Tauri RAG consumer aligned with gateway-owned embedding runtime availability. |
 | `health_monitor.rs` | App-owned health polling loop that maps HTTP probe results onto backend-owned health assessment and emits desktop events. |
@@ -62,6 +62,10 @@ does not own runtime policy.
   gateway and related host-owned runtime services.
 - Tauri commands in this directory adapt host calls onto backend contracts; they
   do not redefine runtime lifecycle truth.
+- Managed-runtime redistributable command surfaces must forward onto the
+  backend-owned manager/view contract exposed by `pantograph-embedded-runtime`
+  rather than branching directly on `inference` install-state helpers inside
+  Tauri.
 - Health and recovery flows must operate through shared gateway-backed state,
   not independent adapter-local state machines.
 - Recovery retry loops may gather host facts such as port availability, but

@@ -426,7 +426,7 @@ core logic into Tauri.
 - Contract tests for projected view payloads
 - Architecture review proving no business logic regressed into Tauri
 
-**Status:** Not started
+**Status:** In progress
 
 ### Milestone 6: Rollout, Follow-On Runtime Reuse, And Source-Of-Truth Closeout
 
@@ -551,6 +551,13 @@ Update during implementation:
   anchored to the workflow's required backend, and adds restart-path coverage
   proving preflight and workflow run block when `llama.cpp` is failed after
   restart instead of silently falling back to an unrelated ready runtime.
+- 2026-04-19: Milestone 5 slice 1 introduced a backend-owned managed-runtime
+  manager view contract in `pantograph-embedded-runtime`, moved Tauri
+  redistributable commands onto that backend facade for list/install/remove/
+  select/default/inspect operations, and replaced the placeholder
+  `src-tauri/src/llm/commands/README.md` text with an explicit adapter-boundary
+  description. Pause/resume/cancel and event-driven progress follow-up remain
+  open inside Milestone 5.
 
 ## Commit Cadence Notes
 

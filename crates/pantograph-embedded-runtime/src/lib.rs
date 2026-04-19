@@ -52,6 +52,7 @@ use uuid::Uuid;
 
 pub mod embedding_workflow;
 pub mod host_runtime;
+pub mod managed_runtime_manager;
 pub mod model_dependencies;
 pub mod python_runtime;
 mod python_runtime_execution;
@@ -68,6 +69,12 @@ pub mod workflow_runtime;
 mod workflow_session_execution;
 
 pub use host_runtime::HostRuntimeModeSnapshot;
+pub use managed_runtime_manager::{
+    inspect_managed_runtime_manager_runtime, install_managed_runtime_manager_runtime,
+    list_managed_runtime_manager_runtimes, remove_managed_runtime_manager_runtime,
+    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
+    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
+};
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,

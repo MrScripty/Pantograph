@@ -186,6 +186,11 @@ reconciled as the final source of truth.
   stays anchored to the workflow's required backend instead of selecting an
   unrelated ready runtime such as `candle`. Workflow preflight and workflow
   run now both block on those restart-time redistributable failures.
+- Runtime redistributable command transport now also routes through a
+  backend-owned managed-runtime manager view contract in
+  `pantograph-embedded-runtime`, so Tauri no longer reaches directly into
+  `inference` install/remove/list helpers for the current list/install/remove/
+  select/default/inspect command surface.
 - Runtime diagnostics preserve concrete producer/runtime observations,
   including lifecycle snapshots, observed runtime ids, and Python-backed
   producer traces.
