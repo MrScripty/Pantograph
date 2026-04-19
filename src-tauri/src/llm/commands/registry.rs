@@ -1,9 +1,9 @@
 //! Runtime-registry inspection and targeted reclaim commands.
 
-#[path = "registry/request.rs"]
-mod request;
 #[path = "registry/debug.rs"]
 mod debug;
+#[path = "registry/request.rs"]
+mod request;
 #[cfg(test)]
 #[path = "registry/tests.rs"]
 mod tests;
@@ -21,13 +21,11 @@ use pantograph_workflow_service::{WorkflowServiceError, WorkflowTraceSnapshotReq
 use serde::{Deserialize, Serialize};
 use tauri::{command, AppHandle, Manager, State};
 
-use crate::llm::runtime_registry::{
-    reclaim_runtime_and_sync_runtime_registry,
-};
+use crate::llm::runtime_registry::reclaim_runtime_and_sync_runtime_registry;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
-pub(crate) use debug::{runtime_debug_snapshot_response, runtime_registry_snapshot_response};
-pub(crate) use debug::RuntimeDebugTraceSelection;
 pub use debug::RuntimeDebugSnapshot;
+pub(crate) use debug::RuntimeDebugTraceSelection;
+pub(crate) use debug::{runtime_debug_snapshot_response, runtime_registry_snapshot_response};
 pub use request::RuntimeDebugSnapshotRequest;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,16 +150,15 @@ pub async fn get_runtime_debug_snapshot(
         include_completed,
     };
     let (workflow_trace, workflow_trace_selection) = if include_trace {
-        let selection = resolve_runtime_debug_trace_scope(
-            workflow_diagnostics_store.as_ref(),
-            &trace_request,
-        )
-        .map_err(|error| error.to_envelope_json())?;
+        let selection =
+            resolve_runtime_debug_trace_scope(workflow_diagnostics_store.as_ref(), &trace_request)
+                .map_err(|error| error.to_envelope_json())?;
         let workflow_trace = match (workflow_diagnostics_store, selection.as_ref()) {
             (Some(store), Some((_, selection))) if selection.ambiguous => None,
-            (Some(store), Some((resolved_request, _))) => {
-                Some(workflow_trace_snapshot_response(&store, resolved_request.clone())?)
-            }
+            (Some(store), Some((resolved_request, _))) => Some(workflow_trace_snapshot_response(
+                &store,
+                resolved_request.clone(),
+            )?),
             _ => None,
         };
         (workflow_trace, selection.map(|(_, selection)| selection))

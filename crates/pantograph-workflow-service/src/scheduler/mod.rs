@@ -19,9 +19,9 @@ pub use contracts::{
     WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
     WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };
-pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
+pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use store::{
-    unix_timestamp_ms, WorkflowSessionPreflightCache, WorkflowSessionStore,
-    WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowSessionPreflightCache, WorkflowSessionStore,
+    unix_timestamp_ms,
 };

@@ -7,9 +7,7 @@ use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::workflow::diagnostics::{
     DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
 };
-use pantograph_workflow_service::{
-    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotResponse,
-};
+use pantograph_workflow_service::{WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotResponse};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

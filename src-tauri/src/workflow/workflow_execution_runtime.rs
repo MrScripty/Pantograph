@@ -28,7 +28,10 @@ fn send_diagnostics_projection(
     ));
 }
 
-fn finalize_edit_session_execution(waiting_for_input: bool, error: Option<String>) -> Result<(), String> {
+fn finalize_edit_session_execution(
+    waiting_for_input: bool,
+    error: Option<String>,
+) -> Result<(), String> {
     if waiting_for_input {
         return Ok(());
     }
@@ -321,11 +324,9 @@ mod tests {
 
     #[test]
     fn finalize_edit_session_execution_propagates_terminal_error() {
-        let error = finalize_edit_session_execution(
-            false,
-            Some("workflow execution failed".to_string()),
-        )
-        .expect_err("terminal error should be returned");
+        let error =
+            finalize_edit_session_execution(false, Some("workflow execution failed".to_string()))
+                .expect_err("terminal error should be returned");
 
         assert_eq!(error, "workflow execution failed");
     }

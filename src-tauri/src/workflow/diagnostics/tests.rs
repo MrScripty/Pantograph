@@ -301,8 +301,14 @@ fn node_engine_parallel_root_trace_projection_tracks_overlapping_node_timing() {
         .get("exec-parallel")
         .expect("parallel run trace");
     assert_eq!(run.workflow_name.as_deref(), Some("Parallel Workflow"));
-    assert_eq!(run.graph_fingerprint_at_start.as_deref(), Some("graph-parallel"));
-    assert_eq!(run.last_incremental_task_ids, vec!["left".to_string(), "right".to_string()]);
+    assert_eq!(
+        run.graph_fingerprint_at_start.as_deref(),
+        Some("graph-parallel")
+    );
+    assert_eq!(
+        run.last_incremental_task_ids,
+        vec!["left".to_string(), "right".to_string()]
+    );
     assert_eq!(run.event_count, 5);
     assert_eq!(run.last_updated_at_ms, 1_060);
 

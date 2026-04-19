@@ -7,11 +7,11 @@ use pantograph_workflow_service::{
     WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
-    WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest,
 };
 
 use super::commands::SharedWorkflowService;

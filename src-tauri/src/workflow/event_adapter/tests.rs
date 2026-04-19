@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use node_engine::EventSink;
@@ -281,7 +281,10 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
         } => {
             assert_eq!(workflow_id, "wf-1");
             assert_eq!(execution_id, "exec-graph");
-            assert_eq!(dirty_tasks, &vec!["node-a".to_string(), "node-b".to_string()]);
+            assert_eq!(
+                dirty_tasks,
+                &vec!["node-a".to_string(), "node-b".to_string()]
+            );
         }
         other => panic!("unexpected event: {other:?}"),
     }
@@ -472,7 +475,10 @@ fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
         super::TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
             let run = snapshot.runs_by_id.get("exec-parallel").expect("trace");
             assert_eq!(run.workflow_name.as_deref(), Some("Parallel Workflow"));
-            assert_eq!(run.graph_fingerprint_at_start.as_deref(), Some("graph-parallel"));
+            assert_eq!(
+                run.graph_fingerprint_at_start.as_deref(),
+                Some("graph-parallel")
+            );
             assert_eq!(
                 run.last_incremental_task_ids,
                 vec!["left".to_string(), "right".to_string()]
@@ -481,7 +487,10 @@ fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
             assert_eq!(run.last_updated_at_ms, 1_060);
 
             let left = run.nodes.get("left").expect("left node trace");
-            assert_eq!(left.status, crate::workflow::diagnostics::DiagnosticsNodeStatus::Completed);
+            assert_eq!(
+                left.status,
+                crate::workflow::diagnostics::DiagnosticsNodeStatus::Completed
+            );
             assert_eq!(left.duration_ms, Some(30));
 
             let right = run.nodes.get("right").expect("right node trace");

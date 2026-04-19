@@ -1,6 +1,4 @@
-use super::super::diagnostics::{
-    node_engine_workflow_trace_event, SharedWorkflowDiagnosticsStore,
-};
+use super::super::diagnostics::{node_engine_workflow_trace_event, SharedWorkflowDiagnosticsStore};
 use super::super::events::WorkflowEvent as TauriWorkflowEvent;
 use super::translation::{translate_node_event, translated_execution_id};
 
