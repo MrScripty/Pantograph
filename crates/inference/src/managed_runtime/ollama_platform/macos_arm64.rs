@@ -10,7 +10,7 @@ pub(crate) struct MacOsArm64Platform;
 pub(crate) static PLATFORM: MacOsArm64Platform = MacOsArm64Platform;
 
 impl OllamaPlatform for MacOsArm64Platform {
-    fn release_asset(&self) -> ReleaseAsset {
+    fn release_asset(&self, _version: &str) -> ReleaseAsset {
         ReleaseAsset {
             archive_name: "Ollama-darwin.zip".to_string(),
             archive_kind: ArchiveKind::Zip,

@@ -13,9 +13,10 @@ use std::path::{Path, PathBuf};
 
 pub(crate) trait ManagedBinaryDefinition: Sync {
     fn display_name(&self) -> &'static str;
-    fn release_version(&self) -> &'static str;
-    fn release_asset(&self) -> Result<ReleaseAsset, String>;
-    fn download_url(&self, release_asset: &ReleaseAsset) -> String;
+    fn github_release_repo(&self) -> (&'static str, &'static str);
+    fn default_release_version(&self) -> &'static str;
+    fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String>;
+    fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String;
     fn platform_key(&self) -> &'static str;
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
@@ -36,18 +37,22 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
         ManagedBinaryId::LlamaCpp.display_name()
     }
 
-    fn release_version(&self) -> &'static str {
+    fn github_release_repo(&self) -> (&'static str, &'static str) {
+        ("ggml-org", "llama.cpp")
+    }
+
+    fn default_release_version(&self) -> &'static str {
         crate::managed_runtime::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG
     }
 
-    fn release_asset(&self) -> Result<ReleaseAsset, String> {
-        Ok(current_llama_platform().release_asset())
+    fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String> {
+        Ok(current_llama_platform().release_asset(version))
     }
 
-    fn download_url(&self, release_asset: &ReleaseAsset) -> String {
+    fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String {
         format!(
             "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
-            crate::managed_runtime::llama_cpp_platform::LLAMA_CPP_RELEASE_TAG,
+            version,
             release_asset.archive_name
         )
     }
@@ -82,18 +87,22 @@ impl ManagedBinaryDefinition for OllamaBinary {
         ManagedBinaryId::Ollama.display_name()
     }
 
-    fn release_version(&self) -> &'static str {
+    fn github_release_repo(&self) -> (&'static str, &'static str) {
+        ("ollama", "ollama")
+    }
+
+    fn default_release_version(&self) -> &'static str {
         crate::managed_runtime::ollama_platform::OLLAMA_RELEASE_TAG
     }
 
-    fn release_asset(&self) -> Result<ReleaseAsset, String> {
-        Ok(current_ollama_platform().release_asset())
+    fn release_asset(&self, version: &str) -> Result<ReleaseAsset, String> {
+        Ok(current_ollama_platform().release_asset(version))
     }
 
-    fn download_url(&self, release_asset: &ReleaseAsset) -> String {
+    fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String {
         format!(
             "https://github.com/ollama/ollama/releases/download/{}/{}",
-            crate::managed_runtime::ollama_platform::OLLAMA_RELEASE_TAG,
+            version,
             release_asset.archive_name
         )
     }

@@ -2,6 +2,7 @@ pub mod llama_cpp_platform;
 pub mod ollama_platform;
 
 mod archive;
+mod catalog;
 mod contracts;
 mod definitions;
 mod operations;
@@ -10,16 +11,17 @@ mod state;
 
 pub use contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeJobArtifactStatus, ManagedRuntimeReadinessState,
+    ManagedBinaryInstallState, ManagedRuntimeCatalogVersion, ManagedRuntimeJobArtifactStatus,
+    ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
     ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
     ResolvedCommand,
 };
 pub use operations::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,
     list_binary_capabilities, list_managed_runtime_snapshots, managed_runtime_snapshot,
-    pause_binary_download, remove_binary, resolve_binary_command, select_managed_runtime_version,
-    set_default_managed_runtime_version,
+    pause_binary_download, refresh_managed_runtime_catalog,
+    refresh_managed_runtime_catalogs, remove_binary, resolve_binary_command,
+    select_managed_runtime_version, set_default_managed_runtime_version,
 };
 pub use paths::managed_runtime_dir;
 pub use state::{

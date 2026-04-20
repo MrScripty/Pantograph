@@ -2,10 +2,11 @@ use std::path::Path;
 
 use inference::{
     cancel_binary_download, download_binary, list_managed_runtime_snapshots,
-    load_managed_runtime_state, remove_binary, select_managed_runtime_version,
-    set_default_managed_runtime_version, pause_binary_download, DownloadProgress, ManagedBinaryId,
-    ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobStatus,
-    ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    load_managed_runtime_state, pause_binary_download, refresh_managed_runtime_catalogs,
+    remove_binary, select_managed_runtime_version, set_default_managed_runtime_version,
+    DownloadProgress, ManagedBinaryId, ManagedRuntimeInstallHistoryEntry,
+    ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobStatus, ManagedRuntimeSelectionState,
+    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
 };
 use serde::{Deserialize, Serialize};
 
@@ -67,19 +68,31 @@ pub fn inspect_managed_runtime_manager_runtime(
 pub async fn install_managed_runtime_manager_runtime<F>(
     app_data_dir: &Path,
     runtime_id: ManagedBinaryId,
+    version: Option<&str>,
     mut on_progress: F,
 ) -> Result<(), String>
 where
     F: FnMut(ManagedRuntimeManagerProgress),
 {
     let mut last_runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)?;
-    download_binary(app_data_dir, runtime_id, |progress| {
+    download_binary(app_data_dir, runtime_id, version, |progress| {
         let runtime = inspect_managed_runtime_manager_runtime(app_data_dir, runtime_id)
             .unwrap_or_else(|_| last_runtime.clone());
         last_runtime = runtime.clone();
         on_progress(project_progress(runtime_id, progress, runtime));
     })
     .await
+}
+
+pub async fn refresh_managed_runtime_manager_catalog_views(
+    app_data_dir: &Path,
+) -> Result<Vec<ManagedRuntimeManagerRuntimeView>, String> {
+    let snapshots = refresh_managed_runtime_catalogs(app_data_dir).await?;
+    let state = load_managed_runtime_state(app_data_dir)?;
+    Ok(snapshots
+        .iter()
+        .map(|snapshot| runtime_view_from_snapshot(snapshot, &state))
+        .collect())
 }
 
 pub async fn remove_managed_runtime_manager_runtime(
@@ -186,6 +199,8 @@ mod tests {
         let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
         state.runtimes.push(ManagedRuntimePersistedRuntime {
             id: ManagedBinaryId::LlamaCpp,
+            catalog_versions: Vec::new(),
+            catalog_refreshed_at_ms: None,
             versions: vec![ManagedRuntimePersistedVersion {
                 version: "b8248".to_string(),
                 runtime_key: Some("llama_cpp".to_string()),
@@ -245,6 +260,8 @@ mod tests {
         let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
         state.runtimes.push(ManagedRuntimePersistedRuntime {
             id: ManagedBinaryId::LlamaCpp,
+            catalog_versions: Vec::new(),
+            catalog_refreshed_at_ms: None,
             versions: vec![ManagedRuntimePersistedVersion {
                 version: "b8248".to_string(),
                 runtime_key: Some("llama_cpp".to_string()),

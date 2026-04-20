@@ -100,6 +100,17 @@ pub struct ManagedRuntimeSelectionState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub struct ManagedRuntimeCatalogVersion {
+    pub version: String,
+    pub display_label: String,
+    pub runtime_key: String,
+    pub platform_key: String,
+    pub archive_name: String,
+    pub download_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimeVersionStatus {
     pub version: Option<String>,
     pub display_label: String,
@@ -110,6 +121,8 @@ pub struct ManagedRuntimeVersionStatus {
     pub executable_ready: bool,
     pub install_state: ManagedBinaryInstallState,
     pub readiness_state: ManagedRuntimeReadinessState,
+    pub catalog_available: bool,
+    pub installable: bool,
     pub selected: bool,
     pub active: bool,
 }

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 pub(crate) const OLLAMA_RELEASE_TAG: &str = "v0.14.1";
 
 pub(crate) trait OllamaPlatform: Sync {
-    fn release_asset(&self) -> ReleaseAsset;
+    fn release_asset(&self, _version: &str) -> ReleaseAsset;
     fn executable_name(&self) -> &'static str;
     fn validate_installation(&self, install_dir: &Path) -> Vec<String>;
     fn resolve_command(&self, install_dir: &Path, args: &[&str])

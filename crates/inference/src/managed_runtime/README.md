@@ -12,6 +12,7 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 
 | File/Folder | Description |
 | ----------- | ----------- |
+| `catalog.rs` | Backend-owned GitHub release catalog refresh and fallback projection for managed runtime versions installable on the current platform. |
 | `contracts.rs` | Stable managed-runtime DTOs for capability, snapshot, version, selection, job, and low-level archive/command contracts shared across backend and host boundaries. |
 | `definitions.rs` | Binary-definition registry that maps managed runtime ids onto runtime-specific release, validation, and command-resolution behavior. |
 | `operations.rs` | Backend-owned orchestration for status reads, install/remove transitions, and command resolution. |
@@ -61,11 +62,12 @@ rebuild runtime state independently.
 ## Decision
 
 Use a small managed-runtime module tree with explicit responsibility splits:
-contracts, definition lookup, orchestration, archive extraction, and path
-helpers. Runtime-specific platform details remain in `llama_cpp_platform/` and
-`ollama_platform/`, while `operations.rs` owns the backend-facing transition and
-availability flow. This keeps Tauri as an adapter that calls backend services
-instead of becoming the owner of install or launch policy.
+contracts, catalog refresh, definition lookup, orchestration, archive
+extraction, and path helpers. Runtime-specific platform details remain in
+`llama_cpp_platform/` and `ollama_platform/`, while `operations.rs` owns the
+backend-facing transition and availability flow. This keeps Tauri as an
+adapter that calls backend services instead of becoming the owner of install or
+launch policy.
 
 ## Alternatives Rejected
 
@@ -139,6 +141,10 @@ fn inspect_runtime(app_data_dir: &Path) {
 - `download_binary()` and `remove_binary()` serialize per-runtime filesystem
   mutations, persist backend-owned job/version/selection state, and surface
   progress/errors through backend-owned contracts.
+- `refresh_managed_runtime_catalog()` and
+  `refresh_managed_runtime_catalogs()` are the backend-owned path for release
+  catalog refresh. Host adapters may request a refresh, but they must not
+  scrape vendor release APIs or synthesize installable version rows locally.
 - `select_managed_runtime_version()` and
   `set_default_managed_runtime_version()` are the backend-owned mutation path
   for version selection policy; host adapters must call them instead of
@@ -199,23 +205,25 @@ following order:
   runtime availability, install state, and user-action affordances.
 - `ManagedRuntimeSnapshot` is the additive broader runtime-manager contract for
   readiness, version, selection, and job-state projection. Current
-  implementations may still leave some version metadata sparse, but the
-  contract is now backed by a durable state file rather than only ephemeral
-  process memory.
+  implementations now merge persisted installed versions with a backend-owned
+  cached release catalog instead of leaving version rows as install-only facts.
 - `ManagedRuntimeVersionStatus` now carries backend-owned compatibility facts
-  for runtime key, platform key, install root, executable name, and executable
-  readiness so execution-adjacent consumers do not infer those fields from
-  host-local assumptions.
+  for runtime key, platform key, install root, executable name, executable
+  readiness, and catalog/installability state so execution-adjacent consumers
+  do not infer those fields from host-local assumptions.
+- `ManagedRuntimeCatalogVersion` is the backend-owned persisted catalog entry
+  for one installable vendor release on the current platform, including the
+  exact archive name and download URL selected by the backend definition layer.
 - `ManagedBinaryInstallState` values are authoritative backend facts and remain
   append-only unless a coordinated breaking change is approved.
 - `DownloadProgress` is the backend-owned progress payload surfaced to adapters;
   `done=true` only means the current transfer/install operation finished, not
   that higher-level workflow readiness policy has been evaluated.
 - `state.json` under the managed runtime root is the persisted runtime-manager
-  artifact for versions, selection state, interrupted-job reconciliation, and
-  install history. Install/remove transitions mutate this file as part of the
-  backend lifecycle flow, and unknown or missing files default to an empty
-  state.
+  artifact for catalog versions, installed versions, selection state,
+  interrupted-job reconciliation, and install history. Install/remove/catalog
+  transitions mutate this file as part of the backend lifecycle flow, and
+  unknown or missing files default to an empty state.
 - Managed runtime installs are version-scoped under the runtime root, while
   command resolution keeps a legacy fallback path for older single-directory
   installs that predate versioned layout support.

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 pub(crate) const LLAMA_CPP_RELEASE_TAG: &str = "b8248";
 
 pub(crate) trait LlamaPlatform: Sync {
-    fn release_asset(&self) -> ReleaseAsset;
+    fn release_asset(&self, version: &str) -> ReleaseAsset;
     fn installed_server_name(&self) -> &'static str;
     fn validate_installation(&self, binaries_dir: &Path) -> Vec<String>;
     fn resolve_command(

@@ -3,9 +3,10 @@
 use pantograph_embedded_runtime::{
     cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
     install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
-    pause_managed_runtime_manager_job, remove_managed_runtime_manager_runtime,
-    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
-    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
+    pause_managed_runtime_manager_job, refresh_managed_runtime_manager_catalog_views,
+    remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
+    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
+    ManagedRuntimeManagerRuntimeView,
 };
 use tauri::{command, ipc::Channel, AppHandle, Manager};
 
@@ -36,15 +37,25 @@ pub async fn inspect_managed_runtime(
     inspect_managed_runtime_manager_runtime(&app_data_dir, binary_id)
 }
 
+/// Refresh backend-owned runtime release catalogs and return updated manager views.
+#[command]
+pub async fn refresh_managed_runtime_catalogs(
+    app: AppHandle,
+) -> Result<Vec<ManagedRuntimeManagerRuntimeView>, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    refresh_managed_runtime_manager_catalog_views(&app_data_dir).await
+}
+
 /// Install one managed runtime into the app-owned runtime directory.
 #[command]
 pub async fn install_managed_runtime(
     app: AppHandle,
     binary_id: ManagedBinaryId,
+    version: Option<String>,
     channel: Channel<ManagedRuntimeManagerProgress>,
 ) -> Result<(), String> {
     let app_data_dir = app_data_dir(&app)?;
-    install_managed_runtime_manager_runtime(&app_data_dir, binary_id, |progress| {
+    install_managed_runtime_manager_runtime(&app_data_dir, binary_id, version.as_deref(), |progress| {
         let _ = channel.send(progress);
     })
     .await

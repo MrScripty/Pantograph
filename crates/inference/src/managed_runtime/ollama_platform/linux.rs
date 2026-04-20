@@ -10,7 +10,7 @@ pub(crate) struct LinuxPlatform;
 pub(crate) static PLATFORM: LinuxPlatform = LinuxPlatform;
 
 impl OllamaPlatform for LinuxPlatform {
-    fn release_asset(&self) -> ReleaseAsset {
+    fn release_asset(&self, _version: &str) -> ReleaseAsset {
         ReleaseAsset {
             archive_name: format!("ollama-linux-amd64.tar.zst"),
             archive_kind: ArchiveKind::TarZst,

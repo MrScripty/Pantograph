@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::{
     ensure_unix_library_aliases, extract_pid_file, find_option_value, prepend_env_path,
-    ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand, LLAMA_CPP_RELEASE_TAG,
+    ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand,
 };
 
 pub(crate) struct LinuxPlatform;
@@ -10,9 +10,9 @@ pub(crate) struct LinuxPlatform;
 pub(crate) static PLATFORM: LinuxPlatform = LinuxPlatform;
 
 impl LlamaPlatform for LinuxPlatform {
-    fn release_asset(&self) -> ReleaseAsset {
+    fn release_asset(&self, version: &str) -> ReleaseAsset {
         ReleaseAsset {
-            archive_name: format!("llama-{}-bin-ubuntu-x64.tar.gz", LLAMA_CPP_RELEASE_TAG),
+            archive_name: format!("llama-{}-bin-ubuntu-x64.tar.gz", version),
             archive_kind: ArchiveKind::TarGz,
         }
     }

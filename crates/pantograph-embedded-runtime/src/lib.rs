@@ -72,9 +72,10 @@ pub use host_runtime::HostRuntimeModeSnapshot;
 pub use managed_runtime_manager::{
     cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
     install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
-    pause_managed_runtime_manager_job, remove_managed_runtime_manager_runtime,
-    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
-    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
+    pause_managed_runtime_manager_job, refresh_managed_runtime_manager_catalog_views,
+    remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
+    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
+    ManagedRuntimeManagerRuntimeView,
 };
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use python_runtime::{
@@ -2234,6 +2235,8 @@ mod tests {
             schema_version: 1,
             runtimes: vec![inference::ManagedRuntimePersistedRuntime {
                 id: inference::ManagedBinaryId::LlamaCpp,
+                catalog_versions: Vec::new(),
+                catalog_refreshed_at_ms: None,
                 versions: vec![inference::ManagedRuntimePersistedVersion {
                     version: version.to_string(),
                     runtime_key: Some(inference::ManagedBinaryId::LlamaCpp.key().to_string()),
@@ -2262,6 +2265,8 @@ mod tests {
             schema_version: 1,
             runtimes: vec![inference::ManagedRuntimePersistedRuntime {
                 id: inference::ManagedBinaryId::LlamaCpp,
+                catalog_versions: Vec::new(),
+                catalog_refreshed_at_ms: None,
                 versions: Vec::new(),
                 selection: inference::ManagedRuntimeSelectionState::default(),
                 active_job: Some(inference::ManagedRuntimeJobStatus {

@@ -10,7 +10,7 @@ pub(crate) struct WindowsPlatform;
 pub(crate) static PLATFORM: WindowsPlatform = WindowsPlatform;
 
 impl OllamaPlatform for WindowsPlatform {
-    fn release_asset(&self) -> ReleaseAsset {
+    fn release_asset(&self, _version: &str) -> ReleaseAsset {
         ReleaseAsset {
             archive_name: "ollama-windows-amd64.zip".to_string(),
             archive_kind: ArchiveKind::Zip,

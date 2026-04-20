@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use super::{
-    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand,
-    LLAMA_CPP_RELEASE_TAG,
+    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, ReleaseAsset,
+    ResolvedCommand,
 };
 
 pub(crate) struct WindowsPlatform;
@@ -10,9 +10,9 @@ pub(crate) struct WindowsPlatform;
 pub(crate) static PLATFORM: WindowsPlatform = WindowsPlatform;
 
 impl LlamaPlatform for WindowsPlatform {
-    fn release_asset(&self) -> ReleaseAsset {
+    fn release_asset(&self, version: &str) -> ReleaseAsset {
         ReleaseAsset {
-            archive_name: format!("llama-{}-bin-win-x64.zip", LLAMA_CPP_RELEASE_TAG),
+            archive_name: format!("llama-{}-bin-win-x64.zip", version),
             archive_kind: ArchiveKind::Zip,
         }
     }

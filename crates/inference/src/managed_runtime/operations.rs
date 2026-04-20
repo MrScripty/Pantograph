@@ -1,9 +1,10 @@
+use super::catalog::fetch_managed_runtime_catalog;
 use super::archive::extract_archive;
 use super::contracts::{
     BinaryStatus, DownloadProgress, ManagedBinaryCapability, ManagedBinaryId,
-    ManagedBinaryInstallState, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimeJobArtifactStatus, ManagedRuntimeReadinessState, ManagedRuntimeSnapshot,
-    ManagedRuntimeVersionStatus, ResolvedCommand,
+    ManagedBinaryInstallState, ManagedRuntimeCatalogVersion, ManagedRuntimeJobArtifactStatus,
+    ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
+    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus, ResolvedCommand,
 };
 use super::definitions::definition;
 use super::paths::{
@@ -33,6 +34,7 @@ static CANCELLATION_REQUESTS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<AtomicBool
     Lazy::new(|| Mutex::new(HashMap::new()));
 static PAUSE_REQUESTS: Lazy<Mutex<HashMap<ManagedBinaryId, Arc<AtomicBool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+const CATALOG_REFRESH_TTL_MS: u64 = 60 * 60 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ManagedRuntimeDownloadArtifact {
@@ -45,6 +47,15 @@ struct ManagedRuntimeDownloadArtifact {
 enum DownloadResponseMode {
     Fresh { total_size: u64 },
     Resume { total_size: u64 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ManagedRuntimeDownloadSource {
+    version: String,
+    runtime_key: String,
+    platform_key: String,
+    archive_name: String,
+    download_url: String,
 }
 
 fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
@@ -127,7 +138,7 @@ pub fn binary_capability(
         });
     }
 
-    let release_asset = definition.release_asset();
+    let release_asset = definition.release_asset(definition.default_release_version());
     if let Err(reason) = release_asset {
         return Ok(ManagedBinaryCapability {
             id,
@@ -199,6 +210,27 @@ pub fn list_managed_runtime_snapshots(
             })
             .collect::<Vec<_>>()
     })
+}
+
+pub async fn refresh_managed_runtime_catalog(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+) -> Result<ManagedRuntimeSnapshot, String> {
+    let catalog = fetch_managed_runtime_catalog(id).await?;
+    persist_catalog_versions(app_data_dir, id, catalog)?;
+    managed_runtime_snapshot(app_data_dir, id)
+}
+
+pub async fn refresh_managed_runtime_catalogs(
+    app_data_dir: &Path,
+) -> Result<Vec<ManagedRuntimeSnapshot>, String> {
+    for id in ManagedBinaryId::all().iter().copied() {
+        if let Ok(catalog) = fetch_managed_runtime_catalog(id).await {
+            let _ = persist_catalog_versions(app_data_dir, id, catalog);
+        }
+    }
+
+    list_managed_runtime_snapshots(app_data_dir)
 }
 
 pub fn select_managed_runtime_version(
@@ -274,6 +306,7 @@ pub fn pause_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Result
 pub async fn download_binary<F>(
     app_data_dir: &Path,
     id: ManagedBinaryId,
+    requested_version: Option<&str>,
     mut on_progress: F,
 ) -> Result<(), String>
 where
@@ -284,7 +317,8 @@ where
     clear_cancellation_request(id);
     clear_pause_request(id);
     let definition = definition(id);
-    let runtime_version = definition.release_version().to_string();
+    let download_source = resolve_download_source(app_data_dir, id, requested_version).await?;
+    let runtime_version = download_source.version.clone();
     if definition.system_command().is_some() {
         return Err(format!(
             "{} is already available from the system PATH",
@@ -293,8 +327,8 @@ where
     }
     let runtime_root = managed_runtime_dir(app_data_dir);
     let install_dir = managed_version_install_dir(app_data_dir, id, &runtime_version);
-    let release_asset = definition.release_asset()?;
-    let download_url = definition.download_url(&release_asset);
+    let release_asset = definition.release_asset(&runtime_version)?;
+    let download_url = download_source.download_url.clone();
 
     fs::create_dir_all(&runtime_root)
         .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
@@ -312,7 +346,7 @@ where
             runtime_root.join(format!(
                 ".{}-{}",
                 uuid::Uuid::new_v4(),
-                release_asset.archive_name
+                download_source.archive_name
             ))
         });
     let mut downloaded = retained_artifact
@@ -325,7 +359,7 @@ where
         .unwrap_or(0);
     let initial_artifact = retained_artifact.as_ref().map(|artifact| ManagedRuntimePersistedJobArtifact {
         version: runtime_version.clone(),
-        archive_name: release_asset.archive_name.clone(),
+        archive_name: download_source.archive_name.clone(),
         archive_path: artifact.temp_path.display().to_string(),
         downloaded_bytes: artifact.downloaded_bytes,
         total_bytes: artifact.total_bytes,
@@ -436,7 +470,7 @@ where
 
             let job_artifact = ManagedRuntimePersistedJobArtifact {
                 version: runtime_version.clone(),
-                archive_name: release_asset.archive_name.clone(),
+                archive_name: download_source.archive_name.clone(),
                 archive_path: temp_path.display().to_string(),
                 downloaded_bytes: downloaded,
                 total_bytes: total_size,
@@ -516,7 +550,7 @@ where
 
     let download_artifact = ManagedRuntimePersistedJobArtifact {
         version: runtime_version.clone(),
-        archive_name: release_asset.archive_name.clone(),
+        archive_name: download_source.archive_name.clone(),
         archive_path: temp_path.display().to_string(),
         downloaded_bytes: downloaded,
         total_bytes: total_size,
@@ -708,7 +742,14 @@ where
         definition.display_name()
     );
 
-    persist_install_success(app_data_dir, id, &runtime_version, &install_dir)?;
+    persist_install_success(
+        app_data_dir,
+        id,
+        &runtime_version,
+        &install_dir,
+        &download_source.runtime_key,
+        &download_source.platform_key,
+    )?;
     clear_cancellation_request(id);
     Ok(())
 }
@@ -781,45 +822,14 @@ fn snapshot_from_capability(
         .map(|runtime| runtime.selection.clone())
         .unwrap_or_default();
     let active_job = persisted_runtime.and_then(|runtime| runtime.active_job.clone());
-    let job_artifact =
-        persisted_runtime.and_then(projected_job_artifact_status);
-    let versions = persisted_runtime
-        .filter(|runtime| !runtime.versions.is_empty())
-        .map(|runtime| {
-            runtime
-                .versions
-                .iter()
-                .map(|version| ManagedRuntimeVersionStatus {
-                    version: Some(version.version.clone()),
-                    display_label: version.version.clone(),
-                    runtime_key: version
-                        .runtime_key
-                        .clone()
-                        .unwrap_or_else(|| capability.id.key().to_string()),
-                    platform_key: version
-                        .platform_key
-                        .clone()
-                        .unwrap_or_else(|| definition.platform_key().to_string()),
-                    install_root: version.install_root.clone(),
-                    executable_name: definition.executable_name().to_string(),
-                    executable_ready: version
-                        .install_root
-                        .as_deref()
-                        .map(|install_root| {
-                            definition
-                                .validate_installation(Path::new(install_root))
-                                .is_empty()
-                        })
-                        .unwrap_or(false),
-                    install_state: capability.install_state,
-                    readiness_state: version.readiness_state,
-                    selected: selection.selected_version.as_deref()
-                        == Some(version.version.as_str()),
-                    active: selection.active_version.as_deref() == Some(version.version.as_str()),
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| vec![version_status_for_capability(app_data_dir, capability)]);
+    let job_artifact = persisted_runtime.and_then(projected_job_artifact_status);
+    let versions = projected_version_statuses(
+        app_data_dir,
+        capability,
+        persisted_runtime,
+        &selection,
+        definition,
+    );
     let readiness_state = projected_snapshot_readiness_state(capability, persisted_runtime);
     let available = projected_snapshot_available(capability, readiness_state);
     let unavailable_reason = projected_snapshot_unavailable_reason(capability, persisted_runtime);
@@ -887,6 +897,111 @@ fn existing_download_artifact(
         downloaded_bytes,
         total_bytes: artifact.total_bytes.max(downloaded_bytes),
     }))
+}
+
+fn persist_catalog_versions(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    catalog_versions: Vec<ManagedRuntimeCatalogVersion>,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = ensure_runtime_state_entry(&mut state, id);
+    runtime.catalog_versions = catalog_versions;
+    runtime.catalog_refreshed_at_ms = Some(current_unix_timestamp_ms());
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
+async fn resolve_download_source(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    requested_version: Option<&str>,
+) -> Result<ManagedRuntimeDownloadSource, String> {
+    let definition = definition(id);
+    let state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = runtime_state_entry(&state, id);
+
+    let preferred_version = requested_version
+        .map(str::to_string)
+        .or_else(|| {
+            runtime.and_then(|runtime| {
+                runtime
+                    .active_job
+                    .as_ref()
+                    .filter(|job| job.state == ManagedRuntimeJobState::Paused)
+                    .and_then(|_| runtime.active_job_artifact.as_ref())
+                    .map(|artifact| artifact.version.clone())
+            })
+        })
+        .or_else(|| {
+            runtime.and_then(|runtime| runtime.selection.selected_version.clone())
+        });
+
+    if let Some(version) = preferred_version.as_deref() {
+        if let Some(download_source) = runtime
+            .and_then(|runtime| runtime.catalog_versions.iter().find(|entry| entry.version == version))
+            .map(download_source_from_catalog)
+        {
+            return Ok(download_source);
+        }
+    }
+
+    let catalog_is_fresh = runtime
+        .and_then(|runtime| runtime.catalog_refreshed_at_ms)
+        .map(|timestamp| current_unix_timestamp_ms().saturating_sub(timestamp) <= CATALOG_REFRESH_TTL_MS)
+        .unwrap_or(false);
+
+    if catalog_is_fresh {
+        if let Some(download_source) = runtime
+            .and_then(|runtime| runtime.catalog_versions.first())
+            .map(download_source_from_catalog)
+        {
+            return Ok(download_source);
+        }
+    }
+
+    let catalog = fetch_managed_runtime_catalog(id).await?;
+    persist_catalog_versions(app_data_dir, id, catalog.clone())?;
+    if let Some(version) = preferred_version.as_deref() {
+        if let Some(download_source) = catalog
+            .iter()
+            .find(|entry| entry.version == version)
+            .map(download_source_from_catalog)
+        {
+            return Ok(download_source);
+        }
+
+        return Err(format!(
+            "{} version {} is not available for the current platform",
+            definition.display_name(),
+            version
+        ));
+    }
+
+    if let Some(download_source) = catalog.first().map(download_source_from_catalog) {
+        return Ok(download_source);
+    }
+
+    let version = definition.default_release_version().to_string();
+    let release_asset = definition.release_asset(&version)?;
+    Ok(ManagedRuntimeDownloadSource {
+        version: version.clone(),
+        runtime_key: id.key().to_string(),
+        platform_key: definition.platform_key().to_string(),
+        archive_name: release_asset.archive_name.clone(),
+        download_url: definition.download_url(&version, &release_asset),
+    })
+}
+
+fn download_source_from_catalog(
+    catalog_version: &ManagedRuntimeCatalogVersion,
+) -> ManagedRuntimeDownloadSource {
+    ManagedRuntimeDownloadSource {
+        version: catalog_version.version.clone(),
+        runtime_key: catalog_version.runtime_key.clone(),
+        platform_key: catalog_version.platform_key.clone(),
+        archive_name: catalog_version.archive_name.clone(),
+        download_url: catalog_version.download_url.clone(),
+    }
 }
 
 fn parse_content_range_total(content_range: Option<&str>) -> Option<u64> {
@@ -1008,6 +1123,129 @@ fn readiness_state_for_capability(
     }
 }
 
+fn projected_version_statuses(
+    app_data_dir: &Path,
+    capability: &ManagedBinaryCapability,
+    persisted_runtime: Option<&ManagedRuntimePersistedRuntime>,
+    selection: &super::contracts::ManagedRuntimeSelectionState,
+    definition: &'static dyn super::definitions::ManagedBinaryDefinition,
+) -> Vec<ManagedRuntimeVersionStatus> {
+    let Some(runtime) = persisted_runtime else {
+        return vec![version_status_for_capability(app_data_dir, capability)];
+    };
+
+    let mut projected_versions = Vec::new();
+
+    for catalog_version in &runtime.catalog_versions {
+        projected_versions.push(projected_catalog_version_status(
+            capability,
+            runtime,
+            selection,
+            definition,
+            catalog_version,
+        ));
+    }
+
+    for installed_version in &runtime.versions {
+        if runtime
+            .catalog_versions
+            .iter()
+            .any(|catalog_version| catalog_version.version == installed_version.version)
+        {
+            continue;
+        }
+
+        projected_versions.push(projected_installed_version_status(
+            capability,
+            selection,
+            definition,
+            installed_version,
+        ));
+    }
+
+    if projected_versions.is_empty() {
+        projected_versions.push(version_status_for_capability(app_data_dir, capability));
+    }
+
+    projected_versions
+}
+
+fn projected_catalog_version_status(
+    capability: &ManagedBinaryCapability,
+    runtime: &ManagedRuntimePersistedRuntime,
+    selection: &super::contracts::ManagedRuntimeSelectionState,
+    definition: &'static dyn super::definitions::ManagedBinaryDefinition,
+    catalog_version: &ManagedRuntimeCatalogVersion,
+) -> ManagedRuntimeVersionStatus {
+    let installed_version = runtime
+        .versions
+        .iter()
+        .find(|version| version.version == catalog_version.version);
+
+    if let Some(installed_version) = installed_version {
+        return projected_installed_version_status(
+            capability,
+            selection,
+            definition,
+            installed_version,
+        );
+    }
+
+    let version = catalog_version.version.as_str();
+    ManagedRuntimeVersionStatus {
+        version: Some(catalog_version.version.clone()),
+        display_label: catalog_version.display_label.clone(),
+        runtime_key: catalog_version.runtime_key.clone(),
+        platform_key: catalog_version.platform_key.clone(),
+        install_root: None,
+        executable_name: definition.executable_name().to_string(),
+        executable_ready: false,
+        install_state: ManagedBinaryInstallState::Missing,
+        readiness_state: ManagedRuntimeReadinessState::Missing,
+        catalog_available: true,
+        installable: capability.can_install,
+        selected: selection.selected_version.as_deref() == Some(version),
+        active: selection.active_version.as_deref() == Some(version),
+    }
+}
+
+fn projected_installed_version_status(
+    capability: &ManagedBinaryCapability,
+    selection: &super::contracts::ManagedRuntimeSelectionState,
+    definition: &'static dyn super::definitions::ManagedBinaryDefinition,
+    version: &ManagedRuntimePersistedVersion,
+) -> ManagedRuntimeVersionStatus {
+    ManagedRuntimeVersionStatus {
+        version: Some(version.version.clone()),
+        display_label: version.version.clone(),
+        runtime_key: version
+            .runtime_key
+            .clone()
+            .unwrap_or_else(|| capability.id.key().to_string()),
+        platform_key: version
+            .platform_key
+            .clone()
+            .unwrap_or_else(|| definition.platform_key().to_string()),
+        install_root: version.install_root.clone(),
+        executable_name: definition.executable_name().to_string(),
+        executable_ready: version
+            .install_root
+            .as_deref()
+            .map(|install_root| definition.validate_installation(Path::new(install_root)).is_empty())
+            .unwrap_or(false),
+        install_state: if version.install_root.is_some() {
+            ManagedBinaryInstallState::Installed
+        } else {
+            ManagedBinaryInstallState::Missing
+        },
+        readiness_state: version.readiness_state,
+        catalog_available: true,
+        installable: capability.can_install,
+        selected: selection.selected_version.as_deref() == Some(version.version.as_str()),
+        active: selection.active_version.as_deref() == Some(version.version.as_str()),
+    }
+}
+
 fn version_status_for_capability(
     app_data_dir: &Path,
     capability: &ManagedBinaryCapability,
@@ -1031,6 +1269,8 @@ fn version_status_for_capability(
         executable_ready: capability.available,
         install_state: capability.install_state,
         readiness_state: readiness_state_for_capability(capability),
+        catalog_available: false,
+        installable: false,
         selected: false,
         active: capability.available,
     }
@@ -1191,6 +1431,8 @@ fn persist_install_success(
     id: ManagedBinaryId,
     version: &str,
     install_dir: &Path,
+    runtime_key: &str,
+    platform_key: &str,
 ) -> Result<(), String> {
     let mut state = load_managed_runtime_state(app_data_dir)?;
     let runtime = ensure_runtime_state_entry(&mut state, id);
@@ -1200,8 +1442,8 @@ fn persist_install_success(
         runtime,
         ManagedRuntimePersistedVersion {
             version: version.to_string(),
-            runtime_key: Some(id.key().to_string()),
-            platform_key: Some(definition(id).platform_key().to_string()),
+            runtime_key: Some(runtime_key.to_string()),
+            platform_key: Some(platform_key.to_string()),
             readiness_state: ManagedRuntimeReadinessState::Ready,
             install_root: Some(install_dir.display().to_string()),
             last_ready_at_ms: Some(current_unix_timestamp_ms()),
@@ -1600,6 +1842,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
 
@@ -1631,6 +1875,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
         persist_remove_success(temp_dir.path(), ManagedBinaryId::LlamaCpp)
@@ -1658,6 +1904,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
         select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
@@ -1690,6 +1938,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
         let error = select_managed_runtime_version(
@@ -1738,6 +1988,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
         select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b8248"))
@@ -1760,6 +2012,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
 
@@ -1797,6 +2051,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
 
@@ -1829,6 +2085,8 @@ mod tests {
             ManagedBinaryId::LlamaCpp,
             "b8248",
             &install_dir,
+            ManagedBinaryId::LlamaCpp.key(),
+            definition(ManagedBinaryId::LlamaCpp).platform_key(),
         )
         .expect("persist install success");
 

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::{
     ensure_unix_library_aliases, extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform,
-    ReleaseAsset, ResolvedCommand, LLAMA_CPP_RELEASE_TAG,
+    ReleaseAsset, ResolvedCommand,
 };
 
 pub(crate) struct MacOsArm64Platform;
@@ -10,9 +10,9 @@ pub(crate) struct MacOsArm64Platform;
 pub(crate) static PLATFORM: MacOsArm64Platform = MacOsArm64Platform;
 
 impl LlamaPlatform for MacOsArm64Platform {
-    fn release_asset(&self) -> ReleaseAsset {
+    fn release_asset(&self, version: &str) -> ReleaseAsset {
         ReleaseAsset {
-            archive_name: format!("llama-{}-bin-macos-arm64.zip", LLAMA_CPP_RELEASE_TAG),
+            archive_name: format!("llama-{}-bin-macos-arm64.zip", version),
             archive_kind: ArchiveKind::Zip,
         }
     }

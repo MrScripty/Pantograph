@@ -398,7 +398,7 @@ version policy, and install/download jobs.
   leakage
 - `cargo check --workspace`
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 3: `llama.cpp` Versioned Install And Readiness Pipeline
 
@@ -425,7 +425,7 @@ version policy, and install/download jobs.
   `CROSS-PLATFORM-STANDARDS.md`
 - `cargo check --workspace`
 
-**Status:** In progress
+**Status:** Complete
 
 ### Milestone 4: Workflow And Scheduler Safety Integration
 
@@ -730,6 +730,15 @@ Update during implementation:
   components. `BackendSelector.svelte`, `ServerStatus.svelte`, and
   `ManagedRuntimeCard.svelte` now sit back at or under the preferred component
   size threshold, so Milestone 5 is functionally complete.
+- 2026-04-19: Milestone 2 and 3 close-out now include a backend-owned cached
+  release catalog plus version-targeted install resolution. `managed_runtime`
+  persists catalog entries and their last refresh timestamp in durable state,
+  refreshes vendor release rows through a focused `catalog.rs` boundary, and
+  resolves install/download requests against exact catalog archive URLs instead
+  of only one baked-in release tag. `ManagedRuntimeSnapshot` version rows now
+  merge cached catalog entries with installed versions so later host and GUI
+  layers can distinguish installable missing versions from already-installed
+  ones without rebuilding release knowledge locally.
 - 2026-04-19: Milestone 6 slice 1 finishes the source-of-truth and
   traceability closeout for the current redistributables boundary. The older
   managed-binary plan and roadmap wording now clearly defer to this plan, and

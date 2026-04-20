@@ -1,6 +1,6 @@
 use super::contracts::{
-    ManagedBinaryId, ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
-    ManagedRuntimeSelectionState,
+    ManagedBinaryId, ManagedRuntimeCatalogVersion, ManagedRuntimeJobState,
+    ManagedRuntimeJobStatus, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
 };
 use super::paths::managed_runtime_dir;
 use serde::{Deserialize, Serialize};
@@ -59,6 +59,9 @@ pub struct ManagedRuntimePersistedJobArtifact {
 #[serde(rename_all = "snake_case")]
 pub struct ManagedRuntimePersistedRuntime {
     pub id: ManagedBinaryId,
+    #[serde(default)]
+    pub catalog_versions: Vec<ManagedRuntimeCatalogVersion>,
+    pub catalog_refreshed_at_ms: Option<u64>,
     #[serde(default)]
     pub versions: Vec<ManagedRuntimePersistedVersion>,
     #[serde(default)]
@@ -153,6 +156,8 @@ pub(crate) fn ensure_runtime_state_entry(
 
     state.runtimes.push(ManagedRuntimePersistedRuntime {
         id,
+        catalog_versions: Vec::new(),
+        catalog_refreshed_at_ms: None,
         versions: Vec::new(),
         selection: ManagedRuntimeSelectionState::default(),
         active_job: None,
@@ -262,6 +267,8 @@ mod tests {
             schema_version: 1,
             runtimes: vec![ManagedRuntimePersistedRuntime {
                 id: ManagedBinaryId::LlamaCpp,
+                catalog_versions: Vec::new(),
+                catalog_refreshed_at_ms: None,
                 versions: Vec::new(),
                 selection: ManagedRuntimeSelectionState {
                     selected_version: Some("b8248".to_string()),
@@ -289,6 +296,8 @@ mod tests {
             schema_version: 1,
             runtimes: vec![ManagedRuntimePersistedRuntime {
                 id: ManagedBinaryId::LlamaCpp,
+                catalog_versions: Vec::new(),
+                catalog_refreshed_at_ms: None,
                 versions: Vec::new(),
                 selection: ManagedRuntimeSelectionState::default(),
                 active_job: Some(ManagedRuntimeJobStatus {
