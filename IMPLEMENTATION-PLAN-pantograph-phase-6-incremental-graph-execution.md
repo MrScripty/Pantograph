@@ -3,58 +3,33 @@
 ## Status
 Complete
 
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## Current Source-of-Truth Summary
 
-This document is the dedicated source of truth for roadmap Phase 6. Phase 6 is
-no longer only "partial graph invalidation." With the clarified requirements,
-Phase 6 now covers the backend-owned execution-memory substrate that makes
-incremental graph execution, debug inspection, keep-alive workflow sessions,
-input reinjection, and scheduler-driven unload/restore viable without pushing
-core graph policy into Tauri or the frontend.
+This document is the dedicated source of truth for roadmap Phase 6, and Phase
+6 is complete.
 
-The roadmap remains the cross-target summary. This file now owns:
+Incremental graph execution is now implemented as a backend-owned
+workflow-session state system rather than a narrow dirty-task feature:
 
-- the backend-owned node-memory and session-checkpoint contract
-- graph-edit reconciliation rules that preserve compatible node memory across
-  graph mutations
-- incremental rerun semantics that reuse preserved node memory and cached
-  outputs where safe
-- restore/reload behavior for keep-alive, temporary runtime unload, and resumed
-  workflow sessions
-- standards-driven refactors required in the immediate touched backend,
-  transport, and package files before more policy lands there
+- `node-engine` owns explicit workflow-session residency, node-memory,
+  graph-memory-impact, checkpoint, and carried-input execution contracts.
+- `pantograph-workflow-service` owns graph-edit reconciliation, memory-impact
+  derivation, selective input reinjection, and additive workflow-session
+  inspection projections.
+- scheduler/runtime reclaim and restore paths preserve logical workflow-session
+  state across checkpoint, unload, and resumed execution instead of discarding
+  node memory on capacity pressure.
+- trace, diagnostics, Tauri, and the GUI consume read-only backend-owned
+  mutation, checkpoint, residency, and node-memory facts.
+- the immediate touched backend, transport, and GUI surfaces were decomposed
+  during rollout so the completed implementation remains standards-compliant in
+  the areas Phase 6 changed.
 
-The accurate baseline at the start of this revised plan is:
-
-- `crates/node-engine/src/engine.rs` already provides demand-driven execution,
-  output caching, version tracking, and `GraphModified` /
-  `IncrementalExecutionStarted` event emission, but it does not yet expose a
-  first-class backend-owned node-memory contract.
-- `WorkflowExecutor` already owns an execution-scoped `Context` and a
-  `DemandEngine`, but current behavior is output-cache-oriented rather than
-  memory-contract-oriented.
-- `crates/pantograph-workflow-service/src/graph/session.rs` already owns
-  backend graph-edit sessions and dirty-task derivation, but it remains
-  oversized and currently treats undo/redo as broad invalidation rather than
-  graph-plus-memory reconciliation.
-- `crates/pantograph-workflow-service/src/workflow.rs` and
-  `crates/pantograph-workflow-service/src/scheduler/` already own keep-alive,
-  runtime reuse, reclaim, and queue semantics, but they do not yet track a
-  persistent workflow-session memory/checkpoint artifact.
-- `src-tauri/src/workflow/execution_manager.rs` still owns execution handles
-  containing a `WorkflowExecutor` and undo stacks, but it does not yet own a
-  standards-reviewed boundary for checkpointing and restoring backend-owned
-  node memory.
-- `crates/pantograph-workflow-service/src/trace/` and
-  `src-tauri/src/workflow/diagnostics/` already project dirty-task and
-  incremental-run facts, but they do not yet expose backend-owned node-memory
-  inspection snapshots.
-- `packages/svelte-graph/src/stores/createWorkflowStores.ts`,
-  `packages/svelte-graph/src/components/WorkflowGraph.svelte`, and
-  `src/services/workflow/WorkflowService.ts` remain immediate non-compliant
-  insertion areas that must be kept healthy if they are touched by the rollout.
+The roadmap should therefore treat Phase 6 as complete, with any future work
+belonging to later follow-on plans rather than reopening this milestone’s core
+ownership boundaries.
 
 ## Objective
 
@@ -1495,10 +1470,19 @@ Update during implementation:
 
 ### Completed
 
-- None yet.
-- Reason: this document is the revised planning baseline for the expanded Phase
-  6 scope.
-- Revisit trigger: first implementation slice lands.
+- Backend-owned workflow-session state, node-memory, graph-memory-impact, and
+  checkpoint contracts are implemented and exercised through `node-engine`,
+  `pantograph-workflow-service`, and the embedded runtime.
+- Compatible graph edits and selective input reinjection preserve and reuse
+  backend-owned node memory so reruns can resolve only the affected downstream
+  closure instead of forcing full recomputation.
+- Keep-alive, reclaim, checkpointed unload, and resumed execution preserve
+  logical workflow-session state across scheduler/runtime lifecycle changes.
+- Trace, diagnostics, Tauri, and the existing GUI graph diagnostics surface now
+  render backend-owned mutation-impact, residency, checkpoint, and node-memory
+  facts without re-owning graph policy.
+- The roadmap and immediate touched documentation now reflect the completed
+  Phase 6 implementation state.
 
 ### Deviations
 
@@ -1508,13 +1492,14 @@ Update during implementation:
 
 ### Follow-Ups
 
-- None yet.
-- Reason: follow-on work should be identified from implemented slices, not
-  guessed now.
+- Future work belongs in later roadmap phases or new dedicated plans if the
+  codebase needs broader durable persistence, richer inspection UX, or other
+  additive behavior beyond the completed Phase 6 ownership boundaries.
 
 ### Verification Summary
 
-- Planning/documentation-only change; no code verification run.
+- Verification was performed incrementally during the landed Phase 6 rollout;
+  this completion summary is a documentation reconciliation update only.
 
 ### Traceability Links
 

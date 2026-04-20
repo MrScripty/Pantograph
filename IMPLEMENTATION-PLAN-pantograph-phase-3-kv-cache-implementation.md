@@ -1,33 +1,35 @@
 # Plan: Pantograph Phase 3 KV Cache Implementation
 
 ## Status
-Active
+Complete
 
 Last updated: 2026-04-19
 
 ## Current Source-of-Truth Summary
 
-This document is the dedicated source of truth for roadmap Phase 3.
+This document is the dedicated source of truth for roadmap Phase 3, and Phase
+3 is complete.
 
-The current codebase has partial KV-cache implementation, but it is not a
-completed workflow primitive:
+The landed Phase 3 implementation now provides a backend-owned KV-cache
+workflow primitive rather than a partial storage subsystem:
 
-- `crates/inference/src/kv_cache/` already owns a real store with memory and
-  disk persistence, model-fingerprint validation, metadata, markers, and
-  codec-based truncation hooks.
-- `crates/node-engine/src/core_executor.rs` already exposes working
-  `kv-cache-save` and `kv-cache-load` executor paths backed by that store.
-- `crates/workflow-nodes/src/storage/kv_cache_{save,load,truncate}.rs` still
-  contain placeholder task runtime logic and TODO comments rather than the
-  real backend-owned execution path.
-- Truncation and partial reuse are not operational end to end because concrete
-  runtime codecs and reuse integration are not yet wired into supported
-  inference backends.
-- The roadmap is internally stale: its top summary still says Phase 3 is not
-  started, while the Phase 3 section says complete.
+- `crates/inference/src/kv_cache/` owns the frozen KV artifact, handle,
+  compatibility, usage-mode, storage, retention, and codec-facing contracts.
+- `node-engine` owns executor-time KV behavior through the extracted
+  `core_executor::kv_cache` path, while `workflow-nodes` stays
+  descriptor-oriented instead of re-owning runtime logic.
+- Workflow graphs expose explicit `kv_cache` ports and validation across the
+  backend, transport, and Svelte graph mirrors.
+- llama.cpp and PyTorch `dllm` inference paths perform backend-owned KV
+  capture, restore, compatibility validation, and truncation through typed
+  runtime adapters.
+- Workflow-session reuse and diagnostics integration are complete: KV handles
+  flow through backend-owned node-memory/session contracts and structured hit,
+  miss, fallback, invalidation, capture, and truncate outcomes project through
+  workflow trace and Tauri diagnostics.
 
-Phase 3 therefore needs a real implementation plan that finishes KV cache as a
-backend-owned workflow primitive and reconciles the stale source of truth.
+The roadmap and immediate touched module READMEs are now reconciled with this
+completed Phase 3 state.
 
 ## Objective
 

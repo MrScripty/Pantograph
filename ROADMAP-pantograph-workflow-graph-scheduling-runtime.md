@@ -1,7 +1,7 @@
 # Roadmap: Pantograph Workflow Execution, Graph, Scheduling, and Runtime
 
 ## Status
-In progress
+Complete
 
 Last updated: 2026-04-19
 
@@ -13,10 +13,10 @@ layers.
 
 1. Metrics/trace spine: Complete
 2. Parallel demand execution: Complete
-3. KV cache implementation: In progress
+3. KV cache implementation: Complete
 4. Scheduler V2: Complete
 5. Real workflow event contract: Complete
-6. Incremental graph execution: In progress
+6. Incremental graph execution: Complete
 7. Runtime adapter unification: Complete
 
 ## Current Source-of-Truth Summary
@@ -34,17 +34,12 @@ Scheduler V2 planning now also has a dedicated implementation plan in
 `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`.
 Incremental graph execution now also has a dedicated standards-reviewed plan
 in `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`.
-That Phase 6 plan now treats incremental execution as a backend-owned
-workflow-session state problem, covering per-node memory, graph-edit
-reconciliation, selective input reinjection, keep-alive session reuse,
-scheduler/runtime unload-restore continuity, and read-only inspection surfaces
-instead of only dirty-task invalidation.
-The first Phase 6 implementation slice is now landed: `node-engine` exposes
-backend-owned workflow-session residency, node-memory, graph-memory-impact,
-and checkpoint contract types behind a focused engine helper module, and graph
-edit-session snapshots now forward an additive `workflow_session_state` view
-that keeps current graph mutations explicitly conservative by projecting
-fallback full invalidation until compatibility-preserving reconciliation lands.
+That Phase 6 plan is now complete and records the landed backend-owned
+workflow-session state model: per-node memory, graph-edit reconciliation,
+selective input reinjection, keep-alive session reuse, scheduler/runtime
+unload-restore continuity, read-only inspection surfaces, and additive
+diagnostics/transport projections now compose through backend Rust instead of
+frontend or Tauri policy ownership.
 Parallel demand execution now has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`, and
 real workflow event contract completion now has dedicated
@@ -116,12 +111,12 @@ pass, and truncate delegates compatibility/truncation through the backend-owned
 path instead of a node-engine placeholder. The inference KV store owns the
 shared executable-compatibility checks used by both load-time and consume-time
 validation and exposes explicit oldest-first bounded retention/eviction
-behavior instead of leaving cache pruning implicit. Milestone 6 is now in
-progress: backend-owned structured KV execution diagnostics for restore
+behavior instead of leaving cache pruning implicit. Milestone 6 is now
+complete: backend-owned structured KV execution diagnostics for restore
 hit/miss/invalidation, capture saved/unsupported, and truncate outcomes now
-flow through workflow trace and Tauri diagnostics, and immediate
-preflight/diagnostics fixtures now use the canonical `kv_cache` extension
-contract. Remaining Phase 3 close-out work is roadmap/README reconciliation.
+flow through workflow trace and Tauri diagnostics, immediate
+preflight/diagnostics fixtures use the canonical `kv_cache` extension
+contract, and roadmap/README reconciliation is complete.
 `pytorch-inference` now restores compatible `kv_cache_in` handles and emits
 fresh `kv_cache_out` handles through the same shared store contract.
 Phase 5 Milestone 1 decomposition is now complete across `node-engine`, the
