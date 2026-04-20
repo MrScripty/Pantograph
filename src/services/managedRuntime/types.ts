@@ -51,6 +51,8 @@ export interface ManagedRuntimeVersionStatus {
   executable_ready: boolean;
   install_state: ManagedBinaryInstallState;
   readiness_state: ManagedRuntimeReadinessState;
+  catalog_available: boolean;
+  installable: boolean;
   selected: boolean;
   active: boolean;
 }

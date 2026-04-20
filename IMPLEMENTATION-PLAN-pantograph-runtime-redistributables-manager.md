@@ -739,6 +739,13 @@ Update during implementation:
   merge cached catalog entries with installed versions so later host and GUI
   layers can distinguish installable missing versions from already-installed
   ones without rebuilding release knowledge locally.
+- 2026-04-19: The mounted runtime-manager GUI now consumes that backend-owned
+  catalog through the shared managed-runtime service, refreshes catalog rows on
+  load, and exposes per-version install actions without moving vendor release
+  or install-resolution policy into TypeScript. The runtime-manager/service
+  README set and roadmap wording are reconciled so the mounted Settings view is
+  documented as a real catalog-backed runtime manager rather than a generic
+  “version-aware” surface.
 - 2026-04-19: Milestone 6 slice 1 finishes the source-of-truth and
   traceability closeout for the current redistributables boundary. The older
   managed-binary plan and roadmap wording now clearly defer to this plan, and

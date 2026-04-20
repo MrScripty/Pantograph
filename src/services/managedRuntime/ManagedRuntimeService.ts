@@ -94,7 +94,8 @@ class ManagedRuntimeServiceClass {
 
   public async installRuntime(
     runtimeId: ManagedRuntimeId,
-    onProgress: ManagedRuntimeProgressListener
+    onProgress: ManagedRuntimeProgressListener,
+    version?: string | null
   ): Promise<void> {
     const channel = new Channel<ManagedRuntimeProgress>();
     channel.onmessage = (event) => {
@@ -105,6 +106,7 @@ class ManagedRuntimeServiceClass {
     try {
       await invoke('install_managed_runtime', {
         binaryId: runtimeId,
+        version,
         channel,
       });
     } catch (error) {
@@ -120,6 +122,14 @@ class ManagedRuntimeServiceClass {
   public async removeRuntime(runtimeId: ManagedRuntimeId): Promise<void> {
     await invoke('remove_managed_runtime', { binaryId: runtimeId });
     await this.listRuntimes();
+  }
+
+  public async refreshCatalogs(): Promise<ManagedRuntimeManagerRuntimeView[]> {
+    const runtimes = await invoke<ManagedRuntimeManagerRuntimeView[]>(
+      'refresh_managed_runtime_catalogs'
+    );
+    this.setRuntimes(runtimes);
+    return this.snapshotRuntimes();
   }
 
   public async cancelRuntimeJob(runtimeId: ManagedRuntimeId): Promise<void> {

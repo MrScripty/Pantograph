@@ -17,6 +17,7 @@
 
     try {
       runtimes = await managedRuntimeService.listRuntimes();
+      runtimes = await managedRuntimeService.refreshCatalogs();
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {

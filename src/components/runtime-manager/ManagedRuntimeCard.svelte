@@ -25,22 +25,25 @@
   let { runtime }: Props = $props();
 
   let installRequested = $state(false);
+  let installingVersion = $state<string | null>(null);
   let removeRequested = $state(false);
   let pauseRequested = $state(false);
   let cancelRequested = $state(false);
   let selectionUpdating = $state(false);
   let error: string | null = $state(null);
 
-  async function installRuntime() {
+  async function installRuntime(version: string | null = null) {
     installRequested = true;
+    installingVersion = version;
     error = null;
 
     try {
-      await managedRuntimeService.installRuntime(runtime.id, () => {});
+      await managedRuntimeService.installRuntime(runtime.id, () => {}, version);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
       installRequested = false;
+      installingVersion = null;
     }
   }
 
@@ -141,6 +144,10 @@
       return 'Installed';
     }
 
+    if (version.catalog_available && version.install_state === 'missing') {
+      return 'Available';
+    }
+
     if (version.readiness_state === 'ready') {
       return 'Ready';
     }
@@ -224,8 +231,11 @@
       {runtime}
       {selectableVersions}
       {selectionUpdating}
+      {installRequested}
+      {installingVersion}
       onUpdateSelected={updateSelectedVersion}
       onUpdateDefault={updateDefaultVersion}
+      onInstallVersion={installRuntime}
       {versionBadgeLabel}
     />
 

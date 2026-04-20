@@ -37,6 +37,9 @@ synchronized snapshot cache of `ManagedRuntimeManagerRuntimeView` values.
 from backend responses and progress events, and notifies subscribers.
 Components then render that projected state and call back through the service
 for actions such as install, pause, cancel, remove, and version policy updates.
+Catalog refresh and version-targeted install requests also stay here so the
+mounted Settings UI can expose richer version controls without learning vendor
+release APIs or download semantics.
 
 ## Alternatives Rejected
 - Let each Settings component call Tauri commands directly.
@@ -89,11 +92,16 @@ const llama = await managedRuntimeService.inspectRuntime('llama_cpp');
 - `inspectRuntime(runtimeId)` refreshes one runtime and updates the shared
   cache entry for that runtime.
 - `installRuntime(runtimeId, onProgress)` forwards the backend install request
-  and surfaces backend progress snapshots through `onProgress`.
+  and surfaces backend progress snapshots through `onProgress`. Callers may
+  also pass an explicit version so the backend installs one catalog entry
+  instead of always choosing the latest/default path.
 - `pauseRuntimeJob`, `cancelRuntimeJob`, `removeRuntime`,
   `selectRuntimeVersion`, and `setDefaultRuntimeVersion` all route through thin
   backend commands and then update the local snapshot cache from backend
   responses.
+- `refreshCatalogs()` asks the backend to refresh persisted release catalogs,
+  updates the shared snapshot cache from that backend response, and keeps
+  vendor/API ownership out of Svelte components.
 - Subscribers receive cloned runtime snapshots and must treat them as read-only
   projections.
 

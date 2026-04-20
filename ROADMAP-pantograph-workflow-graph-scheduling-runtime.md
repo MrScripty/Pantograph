@@ -70,8 +70,11 @@ The dedicated version-aware runtime-manager screen is now mounted in the
 existing Settings GUI: the backend/service contract, version-aware runtime
 presentation, and Settings integration now line up on one authoritative
 runtime-manager surface, and the immediate frontend decomposition pass for that
-surface is also landed. Managed runtime command resolution now also
-consumes that persisted backend selection/install-root state, so future host
+surface is also landed. Managed runtime release catalogs are now backend-owned
+and cached in durable runtime state, so the mounted Settings surface can
+refresh installable version rows without learning vendor release APIs locally.
+Managed runtime command resolution now also consumes that persisted backend
+selection/install-root state, so future host
 adapters do not need to guess which installed runtime path execution should
 launch. Managed runtime installs now land under version-scoped runtime roots,
 with legacy single-directory fallback preserved for older already-installed
@@ -207,9 +210,9 @@ reconciled as the final source of truth.
   `managedRuntime` contract.
 - The mounted Settings GUI now also includes a dedicated version-aware runtime
   manager that renders backend-owned catalog versions, selected/default/active
-  state, retained-artifact controls, and install history through the shared
-  `managedRuntime` contract instead of leaving that behavior in an unmounted
-  one-off component.
+  state, retained-artifact controls, install history, and per-version install
+  actions through the shared `managedRuntime` contract instead of leaving that
+  behavior in an unmounted one-off component.
 - Managed-runtime installs can now also be cancelled through a backend-owned
   request path that flows through the manager facade, Tauri transport, and the
   shared GUI service boundary. That stop path is now split into backend-owned

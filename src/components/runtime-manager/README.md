@@ -19,7 +19,8 @@ between compact backend-picker widgets and unmounted one-off components.
 ## Problem
 Pantograph needs a user-facing runtime manager that can explain why a sidecar
 runtime is unavailable, which versions are known to the backend, which version
-is selected or active, and what install/download work is currently happening.
+is selected or active, which remote catalog versions are installable on the
+current platform, and what install/download work is currently happening.
 Before this directory existed, that information was split between a compact
 backend selector and an unmounted hardcoded runtime component, leaving the
 mounted Settings UI without the version-aware management surface the backend now
@@ -62,10 +63,10 @@ server-shell components.
   does not create a second standalone shell for redistributable management.
 - Runtime actions use semantic buttons, labeled selects, and keyboard-reachable
   interaction paths.
+- Catalog rows remain projection-only: version availability and installability
+  come from the backend-managed runtime snapshot, not from local GUI guesses.
 
 ## Revisit Triggers
-- Pantograph adds per-version install commands that require a richer action
-  model than the current install/resume/remove controls.
 - The runtime manager needs filtering or paging because the managed runtime set
   grows beyond a few cards.
 - Another host surface outside Settings needs the same runtime-manager
