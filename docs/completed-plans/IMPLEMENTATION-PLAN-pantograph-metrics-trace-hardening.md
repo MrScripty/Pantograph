@@ -1,22 +1,23 @@
 # Plan: Pantograph Metrics And Trace Hardening
 
 ## Status
-In progress
+Complete
 
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## Current Source-of-Truth Summary
 
-This document is the dedicated source of truth for the non-premature metrics and
-trace hardening work identified after the metrics/trace spine audit. It expands
-the roadmap follow-up into a standards-reviewed implementation plan for fixing
-contract drift, ambiguous attribution, synthetic timing behavior, and immediate
-standards deviations in the metrics/trace area before more concurrency and
-workflow-event work lands on top of them.
+This document records the completed source of truth for the non-premature
+metrics and trace hardening follow-up that landed after the metrics/trace spine
+implementation.
 
-This plan is intentionally narrower than a broad observability expansion. It
-focuses on correctness, contract consistency, and immediate standards
-compliance, not on durable telemetry, dashboards, or new metrics families.
+The hardening scope is complete: backend-owned trace filter semantics, queue
+attribution/timing correctness, runtime-debug ambiguity handling, and immediate
+trace/diagnostics decomposition were all reconciled without expanding into a
+broader telemetry product lane.
+
+Any future metrics work should be treated as a new follow-on plan rather than a
+reopening of this completed hardening slice.
 
 ## Objective
 

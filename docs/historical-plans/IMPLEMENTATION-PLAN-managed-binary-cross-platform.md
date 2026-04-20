@@ -1,12 +1,15 @@
 # Plan: Managed Binary Cross-Platform
 
+## Status
+Historical precursor
+
 ## Source Of Truth Status
 
 This plan is now a historical precursor, not the active source of truth for
 runtime redistributable work.
 
 Use
-`IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`
 for new implementation. That newer plan supersedes this document because the
 problem has expanded beyond cross-platform binary fetch/install into:
 
@@ -155,7 +158,7 @@ binary-specific and `Ollama` remains Linux-only and inconsistently integrated.
 Update during implementation:
 - 2026-03-09: Plan created after reviewing current `llama.cpp` and `Ollama` binary handling.
 - 2026-04-19: Marked historical-only after the broader
-  `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md` plan
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md` plan
   became the active source of truth. Do not start new work from this file.
 
 ## Commit Cadence Notes
@@ -189,7 +192,7 @@ Update during implementation:
 
 ### Follow-Ups
 
-- Use `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md` for
+- Use `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md` for
   all future runtime redistributable implementation sequencing.
 
 ### Verification Summary

@@ -1,15 +1,20 @@
 # Plan: Pantograph Runtime Redistributables Manager
 
+## Status
+Complete
+
+Last updated: 2026-04-19
+
 ## Source Of Truth Status
 
-This is the active source of truth for Pantograph runtime redistributable
-management work.
+This document records the completed source of truth for Pantograph runtime
+redistributable management work.
 
-It supersedes the older
-`IMPLEMENTATION-PLAN-managed-binary-cross-platform.md` plan because the
-implementation scope is broader and now includes backend-owned persistent job
-state, selected-version policy, workflow/scheduler readiness enforcement, and
-required standards-compliance refactors in the immediate touched code.
+It superseded the older
+`docs/historical-plans/IMPLEMENTATION-PLAN-managed-binary-cross-platform.md`
+plan by broadening the scope to backend-owned persistent job state,
+selected-version policy, workflow/scheduler readiness enforcement, and the
+mounted runtime-manager GUI boundary. That implementation stream is now landed.
 
 ## Objective
 
@@ -290,7 +295,7 @@ Resulting plan corrections:
 Checked against:
 - `ACCESSIBILITY-STANDARDS.md`
 - `DOCUMENTATION-STANDARDS.md`
-- `IMPLEMENTATION-PLAN-managed-binary-cross-platform.md`
+- `docs/historical-plans/IMPLEMENTATION-PLAN-managed-binary-cross-platform.md`
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 
 Findings applied to the plan:
@@ -809,25 +814,42 @@ Update during implementation:
 
 ### Completed
 
-- N/A
+- Backend-owned managed-runtime catalog, selection, retained-artifact, and job
+  lifecycle contracts are implemented for the current runtime-manager lane.
+- Version-aware `llama.cpp` install, resume, pause, cancel, validation, and
+  selected/default-version flows now execute through backend Rust instead of a
+  GUI-owned binary helper path.
+- Workflow preflight, runtime readiness, and scheduler safety now consume the
+  same backend-owned managed-runtime status contract, so execution no longer
+  runs against missing or not-ready redistributables.
+- The mounted Settings runtime manager now renders backend-owned catalog,
+  version, history, and progress state through thin Tauri/service transport.
+- Immediate touched backend, Tauri, and GUI insertion points were decomposed and
+  documented to standards during rollout.
 
 ### Deviations
 
-- N/A
+- Follow-on expansion to additional redistributables or broader package-manager
+  behavior was intentionally left out of scope.
 
 ### Follow-Ups
 
-- N/A
+- Treat future redistributable families or broader runtime-package policy as a
+  new plan rather than reopening this completed `llama.cpp`-first execution
+  slice.
 
 ### Verification Summary
 
-- N/A
+- Verification was performed incrementally during the landed runtime-manager
+  rollout; this reconciled document summarizes the completed implementation
+  state.
 
 ### Traceability Links
 
-- Module README updated: N/A
-- ADR added/updated: N/A
-- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`
+- Historical precursor:
+  `docs/historical-plans/IMPLEMENTATION-PLAN-managed-binary-cross-platform.md`
+- Roadmap reference:
+  `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 
 ## Brevity Note
 

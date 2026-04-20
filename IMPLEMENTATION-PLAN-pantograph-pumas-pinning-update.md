@@ -1,7 +1,19 @@
 # Implementation Plan: Pantograph Update for Pumas Dependency Pinning
 
 ## Status
-Draft (ready to execute)
+In progress
+
+## Current Source-of-Truth Summary
+
+This document is the focused follow-on plan for the remaining dependency
+pinning and audit gaps after the completed resolve-only dependency cutover.
+
+Partial implementation is already landed in code: Pantograph now exposes the
+`audit_dependency_pin_compliance` command surface and several inference-node UI
+surfaces already render the known pinning remediation codes. The remaining work
+is to finish full DTO, resolver, Puma-Lib UI, documentation, and regression
+coverage alignment for pin-specific payloads.
+
 
 ## Goal
 Update Pantograph to consume the newly implemented Pumas dependency pinning model while remaining tolerant to variable metadata shape and additive API fields.

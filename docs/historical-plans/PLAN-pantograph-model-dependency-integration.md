@@ -1,7 +1,19 @@
 # Plan: Pantograph Dependency Integration (Pumas Metadata v2 Finalized Contract)
 
 ## Status
-Implementation plan (updated for finalized Pumas dependency model)
+Historical precursor
+
+## Source Of Truth Status
+
+This document is a historical precursor for Pantograph dependency integration planning.
+
+Use `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-resolve-only-hard-cutover.md`
+for the completed dependency contract baseline,
+`IMPLEMENTATION-PLAN-pantograph-dependency-environment-node.md` for the active
+remaining dependency-environment execution work, and
+`IMPLEMENTATION-PLAN-pantograph-pumas-pinning-update.md` for the remaining
+pin-awareness follow-on.
+
 
 ## Objective
 Implement dependency-aware workflow execution in Pantograph using finalized Pumas metadata/dependency contracts so model-backed nodes (starting with Stable Audio) run reliably on clean machines without bundling all model dependencies in base Pantograph install.

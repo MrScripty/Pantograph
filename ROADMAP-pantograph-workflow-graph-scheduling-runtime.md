@@ -48,13 +48,13 @@ standards-reviewed plans in
 and `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`.
 Managed runtime redistributable work now also has a dedicated
 standards-reviewed plan in
-`IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`. That
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`. That
 plan is now the active source of truth for runtime-binary and redistributable
 management because the work has expanded beyond the older narrow
 cross-platform managed-binary framing into backend-owned version catalogs,
 durable install job state, selected-version policy, workflow/scheduler
 readiness enforcement, and thin Tauri runtime-manager transport. The older
-`IMPLEMENTATION-PLAN-managed-binary-cross-platform.md` document remains in the
+`docs/historical-plans/IMPLEMENTATION-PLAN-managed-binary-cross-platform.md` document remains in the
 repo only as a historical precursor and must not be used as the active
 implementation plan. Managed runtime selection/default-version policy is now
 also exposed as an explicit backend mutation API in `crates/inference`, so
@@ -368,7 +368,7 @@ reconciled as the final source of truth.
   acceptance coverage
 - Runtime redistributables manager implementation planning complete, with the
   active execution source of truth now in
-  `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`
   and the accepted redistributables-manager boundary now frozen in
   `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`; reuse for
   future managed runtimes is captured as an additive backend-extension path

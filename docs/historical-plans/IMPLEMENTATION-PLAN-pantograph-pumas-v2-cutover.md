@@ -1,7 +1,19 @@
 # Actionable Implementation Plan: Pantograph x Pumas Metadata v2 Dependency Cutover
 
 ## Status
-Execution-ready implementation plan
+Historical precursor
+
+## Source Of Truth Status
+
+This document is a historical precursor for the earlier Pumas v2 multi-binding
+cutover framing.
+
+The codebase later converged on a narrower completed resolve-only baseline in
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-resolve-only-hard-cutover.md`,
+with the remaining open work tracked in
+`IMPLEMENTATION-PLAN-pantograph-dependency-environment-node.md` and
+`IMPLEMENTATION-PLAN-pantograph-pumas-pinning-update.md`.
+
 
 ## Goal
 Cut Pantograph over from legacy single-profile dependency handling to finalized Pumas v2 multi-binding dependency contracts, with Stable Audio as first acceptance workflow.
@@ -249,7 +261,7 @@ Acceptance:
 2. Remove stale UI badges/states that do not exist in finalized contract.
 3. Confirm command list in `main.rs` only exposes current dependency command surface.
 4. Update internal docs:
-   - `PLAN-pantograph-model-dependency-integration.md`
+   - `docs/historical-plans/PLAN-pantograph-model-dependency-integration.md`
    - any frontend dev docs for Puma-Lib node behavior.
 5. Confirm dependency additions (if any) include explicit standards justification.
 6. Confirm directory documentation updates are complete.

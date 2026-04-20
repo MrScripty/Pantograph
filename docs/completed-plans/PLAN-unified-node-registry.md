@@ -1,5 +1,16 @@
 # Unified Node Registry — Parallel Agent Orchestration Plan
 
+## Status
+Complete
+
+## Current Source-of-Truth Summary
+
+This document records the completed plan for unifying Pantograph's node
+registry around `workflow-nodes` plus inventory-based discovery. The final
+implementation report lives in `REPORT-unified-node-registry.md`, and the code
+now uses `NodeRegistry::with_builtins()`, `inventory::submit!()`, and
+`buildPantographRegistry()` as the runtime/GUI discovery path.
+
 ## Context
 
 The `llamacpp-inference` node doesn't appear in puma-bot because it exists only in src-tauri's hardcoded registry. Three disconnected registries (engine, Tauri, frontend) must be unified so `workflow-nodes` is the single source of truth. This plan orchestrates the implementation across parallel agents.
@@ -640,3 +651,16 @@ Commits 1-4 can be squashed into one if preferred:
 ```
 feat(workflow-nodes): move Tauri-only node descriptors into engine
 ```
+
+
+## Completion Summary
+
+### Completed
+
+- Built-in node metadata is now discovered from `workflow-nodes` through
+  inventory-based registration.
+- Tauri and Rustler use the same backend-owned registry discovery path instead
+  of maintaining divergent hardcoded registries.
+- Frontend registry construction now flows through `buildPantographRegistry()`.
+- Detailed landed evidence and test results are captured in
+  `REPORT-unified-node-registry.md`.

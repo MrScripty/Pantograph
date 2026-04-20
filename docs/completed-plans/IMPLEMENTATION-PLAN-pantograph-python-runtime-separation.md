@@ -1,5 +1,15 @@
 # Pantograph Implementation Plan: Python Runtime Separation
 
+## Status
+Complete
+
+## Current Source-of-Truth Summary
+
+This document records the completed source of truth for Pantograph's Python runtime separation work. Pantograph no longer embeds Python
+in-process by default, Python-backed nodes execute through a host-managed
+process adapter, and dependency preflight guards now enforce readiness before
+Python-backed execution proceeds.
+
 ## Objective
 Decouple Pantograph's compiled/runtime dependency graph from Python so model-specific Python environments remain optional, arbitrary, and consumer-managed per model binding.
 
@@ -72,3 +82,19 @@ Decouple Pantograph's compiled/runtime dependency graph from Python so model-spe
 3. Python-backed model execution is host-managed via external envs (no in-process embedding).
 4. Unpinned/unready dependency bindings deterministically block execution with clear codes/messages.
 5. Metadata consumption remains dynamic and tolerant of additive/unknown fields.
+
+
+## Completion Summary
+
+### Completed
+
+- Default Pantograph builds no longer require in-process Python linkage.
+- Python-backed nodes execute through `ProcessPythonRuntimeAdapter`.
+- Dependency readiness and pinning guards now gate Python-backed execution.
+- Runtime separation and migration guidance is documented in
+  `docs/python-runtime-separation.md`.
+
+### Follow-Ups
+
+- Later environment-management enhancements belong in the dependency execution
+  plans rather than reopening this completed runtime-separation baseline.

@@ -1,7 +1,21 @@
 # Actionable Implementation Plan: Pantograph Resolve-Only Hard Cutover
 
 ## Status
-Execution-ready implementation plan
+Complete
+
+## Current Source-of-Truth Summary
+
+This document records the completed resolve-only dependency cutover baseline.
+Pantograph now uses `resolve_model_dependency_requirements` as the dependency
+requirements authority and owns the downstream readiness/check/install/runtime
+lifecycle behavior itself.
+
+Remaining dependency work now belongs to:
+- `IMPLEMENTATION-PLAN-pantograph-dependency-environment-node.md` for
+  environment lifecycle/manual override execution
+- `IMPLEMENTATION-PLAN-pantograph-pumas-pinning-update.md` for remaining
+  additive pin-awareness follow-on work
+
 
 ## Goal
 Cut Pantograph to Pumas resolve-only dependency contracts and make Pantograph the sole owner of dependency check/install/runtime readiness.
@@ -222,3 +236,15 @@ git commit -m "chore(cutover): remove legacy dependency surface after hard cut" 
 8. Workstream 7
 9. Workstream 8
 
+
+
+## Completion Summary
+
+### Completed
+
+- Pantograph cut over to resolver-owned dependency requirements via
+  `resolve_model_dependency_requirements`.
+- Backend-owned dependency lifecycle state, model-ref binding payloads, and
+  preflight gating landed in code.
+- The remaining work is follow-on environment management and additive pinning,
+  not the baseline resolve-only cutover itself.

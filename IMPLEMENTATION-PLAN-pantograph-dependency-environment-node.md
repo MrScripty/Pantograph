@@ -1,5 +1,29 @@
 # Pantograph Plan: Dependency Environment Node (Auto + Manual, Persistent Envs)
 
+## Status
+In progress
+
+## Current Source-of-Truth Summary
+
+This is the active source of truth for the remaining dependency execution work
+in Pantograph.
+
+Completed baseline work now lives in:
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-resolve-only-hard-cutover.md`
+  for the resolve-only dependency contract cutover
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-python-runtime-separation.md`
+  for process-based Python runtime separation
+
+This plan now owns the remaining dependency-environment lane: explicit
+`dependency-environment` workflow steps, manual override patches, reusable
+`environment_ref` outputs, deterministic environment reuse, and the remaining
+backend/GUI lifecycle behavior that is broader than the completed resolve-only
+baseline.
+
+The narrower additive pin-awareness follow-on remains tracked in
+`IMPLEMENTATION-PLAN-pantograph-pumas-pinning-update.md`. Older umbrella and
+cutover planning documents now live under `docs/historical-plans/`.
+
 ## 1. Scope and Hard Cutover
 
 - `Puma-Lib` responsibility is strictly limited to:
