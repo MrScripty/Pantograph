@@ -481,7 +481,7 @@ core logic into Tauri.
   Settings GUI instead of leaving version-aware controls split between the
   compact `BackendSelector` surface and the unmounted `BinaryDownloader`
   component
-- [ ] Refactor `BackendSelector.svelte`, `BinaryDownloader.svelte`, and
+- [x] Refactor `BackendSelector.svelte`, `BinaryDownloader.svelte`, and
   `ServerStatus.svelte` into focused components so backend selection, runtime
   manager presentation, and server-shell concerns do not continue to accrete in
   oversized files
@@ -507,7 +507,7 @@ core logic into Tauri.
 - Frontend lint/typecheck plus a targeted accessibility review for the mounted
   runtime-manager controls
 
-**Status:** In progress
+**Status:** Completed
 
 ### Milestone 6: Rollout, Follow-On Runtime Reuse, And Source-Of-Truth Closeout
 
@@ -724,6 +724,12 @@ Update during implementation:
   contract. The remaining Milestone 5 work is narrower frontend decomposition
   of the still-large selector/card shell components rather than missing
   version-aware runtime-manager functionality.
+- 2026-04-19: Milestone 5 slice 14 finishes the runtime-manager/frontend
+  decomposition pass by splitting backend-option rendering, connection-mode
+  tabs, and runtime-card summary/job/catalog/activity blocks into focused
+  components. `BackendSelector.svelte`, `ServerStatus.svelte`, and
+  `ManagedRuntimeCard.svelte` now sit back at or under the preferred component
+  size threshold, so Milestone 5 is functionally complete.
 - 2026-04-19: Milestone 6 slice 1 finishes the source-of-truth and
   traceability closeout for the current redistributables boundary. The older
   managed-binary plan and roadmap wording now clearly defer to this plan, and

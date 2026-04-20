@@ -9,6 +9,9 @@ one large shell component.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `ConnectionModeTabs.svelte` | Toggle buttons for external versus sidecar connection modes inside the Settings shell. |
+| `BackendOptionList.svelte` | Backend button list used by the compact sidecar backend selector. |
+| `BackendCapabilityBadges.svelte` | Capability badge renderer for the active backend summary. |
 | `ExternalConnectionPanel.svelte` | External-server connection form for URL and optional API key entry. |
 | `HealthStatusPanel.svelte` | Health-monitor status disclosure with on-demand check and recovery actions. |
 | `RuntimeSnapshotGrid.svelte` | Read-only runtime lifecycle summary cards for active and embedding runtimes. |

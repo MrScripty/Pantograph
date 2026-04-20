@@ -3,6 +3,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { ConfigService, type ServerModeInfo } from '../services/ConfigService';
   import { LLMService } from '../services/LLMService';
+  import BackendCapabilityBadges from './server-status/BackendCapabilityBadges.svelte';
+  import BackendOptionList from './server-status/BackendOptionList.svelte';
   import {
     managedRuntimeService,
     type ManagedRuntimeManagerRuntimeView,
@@ -216,76 +218,18 @@
   {:else if backends.length === 0}
     <div class="text-xs text-neutral-500">No backends available</div>
   {:else}
-    <div class="flex flex-wrap gap-2">
-      {#each backends as backend (backend.name)}
-        {@const runtime = runtimeForBackend(backend)}
-        {@const summary = runtimeSummary(backend, runtime)}
-        <div class="flex max-w-[190px] flex-col">
-          <button
-            type="button"
-            class={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs transition-colors ${
-              backend.backend_key === currentBackendKey && serverRunning
-                ? 'bg-blue-600 text-white'
-                : backend.available
-                  ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-                  : 'bg-neutral-800 text-neutral-500'
-            }`}
-            onclick={() => handleBackendClick(backend)}
-            disabled={!backend.available || isSwitching}
-            title={backend.description}
-          >
-            {#if isSwitching && backend.backend_key === currentBackendKey}
-              <span class="inline-block h-3 w-3 animate-spin rounded-full border border-white border-t-transparent"></span>
-            {/if}
-            {backend.name}
-          </button>
-
-          {#if summary}
-            <span class={`mt-1 text-[10px] leading-tight ${
-              backend.available ? 'text-neutral-500' : 'text-amber-400'
-            }`}>
-              {summary}
-            </span>
-          {/if}
-        </div>
-      {/each}
-    </div>
+    <BackendOptionList
+      {backends}
+      {currentBackendKey}
+      {serverRunning}
+      {isSwitching}
+      onSelectBackend={handleBackendClick}
+      summaryForBackend={(backend) => runtimeSummary(backend, runtimeForBackend(backend))}
+    />
 
     {#if activeBackend}
       <div class="text-[10px] text-neutral-500">{activeBackend.description}</div>
-
-      <div class="flex flex-wrap gap-1.5">
-        {#if activeBackend.capabilities.vision}
-          <span class="rounded bg-green-900/30 px-1.5 py-0.5 text-[10px] text-green-400">
-            Vision
-          </span>
-        {/if}
-        {#if activeBackend.capabilities.embeddings}
-          <span class="rounded bg-purple-900/30 px-1.5 py-0.5 text-[10px] text-purple-400">
-            Embeddings
-          </span>
-        {/if}
-        {#if activeBackend.capabilities.gpu}
-          <span class="rounded bg-amber-900/30 px-1.5 py-0.5 text-[10px] text-amber-400">
-            GPU
-          </span>
-        {/if}
-        {#if activeBackend.capabilities.device_selection}
-          <span class="rounded bg-cyan-900/30 px-1.5 py-0.5 text-[10px] text-cyan-400">
-            Device Select
-          </span>
-        {/if}
-        {#if activeBackend.capabilities.streaming}
-          <span class="rounded bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-400">
-            Streaming
-          </span>
-        {/if}
-        {#if activeBackend.capabilities.tool_calling}
-          <span class="rounded bg-pink-900/30 px-1.5 py-0.5 text-[10px] text-pink-400">
-            Tools
-          </span>
-        {/if}
-      </div>
+      <BackendCapabilityBadges capabilities={activeBackend.capabilities} />
     {/if}
   {/if}
 

@@ -12,6 +12,7 @@
   } from '../services/HealthMonitorService';
   import BackendSelector from './BackendSelector.svelte';
   import ManagedRuntimePanel from './runtime-manager/ManagedRuntimePanel.svelte';
+  import ConnectionModeTabs from './server-status/ConnectionModeTabs.svelte';
   import ExternalConnectionPanel from './server-status/ExternalConnectionPanel.svelte';
   import HealthStatusPanel from './server-status/HealthStatusPanel.svelte';
   import RuntimeSnapshotGrid from './server-status/RuntimeSnapshotGrid.svelte';
@@ -185,30 +186,7 @@
 
   {#if $expandedSection === 'server'}
     <div class="space-y-3 rounded-lg bg-neutral-800/30 p-3">
-      <div class="flex gap-1 rounded bg-neutral-900 p-1">
-        <button
-          type="button"
-          class={`flex-1 rounded px-2 py-1 text-xs transition-colors ${
-            connectionType === 'external'
-              ? 'bg-neutral-700 text-neutral-200'
-              : 'text-neutral-500 hover:text-neutral-400'
-          }`}
-          onclick={() => (connectionType = 'external')}
-        >
-          External
-        </button>
-        <button
-          type="button"
-          class={`flex-1 rounded px-2 py-1 text-xs transition-colors ${
-            connectionType === 'sidecar'
-              ? 'bg-neutral-700 text-neutral-200'
-              : 'text-neutral-500 hover:text-neutral-400'
-          }`}
-          onclick={() => (connectionType = 'sidecar')}
-        >
-          Sidecar
-        </button>
-      </div>
+      <ConnectionModeTabs bind:connectionType />
 
       {#if connectionType === 'external'}
         <ExternalConnectionPanel

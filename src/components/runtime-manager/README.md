@@ -11,7 +11,10 @@ between compact backend-picker widgets and unmounted one-off components.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `ManagedRuntimePanel.svelte` | Mounted Settings entry point that loads runtime-manager snapshots from the shared frontend service and renders one card per managed runtime. |
-| `ManagedRuntimeCard.svelte` | Per-runtime presentation surface for readiness, version catalog, selection/default policy, install progress, retained downloads, and recent history. |
+| `ManagedRuntimeCard.svelte` | Per-runtime coordinator that owns user actions and composes focused runtime summary, job, catalog, and activity panels. |
+| `ManagedRuntimeCatalogPanel.svelte` | Version policy selectors plus the backend-owned available-version catalog list. |
+| `ManagedRuntimeJobPanel.svelte` | Active job progress and retained-download controls for one managed runtime. |
+| `ManagedRuntimeActivityPanel.svelte` | Install history, missing-file disclosure, and install/remove actions for one managed runtime. |
 
 ## Problem
 Pantograph needs a user-facing runtime manager that can explain why a sidecar

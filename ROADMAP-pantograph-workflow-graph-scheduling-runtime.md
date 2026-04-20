@@ -69,8 +69,8 @@ in `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`.
 The dedicated version-aware runtime-manager screen is now mounted in the
 existing Settings GUI: the backend/service contract, version-aware runtime
 presentation, and Settings integration now line up on one authoritative
-runtime-manager surface, while deeper frontend decomposition remains in
-progress inside Milestone 5. Managed runtime command resolution now also
+runtime-manager surface, and the immediate frontend decomposition pass for that
+surface is also landed. Managed runtime command resolution now also
 consumes that persisted backend selection/install-root state, so future host
 adapters do not need to guess which installed runtime path execution should
 launch. Managed runtime installs now land under version-scoped runtime roots,
