@@ -9,7 +9,7 @@ Last updated: 2026-04-16
 
 This document is the dedicated source of truth for runtime-registry Milestone
 6. It expands the short Milestone 6 subsection in
-`IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 into a standards-reviewed close-out plan for diagnostics visibility,
 documentation traceability, and rollout-safety decisions after the Milestone 5
 workflow/adapter refactor.
@@ -137,8 +137,8 @@ the compatibility impact explicitly.
 
 ### Dependencies
 
-- `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
-- `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
 - `src-tauri/src/llm`
@@ -556,7 +556,7 @@ Update during implementation:
 
 ### Traceability Links
 
-- Dedicated plan: `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
-- Umbrella plan: `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- Dedicated plan: `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+- Umbrella plan: `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 - Roadmap: `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - Related ADR: `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`

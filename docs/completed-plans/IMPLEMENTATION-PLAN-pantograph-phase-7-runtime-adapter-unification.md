@@ -180,9 +180,9 @@ compatibility impact explicitly.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
-- `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
-- `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
 - `crates/pantograph-embedded-runtime`
 - `crates/pantograph-runtime-registry`
 - `crates/pantograph-runtime-identity`

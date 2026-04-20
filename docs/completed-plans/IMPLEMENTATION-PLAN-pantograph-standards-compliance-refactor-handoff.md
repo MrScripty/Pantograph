@@ -232,7 +232,7 @@ contracts.
 - Roadmap reference:
   `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - This handoff plan:
-  `IMPLEMENTATION-PLAN-pantograph-standards-compliance-refactor-handoff.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-standards-compliance-refactor-handoff.md`
 - ADR added/updated:
   N/A
 

@@ -22,18 +22,18 @@ layers.
 ## Current Source-of-Truth Summary
 
 Metrics/trace spine now has a reconciled dedicated implementation plan in
-`IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`, and that plan now
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`, and that plan now
 marks Milestones 1 through 6 complete while keeping the remaining follow-up
 hardening work explicit. Runtime adapter unification and workflow-adapter
 hardening now have a dedicated Milestone 5 implementation plan in
-`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`,
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`,
 and the diagnostics/documentation/rollout-safety close-out now has a dedicated
 Milestone 6 implementation plan in
-`IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
 Scheduler V2 planning now also has a dedicated implementation plan in
-`IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`.
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`.
 Incremental graph execution now also has a dedicated standards-reviewed plan
-in `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`.
+in `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`.
 That Phase 6 plan is now complete and records the landed backend-owned
 workflow-session state model: per-node memory, graph-edit reconciliation,
 selective input reinjection, keep-alive session reuse, scheduler/runtime
@@ -44,8 +44,8 @@ Parallel demand execution now has a dedicated standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`, and
 real workflow event contract completion now has dedicated
 standards-reviewed plans in
-`IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
-and `IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`.
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+and `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`.
 Managed runtime redistributable work now also has a dedicated
 standards-reviewed plan in
 `IMPLEMENTATION-PLAN-pantograph-runtime-redistributables-manager.md`. That
@@ -85,7 +85,7 @@ Binding platform planning now also has a dedicated standards-reviewed plan in
 client-facing surface policy, shared backend-owned binding contract ownership,
 and the C#, Python, and BEAM language lanes.
 KV cache implementation now also has a dedicated standards-reviewed plan in
-`IMPLEMENTATION-PLAN-pantograph-phase-3-kv-cache-implementation.md`. The first
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-3-kv-cache-implementation.md`. The first
 implementation slice freezes backend-owned KV artifact, handle, compatibility,
 and usage-mode contracts in `crates/inference/src/kv_cache`, treats workflow-
 session memory as an indirect-reference consumer instead of a second cache
@@ -505,7 +505,7 @@ adding more scheduling or graph complexity.
 
 **Detailed source of truth:**
 
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
 
 **Progress to date:**
 
@@ -664,7 +664,7 @@ prepare the engine for metric-informed scheduling.
 
 **Detailed source of truth:**
 
-- `IMPLEMENTATION-PLAN-pantograph-phase-3-kv-cache-implementation.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-3-kv-cache-implementation.md`
 
 **Goal:** Convert the existing KV cache scaffolding into a real workflow
 primitive that improves reruns, prompt-prefix reuse, and iterative local work.
@@ -734,7 +734,7 @@ session scheduler that makes better admission and reuse decisions.
 
 **Detailed source of truth:**
 
-- `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
 
 **Milestones:**
 
@@ -798,8 +798,8 @@ session scheduler that makes better admission and reuse decisions.
 
 **Detailed source of truth:**
 
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`
 - `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 
@@ -1014,7 +1014,7 @@ the affected downstream closure.
 
 **Detailed source of truth:**
 
-- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
 
 **Progress to date:**
 
@@ -1190,7 +1190,7 @@ workflow scheduler, preflight layer, and diagnostics surfaces.
 
 **Detailed source of truth:**
 
-- `IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
 
 **Progress to date:**
 

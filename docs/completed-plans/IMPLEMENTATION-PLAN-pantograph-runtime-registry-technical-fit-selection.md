@@ -21,14 +21,14 @@ The accurate status is:
 - runtime-registry Milestone 4, Technical-Fit Selection Integration:
   completed
 - runtime-registry Milestone 5, Workflow And Adapter Integration: completed in
-  `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 - runtime-registry Milestone 6, Diagnostics, Documentation, And Rollout
   Safety: completed in
-  `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
 - current next milestone focus: roadmap work beyond runtime-registry close-out,
   with Milestone 6 retained as the completed diagnostics/documentation
   reference in
-  `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
 - stop rule remains active for later milestones: runtime-registry work must
   preserve ADR-002 and the
   README boundary decisions landed in Milestone 1
@@ -739,7 +739,7 @@ runtime callers.
 
 ### Milestone 4: Technical-Fit Selection Integration
 
-**Detailed plan:** `IMPLEMENTATION-PLAN-pantograph-milestone-4-technical-fit-selection.md` is the dedicated source of truth for Milestone 4 sequencing, standards compliance, and immediate refactor scope.
+**Detailed plan:** `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-4-technical-fit-selection.md` is the dedicated source of truth for Milestone 4 sequencing, standards compliance, and immediate refactor scope.
 
 **Goal:** Choose the best run-time technical fit from Pumas feasible candidates
 and local runtime state.
@@ -817,7 +817,7 @@ and local runtime state.
 business logic into adapters.
 
 Detailed source of truth:
-`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 
 **Tasks:**
 - [x] Wire registry decisions through Tauri workflow host/task-execution paths
@@ -866,7 +866,7 @@ Detailed source of truth:
 refactor lands.
 
 Detailed sequencing and standards-review notes for this milestone now live in
-`IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`.
 
 **Tasks:**
 - [x] Expose runtime-registry snapshots and recent decision diagnostics for

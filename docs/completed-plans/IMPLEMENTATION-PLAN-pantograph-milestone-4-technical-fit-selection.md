@@ -9,12 +9,12 @@ Last updated: 2026-04-16
 
 This document records the completed source of truth for runtime-registry
 Milestone 4. It replaced the short Milestone 4 stub in
-`IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 for detailed sequencing, standards compliance, and immediate refactor scope.
 
 Technical-fit selection is now completed in code. Remaining workflow transport,
 recovery, and diagnostics hardening moved to
-`IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
 and the runtime-registry umbrella plan.
 
 ## Objective
@@ -109,7 +109,7 @@ and architecture standards that now govern this area.
 - `crates/inference`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 - Pumas feasible-candidate APIs and the existing Pantograph model descriptor
   resolution path
 
@@ -525,7 +525,7 @@ Update during implementation:
 
 ### Traceability Links
 
-- Dedicated plan: `IMPLEMENTATION-PLAN-pantograph-milestone-4-technical-fit-selection.md`
-- Umbrella plan: `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- Dedicated plan: `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-4-technical-fit-selection.md`
+- Umbrella plan: `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 - Roadmap: `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - ADR: `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`

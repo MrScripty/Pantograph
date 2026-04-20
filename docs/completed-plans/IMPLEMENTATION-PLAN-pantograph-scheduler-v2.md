@@ -170,10 +170,10 @@ clearer decision semantics rather than broad public API breakage.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
-- `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
-- `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
-- `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
 - `crates/pantograph-workflow-service`
 - `crates/pantograph-runtime-registry`
 - `crates/pantograph-embedded-runtime`

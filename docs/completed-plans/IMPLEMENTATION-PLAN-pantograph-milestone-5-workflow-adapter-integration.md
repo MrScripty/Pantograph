@@ -9,7 +9,7 @@ Last updated: 2026-04-19
 
 This document is the dedicated source of truth for runtime-registry Milestone
 5. It expands the short Milestone 5 section in
-`IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 into a standards-reviewed execution plan for adapter-boundary hardening,
 workflow diagnostics transport, and post-Milestone-4 workflow integration.
 
@@ -122,7 +122,7 @@ is internal extraction and delegation rather than API breakage.
 - `crates/pantograph-frontend-http-adapter`
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
-- `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 
 ### Affected Structured Contracts
@@ -631,8 +631,8 @@ Update during implementation:
 
 ### Traceability Links
 
-- Dedicated plan: `IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
-- Umbrella plan: `IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
+- Dedicated plan: `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-5-workflow-adapter-integration.md`
+- Umbrella plan: `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-runtime-registry-technical-fit-selection.md`
 - Roadmap: `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - Related ADRs: `docs/adr/ADR-001-headless-embedding-service-boundary.md`,
   `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`

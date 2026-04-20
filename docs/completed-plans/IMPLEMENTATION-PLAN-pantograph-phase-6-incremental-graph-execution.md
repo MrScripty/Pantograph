@@ -215,11 +215,11 @@ execution-manager, node-engine, Tauri, and graph-package surfaces.
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`
-- `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
 - `crates/node-engine/src/engine`
 - `crates/pantograph-workflow-service/src/graph`
 - `crates/pantograph-workflow-service/src/scheduler`
@@ -692,7 +692,7 @@ behavior.
   consume checkpoint state without re-deriving it
 
 **Affected persisted artifacts for the remaining work:**
-- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - touched module `README.md` files in:
   - `crates/pantograph-workflow-service/src/scheduler`
@@ -980,7 +980,7 @@ checkpoint semantics.
   `WorkflowService.ts`
 
 **Affected persisted artifacts:**
-- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md` if milestone
   status/progress wording changes during execution
 - touched module `README.md` files in:
@@ -1506,6 +1506,6 @@ Update during implementation:
 - Roadmap source of truth:
   `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - Adjacent plans:
-  `IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
-  `IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
-  `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-scheduler-v2.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-7-runtime-adapter-unification.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`

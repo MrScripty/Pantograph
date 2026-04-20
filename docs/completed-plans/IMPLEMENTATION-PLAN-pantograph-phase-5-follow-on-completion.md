@@ -21,7 +21,7 @@ Use this file for the recorded close-out result covering:
   the true event-contract work is closed
 
 Use the earlier plan
-`IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 for completed milestone history and already-landed contract work. Use
 `IMPLEMENTATION-PLAN-pantograph-binding-platform.md` for broader first-class
 binding platform scope that is not required to close the remaining event
@@ -125,7 +125,7 @@ helpers and tightens remaining coverage behind the current boundary.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`
@@ -153,7 +153,7 @@ helpers and tightens remaining coverage behind the current boundary.
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - This follow-on plan
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - Touched backend, wrapper, adapter, or consumer `README.md` files
@@ -437,7 +437,7 @@ without losing visibility into broader binding-platform follow-ons.
       stay in Phase 5 and broader binding-platform product work points to
       `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`.
 - [ ] Update
-      `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+      `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
       to mark this follow-on plan as the source of truth for the remaining
       closure work.
 - [ ] Update

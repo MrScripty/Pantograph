@@ -16,7 +16,7 @@ transport boundaries, and read-only GUI consumers.
 
 This file remains the source of truth for the completed main milestones. The
 remaining Phase 5 closure work now has its own dedicated source of truth in
-`IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`. The roadmap
+`docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`. The roadmap
 should summarize progress and point to the appropriate Phase 5 plan rather than
 duplicating milestone detail.
 
@@ -125,7 +125,7 @@ surface rather than API breakage.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
 - `crates/node-engine`
 - `crates/pantograph-embedded-runtime`
 - `crates/pantograph-workflow-service`

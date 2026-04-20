@@ -104,8 +104,8 @@ configuration surface is explicitly required.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `crates/node-engine`
 - `crates/pantograph-embedded-runtime`
 - Touched README files under `crates/node-engine/src/`

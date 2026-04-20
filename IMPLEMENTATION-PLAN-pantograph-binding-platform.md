@@ -144,7 +144,7 @@ classify, and document behind current facades before considering API breaks.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - `docs/headless-native-bindings.md`
 - `bindings/csharp`

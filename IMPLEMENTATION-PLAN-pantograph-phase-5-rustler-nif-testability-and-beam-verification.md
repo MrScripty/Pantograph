@@ -134,7 +134,7 @@ while new verification harnesses are added behind the current boundary.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `crates/pantograph-rustler`
 - `crates/pantograph-uniffi`
 - Any backend crate chosen to own extracted canonical envelope semantics
@@ -161,7 +161,7 @@ while new verification harnesses are added behind the current boundary.
 ### Affected Persisted Artifacts
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - This dedicated NIF plan
 - `crates/pantograph-rustler/src/README.md` if the directory structure or
   API-consumer contract changes

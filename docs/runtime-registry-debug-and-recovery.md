@@ -127,4 +127,4 @@ Revisit triggers:
 - Registry policy boundary:
   `crates/pantograph-runtime-registry/src/README.md`
 - Milestone 6 execution plan:
-  `IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`
+  `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-milestone-6-diagnostics-documentation-rollout-safety.md`

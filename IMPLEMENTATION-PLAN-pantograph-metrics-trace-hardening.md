@@ -116,9 +116,9 @@ surface, not API breakage.
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-2-parallel-demand-execution.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `crates/pantograph-workflow-service/src/trace`
 - `src-tauri/src/workflow/diagnostics`
 - `src-tauri/src/workflow/headless_diagnostics.rs`
@@ -140,7 +140,7 @@ surface, not API breakage.
 
 - This implementation plan
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
 - Touched module `README.md` files under:
   - `crates/pantograph-workflow-service/src/trace/`
   - `src-tauri/src/workflow/diagnostics/`
@@ -460,7 +460,7 @@ for later roadmap phases.
 - [x] Update touched module READMEs with the new filter, timing, attribution,
       and consumer-contract semantics.
 - [x] Reconcile
-      `IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
+      `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-metrics-trace-spine.md`
       and `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
       so the hardening follow-up is represented accurately.
 - [x] Confirm no out-of-scope observability expansion slipped into the

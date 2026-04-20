@@ -128,7 +128,7 @@ workflow execution:
 ### Dependencies
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- `IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
+- `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-6-incremental-graph-execution.md`
 - `crates/inference/src/kv_cache/`
 - `crates/node-engine/src/core_executor.rs`
 - `crates/workflow-nodes/src/storage/`
