@@ -37,7 +37,8 @@ supports.
 - The UI must remain keyboard reachable and use semantic controls for runtime
   actions and version policy updates.
 - Version catalogs must remain readable inside the mounted Settings panel by
-  using bounded scroll regions instead of unbounded card stacks.
+  using bounded scroll regions and horizontal table scrolling instead of
+  unbounded card stacks or over-compressed columns.
 - The mounted Settings flow still needs a compact backend selector alongside
   the richer runtime-manager surface.
 

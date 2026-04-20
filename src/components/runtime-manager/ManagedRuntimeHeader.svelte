@@ -10,17 +10,20 @@
   let { runtime, installedVersionCount, error }: Props = $props();
 </script>
 
-<div class="flex items-start justify-between gap-3">
-  <div>
+<div class="flex flex-wrap items-start justify-between gap-2">
+  <div class="min-w-0 flex-1">
     <h4 class="text-sm font-medium text-neutral-100">{runtime.display_name}</h4>
-    <p class="mt-1 text-xs text-neutral-500">
-      Readiness {runtime.readiness_state}
+    <p class="mt-1 break-words text-xs text-neutral-500">
+      Readiness {runtime.readiness_state.replaceAll('_', ' ')}
       {#if runtime.selection.active_version}
         • Active {runtime.selection.active_version}
       {/if}
+      {#if runtime.selection.selected_version}
+        • Selected {runtime.selection.selected_version}
+      {/if}
     </p>
   </div>
-  <div class="text-right text-[11px] text-neutral-500">
+  <div class="min-w-0 text-left text-[11px] text-neutral-500 sm:text-right">
     <div>{runtime.available ? 'Ready for use' : 'Not ready'}</div>
     <div>{installedVersionCount} installed version{installedVersionCount === 1 ? '' : 's'}</div>
   </div>

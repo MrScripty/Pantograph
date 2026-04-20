@@ -29,7 +29,7 @@
   }: Props = $props();
 </script>
 
-<div>
+<div class="min-w-0">
   <h5 class="text-xs uppercase tracking-wider text-neutral-500">Version Policy</h5>
   {#if selectableVersions.length > 0}
     <div class="mt-2 space-y-2">
@@ -73,17 +73,21 @@
     </p>
   {/if}
 
-  <h5 class="mt-4 text-xs uppercase tracking-wider text-neutral-500">Available Versions</h5>
+  <div class="mt-4 flex items-center justify-between gap-2">
+    <h5 class="text-xs uppercase tracking-wider text-neutral-500">Available Versions</h5>
+    <span class="text-[11px] text-neutral-600">{runtime.versions.length} known</span>
+  </div>
+  <p class="mt-1 text-[11px] text-neutral-600">Scroll the table to inspect versions, install roots, and actions without expanding the side panel.</p>
   <div class="mt-2 overflow-hidden rounded border border-neutral-800 bg-neutral-950/50">
-    <div class="max-h-72 overflow-auto">
-      <table class="min-w-full table-fixed text-left text-xs text-neutral-300">
+    <div class="max-h-80 overflow-auto">
+      <table class="min-w-[42rem] text-left text-xs text-neutral-300">
         <thead class="sticky top-0 bg-neutral-950 text-[11px] uppercase tracking-wider text-neutral-500">
           <tr>
-            <th class="px-3 py-2 font-medium">Version</th>
-            <th class="px-3 py-2 font-medium">Status</th>
-            <th class="px-3 py-2 font-medium">Target</th>
-            <th class="px-3 py-2 font-medium">Install Root</th>
-            <th class="px-3 py-2 text-right font-medium">Action</th>
+            <th class="whitespace-nowrap px-3 py-2 font-medium">Version</th>
+            <th class="whitespace-nowrap px-3 py-2 font-medium">Status</th>
+            <th class="whitespace-nowrap px-3 py-2 font-medium">Target</th>
+            <th class="whitespace-nowrap px-3 py-2 font-medium">Install Root</th>
+            <th class="whitespace-nowrap px-3 py-2 text-right font-medium">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -109,14 +113,14 @@
                   {version.readiness_state.replaceAll('_', ' ')}
                 </div>
               </td>
-              <td class="px-3 py-2 text-neutral-400">
+              <td class="whitespace-nowrap px-3 py-2 text-neutral-400">
                 <div>{version.runtime_key}</div>
                 <div class="mt-1 text-[11px] text-neutral-500">{version.platform_key}</div>
               </td>
               <td class="px-3 py-2">
                 {#if version.install_root}
                   <div
-                    class="truncate font-mono text-[11px] text-neutral-500"
+                    class="block max-w-[16rem] truncate font-mono text-[11px] text-neutral-500"
                     title={version.install_root}
                   >
                     {version.install_root}
@@ -125,7 +129,7 @@
                   <span class="text-neutral-600">Not installed</span>
                 {/if}
               </td>
-              <td class="px-3 py-2 text-right">
+              <td class="whitespace-nowrap px-3 py-2 text-right">
                 {#if version.version && version.installable && version.install_state !== 'installed' && version.install_state !== 'system_provided' && !runtime.active_job}
                   <button
                     type="button"
