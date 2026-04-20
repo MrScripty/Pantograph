@@ -10,4 +10,4 @@ export { LLMService } from '../../services/LLMService';
 // Components
 export { default as ServerStatus } from '../../components/ServerStatus.svelte';
 export { default as BackendSelector } from '../../components/BackendSelector.svelte';
-export { default as BinaryDownloader } from '../../components/BinaryDownloader.svelte';
+export { default as ManagedRuntimePanel } from '../../components/runtime-manager/ManagedRuntimePanel.svelte';

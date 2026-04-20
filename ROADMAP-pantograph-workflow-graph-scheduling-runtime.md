@@ -66,7 +66,11 @@ also exposed as an explicit backend mutation API in `crates/inference`, so
 future Tauri/runtime-manager slices can update version policy without writing
 state directly, and the accepted architecture boundary for this work now lives
 in `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`.
-the durable state file directly. Managed runtime command resolution now also
+The dedicated version-aware runtime-manager screen is now mounted in the
+existing Settings GUI: the backend/service contract, version-aware runtime
+presentation, and Settings integration now line up on one authoritative
+runtime-manager surface, while deeper frontend decomposition remains in
+progress inside Milestone 5. Managed runtime command resolution now also
 consumes that persisted backend selection/install-root state, so future host
 adapters do not need to guess which installed runtime path execution should
 launch. Managed runtime installs now land under version-scoped runtime roots,
@@ -197,14 +201,15 @@ reconciled as the final source of truth.
   `src/services/managedRuntime` service boundary instead of redefining partial
   redistributable payloads inside Svelte components, keeping frontend runtime
   state projection thin and aligned to the backend-owned manager view.
-- Current redistributable GUI surfaces also now render backend-owned runtime
-  readiness, selected/default version, active-job summary, and recent install
-  history from that shared service boundary, and the GUI now also exposes the
-  backend-owned pause/resume/cancel flow on top of the same contract.
-- The binary-management GUI now also exposes backend-owned selected/default
-  version updates through the shared managed-runtime service contract, so
-  version policy no longer requires direct command calls or frontend-owned
-  runtime-selection shaping.
+- The backend/service path now supports backend-owned selected/default version
+  updates, pause/resume/cancel semantics, retained-artifact status, install
+  history, and richer runtime-manager snapshots through the shared
+  `managedRuntime` contract.
+- The mounted Settings GUI now also includes a dedicated version-aware runtime
+  manager that renders backend-owned catalog versions, selected/default/active
+  state, retained-artifact controls, and install history through the shared
+  `managedRuntime` contract instead of leaving that behavior in an unmounted
+  one-off component.
 - Managed-runtime installs can now also be cancelled through a backend-owned
   request path that flows through the manager facade, Tauri transport, and the
   shared GUI service boundary. That stop path is now split into backend-owned

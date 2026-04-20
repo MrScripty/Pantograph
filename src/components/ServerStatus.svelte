@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { LLMService, type LLMState } from '../services/LLMService';
   import {
     ConfigService,
     type ConfigState,
-    type RuntimeLifecycleSnapshot,
   } from '../services/ConfigService';
   import {
     HealthMonitorService,
@@ -12,6 +11,10 @@
     type ServerEvent,
   } from '../services/HealthMonitorService';
   import BackendSelector from './BackendSelector.svelte';
+  import ManagedRuntimePanel from './runtime-manager/ManagedRuntimePanel.svelte';
+  import ExternalConnectionPanel from './server-status/ExternalConnectionPanel.svelte';
+  import HealthStatusPanel from './server-status/HealthStatusPanel.svelte';
+  import RuntimeSnapshotGrid from './server-status/RuntimeSnapshotGrid.svelte';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
 
   let llmState: LLMState = $state(LLMService.getState());
@@ -22,7 +25,6 @@
   let unsubscribeHealth: (() => void) | null = null;
   let unsubscribeEvents: (() => void) | null = null;
 
-  // UI state
   let connectionType: 'external' | 'sidecar' = $state('sidecar');
   let externalUrl = $state('http://localhost:1234');
   let apiKey = $state('');
@@ -32,7 +34,6 @@
   onMount(async () => {
     unsubscribeLLM = LLMService.subscribe((state) => {
       llmState = state;
-      // Determine connection type from current mode
       if (state.status.mode.startsWith('sidecar')) {
         connectionType = 'sidecar';
       } else if (state.status.mode === 'external') {
@@ -55,26 +56,23 @@
     });
 
     unsubscribeEvents = HealthMonitorService.subscribeEvents((event: ServerEvent) => {
-      // Handle server events (could show toast notifications, etc.)
       if (event.type === 'server_crashed') {
         console.warn('[ServerStatus] Server crashed:', event.error);
       }
     });
 
-    // Load config and server mode
     try {
       await ConfigService.loadConfig();
       await ConfigService.refreshServerMode();
     } catch {
-      // Errors handled by service
+      // Errors are surfaced by the services themselves.
     }
 
-    // Start health monitoring if server is ready
     if (llmState.status.ready) {
       try {
         await HealthMonitorService.start();
       } catch {
-        // Non-critical
+        // Monitoring start failures are non-critical here.
       }
     }
   });
@@ -86,44 +84,45 @@
     unsubscribeEvents?.();
   });
 
-  const connectExternal = async () => {
-    if (!externalUrl.trim()) return;
+  async function connectExternal() {
+    if (!externalUrl.trim()) {
+      return;
+    }
+
     isConnecting = true;
     try {
       await LLMService.connectToServer(externalUrl);
-      // Save the URL and API key to config
       await ConfigService.saveConfig({
         ...configState.config,
         external_url: externalUrl,
         api_key: apiKey || null,
         connection_mode: { type: 'External', url: externalUrl },
       });
-      // Start health monitoring
       await HealthMonitorService.start();
-    } catch (error) {
-      console.error('Failed to connect:', error);
+    } catch (cause) {
+      console.error('Failed to connect:', cause);
     } finally {
       isConnecting = false;
     }
-  };
+  }
 
-  const disconnectExternal = async () => {
+  async function disconnectExternal() {
     await HealthMonitorService.stop();
     await LLMService.stop();
     await ConfigService.refreshServerMode();
-  };
+  }
 
-  const triggerRecovery = async () => {
+  async function triggerRecovery() {
     try {
       await HealthMonitorService.triggerRecovery();
-    } catch (error) {
-      console.error('Recovery failed:', error);
+    } catch (cause) {
+      console.error('Recovery failed:', cause);
     }
-  };
+  }
 
-  const checkHealthNow = async () => {
+  async function checkHealthNow() {
     await HealthMonitorService.checkNow();
-  };
+  }
 
   let statusColor = $derived(
     llmState.status.ready
@@ -145,7 +144,7 @@
         : 'Not connected'
   );
 
-  let modeText = $derived((() => {
+  let modeText = $derived.by(() => {
     switch (configState.serverMode.mode) {
       case 'external':
         return 'External';
@@ -158,56 +157,24 @@
       default:
         return 'None';
     }
-  })());
-
-  let healthStatusColor = $derived(
-    healthState.lastResult
-      ? HealthMonitorService.getStatusColor(healthState.lastResult.status)
-      : 'text-neutral-500'
-  );
-
-  let healthStatusLabel = $derived(
-    healthState.lastResult
-      ? HealthMonitorService.getStatusLabel(healthState.lastResult.status)
-      : 'Unknown'
-  );
-
-  function formatRuntimeDuration(durationMs: number | null): string {
-    if (durationMs === null) {
-      return 'n/a';
-    }
-    if (durationMs < 1000) {
-      return `${durationMs}ms`;
-    }
-    return `${(durationMs / 1000).toFixed(1)}s`;
-  }
-
-  function runtimeStateLabel(snapshot: RuntimeLifecycleSnapshot | null): string {
-    if (!snapshot) {
-      return 'Unavailable';
-    }
-    if (snapshot.last_error) {
-      return 'Error';
-    }
-    return snapshot.active ? 'Active' : 'Idle';
-  }
+  });
 </script>
 
 <div class="space-y-3">
-  <!-- Header with toggle -->
-  <button type="button"
+  <button
+    type="button"
     class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
     onclick={() => toggleSection('server')}
   >
     <div class="flex items-center gap-2">
-      <span class="w-2 h-2 rounded-full {statusColor}"></span>
+      <span class={`h-2 w-2 rounded-full ${statusColor}`}></span>
       <span>LLM Server</span>
       {#if llmState.status.ready}
-        <span class="text-green-400 normal-case">({modeText})</span>
+        <span class="normal-case text-green-400">({modeText})</span>
       {/if}
     </div>
     <svg
-      class="w-3 h-3 transform transition-transform {$expandedSection === 'server' ? 'rotate-180' : ''}"
+      class={`h-3 w-3 transform transition-transform ${$expandedSection === 'server' ? 'rotate-180' : ''}`}
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -217,21 +184,26 @@
   </button>
 
   {#if $expandedSection === 'server'}
-    <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
-      <!-- Connection Type Tabs -->
-      <div class="flex gap-1 p-1 bg-neutral-900 rounded">
-        <button type="button"
-          class="flex-1 px-2 py-1 text-xs rounded transition-colors {connectionType === 'external'
-            ? 'bg-neutral-700 text-neutral-200'
-            : 'text-neutral-500 hover:text-neutral-400'}"
+    <div class="space-y-3 rounded-lg bg-neutral-800/30 p-3">
+      <div class="flex gap-1 rounded bg-neutral-900 p-1">
+        <button
+          type="button"
+          class={`flex-1 rounded px-2 py-1 text-xs transition-colors ${
+            connectionType === 'external'
+              ? 'bg-neutral-700 text-neutral-200'
+              : 'text-neutral-500 hover:text-neutral-400'
+          }`}
           onclick={() => (connectionType = 'external')}
         >
           External
         </button>
-        <button type="button"
-          class="flex-1 px-2 py-1 text-xs rounded transition-colors {connectionType === 'sidecar'
-            ? 'bg-neutral-700 text-neutral-200'
-            : 'text-neutral-500 hover:text-neutral-400'}"
+        <button
+          type="button"
+          class={`flex-1 rounded px-2 py-1 text-xs transition-colors ${
+            connectionType === 'sidecar'
+              ? 'bg-neutral-700 text-neutral-200'
+              : 'text-neutral-500 hover:text-neutral-400'
+          }`}
           onclick={() => (connectionType = 'sidecar')}
         >
           Sidecar
@@ -239,196 +211,57 @@
       </div>
 
       {#if connectionType === 'external'}
-        <!-- External Connection -->
-        <div class="space-y-2">
-          <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
-            Connect to external server (LM Studio, OpenAI, etc.)
-          </div>
-          <input
-            type="text"
-            bind:value={externalUrl}
-            placeholder="http://localhost:1234 or https://api.openai.com/v1"
-            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
-            disabled={isConnecting || (llmState.status.ready && llmState.status.mode === 'external')}
-          />
-          <input
-            type="password"
-            bind:value={apiKey}
-            placeholder="API Key (optional)"
-            class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
-            disabled={isConnecting || (llmState.status.ready && llmState.status.mode === 'external')}
-          />
-          <div class="flex gap-2">
-            {#if llmState.status.ready && llmState.status.mode === 'external'}
-              <button type="button"
-                onclick={disconnectExternal}
-                class="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-xs transition-colors"
-              >
-                Disconnect
-              </button>
-            {:else}
-              <button type="button"
-                onclick={connectExternal}
-                disabled={isConnecting || !externalUrl.trim()}
-                class="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-              >
-                {isConnecting ? 'Connecting...' : 'Connect'}
-              </button>
-            {/if}
-          </div>
-        </div>
+        <ExternalConnectionPanel
+          bind:externalUrl
+          bind:apiKey
+          {isConnecting}
+          isConnected={llmState.status.ready && llmState.status.mode === 'external'}
+          onConnect={connectExternal}
+          onDisconnect={disconnectExternal}
+        />
       {:else}
-        <!-- Sidecar Mode - Backend Selector -->
-        <BackendSelector />
+        <div class="space-y-3">
+          <BackendSelector />
+          <ManagedRuntimePanel />
+        </div>
       {/if}
 
-      <!-- Status -->
       {#if llmState.status.ready}
-        <div class="flex items-center justify-between text-xs border-t border-neutral-700 pt-2">
+        <div class="flex items-center justify-between border-t border-neutral-700 pt-2 text-xs">
           <span class="text-neutral-500">Status: {statusText}</span>
           {#if llmState.status.url}
-            <span class="text-neutral-600 font-mono text-[10px]">{llmState.status.url}</span>
+            <span class="font-mono text-[10px] text-neutral-600">{llmState.status.url}</span>
           {/if}
         </div>
 
-        <div class="grid gap-2 text-[10px] text-neutral-400 md:grid-cols-2">
-          <div class="rounded border border-neutral-700 bg-neutral-900/60 p-2">
-            <div class="flex items-center justify-between gap-2 text-neutral-500">
-              <span>Active Runtime</span>
-              <span>{runtimeStateLabel(llmState.status.active_runtime)}</span>
-            </div>
-            <div class="mt-1 font-mono text-neutral-300">
-              {llmState.status.active_runtime?.runtime_id ?? llmState.status.backend_name ?? 'unknown'}
-            </div>
-            {#if llmState.status.active_model_target}
-              <div class="mt-1 break-all text-neutral-500">
-                Target {llmState.status.active_model_target}
-              </div>
-            {/if}
-            <div class="mt-1 text-neutral-500">
-              Instance {llmState.status.active_runtime?.runtime_instance_id ?? 'unreported'}
-            </div>
-            <div class="mt-1 text-neutral-500">
-              Warmup {formatRuntimeDuration(llmState.status.active_runtime?.warmup_duration_ms ?? null)}
-              • Reused {llmState.status.active_runtime?.runtime_reused === null ? 'unknown' : llmState.status.active_runtime?.runtime_reused ? 'yes' : 'no'}
-            </div>
-            {#if llmState.status.active_runtime?.lifecycle_decision_reason}
-              <div class="mt-1 text-neutral-600">
-                {llmState.status.active_runtime.lifecycle_decision_reason}
-              </div>
-            {/if}
-          </div>
+        <RuntimeSnapshotGrid
+          activeRuntime={llmState.status.active_runtime}
+          activeModelTarget={llmState.status.active_model_target}
+          embeddingRuntime={llmState.status.embedding_runtime}
+          embeddingModelTarget={llmState.status.embedding_model_target}
+          fallbackActiveRuntimeId={llmState.status.backend_name}
+        />
 
-          <div class="rounded border border-neutral-700 bg-neutral-900/60 p-2">
-            <div class="flex items-center justify-between gap-2 text-neutral-500">
-              <span>Embedding Runtime</span>
-              <span>{runtimeStateLabel(llmState.status.embedding_runtime)}</span>
-            </div>
-            <div class="mt-1 font-mono text-neutral-300">
-              {llmState.status.embedding_runtime?.runtime_id ?? 'not active'}
-            </div>
-            {#if llmState.status.embedding_model_target}
-              <div class="mt-1 break-all text-neutral-500">
-                Target {llmState.status.embedding_model_target}
-              </div>
-            {/if}
-            <div class="mt-1 text-neutral-500">
-              Instance {llmState.status.embedding_runtime?.runtime_instance_id ?? 'unreported'}
-            </div>
-            <div class="mt-1 text-neutral-500">
-              Warmup {formatRuntimeDuration(llmState.status.embedding_runtime?.warmup_duration_ms ?? null)}
-              • Reused {llmState.status.embedding_runtime?.runtime_reused === null ? 'unknown' : llmState.status.embedding_runtime?.runtime_reused ? 'yes' : 'no'}
-            </div>
-            {#if llmState.status.embedding_runtime?.lifecycle_decision_reason}
-              <div class="mt-1 text-neutral-600">
-                {llmState.status.embedding_runtime.lifecycle_decision_reason}
-              </div>
-            {/if}
-          </div>
-        </div>
-
-        <!-- Health Status -->
-        <button type="button"
-          class="w-full flex items-center justify-between text-xs py-1 hover:bg-neutral-800/50 rounded px-1 transition-colors"
-          onclick={() => (showHealthDetails = !showHealthDetails)}
-        >
-          <div class="flex items-center gap-2">
-            <span class="text-neutral-500">Health:</span>
-            <span class={healthStatusColor}>{healthStatusLabel}</span>
-            {#if healthState.lastResult?.response_time_ms}
-              <span class="text-neutral-600 text-[10px]">
-                ({healthState.lastResult.response_time_ms}ms)
-              </span>
-            {/if}
-          </div>
-          <svg
-            class="w-3 h-3 text-neutral-500 transform transition-transform {showHealthDetails ? 'rotate-180' : ''}"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        {#if showHealthDetails}
-          <div class="space-y-2 pl-2 border-l-2 border-neutral-700">
-            <!-- Health details -->
-            {#if healthState.lastResult}
-              <div class="text-[10px] text-neutral-500 space-y-1">
-                <div>Consecutive failures: {healthState.lastResult.consecutive_failures}</div>
-                <div>Last check: {new Date(healthState.lastResult.timestamp).toLocaleTimeString()}</div>
-                {#if healthState.lastResult.error}
-                  <div class="text-red-400">Error: {healthState.lastResult.error}</div>
-                {/if}
-              </div>
-            {/if}
-
-            <!-- Health actions -->
-            <div class="flex gap-2">
-              <button type="button"
-                onclick={checkHealthNow}
-                class="flex-1 px-2 py-1 text-[10px] bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
-              >
-                Check Now
-              </button>
-              {#if healthState.lastResult?.healthy === false}
-                <button type="button"
-                  onclick={triggerRecovery}
-                  disabled={healthState.isRecovering}
-                  class="flex-1 px-2 py-1 text-[10px] bg-yellow-700 hover:bg-yellow-600 disabled:opacity-50 rounded transition-colors"
-                >
-                  {healthState.isRecovering ? 'Recovering...' : 'Recover'}
-                </button>
-              {/if}
-            </div>
-
-            <!-- Monitoring status -->
-            <div class="text-[10px] text-neutral-600">
-              {#if healthState.isRunning}
-                <span class="text-green-500">● Monitoring active</span>
-              {:else}
-                <span class="text-neutral-500">○ Monitoring inactive</span>
-              {/if}
-            </div>
-          </div>
-        {/if}
+        <HealthStatusPanel
+          {healthState}
+          bind:showHealthDetails
+          onCheckNow={checkHealthNow}
+          onTriggerRecovery={triggerRecovery}
+        />
       {/if}
 
-      <!-- Error -->
       {#if llmState.error || configState.error || healthState.error}
-        <div class="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded p-2">
+        <div class="rounded border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-400">
           {llmState.error || configState.error || healthState.error}
         </div>
       {/if}
     </div>
   {:else}
-    <!-- Collapsed summary -->
     <div class="flex items-center gap-2 text-xs text-neutral-500">
       {#if llmState.status.ready}
         <span class="text-green-400">{modeText}</span>
         {#if llmState.status.url}
-          <span class="text-neutral-600 font-mono text-[10px] truncate">{llmState.status.url}</span>
+          <span class="truncate font-mono text-[10px] text-neutral-600">{llmState.status.url}</span>
         {/if}
       {:else}
         <span>Not connected</span>

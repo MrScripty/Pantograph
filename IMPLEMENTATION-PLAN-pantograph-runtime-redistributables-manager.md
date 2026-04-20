@@ -121,6 +121,25 @@ and GUI can all trust.
 - `src-tauri/src/llm/commands/binary.rs` is currently thin enough in size, but
   the plan must keep it thin in responsibility as new runtime-manager commands
   are added.
+- `src/components/BackendSelector.svelte` is currently 513 lines and mixes
+  backend switching with managed-runtime lifecycle UI. The missing version-aware
+  runtime-manager surface should not be implemented by expanding this mixed
+  component further.
+- `src/components/BinaryDownloader.svelte` is currently 383 lines, hardcodes
+  `llama_cpp`, and is not mounted in the current Settings flow. It contains
+  useful runtime-manager presentation logic, but it is not yet the standards-
+  compliant mounted runtime-manager surface.
+- `src/components/ServerStatus.svelte` is currently 438 lines. Expanding it
+  further to absorb the missing runtime-manager detail view would violate the
+  decomposition guidance for large UI components.
+- `src/services/managedRuntime/README.md` exists, but it does not yet satisfy
+  the required section set from `DOCUMENTATION-STANDARDS.md`. Any slice that
+  touches this directory must bring that README to full compliance instead of
+  extending a partial description.
+- `src/features/llm/index.ts` currently exports both the mounted compact
+  `BackendSelector` path and the unmounted `BinaryDownloader` path. The plan
+  must reconcile those duplicate entrypoints so the runtime-manager UI has one
+  clear mounted source of truth inside the existing Settings GUI.
 
 ### Affected Structured Contracts
 
@@ -266,6 +285,40 @@ Resulting plan corrections:
 - The plan now assumes dependency additions must be minimal and justified in
   the backend crate that truly owns them.
 
+### Pass 5: Mounted GUI Reality, Accessibility, And Source-Of-Truth Reconciliation
+
+Checked against:
+- `ACCESSIBILITY-STANDARDS.md`
+- `DOCUMENTATION-STANDARDS.md`
+- `IMPLEMENTATION-PLAN-managed-binary-cross-platform.md`
+- `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
+
+Findings applied to the plan:
+- The active plan and roadmap had drifted ahead of the mounted GUI state. The
+  backend-owned runtime-manager contracts, service boundary, and richer
+  presentation logic existed before the mounted Settings surface caught up.
+- The current mounted/unmounted split creates duplicate frontend entrypoints
+  for the same runtime-manager responsibility. Leaving both paths in place as
+  peers would violate the single-owner intent for UI state orchestration and
+  make the Settings surface harder to reason about.
+- The missing mounted runtime-manager view will introduce more interactive
+  controls for version selection and job actions. The plan therefore has to
+  require semantic buttons, labels, and keyboard-reachable control flow instead
+  of allowing click-only generic elements.
+- The existing `src/services/managedRuntime/README.md` is still incomplete
+  relative to the directory documentation standard, so frontend-adjacent
+  documentation cleanup remains an active part of the implementation work.
+
+Resulting plan corrections:
+- Milestone 5 remains in progress and explicitly included mounting a dedicated
+  version-aware runtime-manager view inside the existing Settings GUI.
+- Milestone 5 now also explicitly includes decomposition refactors for the
+  immediate touched frontend files so the version-aware screen lands in a
+  standards-compliant shape instead of growing already-large components.
+- The roadmap and this plan must describe the GUI accurately as implementation
+  proceeds: the mounted runtime-manager view is now landed, while deeper
+  frontend decomposition remains open.
+
 ## Definition of Done
 
 - Pantograph has a backend-owned runtime redistributables manager with frozen
@@ -278,6 +331,10 @@ Resulting plan corrections:
   ready
 - Tauri commands remain thin and do not own runtime lifecycle policy,
   persistent state, or background workers
+- The existing Settings GUI contains one mounted version-aware runtime-manager
+  surface that renders available/installed versions, selected/default/active
+  state, readiness, job progress, retained-artifact state, and install history
+  from the backend-owned managed-runtime contract
 - Immediate touched files/directories are refactored into standards-compliant
   shape, including README or ADR traceability where required
 - Linux x86_64 and Windows x86_64 verification exist for the new backend-owned
@@ -420,11 +477,35 @@ core logic into Tauri.
 - [x] Replace the non-compliant placeholder content in
   `src-tauri/src/llm/commands/README.md` and update any touched
   frontend-adjacent README files so their adapter-only role remains explicit
+- [x] Mount a dedicated version-aware runtime-manager view in the existing
+  Settings GUI instead of leaving version-aware controls split between the
+  compact `BackendSelector` surface and the unmounted `BinaryDownloader`
+  component
+- [ ] Refactor `BackendSelector.svelte`, `BinaryDownloader.svelte`, and
+  `ServerStatus.svelte` into focused components so backend selection, runtime
+  manager presentation, and server-shell concerns do not continue to accrete in
+  oversized files
+- [x] Generalize the richer runtime-manager presentation path so it consumes a
+  runtime id or backend-owned runtime view input instead of hardcoding
+  `llama_cpp`
+- [x] Ensure the mounted runtime-manager surface exposes available versions,
+  installed versions, selected/default/active state, retained-artifact actions,
+  and install history directly from the backend-owned view contract
+- [x] Reconcile duplicate runtime-manager exports and entrypoints after the
+  mounted Settings surface becomes authoritative
+- [x] Bring `src/services/managedRuntime/README.md` and any newly introduced
+  frontend runtime-manager directories to full
+  `DOCUMENTATION-STANDARDS.md` compliance
+- [x] Ensure runtime-manager controls follow
+  `ACCESSIBILITY-STANDARDS.md`, including semantic buttons/selects, accessible
+  labels, and keyboard-reachable action flows
 
 **Verification:**
 - Targeted command/transport tests for additive facades
 - Contract tests for projected view payloads
 - Architecture review proving no business logic regressed into Tauri
+- Frontend lint/typecheck plus a targeted accessibility review for the mounted
+  runtime-manager controls
 
 **Status:** In progress
 
@@ -628,6 +709,21 @@ Update during implementation:
   backend list once, but subsequent managed-runtime transitions no longer need
   a GUI-triggered capability polling loop, so the Milestone 5 event-driven
   projection task is now complete for the current redistributable surfaces.
+- 2026-04-19: Planning pass 5 reconciled this plan against the historical
+  managed-binary plan, the roadmap wording, the mounted Settings UI, and the
+  remaining accessibility/documentation standards. That pass corrected a stale
+  claim that the version-aware runtime-manager screen was already present in
+  the mounted GUI. Milestone 5 remains open until the existing Settings surface
+  mounts one authoritative version-aware runtime manager and the immediate
+  touched frontend files are decomposed/documented to standards.
+- 2026-04-19: Milestone 5 slice 13 mounts the dedicated version-aware runtime
+  manager inside the existing Settings sidecar flow, removes the stale
+  hardcoded `BinaryDownloader` path, introduces focused `runtime-manager/` and
+  `server-status/` component directories, and updates the feature/service
+  README set so the mounted GUI now matches the backend-owned runtime-manager
+  contract. The remaining Milestone 5 work is narrower frontend decomposition
+  of the still-large selector/card shell components rather than missing
+  version-aware runtime-manager functionality.
 - 2026-04-19: Milestone 6 slice 1 finishes the source-of-truth and
   traceability closeout for the current redistributables boundary. The older
   managed-binary plan and roadmap wording now clearly defer to this plan, and

@@ -16,6 +16,8 @@ architecture views on top of the shared editor.
 | `WorkflowToolbar.svelte` | Toolbar actions for workflow graph editing. |
 | `diagnostics/` | Workflow diagnostics panel, tab views, and presentation helpers for retained execution traces. |
 | `nodes/` | Pantograph-specific node renderers and the shared app node shell. |
+| `runtime-manager/` | Mounted Settings runtime-manager cards and panel for backend-owned redistributable inspection and version policy. |
+| `server-status/` | Focused presentation subcomponents used by the `ServerStatus.svelte` Settings shell. |
 
 ## Problem
 Pantograph needs app-specific graph composition on top of the reusable package:
@@ -32,6 +34,9 @@ as the package graph so GUI behavior and backend validation stay aligned.
   starter workflow templates.
 - Diagnostics rendering should stay inside the workflow workspace without
   becoming a parallel app shell.
+- Settings-side runtime management must remain a presentation surface over the
+  backend-owned managed-runtime contract rather than introducing GUI-owned
+  runtime policy.
 
 ## Decision
 Keep the app `WorkflowGraph.svelte` as a composition layer over package store
@@ -62,7 +67,10 @@ existing workflow edge only after backend validation confirms the dragged node
 type can bridge both endpoints. The workflow workspace now also includes a
 bottom diagnostics panel that renders retained execution traces from the
 diagnostics store without moving transport or event-normalization logic into
-Svelte components.
+Svelte components. Settings-side server/runtime status rendering is now also
+split into focused `server-status/` and `runtime-manager/` subdirectories so
+the mounted shell can expose the dedicated version-aware runtime-manager view
+without continuing to grow one large component file.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
