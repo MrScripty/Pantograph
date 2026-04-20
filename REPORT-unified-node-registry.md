@@ -3,7 +3,7 @@
 **For:** puma-bot team
 **Date:** 2026-02-08
 **Status:** Fully implemented and all tests passing
-**Reference:** PROPOSAL-unified-node-registry.md, docs/completed-plans/PLAN-unified-node-registry.md
+**Reference:** docs/archived-proposals/PROPOSAL-unified-node-registry.md, docs/completed-plans/PLAN-unified-node-registry.md
 
 ---
 

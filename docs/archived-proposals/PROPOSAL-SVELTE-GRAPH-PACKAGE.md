@@ -1,5 +1,15 @@
 # Proposal: Extract Node Graph as `@pantograph/svelte-graph`
 
+## Status
+Archived implemented design
+
+## Archive Summary
+
+This proposal records the design that led to Pantograph's extracted
+`@pantograph/svelte-graph` workspace package. The package now exists and is
+consumed by the desktop app, so this file remains only as historical design
+context and should not be used as an active implementation plan.
+
 ## Summary
 
 Extract Pantograph's node graph editor into a reusable npm package so it can be consumed by other Svelte applications (e.g., PumaBot). The Pantograph desktop app continues to work identically by consuming the package internally.

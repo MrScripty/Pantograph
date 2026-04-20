@@ -1,5 +1,16 @@
 # PROPOSAL: Unify Node Registration Architecture
 
+## Status
+Archived implemented design
+
+## Archive Summary
+
+This proposal records the rationale for the unified node-registry work that is
+now implemented. Current source-of-truth references are
+`docs/completed-plans/PLAN-unified-node-registry.md` and
+`REPORT-unified-node-registry.md`; this file remains only as historical design
+background.
+
 ## Context
 
 The `llamacpp-inference` node doesn't appear in puma-bot's node palette despite having a GUI component (`LlamaCppInferenceNode.svelte`) in `@pantograph/svelte-graph`. Investigation reveals this is a symptom of a broader architectural problem: **three separate systems that should be unified are maintained independently, leading to silent breakage when they drift apart.**
