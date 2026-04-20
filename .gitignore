@@ -71,3 +71,10 @@ dist-ssr
 *.pyc
 __pycache__/
 .pytest_cache/
+# Local agent tooling
+.codex
+
+# Generated image artifacts
+**/grok-image*
+*.xcf
+
