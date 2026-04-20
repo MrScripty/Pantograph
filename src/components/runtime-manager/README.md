@@ -12,15 +12,18 @@ between compact backend-picker widgets and unmounted one-off components.
 | ----------- | ----------- |
 | `ManagedRuntimePanel.svelte` | Mounted Settings entry point that loads runtime-manager snapshots from the shared frontend service and renders one card per managed runtime. |
 | `ManagedRuntimeCard.svelte` | Per-runtime coordinator that owns user actions and composes focused runtime summary, job, catalog, and activity panels. |
-| `ManagedRuntimeCatalogPanel.svelte` | Version policy selectors plus the backend-owned available-version catalog list. |
-| `ManagedRuntimeJobPanel.svelte` | Active job progress and retained-download controls for one managed runtime. |
+| `ManagedRuntimeCatalogPanel.svelte` | Version policy selectors plus a bounded, scrollable backend-owned available-version table. |
+| `ManagedRuntimeJobPanel.svelte` | Prominent live job progress, transfer state, and retained-download controls for one managed runtime. |
 | `ManagedRuntimeActivityPanel.svelte` | Install history, missing-file disclosure, and install/remove actions for one managed runtime. |
 
 ## Problem
 Pantograph needs a user-facing runtime manager that can explain why a sidecar
 runtime is unavailable, which versions are known to the backend, which version
 is selected or active, which remote catalog versions are installable on the
-current platform, and what install/download work is currently happening.
+current platform, and what install/download work is currently happening. The
+mounted Settings view must keep active transfer progress visually primary and
+keep version inventories readable even when a backend catalog exposes several
+versions.
 Before this directory existed, that information was split between a compact
 backend selector and an unmounted hardcoded runtime component, leaving the
 mounted Settings UI without the version-aware management surface the backend now
@@ -33,6 +36,8 @@ supports.
   lifecycle policy or persisted install state.
 - The UI must remain keyboard reachable and use semantic controls for runtime
   actions and version policy updates.
+- Version catalogs must remain readable inside the mounted Settings panel by
+  using bounded scroll regions instead of unbounded card stacks.
 - The mounted Settings flow still needs a compact backend selector alongside
   the richer runtime-manager surface.
 
@@ -65,6 +70,8 @@ server-shell components.
   interaction paths.
 - Catalog rows remain projection-only: version availability and installability
   come from the backend-managed runtime snapshot, not from local GUI guesses.
+- Active transfers remain visually primary and expose live progress feedback
+  without requiring the user to inspect secondary panels or truncated labels.
 
 ## Revisit Triggers
 - The runtime manager needs filtering or paging because the managed runtime set

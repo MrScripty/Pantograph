@@ -30,15 +30,23 @@
   let pauseRequested = $state(false);
   let cancelRequested = $state(false);
   let selectionUpdating = $state(false);
+  let lastProgressAtMs = $state<number | null>(null);
   let error: string | null = $state(null);
 
   async function installRuntime(version: string | null = null) {
     installRequested = true;
     installingVersion = version;
+    lastProgressAtMs = null;
     error = null;
 
     try {
-      await managedRuntimeService.installRuntime(runtime.id, () => {}, version);
+      await managedRuntimeService.installRuntime(
+        runtime.id,
+        () => {
+          lastProgressAtMs = Date.now();
+        },
+        version
+      );
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -135,6 +143,10 @@
     return new Date(atMs).toLocaleString();
   }
 
+  function formatProgressTime(atMs: number): string {
+    return new Date(atMs).toLocaleTimeString();
+  }
+
   function versionBadgeLabel(version: ManagedRuntimeVersionStatus): string {
     if (version.install_state === 'system_provided') {
       return 'System';
@@ -172,6 +184,22 @@
       ? (runtime.active_job.current / runtime.active_job.total) * 100
       : 0
   );
+
+  let progressCaption = $derived.by(() => {
+    if (!runtime.active_job) {
+      return null;
+    }
+
+    if (lastProgressAtMs !== null) {
+      return `Last update ${formatProgressTime(lastProgressAtMs)}`;
+    }
+
+    if (installRequested) {
+      return 'Waiting for the first backend progress event...';
+    }
+
+    return 'Live progress updates stream from the backend while this job is active.';
+  });
 
   let recentHistory = $derived(runtime.install_history.slice(-HISTORY_LIMIT).reverse());
 
@@ -217,6 +245,7 @@
   <ManagedRuntimeJobPanel
     {runtime}
     {progressPercent}
+    {progressCaption}
     {canPauseRuntime}
     {canDiscardRetainedDownload}
     {pauseRequested}
