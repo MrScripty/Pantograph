@@ -222,6 +222,7 @@ impl DemandExecutionBudget {
         Self::new(2)
     }
 
+    #[cfg(test)]
     fn sequential() -> Self {
         Self::new(1)
     }
@@ -287,6 +288,7 @@ impl DemandBatchExecutionOutcome {
         self.completed_targets.push(node_id.clone());
     }
 
+    #[cfg(test)]
     fn completed_targets(&self) -> &[NodeId] {
         &self.completed_targets
     }

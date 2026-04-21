@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 99
+The command completes successfully, but the workspace currently emits 97
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -23,7 +23,6 @@ The classification follows the updated standards expectations:
 
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
-| `node-engine` | 2 | Remove unused helpers | Delete unused multi-demand test helpers or make tests consume them. |
 | `workflow-nodes` | 7 | Remove simple unused fields/imports; gate experimental model-provider executor | Remove unused Ollama response fields/imports; either register the model-provider executor or gate it behind an experimental feature. |
 | `pantograph-workflow-service` | 1 | Remove or test-scope helper | Remove the unused wrapper or move it behind `#[cfg(test)]`. |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
@@ -31,14 +30,16 @@ The classification follows the updated standards expectations:
 | `pantograph` Tauri binary | 80 | Remove migrated/stale local workflow and server-discovery code | Delete superseded workflow local DTO/validation/registry/connection helpers and unused discovery paths after confirming no command references remain. |
 | `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
 
-## Detailed Classification
+## Resolved Warnings
 
 ### `crates/node-engine`
 
 | Location | Warning | Classification | Next action |
 | --- | --- | --- | --- |
-| `src/engine/multi_demand.rs:225` | `DemandExecutionBudget::sequential` unused | Remove/use | Delete if no multi-demand tests need sequential-mode construction. If the helper captures intended behavior, consume it from a focused test. |
-| `src/engine/multi_demand.rs:290` | `DemandBatchExecutionOutcome::completed_targets` unused | Remove/use | Delete if the public outcome API no longer needs a completed-target accessor; otherwise add a focused assertion through the local test boundary. |
+| `src/engine/multi_demand.rs:225` | `DemandExecutionBudget::sequential` unused | Test-scope | Resolved by compiling the helper only for tests, where the sequential dispatch-plan tests consume it. |
+| `src/engine/multi_demand.rs:290` | `DemandBatchExecutionOutcome::completed_targets` unused | Test-scope | Resolved by compiling the accessor only for tests, where batch outcome ordering assertions consume it. |
+
+## Active Warnings
 
 ### `crates/workflow-nodes`
 

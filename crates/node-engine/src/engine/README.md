@@ -244,6 +244,9 @@ planning split, plus the private execution-batch schedule derived from it.
   backend-owned and deterministic while mixing bounded-parallel execution for
   overlap-safe windows with explicit sequential fallback for the remaining
   demand shapes.
+- Test-only multi-demand inspection helpers remain compiled only for tests so
+  production engine builds do not carry warning debt for helpers whose only
+  consumers are contract assertions.
 
 ## Revisit Triggers
 - Bounded parallel demand execution requires additional planner or coordinator
@@ -273,6 +276,10 @@ public `engine.rs` facade.
 
 **External:** None beyond the crate’s existing async and serialization
 dependencies.
+- Reason: engine helper extraction does not require a new external package
+  boundary.
+- Revisit trigger: a future planner, scheduler, or persistence owner requires
+  an engine-local dependency that cannot stay behind the existing facade.
 
 ## Related ADRs
 - None identified as of 2026-04-17.
