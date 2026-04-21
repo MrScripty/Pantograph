@@ -579,8 +579,11 @@ Tasks:
   `docs/toolchain-policy.md` now record Rust 1.92.0, Node 24.12.0, npm 11.6.2,
   and Python 3.12.3; existing CI Rust installation now targets the pinned Rust
   toolchain.
-- Add release hardening: artifact naming policy, SBOM generation, release CI
-  outline, and changelog automation decision.
+- [x] Add release hardening: artifact naming policy, SBOM generation, release CI
+  outline, and changelog automation decision. Status: `docs/release-policy.md`
+  now defines versioned artifact naming, release CI shape, SBOM requirements,
+  and the current manual changelog decision; `scripts/generate-release-sbom.sh`
+  and `npm run release:sbom` provide the CycloneDX SBOM entrypoint.
 - Add Svelte-specific a11y lint/test coverage for interactive generic elements,
   icon-only buttons, embedded controls, and keyboard behavior.
 

@@ -14,6 +14,7 @@ across commit history or transient chat context.
 | `headless-embedding-api-v1.md` | Reference contract for the headless embedding service surface. |
 | `headless-native-bindings.md` | Product-facing native/bindings packaging and usage guidance. |
 | `python-runtime-separation.md` | Design notes and rationale for keeping Python runtime execution out of process. |
+| `release-policy.md` | Release artifact naming, SBOM generation, release CI outline, and changelog automation decision. |
 | `runtime-registry-debug-and-recovery.md` | Operator/developer guide for runtime-registry inspection, reclaim, recovery, and Milestone 6 rollout posture. |
 | `testing-and-release-strategy.md` | Repository policy for hybrid test placement, cross-layer acceptance, and release smoke strategy. |
 | `toolchain-policy.md` | Pinned Rust, Node, npm, and Python versions plus update policy. |

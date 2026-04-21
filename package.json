@@ -27,6 +27,7 @@
     "test": "cargo test -p node-engine --lib && cargo test -p workflow-nodes --lib",
     "traceability": "./scripts/check-decision-traceability.sh",
     "test:runtime-separation": "./scripts/check-no-python-linkage.sh",
+    "release:sbom": "./scripts/generate-release-sbom.sh",
     "check": "npm run lint && npm run lint:critical && npm run typecheck && npm run test",
     "hooks:install": "npx lefthook install"
   },

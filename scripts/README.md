@@ -81,8 +81,10 @@ python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
 npm run lint:no-new
 npm run format:check
+npm run release:sbom -- 0.1.0
 ./scripts/check-decision-traceability.sh
 ./scripts/check-no-python-linkage.sh
+./scripts/generate-release-sbom.sh 0.1.0
 ./scripts/check-runtime-redistributables-smoke.sh
 ./scripts/check-uniffi-embedded-runtime-surface.sh
 ./scripts/check-uniffi-csharp-smoke.sh
