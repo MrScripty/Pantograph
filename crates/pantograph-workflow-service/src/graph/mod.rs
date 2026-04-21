@@ -1,6 +1,7 @@
 mod canonicalization;
 mod connection_intent;
 mod effective_definition;
+mod group_mutation;
 mod memory_impact;
 mod persistence;
 mod registry;
@@ -23,28 +24,29 @@ pub use persistence::{
     FileSystemWorkflowGraphStore, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
-pub use registry::{validate_workflow_connection, NodeRegistry};
+pub use registry::{NodeRegistry, validate_workflow_connection};
 pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use session_graph::convert_graph_to_node_engine;
 pub use session_types::{
     UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
-    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
-    WorkflowSessionKind,
+    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind,
 };
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
     ConnectionRejectionReason, ConnectionTargetAnchorCandidate, ConnectionTargetNodeCandidate,
     EdgeInsertionBridge, EdgeInsertionPreviewResponse, ExecutionMode, GraphEdge, GraphNode,
     InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, InsertNodePositionHint,
-    InsertableNodeTypeCandidate, IoBindingOrigin, NodeCategory, NodeDefinition, PortDataType,
-    PortDefinition, Position, Viewport, WorkflowDerivedGraph, WorkflowFile, WorkflowGraph,
-    WorkflowGraphMetadata,
+    InsertableNodeTypeCandidate, IoBindingOrigin, NodeCategory, NodeDefinition, NodeGroup,
+    PortDataType, PortDefinition, PortMapping, Position, Viewport, WorkflowDerivedGraph,
+    WorkflowFile, WorkflowGraph, WorkflowGraphMetadata,
 };

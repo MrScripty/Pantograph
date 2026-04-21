@@ -52,6 +52,9 @@ workflow decisions to this crate.
 ## Invariants
 - Workflow execution/session identity is owned here and exposed through public
   DTOs.
+- Edit-session graph mutations, including collapsed node group create,
+  ungroup, and port-mapping changes, return backend-owned snapshots that
+  adapters render directly.
 - `workflow_get_io` exposes only nodes marked as input/output with
   `io_binding_origin == "client_session"`.
 - Workflow execution never triggers runtime installation implicitly.

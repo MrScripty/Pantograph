@@ -1,4 +1,4 @@
-use super::types::{GraphEdge, GraphNode, Position, WorkflowGraph};
+use super::types::{GraphEdge, GraphNode, PortMapping, Position, WorkflowGraph};
 use super::{ConnectionAnchor, InsertNodePositionHint};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -104,6 +104,30 @@ pub struct WorkflowGraphAddEdgeRequest {
 pub struct WorkflowGraphRemoveEdgeRequest {
     pub session_id: String,
     pub edge_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphCreateGroupRequest {
+    pub session_id: String,
+    pub name: String,
+    pub selected_node_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphUngroupRequest {
+    pub session_id: String,
+    pub group_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphUpdateGroupPortsRequest {
+    pub session_id: String,
+    pub group_id: String,
+    pub exposed_inputs: Vec<PortMapping>,
+    pub exposed_outputs: Vec<PortMapping>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]

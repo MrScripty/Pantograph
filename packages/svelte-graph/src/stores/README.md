@@ -63,6 +63,11 @@ Workflow execution event reduction now lives in
 component focused on subscription and run-lifecycle ownership while the store
 boundary owns the read-only event-to-overlay reduction shared by GUI
 consumers.
+Collapsed node group create, ungroup, and port-mapping edits now follow the
+same backend-session rule as other structural graph mutations:
+`createWorkflowStores.ts` applies the returned graph mutation snapshot and
+derives `nodeGroups` from group node data rather than rewriting group nodes or
+boundary edges locally.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -74,6 +79,8 @@ consumers.
 ## Invariants
 - Structural graph edits must originate from a backend session and update local
   stores only from the returned graph snapshot.
+- Node group stores are derived from backend graph snapshots; group create,
+  ungroup, and port edits must not synthesize nodes or boundary edges locally.
 - `workflowGraph` must reflect the latest nodes, edges, and derived graph
   fingerprint after every applied graph snapshot.
 - `connectionIntent` is not persisted; it must reset on graph mutation,

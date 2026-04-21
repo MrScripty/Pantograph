@@ -38,6 +38,9 @@ or embedded runtime.
 Keep desktop composition and command wiring in `src-tauri/src`. Move reusable
 workflow, runtime, inference, and binding behavior into workspace crates, then
 let Tauri inject app state and translate command payloads.
+Session-scoped node group commands are registered here only as transport
+entrypoints; collapsed group mutation policy lives in
+`pantograph-workflow-service`.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -52,6 +55,8 @@ let Tauri inject app state and translate command payloads.
 - Long-lived tasks and process handles need owned shutdown paths.
 - Tauri-local DTOs should migrate toward shared backend contracts where
   practical.
+- Command registrations for graph edits, including node group mutations, must
+  return backend-owned service snapshots instead of adapter-owned graph facts.
 
 ## Revisit Triggers
 - `main.rs` composition extraction changes module ownership.

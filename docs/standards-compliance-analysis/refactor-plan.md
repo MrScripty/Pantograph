@@ -209,9 +209,13 @@ Tasks:
   and diagnostics relevance into backend-owned trace/session projection APIs.
 - [ ] Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
   identity and relevance decisions needed by `diagnosticsStore.ts`.
-- [ ] Convert group create/ungroup/update-port operations to return backend-owned
+- [x] Convert group create/ungroup/update-port operations to return backend-owned
   graph mutation responses, then remove local graph reconstruction from
   `packages/svelte-graph/src/stores/createWorkflowStores.ts`.
+  Status: `pantograph-workflow-service` now owns session-scoped node-group
+  graph mutations through `graph/group_mutation.rs`; Tauri exposes them through
+  graph mutation responses, and the Svelte store renders the returned backend
+  graph instead of reconstructing collapsed group nodes and boundary edges.
 - [x] Collapse duplicate Tauri wire normalizers into one executable contract
   module consumed by both `WorkflowService.ts` and `TauriWorkflowBackend.ts`.
   Status: `src/lib/tauriConnectionIntentWire.ts` owns connection-intent

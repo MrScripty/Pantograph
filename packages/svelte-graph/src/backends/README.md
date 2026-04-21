@@ -32,6 +32,9 @@ package-local behavior through `MockWorkflowBackend`. The mock stores a
 session-local graph with derived revision metadata so the same
 `getConnectionCandidates` and `connectAnchors` flow can be exercised without a
 native backend.
+Group create, ungroup, and port-mapping operations are also session-scoped
+graph mutation methods; mock and production backends must return the full graph
+mutation response rather than group-only DTOs.
 
 ## Alternatives Rejected
 - Call Tauri `invoke` directly from package components.
@@ -43,6 +46,8 @@ native backend.
 ## Invariants
 - `WorkflowBackend` implementations must treat sessions as the authority for
   graph mutation methods.
+- Node group create, ungroup, and port edits return graph mutation responses so
+  stores can render backend-owned collapsed group state directly.
 - Session-scoped graph mutation methods may return an additive backend-owned
   `workflow_event` envelope alongside the updated graph so GUI consumers can
   react to canonical `GraphModified` semantics without synthesizing them

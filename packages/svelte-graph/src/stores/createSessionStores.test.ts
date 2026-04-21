@@ -104,6 +104,9 @@ function createBackendStub(): WorkflowBackend {
     async updateGroupPorts() {
       throw new Error('not implemented');
     },
+    async ungroup() {
+      throw new Error('not implemented');
+    },
     subscribeEvents() {
       return () => {};
     },

@@ -33,6 +33,9 @@ Keep all graph-editing and connection-intent DTOs in `workflow.ts`, with the
 transport-facing method surface in `backend.ts`. New interactive editing
 contracts were added here first so both the mock backend and the Tauri adapter
 could share the same shapes.
+Node group create, ungroup, and port-mapping edits are modeled as
+`WorkflowBackend` graph mutation methods instead of group-only return DTOs so
+the backend remains the owner of collapsed graph structure.
 
 ## Alternatives Rejected
 - Define transport payloads inline inside each backend implementation.
@@ -48,6 +51,9 @@ could share the same shapes.
   `accepted: false` and a structured `rejection`.
 - `ConnectionIntentState` is UI-owned transient state derived from backend
   candidate responses, not a persisted workflow artifact.
+- Node group mutation methods in `WorkflowBackend` return
+  `WorkflowGraphMutationResponse`; group DTOs are serialized inside graph node
+  data and are not authoritative by themselves.
 
 ## Revisit Triggers
 - Workflow persistence adopts a versioned schema that needs explicit migration

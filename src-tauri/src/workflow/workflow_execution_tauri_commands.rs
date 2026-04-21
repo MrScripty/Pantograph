@@ -1,4 +1,4 @@
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, command, ipc::Channel};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
@@ -8,8 +8,8 @@ use super::events::WorkflowEvent;
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState, WorkflowGraph,
-    WorkflowGraphEditSessionGraphResponse,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
+    WorkflowGraph, WorkflowGraphEditSessionGraphResponse,
 };
 
 #[command]
@@ -233,6 +233,54 @@ pub async fn remove_edge_from_execution(
     super::workflow_execution_commands::remove_edge_from_execution(
         execution_id,
         edge_id,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn create_group_in_execution(
+    execution_id: String,
+    name: String,
+    selected_node_ids: Vec<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::create_group_in_execution(
+        execution_id,
+        name,
+        selected_node_ids,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn ungroup_in_execution(
+    execution_id: String,
+    group_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::ungroup_in_execution(
+        execution_id,
+        group_id,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn update_group_ports_in_execution(
+    execution_id: String,
+    group_id: String,
+    exposed_inputs: Vec<PortMapping>,
+    exposed_outputs: Vec<PortMapping>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::update_group_ports_in_execution(
+        execution_id,
+        group_id,
+        exposed_inputs,
+        exposed_outputs,
         workflow_service,
     )
     .await

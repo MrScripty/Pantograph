@@ -1,9 +1,10 @@
 pub use super::workflow_edit_session::{
     add_edge_to_execution, add_node_to_execution, connect_anchors_in_execution,
-    create_workflow_session, get_connection_candidates, get_execution_graph, get_undo_redo_state,
-    insert_node_and_connect_in_execution, insert_node_on_edge_in_execution,
-    preview_node_insert_on_edge_in_execution, redo_workflow, remove_edge_from_execution,
-    remove_execution, remove_node_from_execution, undo_workflow, update_node_data,
+    create_group_in_execution, create_workflow_session, get_connection_candidates,
+    get_execution_graph, get_undo_redo_state, insert_node_and_connect_in_execution,
+    insert_node_on_edge_in_execution, preview_node_insert_on_edge_in_execution, redo_workflow,
+    remove_edge_from_execution, remove_execution, remove_node_from_execution, undo_workflow,
+    ungroup_in_execution, update_group_ports_in_execution, update_node_data,
     update_node_position_in_execution,
 };
 pub use super::workflow_execution_runtime::{execute_workflow_v2, run_workflow_session};

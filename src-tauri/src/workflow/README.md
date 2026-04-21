@@ -126,6 +126,9 @@ sync-before-snapshot sequence.
   data for expected incompatibility cases.
 - Insert-and-connect must mutate the session atomically so rejected inserts do
   not leave orphan nodes or disconnected edges.
+- Node group create, ungroup, and port-mapping edits must call the core
+  edit-session APIs and return core graph snapshots rather than using legacy
+  Tauri group helpers as a second source of graph truth.
 - Tauri editing commands must return the graph snapshots received from core
   rather than reconstructing local state.
 - Session-scoped candidate and insert commands must log enough request/rejection
@@ -191,6 +194,9 @@ let snapshot = workflow_service
   graph or a structured rejection.
 - Node add/update/remove/move commands also return updated graph snapshots so
   the GUI can render backend-owned state directly.
+- Group create, ungroup, and update-port commands are session-scoped graph
+  mutations and return the same graph mutation response shape as node and edge
+  edits.
 - Expected incompatibility is not exceptional; transport/session errors still
   surface as command failures.
 - Session-scoped commands are serialized per core edit session; callers should

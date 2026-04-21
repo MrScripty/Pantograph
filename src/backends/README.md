@@ -32,6 +32,9 @@ graph can use revision-aware connection guidance, drag-time insert flows, and
 cursor-hit edge replacement unchanged inside the app. Structural graph edits
 now return authoritative graph snapshots from the backend, which the shared
 stores apply directly instead of reconstructing local state first.
+Group create, ungroup, and update-port methods now call session-scoped Tauri
+commands that return the same graph mutation response shape, keeping collapsed
+group nodes and boundary edges backend-owned.
 
 ## Alternatives Rejected
 - Call Tauri `invoke` directly from `WorkflowGraph.svelte`.
@@ -46,6 +49,8 @@ stores apply directly instead of reconstructing local state first.
   incompatibility should come back as structured commit rejection.
 - Add/update/remove/move edit commands must return the graph snapshot produced
   by core so app stores can render backend-owned state directly.
+- Group create, ungroup, and port edits must use backend-owned mutation
+  responses, not the legacy group-only Tauri commands.
 - Graph revisions are treated as opaque values and echoed unchanged to Rust.
 - Insert commands must remain atomic at the adapter boundary; the adapter should
   not split insert and connect into separate invokes.
@@ -86,6 +91,8 @@ const session = await backend.createSession({ nodes: [], edges: [] });
   return structured rejection data when a preview or commit is denied.
 - `addNode`, `removeNode`, `updateNodeData`, `updateNodePosition`, `addEdge`,
   and `removeEdge` return updated graphs for store synchronization.
+- `createGroup`, `ungroup`, and `updateGroupPorts` return updated graphs for
+  the same store synchronization path.
 - Session lifecycle ordering remains: create/load session before graph mutation,
   consume the returned backend session handle instead of hardcoding local
   session classification,

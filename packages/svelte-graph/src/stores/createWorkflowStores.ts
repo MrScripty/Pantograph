@@ -135,6 +135,43 @@ export function createWorkflowStores(
   const connectionIntent = writable<ConnectionIntentState | null>(null);
   let activeSessionId: string | null = null;
 
+  function isNodeGroupData(value: unknown): value is NodeGroup {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+    const candidate = value as Partial<NodeGroup>;
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.name === 'string' &&
+      Array.isArray(candidate.nodes) &&
+      Array.isArray(candidate.edges) &&
+      Array.isArray(candidate.exposed_inputs) &&
+      Array.isArray(candidate.exposed_outputs)
+    );
+  }
+
+  function extractNodeGroups(graphNodes: Node[]): Map<string, NodeGroup> {
+    const groups = new Map<string, NodeGroup>();
+    for (const node of graphNodes) {
+      const group = node.data?.group;
+      if (isNodeGroupData(group)) {
+        groups.set(group.id, group);
+      }
+    }
+    return groups;
+  }
+
+  function findGroupContainingNodeIds(groups: Map<string, NodeGroup>, nodeIds: string[]) {
+    const selected = new Set(nodeIds);
+    for (const group of groups.values()) {
+      const groupNodeIds = new Set(group.nodes.map((node) => node.id));
+      if (selected.size === groupNodeIds.size && nodeIds.every((nodeId) => groupNodeIds.has(nodeId))) {
+        return group;
+      }
+    }
+    return null;
+  }
+
   // --- Derived stores ---
   const workflowGraph = derived(
     [nodes, edges, derivedGraph],
@@ -213,6 +250,7 @@ export function createWorkflowStores(
     const { graphNodes, graphEdges, graph: nextGraph } = materializeWorkflowGraph(graph);
     nodes.set(graphNodes);
     edges.set(graphEdges);
+    nodeGroups.set(extractNodeGroups(graphNodes));
     if (typeof options?.metadata !== 'undefined') {
       workflowMetadata.set(options.metadata);
     }
@@ -240,28 +278,6 @@ export function createWorkflowStores(
       .catch((error) => {
         console.error(`[workflowStores] Failed to ${action}:`, error);
       });
-  }
-
-  function markGraphModified() {
-    isDirty.set(true);
-    connectionIntent.set(null);
-    derivedGraph.set(
-      buildDerivedGraph({
-        nodes: get(nodes).map((node) => ({
-          id: node.id,
-          node_type: node.type || 'unknown',
-          position: node.position,
-          data: node.data,
-        })),
-        edges: get(edges).map((edge) => ({
-          id: edge.id,
-          source: edge.source,
-          source_handle: edge.sourceHandle || 'output',
-          target: edge.target,
-          target_handle: edge.targetHandle || 'input',
-        })),
-      })
-    );
   }
 
   // --- Node actions ---
@@ -447,6 +463,7 @@ export function createWorkflowStores(
   function clearWorkflow() {
     nodes.set([]);
     edges.set([]);
+    nodeGroups.set(new Map());
     workflowMetadata.set(null);
     selectedNodeIds.set([]);
     connectionIntent.set(null);
@@ -471,6 +488,7 @@ export function createWorkflowStores(
       { id: 'llm', type: 'llm-inference', position: { x: 350, y: 150 }, data: { label: 'LLM Inference', definition: llmDef } },
       { id: 'output', type: 'text-output', position: { x: 650, y: 150 }, data: { label: 'Output', text: '', definition: outputDef } },
     ]);
+    nodeGroups.set(new Map());
     edges.set([
       { id: 'input-to-llm', source: 'user-input', sourceHandle: 'text', target: 'llm', targetHandle: 'prompt' },
       { id: 'llm-to-output', source: 'llm', sourceHandle: 'response', target: 'output', targetHandle: 'text' },
@@ -532,50 +550,18 @@ export function createWorkflowStores(
       console.warn('[workflowStores] Cannot create group with less than 2 nodes');
       return null;
     }
+    if (!activeSessionId) {
+      console.warn('[workflowStores] Cannot create group without an active session');
+      return null;
+    }
 
     try {
-      const graph = get(workflowGraph) as WorkflowGraph;
-      const result = await backend.createGroup(name, nodeIds, graph);
-
-      nodes.update((n) => n.filter((node) => !nodeIds.includes(node.id)));
-
-      const internalizedSet = new Set(result.internalized_edge_ids);
-      edges.update((e) => e.filter((edge) => !internalizedSet.has(edge.id)));
-
-      const groupNode: Node = {
-        id: result.group.id,
-        type: 'node-group',
-        position: result.group.position,
-        data: { label: result.group.name, group: result.group, isGroup: true },
-      };
-      nodes.update((n) => [...n, groupNode]);
-
-      edges.update((e) =>
-        e.map((edge) => {
-          const inputMapping = result.group.exposed_inputs.find(
-            (m) => m.internal_node_id === edge.target && m.internal_port_id === edge.targetHandle
-          );
-          if (inputMapping) {
-            return { ...edge, target: result.group.id, targetHandle: inputMapping.group_port_id };
-          }
-          const outputMapping = result.group.exposed_outputs.find(
-            (m) => m.internal_node_id === edge.source && m.internal_port_id === edge.sourceHandle
-          );
-          if (outputMapping) {
-            return { ...edge, source: result.group.id, sourceHandle: outputMapping.group_port_id };
-          }
-          return edge;
-        })
-      );
-
-      nodeGroups.update((groups) => {
-        const newGroups = new Map(groups);
-        newGroups.set(result.group.id, result.group);
-        return newGroups;
+      const response = await backend.createGroup(name, nodeIds, activeSessionId);
+      applyWorkflowGraph(response.graph, { markDirty: true });
+      applyWorkflowGraphMutationResponse(response, {
+        setNodeExecutionState,
       });
-
-      markGraphModified();
-      return result.group;
+      return findGroupContainingNodeIds(get(nodeGroups), nodeIds);
     } catch (error) {
       console.error('[workflowStores] Failed to create group:', error);
       return null;
@@ -583,50 +569,17 @@ export function createWorkflowStores(
   }
 
   async function ungroupNodes(groupId: string): Promise<boolean> {
-    const groups = get(nodeGroups);
-    const group = groups.get(groupId);
-    if (!group) {
-      console.warn('[workflowStores] Group not found:', groupId);
+    if (!activeSessionId) {
+      console.warn('[workflowStores] Cannot ungroup without an active session');
       return false;
     }
 
     try {
-      const definitions = get(nodeDefinitions);
-      nodes.update((n) => n.filter((node) => node.id !== groupId));
-
-      const restoredNodes: Node[] = group.nodes.map((gn) => {
-        const definition = definitions.find((d) => d.node_type === gn.node_type);
-        return { id: gn.id, type: gn.node_type, position: gn.position, data: { ...gn.data, definition } };
+      const response = await backend.ungroup(groupId, activeSessionId);
+      applyWorkflowGraph(response.graph, { markDirty: true });
+      applyWorkflowGraphMutationResponse(response, {
+        setNodeExecutionState,
       });
-      nodes.update((n) => [...n, ...restoredNodes]);
-
-      const restoredEdges: Edge[] = group.edges.map((ge) => ({
-        id: ge.id, source: ge.source, sourceHandle: ge.source_handle,
-        target: ge.target, targetHandle: ge.target_handle,
-      }));
-      edges.update((e) => [...e, ...restoredEdges]);
-
-      edges.update((e) =>
-        e.map((edge) => {
-          if (edge.target === groupId) {
-            const mapping = group.exposed_inputs.find((m) => m.group_port_id === edge.targetHandle);
-            if (mapping) return { ...edge, target: mapping.internal_node_id, targetHandle: mapping.internal_port_id };
-          }
-          if (edge.source === groupId) {
-            const mapping = group.exposed_outputs.find((m) => m.group_port_id === edge.sourceHandle);
-            if (mapping) return { ...edge, source: mapping.internal_node_id, sourceHandle: mapping.internal_port_id };
-          }
-          return edge;
-        })
-      );
-
-      nodeGroups.update((groups) => {
-        const newGroups = new Map(groups);
-        newGroups.delete(groupId);
-        return newGroups;
-      });
-
-      markGraphModified();
       return true;
     } catch (error) {
       console.error('[workflowStores] Failed to ungroup:', error);
@@ -639,31 +592,22 @@ export function createWorkflowStores(
     exposedInputs: PortMapping[],
     exposedOutputs: PortMapping[],
   ): Promise<boolean> {
-    const groups = get(nodeGroups);
-    const group = groups.get(groupId);
-    if (!group) {
-      console.warn('[workflowStores] Group not found:', groupId);
+    if (!activeSessionId) {
+      console.warn('[workflowStores] Cannot update group ports without an active session');
       return false;
     }
 
     try {
-      const updatedGroup = await backend.updateGroupPorts(group, exposedInputs, exposedOutputs);
-
-      nodeGroups.update((groups) => {
-        const newGroups = new Map(groups);
-        newGroups.set(groupId, updatedGroup);
-        return newGroups;
-      });
-
-      nodes.update((n) =>
-        n.map((node) =>
-          node.id === groupId
-            ? { ...node, data: { ...node.data, group: updatedGroup } }
-            : node
-        )
+      const response = await backend.updateGroupPorts(
+        groupId,
+        exposedInputs,
+        exposedOutputs,
+        activeSessionId,
       );
-
-      markGraphModified();
+      applyWorkflowGraph(response.graph, { markDirty: true });
+      applyWorkflowGraphMutationResponse(response, {
+        setNodeExecutionState,
+      });
       return true;
     } catch (error) {
       console.error('[workflowStores] Failed to update group ports:', error);

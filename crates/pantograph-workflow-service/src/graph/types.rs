@@ -134,6 +134,33 @@ pub struct GraphEdge {
     pub target_handle: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct PortMapping {
+    pub internal_node_id: String,
+    pub internal_port_id: String,
+    pub group_port_id: String,
+    pub group_port_label: String,
+    pub data_type: PortDataType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct NodeGroup {
+    pub id: String,
+    pub name: String,
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    pub exposed_inputs: Vec<PortMapping>,
+    pub exposed_outputs: Vec<PortMapping>,
+    pub position: Position,
+    pub collapsed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionAnchor {

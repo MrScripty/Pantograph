@@ -11,6 +11,7 @@ import type {
   WorkflowSessionHandle,
 } from '../types/workflow.ts';
 import type { WorkflowBackend } from '../types/backend.ts';
+import type { NodeGroup } from '../types/groups.ts';
 
 function flushAsyncWork(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -141,10 +142,67 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
       return [] satisfies WorkflowMetadata[];
     },
     async deleteWorkflow() {},
-    async createGroup() {
-      throw new Error('not implemented');
+    async createGroup(name: string, selectedNodeIds: string[]) {
+      const selected = new Set(selectedNodeIds);
+      const selectedNodes = currentGraph.nodes.filter((node) => selected.has(node.id));
+      const group: NodeGroup = {
+        id: 'group-from-backend',
+        name,
+        nodes: selectedNodes,
+        edges: currentGraph.edges.filter(
+          (edge) => selected.has(edge.source) && selected.has(edge.target),
+        ),
+        exposed_inputs: [
+          {
+            internal_node_id: selectedNodeIds[0],
+            internal_port_id: 'text',
+            group_port_id: `in-${selectedNodeIds[0]}-text`,
+            group_port_label: 'text',
+            data_type: 'any',
+          },
+        ],
+        exposed_outputs: [],
+        position: { x: 42, y: 24 },
+        collapsed: true,
+      };
+
+      currentGraph = {
+        nodes: [
+          ...currentGraph.nodes.filter((node) => !selected.has(node.id)),
+          {
+            id: group.id,
+            node_type: 'node-group',
+            position: group.position,
+            data: { label: group.name, group, isGroup: true },
+          },
+        ],
+        edges: [
+          {
+            id: 'backend-owned-boundary',
+            source: 'source',
+            source_handle: 'text',
+            target: group.id,
+            target_handle: group.exposed_inputs[0].group_port_id,
+          },
+        ],
+      };
+
+      return {
+        graph: structuredClone(currentGraph),
+        workflow_event: {
+          type: 'GraphModified',
+          data: {
+            workflow_id: 'stub-session-1',
+            execution_id: 'stub-session-1',
+            dirty_tasks: [group.id],
+          },
+        },
+      };
     },
     async updateGroupPorts() {
+      throw new Error('not implemented');
+    },
+    async ungroup() {
       throw new Error('not implemented');
     },
     subscribeEvents() {
@@ -188,5 +246,65 @@ test('createWorkflowStores applies backend graph-mutation responses to graph sta
   assert.equal(
     get(stores.nodeExecutionStates).get('text-input-1')?.state,
     'idle',
+  );
+});
+
+test('createWorkflowStores renders backend-owned group mutation responses', async () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'source',
+        node_type: 'text-input',
+        position: { x: 0, y: 0 },
+        data: { text: 'source' },
+      },
+      {
+        id: 'a',
+        node_type: 'text-input',
+        position: { x: 100, y: 0 },
+        data: { text: 'a' },
+      },
+      {
+        id: 'b',
+        node_type: 'text-input',
+        position: { x: 200, y: 0 },
+        data: { text: 'b' },
+      },
+    ],
+    edges: [
+      {
+        id: 'source-to-a',
+        source: 'source',
+        source_handle: 'text',
+        target: 'a',
+        target_handle: 'text',
+      },
+      {
+        id: 'a-to-b',
+        source: 'a',
+        source_handle: 'text',
+        target: 'b',
+        target_handle: 'text',
+      },
+    ],
+  } satisfies WorkflowGraph;
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(backend, {
+    groupStack: writable<string[]>([]),
+    async tabOutOfGroup() {},
+  });
+
+  const session = await backend.createSession(graph);
+  stores.setActiveSessionId(session.session_id);
+  stores.loadWorkflow(graph);
+
+  const group = await stores.createGroup('Backend Group', ['a', 'b']);
+  await flushAsyncWork();
+
+  assert.equal(group?.id, 'group-from-backend');
+  assert.equal(get(stores.nodeGroups).get('group-from-backend')?.name, 'Backend Group');
+  assert.deepEqual(
+    (get(stores.workflowGraph) as WorkflowGraph).edges.map((edge) => edge.id),
+    ['backend-owned-boundary'],
   );
 });

@@ -10,21 +10,22 @@ use uuid::Uuid;
 use crate::capabilities;
 use crate::graph::{
     GraphSessionStore, WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphSessionStateView, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest,
 };
 use crate::scheduler::{
-    unix_timestamp_ms, WorkflowSessionPreflightCache, WorkflowSessionStore,
-    WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowSessionPreflightCache, WorkflowSessionStore,
+    unix_timestamp_ms,
 };
 use crate::technical_fit::{
     WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride, WorkflowTechnicalFitRequest,
@@ -42,21 +43,21 @@ use crate::graph::WorkflowSessionKind;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
-    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowSessionInspectionRequest, WorkflowSessionInspectionResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
-    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
-    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
-    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
-    WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowSessionInspectionRequest,
+    WorkflowSessionInspectionResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
+    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
+    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
+    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
+    WorkflowSessionStaleCleanupResponse, WorkflowSessionStaleCleanupWorker,
+    WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionStatusRequest,
+    WorkflowSessionStatusResponse, WorkflowSessionSummary, WorkflowSessionUnloadReason,
+    select_runtime_unload_candidate_by_affinity,
 };
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -1880,6 +1881,27 @@ impl WorkflowService {
         self.graph_session_store.remove_edge(request).await
     }
 
+    pub async fn workflow_graph_create_group(
+        &self,
+        request: WorkflowGraphCreateGroupRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.create_group(request).await
+    }
+
+    pub async fn workflow_graph_ungroup(
+        &self,
+        request: WorkflowGraphUngroupRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.ungroup(request).await
+    }
+
+    pub async fn workflow_graph_update_group_ports(
+        &self,
+        request: WorkflowGraphUpdateGroupPortsRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.update_group_ports(request).await
+    }
+
     pub async fn workflow_graph_undo(
         &self,
         request: WorkflowGraphEditSessionGraphRequest,
@@ -2471,11 +2493,11 @@ fn extract_nested_trimmed_str(data: &serde_json::Value, path: &[&str]) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WorkflowSchedulerRuntimeCapacityPressure;
     use crate::technical_fit::{
         WorkflowTechnicalFitReason, WorkflowTechnicalFitReasonCode,
         WorkflowTechnicalFitSelectionMode,
     };
-    use crate::WorkflowSchedulerRuntimeCapacityPressure;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -3734,9 +3756,10 @@ mod tests {
             .expect_err("technical-fit decision should block run");
 
         assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
-        assert!(err
-            .to_string()
-            .contains("technical-fit could not select a ready runtime"));
+        assert!(
+            err.to_string()
+                .contains("technical-fit could not select a ready runtime")
+        );
     }
 
     #[tokio::test]
@@ -3760,9 +3783,10 @@ mod tests {
             .expect_err("invalid host output should be internal");
 
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("outputs.0.port_id must be non-empty"));
+        assert!(
+            err.to_string()
+                .contains("outputs.0.port_id must be non-empty")
+        );
     }
 
     #[tokio::test]
@@ -4011,19 +4035,23 @@ mod tests {
             response.inputs[0].ports[0].data_type.as_deref(),
             Some("string")
         );
-        assert!(response.inputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "legacy-out"));
+        assert!(
+            response.inputs[0]
+                .ports
+                .iter()
+                .all(|port| port.port_id != "legacy-out")
+        );
 
         assert_eq!(response.outputs.len(), 1);
         assert_eq!(response.outputs[0].node_id, "text-output-1");
         assert_eq!(response.outputs[0].ports.len(), 1);
         assert_eq!(response.outputs[0].ports[0].port_id, "text");
-        assert!(response.outputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "stream"));
+        assert!(
+            response.outputs[0]
+                .ports
+                .iter()
+                .all(|port| port.port_id != "stream")
+        );
 
         let _ = fs::remove_dir_all(temp_root);
     }
@@ -4180,9 +4208,10 @@ mod tests {
             .expect_err("workflow io should reject missing io_binding_origin");
 
         assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
-        assert!(err
-            .to_string()
-            .contains("missing definition.io_binding_origin"));
+        assert!(
+            err.to_string()
+                .contains("missing definition.io_binding_origin")
+        );
         let _ = fs::remove_dir_all(temp_root);
     }
 
@@ -4385,9 +4414,10 @@ mod tests {
             .expect_err("expected output_not_produced");
 
         assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-        assert!(err
-            .to_string()
-            .contains("requested output target 'text-output-1.text' was not produced"));
+        assert!(
+            err.to_string()
+                .contains("requested output target 'text-output-1.text' was not produced")
+        );
     }
 
     #[tokio::test]
@@ -4454,10 +4484,12 @@ mod tests {
         assert_eq!(response.invalid_targets.len(), 1);
         assert_eq!(response.invalid_targets[0].node_id, "text-output-1");
         assert_eq!(response.invalid_targets[0].port_id, "stream");
-        assert!(response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata")));
+        assert!(
+            response
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not declare required metadata"))
+        );
     }
 
     #[tokio::test]
@@ -4489,10 +4521,12 @@ mod tests {
         assert_eq!(response.graph_fingerprint, "preflight-graph");
         assert!(response.missing_required_inputs.is_empty());
         assert!(response.invalid_targets.is_empty());
-        assert!(response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata")));
+        assert!(
+            response
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("does not declare required metadata"))
+        );
     }
 
     #[tokio::test]
@@ -4645,9 +4679,11 @@ mod tests {
 
         assert!(!response.can_run);
         assert_eq!(response.blocking_runtime_issues.len(), 1);
-        assert!(response.blocking_runtime_issues[0]
-            .message
-            .contains("validation failed"));
+        assert!(
+            response.blocking_runtime_issues[0]
+                .message
+                .contains("validation failed")
+        );
     }
 
     #[tokio::test]
@@ -4878,9 +4914,11 @@ mod tests {
 
         assert_eq!(runtime_warnings.len(), 1);
         assert_eq!(blocking_runtime_issues.len(), 1);
-        assert!(blocking_runtime_issues[0]
-            .message
-            .contains("selected version 'b8248' is validating"));
+        assert!(
+            blocking_runtime_issues[0]
+                .message
+                .contains("selected version 'b8248' is validating")
+        );
     }
 
     #[test]
@@ -5257,12 +5295,16 @@ mod tests {
                 WorkflowSessionUnloadReason::CapacityRebalance,
             ))
         );
-        assert!(unloads
-            .iter()
-            .any(|(session_id, _)| session_id == &third_session_id));
-        assert!(!unloads
-            .iter()
-            .any(|(session_id, _)| session_id == &first.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|(session_id, _)| session_id == &third_session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|(session_id, _)| session_id == &first.session_id)
+        );
     }
 
     #[tokio::test]
@@ -5326,12 +5368,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(non_affine.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &affine.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &target.session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &affine.session_id)
+        );
     }
 
     #[tokio::test]
@@ -5407,12 +5453,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(other_model.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &shared_model.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &target.session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &shared_model.session_id)
+        );
     }
 
     #[tokio::test]
@@ -5491,12 +5541,16 @@ mod tests {
             unloads.first().map(String::as_str),
             Some(other_backend.session_id.as_str())
         );
-        assert!(unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id));
-        assert!(!unloads
-            .iter()
-            .any(|session_id| session_id == &shared_backend.session_id));
+        assert!(
+            unloads
+                .iter()
+                .any(|session_id| session_id == &target.session_id)
+        );
+        assert!(
+            !unloads
+                .iter()
+                .any(|session_id| session_id == &shared_backend.session_id)
+        );
     }
 
     #[tokio::test]
@@ -6089,8 +6143,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available(
-    ) {
+    async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available()
+     {
         let host = MockWorkflowHost::new(8, 1024);
         let service = WorkflowService::with_capacity_limits(2, 1);
         let loaded = service
@@ -7075,8 +7129,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed(
-    ) {
+    async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed()
+     {
         let host = MockWorkflowHost::new(8, 1024);
         let service = WorkflowService::with_capacity_limits(3, 1);
         let _loaded = service
@@ -7193,10 +7247,12 @@ mod tests {
 
         assert_eq!(snapshot.trace_execution_id, None);
         assert_eq!(snapshot.items.len(), 2);
-        assert!(snapshot
-            .items
-            .iter()
-            .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending));
+        assert!(
+            snapshot
+                .items
+                .iter()
+                .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+        );
     }
 
     #[tokio::test]

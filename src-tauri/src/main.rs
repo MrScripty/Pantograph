@@ -399,6 +399,9 @@ fn main() {
             workflow::workflow_execution_tauri_commands::preview_node_insert_on_edge_in_execution,
             workflow::workflow_execution_tauri_commands::insert_node_on_edge_in_execution,
             workflow::workflow_execution_tauri_commands::remove_edge_from_execution,
+            workflow::workflow_execution_tauri_commands::create_group_in_execution,
+            workflow::workflow_execution_tauri_commands::ungroup_in_execution,
+            workflow::workflow_execution_tauri_commands::update_group_ports_in_execution,
             workflow::workflow_execution_tauri_commands::get_execution_graph,
             workflow::workflow_execution_tauri_commands::remove_execution,
             // Port options query commands

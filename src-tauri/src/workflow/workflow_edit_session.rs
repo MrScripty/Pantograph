@@ -3,14 +3,16 @@ use tauri::State;
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, InsertNodePositionHint, Position, UndoRedoState, WorkflowGraph,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
+    WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
+    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
     WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
     WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
     WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
-    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUngroupRequest,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest,
 };
 
@@ -234,6 +236,54 @@ pub async fn remove_edge_from_execution(
         .workflow_graph_remove_edge(WorkflowGraphRemoveEdgeRequest {
             session_id: execution_id,
             edge_id,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn create_group_in_execution(
+    execution_id: String,
+    name: String,
+    selected_node_ids: Vec<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_create_group(WorkflowGraphCreateGroupRequest {
+            session_id: execution_id,
+            name,
+            selected_node_ids,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn ungroup_in_execution(
+    execution_id: String,
+    group_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_ungroup(WorkflowGraphUngroupRequest {
+            session_id: execution_id,
+            group_id,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn update_group_ports_in_execution(
+    execution_id: String,
+    group_id: String,
+    exposed_inputs: Vec<PortMapping>,
+    exposed_outputs: Vec<PortMapping>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_update_group_ports(WorkflowGraphUpdateGroupPortsRequest {
+            session_id: execution_id,
+            group_id,
+            exposed_inputs,
+            exposed_outputs,
         })
         .await
         .map_err(|e| e.to_envelope_json())

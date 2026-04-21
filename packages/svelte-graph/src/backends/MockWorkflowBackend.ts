@@ -25,7 +25,7 @@ import type {
   GraphNode,
   GraphEdge,
 } from '../types/workflow.js';
-import type { NodeGroup, PortMapping, CreateGroupResult } from '../types/groups.js';
+import type { NodeGroup, PortMapping } from '../types/groups.js';
 import { isPortTypeCompatible } from '../portTypeCompatibility.js';
 import { buildDerivedGraph, computeGraphFingerprint } from '../graphRevision.js';
 
@@ -745,8 +745,10 @@ export class MockWorkflowBackend implements WorkflowBackend {
   async createGroup(
     name: string,
     selectedNodeIds: string[],
-    graph: WorkflowGraph,
-  ): Promise<CreateGroupResult> {
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
     const groupId = `group-${Date.now()}`;
     const selectedNodes = graph.nodes.filter((n) => selectedNodeIds.includes(n.id));
     const selectedSet = new Set(selectedNodeIds);
@@ -789,27 +791,114 @@ export class MockWorkflowBackend implements WorkflowBackend {
       name,
       nodes: selectedNodes,
       edges: internalEdges,
-      exposed_inputs: [],
-      exposed_outputs: [],
+      exposed_inputs: suggestedInputs,
+      exposed_outputs: suggestedOutputs,
       position: selectedNodes[0]?.position || { x: 0, y: 0 },
-      collapsed: false,
+      collapsed: true,
     };
 
-    return {
-      group,
-      internalized_edge_ids: internalizedEdgeIds,
-      boundary_edge_ids: boundaryEdgeIds,
-      suggested_inputs: suggestedInputs,
-      suggested_outputs: suggestedOutputs,
-    };
+    graph.nodes = graph.nodes
+      .filter((node) => !selectedSet.has(node.id))
+      .concat({
+        id: group.id,
+        node_type: 'node-group',
+        position: group.position,
+        data: { label: group.name, group, isGroup: true },
+      });
+    graph.edges = graph.edges
+      .filter((edge) => !internalizedEdgeIds.includes(edge.id))
+      .map((edge) => {
+        const input = suggestedInputs.find(
+          (mapping) =>
+            mapping.internal_node_id === edge.target &&
+            mapping.internal_port_id === edge.target_handle,
+        );
+        if (input) {
+          return { ...edge, target: group.id, target_handle: input.group_port_id };
+        }
+        const output = suggestedOutputs.find(
+          (mapping) =>
+            mapping.internal_node_id === edge.source &&
+            mapping.internal_port_id === edge.source_handle,
+        );
+        if (output) {
+          return { ...edge, source: group.id, source_handle: output.group_port_id };
+        }
+        return edge;
+      });
+    graph.derived_graph = buildDerivedGraph(graph);
+
+    return this.graphMutationResponse(
+      graph,
+      sessionId,
+      Array.from(new Set([...selectedNodeIds, ...boundaryEdgeIds])),
+    );
   }
 
   async updateGroupPorts(
-    group: NodeGroup,
+    groupId: string,
     exposedInputs: PortMapping[],
     exposedOutputs: PortMapping[],
-  ): Promise<NodeGroup> {
-    return { ...group, exposed_inputs: exposedInputs, exposed_outputs: exposedOutputs };
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    graph.nodes = graph.nodes.map((node) => {
+      if (node.id !== groupId) return node;
+      const group = node.data.group as NodeGroup;
+      const updatedGroup = {
+        ...group,
+        exposed_inputs: exposedInputs,
+        exposed_outputs: exposedOutputs,
+      };
+      return {
+        ...node,
+        data: { ...node.data, group: updatedGroup, label: updatedGroup.name, isGroup: true },
+      };
+    });
+    graph.derived_graph = buildDerivedGraph(graph);
+    return this.graphMutationResponse(graph, sessionId, [groupId]);
+  }
+
+  async ungroup(groupId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    const groupNode = graph.nodes.find((node) => node.id === groupId);
+    if (!groupNode) throw new Error(`Group not found: ${groupId}`);
+    const group = groupNode.data.group as NodeGroup;
+
+    graph.nodes = graph.nodes.filter((node) => node.id !== groupId).concat(group.nodes);
+    graph.edges = graph.edges
+      .map((edge) => {
+        if (edge.target === groupId) {
+          const mapping = group.exposed_inputs.find(
+            (candidate) => candidate.group_port_id === edge.target_handle,
+          );
+          if (mapping) {
+            return {
+              ...edge,
+              target: mapping.internal_node_id,
+              target_handle: mapping.internal_port_id,
+            };
+          }
+        }
+        if (edge.source === groupId) {
+          const mapping = group.exposed_outputs.find(
+            (candidate) => candidate.group_port_id === edge.source_handle,
+          );
+          if (mapping) {
+            return {
+              ...edge,
+              source: mapping.internal_node_id,
+              source_handle: mapping.internal_port_id,
+            };
+          }
+        }
+        return edge;
+      })
+      .concat(group.edges);
+    graph.derived_graph = buildDerivedGraph(graph);
+    return this.graphMutationResponse(graph, sessionId, group.nodes.map((node) => node.id));
   }
 
   subscribeEvents(listener: (event: WorkflowEvent) => void): () => void {

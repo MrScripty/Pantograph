@@ -19,7 +19,7 @@ import type {
   InsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse,
 } from './workflow.js';
-import type { NodeGroup, PortMapping, CreateGroupResult } from './groups.js';
+import type { PortMapping } from './groups.js';
 
 /** A single option for a port dropdown (e.g., model selection) */
 export interface PortOption {
@@ -190,15 +190,19 @@ export interface WorkflowBackend {
   createGroup(
     name: string,
     selectedNodeIds: string[],
-    graph: WorkflowGraph,
-  ): Promise<CreateGroupResult>;
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse>;
 
   /** Update port mappings for an existing group */
   updateGroupPorts(
-    group: NodeGroup,
+    groupId: string,
     exposedInputs: PortMapping[],
     exposedOutputs: PortMapping[],
-  ): Promise<NodeGroup>;
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse>;
+
+  /** Ungroup a collapsed node group and restore its internal graph */
+  ungroup(groupId: string, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   // --- Port Options ---
 

@@ -15,6 +15,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `effective_definition.rs` | Merges registry metadata with additive per-node definition overlays before validation or candidate lookup. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
+| `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |
 | `session_runtime.rs` | Focused runtime/lifecycle state for one graph edit session, including active execution metadata, queue projection, and run counters. |
@@ -74,6 +75,9 @@ when the node type matches.
   from backend-owned graph-diff compatibility analysis when that richer
   context is available; generic event-only fallbacks remain a compatibility
   backstop rather than the primary source of truth.
+- Node group create, ungroup, and port-mapping edits are session mutations that
+  return whole-graph mutation responses; UI stores must not reconstruct group
+  boundary edges locally.
 - KV-capable inference nodes should emit explicit backend-owned memory-impact
   reasons for model changes, runtime/backend changes, tokenizer-or-config
   changes, upstream prefix changes, and prefix-breaking topology edits so

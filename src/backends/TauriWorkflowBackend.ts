@@ -24,9 +24,7 @@ import type {
   InsertNodePositionHint,
   InsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse,
-  NodeGroup,
   PortMapping,
-  CreateGroupResult,
 } from '@pantograph/svelte-graph';
 import {
   normalizeConnectionCandidatesResponse,
@@ -277,25 +275,37 @@ export class TauriWorkflowBackend implements WorkflowBackend {
   async createGroup(
     name: string,
     selectedNodeIds: string[],
-    graph: WorkflowGraph,
-  ): Promise<CreateGroupResult> {
-    return invoke<CreateGroupResult>('create_node_group', {
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const response = await invoke<unknown>('create_group_in_execution', {
+      executionId: sessionId,
       name,
       selectedNodeIds,
-      graph,
     });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   async updateGroupPorts(
-    group: NodeGroup,
+    groupId: string,
     exposedInputs: PortMapping[],
     exposedOutputs: PortMapping[],
-  ): Promise<NodeGroup> {
-    return invoke<NodeGroup>('update_group_ports', {
-      group,
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const response = await invoke<unknown>('update_group_ports_in_execution', {
+      executionId: sessionId,
+      groupId,
       exposedInputs,
       exposedOutputs,
     });
+    return parseWorkflowGraphMutationResponse(response);
+  }
+
+  async ungroup(groupId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    const response = await invoke<unknown>('ungroup_in_execution', {
+      executionId: sessionId,
+      groupId,
+    });
+    return parseWorkflowGraphMutationResponse(response);
   }
 
   // --- Events ---
