@@ -121,10 +121,10 @@ Status:
   compliance can be enforced directly.
 
 Tasks:
-- Fix `src/components/nodes/workflow/ImageOutputNode.svelte` so `npm run lint:critical` passes.
-- Fix `src/components/runtime-manager/ManagedRuntimeSummaryGrid.svelte` so `npm run lint:full` gets past the current Svelte lint failure.
-- Change Vite default host from `0.0.0.0` to `127.0.0.1`; add an explicit documented override if LAN exposure is needed.
-- Record the `src/generated/.git` decision: supported generated state with README and ignore rules, or remove it from the source root.
+- [x] Fix `src/components/nodes/workflow/ImageOutputNode.svelte` so `npm run lint:critical` passes.
+- [x] Fix `src/components/runtime-manager/ManagedRuntimeSummaryGrid.svelte` so `npm run lint:full` gets past the current Svelte lint failure.
+- [x] Change Vite default host from `0.0.0.0` to `127.0.0.1`; add an explicit documented override if LAN exposure is needed.
+- [x] Record the `src/generated/.git` decision: supported generated state with README and ignore rules, or remove it from the source root.
 
 Verification:
 - `npm run lint:critical`
@@ -136,7 +136,7 @@ Verification:
 Goal: Make source ownership and architectural intent navigable before moving large code.
 
 Tasks:
-- Add missing READMEs identified in pass 01. Status: `crates/README.md` now
+- [x] Add missing READMEs identified in pass 01. Status: `crates/README.md` now
   documents the Rust workspace package-role boundary, and runtime identity plus
   registry crate roots now document their public contracts. `node-engine`,
   `workflow-nodes`, and `pantograph-workflow-service` crate roots now document
@@ -148,31 +148,30 @@ Tasks:
   roles. Inference Python workers, managed runtime platform adapters, and the
   reserved managed-binaries marker now document their runtime-artifact and
   worker-contract boundaries.
-- Resolve the `src/generated/` documentation exception by either moving
+- [ ] Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked
   `src/generated/README.md`.
-- Update host-facing READMEs for `pantograph-uniffi`, `pantograph-rustler`,
+- [x] Update host-facing READMEs for `pantograph-uniffi`, `pantograph-rustler`,
   `pantograph-workflow-service`, generated components, and Tauri workflow
   command boundaries to include required sections. Status: workflow-service,
   UniFFI, and Rustler source READMEs now use the required decision,
   host-facing, and structured-producer sections. Frontend source-root generated
   component state and Tauri workflow command docs now use exact host-facing and
   structured-producer contract headings.
-- Mark structured producer directories, especially templates, saved workflows,
+- [x] Mark structured producer directories, especially templates, saved workflows,
   generated components, schemas, and binding artifacts, with `Structured Producer Contract`.
   Status: `.pantograph` saved workflow and orchestration data directories now
   document their structured producer contracts and README marker ignore rules.
   UniFFI binding generator helpers now document generated binding artifact
   contracts.
-- Add a decision-traceability script adapted from the standards template and
+- [x] Add a decision-traceability script adapted from the standards template and
   configure host-facing/structured-producer paths. Status: repo-local script,
   npm entrypoint, and Lefthook staged-file command are now in place.
-- Normalize the remaining template-generated README files that still contain
+- [x] Normalize the remaining template-generated README files that still contain
   banned placeholder language before enabling broad full-branch traceability as
-  a hard gate. Current scan found 40 README files across older frontend,
-  Tauri, `workflow-nodes`, `node-engine`, and `packages/svelte-graph`
-  subdirectories that need focused ownership text.
+  a hard gate. The repo-wide scan now finds no banned placeholder README
+  language across `src`, `src-tauri`, `crates`, `packages`, or `scripts`.
   Status: workflow-nodes root/control/output/system/tool READMEs are normalized
   and now explicitly record the tool-loop/tool-executor placeholder risk.
   Node-engine orchestration and context-key helper READMEs are normalized.
@@ -192,11 +191,10 @@ Additional issue recorded during implementation:
   unreferenced source-tree directory. It is now documented as a no-artifacts
   marker, but M3 managed-runtime cleanup should remove it unless a real
   source-owned fixture role is accepted.
-- The placeholder README sweep is broader than the original pass-01 examples:
-  40 existing README files still contain generated placeholder descriptions or
-  placeholder import examples. This does not block compilation, but it must be
-  resolved during M1 before treating full-repo documentation traceability as
-  complete.
+- Resolved: the placeholder README sweep was broader than the original pass-01
+  examples, but all 40 generated placeholder descriptions and placeholder
+  import examples have now been replaced with directory-specific ownership
+  text.
 
 Verification:
 - Run the new decision-traceability script against changed directories.
