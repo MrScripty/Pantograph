@@ -50,6 +50,15 @@ owning node truth.
   documented.
 - Runtime-specific dependencies stay behind feature gates.
 
+## Cargo Feature Contract
+| Feature | Default | Contract |
+| ------- | ------- | -------- |
+| `desktop` | Yes | Enables the default desktop node inventory shape. It is currently dependency-light and keeps descriptors discoverable. |
+| `model-library` | No | Enables Pumas model-library integration for model-backed descriptors and resolution helpers. |
+
+Base descriptor discovery must stay available without `model-library` so
+non-Pumas consumers can still inspect and execute dependency-light nodes.
+
 ## Revisit Triggers
 - A second product wants a different built-in node catalog.
 - Disabled tool execution is replaced by a real backend tool contract.

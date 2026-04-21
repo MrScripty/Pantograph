@@ -51,6 +51,17 @@ host-agnostic application operations.
 - Blocking or runtime-specific execution must stay isolated from pure graph
   contracts.
 
+## Cargo Feature Contract
+| Feature | Default | Contract |
+| ------- | ------- | -------- |
+| `inference-nodes` | No | Enables gateway-backed LLM, vision, embedding, reranking, unload, and llama.cpp node handlers. |
+| `pytorch-nodes` | No | Extends inference nodes with PyTorch/PyO3 execution and live KV snapshot reuse. Requires Python/PyTorch runtime availability. |
+| `audio-nodes` | No | Enables Stable Audio Python-worker execution. Requires Python audio dependencies at runtime. |
+
+The base crate intentionally has no default features so graph DTOs,
+validation, undo/redo, and pure execution paths remain available to lightweight
+consumers.
+
 ## Revisit Triggers
 - `core_executor.rs` decomposition changes the public facade.
 - A new node family needs an execution path that cannot fit the current
@@ -107,5 +118,5 @@ cargo test -p node-engine
 ```
 
 ## Notes
-- `core_executor.rs` is over the decomposition threshold and remains tracked in
-  the standards compliance plan.
+- `core_executor` production modules are split by execution family; future
+  oversized modules remain tracked in the standards compliance plan.

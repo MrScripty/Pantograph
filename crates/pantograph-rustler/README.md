@@ -50,6 +50,14 @@ registration.
   types.
 - Event/callback behavior must preserve backend event semantics.
 
+## Cargo Feature Contract
+| Feature | Default | Contract |
+| ------- | ------- | -------- |
+| `frontend-http` | No | Enables NIFs and parameters that delegate workflow host behavior through `pantograph-frontend-http-adapter`. |
+
+The default Rustler feature set intentionally exposes no frontend HTTP workflow
+surface. NIF consumers must opt into HTTP adapter behavior explicitly.
+
 ## Revisit Triggers
 - Rustler resource registration warnings require a crate-level lint exception
   or dependency upgrade.

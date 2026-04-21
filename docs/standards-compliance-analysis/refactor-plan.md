@@ -489,11 +489,14 @@ Tasks:
   for app, binding-wrapper, internal, and workspace-only crates. Status:
   reusable workspace crates now inherit shared package metadata, and the Tauri
   app plus all local Rust crates explicitly opt out of crates.io publishing.
-- [ ] Document Cargo feature contracts for `inference`, `node-engine`,
+- [x] Document Cargo feature contracts for `inference`, `node-engine`,
   `pantograph-embedded-runtime`, `pantograph-uniffi`, `pantograph-rustler`,
-  `workflow-nodes`, and `src-tauri`.
-- [ ] Keep or justify current default features; move expensive optional behavior
+  `workflow-nodes`, and `src-tauri`. Status: crate READMEs now list feature
+  flags, default status, and public contract meaning for each M5 target.
+- [x] Keep or justify current default features; move expensive optional behavior
   behind explicit features where consumers should not always pay the cost.
+  Status: READMEs now document the current desktop local-backend defaults and
+  keep Python-backed or frontend-HTTP behavior behind explicit opt-in features.
 - [ ] Classify binding exports as `supported`, `experimental`, or `internal-only`;
   document product-native artifact names and version matching.
 - [ ] Add or document host-visible binding `version()` behavior.

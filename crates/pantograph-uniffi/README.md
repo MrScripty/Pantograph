@@ -46,6 +46,22 @@ mapping, not workflow semantics.
 - Errors are flattened at the binding boundary.
 - Public binding changes require generated host-language smoke coverage.
 
+## Cargo Feature Contract
+| Feature | Default | Contract |
+| ------- | ------- | -------- |
+| `embedded-runtime` | Yes | Exposes the direct embedded runtime wrapper and implies llama.cpp runtime support. |
+| `backend-llamacpp` | Via `embedded-runtime` | Enables llama.cpp runtime dependencies for embedded execution. |
+| `backend-ollama` | Yes | Enables Ollama runtime dependencies for embedded execution. |
+| `backend-candle` | Yes | Enables Candle runtime dependencies for embedded execution. |
+| `backend-pytorch` | No | Enables PyTorch runtime dependencies. Requires Python/PyTorch runtime availability. |
+| `backend-audio` | No | Enables Python-backed audio runtime support. Requires audio Python dependencies. |
+| `frontend-http` | No | Exposes optional frontend HTTP workflow host exports. |
+| `cli` | No | Enables the UniFFI bindgen helper binary. |
+| `runtime-deps` | Internal glue | Activates optional embedded-runtime and inference dependencies for backend features. |
+
+Defaults expose the product-native embedded runtime plus selected local backend
+families. Frontend HTTP and Python-backed families remain explicit opt-ins.
+
 ## Revisit Triggers
 - A supported host language needs a different binding framework.
 - Product-native artifact naming changes.
