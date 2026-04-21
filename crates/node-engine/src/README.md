@@ -69,6 +69,9 @@ locally.
   published by `workflow-nodes`.
 - Core executor behavior tests stay in `core_executor/tests.rs` so production
   dispatch and helper extraction can proceed without growing the facade file.
+- Synchronous built-in node handlers stay in `core_executor/pure_nodes.rs` so
+  payload normalization for pure nodes remains separate from runtime-backed
+  adapters and dispatch wiring.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.

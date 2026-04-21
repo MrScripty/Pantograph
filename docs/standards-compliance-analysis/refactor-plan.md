@@ -405,6 +405,10 @@ Tasks:
   Progress: core executor behavior tests now live in
   `crates/node-engine/src/core_executor/tests.rs`, reducing the facade to
   production dispatch and helper code before further execution-family splits.
+  Synchronous built-in node handlers now live in
+  `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
+  payload normalization from file I/O, dependency preflight, and runtime-backed
+  adapters.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
