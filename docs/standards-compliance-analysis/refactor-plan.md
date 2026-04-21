@@ -184,6 +184,8 @@ Tasks:
   are normalized.
   Frontend config, feature entrypoint, node registry, and shared type READMEs
   are normalized.
+  Frontend lib, design-system, hotload sandbox, agent/architecture service, and
+  shared barrel READMEs are normalized.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,
