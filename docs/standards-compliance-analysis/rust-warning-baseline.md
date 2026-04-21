@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 36
+The command completes successfully, but the workspace currently emits 8
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -24,7 +24,7 @@ The classification follows the updated standards expectations:
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
-| `pantograph` Tauri binary | 28 | Remove migrated/stale local workflow code | Delete superseded workflow local DTOs after confirming no command references remain. |
+| `pantograph` Tauri binary | 0 | Complete | Tauri-local warning debt has been removed; keep command adapters on backend-owned DTOs and service contracts. |
 | `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
 
 ## Resolved Warnings
@@ -108,6 +108,12 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/workflow/execution_manager.rs` and `src/workflow/execution_manager/state.rs` | unused Tauri-local execution state, undo/redo, stale cleanup, and accessors | Remove | Resolved by deleting the stale desktop-local execution manager and removing its managed Tauri state injection; undo/redo and session execution state stay with `pantograph-workflow-service`. |
 
+### `src-tauri` Legacy Workflow Type Mirror
+
+| Location | Warning group | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/workflow/types.rs` | unused local workflow DTOs, graph helpers, file metadata, and duplicated connection payloads | Remove | Resolved by deleting the stale Tauri-local type mirror and moving the last workflow event/group command references to `pantograph-workflow-service` graph and port DTOs. |
+
 ### `crates/workflow-nodes` Model Provider
 
 | Location | Warning | Classification | Resolution |
@@ -126,12 +132,6 @@ The classification follows the updated standards expectations:
 | `src/lib.rs:6` | unused `node_engine::ExecutorExtensions` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
 | `src/lib.rs:15` | unused `tokio::sync::RwLock` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
 
-### `src-tauri` / `pantograph` binary
-
-| Location | Warning group | Classification | Next action |
-| --- | --- | --- | --- |
-| `src/workflow/types.rs` | local workflow DTOs, graph helpers, fingerprint helpers, file metadata unused | Remove | Delete once stale local connection/validation/registry modules are removed and command DTO imports are migrated. |
-
 ### `crates/pantograph-rustler`
 
 | Location | Warning | Classification | Next action |
@@ -142,9 +142,9 @@ The classification follows the updated standards expectations:
 
 1. Remove simple unused imports, fields, constants, and wrappers in isolated
    commits.
-2. Delete the remaining stale Tauri-local workflow type, event, and
-   execution-manager helpers once command imports are confirmed to use
-   backend-owned workflow-service contracts.
+2. Keep Tauri-local workflow type, event, registry, graph-policy, and
+   execution-manager mirrors deleted; command imports should use backend-owned
+   workflow-service contracts.
 3. Keep desktop-local server discovery, graph policy, and registry mirrors
    deleted unless a future feature reintroduces them through an explicit command
    and backend-owned contract.

@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-use super::types::{GraphEdge, GraphNode, PortDataType, WorkflowGraph};
+use pantograph_workflow_service::{GraphEdge, GraphNode, PortDataType, WorkflowGraph};
 
 /// Port mapping for group boundaries
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,7 +333,7 @@ mod tests {
         GraphNode {
             id: id.to_string(),
             node_type: "test".to_string(),
-            position: super::super::types::Position { x, y },
+            position: pantograph_workflow_service::Position { x, y },
             data: serde_json::Value::Null,
         }
     }

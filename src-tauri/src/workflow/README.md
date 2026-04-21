@@ -91,6 +91,10 @@ commands now use the service-owned registry directly.
 The legacy Tauri-local execution manager has been removed; undo/redo and
 session execution state now stay with the backend-owned workflow service rather
 than a parallel desktop state map.
+The legacy Tauri-local workflow type mirror has also been removed; graph,
+connection, node-definition, file, and port DTOs should come from
+`pantograph-workflow-service` so command payloads do not drift from backend
+contracts.
 `headless_diagnostics_transport.rs` owns the host-facing diagnostics snapshot,
 trace snapshot, and clear-history responses so runtime debug commands and
 workflow command wrappers do not depend on the broader headless workflow
@@ -167,6 +171,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Undo/redo and execution session state must stay with
   `pantograph-workflow-service`; Tauri command handlers must not recreate a
   parallel execution-state manager.
+- Workflow command/event adapters must use backend-owned workflow-service graph,
+  connection, node-definition, file, and port DTOs rather than reintroducing
+  Tauri-local mirrors.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas

@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotDiagnostics, WorkflowSessionQueueItem,
-    WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSchedulerSnapshotDiagnostics,
+    WorkflowSessionQueueItem, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
 };
 
 use super::diagnostics::{DiagnosticsRuntimeLifecycleSnapshot, WorkflowDiagnosticsProjection};
@@ -127,7 +127,7 @@ pub enum WorkflowEvent {
         /// Unique identifier for this execution
         execution_id: String,
         /// The updated graph when a full snapshot is available
-        graph: Option<super::types::WorkflowGraph>,
+        graph: Option<WorkflowGraph>,
         /// Nodes invalidated by the graph change
         dirty_tasks: Vec<String>,
         /// Backend-owned mutation impact for preserved vs invalidated node memory
