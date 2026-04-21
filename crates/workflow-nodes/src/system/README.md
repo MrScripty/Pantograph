@@ -1,25 +1,84 @@
 # crates/workflow-nodes/src/system
 
+System workflow node implementations.
+
 ## Purpose
-Submodule source for this crate, grouped by responsibility.
+This directory owns built-in system-level workflow nodes that interact with
+process or host-adjacent capabilities through backend task contracts.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| mod.rs | Source file used by modules in this directory. |
-| process.rs | Source file used by modules in this directory. |
+| `mod.rs` | System-node module exports and registration wiring. |
+| `process.rs` | Process execution node behavior and metadata. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+System nodes can cross the boundary from pure graph dataflow into host process
+execution. That boundary needs explicit ownership and guardrails so workflow
+graphs do not bypass backend runtime policy.
+
+## Constraints
+- Process behavior must stay backend-owned and explicit.
+- Host/path/environment assumptions must be validated before execution.
+- System node descriptors are saved workflow contracts.
+- Security and sandbox policy must not be hidden in frontend code.
+
+## Decision
+Keep system node descriptors and behavior isolated in this directory. Treat
+process execution as a backend capability that must remain reviewable and
+bounded by host policy.
+
+## Alternatives Rejected
+- Put process execution in frontend or Tauri-only code: rejected because graph
+  execution can run through non-desktop hosts.
+- Merge system nodes into generic processing nodes: rejected because host
+  process interaction needs distinct security review.
+
+## Invariants
+- System node ids and ports are compatibility contracts.
+- Process execution must preserve backend error reporting.
+- Any expansion of host-side effects requires security and lifecycle review.
+
+## Revisit Triggers
+- System nodes need sandbox profiles.
+- Process execution moves behind a dedicated host trait.
+- Additional host-side-effect nodes are added.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** `node-engine`, `graph-flow`, and host runtime policy.
+
+**External:** standard process/filesystem APIs and `async-trait`.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+let task = ProcessTask::new("process-1");
 ```
+
+## API Consumer Contract
+- Inputs: process command/configuration values supplied by graph context.
+- Outputs: process result values and task errors.
+- Lifecycle: process tasks run during graph execution and must not own
+  long-lived host services.
+- Errors: process launch and exit failures surface as graph execution errors.
+- Versioning: process node ids and ports must migrate with saved workflows.
+
+## Structured Producer Contract
+- Stable fields: node type ids, port ids, data types, and process result shapes
+  are machine-consumed.
+- Defaults: process defaults must be explicit in descriptors or task code.
+- Enums and labels: process result/status labels carry behavior.
+- Ordering: process output streams should preserve emitted order where exposed.
+- Compatibility: saved workflows may reference system node ids.
+- Regeneration/migration: descriptor changes require saved workflow, template,
+  and tests updates together.
+
+## Testing
+```bash
+cargo test -p workflow-nodes --lib system
+```
+
+## Notes
+- Treat new system nodes as security-relevant changes.

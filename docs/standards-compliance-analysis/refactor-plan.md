@@ -173,6 +173,8 @@ Tasks:
   a hard gate. Current scan found 40 README files across older frontend,
   Tauri, `workflow-nodes`, `node-engine`, and `packages/svelte-graph`
   subdirectories that need focused ownership text.
+  Status: workflow-nodes root/control/output/system/tool READMEs are normalized
+  and now explicitly record the tool-loop/tool-executor placeholder risk.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,
