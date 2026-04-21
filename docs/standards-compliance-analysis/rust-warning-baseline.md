@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 72
+The command completes successfully, but the workspace currently emits 54
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -84,6 +84,12 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/llm/server_discovery.rs` | unused registration DTOs, registry file constant, discovery owner, helpers, and `get_process_info` import | Remove | Resolved by deleting the unconsumed desktop-local discovery registry module and removing it from `llm::mod`; future discovery must return through active command/backend runtime-registry contracts. |
 
+### `src-tauri` Legacy Graph Policy
+
+| Location | Warning group | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/workflow/connection_intent.rs`, `effective_definition.rs`, `validation.rs` | unused local connection-intent, effective-definition, and validation helpers | Remove | Resolved by deleting the stale Tauri-local graph policy modules; active editing wrappers delegate to `pantograph-workflow-service`. |
+
 ### `crates/workflow-nodes` Model Provider
 
 | Location | Warning | Classification | Resolution |
@@ -106,13 +112,10 @@ The classification follows the updated standards expectations:
 
 | Location | Warning group | Classification | Next action |
 | --- | --- | --- | --- |
-| `src/workflow/connection_intent.rs` | local connection candidate/commit/insert helpers unused | Remove | Superseded by `pantograph-workflow-service::graph::connection_intent`; delete after command imports are confirmed clean. |
-| `src/workflow/effective_definition.rs` | local effective-definition resolver unused | Remove | Superseded by workflow-service graph definitions; delete with the stale local workflow type cleanup. |
 | `src/workflow/events.rs` | workflow event constructor helpers unused | Remove/use | Delete inactive constructors or move expected construction through the backend-owned event adapter. |
 | `src/workflow/execution_manager.rs` and `execution_manager/state.rs` | execution state, undo/redo, cleanup, and accessors mostly unused | Remove/replace | Confirm Tauri state still needs `ExecutionManager`; then delete migrated session-manager logic or route remaining commands through backend-owned workflow sessions. |
 | `src/workflow/registry.rs` | local node registry conversion layer unused | Remove | Superseded by workflow-service graph registry and direct `node_engine::NodeRegistry` command state. |
 | `src/workflow/types.rs` | local workflow DTOs, graph helpers, fingerprint helpers, file metadata unused | Remove | Delete once stale local connection/validation/registry modules are removed and command DTO imports are migrated. |
-| `src/workflow/validation.rs` | local validator and helper unused | Remove | Superseded by workflow-service and node-engine validation paths. |
 
 ### `crates/pantograph-rustler`
 

@@ -21,10 +21,7 @@ owner of that policy itself.
 | `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
 | `event_adapter/` | Focused translation and diagnostics-bridge helpers behind the stable event-adapter facade. |
 | `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
-| `connection_intent.rs` | Legacy local connection-intent implementation retained during migration; core now owns the canonical policy. |
-| `effective_definition.rs` | Applies additive per-node `data.definition` overlays before legacy validation or candidate lookup reads port metadata. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
-| `validation.rs` | Legacy local validation helpers retained during migration; core validation is authoritative for new editing surfaces. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
 | `python_runtime.rs` | Process-backed Python adapter that resolves venv-specific interpreters and launches workflow workers. |
 | `diagnostics/` | Backend-owned diagnostics contracts, trace projection helpers, and in-memory overlay/store state for workflow UI snapshots. |
@@ -61,10 +58,10 @@ into core requests, return core graph snapshots to the GUI, and delegate
 runtime execution through backend-owned helpers in
 `crates/pantograph-embedded-runtime`. Desktop-specific code still injects event
 channels, app state, and other host resources, but it no longer owns composite
-task execution for workflow/orchestration paths. Where legacy local validation
-or candidate lookup still exists, `effective_definition.rs` merges registry
-metadata with additive per-node `inputs`/`outputs` overlays so dynamic
-expand-setting ports behave the same way as the core service. Workflow
+task execution for workflow/orchestration paths. The legacy Tauri-local
+connection-intent, effective-definition, and validation modules have been
+removed; graph compatibility, dynamic definition overlays, and connection
+rejection semantics now belong to `pantograph-workflow-service`. Workflow
 diagnostics projections now adapt backend-owned `WorkflowTraceStore` snapshots
 from `pantograph-workflow-service`; the `diagnostics/` module now splits
 contracts, trace/projection helpers, and retained overlay/store state by
@@ -157,9 +154,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Workflow command handlers must preserve backend-owned workflow error
   envelopes for registry admission and runtime-unavailable failures rather than
   rewriting them into generic transport/internal errors.
-- Legacy local validation must treat `node.data.definition` as an additive
-  overlay on top of registry metadata, not as an unchecked replacement for the
-  node type contract.
+- Tauri must not reintroduce local graph validation, connection-intent, or
+  effective-definition policy; those behaviors belong in
+  `pantograph-workflow-service`.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas
@@ -168,8 +165,8 @@ service crate, which is the active owner for save/load/list behavior.
   such as llama.cpp reranking rather than collapsing them into text generation.
 
 ## Revisit Triggers
-- Legacy local graph-edit helpers are removed after all callers use core-owned
-  contracts.
+- Core graph-edit contracts need a new transport projection that the current
+  service DTOs cannot represent.
 - Desktop execution needs a reusable host implementation outside Tauri.
 - Insert ranking/placement heuristics need a dedicated policy boundary.
 - RuntimeRegistry introduction requires a distinct host-state injection path or

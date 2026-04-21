@@ -22,10 +22,8 @@
 //! ```
 
 pub mod commands;
-pub mod connection_intent;
 pub mod dependency_environment_commands;
 pub mod diagnostics;
-pub mod effective_definition;
 pub mod event_adapter;
 pub mod events;
 pub mod execution_manager;
@@ -42,7 +40,6 @@ pub mod python_runtime;
 pub mod registry;
 pub mod runtime_shutdown;
 pub mod types;
-pub mod validation;
 pub mod workflow_definition_commands;
 mod workflow_edit_session;
 pub mod workflow_execution_commands;
