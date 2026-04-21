@@ -28,8 +28,9 @@ starts as a ratchet: debug macros and TODOs warn, while unsafe documentation
 lints are denied so any future exception must be documented.
 
 Rust warning cleanup history remains tracked in
-`docs/standards-compliance-analysis/rust-warning-baseline.md`; the current M7
-baseline is zero `cargo check` warnings.
+`docs/standards-compliance-analysis/rust-warning-baseline.md`; the M7 baseline
+is zero `cargo check` warnings, and the workspace now passes strict clippy with
+warnings denied.
 
 ## Dependency Inheritance
 
@@ -60,13 +61,10 @@ Current policy:
   `cargo check --workspace --no-default-features` must compile.
 - `unused`, `dead_code`, and dependency macro warnings are expected to remain
   at zero for `cargo check`.
-- `clippy -D warnings` is not a blocking gate until M7 resolves the
-  clippy-specific findings exposed after the rustc warning baseline reached
-  zero. The audit has cleared `inference`, `node-engine`, `workflow-nodes`,
-  `pantograph-workflow-service`, `pantograph-frontend-http-adapter`,
-  `pantograph-embedded-runtime`, and `pantograph-rustler`; the current
-  workspace run now stops in the Tauri app crate on workflow argument-shape and
-  event-size cleanup after the first mechanical Tauri pass.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  passes after the M7 clippy cleanup. Tauri command entrypoints that must keep
+  framework-injected state handles use scoped `#[expect]` annotations, while
+  internal runtime and diagnostics helpers use grouped request/state structs.
 - New policy lints may be denied only when they are known not to fail the
   current workspace.
 
@@ -75,9 +73,9 @@ Ratchet sequence:
 1. Keep `docs/standards-compliance-analysis/rust-warning-baseline.md` current
    as the zero-warning history for `cargo check`.
 2. Add a non-regression check for the zero rustc warning baseline.
-3. Resolve clippy-specific findings separately from rustc warning cleanup.
-4. Promote clippy to `-D warnings` only after the clippy audit is clean or
-   explicitly machine-enforced.
+3. Keep clippy-specific findings separate from rustc warning cleanup.
+4. Keep strict clippy clean; CI promotion from audit to blocking can happen
+   independently from the remaining Rust formatting ratchet.
 
 ## Unsafe Exceptions
 

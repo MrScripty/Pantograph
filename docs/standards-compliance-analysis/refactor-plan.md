@@ -481,12 +481,11 @@ Tasks:
   Rust workspace member into the policy. The exception checklist is documented
   in `docs/rust-workspace-policy.md`.
 - [x] Decide the warning ratchet for existing Rust warnings before turning
-  clippy into a hard `-D warnings` gate. Progress: `cargo check --workspace
-  --all-features` and `cargo check --workspace --no-default-features` pass, but
-  still emit the warning baseline tracked in M7. Status:
-  `docs/rust-workspace-policy.md` keeps those warnings non-blocking until M7
-  classifies them, while denied policy lints are limited to checks that pass the
-  current workspace.
+  clippy into a hard `-D warnings` gate. Status: `cargo check --workspace
+  --all-features`, `cargo check --workspace --no-default-features`, and
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` now
+  pass after the M7 warning and clippy cleanup. The remaining Rust formatting
+  audit is tracked separately from warning enforcement.
 - [x] Normalize Rust crate metadata: workspace `version`, `rust-version`,
   `repository`, shared package inheritance, and explicit `publish = false`
   for app, binding-wrapper, internal, and workspace-only crates. Status:
@@ -623,7 +622,7 @@ Tasks:
   plus the legacy Tauri-local execution manager and type mirror have been
   removed. Tauri command adapters now use backend-owned workflow-service DTOs
   for the active graph, connection, file, and node definition contracts.
-- [ ] Resolve clippy-specific findings exposed after the rustc warning baseline
+- [x] Resolve clippy-specific findings exposed after the rustc warning baseline
   reached zero. Status: `cargo clippy --workspace --all-targets --all-features
   -- -D warnings` reached `crates/inference`; the mechanical inference findings
   in streaming prefix parsing, derivable defaults, path joins, lazy option
@@ -659,8 +658,11 @@ Tasks:
   store/event constructors now use named runtime and scheduler snapshot input
   structs, and large workflow event internals are boxed while preserving the
   serialized event shape. Headless diagnostics projection helpers now accept
-  grouped runtime/projection inputs. The remaining active Tauri blockers are
-  argument grouping across orchestration and workflow execution entrypoints.
+  grouped runtime/projection inputs. Workflow execution runtime internals now
+  accept grouped execution/session/runtime-state inputs, and Tauri command
+  entrypoints that must preserve framework-injected state signatures carry
+  scoped `#[expect]` annotations with boundary reasons. The full workspace
+  strict clippy gate now passes.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

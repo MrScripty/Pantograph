@@ -357,6 +357,10 @@ pub async fn register_data_graph(
 
 /// Execute an orchestration graph.
 #[command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri command entrypoint receives framework-injected orchestration and runtime state handles."
+)]
 pub async fn execute_orchestration(
     app: AppHandle,
     orchestration_id: String,

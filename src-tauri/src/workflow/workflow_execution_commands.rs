@@ -7,7 +7,10 @@ pub use super::workflow_edit_session::{
     ungroup_in_execution, update_group_ports_in_execution, update_node_data,
     update_node_position_in_execution,
 };
-pub use super::workflow_execution_runtime::{execute_workflow_v2, run_workflow_session};
+pub use super::workflow_execution_runtime::{
+    ExecuteWorkflowV2Input, RunWorkflowSessionInput, WorkflowExecutionRuntimeState,
+    execute_workflow_v2, run_workflow_session,
+};
 
 #[cfg(test)]
 mod tests {

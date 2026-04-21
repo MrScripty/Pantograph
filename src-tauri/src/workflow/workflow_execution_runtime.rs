@@ -25,6 +25,53 @@ use super::events::{
     WorkflowEvent, WorkflowRuntimeSnapshotEventInput, WorkflowSchedulerSnapshotEventInput,
 };
 
+pub struct WorkflowExecutionRuntimeState<'a> {
+    pub gateway: State<'a, SharedGateway>,
+    pub runtime_registry: State<'a, SharedRuntimeRegistry>,
+    pub config: State<'a, SharedAppConfig>,
+    pub rag_manager: State<'a, SharedRagManager>,
+    pub extensions: State<'a, SharedExtensions>,
+    pub workflow_service: State<'a, SharedWorkflowService>,
+    pub diagnostics_store: State<'a, SharedWorkflowDiagnosticsStore>,
+}
+
+pub struct ExecuteWorkflowV2Input<'a> {
+    pub app: AppHandle,
+    pub graph: WorkflowGraph,
+    pub state: WorkflowExecutionRuntimeState<'a>,
+    pub channel: Channel<WorkflowEvent>,
+}
+
+pub struct RunWorkflowSessionInput<'a> {
+    pub app: AppHandle,
+    pub session_id: String,
+    pub state: WorkflowExecutionRuntimeState<'a>,
+    pub channel: Channel<WorkflowEvent>,
+}
+
+struct DiagnosticsEmissionInput<'a> {
+    app: &'a AppHandle,
+    session_id: &'a str,
+    gateway: &'a SharedGateway,
+    runtime_registry: &'a SharedRuntimeRegistry,
+    extensions: &'a SharedExtensions,
+    workflow_service: &'a SharedWorkflowService,
+    diagnostics_store: &'a SharedWorkflowDiagnosticsStore,
+    channel: &'a Channel<WorkflowEvent>,
+    runtime_snapshot_override: Option<inference::RuntimeLifecycleSnapshot>,
+    trace_runtime_metrics_override:
+        Option<pantograph_workflow_service::WorkflowTraceRuntimeMetrics>,
+    runtime_model_target_override: Option<String>,
+}
+
+struct SessionGraphSnapshotInput<'a> {
+    app: AppHandle,
+    session_id: String,
+    session_graph: WorkflowGraph,
+    state: WorkflowExecutionRuntimeState<'a>,
+    channel: Channel<WorkflowEvent>,
+}
+
 fn managed_runtime_diagnostics_views(
     app: &AppHandle,
 ) -> Vec<pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView> {
@@ -58,25 +105,12 @@ fn finalize_edit_session_execution(
     Ok(())
 }
 
-async fn emit_diagnostics_snapshots(
-    app: &AppHandle,
-    session_id: &str,
-    gateway: &SharedGateway,
-    runtime_registry: &SharedRuntimeRegistry,
-    extensions: &SharedExtensions,
-    workflow_service: &SharedWorkflowService,
-    diagnostics_store: &SharedWorkflowDiagnosticsStore,
-    channel: &Channel<WorkflowEvent>,
-    runtime_snapshot_override: Option<inference::RuntimeLifecycleSnapshot>,
-    trace_runtime_metrics_override: Option<
-        pantograph_workflow_service::WorkflowTraceRuntimeMetrics,
-    >,
-    runtime_model_target_override: Option<String>,
-) {
-    let scheduler_snapshot = match workflow_service
+async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
+    let scheduler_snapshot = match input
+        .workflow_service
         .workflow_get_scheduler_snapshot(
             pantograph_workflow_service::WorkflowSchedulerSnapshotRequest {
-                session_id: session_id.to_string(),
+                session_id: input.session_id.to_string(),
             },
         )
         .await
@@ -85,7 +119,7 @@ async fn emit_diagnostics_snapshots(
         Err(error) => {
             log::debug!(
                 "Skipping diagnostics snapshots for session '{}' because scheduler snapshot is unavailable: {}",
-                session_id,
+                input.session_id,
                 error
             );
             return;
@@ -94,11 +128,11 @@ async fn emit_diagnostics_snapshots(
 
     let captured_at_ms = unix_timestamp_ms();
     let runtime = super::headless_runtime::build_runtime(
-        app,
-        gateway,
-        runtime_registry,
-        extensions,
-        workflow_service,
+        input.app,
+        input.gateway,
+        input.runtime_registry,
+        input.extensions,
+        input.workflow_service,
         None,
     )
     .await;
@@ -119,7 +153,7 @@ async fn emit_diagnostics_snapshots(
                 log::warn!(
                     "Failed to collect runtime snapshot for workflow '{}' in session '{}': {}",
                     runtime_workflow_id,
-                    session_id,
+                    input.session_id,
                     error
                 );
                 (None, Some(error.to_envelope_json()))
@@ -129,20 +163,20 @@ async fn emit_diagnostics_snapshots(
     };
 
     let snapshot = build_workflow_execution_diagnostics_snapshot_with_registry_sync(
-        gateway.as_ref(),
+        input.gateway.as_ref(),
         WorkflowExecutionDiagnosticsSyncInput {
-            runtime_registry: Some(runtime_registry.as_ref()),
+            runtime_registry: Some(input.runtime_registry.as_ref()),
             scheduler_snapshot: &scheduler_snapshot,
             captured_at_ms,
             runtime_capabilities,
             runtime_error,
-            trace_runtime_metrics_override,
-            runtime_snapshot_override: runtime_snapshot_override.as_ref(),
-            runtime_model_target_override: runtime_model_target_override.as_deref(),
+            trace_runtime_metrics_override: input.trace_runtime_metrics_override,
+            runtime_snapshot_override: input.runtime_snapshot_override.as_ref(),
+            runtime_model_target_override: input.runtime_model_target_override.as_deref(),
         },
     )
     .await;
-    let managed_runtimes = managed_runtime_diagnostics_views(app);
+    let managed_runtimes = managed_runtime_diagnostics_views(input.app);
 
     let scheduler_event = WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
         workflow_id: snapshot.scheduler.workflow_id,
@@ -154,11 +188,13 @@ async fn emit_diagnostics_snapshots(
         diagnostics: snapshot.scheduler.diagnostics,
         error: None,
     });
-    diagnostics_store.record_workflow_event(&scheduler_event, captured_at_ms);
-    let _ = channel.send(scheduler_event);
+    input
+        .diagnostics_store
+        .record_workflow_event(&scheduler_event, captured_at_ms);
+    let _ = input.channel.send(scheduler_event);
     send_diagnostics_projection(
-        channel,
-        diagnostics_store,
+        input.channel,
+        input.diagnostics_store,
         &snapshot.scheduler.trace_execution_id,
     );
 
@@ -175,43 +211,49 @@ async fn emit_diagnostics_snapshots(
         managed_runtimes,
         error: snapshot.runtime.error,
     });
-    diagnostics_store.record_workflow_event(&runtime_event, captured_at_ms);
-    let _ = channel.send(runtime_event);
+    input
+        .diagnostics_store
+        .record_workflow_event(&runtime_event, captured_at_ms);
+    let _ = input.channel.send(runtime_event);
     send_diagnostics_projection(
-        channel,
-        diagnostics_store,
+        input.channel,
+        input.diagnostics_store,
         &snapshot.runtime.trace_execution_id,
     );
 }
 
-async fn run_session_graph_snapshot(
-    app: AppHandle,
-    session_id: String,
-    session_graph: WorkflowGraph,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    config: State<'_, SharedAppConfig>,
-    rag_manager: State<'_, SharedRagManager>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<(), String> {
+async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Result<(), String> {
+    let SessionGraphSnapshotInput {
+        app,
+        session_id,
+        session_graph,
+        state,
+        channel,
+    } = input;
+    let WorkflowExecutionRuntimeState {
+        gateway,
+        runtime_registry,
+        config,
+        rag_manager,
+        extensions,
+        workflow_service,
+        diagnostics_store,
+    } = state;
     let diagnostics_channel = channel.clone();
 
-    emit_diagnostics_snapshots(
-        &app,
-        &session_id,
-        gateway.inner(),
-        runtime_registry.inner(),
-        extensions.inner(),
-        workflow_service.inner(),
-        diagnostics_store.inner(),
-        &diagnostics_channel,
-        None,
-        None,
-        None,
-    )
+    emit_diagnostics_snapshots(DiagnosticsEmissionInput {
+        app: &app,
+        session_id: &session_id,
+        gateway: gateway.inner(),
+        runtime_registry: runtime_registry.inner(),
+        extensions: extensions.inner(),
+        workflow_service: workflow_service.inner(),
+        diagnostics_store: diagnostics_store.inner(),
+        channel: &diagnostics_channel,
+        runtime_snapshot_override: None,
+        trace_runtime_metrics_override: None,
+        runtime_model_target_override: None,
+    })
     .await;
 
     diagnostics_store.set_execution_graph(&session_id, &session_graph);
@@ -247,90 +289,71 @@ async fn run_session_graph_snapshot(
         )
         .await
         .map_err(|error| error.to_string())?;
-    emit_diagnostics_snapshots(
-        &app,
-        &session_id,
-        gateway.inner(),
-        runtime_registry.inner(),
-        extensions.inner(),
-        workflow_service.inner(),
-        diagnostics_store.inner(),
-        &diagnostics_channel,
-        Some(outcome.runtime_snapshot),
-        Some(outcome.trace_runtime_metrics),
-        outcome.runtime_model_target,
-    )
+    emit_diagnostics_snapshots(DiagnosticsEmissionInput {
+        app: &app,
+        session_id: &session_id,
+        gateway: gateway.inner(),
+        runtime_registry: runtime_registry.inner(),
+        extensions: extensions.inner(),
+        workflow_service: workflow_service.inner(),
+        diagnostics_store: diagnostics_store.inner(),
+        channel: &diagnostics_channel,
+        runtime_snapshot_override: Some(outcome.runtime_snapshot),
+        trace_runtime_metrics_override: Some(outcome.trace_runtime_metrics),
+        runtime_model_target_override: outcome.runtime_model_target,
+    })
     .await;
     finalize_edit_session_execution(outcome.waiting_for_input, outcome.error)
 }
 
-pub async fn execute_workflow_v2(
-    app: AppHandle,
-    graph: WorkflowGraph,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    config: State<'_, SharedAppConfig>,
-    rag_manager: State<'_, SharedRagManager>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<String, String> {
-    let session = workflow_service
+pub async fn execute_workflow_v2(input: ExecuteWorkflowV2Input<'_>) -> Result<String, String> {
+    let ExecuteWorkflowV2Input {
+        app,
+        graph,
+        state,
+        channel,
+    } = input;
+    let session = state
+        .workflow_service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest { graph })
         .await
         .map_err(|e| e.to_envelope_json())?;
     let execution_id = session.session_id.clone();
-    let session_graph = workflow_service
+    let session_graph = state
+        .workflow_service
         .workflow_graph_get_runtime_snapshot(&execution_id)
         .await
         .map_err(|e| e.to_envelope_json())?;
-    run_session_graph_snapshot(
+    run_session_graph_snapshot(SessionGraphSnapshotInput {
         app,
-        execution_id.clone(),
+        session_id: execution_id.clone(),
         session_graph,
-        gateway,
-        runtime_registry,
-        config,
-        rag_manager,
-        extensions,
-        workflow_service,
-        diagnostics_store,
+        state,
         channel,
-    )
+    })
     .await?;
     Ok(execution_id)
 }
 
-pub async fn run_workflow_session(
-    app: AppHandle,
-    session_id: String,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    config: State<'_, SharedAppConfig>,
-    rag_manager: State<'_, SharedRagManager>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<(), String> {
-    let session_graph = workflow_service
+pub async fn run_workflow_session(input: RunWorkflowSessionInput<'_>) -> Result<(), String> {
+    let RunWorkflowSessionInput {
+        app,
+        session_id,
+        state,
+        channel,
+    } = input;
+    let session_graph = state
+        .workflow_service
         .workflow_graph_get_runtime_snapshot(&session_id)
         .await
         .map_err(|e| e.to_envelope_json())?;
-    run_session_graph_snapshot(
+    run_session_graph_snapshot(SessionGraphSnapshotInput {
         app,
         session_id,
         session_graph,
-        gateway,
-        runtime_registry,
-        config,
-        rag_manager,
-        extensions,
-        workflow_service,
-        diagnostics_store,
+        state,
         channel,
-    )
+    })
     .await
 }
 

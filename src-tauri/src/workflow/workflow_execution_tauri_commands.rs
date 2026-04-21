@@ -5,6 +5,9 @@ use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::events::WorkflowEvent;
+use super::workflow_execution_commands::{
+    ExecuteWorkflowV2Input, RunWorkflowSessionInput, WorkflowExecutionRuntimeState,
+};
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
     EdgeInsertionPreviewResponse, GraphEdge, GraphNode, InsertNodeConnectionResponse,
@@ -13,6 +16,10 @@ use pantograph_workflow_service::{
 };
 
 #[command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri command entrypoint receives framework-injected state handles; internal execution code uses grouped request structs."
+)]
 pub async fn execute_workflow_v2(
     app: AppHandle,
     graph: WorkflowGraph,
@@ -25,18 +32,20 @@ pub async fn execute_workflow_v2(
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<String, String> {
-    super::workflow_execution_commands::execute_workflow_v2(
+    super::workflow_execution_commands::execute_workflow_v2(ExecuteWorkflowV2Input {
         app,
         graph,
-        gateway,
-        runtime_registry,
-        config,
-        rag_manager,
-        extensions,
-        workflow_service,
-        diagnostics_store,
+        state: WorkflowExecutionRuntimeState {
+            gateway,
+            runtime_registry,
+            config,
+            rag_manager,
+            extensions,
+            workflow_service,
+            diagnostics_store,
+        },
         channel,
-    )
+    })
     .await
 }
 
@@ -303,6 +312,10 @@ pub async fn create_workflow_session(
 }
 
 #[command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri command entrypoint receives framework-injected state handles; internal execution code uses grouped request structs."
+)]
 pub async fn run_workflow_session(
     app: AppHandle,
     session_id: String,
@@ -315,18 +328,20 @@ pub async fn run_workflow_session(
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<(), String> {
-    super::workflow_execution_commands::run_workflow_session(
+    super::workflow_execution_commands::run_workflow_session(RunWorkflowSessionInput {
         app,
         session_id,
-        gateway,
-        runtime_registry,
-        config,
-        rag_manager,
-        extensions,
-        workflow_service,
-        diagnostics_store,
+        state: WorkflowExecutionRuntimeState {
+            gateway,
+            runtime_registry,
+            config,
+            rag_manager,
+            extensions,
+            workflow_service,
+            diagnostics_store,
+        },
         channel,
-    )
+    })
     .await
 }
 

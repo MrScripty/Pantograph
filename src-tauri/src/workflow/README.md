@@ -86,6 +86,11 @@ entrypoints, while `workflow_execution_commands.rs` remains a thin command-
 group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`
 so edit-session graph operations and runtime execution sequencing stop growing
 inside the general command root.
+`workflow_execution_runtime.rs` uses grouped execution, session, and runtime
+state inputs for internal orchestration. Tauri command entrypoints retain their
+framework-injected state signatures for registration compatibility, with scoped
+lint expectations documenting that boundary exception instead of propagating
+long positional argument lists through runtime helpers.
 The legacy Tauri-local node registry mirror has also been removed; definition
 commands now use the service-owned registry directly.
 The legacy Tauri-local execution manager has been removed; undo/redo and
@@ -258,6 +263,9 @@ let snapshot = workflow_service
 - Tauri diagnostics collection should pass grouped embedded-runtime diagnostics
   input objects into the backend projection helpers rather than rebuilding long
   positional argument lists locally.
+- Workflow execution runtime helpers should pass grouped execution/session and
+  runtime-state inputs internally; expanded argument lists are only acceptable
+  at Tauri command registration boundaries with a scoped reason.
 - Workflow helper lint cleanup should remove needless adapter allocations while
   leaving model dependency, runtime shutdown, and diagnostics contracts owned by
   backend services or their existing command DTOs.

@@ -10,9 +10,9 @@ workspace members with repeated package metadata, no `rust-version`, no shared
 repository metadata, no explicit `publish = false`, and no root
 `[workspace.lints]` policy.
 
-The workspace also has known warning debt. Cargo checks pass, but `clippy -D
-warnings` and `cargo fmt --all -- --check` are not yet appropriate as blocking
-gates without a separate cleanup pass.
+The workspace previously had warning and clippy debt. Cargo checks and strict
+workspace clippy now pass after the M7 cleanup; `cargo fmt --all -- --check`
+remains a separate formatting ratchet until the recorded drift is cleaned up.
 
 The Rust dependency standards also require dependencies used by two or more
 workspace members to inherit a shared version from `[workspace.dependencies]`
@@ -62,8 +62,8 @@ Adopt a root Rust package and lint policy:
   without hiding which crate owns each import.
 
 ### Negative
-- Clippy-specific findings remain a separate cleanup path after the M7
-  `cargo check` warning baseline reached zero.
+- Clippy-specific findings are clean after M7, but CI promotion can remain
+  separate from this ADR if release timing requires a staged gate rollout.
 - `cargo fmt --all -- --check` remains a separate cleanup slice because current
   formatting drift spans several modules.
 - Current `rust-version` follows the active project toolchain and may need a
@@ -80,4 +80,4 @@ Adopt a root Rust package and lint policy:
 - Root policy file: `docs/rust-workspace-policy.md`.
 - Compliance plan tracking:
   `docs/standards-compliance-analysis/refactor-plan.md`.
-- Warning cleanup remains owned by M7.
+- Warning and clippy cleanup are tracked in M7.
