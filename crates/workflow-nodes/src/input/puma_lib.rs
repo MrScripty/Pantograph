@@ -111,8 +111,8 @@ inventory::submit!(node_engine::DescriptorFn(PumaLibTask::descriptor));
 mod options_provider {
     use async_trait::async_trait;
     use node_engine::{
-        extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
-        PortOptionsQuery, PortOptionsResult,
+        ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider, PortOptionsQuery,
+        PortOptionsResult, extension_keys,
     };
     use pumas_library::models::ModelExecutionDescriptor;
     use std::sync::Arc;
@@ -127,7 +127,7 @@ mod options_provider {
     ) -> serde_json::Value {
         // Try the stored value first
         if let Some(stored) = record.metadata.get("inference_settings") {
-            if stored.is_array() && !stored.as_array().map_or(true, |a| a.is_empty()) {
+            if stored.as_array().is_some_and(|a| !a.is_empty()) {
                 return stored.clone();
             }
         }
@@ -225,7 +225,7 @@ mod options_provider {
                 // Prefer the Pumas execution descriptor whenever the record can
                 // resolve one so runtime-facing paths come from the executable
                 // contract rather than projected metadata.
-                let execution_descriptor = resolve_execution_descriptor(&api, m).await;
+                let execution_descriptor = resolve_execution_descriptor(api, m).await;
                 let inference_settings = api
                     .get_inference_settings(&m.id)
                     .await
@@ -384,21 +384,23 @@ mod tests {
         assert!(meta.outputs.iter().any(|p| p.id == "dependency_bindings"
             && p.data_type == PortDataType::Json
             && !p.required));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == "dependency_requirements_id"
-                && p.data_type == PortDataType::String
-                && !p.required));
+        assert!(
+            meta.outputs
+                .iter()
+                .any(|p| p.id == "dependency_requirements_id"
+                    && p.data_type == PortDataType::String
+                    && !p.required)
+        );
         assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"
             && p.data_type == PortDataType::Json
             && !p.required));
-        assert!(meta
-            .outputs
-            .iter()
-            .any(|p| p.id == "dependency_requirements"
-                && p.data_type == PortDataType::Json
-                && !p.required));
+        assert!(
+            meta.outputs
+                .iter()
+                .any(|p| p.id == "dependency_requirements"
+                    && p.data_type == PortDataType::Json
+                    && !p.required)
+        );
     }
 
     #[tokio::test]

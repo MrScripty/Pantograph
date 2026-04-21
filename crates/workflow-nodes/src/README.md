@@ -50,6 +50,8 @@ other so graph metadata and runtime behavior can be reviewed together.
 - Saved templates must not rely on frontend-only aliases for backend ports.
 - Experimental control/tool nodes must not be presented as complete execution
   behavior while tool execution is disabled.
+- Descriptor/task structs should derive standard defaults when the declared
+  empty configuration exactly matches Rust's derived field defaults.
 
 ## Revisit Triggers
 - Node definitions move to a generated registry format.

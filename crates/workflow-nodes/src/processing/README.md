@@ -69,6 +69,9 @@ instead of hiding behind generic JSON ports.
 - Ollama inference output mapping consumes the response text and model echo
   only; unneeded `/api/generate` fields stay ignored by serde rather than being
   stored as dead response state.
+- JSON-filter configuration defaults remain the derived empty-path/empty-default
+  contract so descriptor consumers and task construction share one default
+  shape.
 
 ## Revisit Triggers
 - Another runtime requires a different environment handoff contract than the

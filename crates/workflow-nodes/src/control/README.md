@@ -12,7 +12,7 @@ branching, merging, and tool-call orchestration inside workflow graphs.
 | `mod.rs` | Control-node module exports and registration wiring. |
 | `conditional.rs` | Conditional branch node behavior and metadata. |
 | `merge.rs` | Merge node behavior and metadata. |
-| `tool_loop.rs` | Tool-loop node descriptor and LLM loop behavior; fails explicitly when tool calls require disabled backend tool execution. |
+| `tool_loop.rs` | Tool-loop node descriptor and current single-attempt LLM behavior; fails explicitly when tool calls require disabled backend tool execution. |
 | `tool_executor.rs` | Disabled tool-executor node descriptor that preserves saved-workflow compatibility without fabricating tool results. |
 
 ## Problem
@@ -42,6 +42,9 @@ emitting synthetic success.
 ## Invariants
 - Conditional and merge nodes must preserve declared input/output semantics.
 - Tool-loop/tool-executor must fail when real tool execution would be required.
+- Tool-loop may perform only the initial LLM request while backend-owned tool
+  execution is disabled; multi-turn continuation must land with the tool
+  runtime contract rather than as a hidden local loop.
 - Disabled tool behavior must not emit successful placeholder results.
 
 ## Revisit Triggers

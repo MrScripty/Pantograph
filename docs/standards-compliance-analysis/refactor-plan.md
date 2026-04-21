@@ -632,10 +632,14 @@ Tasks:
   after grouping recursive demand execution inputs into a borrowed runtime
   context, adding callback/output/future aliases, and applying mechanical
   PyTorch, orchestration, registry, and persistence cleanups. The full
-  workspace audit now reaches `crates/workflow-nodes`, where the next cleanup
-  set is `control/tool_loop.rs` `never_loop`, `input/puma_lib.rs`
-  `unnecessary_map_or` and `needless_borrow`, and
-  `processing/json_filter.rs` `derivable_impls`.
+  workspace audit then reached `crates/workflow-nodes`; those findings are now
+  resolved by making disabled tool-loop continuation explicit, simplifying
+  Puma-Lib inference-setting/descriptor access, and deriving the JSON-filter
+  config default. The audit now reports the next clippy-specific cleanup set in
+  `crates/pantograph-workflow-service`: graph canonicalization lazy fallback,
+  connection revision comparison, graph execution-mode default derivation,
+  scheduler queued-run rebinding, trace scheduler argument grouping, and
+  workflow run-handle default construction.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

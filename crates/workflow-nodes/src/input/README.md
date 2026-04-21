@@ -59,6 +59,9 @@ contract only, not the runtime source of truth.
 - Pantograph must not infer Pumas runtime bundle semantics from projected
   metadata when an execution descriptor is available.
 - Fallback task inference must remain conservative and deterministic.
+- Stored Pumas inference settings are reused only when they are non-empty
+  arrays; otherwise the node falls back to descriptor/API defaults so empty
+  metadata does not masquerade as an executable settings contract.
 
 ## Revisit Triggers
 - Model-selection metadata grows beyond what one node should emit directly.

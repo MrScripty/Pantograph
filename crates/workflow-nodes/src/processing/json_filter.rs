@@ -12,21 +12,12 @@ use node_engine::{
 use serde::{Deserialize, Serialize};
 
 /// Configuration for the JSON filter task
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct JsonFilterConfig {
     /// JSON path expression (e.g., "data.items[0].name" or "[0].arguments.content")
     pub path: String,
     /// Default value if path doesn't exist
     pub default_value: Option<serde_json::Value>,
-}
-
-impl Default for JsonFilterConfig {
-    fn default() -> Self {
-        Self {
-            path: String::new(),
-            default_value: None,
-        }
-    }
 }
 
 /// JSON Filter Task

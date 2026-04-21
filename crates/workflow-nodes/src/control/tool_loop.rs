@@ -238,8 +238,9 @@ impl Task for ToolLoopTask {
             max_turns
         );
 
-        for turn in 0..max_turns {
-            turns_executed = turn + 1;
+        if max_turns > 0 {
+            let turn = 0;
+            turns_executed = 1;
 
             // Build request body
             let mut request_body = serde_json::json!({
@@ -269,7 +270,7 @@ impl Task for ToolLoopTask {
             log::debug!(
                 "ToolLoopTask {}: turn {}/{}",
                 self.task_id,
-                turn + 1,
+                turns_executed,
                 max_turns
             );
 
@@ -329,38 +330,37 @@ impl Task for ToolLoopTask {
                     self.task_id,
                     turns_executed
                 );
-                break;
-            }
+            } else {
+                // Process tool calls
+                if let Some(calls) = tool_calls_json.and_then(|t| t.as_array()) {
+                    for call in calls {
+                        let tool_name = call["function"]["name"].as_str().unwrap_or("unknown");
+                        let tool_args_str = call["function"]["arguments"].as_str().unwrap_or("{}");
+                        let tool_args: serde_json::Value =
+                            serde_json::from_str(tool_args_str).unwrap_or(serde_json::json!({}));
+                        let call_id = call["id"].as_str().map(String::from);
 
-            // Process tool calls
-            if let Some(calls) = tool_calls_json.and_then(|t| t.as_array()) {
-                for call in calls {
-                    let tool_name = call["function"]["name"].as_str().unwrap_or("unknown");
-                    let tool_args_str = call["function"]["arguments"].as_str().unwrap_or("{}");
-                    let tool_args: serde_json::Value =
-                        serde_json::from_str(tool_args_str).unwrap_or(serde_json::json!({}));
-                    let call_id = call["id"].as_str().map(String::from);
+                        let tool_call = ToolCall {
+                            name: tool_name.to_string(),
+                            arguments: tool_args,
+                            id: call_id.clone(),
+                        };
 
-                    let tool_call = ToolCall {
-                        name: tool_name.to_string(),
-                        arguments: tool_args,
-                        id: call_id.clone(),
-                    };
+                        all_tool_calls.push(tool_call);
 
-                    all_tool_calls.push(tool_call);
-
-                    log::debug!(
-                        "ToolLoopTask {}: tool call '{}' with args",
-                        self.task_id,
-                        tool_name
-                    );
+                        log::debug!(
+                            "ToolLoopTask {}: tool call '{}' with args",
+                            self.task_id,
+                            tool_name
+                        );
+                    }
                 }
-            }
 
-            return Err(GraphError::TaskExecutionFailed(format!(
-                "tool-loop received {} tool call(s), but backend-owned tool execution is disabled",
-                all_tool_calls.len()
-            )));
+                return Err(GraphError::TaskExecutionFailed(format!(
+                    "tool-loop received {} tool call(s), but backend-owned tool execution is disabled",
+                    all_tool_calls.len()
+                )));
+            }
         }
 
         // If we hit max turns without a final response, use the last content
