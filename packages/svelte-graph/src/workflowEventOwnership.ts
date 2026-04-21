@@ -2,6 +2,7 @@ export interface ExecutionScopedWorkflowEvent {
   type?: string;
   data: {
     execution_id?: string | null;
+    ownership?: WorkflowEventOwnershipProjection | null;
   };
 }
 
@@ -12,15 +13,54 @@ export interface WorkflowEventOwnershipProjection {
 }
 
 export function getWorkflowEventExecutionId(event: ExecutionScopedWorkflowEvent): string | null {
-  return typeof event.data.execution_id === 'string' && event.data.execution_id.trim().length > 0
-    ? event.data.execution_id
+  return (
+    normalizeExecutionId(event.data.ownership?.eventExecutionId) ??
+    normalizeExecutionId(event.data.execution_id)
+  );
+}
+
+function normalizeExecutionId(executionId: string | null | undefined): string | null {
+  return typeof executionId === 'string' && executionId.trim().length > 0
+    ? executionId
     : null;
+}
+
+function normalizeBackendOwnership(
+  ownership: WorkflowEventOwnershipProjection | null | undefined,
+): WorkflowEventOwnershipProjection | null {
+  if (!ownership) {
+    return null;
+  }
+
+  const eventExecutionId = normalizeExecutionId(ownership.eventExecutionId);
+  const activeExecutionId = normalizeExecutionId(ownership.activeExecutionId);
+  if (eventExecutionId === null || activeExecutionId === null) {
+    return null;
+  }
+
+  return {
+    eventExecutionId,
+    activeExecutionId,
+    relevant: ownership.relevant,
+  };
 }
 
 export function projectWorkflowEventOwnership(
   event: ExecutionScopedWorkflowEvent,
   currentExecutionId: string | null,
 ): WorkflowEventOwnershipProjection {
+  const backendOwnership = normalizeBackendOwnership(event.data.ownership);
+  if (backendOwnership !== null) {
+    const activeExecutionId = currentExecutionId ?? backendOwnership.activeExecutionId;
+    return {
+      eventExecutionId: backendOwnership.eventExecutionId,
+      activeExecutionId,
+      relevant:
+        backendOwnership.relevant &&
+        (currentExecutionId === null || backendOwnership.activeExecutionId === currentExecutionId),
+    };
+  }
+
   const eventExecutionId = getWorkflowEventExecutionId(event);
   const activeExecutionId = currentExecutionId ?? eventExecutionId;
 

@@ -3,7 +3,8 @@
 //! These events are sent via Tauri channels to provide real-time
 //! feedback on workflow execution progress.
 
-use serde::Serialize;
+use serde::{Serialize, Serializer, ser::Error as _};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
@@ -21,8 +22,7 @@ pub type PortValue = serde_json::Value;
 ///
 /// These are sent to the frontend via a Tauri channel to provide
 /// real-time updates on execution progress.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", content = "data")]
+#[derive(Debug, Clone)]
 pub enum WorkflowEvent {
     /// Workflow execution has started
     Started {
@@ -211,7 +211,292 @@ pub enum WorkflowEvent {
     },
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowEventOwnershipProjection {
+    pub event_execution_id: String,
+    pub active_execution_id: String,
+    pub relevant: bool,
+}
+
+impl WorkflowEventOwnershipProjection {
+    fn from_execution_id(execution_id: &str) -> Self {
+        Self {
+            event_execution_id: execution_id.to_string(),
+            active_execution_id: execution_id.to_string(),
+            relevant: true,
+        }
+    }
+}
+
+impl Serialize for WorkflowEvent {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let (event_type, mut data) = self.serialized_parts();
+        if let Some(ownership) = self.ownership_projection() {
+            let ownership = serde_json::to_value(ownership).map_err(S::Error::custom)?;
+            if let Value::Object(fields) = &mut data {
+                fields.insert("ownership".to_string(), ownership);
+            }
+        }
+
+        let mut envelope = Map::new();
+        envelope.insert("type".to_string(), Value::String(event_type.to_string()));
+        envelope.insert("data".to_string(), data);
+        envelope.serialize(serializer)
+    }
+}
+
 impl WorkflowEvent {
+    pub fn ownership_projection(&self) -> Option<WorkflowEventOwnershipProjection> {
+        Some(WorkflowEventOwnershipProjection::from_execution_id(
+            self.execution_id(),
+        ))
+    }
+
+    fn execution_id(&self) -> &str {
+        match self {
+            Self::Started { execution_id, .. }
+            | Self::NodeStarted { execution_id, .. }
+            | Self::NodeProgress { execution_id, .. }
+            | Self::NodeStream { execution_id, .. }
+            | Self::NodeCompleted { execution_id, .. }
+            | Self::NodeError { execution_id, .. }
+            | Self::Completed { execution_id, .. }
+            | Self::Failed { execution_id, .. }
+            | Self::Cancelled { execution_id, .. }
+            | Self::GraphModified { execution_id, .. }
+            | Self::WaitingForInput { execution_id, .. }
+            | Self::IncrementalExecutionStarted { execution_id, .. }
+            | Self::RuntimeSnapshot { execution_id, .. }
+            | Self::SchedulerSnapshot { execution_id, .. }
+            | Self::DiagnosticsSnapshot { execution_id, .. } => execution_id,
+        }
+    }
+
+    fn serialized_parts(&self) -> (&'static str, Value) {
+        match self {
+            Self::Started {
+                workflow_id,
+                node_count,
+                execution_id,
+            } => (
+                "Started",
+                json!({
+                    "workflow_id": workflow_id,
+                    "node_count": node_count,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::NodeStarted {
+                node_id,
+                node_type,
+                execution_id,
+            } => (
+                "NodeStarted",
+                json!({
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::NodeProgress {
+                node_id,
+                progress,
+                message,
+                detail,
+                execution_id,
+            } => (
+                "NodeProgress",
+                json!({
+                    "node_id": node_id,
+                    "progress": progress,
+                    "message": message,
+                    "detail": detail,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::NodeStream {
+                node_id,
+                port,
+                chunk,
+                execution_id,
+            } => (
+                "NodeStream",
+                json!({
+                    "node_id": node_id,
+                    "port": port,
+                    "chunk": chunk,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::NodeCompleted {
+                node_id,
+                outputs,
+                execution_id,
+            } => (
+                "NodeCompleted",
+                json!({
+                    "node_id": node_id,
+                    "outputs": outputs,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::NodeError {
+                node_id,
+                error,
+                execution_id,
+            } => (
+                "NodeError",
+                json!({
+                    "node_id": node_id,
+                    "error": error,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::Completed {
+                workflow_id,
+                outputs,
+                execution_id,
+            } => (
+                "Completed",
+                json!({
+                    "workflow_id": workflow_id,
+                    "outputs": outputs,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::Failed {
+                workflow_id,
+                error,
+                execution_id,
+            } => (
+                "Failed",
+                json!({
+                    "workflow_id": workflow_id,
+                    "error": error,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::Cancelled {
+                workflow_id,
+                error,
+                execution_id,
+            } => (
+                "Cancelled",
+                json!({
+                    "workflow_id": workflow_id,
+                    "error": error,
+                    "execution_id": execution_id,
+                }),
+            ),
+            Self::GraphModified {
+                workflow_id,
+                execution_id,
+                graph,
+                dirty_tasks,
+                memory_impact,
+            } => (
+                "GraphModified",
+                json!({
+                    "workflow_id": workflow_id,
+                    "execution_id": execution_id,
+                    "graph": graph,
+                    "dirty_tasks": dirty_tasks,
+                    "memory_impact": memory_impact,
+                }),
+            ),
+            Self::WaitingForInput {
+                workflow_id,
+                execution_id,
+                node_id,
+                message,
+            } => (
+                "WaitingForInput",
+                json!({
+                    "workflow_id": workflow_id,
+                    "execution_id": execution_id,
+                    "node_id": node_id,
+                    "message": message,
+                }),
+            ),
+            Self::IncrementalExecutionStarted {
+                workflow_id,
+                execution_id,
+                task_ids,
+            } => (
+                "IncrementalExecutionStarted",
+                json!({
+                    "workflow_id": workflow_id,
+                    "execution_id": execution_id,
+                    "task_ids": task_ids,
+                }),
+            ),
+            Self::RuntimeSnapshot {
+                workflow_id,
+                execution_id,
+                captured_at_ms,
+                capabilities,
+                trace_runtime_metrics,
+                active_model_target,
+                embedding_model_target,
+                active_runtime_snapshot,
+                embedding_runtime_snapshot,
+                managed_runtimes,
+                error,
+            } => (
+                "RuntimeSnapshot",
+                json!({
+                    "workflow_id": workflow_id,
+                    "execution_id": execution_id,
+                    "captured_at_ms": captured_at_ms,
+                    "capabilities": capabilities,
+                    "trace_runtime_metrics": trace_runtime_metrics,
+                    "active_model_target": active_model_target,
+                    "embedding_model_target": embedding_model_target,
+                    "active_runtime_snapshot": active_runtime_snapshot,
+                    "embedding_runtime_snapshot": embedding_runtime_snapshot,
+                    "managed_runtimes": managed_runtimes,
+                    "error": error,
+                }),
+            ),
+            Self::SchedulerSnapshot {
+                workflow_id,
+                execution_id,
+                session_id,
+                captured_at_ms,
+                session,
+                items,
+                diagnostics,
+                error,
+            } => (
+                "SchedulerSnapshot",
+                json!({
+                    "workflow_id": workflow_id,
+                    "execution_id": execution_id,
+                    "session_id": session_id,
+                    "captured_at_ms": captured_at_ms,
+                    "session": session,
+                    "items": items,
+                    "diagnostics": diagnostics,
+                    "error": error,
+                }),
+            ),
+            Self::DiagnosticsSnapshot {
+                execution_id,
+                snapshot,
+            } => (
+                "DiagnosticsSnapshot",
+                json!({
+                    "execution_id": execution_id,
+                    "snapshot": snapshot,
+                }),
+            ),
+        }
+    }
+
     /// Create a Started event
     pub fn started(
         workflow_id: impl Into<String>,
@@ -414,6 +699,16 @@ mod tests {
         assert!(json.contains("test-123"));
         assert!(json.contains("5"));
         assert!(json.contains("exec-123"));
+        let value = serde_json::to_value(event).unwrap();
+        assert_eq!(
+            value["data"]["ownership"]["eventExecutionId"].as_str(),
+            Some("exec-123")
+        );
+        assert_eq!(
+            value["data"]["ownership"]["activeExecutionId"].as_str(),
+            Some("exec-123")
+        );
+        assert_eq!(value["data"]["ownership"]["relevant"].as_bool(), Some(true));
     }
 
     #[test]

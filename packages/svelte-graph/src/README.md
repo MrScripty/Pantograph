@@ -40,7 +40,9 @@ and the app graph wrapper. Export those helpers through `index.ts` so the app
 layer can consume the same connect/reconnect rules instead of copying them.
 Keep workflow execution event identity in `workflowEventOwnership.ts` as an
 explicit projection object until the backend-owned trace/session projection API
-can replace that frontend seam.
+can replace that frontend seam. The helper prefers backend-authored event
+`ownership` payloads from Tauri before falling back to legacy `execution_id`
+fields.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -67,6 +69,8 @@ can replace that frontend seam.
   compute state and decisions for callers that own side effects.
 - `workflowEventOwnership.ts` must only project backend-supplied execution ids
   and active-run relevance; it must not synthesize canonical run identity.
+- Backend-authored workflow event `ownership` payloads take precedence over
+  legacy raw `execution_id` fields.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.

@@ -55,6 +55,51 @@ test('projectWorkflowEventOwnership claims the backend event id when no run is p
   );
 });
 
+test('projectWorkflowEventOwnership prefers backend-authored ownership', () => {
+  assert.deepEqual(
+    projectWorkflowEventOwnership(
+      {
+        data: {
+          execution_id: 'legacy-run',
+          ownership: {
+            eventExecutionId: 'backend-run',
+            activeExecutionId: 'backend-run',
+            relevant: true,
+          },
+        },
+      },
+      null,
+    ),
+    {
+      eventExecutionId: 'backend-run',
+      activeExecutionId: 'backend-run',
+      relevant: true,
+    },
+  );
+});
+
+test('projectWorkflowEventOwnership applies current run filtering to backend ownership', () => {
+  assert.deepEqual(
+    projectWorkflowEventOwnership(
+      {
+        data: {
+          ownership: {
+            eventExecutionId: 'run-2',
+            activeExecutionId: 'run-2',
+            relevant: true,
+          },
+        },
+      },
+      'run-1',
+    ),
+    {
+      eventExecutionId: 'run-2',
+      activeExecutionId: 'run-1',
+      relevant: false,
+    },
+  );
+});
+
 test('isWorkflowEventRelevantToExecution accepts all events when no execution is pinned', () => {
   assert.equal(
     isWorkflowEventRelevantToExecution(

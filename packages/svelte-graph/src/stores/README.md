@@ -65,7 +65,8 @@ boundary owns the read-only event-to-overlay reduction shared by GUI
 consumers. That reducer now consumes the explicit execution ownership projection
 from `workflowEventOwnership.ts` so active-run identity and stale-event
 relevance are evaluated once before node overlays or runtime-data mirrors are
-updated.
+updated. When Tauri emits backend-authored event `ownership`, that payload is
+the source for the shared projection.
 Collapsed node group create, ungroup, and port-mapping edits now follow the
 same backend-session rule as other structural graph mutations:
 `createWorkflowStores.ts` applies the returned graph mutation snapshot and
@@ -101,6 +102,8 @@ boundary edges locally.
 - Execution event reducers must consume the shared workflow event ownership
   projection instead of composing execution-id claiming and relevance checks
   locally.
+- Backend-authored event `ownership` payloads are authoritative over legacy raw
+  `execution_id` fields when both are present.
 
 ## Revisit Triggers
 - Multiple simultaneous connection intents need independent store partitions.

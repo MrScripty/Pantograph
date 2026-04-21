@@ -211,8 +211,11 @@ Tasks:
   stale-event filtering to the shared workflow execution event projector instead
   of maintaining its own duplicate gate. The shared projector now returns an
   explicit ownership projection consumed by `WorkflowService.ts` and workflow
-  execution event reducers. The remaining work is to replace that shared
-  frontend projector with a backend-owned trace/session projection API.
+  execution event reducers. Tauri workflow-event serialization now emits a
+  backend-authored `ownership` projection, and the shared frontend projector
+  prefers that payload when present. The remaining work is to replace the last
+  consumer-local current-run comparison with a backend-owned trace/session
+  relevance query.
 - [x] Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
   identity and relevance decisions needed by `diagnosticsStore.ts`.
   Status: diagnostics projections now carry backend-authored context containing

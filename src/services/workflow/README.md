@@ -50,7 +50,9 @@ projection context so app stores can consume relevance and attribution fields
 without rebuilding them from workflow events.
 Run identity updates now consume the package-level workflow event ownership
 projection so `WorkflowService.ts` and workflow execution reducers agree on how
-backend event execution ids claim or reject an active run.
+backend event execution ids claim or reject an active run. Backend-authored
+event `ownership` payloads are preferred over raw execution-id fields when
+native Tauri events provide them.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -67,6 +69,8 @@ backend event execution ids claim or reject an active run.
   be reset when session ownership changes.
 - `currentRunExecutionId` updates must use the shared workflow event ownership
   projection until a backend-owned trace/session projection replaces it.
+- Native event `ownership` payloads are authoritative for run identity when
+  present; mock and legacy event paths may still fall back to `execution_id`.
 - Edit mutation methods must forward backend-owned graph state rather than
   reconstructing local graph changes client-side.
 - Expected connection rejection is returned as structured data, not thrown as an

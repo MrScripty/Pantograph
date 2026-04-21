@@ -108,6 +108,9 @@ remains a thin caller.
 Diagnostics projections now carry backend-authored context for requested
 snapshot filters, event source execution id, relevant execution id, and
 relevance, so GUI stores do not need adapter-local diagnostics event claiming.
+Serialized workflow events also include a backend-authored `ownership` payload
+that exposes event execution id, active execution id, and baseline relevance for
+frontend execution reducers.
 Workflow execution diagnostics emission must likewise route through a backend
 helper that synchronizes the shared runtime registry before projecting the
 execution snapshot, so `workflow_execution_runtime.rs` does not own a second
@@ -142,6 +145,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Diagnostics snapshot commands and event bridge emissions must preserve
   backend-authored projection context rather than requiring frontend-local
   execution-id claiming for diagnostics relevance.
+- Workflow-event serialization must include backend-authored ownership context
+  for execution-scoped events so GUI reducers do not infer event execution ids
+  from raw payload fields first.
 - Session-scoped candidate and insert commands must log enough request/rejection
   context to diagnose release-only interaction failures without relying on
   browser-console access.

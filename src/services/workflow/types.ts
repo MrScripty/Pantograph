@@ -2,6 +2,8 @@
 // NOTE: These types must match the Rust types in src-tauri/src/workflow/types.rs
 // Rust uses snake_case serialization for enums
 
+import type { WorkflowEventOwnershipProjection } from '@pantograph/svelte-graph';
+
 export type PortDataType =
   | 'any'
   | 'string'
@@ -336,39 +338,77 @@ export type WorkflowEventType =
   | 'SchedulerSnapshot'
   | 'DiagnosticsSnapshot';
 
+export type WorkflowEventOwnershipData = {
+  ownership?: WorkflowEventOwnershipProjection | null;
+};
+
 export interface WorkflowEventData {
-  Started: { workflow_id: string; node_count: number; execution_id?: string };
-  NodeStarted: { node_id: string; node_type: string; execution_id?: string };
-  NodeProgress: { node_id: string; progress: number; message?: string; execution_id?: string };
-  NodeStream: { node_id: string; port: string; chunk: unknown; execution_id?: string };
-  NodeCompleted: { node_id: string; outputs: Record<string, unknown>; execution_id?: string };
-  NodeError: { node_id: string; error: string; execution_id?: string };
-  Completed: {
+  Started: WorkflowEventOwnershipData & {
+    workflow_id: string;
+    node_count: number;
+    execution_id?: string;
+  };
+  NodeStarted: WorkflowEventOwnershipData & {
+    node_id: string;
+    node_type: string;
+    execution_id?: string;
+  };
+  NodeProgress: WorkflowEventOwnershipData & {
+    node_id: string;
+    progress: number;
+    message?: string;
+    execution_id?: string;
+  };
+  NodeStream: WorkflowEventOwnershipData & {
+    node_id: string;
+    port: string;
+    chunk: unknown;
+    execution_id?: string;
+  };
+  NodeCompleted: WorkflowEventOwnershipData & {
+    node_id: string;
+    outputs: Record<string, unknown>;
+    execution_id?: string;
+  };
+  NodeError: WorkflowEventOwnershipData & {
+    node_id: string;
+    error: string;
+    execution_id?: string;
+  };
+  Completed: WorkflowEventOwnershipData & {
     workflow_id?: string;
     outputs: Record<string, unknown>;
     execution_id?: string;
   };
-  Failed: { workflow_id?: string; error: string; execution_id?: string };
-  Cancelled: { workflow_id?: string; error: string; execution_id?: string };
-  GraphModified: {
+  Failed: WorkflowEventOwnershipData & {
+    workflow_id?: string;
+    error: string;
+    execution_id?: string;
+  };
+  Cancelled: WorkflowEventOwnershipData & {
+    workflow_id?: string;
+    error: string;
+    execution_id?: string;
+  };
+  GraphModified: WorkflowEventOwnershipData & {
     workflow_id?: string;
     execution_id?: string;
     graph?: WorkflowGraph | null;
     dirty_tasks?: string[];
     memory_impact?: GraphMemoryImpactSummary | null;
   };
-  WaitingForInput: {
+  WaitingForInput: WorkflowEventOwnershipData & {
     workflow_id?: string;
     execution_id?: string;
     node_id: string;
     message?: string | null;
   };
-  IncrementalExecutionStarted: {
+  IncrementalExecutionStarted: WorkflowEventOwnershipData & {
     workflow_id?: string;
     execution_id?: string;
     task_ids: string[];
   };
-  RuntimeSnapshot: {
+  RuntimeSnapshot: WorkflowEventOwnershipData & {
     workflow_id?: string;
     execution_id?: string;
     captured_at_ms: number;
@@ -379,7 +419,7 @@ export interface WorkflowEventData {
     embedding_runtime_snapshot?: RuntimeLifecycleSnapshot | null;
     error?: string | null;
   };
-  SchedulerSnapshot: {
+  SchedulerSnapshot: WorkflowEventOwnershipData & {
     workflow_id?: string;
     execution_id?: string;
     session_id: string;
@@ -388,7 +428,7 @@ export interface WorkflowEventData {
     items: WorkflowSessionQueueItem[];
     error?: string | null;
   };
-  DiagnosticsSnapshot: {
+  DiagnosticsSnapshot: WorkflowEventOwnershipData & {
     execution_id?: string;
     snapshot: unknown;
   };

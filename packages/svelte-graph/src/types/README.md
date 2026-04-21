@@ -36,6 +36,9 @@ could share the same shapes.
 Node group create, ungroup, and port-mapping edits are modeled as
 `WorkflowBackend` graph mutation methods instead of group-only return DTOs so
 the backend remains the owner of collapsed graph structure.
+Workflow event DTOs now include optional backend-authored `ownership` payloads
+that mirror the Tauri workflow-event serializer and let reducers prefer
+backend-projected execution identity over raw `execution_id` fallback fields.
 
 ## Alternatives Rejected
 - Define transport payloads inline inside each backend implementation.
@@ -54,6 +57,8 @@ the backend remains the owner of collapsed graph structure.
 - Node group mutation methods in `WorkflowBackend` return
   `WorkflowGraphMutationResponse`; group DTOs are serialized inside graph node
   data and are not authoritative by themselves.
+- Workflow event `ownership` payloads are backend-authored transport context;
+  consumers may fall back to `execution_id` only for mock or legacy producers.
 
 ## Revisit Triggers
 - Workflow persistence adopts a versioned schema that needs explicit migration
@@ -106,3 +111,5 @@ function isAccepted(result: ConnectionCommitResponse): boolean {
   `cycle_detected`, and `incompatible_types`.
 - If the serialized shape changes, update Rust mirrors and any persisted
   migration notes in the same change.
+- `WorkflowEventOwnershipData.ownership` mirrors the Tauri event serializer's
+  camelCase execution ownership projection.
