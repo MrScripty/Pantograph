@@ -59,9 +59,7 @@
     const a = document.createElement('a');
     a.href = url;
     a.download = 'output.png';
-    document.body.appendChild(a);
     a.click();
-    a.remove();
     requestAnimationFrame(() => URL.revokeObjectURL(url));
   }
 
