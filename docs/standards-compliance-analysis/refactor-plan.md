@@ -480,10 +480,13 @@ Tasks:
   requires unsafe documentation if unsafe is ever introduced, and opts every
   Rust workspace member into the policy. The exception checklist is documented
   in `docs/rust-workspace-policy.md`.
-- [ ] Decide the warning ratchet for existing Rust warnings before turning
+- [x] Decide the warning ratchet for existing Rust warnings before turning
   clippy into a hard `-D warnings` gate. Progress: `cargo check --workspace
   --all-features` and `cargo check --workspace --no-default-features` pass, but
-  still emit the warning baseline tracked in M7.
+  still emit the warning baseline tracked in M7. Status:
+  `docs/rust-workspace-policy.md` keeps those warnings non-blocking until M7
+  classifies them, while denied policy lints are limited to checks that pass the
+  current workspace.
 - [x] Normalize Rust crate metadata: workspace `version`, `rust-version`,
   `repository`, shared package inheritance, and explicit `publish = false`
   for app, binding-wrapper, internal, and workspace-only crates. Status:

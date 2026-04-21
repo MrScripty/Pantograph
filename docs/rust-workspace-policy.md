@@ -30,6 +30,29 @@ lints are denied so any future exception must be documented.
 Existing Rust warning debt remains a tracked baseline until M7 classifies each
 warning as remove, use, feature-gate, or intentionally retained.
 
+## Warning Ratchet
+
+Current policy:
+
+- `cargo check --workspace --all-features` and
+  `cargo check --workspace --no-default-features` must compile.
+- Existing `unused`, `dead_code`, and dependency macro warnings are allowed
+  temporarily and tracked in the standards plan.
+- `clippy -D warnings` is not a blocking gate until M7 classifies or removes
+  the current warning baseline.
+- New policy lints may be denied only when they are known not to fail the
+  current workspace.
+
+Ratchet sequence:
+
+1. Classify each warning as remove, use, feature-gate, external/dependency
+   exception, or intentionally retained.
+2. Remove or scope exceptions for warnings that belong to inactive or migrated
+   code paths.
+3. Add a non-regression check for the resulting baseline.
+4. Promote clippy to `-D warnings` only after the baseline is zero or
+   explicitly machine-enforced.
+
 ## Unsafe Exceptions
 
 New unsafe code is not allowed unless a future change first introduces a narrow
