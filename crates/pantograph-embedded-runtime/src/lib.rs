@@ -62,6 +62,7 @@ pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
 pub mod runtime_capabilities;
+mod runtime_config;
 mod runtime_extensions;
 pub mod runtime_health;
 pub mod runtime_recovery;
@@ -90,6 +91,9 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
+#[cfg(feature = "standalone")]
+pub use runtime_config::StandaloneRuntimeConfig;
+pub use runtime_config::{EmbeddedRuntimeConfig, EmbeddedRuntimeError};
 pub use runtime_extensions::{
     RuntimeExtensionsSnapshot, SharedExtensions, apply_runtime_extensions,
     apply_runtime_extensions_for_execution,
@@ -106,59 +110,6 @@ const RUNTIME_WARMUP_WAIT_TIMEOUT_MS: u64 = 5_000;
 
 #[cfg(test)]
 const RUNTIME_WARMUP_WAIT_TIMEOUT_MS: u64 = 250;
-
-#[derive(Debug, Clone)]
-pub struct EmbeddedRuntimeConfig {
-    pub app_data_dir: PathBuf,
-    pub project_root: PathBuf,
-    pub workflow_roots: Vec<PathBuf>,
-    pub max_loaded_sessions: Option<usize>,
-}
-
-impl EmbeddedRuntimeConfig {
-    pub fn new(app_data_dir: PathBuf, project_root: PathBuf) -> Self {
-        Self {
-            app_data_dir,
-            workflow_roots: capabilities::default_workflow_roots(&project_root),
-            project_root,
-            max_loaded_sessions: None,
-        }
-    }
-}
-
-#[cfg(feature = "standalone")]
-#[derive(Debug, Clone)]
-pub struct StandaloneRuntimeConfig {
-    pub app_data_dir: PathBuf,
-    pub project_root: PathBuf,
-    pub workflow_roots: Vec<PathBuf>,
-    pub max_loaded_sessions: Option<usize>,
-    pub binaries_dir: PathBuf,
-    pub pumas_library_path: Option<PathBuf>,
-}
-
-#[cfg(feature = "standalone")]
-impl StandaloneRuntimeConfig {
-    pub fn new(app_data_dir: PathBuf, project_root: PathBuf, binaries_dir: PathBuf) -> Self {
-        Self {
-            app_data_dir,
-            workflow_roots: capabilities::default_workflow_roots(&project_root),
-            project_root,
-            max_loaded_sessions: None,
-            binaries_dir,
-            pumas_library_path: None,
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum EmbeddedRuntimeError {
-    #[error("configuration error: {message}")]
-    Config { message: String },
-
-    #[error("runtime initialization error: {message}")]
-    Initialization { message: String },
-}
 
 #[async_trait]
 impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGateway {

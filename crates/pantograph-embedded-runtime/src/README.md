@@ -22,6 +22,7 @@ packages.
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, and Python-sidecar capability builders plus capability-to-lifecycle projection. |
+| `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
 | `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas, KV cache, model dependencies, event sinks, execution ids, and Python runtime execution records. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
@@ -118,6 +119,9 @@ embedded-runtime crate.
 - Managed-runtime, host-runtime, and Python-sidecar capability shaping must
   stay in the shared backend capability helper module rather than being
   rebuilt inside `EmbeddedWorkflowHost` or Tauri adapters.
+- Runtime configuration and initialization error contracts stay in
+  `runtime_config.rs` and are re-exported by the crate facade so embedding
+  hosts do not couple to the root composition file.
 - Managed-runtime capability shaping must consume backend-owned managed-runtime
   snapshots rather than flatter install-only capability records, so workflow
   preflight can see backend-owned readiness and selected-version context
